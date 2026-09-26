@@ -248,6 +248,22 @@ export interface Team {
 	createdAt: string;
 	memberCount: number;
 	projectCount: number;
+	/** The team's stored settings (055): `{ portfolio?: { thresholds?: { green, amber } } }`. */
+	settings: { portfolio?: { thresholds?: { green: number; amber: number } } };
+	/** The portfolio thresholds that apply: the team's, or the defaults. */
+	portfolioThresholds: PortfolioThresholds;
+}
+
+/**
+ * The portfolio's traffic-light cut-offs (D11), percent of the last 30 days
+ * with the outlet EWR not met: green below `green`, amber below `amber`, red
+ * otherwise. `source` says whether they are the team's own or the defaults
+ * (5, 20).
+ */
+export interface PortfolioThresholds {
+	green: number;
+	amber: number;
+	source: 'team' | 'default';
 }
 
 /** GET /teams/:id/portfolio (WP-2.14, docs/api.md § Portfolio): one row per team catchment you can see. */
@@ -384,8 +400,8 @@ export interface Portfolio {
 	team: { id: string; name: string; role: TeamRole };
 	/** The server's UTC date the ages are counted to. */
 	today: string;
-	/** The traffic-light thresholds: amber from this fraction of days not met, red from that. */
-	thresholds: { amber: number; red: number };
+	/** The traffic-light thresholds the statuses were judged by (the team's, or the defaults). */
+	thresholds: PortfolioThresholds;
 	projects: PortfolioProject[];
 }
 
@@ -788,6 +804,12 @@ export interface ScenarioCheck {
 	 * Sent to viewers and up only, never to an applicant.
 	 */
 	renamed?: { kind: 'node' | 'crop'; id: string; name: string; as: string }[];
+	/**
+	 * An application's new crops, transfers, land-cover patches or boreholes
+	 * given an id a hidden one already had, moved to a fresh id in its runs so
+	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
+	 */
+	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
 }
 
 /**

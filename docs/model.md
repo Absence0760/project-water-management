@@ -2517,10 +2517,10 @@ research on issue #1 found exactly this: its gauge column is a neighbouring
 river's gauge (area-scaled for part of the record), and the logger's magnitude
 is verified against independent field gaugings, so the **logger is the
 calibration target**, which is also what the workbook and the imported settings
-already use. This is **pending the hydrologist's sign-off**, now put to them
-as a confirmation with three follow-on questions (rating, area, the short
-record) rather than an open choice between records
-([plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
+already use. **Decided** (issue #1, closed 2026-09-25): the operator assumed
+the hydrologist's agreement, which is not yet in writing; reopen #1 if they
+disagree. Three follow-on questions stay open (rating, area, the short
+record; [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
 logger: high flows above the highest field gauging come from an extrapolated
 rating curve, so peak days and wet-season volumes are uncertain, and the record
 is short and mostly dry, so wet-year behaviour is weakly constrained.
@@ -3089,8 +3089,8 @@ On the client catchment the two records roughly agree in the early shared
 years, then several consecutive years fall far below the lower limit and are
 flagged (figures in the private source repo). Here the records are two different rivers, so the
 flag is expected and is not evidence of a fault in either; the logger is the
-calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and the
-first hydrologist question in
+calibration target (decided in issue #1; the hydrologist's agreement is
+assumed, not yet in writing; §2.10 and the first hydrologist question in
 [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
@@ -3477,6 +3477,19 @@ shortfall, charged and natural parts (≤ 0; charged + natural = shortfall);
 values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
 86 400 s). With nothing rounded, the reductions and gains (N) sum to 0 up to
 floating-point noise.
+
+**Over another window (issue #44).** `curtailmentOverWindow(run, window)`
+(`views/farmProjection.ts`, with `prepareCurtailment` to read a run once for
+several windows) recomputes the whole table (farms, other water users, EWR
+sites) over any window of a saved run from its stored daily series, with no
+re-run: what `runModel` reports with that window as `reportStart … reportEnd`.
+The EWR site setting each farm's charge needs each day's binding site, which
+a run doesn't store, so it re-runs the attribution (§2.7b) on the stored
+flows; that is exact unless the transfer rules form a loop, when the loop's
+closing rule is carried round the rest of it (`bindingApproximate`). The
+farmer projection's season and the Runs tab's reporting-window picker both use
+it; `curtailmentOverWindow.test.ts` checks it against `runModel` on seeded
+networks. It is a view over a saved run, so it leaves `ENGINE_VERSION` alone.
 
 The client catchment regression test feeds the workbook's own daily Element-sheet
 values into `computeCurtailment` and checks every column against the cell
@@ -4023,7 +4036,8 @@ engine bug (fix the engine).
 ## 7. Glossary
 
 The app's `/help` page carries a fuller, searchable version of this glossary
-plus per-field help (`frontend/src/lib/help/content.ts`). Keep the two in
+plus per-field help (`frontend/src/lib/help/`: `tips.ts` for the short
+text and field keys, `articles.ts` for the fuller text). Keep the two in
 step when a definition changes.
 
 | Term | Meaning |

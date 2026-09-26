@@ -1,4 +1,5 @@
 import { seriesRowFlags } from '@water-management/engine';
+import { toEpochDay } from '@water-management/engine/calendar';
 import { describe, expect, it } from 'vitest';
 import { anomalousPushedDays, HELD_EXAMPLES, limitWithout } from './hold.js';
 
@@ -39,6 +40,29 @@ describe('anomalousPushedDays', () => {
 		for (let i = 500; i < 600; i++) before.values[i] = 1000;
 		expect(limitWithout('rain_catchment_mm', before, { startDate: '2022-05-16', values: new Array(100).fill(1) })).toBe(50);
 		expect(limitWithout('rain_catchment_mm', before, { startDate: '2030-01-01', values: [1] })).toBe(5000);
+	});
+
+	it('leaves out the pushing key’s earlier days too, so batches under the limit can’t lift it (053)', () => {
+		// 600 days, then 20 days of 45 mm the key pushed earlier, each batch under the 50 mm limit of the rest.
+		const before = series(600);
+		before.values.push(...new Array(20).fill(45));
+		const keyDays: [number, number][] = [[toEpochDay('2021-01-01') + 600, toEpochDay('2021-01-01') + 620]];
+		const pushed = { startDate: '2023-01-01', values: [200] };
+		// Counted, they lift the 99th percentile to 45: a limit of 225 mm the 200 mm day passes.
+		expect(limitWithout('rain_catchment_mm', before, pushed)).toBe(225);
+		expect(limitWithout('rain_catchment_mm', before, pushed, keyDays)).toBe(50);
+		expect(anomalousPushedDays('rain_catchment_mm', before, pushed, keyDays)).toMatchObject({ outlier: 1 });
+		// A key's days outside the series change nothing.
+		expect(limitWithout('rain_catchment_mm', series(600), pushed, [[toEpochDay('2030-01-01'), toEpochDay('2030-02-01')]])).toBe(50);
+	});
+
+	it('falls back to the series without the push when the key’s days leave too few (a series only the key fills)', () => {
+		const before = series(600);
+		const everything: [number, number][] = [[toEpochDay('2021-01-01'), toEpochDay('2021-01-01') + 600]];
+		expect(limitWithout('rain_catchment_mm', before, { startDate: '2030-01-01', values: [1] }, everything)).toBe(50);
+		// Still without the pushed days themselves.
+		for (let i = 500; i < 600; i++) before.values[i] = 1000;
+		expect(limitWithout('rain_catchment_mm', before, { startDate: '2022-05-16', values: new Array(100).fill(1) }, everything)).toBe(50);
 	});
 
 	it('uses the flow factor for flow', () => {

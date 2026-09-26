@@ -342,6 +342,16 @@ describe('teams client', () => {
 		expect(call(f, 2)).toEqual({ url: '/teams/t/members/u%2F1', method: 'PATCH', body: { role: 'admin' } });
 	});
 
+	it('sets a team’s portfolio thresholds, or clears them with null (D11)', async () => {
+		const team = { id: 't/1', portfolioThresholds: { green: 10, amber: 30, source: 'team' } };
+		const f = mockFetch(200, { team });
+		const api = createApi('', f);
+		expect(await api.teams.setThresholds('t/1', { green: 10, amber: 30 })).toEqual(team);
+		await api.teams.setThresholds('t/1', null);
+		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: { green: 10, amber: 30 } } } } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: null } } } });
+	});
+
 	it('farmers.* call the farmer routes and unwrap the farmer', async () => {
 		const farmer = { status: 'active', userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
 		const add = mockFetch(201, { farmer });

@@ -262,6 +262,8 @@ export interface MergeResult {
 	after: Daily;
 	written: number;
 	kept: number;
+	/** For a key's merge (`byKey`): the days that key wrote before this merge and nobody has written since (series_key_days, 053). */
+	keyDays: DayRuns;
 }
 
 /**
@@ -276,12 +278,17 @@ export interface MergeResult {
  * only the days that feed may replace (feedDays) and records them as its own;
  * without (a user), it releases the feed's claim on every day it overwrites.
  * `kept` counts the days a feed left alone because their value wasn't its own.
+ *
+ * Which days each API key wrote travels in series_key_days (053): with
+ * `byKey` (an ingest, in withApiKey), the merge records the days whose value
+ * it changed as the key's, and returns the key's days from before; any other
+ * merge releases the days it writes from every key (trackKeyDays).
  */
 export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
-	{ keepOnNull = false, feedId, provenance }: MergeOptions & { feedId?: string } = {}
+	{ keepOnNull = false, feedId, provenance, byKey = false }: MergeOptions & { feedId?: string; byKey?: boolean } = {}
 ): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
 	const { rows: cur } = await db.query<{
@@ -302,6 +309,17 @@ export async function mergeSeries(
 	);
 	const row = cur[0];
 	const existing = row ? { startDate: row.start_date, values: row.values } : null;
+	const keyDays: DayRuns =
+		byKey && row
+			? (
+					await db.query<{ days: DayRuns }>(
+						`SELECT (SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+							FROM unnest(days) r) AS days
+						 FROM series_key_days WHERE project_id = $1 AND series_id = $2 AND api_key_id = app_current_api_key_id()`,
+						[projectId, row.id]
+					)
+				).rows[0]?.days ?? []
+			: [];
 	// The version guard (032_series_provenance): days of another product or
 	// version never go into a series holding values; an empty or new series
 	// takes the incoming days' label, a filled one keeps its own.
@@ -344,7 +362,9 @@ export async function mergeSeries(
 					 WHERE project_id = $1 AND kind = $2 AND name = $3 RETURNING ${SERIES_META}`,
 					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
 				);
-		return { meta: rows[0]!, before, after: merged, kept, written };
+		// A person re-sending a key's values makes them theirs all the same (a key's re-send changes nothing, so records nothing).
+		await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
+		return { meta: rows[0]!, before, after: merged, kept, written, keyDays };
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version)
@@ -368,7 +388,48 @@ export async function mergeSeries(
 			label?.version ?? null
 		]
 	);
-	return { meta: rows[0]!, before, after: merged, kept, written };
+	await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
+	return { meta: rows[0]!, before, after: merged, kept, written, keyDays };
+}
+
+/**
+ * Keep series_key_days (053) in step with a merge that changed the series'
+ * values. A key's merge adds the days whose value it changed to that key's
+ * row (a value re-sent unchanged stays whoever's it was). Anyone else's
+ * releases every day it writes from every key's row: the value there is
+ * theirs now, even when it is the same.
+ */
+async function trackKeyDays(
+	db: Db,
+	projectId: string,
+	seriesId: string,
+	existing: Daily | null,
+	incoming: Daily,
+	{ keepOnNull, byKey }: { keepOnNull: boolean; byKey: boolean }
+): Promise<void> {
+	const i0 = toEpochDay(incoming.startDate);
+	const e0 = existing ? toEpochDay(existing.startDate) : 0;
+	const current = (d: number) => (existing ? (existing.values[d - e0] ?? null) : null);
+	const writes = (k: number) => incoming.values[k] !== null || !keepOnNull;
+	const days = runsOf(i0, incoming.values.length, byKey ? (k) => writes(k) && incoming.values[k] !== current(i0 + k) : writes);
+	if (days.length === 0) return;
+	const params = [projectId, seriesId, days.map((r) => r[0]), days.map((r) => r[1])];
+	if (byKey) {
+		await db.query(
+			`INSERT INTO series_key_days (project_id, series_id, api_key_id, days) VALUES ($1, $2, app_current_api_key_id(), ${feedDaysSql(3, 4)})
+			 ON CONFLICT (project_id, series_id, api_key_id) DO UPDATE SET days = series_key_days.days + EXCLUDED.days`,
+			params
+		);
+		return;
+	}
+	// A row whose days are all overwritten goes; the others lose those days.
+	await db.query(
+		`WITH w AS (SELECT ${feedDaysSql(3, 4)} AS days),
+		 gone AS (DELETE FROM series_key_days k USING w WHERE k.project_id = $1 AND k.series_id = $2 AND k.days <@ w.days)
+		 UPDATE series_key_days k SET days = k.days - w.days FROM w
+		 WHERE k.project_id = $1 AND k.series_id = $2 AND k.days && w.days AND NOT k.days <@ w.days`,
+		params
+	);
 }
 
 /** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
@@ -440,7 +501,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
 		);
 	}
-	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body) });
+	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body), byKey: opts.via === 'api_key' });
 	const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, projectId, r0.meta, body.dayBoundary) } : r0;
 	const subject = seriesSubject(r.meta, r.before, r.after, opts.audit);
 	const daysChanged = subject.daysChanged as number;
@@ -452,7 +513,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
 	}
 	// A key's push whose days look wrong holds the automatic re-run for a person to review (series/hold.ts).
-	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.before, body) : null;
+	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.before, body, r.keyDays) : null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
 	const rerun = flagged ? null : await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });

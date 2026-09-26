@@ -82,6 +82,43 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(page).toHaveURL(new RegExp(`/projects/${a.published.id}$`));
 });
 
+test('the page states which thresholds apply, and judges by the team’s once an admin sets them', async ({ page, owner }) => {
+	void owner;
+	const a = await arrange(page.request, 'T');
+	const pub = a.rows.find((r) => r.id === a.published.id)!;
+	expect(pub.ewr.status).not.toBe('unknown');
+	const d = pub.ewr.daysNotMet30!;
+	const n = pub.ewr.days30!;
+
+	await page.goto(`/teams/${a.team.id}/portfolio`);
+	await expect(page.getByText(/green when it was not met on under 5 % of them, amber under 20 %, red otherwise/)).toBeVisible();
+	await expect(page.getByText('These are the default thresholds, still to be confirmed by the hydrologist.')).toBeVisible();
+	await expect(tableRow(page, 'Pf published T')).toContainText(statusText(pub)!);
+
+	// Thresholds that move the published row where they can: a default green becomes amber
+	// under a 0 % green, anything short of every day becomes green under 99.9 %; a row that
+	// missed every day is red under any thresholds.
+	const t = d === n ? { green: 1, amber: 2 } : d * 100 < 5 * n ? { green: 0, amber: 100 } : { green: 99.9, amber: 100 };
+	await page.getByRole('link', { name: 'Change them on the team page' }).click();
+	const panel = page.getByRole('region', { name: 'Portfolio traffic lights' });
+	await panel.getByLabel('Green below (%)').fill(String(t.green));
+	await panel.getByLabel('Amber below (%)').fill(String(t.amber));
+	await panel.getByRole('button', { name: 'Save thresholds' }).click();
+	await expect(panel.getByRole('status')).toHaveText('Saved. The portfolio now uses these thresholds.');
+
+	const after = (await (await page.request.get(`${API_URL}/teams/${a.team.id}/portfolio`)).json()) as { thresholds: unknown; projects: Row[] };
+	expect(after.thresholds).toEqual({ ...t, source: 'team' });
+	const now = after.projects.find((r) => r.id === a.published.id)!;
+	const expected = d * 100 < t.green * n ? 'green' : d * 100 < t.amber * n ? 'amber' : 'red';
+	expect(now.ewr.status).toBe(expected);
+	if (d < n) expect(now.ewr.status).not.toBe(pub.ewr.status);
+
+	await page.goto(`/teams/${a.team.id}/portfolio`);
+	await expect(page.getByText(`green when it was not met on under ${String(t.green)} % of them, amber under ${String(t.amber)} %, red otherwise`, { exact: false })).toBeVisible();
+	await expect(page.getByText('These are the team’s own thresholds.')).toBeVisible();
+	await expect(tableRow(page, 'Pf published T')).toContainText(statusText(now)!);
+});
+
 test('sorts by status (worst first) and by name, and keeps the sort in the address', async ({ page, owner }) => {
 	void owner;
 	const a = await arrange(page.request, 'B');

@@ -161,6 +161,11 @@ export const en = {
 	'account.alerts': 'Alert emails',
 	'account.alertsHint': 'Choose which alerts you get by email, and how often.',
 	'account.alertsLink': 'Choose your alert emails',
+	'account.data': 'Your data',
+	'account.dataHint': 'Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.',
+	'account.dataDownload': 'Download my data',
+	'account.dataDownloading': 'Preparing…',
+	'account.dataDone': 'Your data has been downloaded.',
 
 	// ---- Farm view: frame and states -------------------------------------------
 	'farm.myFarm': 'My farm',

@@ -156,7 +156,7 @@
 		<div class="alert alert-success-ish" role="status">
 			<p>Restored the version of {fmtDate(restored.at, true)}. The model and settings are as they were then; run the model again to update the results.</p>
 			{#if restored.relink.length}
-				<p>Farmers aren't linked back automatically. Re-link them on the Overview tab's farmers list:</p>
+				<p>Farmers aren't linked back automatically. Re-link them on the Summary tab's farmers list:</p>
 				<ul>
 					{#each restored.relink as r (r.userId + r.nodeId)}<li>{r.displayName} to {r.nodeName}</li>{/each}
 				</ul>

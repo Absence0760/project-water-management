@@ -776,6 +776,14 @@ Every step is an ordinary app action by an owner unless it says "operator".
    is for the operator and the client's information officer to decide first
    (followups.md § POPIA). Record the request and the outcome in the operator
    log.
+8. **A POPIA request for a copy of a person's data** (access, s23). The
+   person downloads it themselves: Account → Your data → **Download my
+   data** (`GET /auth/me/export`, [security.md § Personal information](./security.md#personal-information-popia)).
+   If they can't sign in, confirm who is asking with the WUA, have them
+   reset their password, and point them there; no operator query is needed.
+   If `auditEventsTruncated` is `true` (more than 50 000 events), the
+   operator adds the older events by query as the schema owner. Record the
+   request in the operator log.
 
 ## Rollback
 

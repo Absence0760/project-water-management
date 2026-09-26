@@ -4,6 +4,8 @@ import { withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
 import { markVerified, verificationMail } from './email-routes.js';
+import { buildSubjectExport, ExportThrottled } from './export.js';
+import { attachment } from '../export/csv.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { clearSession, issueSession } from './session.js';
@@ -162,6 +164,23 @@ export const authRoutes = new Hono<AuthEnv>()
 		});
 		if (!row) throw new ApiError(401, 'not signed in');
 		return c.json({ user: toUser(row) });
+	})
+	// "Download my data" (POPIA access; auth/export.ts): everything the app
+	// keeps about the signed-in person, as a JSON file. One a minute per account.
+	.get('/me/export', requireUser, async (c) => {
+		let doc;
+		try {
+			doc = await buildSubjectExport(c.get('userId'));
+		} catch (err) {
+			if (!(err instanceof ExportThrottled)) throw err;
+			c.header('Retry-After', String(err.retryAfter));
+			throw new ApiError(429, 'you downloaded your data a moment ago — try again in a minute');
+		}
+		return c.body(JSON.stringify(doc, null, 2), 200, {
+			'Content-Type': 'application/json; charset=utf-8',
+			'Content-Disposition': attachment(`my-data_${doc.exportedAt.slice(0, 10)}.json`),
+			'Cache-Control': 'no-store'
+		});
 	})
 	.patch('/me', requireUser, async (c) => {
 		const body = MeBody.parse(await readJson(c));

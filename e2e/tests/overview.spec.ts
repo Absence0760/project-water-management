@@ -1,4 +1,4 @@
-// The Overview tab: setup checklist and headline facts, built from the lists
+// The Summary tab (id `overview`, issue #17): results, setup checklist and headline facts, built from the lists
 // the project page loads (series, runs) and the model being edited.
 import type { Page } from '@playwright/test';
 import { createProject, createRun, PASSWORD, seedRunnableProject } from '../support/api.ts';
@@ -79,6 +79,33 @@ test('needs attention: stale data links to the Data tab; a project with no runs 
 	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
 	await expect(latest).not.toContainText('vs previous run');
+});
+
+test('the Summary leads with the results once there is a run, the setup checklist before one', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary order');
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
+	// No run yet: the checklist is the first thing on the tab, and there is no flow chart.
+	await expect(setup(page)).toBeVisible();
+	const top = async (name: string | RegExp) => (await page.getByRole('region', { name, exact: typeof name === 'string' }).boundingBox())!.y;
+	expect(await top(/^Set(up| up this catchment)/)).toBeLessThan(await top('Needs attention'));
+	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+
+	await createRun(page.request, project.id, 'Baseline');
+	await page.reload();
+	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
+	await expect(flow.getByRole('img', { name: /^EWR vs simulated outflow: line chart of Simulated outflow/ })).toBeVisible();
+	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
+	// Latest run, then what needs attention, then the flow chart, then the checklist, then the model's facts.
+	const order = [await top('Latest run'), await top('Needs attention'), await top('Flow vs reserve'), await top(/^Set(up| up this catchment)/)];
+	expect([...order].sort((a, b) => a - b)).toEqual(order);
+	const modelH = (await page.getByRole('heading', { level: 2, name: 'The model' }).boundingBox())!.y;
+	expect(modelH).toBeGreaterThan(order[3]!);
+
+	// ?tab=summary is the same page.
+	await page.goto(`/projects/${project.id}?tab=summary`);
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
 });
 
 test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {

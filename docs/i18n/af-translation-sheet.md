@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-523 strings: 429 on the site, 70 in emails, 24 in the glossary.
+528 strings: 434 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -215,6 +215,11 @@ The account page: name, language and units, password.
 | `account.alerts` | Alert emails |  |  |
 | `account.alertsHint` | Choose which alerts you get by email, and how often. |  |  |
 | `account.alertsLink` | Choose your alert emails |  |  |
+| `account.data` | Your data |  |  |
+| `account.dataHint` | Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file. |  |  |
+| `account.dataDownload` | Download my data |  |  |
+| `account.dataDownloading` | Preparing… |  |  |
+| `account.dataDone` | Your data has been downloaded. |  |  |
 
 ### farm
 

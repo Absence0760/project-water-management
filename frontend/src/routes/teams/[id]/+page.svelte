@@ -22,6 +22,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import EmailText from '$lib/components/common/EmailText.svelte';
+	import { thresholdsError, thresholdsRule, thresholdsSource } from '$lib/components/portfolio/portfolio';
 
 	const teamId = $derived(page.params.id ?? '');
 	const me = $derived(session.user?.id ?? '');
@@ -38,6 +39,17 @@
 	let newName = $state('');
 	let renaming = $state(false);
 	let renamed = $state(false);
+
+	// The portfolio's traffic-light cut-offs (D11), in percent; admins edit them.
+	let green = $state(5);
+	let amber = $state(20);
+	let savingThresholds = $state(false);
+	let thresholdsSaved = $state<string | null>(null);
+	let thresholdsFailed = $state<string | null>(null);
+	const thresholdsInvalid = $derived(thresholdsError(green, amber));
+	const thresholdsUnchanged = $derived(
+		!!team && team.portfolioThresholds.green === green && team.portfolioThresholds.amber === amber
+	);
 
 	let email = $state('');
 	let role = $state<TeamRole>('member');
@@ -74,6 +86,8 @@
 			team = detail.team;
 			members = detail.members;
 			newName = detail.team.name;
+			green = detail.team.portfolioThresholds.green;
+			amber = detail.team.portfolioThresholds.amber;
 			projects = list.filter((p) => p.team?.id === teamId);
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) notFound = true;
@@ -101,6 +115,28 @@
 		} finally {
 			renaming = false;
 		}
+	}
+
+	async function saveThresholds(next: { green: number; amber: number } | null) {
+		if (!team) return;
+		savingThresholds = true;
+		thresholdsFailed = null;
+		thresholdsSaved = null;
+		try {
+			team = await api.teams.setThresholds(team.id, next);
+			green = team.portfolioThresholds.green;
+			amber = team.portfolioThresholds.amber;
+			thresholdsSaved = next ? 'Saved. The portfolio now uses these thresholds.' : 'Saved. The portfolio uses the default thresholds again.';
+		} catch (err) {
+			thresholdsFailed = msg(err);
+		} finally {
+			savingThresholds = false;
+		}
+	}
+
+	function submitThresholds(e: SubmitEvent) {
+		e.preventDefault();
+		if (!thresholdsInvalid) void saveThresholds({ green, amber });
 	}
 
 	async function add(e: SubmitEvent) {
@@ -334,9 +370,71 @@
 						{:else}
 							<p class="muted">
 								{canAddProjects
-									? 'No projects yet. Create one here, or move an existing project into the team from its Overview tab.'
+									? 'No projects yet. Create one here, or move an existing project into the team from its Summary tab.'
 									: 'No projects yet.'}
 							</p>
+						{/if}
+					</section>
+
+					<section class="panel" aria-labelledby="pt-h">
+						<div class="panel-head"><h2 id="pt-h">Portfolio traffic lights</h2></div>
+						<p class="small rule">
+							A catchment's EWR status on the <a href="{base}/teams/{team.id}/portfolio">portfolio</a> counts the days
+							in the last 30 its outlet EWR was not met: {thresholdsRule(team.portfolioThresholds)}.
+						</p>
+						<p class="muted small">{thresholdsSource(team.portfolioThresholds)}</p>
+						{#if isAdmin}
+							<form onsubmit={submitThresholds} novalidate>
+								{#if thresholdsFailed}<div class="alert alert-error" role="alert">{thresholdsFailed}</div>{/if}
+								<div class="form-row">
+									<div class="field">
+										<label for="pt-green">Green below (%)</label>
+										<input
+											id="pt-green"
+											type="number"
+											min="0"
+											max="100"
+											step="any"
+											inputmode="decimal"
+											required
+											aria-describedby={thresholdsInvalid ? 'pt-error' : undefined}
+											aria-invalid={thresholdsInvalid ? 'true' : undefined}
+											bind:value={green}
+											oninput={() => (thresholdsSaved = null)}
+										/>
+									</div>
+									<div class="field">
+										<label for="pt-amber">Amber below (%)</label>
+										<input
+											id="pt-amber"
+											type="number"
+											min="0"
+											max="100"
+											step="any"
+											inputmode="decimal"
+											required
+											aria-describedby={thresholdsInvalid ? 'pt-error' : undefined}
+											aria-invalid={thresholdsInvalid ? 'true' : undefined}
+											bind:value={amber}
+											oninput={() => (thresholdsSaved = null)}
+										/>
+									</div>
+								</div>
+								{#if thresholdsInvalid}<p id="pt-error" class="field-error small" role="alert">{thresholdsInvalid}</p>{/if}
+								<div class="t-actions">
+									<button class="btn" type="submit" disabled={savingThresholds || !!thresholdsInvalid || thresholdsUnchanged}>
+										{savingThresholds ? 'Saving…' : 'Save thresholds'}
+									</button>
+									{#if team.portfolioThresholds.source === 'team'}
+										<button type="button" class="btn btn-sm" disabled={savingThresholds} onclick={() => saveThresholds(null)}>
+											Use the defaults
+										</button>
+									{/if}
+								</div>
+								<p class="muted small" role="status">{thresholdsSaved ?? ''}</p>
+							</form>
+						{:else}
+							<p class="muted small">Only admins can change them.</p>
 						{/if}
 					</section>
 
@@ -500,6 +598,20 @@
 	}
 	.plist .muted {
 		flex: none;
+	}
+	.rule {
+		margin: 0 0 0.35rem;
+	}
+	.field-error {
+		margin: 0.25rem 0 0;
+		color: var(--danger);
+	}
+	.t-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+		margin-top: 0.5rem;
 	}
 	.danger {
 		border-color: color-mix(in srgb, var(--danger) 35%, var(--border));

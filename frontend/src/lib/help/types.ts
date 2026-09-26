@@ -1,0 +1,43 @@
+// The help text's shapes. Type-only, so the modules that hold the text
+// (tips.ts, articles.ts, farmer.ts) import nothing at run time: each stays
+// its own chunk, and scripts/guards/i18n_sheet.mjs can load farmer.ts with
+// Node's type stripping.
+
+export type HelpCategory =
+	| 'basics'
+	| 'network'
+	| 'farm'
+	| 'crops'
+	| 'transfers'
+	| 'flow'
+	| 'ewr'
+	| 'data'
+	| 'results'
+	| 'fit'
+	| 'farmer';
+
+export interface HelpEntry {
+	/** Stable anchor on the glossary (`/help/glossary#<id>`). Lowercase, hyphenated. */
+	id: string;
+	term: string;
+	/** One sentence, ≤ 140 characters: what the HelpTip shows first. */
+	short: string;
+	/** Fuller explanation. Paragraphs separated by a blank line. */
+	long: string;
+	units?: string;
+	category: HelpCategory;
+	/** Other names people search for (abbreviations, workbook labels). */
+	aliases?: string[];
+	/** Form/result keys this entry explains (see tips.ts's header comment). */
+	fields?: string[];
+	/** Ids of related entries. */
+	related?: string[];
+	/** Where the concept comes from: a workbook sheet or a doc. */
+	source: string;
+}
+
+/** What a HelpTip shows and looks up by (tips.ts). */
+export type HelpTipText = Pick<HelpEntry, 'id' | 'term' | 'short' | 'units' | 'category' | 'fields'>;
+
+/** The rest of an entry, only the glossary and search read (articles.ts). */
+export type HelpArticle = Pick<HelpEntry, 'long' | 'aliases' | 'related' | 'source'>;

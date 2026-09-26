@@ -153,7 +153,9 @@ describe('anonymised farm context and the holder count', () => {
 /**
  * The project routes a farmer may call (WP-2.3 publication read, WP-2.6 farm
  * view, WP-2.7 notes, where RLS limits a farmer to farm notes on their own
- * farms: notes/notes.db.test.ts); every other one refuses them.
+ * farms: notes/notes.db.test.ts; WP-2.13 alert events, where RLS limits a
+ * farmer to their farms' events and the notice events: alerts/alerts.db.test.ts);
+ * every other one refuses them.
  */
 const FARMER_ALLOWED = new Set([
 	'GET /projects/:id/publication',
@@ -165,7 +167,8 @@ const FARMER_ALLOWED = new Set([
 	'GET /projects/:id/notes/counts',
 	'POST /projects/:id/notes',
 	'PATCH /projects/:id/notes/:noteId',
-	'DELETE /projects/:id/notes/:noteId'
+	'DELETE /projects/:id/notes/:noteId',
+	'GET /projects/:id/alert-events'
 ]);
 
 describe('project routes for a farmer', () => {
@@ -205,6 +208,11 @@ describe('project routes for a farmer', () => {
 		expect(await farmer.call('GET', `/projects/${projectId}/notes`)).toEqual({ status: 200, body: { notes: [] } });
 		expect((await farmer.call('POST', `/projects/${projectId}/notes`, { body: 'x' })).status).toBe(403);
 		expect((await farmer.call('PATCH', `/projects/${projectId}/notes/${ZERO}`, { body: 'x' })).status).toBe(404);
+	});
+
+	// Alert events admit a farmer; none have fired in this project.
+	it('lets a farmer list alert events, empty here', async () => {
+		expect(await farmer.call('GET', `/projects/${projectId}/alert-events`)).toEqual({ status: 200, body: { events: [] } });
 	});
 
 	// requireRole(…, 'viewer') and above refuse the farmer rank (fail closed). A

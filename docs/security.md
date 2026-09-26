@@ -300,21 +300,28 @@ and nothing else.
   data feed's values are checked by its parser. The outlier limit is the
   engine's (5× the 99th percentile of the series' non-zero days for rain,
   10× for flow), taken from the series **without** the push (its days before
-  the merge, less the days the push overwrites), so one push can't lift the
-  limit over itself. **Limits** (a partial mitigation):
+  the merge, less the days the push overwrites) and without every day that
+  key wrote before and nobody has written since (`series_key_days`, 053),
+  so a key can't lift the limit over itself, in one push or slowly, batch by
+  batch under it. A person's write over a key's days (or a feed's) makes
+  them count again: they are that person's values now. **Limits** (a
+  partial mitigation):
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a new or
     short series is checked for negatives only;
-  - days an earlier push of the same key wrote still count towards the
-    limit (a series keeps no per-day author), so a key that poisons slowly,
-    push by push, can shift the 99th percentile it is later judged by
-    (followups.md § POPIA and the Step 2 release tracks excluding them).
+  - when the days left without the key's own are too few for the rule (a
+    series the key alone fills, like a logger's), the limit falls back to
+    the series without the push only, which that key's earlier pushes still
+    shape (followups.md § POPIA and the Step 2 release tracks a reference
+    for that case).
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
   days from the key's events, re-push; a key's merge keeps no series
   revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
-  handler waiting, a person's run ending it, a person's merge not held),
+  handler waiting, a person's run ending it, a person's merge not held; a
+  key pushing in batches held by the limit without its own days, another
+  key's and a person's days counting, the guard's directions),
   `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
@@ -457,7 +464,7 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   to an address on its suppression list; the app learns of it through the
   configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
   `ses-events` → SQS `mail-events` → the worker (`mail/suppression.ts`,
-  054). The person's `app_user.mail_suppressed_at` is set, they drop out of
+  056). The person's `app_user.mail_suppressed_at` is set, they drop out of
   `app_alert_recipients`, the deliveries waiting for them are skipped, and a
   delivery already made is skipped when it's built (the worker checks the
   flag as the recipient). Their choices are kept, so turning mail back on
@@ -753,9 +760,12 @@ In short:
     leaves is the applicant projection (`scenarios/applicant.ts`: their own
     farms and the gauges in full, every other node anonymised and blanked).
     An application is checked in its applicant's namespace (049: the engine
-    meets every hidden node under its anonymous name and every hidden crop
-    under a name made of its id, `applyScenario`'s `maskedNames`), so its
-    messages quote no hidden name without any text redaction. The DB test scans everything the applicant
+    meets every hidden node under its anonymous name, and every hidden crop,
+    transfer, land-cover patch and borehole under an opaque id and name,
+    `applyScenario`'s `mask`), so its messages quote no hidden name or id
+    without any text redaction, count nothing hidden, and a rule broken
+    because of hidden data reads only "doesn't apply to the catchment as
+    modelled" (wording pending the client, issue #50). The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -799,11 +809,18 @@ In short:
     does; the hidden one is renamed with a suffix in that application's runs,
     and only the assessors are told (`check.renamed`). An application's name
     is unique among its owner's applications only, so naming a draft after
-    someone else's says nothing either. What remains: the id of a hidden
-    crop, transfer, land-cover patch or borehole can still be probed by an
-    op that targets or reuses it, which needs the id (random UUIDs from the
-    UI; imports derive them from the project and element names) and is
-    tracked in followups.md with the counts an op on a hidden farm reports.
+    someone else's says nothing either. *Ids*: an op that targets the id of
+    a hidden crop, transfer, land-cover patch or borehole answers `… not
+    found`, and one that reuses it applies, exactly as for a free id (the
+    hidden items are under opaque ids no op holds while the ops apply); the
+    new item moves to a fresh id in that application's runs, and only the
+    assessors are told (`check.reIds`). *Counts and rules*: removing a hidden
+    farm reports nothing it carried, and a rule the op breaks only because
+    of hidden data (a hidden item, a hidden farm's borehole rule, flow
+    shares over 100 %, no catchment area left) says only that the op
+    doesn't apply to the catchment as modelled. Whether it applies can't be
+    hidden (a model that breaks a save rule can't run); the words are the
+    client's call (issue #50).
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.
@@ -1018,8 +1035,13 @@ database:
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does.
-- Still open with the rest of POPIA ([§ Personal information](#personal-information-popia)):
-  allocations and names in a data-subject export.
+- In the data-subject export ([§ Personal information](#personal-information-popia)),
+  a farmer gets the allocations matched to *their* linked farms, holder name
+  included (what RLS already lets them read). A holder is never matched to
+  an account by name: names aren't unique, so matching would hand one
+  person another's registration. A registered user without a linked farm
+  has no account to export to; their name is the WUA's record, answered by
+  the WUA.
 
 ## Personal information (POPIA)
 
@@ -1064,7 +1086,7 @@ file), so a new column can't ship without a decision.
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark, whether SES suppressed the address (054) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (056) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -1078,17 +1100,33 @@ file), so a new column can't ship without a decision.
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
+| An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination holds the project |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
 
 **Data-subject requests.**
-- **Access / export: not built.** There is no "download my data" yet
-  (plan.md Phase 7). Until then the operator answers a request by querying
-  the tables above for the person (the WUA confirms who is asking). The
-  project exports (`export.json`, CSV, the farm CSV) are project data, not a
-  data-subject export.
+- **Access / export: self-service.** Account → Your data → **Download my
+  data** (`GET /auth/me/export`, [api.md § Auth](./api.md)) saves one JSON
+  file: the account (never the password hash), memberships, farm links with
+  those farms' current published figures (as the farm page shows them) and
+  the registered volumes and holder names matched to them, notes written,
+  sign-offs, invites to their verified address, alert and report choices,
+  alert mails sent, and every audit event they made or that names them.
+  The rows RLS hides from the person (the audit log for a farmer, invites,
+  anything in a project they've left) come through `app_subject_export()`
+  (052), a `SECURITY DEFINER` reader with no user argument that reads only
+  the caller's own rows. Nothing about another farm or person beyond what
+  those records name (the actor who linked them, the people named in events
+  they made). One export a minute per account. Every foreign key to
+  `app_user` is classified as exported or left out, with why, in
+  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`): the
+  project's own records that name the person only as their maker (runs,
+  revisions, keys, publications…) are left out, because the act is in the
+  audit events. The project exports (`export.json`, CSV, the farm CSV)
+  remain project data, not a data-subject export
+  ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
 - **Deletion: an operator act.** There is no self-service deletion. On a
   request the operator deletes the `app_user` row as the schema owner
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 7): the table
@@ -1243,9 +1281,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     number is **self-declared** (not checked against the SACNASP register);
     dam safety classification (DW793) is for others; there is no MFA on
     signing yet (Step 4), so a sign-off is as strong as the signer's
-    password. The typed name and registration are personal data: the POPIA
-    export and deletion must cover them (followups.md § Liability and
-    sign-off).
+    password. The typed name and registration are personal data: the
+    data-subject export lists them (`signoffs`), and deletion keeps the row
+    with the account cleared ([§ Personal information](#personal-information-popia)).
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
@@ -1264,8 +1302,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- POPIA: no privacy notice, no data-subject export and no self-service
-  account deletion yet (Phase 7); what exists today and the open items are in
+- POPIA: no privacy notice and no self-service account deletion yet
+  (Phase 7); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook

@@ -1,11 +1,13 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
-	// while signed in, and a link to the alert emails page (WP-2.13), with a
+	// while signed in, a link to the alert emails page (WP-2.13), with a
 	// banner when SES stopped delivering to the address (alert emails paused
-	// until the person turns them back on). The header's account menu links here. docs/ui.md § App
+	// until the person turns them back on), and "download my data" (POPIA,
+	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
 	import { base } from '$app/paths';
+	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
@@ -78,6 +80,28 @@
 			resumeError = resumeProblem(err);
 		} finally {
 			resuming = false;
+		}
+	}
+
+	// ---- Download my data (GET /auth/me/export) ----
+	// The download helpers load on click, so the page chunk stays lean.
+	let exporting = $state(false);
+	let exportError = $state<string | null>(null);
+	let exported = $state(false);
+	async function downloadData() {
+		exported = false;
+		exportError = null;
+		exporting = true;
+		try {
+			const { fetchDownload, saveBlob } = await import('$lib/export/download');
+			const { blob, filename } = await fetchDownload(`${PUBLIC_API_URL}/auth/me/export`);
+			saveBlob(blob, filename);
+			exported = true;
+		} catch (err) {
+			// 429 (one a minute) and anything else: the server's message says what to do.
+			exportError = msg(err);
+		} finally {
+			exporting = false;
 		}
 	}
 
@@ -214,6 +238,18 @@
 			<p class="status" role="status" aria-live="polite">{resumed ? t('alerts.suppressed.resumed') : ''}</p>
 			<p class="muted intro">{t('account.alertsHint')}</p>
 			<p><a href="{base}/account/alerts">{t('account.alertsLink')}</a></p>
+		</section>
+
+		<section class="panel" aria-labelledby="data-h">
+			<h2 id="data-h">{t('account.data')}</h2>
+			<p class="muted intro">{t('account.dataHint')}</p>
+			{#if exportError}<div class="alert alert-error" role="alert">{exportError}</div>{/if}
+			<div class="actions">
+				<button class="btn" type="button" onclick={downloadData} disabled={exporting}>
+					{exporting ? t('account.dataDownloading') : t('account.dataDownload')}
+				</button>
+				<p class="status" role="status" aria-live="polite">{exported ? t('account.dataDone') : ''}</p>
+			</div>
 		</section>
 
 		<section class="panel" aria-labelledby="password-h">

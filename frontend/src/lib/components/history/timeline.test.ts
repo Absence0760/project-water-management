@@ -103,6 +103,17 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
 	});
 
+	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
+		const from = { green: 5, amber: 20, source: 'default' };
+		const to = { green: 2.5, amber: 12.5, source: 'team' };
+		expect(eventLine(ev('team_thresholds.changed', { team: 'Upper WUA', from, to }))).toBe(
+			'Changed the portfolio traffic lights of the team “Upper WUA” from green under 5 %, amber under 20 % (the defaults) to green under 2.5 %, amber under 12.5 %'
+		);
+		expect(eventLine(ev('team_thresholds.changed', { team: 'Upper WUA', from: to, to: from }))).toBe(
+			'Changed the portfolio traffic lights of the team “Upper WUA” from green under 2.5 %, amber under 12.5 % to green under 5 %, amber under 20 % (the defaults)'
+		);
+	});
+
 	it('gives an event one line and a revision its changes', () => {
 		expect(itemLines(ev('invite.revoked', { email: 'j•••@example.com' }))).toEqual(['Revoked the invite for j•••@example.com']);
 		expect(itemLines(rev())).toHaveLength(1);

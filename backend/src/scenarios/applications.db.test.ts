@@ -421,6 +421,9 @@ const CONTRIBUTOR_ALLOWED = new Set([
 	'GET /projects/:id/scenarios/:sid/share-candidates',
 	'POST /projects/:id/scenarios/:sid/members',
 	'DELETE /projects/:id/scenarios/:sid/members/:userId',
+	// Alerts (WP-2.13): min role farmer, and a contributor gets an empty list
+	// (alerts/routes.ts), never an event; checked below.
+	'GET /projects/:id/alert-events',
 	// Notes (WP-2.7): min role farmer, and RLS gives a contributor what a farmer
 	// with the same links reads (their own farm's farm-visible notes); the
 	// route lets them write only there (scenarios/contributor-tables.db.test.ts).
@@ -440,6 +443,10 @@ describe('project routes for a contributor', () => {
 	it('finds the project routes, the contributor-allowed ones among them', () => {
 		expect(refused.length).toBeGreaterThan(40);
 		for (const r of CONTRIBUTOR_ALLOWED) expect(allRoutes).toContain(r);
+	});
+
+	it('answers a contributor’s alert-events with no event', async () => {
+		expect(await applicantB.call('GET', `/projects/${projectId}/alert-events`)).toEqual({ status: 200, body: { events: [] } });
 	});
 
 	it.each(refused)('%s refuses a contributor', async (route) => {

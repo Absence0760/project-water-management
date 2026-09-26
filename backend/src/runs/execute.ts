@@ -15,10 +15,11 @@ import {
 	type SeriesProvenance,
 	withoutForecastTail
 } from '@water-management/engine';
-import type { Db } from '../db/tx.js';
+import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
+import { requireRole } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
 
 /**
@@ -160,7 +161,7 @@ export async function citedMessage(db: Db, projectId: string, runId: string, tai
 
 /**
  * Serialise the project's run writes and removals to the end of the caller's
- * transaction: trimRuns, the run DELETE route and executeRun's stored inputs
+ * transaction: trimRuns, the run DELETE route and storeRun's stored inputs
  * all take it. Without it a new run could reuse a stored input series
  * (series_blob) in the same moment a trim frees that series' last other
  * reference and garbage-collects it, failing one of the two.
@@ -250,13 +251,58 @@ export class NoForecastRainError extends ApiError {
 }
 
 /**
- * Run the live model and persist it. Returns the new run id.
- *
- * The run's input series are stored too (021_series_blob.sql): each kind's
- * values go to `series_blob` under their SHA-256 (only if the project doesn't
- * hold those exact values already) and `run_input_series` records which blob
- * and start date the run used, so loadRunInput can rebuild the exact input
- * later, whatever happens to the live series.
+ * Everything a run needs from the database, read before the engine runs:
+ * the input, the label, the trigger and, for a scenario run, what the
+ * scenario was. The input is what storeRun records as the run's snapshot and
+ * input series, so a run's results always match its stored inputs, whatever
+ * happens to the project while the engine runs.
+ */
+export interface RunPlan {
+	projectId: string;
+	label: string;
+	input: ModelInput;
+	trigger: RunTrigger;
+	scenario?: RunScenarioSnapshot;
+	/** A draft application's run: its label stays out of the project's log (storeRun's audit event). */
+	privateLabel?: boolean;
+}
+
+/** The engine half of a run: no database. Injectable in tests (runOutsideTransaction). */
+export type ComputeRun = (plan: RunPlan) => ModelOutput | Promise<ModelOutput>;
+
+/**
+ * Run the engine on a plan. The engine's self-checks and water balance are
+ * stored with the run (engine ≥ 0.12.0). A forecast run is reproduced by
+ * runForecastChecked(loadRunInput(run)), an ordinary one by runModelChecked.
+ */
+export const computeRun = (plan: RunPlan): ModelOutput => (plan.trigger === 'forecast' ? runForecastChecked(plan.input) : runModelChecked(plan.input));
+
+/**
+ * The live model's plan: the project's current inputs (loadModelInput).
+ * Forecast mode (WP-2.12): the history as an ordinary run, the forecast days
+ * after it, summary.forecast over them. Every other run (manual, auto)
+ * leaves the forecast tail out entirely (withoutForecastTail), so forecast
+ * rain never reaches the figures farmers and regulators rely on; it stores
+ * the input it ran on, so runModel(loadRunInput(run)) still reproduces it.
+ */
+export async function prepareRun(
+	db: Db,
+	projectId: string,
+	label: string | ((input: ModelInput) => string),
+	trigger: RunTrigger = 'manual'
+): Promise<RunPlan> {
+	const live = await loadModelInput(db, projectId);
+	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) throw new NoForecastRainError();
+	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
+	return { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger };
+}
+
+/**
+ * Run the live model and persist it, all in the caller's transaction.
+ * Returns the new run id. The job worker's re-run uses this
+ * (jobs/handlers/rerun.ts): a job's writes commit with its `done`
+ * (jobs/registry.ts), and the worker's connection serves no request. A
+ * request uses runLiveModel, which holds no connection while the engine runs.
  */
 export async function executeRun(
 	db: Db,
@@ -264,35 +310,99 @@ export async function executeRun(
 	label: string | ((input: ModelInput) => string),
 	trigger: RunTrigger = 'manual'
 ): Promise<{ id: string; output: ModelOutput }> {
-	const live = await loadModelInput(db, projectId);
-	// Forecast mode (WP-2.12): the history as an ordinary run, the forecast days
-	// after it, summary.forecast over them. Every other run (manual, auto)
-	// leaves the forecast tail out entirely (withoutForecastTail), so forecast
-	// rain never reaches the figures farmers and regulators rely on; it stores
-	// the input it ran on, so runModel(loadRunInput(run)) still reproduces it.
-	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) throw new NoForecastRainError();
-	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
-	return runAndStore(db, projectId, typeof label === 'function' ? label(input) : label, input, undefined, trigger);
+	const plan = await prepareRun(db, projectId, label, trigger);
+	return storeRun(db, plan, computeRun(plan));
 }
 
 /**
- * Run the engine on `input` and persist the run, its outputs and its stored
- * inputs: the one save path, shared by executeRun (the live model) and
- * executeScenarioRun (a scenario applied to its base run's input, with
- * `scenario` set, scenarios/execute.ts). Doesn't trim; the caller does.
+ * A model run in two transactions with the engine between them, so no pooled
+ * connection (nor any lock or snapshot) is held while it computes
+ * (docs/architecture.md § A model run):
+ *
+ * 1. `prepare`, as `userId` in a READ ONLY REPEATABLE READ transaction: check
+ *    the caller may run it and read the plan, from one consistent snapshot;
+ * 2. the engine (`compute`), with no transaction open;
+ * 3. `commit`, as `userId` in a new transaction: check again that the caller
+ *    may run it (a user removed from the project while the engine ran writes
+ *    nothing; RLS would refuse the insert anyway, this answers 403/404
+ *    first), then store the run and whatever follows (trim, read back).
+ *
+ * The plan read in 1 is what 3 stores (settings, model, input series), so
+ * the run's results always match its stored inputs. The live project may
+ * change in between: the run is then a run of the project as it stood when
+ * it was read, exactly as reproducible, and "what changed since this run"
+ * shows the edit, as it would an edit made a moment after the run. It is not
+ * redone: under a steady stream of feed writes a redo could go on for ever,
+ * and the new data queues its own re-run anyway. (One transaction had the
+ * same gap: nothing locked the inputs, and under READ COMMITTED each of its
+ * reads could see a different moment.) A scenario run's commit refuses if
+ * the scenario itself changed (scenarios/execute.ts runScenario).
  */
-export async function runAndStore(
-	db: Db,
+export async function runOutsideTransaction<P extends { run: RunPlan }, T>(
+	userId: string,
+	prepare: (db: Db) => Promise<P>,
+	commit: (db: Db, prepared: P, output: ModelOutput) => Promise<T>,
+	compute: ComputeRun = computeRun
+): Promise<T> {
+	const prepared = await withUser(userId, prepare, { readOnly: true });
+	const output = await compute(prepared.run);
+	return withUser(userId, (db) => commit(db, prepared, output));
+}
+
+/**
+ * POST /projects/:id/runs and an import's run: the live model as `userId`,
+ * who must be an editor when it is read and again when it is stored
+ * (runOutsideTransaction). `then` runs in the storing transaction, after the
+ * run is written (the route trims and reads the run back there).
+ */
+export function runLiveModel<T>(
+	userId: string,
 	projectId: string,
 	label: string,
-	input: ModelInput,
-	scenario?: RunScenarioSnapshot,
-	trigger: RunTrigger = 'manual',
-	opts: { privateLabel?: boolean } = {}
-): Promise<{ id: string; output: ModelOutput }> {
-	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
-	// A forecast run is reproduced by runForecastChecked(loadRunInput(run)), an ordinary one by runModelChecked.
-	const output = trigger === 'forecast' ? runForecastChecked(input) : runModelChecked(input);
+	trigger: RunTrigger,
+	then: (db: Db, run: { id: string; output: ModelOutput }) => Promise<T>,
+	compute?: ComputeRun
+): Promise<T> {
+	return runOutsideTransaction(
+		userId,
+		async (db) => {
+			await requireRole(db, projectId, 'editor');
+			return { run: await prepareRun(db, projectId, label, trigger) };
+		},
+		async (db, { run }, output) => {
+			await requireRole(db, projectId, 'editor');
+			return then(db, await storeRun(db, run, output));
+		},
+		compute
+	);
+}
+
+/**
+ * Engine problems (bad inputs, missing series) are the user's to fix: a
+ * failed run answers 400 with the engine's message. An ApiError, or a
+ * database error (it carries a SQLSTATE `code`; its text never reaches a
+ * response), passes through unchanged. For a run route's `.catch`.
+ */
+export function runFailure(err: Error): never {
+	if (err instanceof ApiError || (err as { code?: string }).code) throw err;
+	throw new ApiError(400, `model run failed: ${err.message}`);
+}
+
+/**
+ * Persist a computed run, its outputs and its stored inputs, in the caller's
+ * transaction: the one save path, for the live model (executeRun,
+ * runLiveModel) and a scenario applied to its base run's input (`scenario`
+ * set, scenarios/execute.ts runScenario). Doesn't trim; the caller does.
+ *
+ * The run's input series are stored too (021_series_blob.sql): each kind's
+ * values go to `series_blob` under their SHA-256 (only if the project doesn't
+ * hold those exact values already) and `run_input_series` records which blob
+ * and start date the run used, so loadRunInput can rebuild the exact input
+ * later, whatever happens to the live series.
+ */
+export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Promise<{ id: string; output: ModelOutput }> {
+	const { projectId, label, input, scenario, trigger } = plan;
+	const opts = { privateLabel: plan.privateLabel };
 	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
@@ -358,7 +468,7 @@ export async function runAndStore(
 /**
  * Write a new run's input series: each distinct content once per project
  * (series_blob), then the run's references to it (run_input_series). Last
- * in executeRun, so the project's run lock (taken here, held to commit, the
+ * in storeRun, so the project's run lock (taken here, held to commit, the
  * one trimRuns takes next anyway) covers as little of the run as it can.
  */
 async function storeRunInputs(
