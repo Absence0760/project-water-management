@@ -1150,8 +1150,9 @@ yet; each lands with the work package named.
       access to a farm.
 - [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
       `FarmIndex`; the pages say "your WUA".
-- [ ] **"Email me when …"** links (the notice / low-dam alert and "Email me
-      when it's ready"): WP-2.13.
+- [x] **"Email me when …"** links for the notice and a low dam: alert emails
+      (WP-2.13); the farm view's alert card and every alert email link to
+      `/account/alerts`. "Email me when it's ready" (a report) is still open.
 - [ ] **"Not available: the model's data starts on …"** needs the run's
       first date; `lastSeason` is null without it, so the page says the data
       doesn't reach back.
@@ -1532,8 +1533,8 @@ role and not before it.
   - [ ] Marking a fed series on the Data tab ("from CHIRPS feed"), and an
         audit event per merge (needs WP-2.4's `audit_event`).
   - [x] A debounced re-run after new data (WP-2.11, built).
-  - [ ] Emailing owners about a stale or failing feed (WP-2.13): today the
-        panel and the CloudWatch alarms are how anyone hears.
+  - [x] Emailing owners about a stale or failing feed: the `data_stale` and
+        `feed_failing` alerts (WP-2.13), once the catchment switches them on.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
   - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
         last 50 days daily (~200 range requests). Trigger: more than ~20
@@ -1885,10 +1886,9 @@ from the WP:
       team admins on the team page, passed to `ewrStatus`. Trigger: the
       hydrologist confirms or changes the defaults (plan.md D11), or a second
       team wants different ones.
-- [ ] **Alerts column.** `alertsFiring` is `null` and the page shows no
-      Alerts column; both carry a marked WP-2.13 hook. Trigger: WP-2.13
-      (alert_event) lands: count firing events per project in the portfolio
-      query and render the column.
+- [x] **Alerts column.** `alertsFiring` counts the firing `alert_event`
+      rows per project in the portfolio query, and the page shows it
+      (WP-2.13).
 - [ ] **"Farms short this week" lands at the top of the Runs tab.** The link
       is `?tab=runs&run=…&window=last7#res-curtailment`: the curtailment
       table now opens on the last 7 days (the reporting-window picker, #44),
@@ -2069,6 +2069,47 @@ Left, each with its trigger:
       years lists only the first ones. Trigger: a catchment that hits it;
       the fix is a full list on the check or in the statement.
 
+## Alerts (WP-2.13)
+
+- [ ] **SES suppression turns a person's alerts off, with a banner.** SES
+      already drops mail to a bounced or complaining address (the
+      configuration set's suppression list), but the app doesn't know: the
+      person's alerts stay on and nothing tells them. Durable fix: an SES
+      event destination (bounce, complaint) to SNS → the jobs queue, a
+      handler that sets the address's `alert_subscription` rows to `off`
+      and a flag on `app_user`, and a banner on the account and alerts
+      pages. Trigger: SES production access (a prerequisite of Step 2), and
+      before the first farmer gets an alert on production.
+- [ ] **End-to-end through Mailpit.** The roadmap's e2e (a fixture forecast
+      drives a dam below 30 % → an Afrikaans mail for the farmer in Mailpit
+      → one-click unsubscribe → no second mail on the next crossing) isn't
+      built: the flow is proven by `backend/src/alerts/alerts.db.test.ts`
+      (memory outbox, real ticks) and the pages by `e2e/tests/alerts.spec.ts`.
+      Durable fix: a spec that runs `runJobsTick` against Mailpit
+      (`pnpm dev:mail:up`, as `server-report.spec.ts` does) and reads the
+      message through Mailpit's API. Trigger: the reviewed Afrikaans alert
+      wording lands (§ Afrikaans), so the mail it checks is the real one.
+- [ ] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
+      `alerts.*`, `unsubscribe.*` and `farm.alerts.*` page keys are on
+      `docs/i18n/af-translation-sheet.md`; until they come back an Afrikaans
+      reader gets English (marked `lang="en"`). Trigger: § Afrikaans.
+- [ ] **Per-feed staleness levels.** `data_stale` is one rule per catchment,
+      measured past each feed's own usual delay. Durable fix: a
+      `node_id`-like `feed_id` on `alert_rule` for `data_stale`. Trigger: a
+      WUA asks for a different level per feed.
+- [ ] **Open rates and farmer feedback** (the roadmap's recommendation
+      before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
+      click tracking on the configuration set (POPIA: say so in the privacy
+      notice) or a "Was this useful?" link. Trigger: one season of alerts on
+      production.
+- [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
+      is ready; a transport beside `mail/transport.ts` with a log transport
+      locally. Trigger: farmers ask for it after a season of email.
+- [ ] **Bundle ceiling.** The alert pages bring the frontend's gzipped total
+      to 942 KB against the 929 KB ceiling (932 KB at this merge before
+      them). The ceiling was left alone for the integrator to decide
+      (`scripts/guards/check_web_bundle_budget.mjs`). Trigger: the merge.
+
 ## POPIA and the Step 2 release (WP-2.16)
 
 The Step 2 release-hardening pass (2026-09-26,
@@ -2089,7 +2130,8 @@ own. Loop in the CISO or security analyst before acting on any of them.
 - [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
       security.md: farmers' accounts and farm links (the WUA's function or
       legitimate interest, not consent), notes and the audit log kept for
-      the life of the project, alerts as opt-out service messages (WP-2.13).
+      the life of the project, alerts as service messages the WUA switches
+      on per catchment, each person choosing how often (WP-2.13).
       Who: the client's information officer. Trigger: with the privacy
       notice.
 - [ ] **Operator agreement** (POPIA s20–21) between the client as

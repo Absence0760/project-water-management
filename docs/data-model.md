@@ -1442,7 +1442,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6) |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
 | `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running` |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
@@ -1721,6 +1721,91 @@ refuses one.
   report and schedule RLS with positive controls, farmers, the recipients
   rule and the tick; `reports/render.db.test.ts` renders a real PDF into
   MinIO.
+
+### Alerts (051_alerts.sql)
+
+Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
+[security.md § Alerts](./security.md#alerts)).
+
+| Table | Holds |
+| --- | --- |
+| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `threshold` (a per-kind CHECK: a dam fraction 0–1, whole days, failures or jobs, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`) |
+| `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
+| `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
+| `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
+
+- **RLS**:
+  - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
+    and the `restriction_published` rule; INSERT / UPDATE / DELETE for
+    editors. The `alert_rule_check` trigger requires a farm node, stamps the
+    creator, and never lets a rule's kind or farm change.
+  - `alert_event`: SELECT for viewers; a farmer the events on their own farms
+    and the restriction-notice events (not an applicant). INSERT and UPDATE
+    for editors (the `alert_eval` job's acting user). `water_app` may update
+    only `state`, `cleared_at`, `value` and `detail` (a column grant; the
+    catalogue test lists it), and `alert_event_guard` refuses reopening a
+    cleared event or moving one to another rule. No DELETE policy.
+  - `alert_subscription`: one policy for everything: your own rows, for a
+    project you can still open (not as an applicant), and a farmer's
+    `node_id` must be one of their farms (`app_farm_nodes`).
+  - `alert_delivery`: SELECT your own rows. No write policy: every write is a
+    `SECURITY DEFINER` function below.
+- **Who gets an alert** (`alert_audience`, a plain SQL function run only
+  inside the definer functions, not granted to `water_app`): each member's
+  current role on the project, directly or through its team, then the kind's
+  default for that role, overridden by their farm-level choice, then their
+  kind-level choice; a catchment-wide `all = off` mutes them. Defaults:
+  `dam_below` that farm's farmers, editors and owners (viewers opt in);
+  `ewr_forecast_fail` editors and owners (viewers opt in); `data_stale`
+  editors and owners; `restriction_published` farmers, viewers and up;
+  `job_dead` and `feed_failing` owners (editors opt in). Applicants never.
+- **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
+  - `app_alert_recipients(project, kind, node)`: verified addresses whose
+    mode isn't off, with locale, volume unit, role and mode. Answers an
+    editor of the project, or the worker's own context (no user, no API
+    key); anyone else gets no rows.
+  - `app_alert_my_mode(project, kind, node)`: the signed-in person's own
+    effective mode, or NULL when they don't get the kind. The worker asks it
+    as the recipient, right before building their mail.
+  - `app_alert_fan_out(event)`: one delivery per recipient of an event
+    opened within the hour, `pending` or `digest` by their mode; an editor
+    of the project only.
+  - `app_alert_claim(limit, since, cap, lease)`: claims pending deliveries
+    to send (`sending`, leased), one person at a time under an advisory lock,
+    turning each past `cap` immediate mails since `since` into `digest`; a
+    delivery left `sending` past its lease becomes `failed`, never re-sent.
+  - `app_alert_claim_digest(before, people, lease)`: every digest line
+    queued before `before` for up to `people` people.
+  - `app_alert_finish(event, user, status, reason)`: `sent`, `skipped`,
+    `failed`, or `retry` (back to pending or digest, failed after 3 tries).
+  - `app_alert_skip_all(reason)`: the kill switch: every pending or digest
+    delivery becomes `skipped`.
+  - `app_purge_alerts(age)`: deliveries older than `age` (≥ 30 days; the tick
+    passes 180), and events cleared that long ago.
+  - `app_alert_unsubscribe(hash)`: turns off the subscription with that token
+    hash, and returns its kind, project name and farm name; nothing when no
+    row has the hash, or its person no longer has access to the project (or,
+    a farmer, to that farm). Pre-auth, like `app_consume_email_token`.
+  - `app_alert_schedule(project, gap, limit)`: queues an `alert_eval` for one
+    project, or for up to `limit` projects with an enabled `data_stale`,
+    `feed_failing` or `job_dead` rule and none queued or made in the last
+    `gap`, as the first of: a rule's creator, a feed's acting user, the
+    longest-standing owner, who is an editor or owner now.
+  - Every claim, finish, skip and schedule function refuses a signed-in or
+    API-key context (`alert_worker_context`): only the worker runs them.
+- Indexes cover every foreign key: the rule's unique index (project), node
+  and creator; the event's rule, project (with state: the firing counts),
+  node and run; the subscription's unique index (user), project and node;
+  the delivery's primary key (event), user (with `claimed_at`: the cap) and
+  project; plus the open deliveries by status and every delivery by
+  `created_at` for the purge.
+- `alerts/alerts.db.test.ts` checks the recipients (a farmer only for their
+  own farm, a removed member gets nothing, each with a positive control),
+  subscriptions (own rows, a farmer only for their farm), one delivery per
+  event and person, the unsubscribe token (valid, tampered, replayed after
+  a re-enable, expired with a membership, the one-click form post), the
+  daily cap and the digest, the kill switch, re-arming after recovery, the
+  restriction notice in the reader's language, and the scheduled checks.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role

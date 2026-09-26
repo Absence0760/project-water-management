@@ -1719,6 +1719,60 @@ part can start at any time. D7.
 
 ### WP-2.13 Alerts (email), with preferences, unsubscribe and rate limits
 
+> **Status (2026-09-26): built** (`051_alerts.sql`, `backend/src/alerts/`,
+> the `alert_eval` job, `mail/alerts.ts`; the pages `/account/alerts` and
+> `/alerts/unsubscribe`, Overview → Active alerts with the rule editor, the
+> farm view's alert card, the portfolio's Alerts column). Docs:
+> [api.md § Alerts](../api.md#alerts), [data-model.md § Alerts](../data-model.md#alerts-051_alertssql),
+> [security.md § Alerts](../security.md#alerts), [architecture.md § Alert emails](../architecture.md#alert-emails),
+> [ui.md § Alerts](../ui.md#alerts), [deployment.md § Alert emails](../deployment.md#alert-emails)
+> and Runbooks 3 (alert storm).
+>
+> Departures from the plan below:
+> - **Opt-in per catchment.** No rule exists (or it is off) until an editor
+>   switches a kind on; the defaults are shown, unsaved, in the rule editor.
+>   The WUA decides when its members start getting mail, as publication is
+>   a person's act (D5). A dam rule for a farm added later follows the
+>   catchment's.
+> - **dam_below reads the publication**, not an unpublished run: the farm's
+>   published projection (its dam on the last day of data, or the published
+>   forecast's lowest), so the farmer and the WUA see the same figure the
+>   WUA stands behind. `ewr_forecast_fail` (WUA only) reads the newest
+>   forecast run, and is skipped while an API key's push is held.
+> - **Queued after** an auto or forecast run, a publication or notice
+>   change (the plan's "published run"), a rule change, and by the tick
+>   (hourly for data_stale / feed_failing / job_dead, at once on a dead
+>   job). A manual run isn't a cause: its figures reach farmers only when
+>   published.
+> - **Sending** is an outbox: the job fans out deliveries in its own
+>   transaction, and the tick sends them after it commits, building each
+>   mail **as the recipient** under RLS (their access and choice re-checked
+>   then; a farmer's mail can only name what they may read).
+> - **The unsubscribe token** is HMAC(`ALERTS_TOKEN_SECRET`, a per-row
+>   nonce), stored as its SHA-256, rather than 32 random bytes: the worker
+>   must put the same token in every mail (links in old mails keep working)
+>   without storing it. Only the worker holds the secret. A re-enable draws
+>   a new nonce (an old link is then refused); a removed member's link is
+>   refused. The landing page **asks before it acts** (mail scanners open
+>   links); the RFC 8058 header is the one-click path, and only it is
+>   exempt from `csrf()`.
+> - **Digests** are one email per person per catchment, and carry a
+>   catchment-wide unsubscribe (`kind = 'all'`), since RFC 8058 allows one
+>   address per mail.
+> - **Kinds:** `data_stale` is one rule per project, measured against each
+>   feed's own usual delay (`staleAfterDays`: 3 days *past* it, so CHIRPS's
+>   normal lag doesn't fire it), not a threshold per feed; `feed_failing`
+>   and `job_dead` are evaluated from the feeds and jobs tables like the
+>   other kinds (owners by default, editors opt in).
+> - **Kill switch** drops waiting deliveries rather than holding them, so
+>   turning it back on can't release the storm.
+> - **Not built:** SES suppression turning a bounced address's alerts off
+>   with a banner (needs the SES event destination), the Mailpit end-to-end
+>   (an AF farmer mail through a real worker tick; the flow is covered by
+>   `alerts.db.test.ts` with the memory outbox and the pages by
+>   `e2e/tests/alerts.spec.ts`), open-rate measurement, and WhatsApp/SMS
+>   (`channel` is ready). All in [followups.md § Alerts](../followups.md#alerts-wp-213).
+
 **Goal.** People hear about trouble before they'd have noticed it. Nobody is
 spammed, and farmers never receive a neighbour's figures.
 
@@ -1876,8 +1930,8 @@ the forecast kinds.
 > merged yet; `unknown` carries a reason (no run, no EWR set, no series) so
 > it is never a false green; farm counts are stored at publish time as
 > `catchment_view.recent` (farms short in 7 / 30 days) and kept out of a
-> farmer's publication response; `alertsFiring` is always `null`, a marked
-> hook for WP-2.13; the D11 thresholds are fixed defaults, not yet a team
+> farmer's publication response; `alertsFiring` counts the firing alerts
+> (WP-2.13 filled the hook); the D11 thresholds are fixed defaults, not yet a team
 > setting (followups.md); "farms short this week" links to the Runs tab's
 > Curtailment section of the run over the last 7 days (`window=last7`, #44;
 > it doesn't scroll there yet, followups.md); `seed:examples` still puts two of its three catchments in
@@ -2142,7 +2196,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Key escalation (another project, another scope, a read) | ✅ | `ingest/ingest.db.test.ts` "writes only its own project", "checks the scope in the database", "can't read the model, runs, members, the project, keys or the history" |
 | Share-link scraping / overreach | ✅ | `share/share.db.test.ts` (catchment-level only, response scan for the note and every farm name and id, farm keys refused, same 404 for every dead link, owner-only); WAF attached: `infra/tests/guardrails.tftest.hcl` "edge_security"; `noindex`: `e2e/tests/share-links.spec.ts` |
 | Stored XSS through notes, notices, the share page | 🔧 | **Added** `frontend/src/lib/rawHtml.test.ts`: no `{@html}` and no `innerHTML`-style write anywhere under `src/` (there was a rule, no guard). Mail: `mail/templates.test.ts` escapes names |
-| A farmer using a removed membership | 🔧 | Leaving was tested; removal by an owner wasn't. **Added** `publish/publication.db.test.ts` "ends a removed farmer's access on their next request, with the same session" (farm view, CSV, index, publication, notes, series). Per alert: ⏳ WP-2.13 |
+| A farmer using a removed membership | 🔧 | Leaving was tested; removal by an owner wasn't. **Added** `publish/publication.db.test.ts` "ends a removed farmer's access on their next request, with the same session" (farm view, CSV, index, publication, notes, series). Per alert (WP-2.13): `alerts/alerts.db.test.ts` "checks the recipient's access again at send time" and "a removed member stops being a recipient at once" |
 | Farmer mail built from the recipient's own scope | ✅ | `farms/invites.db.test.ts` (only the invited farms); `reports/reports.db.test.ts` "a farmer can't … be a recipient" |
 | Background jobs run as a person and fail closed | ✅ | `jobs/jobs.db.test.ts` "fails closed … when the acting user lost the editor role"; `ingest/ingest.db.test.ts` key re-run as its creator, skipped when the creator is gone; `feeds/feeds.db.test.ts` feed of a deleted acting user skipped |
 | Internet fetch output as untrusted input | ✅ | `feeds/fetch.test.ts` "FetchResult (the fetcher's output is untrusted)" and the parse-failure cases |
@@ -2150,7 +2204,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Render tokens (server PDFs) | ✅ | `reports/reports.db.test.ts` "render tokens", `reports/scope.test.ts` |
 | Portfolio: no other team's or personal project; farmers 404 | ✅ | `portfolio/portfolio.db.test.ts` |
 | Every route auth-gated or public by design | ✅ | `routes.test.ts` (ingest key-gated, share on the allowlist) |
-| Alert mail-bombing, unsubscribe abuse | ⏳ | WP-2.13 |
+| Alert mail-bombing, unsubscribe abuse | ✅ | WP-2.13: once per crossing (`alerts/rules.test.ts`), one delivery per event and person, the daily cap and digest, the kill switch, the unsubscribe token (tampered, replayed, expired, one-click form post): `alerts/alerts.db.test.ts`; the CSRF exemption stays one route: `routes.test.ts`; a farmer's mail scanned for other farms' names: `alerts.db.test.ts`, `mail/alerts.test.ts` |
 
 *Data export and deletion (every Step 2 personal-data table)*
 
@@ -2170,9 +2224,9 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | --- | --- | --- |
 | What is kept, why, how long, what deletion does | ✅ | [security.md § Personal information](../security.md#personal-information-popia) |
 | Privacy notice, lawful basis, operator agreement, region, deleted-note bodies, backups | ⏳ | followups.md § POPIA and the Step 2 release (client / information officer) |
-| Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm ⏳ WP-2.13) |
-| `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (unsubscribe ⏳ WP-2.13) |
-| Personas (§9) and load checks | ⏳ | Once WP-2.5, WP-2.12 and WP-2.13 land (three personas judge those) |
+| Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm: runbook 3, WP-2.13) |
+| `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (the unsubscribe: [security.md § Alerts](../security.md#alerts)) |
+| Personas (§9) and load checks | ⏳ | Now that WP-2.5, WP-2.12 and WP-2.13 are built (three personas judge those) |
 
 **Size.** S. **Depends on.** Everything above.
 

@@ -333,8 +333,9 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),
-  the job is `dead` and logs `job_dead`, which alarms in production (email to
-  the owners comes with WP-2.13). The stored error is written by us
+  the job is `dead` and logs `job_dead`, which alarms in production, and
+  queues a job_dead alert check for the project (emailing its owners when the
+  project has that alert on, [§ Alert emails](#alert-emails)). The stored error is written by us
   (`jobs/errors.ts`), never database text.
 - **A worker that dies** mid-job leaves it `running` until its lease
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
@@ -445,7 +446,63 @@ Settings → Automatic runs.
 - **Waking the worker**: a route wakes it after commit only when the re-run
   is due at once (a debounce of 0, handy in dev); a debounced one is found
   by the next poll (15 s locally) or the production tick (5 minutes) once
-  due. WP-2.13 will queue `alert_eval` after each auto run.
+  due. An auto or forecast run queues `alert_eval` when the project has an
+  alert on ([§ Alert emails](#alert-emails)).
+
+### Alert emails
+
+Roadmap WP-2.13 (`backend/src/alerts/`, `051_alerts.sql`, the `alert_eval`
+job; [api.md § Alerts](./api.md#alerts), [security.md § Alerts](./security.md#alerts)).
+Alerts are opt-in per catchment: nothing below happens for a project with
+no rule switched on.
+
+```mermaid
+flowchart LR
+  AR[auto / forecast run<br/>jobs/handlers/rerun.ts] --> Q
+  PUB[publish or notice change<br/>publish/routes.ts] --> Q
+  RULES[PUT /alert-rules] --> Q
+  TICK[tick: app_alert_schedule<br/>hourly, and on a dead job] --> Q
+  Q[[alert_eval job<br/>dedupe 'alert_eval']] --> EV[evaluate as the editor<br/>alerts/evaluate.ts]
+  EV -- opens / clears --> E[(alert_event)]
+  EV -- app_alert_fan_out --> D[(alert_delivery<br/>pending / digest)]
+  D --> S[tick's send step<br/>alerts/send.ts]
+  S -- as each recipient, RLS --> M[sendMail<br/>SES / Mailpit]
+```
+
+1. **Queue.** `alerts/queue.ts` queues an `alert_eval` (one pending per
+   project) after an auto or forecast run, after a person publishes or
+   changes the restriction notice, and when an editor changes the rules.
+   The tick queues the checks no run causes (a feed going stale or failing,
+   dead jobs) through `app_alert_schedule`: hourly for projects with those
+   rules on, and at once for a job that just died.
+2. **Evaluate** (`alerts/evaluate.ts`, as the job's acting editor under
+   RLS). Values come from the current publication (dam level: the farm's
+   published projection, and its published forecast's lowest), the newest
+   forecast run (EWR days at risk; skipped while an API key's anomalous push
+   is held), the data feeds and the dead jobs. `alerts/rules.ts` decides
+   with hysteresis: open an event on crossing, clear it only after recovery
+   past the margin. A restriction notice is an event per change. Each newly
+   opened event is fanned out (`app_alert_fan_out`) to one delivery per
+   recipient, `pending` or `digest` by their choice. Nothing is mailed here:
+   the job holds no network I/O, and its writes commit with its "done".
+3. **Send** (`alerts/send.ts`, the last step of every tick, so after the
+   job committed). The kill switch first: `ALERTS_ENABLED=false` skips every
+   waiting delivery. Then `app_alert_claim` claims pending deliveries,
+   turning those past the daily cap (5 since the last 06:00 SAST) into
+   digest lines; after 06:00 `app_alert_claim_digest` claims each person's
+   digest lines, one email per catchment. Each mail is built in a
+   transaction **as its recipient** (`withUser`): `app_alert_my_mode`
+   re-checks their access and choice, and RLS limits what the mail can say
+   (a farmer's names only their farm). The unsubscribe token is derived
+   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`).
+   The mail goes out after that transaction, and `app_alert_finish` records
+   `sent`, `skipped` (why) or a retry.
+4. **Purge.** The tick deletes deliveries after 180 days and events 180 days
+   after they cleared (`app_purge_alerts`).
+
+The worker Lambda's metric line carries `AlertMailsSent` and
+`AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on
+failing sends.
 
 ## Data feeds
 
@@ -606,8 +663,9 @@ merges into:
   forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
   (not fetched yet, or not since a new place or series was saved),
   `disabled`. A feed not fetched two days after it was attached or changed is
-  stale ("the background worker may not be running"). Emailing owners about a stale feed
-  is WP-2.13.
+  stale ("the background worker may not be running"). A project with the
+  `data_stale` or `feed_failing` alert on emails its owners and editors
+  ([§ Alert emails](#alert-emails)).
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 

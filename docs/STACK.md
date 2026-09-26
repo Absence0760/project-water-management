@@ -28,6 +28,9 @@ sides share.
   (`playwright-core`, the browser e2e installs) and store the PDF through
   `@aws-sdk/client-s3` (MinIO locally, `STORAGE=local`; a private S3 bucket in
   production, where a container-image renderer Lambda does the printing).
+  Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
+  by the tick, each built as its recipient under RLS (Mailpit locally;
+  `ALERTS_ENABLED=false` is the kill switch).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the

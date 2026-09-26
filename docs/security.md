@@ -346,6 +346,113 @@ and nothing else.
   routes key-gated, the owner routes session-gated) and
   `e2e/tests/api-keys.spec.ts`.
 
+## Alerts
+
+Email alerts (roadmap WP-2.13; `051_alerts.sql`, [api.md § Alerts](./api.md#alerts),
+[data-model.md § Alerts](./data-model.md#alerts-051_alertssql)). The risks
+are mail-bombing (a loop, a flapping figure or a hostile editor mailing
+people over and over), an unsubscribe link that can be forged or turned
+against its owner, and a farmer's mail naming a neighbour's farm.
+
+- **Opt-in per catchment.** Nothing is evaluated or sent until an editor
+  switches a kind on (`PUT /projects/:id/alert-rules`, recorded as
+  `alert_rules.changed`). The WUA decides when its members start getting
+  mail, as it decides when a run is published.
+- **Rate limits, in layers.**
+  - *Once per crossing.* A rule has at most one firing event (a partial
+    unique index), and it re-arms only after the value recovers past the
+    threshold **plus a margin** (dam level + 5 points; other kinds in
+    [api.md § Alerts](./api.md#alerts)), so a figure hovering at the line
+    sends one mail, not one a day (`alerts/rules.ts`, `rules.test.ts`).
+    A cleared event never fires again (`alert_event_guard`).
+  - *Once per event per person, ever.* `alert_delivery`'s primary key is
+    `(event_id, user_id)`, and `app_alert_fan_out` refuses an event older
+    than an hour, so an old event can't be mailed out again.
+  - *At most 5 immediate alert emails per person per day*
+    (`ALERTS_DAILY_CAP`), the day running from 06:00 to 06:00 South African
+    time; the rest wait for that person's next 06:00 digest, one email per
+    catchment. The cap is applied when a delivery is claimed, one person at
+    a time under an advisory lock, so two workers can't both send the sixth.
+    This bounds what any source can send a person, a hostile editor
+    flapping thresholds included (their edits are in the audit log).
+  - *Never twice after a crash.* A delivery is marked `sending` before the
+    mail goes and `sent` after; one left `sending` past its lease is marked
+    `failed`, never re-sent. A transport error is retried at most 3 times.
+  - *The kill switch.* `ALERTS_ENABLED=false` on the worker stops every send
+    and drops what was waiting (`app_alert_skip_all`), so turning it back on
+    doesn't release the storm; events still open and clear, so the app
+    stays right ([deployment.md § Runbooks](./deployment.md#runbooks), alert
+    storm; the `alert_storm` CloudWatch alarm).
+- **Recipients, and access at send time.** `app_alert_recipients` (SECURITY
+  DEFINER, search path pinned) lists who gets a kind from each member's
+  **current** role (direct or through the team), their choice and the
+  kind's default; applicants never, farmers only their own farms' dam
+  alerts and the restriction notices, unverified addresses never. It
+  answers an editor of the project (the job's acting user) or the worker's
+  own context, and nobody else. When the mail is built, the worker opens a
+  transaction **as the recipient** (`withUser`) and asks
+  `app_alert_my_mode` again: a member removed after the event, or who
+  turned the alert off, gets nothing (the delivery is `skipped` with why).
+- **A farmer's mail names only their own farm.** The mail is built as the
+  recipient under RLS: the event (`alert_event` RLS: a farmer sees their own
+  farms' events and the notice events), the farm's name (`node` RLS) and the
+  notice (`run_publication`) are read with the farmer's rights, so the mail
+  can't contain a row they may not read. A dam event's `detail` comes from
+  that farm's own publication projection. Tests scan the rendered farmer
+  mail for every other farm's name (`alerts.db.test.ts`, `mail/alerts.test.ts`).
+  The dam figure is the **published** projection's, never an unpublished
+  run's: a farmer is told only what the WUA stands behind.
+- **The unsubscribe token.**
+  - Each subscription has a random 32-byte nonce; its token is
+    HMAC-SHA256(`ALERTS_TOKEN_SECRET`, nonce), base64url (43 characters),
+    and the row stores only the token's SHA-256 (`unsubscribe_hash`,
+    unique). Only the worker holds the secret (it builds the mails, and
+    derives the same token for every mail, so a link in an old mail keeps
+    working); the API checks a token by its hash alone and has no secret to
+    leak. Neither a database leak (nonce and hash) nor the secret alone
+    makes a valid token.
+  - It **only ever turns its own subscription off**
+    (`app_alert_unsubscribe`), without signing in: a leaked link can at
+    worst stop one person's alerts of one kind (a digest's, all of one
+    catchment's), and "Manage your alerts" turns them back on.
+  - *Tampered*: hashes to nothing, `404`. *Replayed after a re-enable*:
+    turning a choice back on draws a new nonce and clears the hash, so the
+    old link is dead. *Expired*: there is no time limit (old mails must keep
+    working), but a token whose person is no longer a member (or, a farmer,
+    no longer linked to the farm) is refused. A repeat of a valid token is
+    harmless (a mail client may post twice).
+  - *Where it travels.* The mail's link is `/alerts/unsubscribe#t=<token>`:
+    in the fragment, like share links, so it never reaches a server log;
+    the page strips it from the address bar and POSTs it as JSON. The RFC
+    8058 `List-Unsubscribe` header must carry it in the URL
+    (`/api/alerts/unsubscribe?token=…`: a mail client's one-click post has a
+    fixed body), so that one address can appear in CloudFront, WAF and API
+    access logs; its worst use is the one above.
+  - *The page asks first.* The landing page shows "Stop these emails" and
+    acts on the click, not on arrival, so a mail scanner that opens (and
+    even renders) links can't silently switch a farmer's dam alerts off.
+    The one-click header is the one-click path.
+  - *CSRF.* `POST /alerts/unsubscribe` is the only route exempt from the
+    `csrf()` check (`app.ts`, exact method and path): a mail client
+    form-posts it from its own servers with no Origin. It reads no session
+    cookie, so a forged cross-site post can do only what the token's holder
+    could do anyway. `routes.test.ts` checks the exemption stays that
+    narrow (the same form post to any other route is refused).
+  - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
+    can't be guessed.
+- **Headers.** `List-Unsubscribe`, `List-Unsubscribe-Post:
+  List-Unsubscribe=One-Click` and `Auto-Submitted: auto-generated` go out on
+  every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
+  `headers`). `sendMail` makes every header value one line and refuses a
+  header name that isn't a token, so no user text can inject a header.
+- **Liability.** Every alert says it is a model estimate from the WUA's
+  published figures, not a measurement or an instruction, and to check with
+  the WUA before acting; a forecast says forecasts change; a restriction
+  notice says it is the WUA's own words.
+- **Not built yet.** SES suppression (a bounce or complaint turning the
+  address's alerts off, with a banner in the app) waits for the SES event
+  destination ([followups.md § Alerts](./followups.md)).
+
 ## Authorization: per-project roles enforced by Postgres RLS
 
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
@@ -896,8 +1003,9 @@ by the WUA; nobody is added to a project without an owner acting.
   both are needed before a farmer is invited on production.
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
-- Alerts (WP-2.13, not built): opt-out service messages with one-click
-  unsubscribe *(confirm)*.
+- Alerts (WP-2.13): service messages the WUA switches on per catchment,
+  each person choosing right away, daily or off, with a one-click
+  unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
 - Cookies: one session cookie (`wm_session`, strictly necessary). No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
@@ -925,6 +1033,7 @@ file), so a new column can't ship without a decision.
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
+| Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination holds the project |

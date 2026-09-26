@@ -151,7 +151,7 @@ shorter than the cap looks as before.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
-the published baseline, a "Needs attention" list, eight headline facts, project details, the import
+the published baseline, a "Needs attention" list, the active alerts ([§ Alerts](#alerts)), eight headline facts, project details, the import
 record (an imported project only), recent notes ([§ Notes](#notes)), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
@@ -438,8 +438,8 @@ Portfolio](./api.md#portfolio)):
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
   recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
   health.
-- Alerts: no column yet. The table and the cards carry a marked hook for
-  WP-2.13; the API's `alertsFiring` is `null` until alerts exist.
+- **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
+  from `alertsFiring` ([§ Alerts](#alerts)).
 
 Wide screens get a sortable table (column-heading buttons with `aria-sort`);
 under 760 px the same rows become stacked cards with a *Sort by* select.
@@ -2304,8 +2304,10 @@ published.
 English and Afrikaans for everything a farmer touches (WP-2.5): the farm
 view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
-email" banner, the account page, and the emails a farmer receives (confirm
-address, reset password, the farmer invite). The modeller workspace and the
+email" banner, the account page and its alert emails page
+(`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), and the
+emails a farmer receives (confirm address, reset password, the farmer
+invite, the alert emails and their digest). The modeller workspace and the
 `/share` page stay English.
 
 - **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
@@ -2336,8 +2338,9 @@ address, reset password, the farmer invite). The modeller workspace and the
   `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
   They read runes, so a template that calls them re-renders on a switch.
   The backend's emails have their own catalogue, `backend/src/mail/i18n/`
-  (`mailT(locale)` → `{ t, lang }`), same pattern; alert emails (WP-2.13)
-  should add their keys there.
+  (`mailT(locale)` → `{ t, lang }`), same pattern; the alert emails'
+  words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
+  them, in the language the words came out in.
 - **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
@@ -2358,6 +2361,55 @@ address, reset password, the farmer invite). The modeller workspace and the
   stale). `catalogue.test.ts` (frontend and backend) and
   `content.af.test.ts` fail when an untranslated key is missing from the
   sheet; `pnpm check:i18n` fails when the sheet is out of date.
+
+## Alerts
+
+Email alerts (WP-2.13; [api.md § Alerts](./api.md#alerts), [security.md §
+Alerts](./security.md#alerts)). Words and parsing in
+`lib/components/alerts/alerts.ts` (unit-tested); the farmer-facing pages'
+words come from the message catalogue ([§ Language](#language)).
+
+- **Overview → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
+  attention): the alerts firing now, each as a sentence ("Farm One: dam
+  about 8 % on 20 Sep 2026 (alert below 30 %)", "EWR at the outlet at risk
+  on 5 of 14 forecast days (alert at 3)", the late or failing feeds), or "No
+  alert is firing". An editor gets **Set up alert emails**, which loads the
+  rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
+  the click): a checkbox per catchment kind (EWR at risk in the forecast,
+  data feed behind, restriction notice, background jobs failed, data feed
+  failing) and per farm dam, each with its level (dam % of capacity, days,
+  failures or jobs; range-checked in the form and by the API), a *Firing*
+  mark, and Save. It says that nothing is sent until a kind is switched on,
+  and that each alert is sent once per crossing.
+- **`/account/alerts`** (linked from the account page's **Alert emails**
+  panel and from every alert email; translated): per catchment you can open,
+  a group per alert you can get, with *Right away* / *Once a day (06:00)* /
+  *Off* radios (44 px rows). A farmer sees a *Dam running low: <farm>* group
+  per own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  also the opt-in kinds (dam alerts for every farm, the EWR forecast);
+  editors and owners the operational kinds. A choice saves when made
+  ("Saved."), and the page says when the catchment hasn't switched that
+  alert on yet. A catchment muted by a digest's unsubscribe says so, with
+  *Turn alert emails back on*. It notes the daily cap (5 right away, the rest
+  in the next morning's summary).
+- **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
+  signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
+  token from the fragment (`#t=…`) once, strips it from the address bar,
+  and **asks first**: *Stop getting these alert emails? …* with *Stop these
+  emails*. Only the click posts the token (so a mail scanner that opens the
+  link can't switch a farmer's alerts off). Then "You won't get dam level
+  emails for Rietvlei any more." (or "any alert emails", for a digest's link)
+  with *Manage alerts*. A dead link ("This link doesn't work any more: a
+  newer email may have replaced it, or you may no longer be a member") and a
+  link without its token have their own states. `noindex`-free but
+  `no-referrer`, like the reset pages.
+- **Farm view**: while the farm's own dam alert fires, an **Alerts** card
+  under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
+  alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may
+  fall below … around …"), with *Choose your alert emails*. Nothing shows
+  otherwise, or when the alerts can't be loaded.
+- **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
+  (a warning badge), from `alertsFiring`.
 
 ## Share page (`/share`)
 
