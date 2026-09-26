@@ -23,7 +23,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			"MIN(soil store[t−1] + Pe, MAX(0, gross demand)), in m³ (Pe = cropped area × effective rain fraction ÷ 1000 × rain; rain ≤ threshold counts as 0; the store in m³ = mm × cropped area ÷ 1000)"
 	},
 	{ key: 'soil_water', letter: null, formula: 'MIN(store size, soil store[t−1] + Pe − effective rain used), in mm over the cropped area; starts empty' },
-	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used' },
+	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used; × the demand factor for the month when a demand.scale scenario set one' },
 	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
 	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − release − dam capacity × minimum operating level, 0), D) (release only with a release rule, WP-3.5)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
@@ -110,7 +110,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 
 /** Other water users (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.7c). No letters: the workbook has no such element. */
 export const USER_COLUMNS: readonly FarmColumn[] = [
-	{ key: 'demand', letter: null, formula: 'the monthly demand from the river (m³/day) for the day’s month' },
+	{ key: 'demand', letter: null, formula: 'the monthly demand from the river (m³/day) for the day’s month, × the demand factor for the month when a demand.scale scenario set one' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
 	{ key: 'supplied', letter: 'G', formula: 'senior: MIN(demand, H); junior: MIN(demand, MAX(0, H − Σ upstream Zs))' },
 	{ key: 'return_flow', letter: 'T', formula: 'return share × G' },

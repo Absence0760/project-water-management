@@ -30,6 +30,8 @@
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
 	// Boreholes (WP-3.9) supply farms and other users.
 	const pumpers = $derived(nodes.filter((n) => n.kind !== 'gauge'));
+	// demand.scale (issue #53 R1): the nodes of the category picked.
+	const demandNodes = $derived(nodes.filter((n) => n.kind === d.demandCategory));
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
 	const node = $derived(nodes.find((n) => n.id === d.nodeId));
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));
@@ -82,6 +84,11 @@
 	function toggleMonth(m: number, on: boolean) {
 		d.months = on ? [...d.months, m].sort((a, b) => a - b) : d.months.filter((x) => x !== m);
 	}
+	function toggleDemandNode(id: string, on: boolean) {
+		d.demandNodeIds = on ? [...d.demandNodeIds, id] : d.demandNodeIds.filter((x) => x !== id);
+	}
+	/** Water-year order for demand.scale's months (Oct first), the order its demand rows read in. */
+	const WATER_YEAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -449,6 +456,42 @@
 			</div>
 		</div>
 		<p class="hint">Scales recorded rain only; missing days stay missing. Evaporation is the A-pan setting (“Change a setting”).</p>
+	{:else if d.kind === 'demand.scale'}
+		<div class="form-row">
+			<div class="field">
+				<label for="op-demand-category">Whose demand</label>
+				<select
+					id="op-demand-category"
+					value={d.demandCategory}
+					onchange={(e) => {
+						d.demandCategory = e.currentTarget.value as OpDraft['demandCategory'];
+						d.demandNodeIds = [];
+					}}
+				>
+					<option value="farm">Farms (irrigation)</option>
+					<option value="user">Other water users</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="op-demand-pct">Demand (% of what they'd take)</label>
+				<input id="op-demand-pct" type="text" inputmode="decimal" placeholder="e.g. 85" bind:value={d.demandPct} />
+			</div>
+		</div>
+		<fieldset class="months" data-testid="op-demand-nodes">
+			<legend>{d.demandCategory === 'farm' ? 'Farms' : 'Other water users'} (none ticked: all of them)</legend>
+			{#each demandNodes as n (n.id)}
+				<label><input type="checkbox" checked={d.demandNodeIds.includes(n.id)} onchange={(e) => toggleDemandNode(n.id, e.currentTarget.checked)} /> {n.name}</label>
+			{:else}
+				<span class="hint">The model has no {d.demandCategory === 'farm' ? 'farm' : 'other water user'}.</span>
+			{/each}
+		</fieldset>
+		<fieldset class="months">
+			<legend>Months (none ticked: every month)</legend>
+			{#each WATER_YEAR_MONTHS as m (m)}
+				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
+			{/each}
+		</fieldset>
+		<p class="hint">Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply.</p>
 	{/if}
 
 	<div class="actions">

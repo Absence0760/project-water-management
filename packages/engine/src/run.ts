@@ -22,7 +22,7 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, toEpochDay, waterYearIndex } from './calendar';
-import { cropFactorAreaM2, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -1020,6 +1020,9 @@ function otherUsers(
 				demand[t] = Number.isFinite(v) && v > 0 ? v : 0;
 			}
 		}
+		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month.
+		const factor = demandFactorOf(n, warnings);
+		if (factor) for (let t = 0; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -1454,6 +1457,10 @@ function buildDemand(
 		} else for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
 		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
 		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
+		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
+		// requirement F after the store, so the rain used, the store and the gross demand stay as they were.
+		const factor = demandFactorOf(node, warnings);
+		if (factor) for (let t = 0; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.

@@ -719,6 +719,16 @@ export interface NetworkNode {
 	/** kind 'user' only: priority against the farms. Default 'senior'. */
 	userPriority?: UserPriority;
 	/**
+	 * Demand factor (engine ≥ 0.41.0, issue #53 R1): a multiplier on the
+	 * node's demand per water-year month (Oct–Sep), for a farm its crop water
+	 * requirement F (so the abstraction D = F ÷ e scales with it, and the
+	 * efficiency and loss return are unchanged), for an other water user its
+	 * monthly demand. null / absent = 1 in every month; a gauge ignores it.
+	 * Only the `demand.scale` scenario op sets it (docs/scenarios.md): the
+	 * model editor and a model save don't carry it.
+	 */
+	demandFactor?: number[] | null;
+	/**
 	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
 	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
 	 * boreholes, and the other borehole fields are inert.

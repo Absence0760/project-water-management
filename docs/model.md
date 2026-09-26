@@ -174,6 +174,19 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    The result, net demand, is the farm's **crop water requirement** F (run
    series `crop_requirement`, the workbook's net irrigation demand).
 
+4a. **Demand factor (engine ≥ 0.41.0, issue #53 R1).** A scenario's
+   `demand.scale` op ([scenarios.md](./scenarios.md), "what if everyone takes
+   85 %?") gives a farm a `demandFactor`, a multiplier per water-year month
+   (absent = 1). It multiplies F after the soil-water store:
+
+   `F[f][t] = demandFactor[f][month(t)] × (MAX(0, grossFarm) − used)`
+
+   so the store, the effective rain used and the gross demand are what they
+   were, and D below scales with F. The crop area, efficiency and loss
+   return are untouched, so the meaning is "the farm takes 85 % of what it
+   would" (deficit irrigation, or a restriction), not a smaller crop. The
+   run's own check (`verify/checks.ts` `checkWorkings`) reads the factor.
+
 5. **Abstraction demand (engine ≥ 0.16.0, [audit N1](./engine-audit.md))**:
    the farm abstracts enough to cover its application losses,
 
@@ -1916,6 +1929,8 @@ kind `user` runs exactly as before (no new series or summary fields).
 
 It has no area, flow share, dam, crops, transfers or EWR share; the API
 refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+A scenario's `demand.scale` with `category: 'user'` (engine ≥ 0.41.0)
+multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 
 **Each day** (network/simulate.ts), with H = Σ upstream outflow and Zs_in =
 Σ upstream senior requirement (below):

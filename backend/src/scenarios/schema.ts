@@ -51,6 +51,8 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			];
 		case 'borehole.remove':
 			return [['boreholeId', op.boreholeId]];
+		case 'demand.scale':
+			return (op.nodeIds ?? []).map((id, i) => [`nodeIds[${i}]`, id] as [string, unknown]);
 		case 'settings.set':
 		case 'series.scale':
 			return [];

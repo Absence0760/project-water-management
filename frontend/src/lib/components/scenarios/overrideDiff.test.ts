@@ -195,13 +195,21 @@ describe('diffModel', () => {
 	it('round-trips any model edit the engine’s own random ops make (fuzz)', () => {
 		for (let seed = 1; seed <= 150; seed++) {
 			const input = randomInput(seed);
-			// Settings and series aren't the model editor's: only model ops.
-			const ops = randomOps(input, seed).filter((o) => o.op !== 'settings.set' && o.op !== 'series.scale');
+			// Settings, series and demand factors aren't the model editor's: only model ops.
+			const ops = randomOps(input, seed).filter((o) => o.op !== 'settings.set' && o.op !== 'series.scale' && o.op !== 'demand.scale');
 			const after = applyScenario(input, ops).input.model;
 			const d = diffModel(input, after);
 			expect(d.unsupported, `seed ${seed}`).toEqual([]);
 			expect(d.problems, `seed ${seed}`).toEqual([]);
 		}
+	});
+
+	it('keeps a demand factor an earlier demand.scale set, and records only the edit made (issue #53 R1)', () => {
+		const scaled = applyScenario(base(), [{ op: 'demand.scale', factor: 0.85, nodeIds: [UP], months: [12, 1] }]).input;
+		const e = editing(scaled);
+		node(e, UP).damCapacityM3 = 180_000;
+		expect(roundTrips(scaled, e.snapshot())).toEqual([{ op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 180_000 }]);
+		expect(node(e, UP).demandFactor).toEqual(scaled.model.nodes.find((n) => n.id === UP)!.demandFactor);
 	});
 
 	it('reports an edit the engine won’t apply, such as a duplicate name', () => {
