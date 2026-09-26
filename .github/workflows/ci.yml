@@ -87,6 +87,11 @@ jobs:
       - name: Web bundle budget
         run: pnpm check:bundle
 
+      # Every farmer-facing string without reviewed Afrikaans is on the
+      # translator's sheet, and the sheet is current (WP-2.5, docs/ui.md § Language).
+      - name: Afrikaans translation sheet current
+        run: pnpm check:i18n
+
       # The exact packaging deploy-backend.yml runs, so a broken package script
       # fails here rather than at release time.
       - name: Package Lambdas (release path)
