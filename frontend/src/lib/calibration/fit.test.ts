@@ -281,9 +281,18 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [] });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' } });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
+	});
+
+	it('records a monthly PE input the fit ran under, copied (issue #39)', () => {
+		const mm = new Array(12).fill(90) as unknown as ProjectSettings['apanMm'];
+		const form = { ...defaultProjectSettings(), pe: { kind: 'monthly' as const, mm, source: 'station ET₀' } };
+		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
+		expect(rec.forcing!.pe).toEqual({ kind: 'monthly', mm, source: 'station ET₀' });
+		(mm as unknown as number[])[0] = 1;
+		expect(rec.forcing!.pe).toEqual({ kind: 'monthly', mm: new Array(12).fill(90), source: 'station ET₀' });
 	});
 
 	it('records the CHIRPS fit period the fit ran under, copied, and the factor sets from the report (engine ≥ 0.29.0)', () => {
