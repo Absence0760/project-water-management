@@ -99,6 +99,14 @@ If you spot a candidate fix that fits one of those patterns: stop, surface the u
 - **Recommend the long-term solution.** When a quick patch and a durable fix diverge, name the durable fix and its tradeoffs even if you also ship the patch — don't let an expedient workaround pass as the answer.
 - **No dangling "deferred" / "out-of-scope" findings.** A real issue you surface — in a review, an audit, a code comment, or your own analysis — gets driven to resolution, not left as a passing mention. Default: fix it the same session when it's bounded and you've already diagnosed it. Only when a fix is genuinely too large or risky may you defer — and a deferral is a tracked follow-up (a GitHub issue or Jira ticket — confirm before creating), naming what's broken, the durable fix, and the trigger to do it. Surfacing starts the obligation; it doesn't end it.
 
+## Running tests: fast loop first
+
+Don't run full suites after every edit. While working use `pnpm test:changed`
+(typecheck + only the tests the change reaches) or the single failing file;
+run e2e only for the specs of the surface you touched. Run the full gate
+(`pnpm check && pnpm test`, plus `pnpm test:backend:db` for backend/SQL) once
+before committing. Timings and the why: `docs/testing.md`.
+
 ## UI verification
 
 Don't spin up the dev server to visually verify UI/frontend changes before reporting a task complete. `pnpm check` + `pnpm test` (or the stack's equivalent — see `docs/STACK.md`) are sufficient; the operator reviews visuals themselves. Only run the dev server if explicitly asked.
