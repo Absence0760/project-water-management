@@ -6,6 +6,10 @@
 		crops: () => import('$lib/components/crops/CropsTab.svelte'),
 		transfers: () => import('$lib/components/transfers/TransfersTab.svelte')
 	};
+	// The model overlays the tables link to (issue #17: the Network's Grids
+	// menu, its node card's farm link), the same chunks the workspace page loads.
+	const loadGridModal = () => import('$lib/components/model/GridModal.svelte');
+	const loadFarmDrawer = () => import('$lib/components/crops/FarmCropsDrawer.svelte');
 </script>
 
 <script lang="ts">
@@ -18,8 +22,15 @@
 	// model) and hands them to the scenario editor, which appends them with
 	// one PATCH, as the form does. Edits no op can express are listed and
 	// block recording; nothing is dropped silently.
+	//
+	// The overlays the tables open from the URL (the grid modal, `grid=<id>`;
+	// the farm drawer, `farm=<nodeId>`; lib/workspace/overlays.ts) are opened
+	// here too, on this editor and without a save: the workspace page doesn't
+	// open its own over the Scenarios tab, since those edit the live model.
 	import { untrack } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { isGridId, withoutParam } from '$lib/workspace/overlays';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import IssueList from '$lib/components/model/IssueList.svelte';
@@ -94,8 +105,35 @@
 		if (editor.dirty && !confirm(LEAVE)) return;
 		onclose();
 	}
+	// Opening or closing an overlay, or a node's sheet, is a navigation too
+	// (its URL parameter) but stays in override mode: only leaving the
+	// scenario (another tab, scenario or page, or the browser) asks.
+	const leaves = (to: URL | undefined) =>
+		!to ||
+		to.pathname !== page.url.pathname ||
+		['tab', 'scenario'].some((k) => to.searchParams.get(k) !== page.url.searchParams.get(k));
 	beforeNavigate((nav) => {
-		if (editor.dirty && !confirm(LEAVE)) nav.cancel();
+		if (editor.dirty && leaves(nav.to?.url) && !confirm(LEAVE)) nav.cancel();
+	});
+
+	// --- the grid modal and the farm drawer, on this editor (see above) ---
+	const gridParam = $derived(page.url.searchParams.get('grid'));
+	const openGrid = $derived(isGridId(gridParam) ? gridParam : null);
+	let gridOpen = $state(false);
+	$effect(() => {
+		gridOpen = !!openGrid;
+	});
+	const farmParam = $derived(page.url.searchParams.get('farm'));
+	let farmOpen = $state(false);
+	$effect(() => {
+		farmOpen = !!farmParam;
+	});
+	// Closed (Done, Esc, the ✕): drop the parameter in place, so Back goes to where it was opened from.
+	$effect(() => {
+		if (!gridOpen && untrack(() => gridParam)) void goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+	$effect(() => {
+		if (!farmOpen && untrack(() => farmParam)) void goto(withoutParam(page.url, 'farm'), { replaceState: true, noScroll: true, keepFocus: true });
 	});
 </script>
 
@@ -143,6 +181,21 @@
 		</Lazy>
 	{/if}
 </div>
+
+{#if openGrid}
+	<Lazy load={loadGridModal}>
+		{#snippet children(GridModal)}
+			<GridModal bind:open={gridOpen} grid={openGrid} {editor} settings={input.settings as ProjectSettings} readonly={false} projectId="" />
+		{/snippet}
+	</Lazy>
+{/if}
+{#if farmParam}
+	<Lazy load={loadFarmDrawer}>
+		{#snippet children(FarmCropsDrawer)}
+			<FarmCropsDrawer bind:open={farmOpen} {editor} settings={input.settings as ProjectSettings} nodeId={farmParam} readonly={false} />
+		{/snippet}
+	</Lazy>
+{/if}
 
 <section class="panel record" aria-labelledby="record-h" data-testid="override-record">
 	<h2 id="record-h">Edits to record</h2>

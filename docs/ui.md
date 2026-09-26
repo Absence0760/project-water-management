@@ -889,7 +889,10 @@ context. It opens while the workspace URL has `farm=<nodeId>`
 (`farmDrawerHref(tab, nodeId)`: `?tab=network&farm=…`, or `?farm=…` over the
 Summary), so it can be linked and Back works; Done, Esc or the ✕ drop `farm`
 from the URL in place (`withoutFarm`), so Back then goes to where it was
-opened from. It is its own chunk, fetched when a URL names a farm.
+opened from. It is its own chunk, fetched when a URL names a farm. The
+workspace page never opens it over the Scenarios tab: there, override mode
+opens its own on the scenario's model, with no save ([§ Scenarios](#scenarios-tabscenarios),
+override mode).
 
 - **From:** the Summary's Needs attention (a farm below the supply target, a
   single farm with nothing planted) and the Network: on the Map, a farm's
@@ -926,7 +929,10 @@ outflow gauge**), `crop-factors`, `planted-areas` and `demand` (the Crops tab's
 sections, through its `sections` prop) and `transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
-The node table has no such tab (`GRID_TAB.nodes` is null), so it opens anywhere.
+The node table has no such tab (`GRID_TAB.nodes` is null), so it opens anywhere
+but the Scenarios tab: the workspace page never opens a grid there, since
+override mode opens its own, on the scenario's model and with no save
+([§ Scenarios](#scenarios-tabscenarios), override mode).
 
 - **From:** the Network's **Grids** menu. More screens will link to
   it as they simplify (the #17 checklist).
@@ -2271,8 +2277,17 @@ them scenarios).
   on the scenario's model (its base run with its changes applied), under a
   banner in the warning colour: "Editing the scenario *X*, not the
   catchment", saying the catchment's own model isn't touched, with **Close
-  override mode**. Notes, farmer links, the yield panel and "Colour farms
-  by" are left out (they belong to the live model). **Edits to record**
+  override mode**. Notes, farmer links, the yield panel and colouring farms
+  by a run's results are left out (they belong to the live model). The
+  Network is its map, as on its own tab: the node fields are in **Grids →
+  Node table**, a node's full form in its card's Edit sheet, and a farm's
+  planted areas in the farm drawer from its card. Override mode opens those
+  overlays itself (the same `grid=` / `farm=` / `edit=` URL parameters) on
+  the scenario's editor, and none has a save: **Done** leaves the edit in
+  Edits to record. The workspace page doesn't open its own grid modal or
+  farm drawer over the Scenarios tab, so nothing there can reach the
+  catchment's model or its save. Opening or closing one of them doesn't ask
+  about unrecorded edits; only leaving the scenario does. **Edits to record**
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
