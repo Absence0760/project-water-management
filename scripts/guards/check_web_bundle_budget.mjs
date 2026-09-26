@@ -646,6 +646,13 @@
 // 2026-09-26  total 953 → 957 KB (measured 952). Merging #17 step 4's farm
 //             drawer (948) with #45's import formats (+3, lazy upload chunk)
 //             and main since. Headroom ~5 KB.
+// 2026-09-26  total 957 → 958 KB. Issue #45, fit provenance of the daily
+//             A-pan series: the fit record's fingerprint (SHA-256 of the
+//             series' values via crypto.subtle), its row and caveat in the
+//             fit record view, Settings' fetch-and-hash of the live series,
+//             and the run comparison's "another daily A-pan series". main
+//             measured 957 at its own ceiling; this measured 958 (+<1 KB,
+//             rounding up). Largest chunk unchanged. No headroom left.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -656,7 +663,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 957,
+	totalCodeKb: 958,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
