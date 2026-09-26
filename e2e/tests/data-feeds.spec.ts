@@ -33,7 +33,7 @@ const day = (n: number) => {
  * ahead of UTC from 22:00 to 24:00 UTC.
  */
 const projectToday = () => {
-	const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(new Date()).split('-').map(Number);
+	const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(new Date()).split('-').map(Number) as [number, number, number];
 	return `${d} ${MONTHS[m - 1]} ${y}`;
 };
 
