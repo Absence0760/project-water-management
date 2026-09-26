@@ -4,10 +4,11 @@ Research and recommendations for four decision-support outputs the client
 sketched with a chat assistant (received 2026-09-26). The sketches used
 hypothetical figures for the client catchment; they are **not committed**
 (the repo is public and they name the catchment and its users). This doc
-describes them generically. R3's equal-share board is built
-([ui.md § Share the pain](../ui.md#share-the-pain)); the rest is not yet. The
-build is tracked in
+describes them generically. The build is tracked in
 [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
+Built so far: R1 (`demand.scale`, engine 0.41.0,
+[scenarios.md](../scenarios.md)) and R3's equal-share board
+([ui.md § Share the pain](../ui.md#share-the-pain)); the rest is not yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -87,6 +88,10 @@ baseline (scenarios.md § Classification). S2, S3 and a WUA's "what if
 everyone takes 85 %" all need it; today it takes a `cropArea.set` per farm
 and crop. **(judgement)** Scale demand, not crop area, so efficiency and
 return flows are unchanged and the meaning is "85 % of what they'd take".
+**Built** (engine 0.41.0): months are calendar month numbers 1–12 (the
+engine's convention for month lists), categories `farm` (default) and
+`user`, and ops stack; [scenarios.md § Op catalogue](../scenarios.md#op-catalogue)
+has the rules.
 
 ### 3.2 R2: scenario sweeps as a background job (**M**)
 

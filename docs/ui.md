@@ -2187,7 +2187,9 @@ them scenarios).
   (a leaf farm or other water user), remove a node, set a farm's crop area,
   add a crop (optionally starting from another crop's factors), add, change
   or remove a transfer, add or remove land cover, change a setting, scale
-  rainfall by a % change over a date range. A setting's value is typed as
+  rainfall by a % change over a date range, scale demand (farms' irrigation
+  or other water users', as a % of what they'd take, for ticked nodes and
+  months; none ticked is all; `demand.scale`, issue #53 R1). A setting's value is typed as
   the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules

@@ -4,6 +4,7 @@
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
 import { daysPerMonth, type Monthly } from './calendar';
+import type { NetworkNode } from './project';
 
 export interface Crop {
 	id: string;
@@ -127,5 +128,28 @@ export function farmDailyDemand(
 		w = Math.min(maxM3, available - used);
 		out.storeMm[t] = croppedAreaM2 > 0 ? (w * 1000) / croppedAreaM2 : 0;
 	}
+	return out;
+}
+
+/**
+ * A node's demand factor per water-year month (engine ≥ 0.41.0, issue #53
+ * R1, set by the demand.scale scenario op), or null when it has none (1 in
+ * every month). A value that isn't a finite number ≥ 0, or a missing month,
+ * runs as 1 with a warning; a gauge has no demand, so its factor is ignored.
+ */
+export function demandFactorOf(n: NetworkNode, warnings: string[]): Float64Array | null {
+	const f = n.demandFactor;
+	if (f === null || f === undefined || n.kind === 'gauge') return null;
+	const out = new Float64Array(12).fill(1);
+	if (!Array.isArray(f) || f.length !== 12) warnings.push(`${n.kind} "${n.name}": demand factor should have 12 monthly values, has ${Array.isArray(f) ? f.length : 0}; missing months are 1`);
+	if (!Array.isArray(f)) return out;
+	let bad = false;
+	for (let m = 0; m < 12; m++) {
+		const v = f[m];
+		if (v === undefined) continue;
+		if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[m] = v;
+		else bad = true;
+	}
+	if (bad) warnings.push(`${n.kind} "${n.name}": a demand factor that isn't a number ≥ 0 runs as 1`);
 	return out;
 }

@@ -9,6 +9,7 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
+import { demandFactorOf } from '../demand';
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -713,6 +714,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
 		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
 		const e = n.irrigationEfficiency;
+		// The demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales F after the soil-water store.
+		const factor = demandFactorOf(n, []);
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
@@ -722,8 +725,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			if (!near(f, Math.max(0, gr) - ef, Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
-				return `${where}: crop requirement ${f} ≠ MAX(0, gross ${gr}) − effective rain used ${ef}`;
+			const df = factor ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
+			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
+				return `${where}: crop requirement ${f} ≠ ${factor ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor ? ')' : ''}`;
 			if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;

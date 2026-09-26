@@ -328,6 +328,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.irrigationEfficiency']
 	},
 	{
+		id: 'demand-factor',
+		term: 'Demand factor',
+		short: 'A scenario’s multiplier on what a farm or other water user would take, per month: 0.85 is 85 % of it.',
+		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
+		category: 'farm',
+		fields: ['node.demandFactor']
+	},
+	{
 		id: 'return-flow',
 		term: 'Irrigation return flow',
 		short: 'The part of the irrigation losses that runs back into the river the same day: loss return fraction × (1 − efficiency) × supplied.',

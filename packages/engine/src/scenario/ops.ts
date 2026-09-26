@@ -337,6 +337,55 @@ export type ScalableSeriesKind = (typeof SCALABLE_SERIES_KINDS)[number];
 export const SERIES_SCALE_MAX = 10;
 
 // ---------------------------------------------------------------------------
+// demand.scale
+// ---------------------------------------------------------------------------
+
+/**
+ * Whose demand `demand.scale` scales (issue #53 R1): `farm`, the farms'
+ * irrigation demand (the default), or `user`, the other water users'
+ * (WP-1.33). One op scales one category; scaling both is two ops.
+ */
+export const DEMAND_CATEGORIES = ['farm', 'user'] as const;
+export type DemandCategory = (typeof DEMAND_CATEGORIES)[number];
+/** Largest factor demand.scale accepts: at most double what a node would take. */
+export const DEMAND_SCALE_MAX = 2;
+
+/** A demand.scale op's list of node ids: at least one, no repeats. */
+const nodeIdList: Check = (v) => {
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one node id (leave it out for every node of the category)';
+	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} node ids`;
+	for (const x of v) {
+		const e = id(x);
+		if (e) return `each ${e}`;
+	}
+	return new Set(v).size === v.length ? null : 'names a node more than once';
+};
+/** A demand.scale op's months: calendar months 1–12, at least one, no repeats. */
+const demandMonths: Check = (v) => {
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one calendar month (leave it out for every month)';
+	const e = months(v);
+	if (e) return e;
+	return new Set(v).size === v.length ? null : 'names a month more than once';
+};
+
+/** Check a demand.scale op's fields (applyScenario checks the node ids exist and are of the category). */
+export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; months?: unknown; category?: unknown }): string | null {
+	const checks: [string, Check][] = [
+		['factor', range(0, DEMAND_SCALE_MAX)],
+		['nodeIds', nodeIdList],
+		['months', demandMonths],
+		['category', oneOf(DEMAND_CATEGORIES)]
+	];
+	for (const [k, c] of checks) {
+		const v = (op as Record<string, unknown>)[k];
+		if (v === undefined && k !== 'factor') continue;
+		const e = v === undefined ? 'missing' : c(v);
+		if (e) return `${k} ${e}`;
+	}
+	return null;
+}
+
+// ---------------------------------------------------------------------------
 // The ops
 // ---------------------------------------------------------------------------
 
@@ -368,7 +417,24 @@ export type ScenarioOp =
 	| { op: 'borehole.remove'; boreholeId: string }
 	| SettingsSetOp
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
-	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string };
+	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
+	| DemandScaleOp;
+
+/**
+ * Multiply demand by `factor` (0–2, issue #53 R1): the farms' irrigation
+ * demand (their crop water requirement, so efficiency and return flows are
+ * unchanged), or with `category: 'user'` the other water users'. `nodeIds`
+ * limits it to those nodes (default: every node of the category); `months`
+ * to those calendar months (1–12, Oct = 10; default: every month). Ops
+ * stack: two at 0.9 leave 0.81.
+ */
+export interface DemandScaleOp {
+	op: 'demand.scale';
+	factor: number;
+	nodeIds?: string[];
+	months?: number[];
+	category?: DemandCategory;
+}
 
 export type ScenarioOpName = ScenarioOp['op'];
 export const SCENARIO_OP_NAMES = [
@@ -385,7 +451,8 @@ export const SCENARIO_OP_NAMES = [
 	'borehole.add',
 	'borehole.remove',
 	'settings.set',
-	'series.scale'
+	'series.scale',
+	'demand.scale'
 ] as const satisfies readonly ScenarioOpName[];
 
 /** Most ops one scenario may hold (the backend's body limit mirrors it). */
@@ -543,6 +610,21 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 				else errors.push(`${where}.${k}: must be an ISO date (YYYY-MM-DD)`);
 			}
 			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${s.from} is after to ${s.to}`);
+			op = s;
+			break;
+		}
+		case 'demand.scale': {
+			const s: DemandScaleOp = { op: 'demand.scale', factor: need('factor', range(0, DEMAND_SCALE_MAX)) as number };
+			// Optional fields are kept only when given, so an op's stored form (and its hash) is what was sent.
+			const opt = (k: 'nodeIds' | 'months' | 'category', c: Check) => {
+				if (raw[k] === undefined) return;
+				const e = c(raw[k]);
+				if (e) errors.push(`${where}.${k}: ${e}`);
+				else (s as unknown as Obj)[k] = cloneValue(raw[k]);
+			};
+			opt('nodeIds', nodeIdList);
+			opt('months', demandMonths);
+			opt('category', oneOf(DEMAND_CATEGORIES));
 			op = s;
 			break;
 		}

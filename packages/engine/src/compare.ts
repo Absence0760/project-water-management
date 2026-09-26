@@ -1058,6 +1058,9 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
 			if (d) parts.push(`demand ${d}`);
 		}
+		// Demand factor (engine ≥ 0.41.0, the demand.scale scenario op).
+		const df = optionalMonthlyChange(x.demandFactor, y.demandFactor, '×', 'none');
+		if (df) parts.push(`demand factor ${df}`);
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);

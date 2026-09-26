@@ -377,6 +377,8 @@ must build WP-2.15 Phase B.
       - `transfer.add | set | remove`;
       - `settings.set { path, value }`;
       - `series.scale { kind, factor, from?, to? }`;
+      - `demand.scale { factor, nodeIds?, months?, category? }` (added
+        later, issue #53 R1, engine 0.41.0: [scenarios.md](../scenarios.md));
       - later ops for the new physics fields: `allocation.set`,
         `ewrSite.set`, `borehole.add`.
     - Each op is classified as **proposal** (the applicant's own or new
