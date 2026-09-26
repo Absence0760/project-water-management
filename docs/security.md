@@ -169,6 +169,64 @@ buys a **render session** that can read one report and nothing else.
   account. The worker's inline render (local and CI only) holds the job's
   database transaction open for the few seconds it takes.
 
+## Share links
+
+Read-only links to a project's published baseline for people outside it
+(WP-2.3 phase 2; `025_share_links.sql`, [api.md § Share](./api.md#share)).
+The link is the credential: whoever holds it reads the catchment-level
+result without signing in, until it expires or its owner revokes it.
+
+- **The token.** 32 random bytes, base64url (43 characters), the emailed
+  tokens' format (`auth/tokens.ts`). `share_link.token_hash` holds **only its
+  SHA-256** (`CHECK` 32 bytes, `UNIQUE`); the raw token is in the `201` that
+  creates the link and nowhere else: not in the list, not in the database,
+  not in a log. A lost link can't be shown again, only replaced.
+- **In the fragment.** The URL is `/share#t=<token>`. A browser never sends
+  the fragment to a server, so the token doesn't reach CloudFront, WAF or
+  Lambda access logs, or a `Referer`. The `/share` page reads it, strips it
+  from the address bar with `history.replaceState` (as the reset pages strip
+  `?token=`), and POSTs it in a JSON body. The page sets `noindex` and
+  `no-referrer`. A link pasted into a chat app is still readable by whoever
+  sees the message: that is what a link is.
+- **Owner-only.** `share_link` RLS: SELECT, INSERT (as yourself) and UPDATE
+  for `app_has_role(project_id, 'owner')`; nobody else sees a row. `water_app`
+  may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
+  catalogue test pins both): a revoked link stays as the record of who made
+  and withdrew it. An insert trigger stamps `created_by` and `created_at`.
+  Lifetime 1–365 days (API and `CHECK`).
+- **What it reveals.** Only through `SECURITY DEFINER app_share_view` (search
+  path pinned): for a live, unrevoked, unexpired token of a project with a
+  **current** publication, the project name, who published it and when, the
+  WUA's notice (both languages, the percentage, the next date), and
+  `catchment_view` rebuilt from an allowlist of keys (dates, the farm count,
+  EWR days not met per site). Never the modeller's note, never a farm's row,
+  name or id, and the outlet's name is dropped because the outflow node may
+  be a farm. A key added to `catchment_view` later doesn't reach the public
+  until it is added to the allowlist. Anything else answers no row, and the
+  API turns every dead link into the same `404` (unknown, malformed,
+  revoked, expired, unpublished), so the answer never says which.
+- **The k rule on series.** `app_share_series` returns only the catchment
+  allowlist (`natural_flow`, `simulated_outflow`, `observed_flow`, `ewr`,
+  `ewr_shortfall`) of the current published run, monthly means plus the last
+  365 days, and **only when the catchment has at least `FARMER_K` = 5 farm
+  holders** (counted from nobody's point of view: one user's farms once, an
+  unlinked farm on its own). In a smaller catchment natural flow minus
+  outflow is the farms' use, and with one farm it is that farm's
+  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)).
+  Farm keys are refused in the API and again in the function. The literal 5
+  in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
+- **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
+  (`waf_rate_limit_per_ip`, `infra/waf.tf`) covers `/api/share/*`, and a
+  256-bit token can't be enumerated. `last_used_at` moves at most once an
+  hour, so a busy link doesn't write on every view.
+- **Audit.** Created by and revoked by are on the row; audit events for both
+  wait for the audit log (WP-2.4, issue #28; [followups.md](./followups.md)).
+- **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
+  control, the dead-link cases against a live one, the response scan for the
+  note and every farm name and id, the `last_used_at` throttle, farm keys,
+  and the k boundary at 4 and 5 holders) and `routes.test.ts` (the two reads
+  on the public allowlist, answering `400` rather than `401`).
+
 ## Authorization: per-project roles enforced by Postgres RLS
 
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).

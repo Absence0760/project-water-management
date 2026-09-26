@@ -126,9 +126,13 @@ pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 +
 
 ## Running tests
 
-**While you work, run only what you touched** (CLAUDE.md rule 12):
+**While you work, run only what you touched** (CLAUDE.md rule 12). The
+quick way is `pnpm test:changed`: typecheck plus `vitest --changed` for what
+your working changes touch, DB tests included when Postgres is up, never e2e
+([testing.md](./testing.md)). By hand:
 
 ```bash
+pnpm test:changed                                             # typecheck + the vitest files your changes touch
 pnpm check                                                    # typecheck (fast; always)
 pnpm -C backend exec vitest run --project unit src/<area>     # backend unit files you changed
 pnpm -C backend exec vitest run --project db src/<area>       # backend DB/RLS files (needs dev:db:up)

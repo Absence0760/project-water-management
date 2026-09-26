@@ -340,6 +340,17 @@
 //             server-side PDF reports (the 665 → 673 entry above, +8.7 KB,
 //             all lazy) with the farmer view and Publication panel (707).
 //             Measured merged: 713 KB. Headroom ~6 KB.
+// 2026-09-25  total 719 → 726 KB; other ceilings unchanged. Read-only share
+//             links (WP-2.3 phase 2). Measured on origin/main 93dcd56 → this
+//             change: 711 → 720 KB (+9.2 KB). The public /share page is its
+//             own route chunk (5.3 KB JS + 0.9 KB CSS: the page, its wording,
+//             chart and loading modules and the flow chart; it reuses the
+//             farm view's NoticeCard, whose CSS is now a 0.4 KB chunk of its
+//             own) and is fetched only by someone opening a link; the
+//             Overview's owner-only Share links panel adds ~1.9 KB to the
+//             workspace page chunk and the API client ~0.3 KB. Inline SVG, no
+//             new dependency; the largest chunk is unchanged (37 KB).
+//             Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -350,7 +361,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 719,
+	totalCodeKb: 726,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

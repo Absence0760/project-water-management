@@ -136,6 +136,7 @@ export interface FarmView {
 		engineVersion: string;
 		restriction: {
 			level: RestrictionLevel;
+			/** The WUA's percentage, 0–100 (run_publication.restriction_pct), not a fraction. */
 			pct: number | null;
 			notice: string | null;
 			/** The language `notice` is in: the other one when the viewer's language has none (design §7, "not translated"). Absent without a notice. */
