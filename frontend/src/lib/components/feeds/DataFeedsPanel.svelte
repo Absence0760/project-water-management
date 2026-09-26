@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import { kindLabel } from '$lib/series/kinds';
-	import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, feedsApi, healthMessage, needsAttention, STATE_LABELS } from './feeds';
+	import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, errorText, feedsApi, healthMessage, needsAttention, STATE_LABELS } from './feeds';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -19,25 +19,44 @@
 	let data = $state<FeedList | null>(null);
 	let loadError = $state<string | null>(null);
 	let busy = $state<string | null>(null);
+	let refreshing = $state(false);
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let adding = $state(false);
 	let draft = $state<FeedDraft>(emptyDraft());
 	let formError = $state<string | null>(null);
 
-	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const source = $derived(data?.sources.find((s) => s.source === draft.source));
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
+	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
-	async function reload() {
-		loadError = null;
+	// Only the newest list request may land: an older one answering late
+	// (a slow first load, a double press of Refresh) must not overwrite it.
+	let seq = 0;
+	/** Re-read the list. Never throws: with a list already shown, a failure keeps it and says so. */
+	async function reload(): Promise<boolean> {
+		const mine = ++seq;
 		try {
-			data = await feeds.list();
+			const next = await feeds.list();
+			if (mine !== seq) return false;
+			data = next;
+			loadError = null;
+			return true;
 		} catch (e) {
-			loadError = msg(e);
+			if (mine !== seq) return false;
+			if (data) error = `Couldn’t refresh the data feeds: ${errorText(e)}`;
+			else loadError = errorText(e);
+			return false;
 		}
 	}
 	onMount(reload);
+
+	async function refresh() {
+		message = error = null;
+		refreshing = true;
+		if (await reload()) message = 'Status refreshed.';
+		refreshing = false;
+	}
 
 	function startAdding() {
 		draft = emptyDraft('chirps', data?.sources.find((s) => s.source === 'chirps')?.kinds);
@@ -63,16 +82,16 @@
 			const feed = await feeds.create(parsed.body);
 			adding = false;
 			message = `Feed attached: ${describeTarget(feed)} from ${describePlace(feed)}. It runs on the next schedule, or now with “Run now”.`;
-			await reload();
 		} catch (err) {
-			formError = msg(err);
-		} finally {
-			busy = null;
+			formError = errorText(err);
 		}
+		// Either way the list may have moved (another owner's feed for the same series is the usual 409).
+		await reload();
+		busy = null;
 	}
 
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove') {
-		if (what === 'remove' && !confirm(`Remove the ${f.source === 'dws' ? 'DWS' : 'CHIRPS'} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
+		if (what === 'remove' && !confirm(`Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
 		busy = f.id;
 		message = error = null;
 		try {
@@ -86,12 +105,13 @@
 				await feeds.remove(f.id);
 				message = 'Feed removed.';
 			}
-			await reload();
 		} catch (e) {
-			error = msg(e);
-		} finally {
-			busy = null;
+			error = errorText(e);
 		}
+		// Also after a failure: it usually means the list is out of date (the
+		// feed was switched off or removed elsewhere), so show what is there now.
+		await reload();
+		busy = null;
 	}
 </script>
 
@@ -109,7 +129,7 @@
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the data feeds: {loadError}
-			<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+			<button type="button" class="btn btn-sm" onclick={refresh}>Try again</button>
 		</div>
 	{:else if !data}
 		<p class="muted" role="status">Loading…</p>
@@ -128,7 +148,7 @@
 					<li class="feed" data-state={f.health.state}>
 						<div class="head">
 							<span class="state state-{f.health.state}">{STATE_LABELS[f.health.state]}</span>
-							<strong>{data.sources.find((s) => s.source === f.source)?.label ?? f.source}</strong>
+							<strong>{sourceLabel(f)}</strong>
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)} · {f.schedule}{f.actingUser ? ` · runs as ${f.actingUser}` : ' · no acting owner: save it again'}</p>
@@ -153,7 +173,7 @@
 		{/if}
 
 		<div class="row">
-			<button type="button" class="btn btn-sm" onclick={reload} disabled={busy !== null}>Refresh status</button>
+			<button type="button" class="btn btn-sm" onclick={refresh} disabled={busy !== null || refreshing}>{refreshing ? 'Refreshing…' : 'Refresh status'}</button>
 			{#if data.canEdit && !adding}
 				<button type="button" class="btn btn-sm btn-primary" onclick={startAdding}>Attach a feed</button>
 			{/if}

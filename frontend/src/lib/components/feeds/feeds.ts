@@ -3,6 +3,7 @@
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
 import type { Api } from '$lib/api';
+import { ApiError } from '$lib/api/client';
 import { fmtDate, fmtDay } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
@@ -177,3 +178,14 @@ export const healthMessage = (message: string) => message.replace(/\b\d{4}-\d{2}
 /** How many feeds need attention (stale or failing), for the section's warning. */
 export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
 	feeds.filter((f) => f.health.state === 'failing' || f.health.state === 'stale').length;
+
+/**
+ * What to show for a failed call. The server's own message (already written
+ * for people, and never raw database text: backend/src/http/errors.ts) starts
+ * with a capital; anything else, such as a script error, gets a generic
+ * sentence instead of its raw text.
+ */
+export function errorText(e: unknown): string {
+	if (e instanceof ApiError && e.message) return e.message.charAt(0).toUpperCase() + e.message.slice(1);
+	return 'Something went wrong. Try again, or reload the page.';
+}

@@ -5,7 +5,9 @@
 // fixture grid's sea cell shows as failing, with the warning above the list,
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 import { AxeBuilder } from '@axe-core/playwright';
+import type { APIRequestContext } from '@playwright/test';
 import { createProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 
@@ -15,6 +17,15 @@ const day = (n: number) => {
 	const d = new Date(Date.now() + n * 86_400_000);
 	return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
+
+/** Attach a CHIRPS feed straight through the API (as whoever `request` is signed in as). */
+async function attachFeed(request: APIRequestContext, projectId: string): Promise<string> {
+	const res = await request.post(`${API_URL}/projects/${projectId}/feeds`, {
+		data: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] } }
+	});
+	expect(res.status(), await res.text()).toBe(201);
+	return ((await res.json()) as { feed: { id: string } }).feed.id;
+}
 
 test('an owner attaches a forecast feed on fixtures, runs it, and the status panel shows it OK', async ({ page, owner }) => {
 	void owner;
@@ -99,4 +110,30 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	await feed.getByRole('button', { name: 'Switch off: Rainfall — CHIRPS' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'disabled');
 	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
+});
+
+test('an action on a feed changed elsewhere says why it failed and shows the list as it is now', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feed changed elsewhere');
+	const feedId = await attachFeed(page.request, project.id);
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveAttribute('data-state', 'pending');
+
+	// Another tab (or owner) switches it off while this page still shows it on.
+	const off = await page.request.patch(`${API_URL}/projects/${project.id}/feeds/${feedId}`, { data: { enabled: false } });
+	expect(off.status()).toBe(200);
+
+	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('alert')).toHaveText('The feed is switched off');
+	// The card is no longer stale: it reads Off, with no Run now.
+	await expect(feed).toHaveAttribute('data-state', 'disabled');
+	await expect(feed.getByRole('button', { name: /^Run now/ })).toHaveCount(0);
+	await expect(feed.getByRole('button', { name: 'Switch on: Rainfall — CHIRPS' })).toBeVisible();
+
+	// Refresh status clears the old error and says it refreshed.
+	await panel.getByRole('button', { name: 'Refresh status' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Status refreshed.' })).toBeVisible();
+	await expect(panel.getByRole('alert')).toHaveCount(0);
 });

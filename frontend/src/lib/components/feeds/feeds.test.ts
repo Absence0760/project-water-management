@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
+import { ApiError } from '$lib/api/client';
+import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, errorText, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
 
 describe('parseCells', () => {
 	it('reads one cell per line (or ;), with an optional weight', () => {
@@ -94,5 +95,14 @@ describe('feedsApi', () => {
 			'DELETE /projects/p%2F1/feeds/f1',
 			'POST /projects/p%2F1/feeds/f1/run-now'
 		]);
+	});
+});
+
+describe('errorText', () => {
+	it('shows the server’s message with a capital, and never a raw script error', () => {
+		expect(errorText(new ApiError(409, 'another feed already writes that series'))).toBe('Another feed already writes that series');
+		expect(errorText(new ApiError(0, 'Could not reach the server'))).toBe('Could not reach the server');
+		expect(errorText(new TypeError("Cannot read properties of undefined (reading 'feeds')"))).toBe('Something went wrong. Try again, or reload the page.');
+		expect(errorText('boom')).toBe('Something went wrong. Try again, or reload the page.');
 	});
 });
