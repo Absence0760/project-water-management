@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -36,7 +36,9 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		damSeepagePerDay: 0,
 		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
 		...USER_DEFAULTS,
-		...BOREHOLE_DEFAULTS
+		...BOREHOLE_DEFAULTS,
+		// No survey curve, no release, all seepage returning (WP-3.5).
+		...DAM_STORAGE_DEFAULTS
 	};
 }
 

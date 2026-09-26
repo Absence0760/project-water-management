@@ -5,7 +5,8 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { damHints, GROUPS, hasDam, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import DamStorageFields from './DamStorageFields.svelte';
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
 
@@ -184,6 +185,13 @@
 			</div>
 		</fieldset>
 	{/each}
+
+	{#if hasDam(node)}
+		<fieldset>
+			<legend>Dam survey and releases</legend>
+			<DamStorageFields {node} {readonly} />
+		</fieldset>
+	{/if}
 
 	{#if node.kind === 'farm'}
 		<fieldset>

@@ -93,6 +93,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		rain_on_dam: 0,
 		dam_evaporation: 0,
 		dam_seepage: 0,
+		// Present in a run whose dam loses seepage from the catchment or releases water (WP-3.5); none here.
+		dam_seepage_lost: 0,
+		dam_release: 0,
 		interim_storage: 1075 - F,
 		dam_storage: 1000,
 		spill: 75 - F,
@@ -123,7 +126,7 @@ describe('day trace', () => {
 		const rows = traceRows(farmDay());
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
-		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' });
+		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − release − dam capacity × minimum operating level, 0), D) (release only with a release rule, WP-3.5)' });
 	});
 
 	it('shows the land-cover reduction right after the runoff I it was taken from, and only for a farm that has land cover', () => {

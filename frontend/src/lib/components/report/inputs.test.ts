@@ -85,6 +85,19 @@ describe('settingsRows', () => {
 	});
 });
 
+describe('monthly dam evaporation factors (WP-3.5)', () => {
+	it('lists them with the monthly rows and points the settings row there', () => {
+		const run = { startDate: '2020-10-01', endDate: '2021-09-30' };
+		const k = [0.7, 0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.75, 0.7, 0.65, 0.65, 0.7];
+		const s = effectiveSettings({ lakeEvapFactorMonthly: k as never });
+		expect(monthlyRows(s).find((r) => r.label === 'Dam evaporation factor (× A-pan)')?.values[3]).toBe('0.8');
+		expect(settingsRows(s, run).find((r) => r[0] === 'Dam evaporation factor')?.[1]).toBe('by month (see the monthly table)');
+		const one = effectiveSettings({});
+		expect(monthlyRows(one).map((r) => r.label)).not.toContain('Dam evaporation factor (× A-pan)');
+		expect(settingsRows(one, run).find((r) => r[0] === 'Dam evaporation factor')?.[1]).toBe('0.75');
+	});
+});
+
 describe('monthlyRows', () => {
 	it('gives twelve values per row, in water-year order', () => {
 		const s = effectiveSettings({ apanMm: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as never });

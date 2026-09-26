@@ -43,7 +43,8 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 		// Engine ≥ 0.30.0 (issue #40 b); a snapshot without it had none.
 		['Rain source periods', rainSourceText(s.rainSource ?? [])],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
-		['Dam evaporation factor', fmtNum(s.lakeEvapFactor, 2, true)]
+		// Monthly factors (engine ≥ 0.32.0, WP-3.5) are listed with the monthly rows.
+		['Dam evaporation factor', s.lakeEvapFactorMonthly ? 'by month (see the monthly table)' : fmtNum(s.lakeEvapFactor, 2, true)]
 	);
 	return rows;
 }
@@ -56,6 +57,7 @@ export function monthlyRows(s: ProjectSettings): { label: string; values: string
 		row('A-pan evaporation (mm)', s.apanMm, 1),
 		// Under a monthly PE (issue #39) GR4J runs on its own row and the pan coefficient is unused.
 		...(monthlyPe ? [row('GR4J monthly PE (mm)', monthlyPe.mm, 1)] : [row('Pan coefficient', s.panCoefficient, 2)]),
+		...(s.lakeEvapFactorMonthly ? [row('Dam evaporation factor (× A-pan)', s.lakeEvapFactorMonthly, 2)] : []),
 		row('Pragmatic EWR (m³/day)', s.ewrPragmaticM3PerDay, 0)
 	];
 }
