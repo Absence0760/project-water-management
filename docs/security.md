@@ -353,9 +353,13 @@ In short:
   - Only fixed hosts are fetched: the URL is built from the source and a
     validated config (cells as numbers in range, a station matching
     `^[A-Z]\d[A-Z]\d{3}$`), never from user text, so a feed can't be pointed
-    at an arbitrary URL (no SSRF). `FEED_SOURCE=fixtures` is the default
+    at an arbitrary URL (no SSRF). The live client enforces it too: it asks
+    only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
+    follows redirects itself, at most 3, each re-checked, so a redirect
+    can't send the fetcher (open egress) to another host or plain HTTP.
+    `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
-  - Every response is bounded: 20 s timeout, 4 MB cap whether declared or
+  - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
     streamed, range reads for the grids. A GeoTIFF is parsed by our own
     bounds-checked reader (dimensions, strip sizes and LZW codes checked;
     anything outside the known layout refused), and a DWS page by a strict
