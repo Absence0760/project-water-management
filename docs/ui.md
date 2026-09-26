@@ -91,7 +91,7 @@ shorter than the cap looks as before.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
-a "Needs attention" list, eight headline facts, project details, the import
+the published baseline, a "Needs attention" list, eight headline facts, project details, the import
 record (an imported project only), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
@@ -120,6 +120,18 @@ record (an imported project only), team and members.
   tab's `detailCache`, so only this section shows a loading or error state
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
+- **Published baseline** (WP-2.3, `overview/PublishedBaseline.svelte`),
+  under Latest run (shown with or without runs): what stakeholders and farmers see. It fetches
+  `GET /projects/:id/publication` and names the published run (a link to it
+  in Runs, with its period from the page's runs list), when and by whom it
+  was published, the notice level with its percentage ("Advisory · 15 %"),
+  the English and Afrikaans notice, and the next expected update (a calendar
+  day, `fmtDay`). It is read-only for everyone: editors get **Change the
+  notice or publish another run**, a link to the Runs tab on the published
+  run at its Publication panel (`?tab=runs&run=<id>#res-publication`), so
+  the notice has one editor, not two. With nothing published: "No run is
+  published yet. Stakeholders and farmers see nothing until you publish one
+  (Runs tab)." Its own `LoadState` (loading, an error with a retry).
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): one sentence and one link per item, hidden when
   there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
@@ -930,6 +942,13 @@ run's report to chosen members every week or month.
   whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
   runs** (`/compare?project=<id>`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
+  **Which run opens** when the URL names none (`defaultRunId` in
+  `runs/runList.ts`): for an editor or owner the newest run, the one they are
+  working on; for a viewer the published baseline when there is one (the run
+  stakeholders are meant to read), else the newest. An explicit `?run=`
+  always wins. Viewing any run other than the published one, the results
+  header offers **Compare with published** (`/compare?a=<published>&b=<this
+  run>`, [run-comparison.md](./run-comparison.md)).
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Pinned runs** (015_run_pinned). Each row has a pin toggle for editors
@@ -938,7 +957,7 @@ run's report to chosen members every week or month.
   unpinned. A project holds at most 10 pinned runs; pinning an 11th shows the
   server's `409` reason in the tab's error. Viewers see the badge but no
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
-  option (read only).
+  option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
   its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
   menu entry **Publication**). Says whether the shown run is the project's
