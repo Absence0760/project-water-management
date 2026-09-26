@@ -329,7 +329,9 @@ merges into:
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
   reads the newest issue. DWS re-reads a year before its newest day (verified
-  data is revised in arrears), 10 years on the first fetch.
+  data is revised in arrears), 10 years on the first fetch. A feed's
+  `startDate` is a floor for every fetch, not just the first: the re-read
+  never reaches before it, where the series may hold the owner's own data.
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health

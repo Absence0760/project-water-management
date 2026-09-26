@@ -42,6 +42,16 @@ describe('fetchWindow', () => {
 		expect(CHIRPS_MAX_DAYS).toBe(120);
 	});
 
+	it('never reads before a configured startDate, even to re-read revisions (days before it may be the owner’s own data)', () => {
+		// A second CHIRPS fetch would otherwise re-read 50 days back, into August.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-09-01' }, '2026-09-22', '2026-09-25')).toEqual({ start: '2026-09-01', end: '2026-09-24' });
+		// Far enough past startDate, the revision window is unchanged.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-01-01' }, '2026-09-20', '2026-09-25')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		// DWS re-reads a year, but not across startDate.
+		expect(fetchWindow('dws', { station: 'X0H000', startDate: '2026-03-01' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2026-03-01', end: '2026-09-25' });
+		expect(fetchWindow('dws', { station: 'X0H000', startDate: '2020-03-01' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
+	});
+
 	it('GEFS: the 16 days from today', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});

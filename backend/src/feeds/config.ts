@@ -46,7 +46,7 @@ export const GridConfig = z
 			.array(z.object({ lat: Lat, lon: Lon, weight: z.number().finite().positive().max(1000).default(1) }).strict())
 			.min(1)
 			.max(25),
-		/** First day to fetch when the feed has no data yet (default: 60 days back). */
+		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
 		startDate: SeriesStartDate.optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional()
 	})
@@ -61,7 +61,7 @@ export const DwsConfig = z
 			.trim()
 			.transform((s) => s.toUpperCase())
 			.pipe(z.string().regex(DWS_STATION, 'a DWS station code looks like A2H012')),
-		/** First day to fetch when the feed has no data yet (default: 10 years back). */
+		/** First day to fetch when the feed has no data yet (default: 10 years back), and never fetched before. */
 		startDate: SeriesStartDate.optional(),
 		staleAfterDays: z.number().int().min(1).max(3650).optional()
 	})
