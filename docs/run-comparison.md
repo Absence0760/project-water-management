@@ -184,7 +184,15 @@ The page has these sections, top to bottom:
    EWR (engine ≥ 0.17.0, audit Q17; a run from an older engine holds its reach
    shortfall AB there, so compare runs of the same engine).
    Click a column heading to sort by that change. Farms that exist in only one
-   run are listed underneath.
+   run are listed underneath. When either run holds a **feature metric** for
+   any farm in both runs, its column joins: *Pumped from the river*
+   (`avgRiverAbstractionM3Day`, WP-3.8), *Groundwater*, *Groundwater to dam*
+   and *Stream depletion* (WP-1.34, WP-3.9). A farm without the feature in a
+   run reads **0** there, marked "(none)" under B's value or "A: none (0)"
+   under the change, and a note under the table says why ("a run with no
+   river pump at a farm reads as 0 there"), under the rule in
+   [Series and metrics only one run has](#series-and-metrics-only-one-run-has)
+   (`delta.ts` `farmFeatureMetrics`). These columns don't sort.
 6. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, its own
    chunk). Pick a **node** and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
@@ -193,7 +201,13 @@ The page has these sections, top to bottom:
    new node has it, else its outflow. Nodes are matched the way the rest of
    the page matches them (below): by id, then by name across a copy, listed
    in network order with a renamed node shown as "Rooikloof (was Farm 1)".
-   Only series both runs stored with the same unit are offered. A node only
+   Series both runs stored with the same unit are offered, and after them a
+   **feature series only one run stored** (a scenario's river pump:
+   *Pumped from the river … · run B only*), the other run drawn as zeros over
+   its own period, its legend entry ending "none (0)", and a note under the
+   chart: "Not in run A: shown as 0. Run A has no such feature at Upper farm
+   …" (the rule: [Series and metrics only one run has](#series-and-metrics-only-one-run-has)).
+   A node only
    one run has can't be overlaid, and a note under the chart names it ("Only
    in run B, so nothing to overlay: New farm."), as it does a node whose
    series share nothing. Under the overlay a sentence reads the pair out over
@@ -260,6 +274,41 @@ name**:
   (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
   name): added, removed, or changed with the old and new capacity, mode,
   target, annual cap and depletion.
+
+### Series and metrics only one run has
+
+A run stores some columns only when a feature is on (issue #54): a river
+pump (`river_abstraction`), boreholes (`groundwater_used`,
+`groundwater_to_dam`, `baseflow_depletion`, …), a release rule
+(`dam_release`), land cover (`landcover_reduction`), senior users
+(`senior_requirement`, `passed_for_senior`), a seepage return share
+(`dam_seepage_lost`). A run without the feature there moved none of that
+water, so comparing a river-first scenario with its dam-first base is its
+pumping against 0. Anything else one run lacks is **unknown**, and is never
+drawn as 0. A missing series or farm metric reads as 0 only when all of
+these hold:
+
+- **The node is in both runs**, matched as above. A node only one run has
+  stays under "Only in run A / B": it wasn't modelled there at all.
+- **Both model snapshots know it as the same kind** (farm, gauge, other
+  user). A node missing from a snapshot, or a farm in one run and a user in
+  the other, is not filled.
+- **The column is a feature column for that kind**: marked `optional` in the
+  engine's column registry (`packages/engine/src/verify/columns.ts`,
+  `FARM_COLUMNS`, `USER_COLUMNS`, `GAUGE_COLUMNS`). For the catchment
+  (no node) only `landcover_reduction`, which the engine stores only when a
+  node has land cover. So observed flow, calibration series, CHIRPS or any
+  core column (a `dam_storage` an older run didn't store) are never filled.
+- **The other run has no series under that key.** Both stored, but in
+  different units, still isn't offered.
+
+The daily overlay's zeros cover the lacking run's own period (its start to
+end date, `overlay.ts` `zeroSeries`), so B − A and the read-out count the
+days that run modelled. The farm table's feature columns follow the same
+rule on the farm summary's optional fields (`FarmSummary` in the engine's
+`project.ts`: present only for a farm with the feature). The helpers are
+`overlay.ts` `zeroFillable` / `commonOptions` and `delta.ts`
+`farmFeatureMetrics`, unit-tested beside them.
 
 ## Scenario runs
 
@@ -355,7 +404,7 @@ fitted values"*). A parameter edit itself still has its own line. Settings keys 
 | `compareRuns`, `diffInputs`, types | `packages/engine/src/compare.ts` (pure, unit-tested in `compare.test.ts`) |
 | `GET /compare/runs` | `backend/src/compare/routes.ts`, contract in [api.md § Compare runs](./api.md#compare-runs) |
 | Page | `frontend/src/routes/compare/+page.svelte` (heading, back link, URL) and the workspace's `compare` tab, both showing `lib/components/compare/CompareView.svelte` (the pickers and the comparison; the host passes the pair and builds URLs through `hrefFor`) |
-| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note, `overlay.ts` the daily series overlay's node matching, B − A and read-out, exported for reuse by scenario comparison, issue #18) |
+| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting, sorting and the farm feature columns, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note, `overlay.ts` the daily series overlay's node matching, zero-filled feature series, B − A and read-out, exported for reuse by scenario comparison, issue #18) |
 | Uncertainty and paired bands | `packages/engine/src/uncertainty/paired.ts`; `frontend/src/lib/components/uncertainty/PairedUncertaintyPanel.svelte` |
 
 Access follows the usual rules. You need at least **viewer** on both projects.

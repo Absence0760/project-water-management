@@ -134,7 +134,7 @@
 	<IssueList issues={editor.issues} {area} />
 	{#if area === 'network'}
 		<Lazy load={LOAD.network}>
-			{#snippet children(NetworkTab)}<NetworkTab {editor} settings={input.settings as ProjectSettings} readonly={false} />{/snippet}
+			{#snippet children(NetworkTab)}<NetworkTab {editor} settings={input.settings as ProjectSettings} readonly={false} only="table" />{/snippet}
 		</Lazy>
 	{:else if area === 'crops'}
 		<Lazy load={LOAD.crops}>
