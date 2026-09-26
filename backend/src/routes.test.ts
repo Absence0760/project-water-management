@@ -63,7 +63,8 @@ describe('route auth inventory', () => {
 			'PATCH /projects/:id/publication/:pubId',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
-			'GET /projects/:id/farm/:nodeId/export.csv'
+			'GET /projects/:id/farm/:nodeId/export.csv',
+			'GET /projects/:id/farm/:nodeId/access'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);

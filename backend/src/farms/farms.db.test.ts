@@ -149,7 +149,8 @@ const FARMER_ALLOWED = new Set([
 	'GET /projects/:id/publication',
 	'GET /projects/:id/farm',
 	'GET /projects/:id/farm/:nodeId',
-	'GET /projects/:id/farm/:nodeId/export.csv'
+	'GET /projects/:id/farm/:nodeId/export.csv',
+	'GET /projects/:id/farm/:nodeId/access'
 ]);
 
 describe('project routes for a farmer', () => {

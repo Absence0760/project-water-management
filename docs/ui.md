@@ -1359,7 +1359,9 @@ published.
   notice; the last 12 months (inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers"); last
   season; the farm on the river (counts, the outlet's last 30 days, the
-  privacy sentence and "Who can see my farm"); the CSV download and the
+  privacy sentence and "Who can see my farm", which loads the people by name
+  and role when first opened, `GET …/access`, and falls back to the roles
+  alone if that fails); the CSV download and the
   disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
 - **Wording.** Every visible string and number rule lives in pure modules
   under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,

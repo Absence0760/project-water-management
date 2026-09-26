@@ -20,6 +20,7 @@ import type {
 	ImportResult,
 	EnsembleDetail,
 	EnsembleStart,
+	FarmAccessPerson,
 	Farmer,
 	Member,
 	Nomination,
@@ -246,7 +247,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Everything one farm's page renders, in one response. */
 			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
 			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
-			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`
+			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
+			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
+			access: (id: string, nodeId: string) =>
+				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
 		},
 		teams: {
 			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),

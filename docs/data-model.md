@@ -513,6 +513,11 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   them (trigger `node_unlink_farmers`), and the Network tab says so first. A trigger allows only `farm`
   nodes and only members whose role is `farmer`; `assert_same_project` keeps
   the node in the project.
+- **Who can see a farm** (022, design §10.2): `app_farm_access(project,
+  node)` lists everyone who can read that farm, by display name and effective
+  role, never an email: its linked farmers, and every viewer-and-above member
+  (direct or through the team). It answers a viewer or a user linked to that
+  farm, and no row to anyone else, so a farmer on another farm can't ask.
 - **Anonymised context** (decision D1, option b): `app_farm_context(project,
   node)` returns the number of farms upstream and downstream of a node and
   the catchment's farm count, never ids or names, to a viewer or a user

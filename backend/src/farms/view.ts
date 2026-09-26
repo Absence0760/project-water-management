@@ -150,6 +150,18 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			return c.json(body);
 		});
 	})
+	// "Who can see my farm" (design §10.2): names and roles, never emails.
+	.get('/:id/farm/:nodeId/access', async (c) => {
+		const { id, nodeId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireFarm(db, id, nodeId);
+			const { rows } = await db.query<{ display_name: string; role: Role; is_you: boolean }>(
+				'SELECT display_name, role, is_you FROM app_farm_access($1, $2)',
+				[id, nodeId]
+			);
+			return c.json({ people: rows.map((r) => ({ displayName: r.display_name, role: r.role, you: r.is_you })) });
+		});
+	})
 	// The farm's own daily figures from the published run: the farm allowlist
 	// only (FARMER_SERIES_KEYS), with the export CSV's rules (export/csv.ts).
 	.get('/:id/farm/:nodeId/export.csv', async (c) => {

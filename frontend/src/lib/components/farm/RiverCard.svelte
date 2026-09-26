@@ -3,14 +3,28 @@
 	// positions (D1 b); the outlet's days below its reserve, never a flow; the
 	// one privacy sentence, and "Who can see my farm".
 	//
-	// The list of people by name (§10.2) needs an API that doesn't exist yet,
-	// so the panel lists who, by role, and says the WUA can name them.
+	// "Who can see my farm" loads the people by name when first opened
+	// (GET …/access, §10.2); if that fails it falls back to who, by role.
 	import type { FarmView } from '@water-management/engine';
-	import { outletLine, positionLine, PRIVACY, WHO_CAN_SEE } from './cards';
+	import { api, type FarmAccessPerson } from '$lib/api';
+	import { accessLine, outletLine, positionLine, PRIVACY, WHO_CAN_SEE } from './cards';
 	import Rich from './Rich.svelte';
 
 	let { view }: { view: FarmView } = $props();
 	let open = $state(false);
+	let people = $state<FarmAccessPerson[] | null>(null);
+	let failed = $state(false);
+
+	async function toggle() {
+		open = !open;
+		if (!open || people) return;
+		failed = false;
+		try {
+			people = await api.farm.access(view.project.id, view.farm.nodeId);
+		} catch {
+			failed = true; // shown: the roles-only list and WHO_CAN_SEE.failed
+		}
+	}
 </script>
 
 <section class="card" aria-labelledby="fair-h">
@@ -21,15 +35,23 @@
 		<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11 V8 a4 4 0 0 1 8 0 V11" /></svg>
 		<span>{PRIVACY}</span>
 	</p>
-	<button type="button" class="link toggle" aria-expanded={open} aria-controls="who-can-see" onclick={() => (open = !open)}>
+	<button type="button" class="link toggle" aria-expanded={open} aria-controls="who-can-see" onclick={toggle}>
 		{WHO_CAN_SEE.heading}
 	</button>
 	<div id="who-can-see" class="who" hidden={!open}>
-		<ul>
-			{#each WHO_CAN_SEE.people as p (p)}<li>{p}</li>{/each}
-		</ul>
+		{#if people}
+			<ul>
+				{#each people as p, i (i)}<li>{accessLine(p)}</li>{/each}
+			</ul>
+		{:else if failed}
+			<ul>
+				{#each WHO_CAN_SEE.people as p (p)}<li>{p}</li>{/each}
+			</ul>
+			<p class="fine" role="status">{WHO_CAN_SEE.failed}</p>
+		{:else}
+			<p class="fine" role="status">{WHO_CAN_SEE.loading}</p>
+		{/if}
 		<p>{WHO_CAN_SEE.not}</p>
-		<p class="fine">{WHO_CAN_SEE.names}</p>
 	</div>
 </section>
 

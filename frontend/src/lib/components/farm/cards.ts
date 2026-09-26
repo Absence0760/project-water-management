@@ -339,13 +339,26 @@ export function outletLine(view: FarmView): Rich {
 	return [head, 'below its reserve on ', { b: `${o.daysNotMet} of ${last}` }, '.'];
 }
 
-/** "Who can see my farm" (§10.2). The list of people by name needs an API that doesn't exist yet. */
+/** "Who can see my farm" (§10.2): the people, by name, from GET …/farm/:nodeId/access; the roles alone if that fails. */
 export const WHO_CAN_SEE = {
 	heading: 'Who can see my farm',
 	people: ['You', 'Anyone else linked to this farm', 'The WUA’s staff', 'The WUA’s modeller'],
 	not: 'Other farmers can’t see your farm’s figures, and you can’t see theirs.',
-	names: 'Your WUA can tell you who these people are by name.'
+	loading: 'Loading the names…',
+	failed: 'Couldn’t load the names just now. Your WUA can tell you who these people are.'
 };
+
+const ACCESS_ROLE: Record<string, string> = {
+	farmer: 'linked to this farm',
+	viewer: 'WUA, can read',
+	editor: 'WUA, can change the model',
+	owner: 'WUA, manages who has access'
+};
+
+/** One line of "Who can see my farm": "Jane Smith (you) · linked to this farm". */
+export function accessLine(p: { displayName: string; role: string; you: boolean }): string {
+	return `${p.displayName}${p.you ? ' (you)' : ''} · ${ACCESS_ROLE[p.role] ?? 'WUA'}`;
+}
 
 export const DISCLAIMER =
 	'These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction.';

@@ -177,6 +177,40 @@ CREATE POLICY run_series_select_farmer ON run_series FOR SELECT
 		AND run_id IN (SELECT p.run_id FROM run_publication p WHERE p.project_id = run_series.project_id AND p.superseded_at IS NULL)
 	);
 
+-- "Who can see my farm" (design §10.2): everyone who can read this farm's
+-- figures, by display name and effective role, never an email. The farmers
+-- linked to the farm, and every viewer-and-above member, direct or through
+-- the project's team (mapped as app_project_role maps them). A farmer can't
+-- read the member list through RLS (020), so this is SECURITY DEFINER, and
+-- it answers only a viewer and above, or a user linked to that farm; anyone
+-- else gets no row.
+CREATE FUNCTION app_farm_access(p_project uuid, p_node uuid)
+	RETURNS TABLE (display_name text, role text, is_you boolean)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+		WITH people AS (
+			SELECT fl.user_id, 'farmer'::text AS role, 0 AS rk
+			FROM farm_link fl WHERE fl.project_id = p_project AND fl.node_id = p_node
+			UNION ALL
+			SELECT m.user_id, m.role::text,
+				CASE m.role::text WHEN 'viewer' THEN 1 WHEN 'editor' THEN 2 WHEN 'owner' THEN 3 END
+			FROM project_member m WHERE m.project_id = p_project AND m.role::text IN ('viewer', 'editor', 'owner')
+			UNION ALL
+			SELECT tm.user_id,
+				CASE tm.role::text WHEN 'admin' THEN 'owner' WHEN 'member' THEN 'editor' WHEN 'viewer' THEN 'viewer' END,
+				CASE tm.role::text WHEN 'admin' THEN 3 WHEN 'member' THEN 2 WHEN 'viewer' THEN 1 END
+			FROM project p JOIN team_member tm ON tm.team_id = p.team_id
+			WHERE p.id = p_project
+		), best AS (
+			SELECT DISTINCT ON (user_id) user_id, role, rk FROM people WHERE role IS NOT NULL ORDER BY user_id, rk DESC
+		)
+		SELECT u.display_name::text, b.role, b.user_id = app_current_user_id()
+		FROM best b JOIN app_user u ON u.id = b.user_id
+		WHERE EXISTS (SELECT 1 FROM node WHERE id = p_node AND project_id = p_project AND kind = 'farm')
+		  AND (app_has_role(p_project, 'viewer') OR p_node IN (SELECT app_farm_nodes(p_project)))
+		ORDER BY b.rk, u.display_name
+	$$;
+
 -- ---------------------------------------------------------------------------
 -- Grants. A publication's run, project, projection and publisher never
 -- change: water_app may update only the notice, the note, the next date, the

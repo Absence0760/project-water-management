@@ -146,7 +146,7 @@ A farm with no dam (`damCapacityM3 = 0`) gets no dam card and no dam screen.
 | "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment" | counts from the network topology (E6) | D1 option (b): counts only, no names, no positions |
 | "The same rules apply to every farm" | fixed text. True by construction: the curtailment and attribution rules are symmetric and order-free (model.md §2.7b, "Order-free") | – |
 | "River at Sandspruit Outlet: below its reserve on all of the last 30 days" | `catchment_view`: days not met over the last 30 days at the outlet | A count, never a flow volume (§10.3) |
-| "Your farm's figures are seen by you, anyone else linked to this farm, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my farm" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5) |
+| "Your farm's figures are seen by you, anyone else linked to this farm, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my farm" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5). Built: `GET …/farm/:nodeId/access` (names and roles, no emails) |
 
 ## 4. Gaps: asks of the engine, the data model and the API
 

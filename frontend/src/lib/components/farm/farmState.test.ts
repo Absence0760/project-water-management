@@ -18,7 +18,8 @@ function fakeApi(opts: { index?: () => Promise<FarmIndex>; view?: () => Promise<
 		farm: {
 			index: vi.fn(opts.index ?? (async () => index())),
 			view: vi.fn(opts.view ?? (async () => vaalbankFixture())),
-			exportUrl: () => ''
+			exportUrl: () => '',
+			access: vi.fn(async () => [])
 		},
 		projects: { list: vi.fn(async () => [{ id: P, role: opts.role ?? 'farmer' }] as never) }
 	};

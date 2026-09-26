@@ -20,8 +20,7 @@ import {
 	stillFailing,
 	splitNotice,
 	supplyCard,
-	systemName
-} from './cards';
+	systemName, accessLine } from './cards';
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from './rich';
 
@@ -286,5 +285,14 @@ describe('the states', () => {
 		expect(stillFailing(true)).toBe('Still no connection. If this keeps happening, contact your WUA.');
 		expect(stillFailing(false)).toBe('Still not working. If this keeps happening, contact your WUA.');
 		expect(previewBanner('Vaalbank (example)')).toBe('You’re previewing Vaalbank (example) as its farmer sees it');
+	});
+});
+
+describe('Who can see my farm', () => {
+	it('names each person with what they can do, and marks the caller', () => {
+		expect(accessLine({ displayName: 'Demo Farmer', role: 'farmer', you: true })).toBe('Demo Farmer (you) · linked to this farm');
+		expect(accessLine({ displayName: 'Demo Analyst', role: 'owner', you: false })).toBe('Demo Analyst · WUA, manages who has access');
+		expect(accessLine({ displayName: 'Clerk', role: 'viewer', you: false })).toBe('Clerk · WUA, can read');
+		expect(accessLine({ displayName: 'Modeller', role: 'editor', you: false })).toBe('Modeller · WUA, can change the model');
 	});
 });

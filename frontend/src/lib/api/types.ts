@@ -128,6 +128,14 @@ export interface Member {
 	role: Role;
 }
 
+/** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
+export interface FarmAccessPerson {
+	displayName: string;
+	role: Role;
+	/** The caller. */
+	you: boolean;
+}
+
 /** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
 export interface Farmer {
 	userId: string;
