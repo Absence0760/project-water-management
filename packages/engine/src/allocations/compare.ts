@@ -1,5 +1,5 @@
 // Registered water-use volumes against modelled use, per farm or water user
-// and per water year (roadmap WP-3.10 first slice; docs/model.md §2.13,
+// and per water year (roadmap WP-3.10 first slice; docs/model.md §2.12,
 // docs/allocations.md).
 //
 // Pure and I/O-free like the rest of the engine: the backend feeds it a

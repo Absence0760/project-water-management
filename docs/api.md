@@ -990,6 +990,53 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   be deleted, trimmed or unpinned while the scenario exists
   ([Runs](#runs)).
 
+## Allocations
+
+Registered and licensed water-use volumes per farm or water user, and a run's
+modelled use against them (roadmap WP-3.10, migration 035,
+[allocations.md](./allocations.md)). The app compares; it never decides
+whether a use is lawful.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
+| POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
+| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; `holder: ''` removes the name | editor |
+| DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
+| POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
+| POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
+| DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1, default 0.1) | `{ run: { id, label, startDate, endDate }, comparison: AllocationComparison }` (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
+
+- `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
+  propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
+  storageM3, validFrom, validTo, reference, createdAt, updatedAt }`. `holder`
+  is `null` for a viewer (RLS hides `allocation_holder`), and when there is
+  none. `sourceId` is `null` for a row typed into the app.
+- `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
+  holder?, authorisation: 'registration' | 'licence' | 'general_authorisation'
+  | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
+  | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
+  'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
+  reference? }` (dates `YYYY-MM-DD`).
+- `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
+  importedBy, rows }`.
+- `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
+  `nodeId`, `matchedBy` (`registration` | `property` | `name` | `manual` |
+  `null`) and `alreadyInProject` (the registration number is already there).
+- `AllocationComparison = { tolerance, startDate, endDate, nodes: [{ nodeId,
+  name, kind, surface, groundwater, storage: { registeredM3,
+  modelledCapacityM3 } }], unmatchedAllocationIds, notInRunAllocationIds }`;
+  `surface` / `groundwater` = `{ waterSource, allocationIds, years: [{
+  waterYear, days, yearDays, partial, modelledM3, registeredM3, ratio, status
+  }], yearsOver, wholeYears, meanModelledM3PerYear, meanRegisteredM3PerYear }`,
+  `status` ∈ `over` | `within` | `under` | `unregistered` | `none`.
+- **Farmers** get `403` on every route, like every viewer route; RLS already
+  limits them to their own farms' allocations for the farm view to come.
+- History: `allocation.created/changed/deleted/imported/import_deleted`; the
+  preview is exempt (it writes nothing).
+
 ## Publication
 
 The run the project's stakeholders see, with the WUA's restriction notice

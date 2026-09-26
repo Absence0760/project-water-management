@@ -1033,6 +1033,21 @@ must build WP-2.15 Phase B.
 
 ### WP-3.10 Water-use allocations: WARMS vs modelled use
 
+- **Status.** First slice built (2026-09-26): migration `035_allocations.sql`
+  (`allocation_source`, `allocation`, `allocation_holder` for names per D3 (b),
+  pending legal advice), engine `compareAllocations` (no `runModel` change, so
+  no engine bump; [model.md §2.12](../model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)),
+  `backend/src/allocations/` (CRUD, a stateless preview → commit CSV import
+  with WARMS header aliases, POPIA column refusal, SHA-256 provenance, undo an
+  import, CSV export, the run comparison), and the Allocations tab. Groundwater
+  uses the existing borehole series (`groundwater_used`, WP-1.34), so it
+  doesn't wait on WP-3.9. Deviations: the import sends the file as JSON text
+  (≤ 2 MB, CSV only), not multipart ≤ 5 MB with XLSX; preview and commit are
+  `…/import` and `…/import/commit` with no stored preview id. Left:
+  `allocationMode` (`cap`, `fullAllocation`), `settings.allocationTolerance`,
+  XLSX and column mapping, licence conditions, the farm view and the chart
+  ([followups.md § Allocations](../followups.md#allocations-wp-310),
+  [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to
   modelled use: over-use, under-use, and a **full-allocation** scenario
   ("if every lawful user took their entitlement").

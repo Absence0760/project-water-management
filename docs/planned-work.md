@@ -39,7 +39,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 ### Model completeness
 | Feature | Why | Effort |
 | --- | --- | --- |
-| ⬜ **Water-use licences / allocations** | Registered volumes per farm (National Water Act, WARMS) vs modelled use → over/under-use and compliance. Central to catchment management agencies. | M |
+| 🚧 **Water-use licences / allocations** | Registered volumes per farm (National Water Act, WARMS) vs modelled use → over/under-use and compliance. Central to catchment management agencies. **First slice built (WP-3.10, 2026-09-26):** volumes per farm with source, purpose, water source and validity; WARMS/CSV import with matching and file provenance; names hidden from viewers; modelled use vs registered volume per water year ([allocations.md](./allocations.md)). Left: `cap` / `fullAllocation` runs, XLSX and column mapping, the farm view ([followups.md § Allocations](./followups.md#allocations-wp-310)). | M |
 | ⬜ **Assurance of supply & yield** | Reliability (% of time demand met), firm yield of each dam, storage–yield curves. Standard planning outputs. | M |
 | ✅ **Dam evaporation, seepage, area–volume curves** | b023 ignores dam losses; material for small farm dams in summer. — **Done** (engine 0.16.0, audit N2, pending the hydrologist): power-law area–volume, lake evaporation from A-pan, rain on the dam and seepage (model.md §2.7a). Survey curves and releases are roadmap WP-3.5. | M |
 | ⬜ **Operating rules** | Pump scenarios from the node-based design (dam-first, river-first, trigger-based, run-of-river) and drought restrictions (curtail when storage < x %). | L |

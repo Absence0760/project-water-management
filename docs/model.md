@@ -3028,6 +3028,47 @@ values into `computeCurtailment` and checks every column against the cell
 formulas written out unrounded, and the saved window's averages against the
 sheet within its rounding (½ m³/day).
 
+### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
+
+Not part of the workbook, and not part of `runModel`: `compareAllocations`
+(`packages/engine/src/allocations/compare.ts`) reads a stored run's series and
+the project's registered volumes and returns a comparison. A run's output
+doesn't change, so `ENGINE_VERSION` doesn't move. The data, the import and the
+wording rules are in [allocations.md](./allocations.md).
+
+For each farm or water user *n*, water source *s* and water year *y*
+(October–September, labelled by the year it starts in; `waterYearOf`), over
+the days *D(y)* of *y* inside the run:
+
+- modelled use *M(n,s,y)* = Σ over *D(y)* of `groundwater_used` for
+  *s* = groundwater, and of `supplied` − `groundwater_used` for *s* = surface
+  (0 for a node without boreholes, §2.7d). `supplied` includes what the farm
+  draws from its own dam.
+- registered volume *R(n,s,y)* = Σ over the node's allocations *a* of source
+  *s*: *V(a)* × |*D(y)* ∩ [validFrom(a), validTo(a)]| ÷ *L(y)*, with *L(y)*
+  = 365 or 366, the days of the whole water year. A whole year in force gives
+  exactly *V(a)*; a run that covers part of the year, or a validity window
+  that starts or ends in it, gives the prorated volume.
+- ratio = *M* ÷ *R* (none when *R* = 0), and a status with tolerance *τ*
+  (default 0.1, pending the hydrologist): **over** *M* > *R*(1 + *τ*),
+  **under** *M* < *R*(1 − *τ*), **within** otherwise; with *R* = 0,
+  **unregistered** if *M* > 0, else **none**. Quantities below 10⁻⁶ m³ count
+  as 0.
+- partial = |*D(y)*| < *L(y)*; the per-node summary (`yearsOver`,
+  `meanModelledM3PerYear`, `meanRegisteredM3PerYear`) counts whole years
+  only.
+- storage: Σ `storageM3` of the node's allocations (none when no allocation
+  states one) beside the run's `damCapacityM3` for a farm.
+
+Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
+of *M(n,s,y)* equals Σ of the node's `supplied` series, and every run day falls
+in exactly one water year; the result is the same at UTC+14 and UTC−11.
+
+Not built yet: the engine settings `allocationMode` = `cap` (supply limited
+so cumulative supply within a water year ≤ the allocation) and
+`fullAllocation` (demand replaced by the allocation), which will change
+`runModel` and bump `ENGINE_VERSION` (followups.md § Allocations).
+
 ---
 
 ## 3. Workbook quirks and suspected bugs

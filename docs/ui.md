@@ -1584,6 +1584,45 @@ them scenarios).
   recorded them, with their classes and the callout (`ScenarioOverrides.svelte`,
   its own chunk).
 
+## Allocations (`?tab=allocations`)
+
+WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
+[allocations.md](./allocations.md)). A core tab: owners, editors and viewers
+see it; farmers never reach the workspace.
+
+- **Modelled use vs registered volume** (`AllocationCompare.svelte`), on top:
+  a run picker (the published run by default, else the latest), a sentence
+  saying modelled use is *modelled, not metered* and a difference is
+  something to look into, not a finding; a warning listing the farms and
+  sources whose modelled use was above the registered volume, with how many
+  whole water years; notes for allocations not matched to a farm, or matched
+  to a farm the run doesn't have. The table has one row per farm, source and
+  water year: registered m³, modelled use m³ ("modelled, not metered" under
+  the heading), modelled ÷ registered, and a status badge (*Above
+  registered*, *Within band*, *Below registered*, *No registered volume*, *No
+  use, none registered*; the full sentence in its title). A part year is
+  marked "part (N d)". A source with neither use nor a volume is left out.
+  On a phone each row is a card of label–value lines.
+- **Registered volumes**: the list (farm, registration, the registered user
+  for editors only, authorisation, purpose, source, volume, storage, validity,
+  and where it came from: the file name and the first 12 hex digits of its
+  SHA-256, or "Entered by hand"). Unmatched rows are highlighted. **Download
+  CSV** (the export, names for editors only). Editors: **Add a volume**, and
+  **Change** / **Delete** per row (the form's farm picker is how a row is
+  matched by hand). Viewers see "Names of registered users are shown to
+  editors only." Below the list, **Imported files**: each with its full hash,
+  reference, row count, who and when, and **Remove this import**.
+- **Import registered volumes** (`AllocationImport.svelte`, editors): what
+  the file is (WARMS extract or CSV template), a reference, the file, and a
+  **Download the CSV template** link. The preview says how many rows matched,
+  didn't, or have problems; the table lists rows with problems first (the
+  problem in red), then unmatched rows, each with a farm picker ("by farm
+  name", "chosen by you"). **Import N rows** stores the valid ones; the
+  message says how many were imported, left out and still unmatched. Errors
+  (a refused file, a file already imported) show in an alert.
+- e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
+  viewer without names, phone cards, axe).
+
 ## History (`?tab=history`)
 
 WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
