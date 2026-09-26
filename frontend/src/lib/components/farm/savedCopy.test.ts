@@ -4,6 +4,7 @@ import {
 	clearAllSaved,
 	clearSaved,
 	keepsCopy,
+	latestSavedNode,
 	NO_COPY_KEY,
 	readSaved,
 	readUnit,
@@ -34,6 +35,18 @@ describe('the saved copy (§9)', () => {
 		expect(readSaved('u1', 'p', 'n1', T0 + 1000, s)).toEqual({ view, savedAt: T0, usedAt: T0 + 1000 });
 		expect(readSaved('u1', 'p', 'n2', T0, s)).toBeNull();
 		expect(readSaved('u1', 'q', 'n1', T0, s)).toBeNull();
+	});
+
+	it('finds the farm of a project shown last, for a visit without ?node=', () => {
+		const s = memory();
+		expect(latestSavedNode('u1', 'p', s)).toBeNull();
+		writeSaved('u1', 'p', 'n1', view, T0, s);
+		writeSaved('u1', 'p', 'n2', view, T0 + 5, s);
+		writeSaved('u1', 'q', 'n3', view, T0 + 9, s);
+		expect(latestSavedNode('u1', 'p', s)).toBe('n2');
+		readSaved('u1', 'p', 'n1', T0 + 10, s);
+		expect(latestSavedNode('u1', 'p', s)).toBe('n1');
+		expect(latestSavedNode('u2', 'p', s)).toBeNull();
 	});
 
 	it('is cleared when a different user signs in on the phone', () => {

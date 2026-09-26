@@ -128,6 +128,24 @@ export function readSaved(userId: string, projectId: string, nodeId: string, now
 	return e;
 }
 
+/**
+ * The farm of this project whose copy was shown last, for a visit without
+ * `?node=` (a farmer with one farm): the page can show its copy before the
+ * farm list answers. null when there's none or it belongs to another user.
+ */
+export function latestSavedNode(userId: string, projectId: string, s?: Storage | null): string | null {
+	const st = storage(s);
+	if (!st || !keepsCopy(st)) return null;
+	const store = load(st);
+	if (!store || store.userId !== userId) return null;
+	let best: [string, number] | null = null;
+	for (const [k, e] of Object.entries(store.entries)) {
+		if (!k.startsWith(`${projectId}/`) || typeof e?.usedAt !== 'number') continue;
+		if (!best || e.usedAt > best[1]) best = [k.slice(projectId.length + 1), e.usedAt];
+	}
+	return best?.[0] ?? null;
+}
+
 /** Keep `view` as the copy of this farm (a no-op when copies are off). */
 export function writeSaved(userId: string, projectId: string, nodeId: string, view: FarmView, now = Date.now(), s?: Storage | null): void {
 	const st = storage(s);

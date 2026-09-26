@@ -14,6 +14,7 @@ import {
 	fmtMonthShort,
 	fmtPct,
 	fmtStampDay,
+	fmtStampTime,
 	fmtVolume,
 	joinAnd,
 	plural,
@@ -360,3 +361,32 @@ export function farmSummaryLine(farm: FarmProjection): string {
 
 export const FARMS_PRIVACY =
 	'Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.';
+
+// ---- States (§6.5, boards 5 to 8) ---------------------------------------------
+
+export const STATES = {
+	loading: 'Loading your farm…',
+	slow: 'Slow signal? This can take a moment.',
+	errorTitle: 'We couldn’t load your farm',
+	errorText: 'Check your signal and try again. Your figures are safe; nothing was changed.',
+	noPublication: 'Your WUA hasn’t published figures yet',
+	noPublicationText: 'When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.',
+	contact: 'Questions? Contact your WUA.',
+	removed: 'You no longer have access to this farm. Contact your WUA.',
+	needsConnection: 'Charts, “Why?” and downloads need a connection.',
+	updating: 'Updating…'
+};
+
+/** The contact line after a second failure in a row. */
+export function stillFailing(offline: boolean): string {
+	return `${offline ? 'Still no connection.' : 'Still not working.'} If this keeps happening, contact your WUA.`;
+}
+
+/** The status strip over a saved copy: no signal, or the update failed. */
+export function savedStrip(savedAt: number, why: 'offline' | 'failed'): string {
+	const at = `These are the figures saved on this phone at ${fmtStampTime(savedAt)}.`;
+	return why === 'offline' ? `No signal. ${at} We’ll update them when you’re back online.` : `We couldn’t update your figures. ${at}`;
+}
+
+/** "You're previewing Vaalbank as its farmer sees it" (viewer+ only). */
+export const previewBanner = (farmName: string) => `You’re previewing ${farmName} as its farmer sees it`;

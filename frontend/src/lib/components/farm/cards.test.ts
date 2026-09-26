@@ -14,7 +14,10 @@ import {
 	outletLine,
 	positionLine,
 	PRIVACY,
+	previewBanner,
+	savedStrip,
 	shortLine,
+	stillFailing,
 	splitNotice,
 	supplyCard,
 	systemName
@@ -259,5 +262,29 @@ describe('the farms list (board 9)', () => {
 	it('sums a farm up in one line', () => {
 		expect(sp(farmSummaryLine(vaalbankFixture().farm))).toBe('86 % of water needed · dam 24 %');
 		expect(sp(farmSummaryLine(withFarm((f) => ((f.damCapacityM3 = 0), (f.dam = null))).farm))).toBe('86 % of water needed · no dam');
+	});
+});
+
+describe('the states', () => {
+	it('word the offline strip and the update failure with when the copy was saved (skewed TZ)', () => {
+		const tz = process.env.TZ;
+		try {
+			process.env.TZ = 'Africa/Johannesburg';
+			const at = Date.UTC(2024, 0, 19, 5, 42);
+			expect(savedStrip(at, 'offline')).toBe(
+				'No signal. These are the figures saved on this phone at 07:42 on 19 Jan 2024. We’ll update them when you’re back online.'
+			);
+			expect(savedStrip(at, 'failed')).toBe('We couldn’t update your figures. These are the figures saved on this phone at 07:42 on 19 Jan 2024.');
+			process.env.TZ = 'Pacific/Kiritimati';
+			expect(savedStrip(at, 'failed')).toContain('at 19:42 on 19 Jan 2024');
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
+	it('adds a contact line after a second failure', () => {
+		expect(stillFailing(true)).toBe('Still no connection. If this keeps happening, contact your WUA.');
+		expect(stillFailing(false)).toBe('Still not working. If this keeps happening, contact your WUA.');
+		expect(previewBanner('Vaalbank (example)')).toBe('You’re previewing Vaalbank (example) as its farmer sees it');
 	});
 });
