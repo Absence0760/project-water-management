@@ -429,10 +429,20 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 		if (e instanceof DraftError) return { ok: false, error: capital(e.message) };
 		throw e;
 	}
+	return checkOp(op, spec);
+}
+
+/**
+ * One op checked by the engine's own validator (validateScenarioOps), with its
+ * error worded for a person: a 0–1 value's limits in % when `spec` says the
+ * value is typed as a percentage. buildOp's check, and override mode's for
+ * each op its edits diff into (overrideDiff.ts).
+ */
+export function checkOp(op: ScenarioOp, spec: ValueSpec | null = null): Built {
 	const { errors } = validateScenarioOps([op]);
 	if (errors.length) {
 		const text = errors.map((x) => x.replace(/^ops\[0\]\.?/, '').replace(/^value: /, '')).join('; ');
-		return { ok: false, error: capital(spec ? percentMessage(spec, text) : scaleNote(d.kind, text)) };
+		return { ok: false, error: capital(spec ? percentMessage(spec, text) : scaleNote(op.op, text)) };
 	}
 	return { ok: true, op };
 }
