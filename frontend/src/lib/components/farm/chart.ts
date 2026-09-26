@@ -8,15 +8,10 @@ import type { MonthTotals } from '@water-management/engine';
 import { t, tn } from '$lib/i18n/locale.svelte';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd } from './format';
 
-export const CHART_HEIGHT = 152;
-const TOP = 10;
-/** The x axis (y of zero). */
-export const CHART_BASE = 130;
+import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP as TOP, niceMax } from './chartGeometry';
+
+export { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, LABEL_Y, niceMax } from './chartGeometry';
 const BASE = CHART_BASE;
-/** Baseline of the month letters. */
-export const LABEL_Y = 147;
-/** The design's minimum text size, chart labels included (§7). */
-export const CHART_FONT_PX = 13;
 
 export interface MonthLabel {
 	month: string;
@@ -50,14 +45,6 @@ export function rangeCaption(monthly: readonly MonthTotals[], dataUntil: string)
 	const day = Number(dataUntil.slice(8, 10));
 	const range = t('farm.chart.range', { from: first, to: fmtMonthYear(lastMonth) });
 	return partial ? `${range} ${t('farm.chart.partialNote', { month: fmtMonthLong(lastMonth), day: tn('farm.ordinal', day, {}, true) })}` : range;
-}
-
-/** A round top for the axis whose half is round too: 116.5 → 120, 45 → 50, 7 → 8. */
-export function niceMax(v: number): number {
-	if (!(v > 0)) return 1;
-	const p = 10 ** Math.floor(Math.log10(v));
-	for (const m of [1, 1.2, 1.6, 2, 3, 4, 5, 6, 8, 10]) if (m * p >= v - 1e-9) return m * p;
-	return 10 * p;
 }
 
 const approxTextWidth = (s: string) => s.length * CHART_FONT_PX * 0.6;

@@ -79,7 +79,7 @@
 		}
 		const problem = passwordProblem(next, repeat);
 		if (problem) {
-			passwordError = problem;
+			passwordError = t(problem);
 			passwordErrorField = 'next';
 			return;
 		}

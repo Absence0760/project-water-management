@@ -20,7 +20,7 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
 	import { readUnit } from '$lib/components/farm/savedCopy';
@@ -74,7 +74,7 @@
 			</section>
 			<p class="sub">{stateText('needsConnection')}</p>
 		{:else}
-			<NoticeCard {notice} />
+			<NoticeCard {notice} noneText={noRestriction()} />
 			<SupplyCard farm={view.farm} bind:unit />
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
 			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />

@@ -23,12 +23,8 @@ import { en, type MessageKey } from './messages/en';
 import type { Rich, RichPart } from './rich';
 
 export type { MessageKey } from './messages/en';
-
-export const LOCALES = ['en', 'af'] as const;
-export type Locale = (typeof LOCALES)[number];
-
-/** Each language's name in that language (fixed names, never translated). */
-export const LANGUAGE_NAMES: Record<Locale, string> = { en: 'English', af: 'Afrikaans' };
+import { i18n, wordsLang, type Locale } from './state.svelte';
+export * from './state.svelte';
 
 export type Catalogue = Partial<Record<MessageKey, string>>;
 
@@ -39,13 +35,10 @@ const LOADERS: Record<Exclude<Locale, 'en'>, () => Promise<Catalogue>> = {
 	af: () => import('./messages/af').then((m) => m.af)
 };
 
-export const i18n = $state<{ locale: Locale; complete: boolean }>({ locale: 'en', complete: true });
 /** The chosen language's catalogue ({} for English). Raw: replaced whole, never mutated. */
 let catalogue = $state.raw<Catalogue>({});
 /** The latest setLocale call, so an older, slower load can't win. */
 let switching = 0;
-
-export const isLocale = (v: unknown): v is Locale => (LOCALES as readonly unknown[]).includes(v);
 
 /** Every English key has a translation in `c`. */
 export const isComplete = (c: Catalogue) => (Object.keys(en) as MessageKey[]).every((k) => c[k] != null);
@@ -67,11 +60,6 @@ export async function setLocale(locale: Locale, supplied?: Catalogue): Promise<v
 	if (mine !== switching) return;
 	catalogue = loaded;
 	i18n.complete = isComplete(loaded);
-}
-
-/** The language the words on the page are in: the chosen one once its catalogue is complete, else English. */
-export function wordsLang(): Locale {
-	return i18n.locale !== 'en' && i18n.complete ? i18n.locale : 'en';
 }
 
 /** `{name}` → vars.name. An unknown placeholder is left as written, so a typo shows rather than vanishing. */
@@ -157,41 +145,4 @@ export function tRich(key: MessageKey, vars: Record<string, RichVar> = {}): Rich
 export function joinAnd(items: readonly string[]): string {
 	if (items.length <= 1) return items[0] ?? '';
 	return `${items.slice(0, -1).join(', ')} ${t('common.and')} ${items[items.length - 1]}`;
-}
-
-// ---- Which language to start in -------------------------------------------
-
-const STORAGE_KEY = 'wm.locale';
-
-/** The language chosen on this device before signing in (null when none or storage is blocked). */
-export function readStoredLocale(s: Storage | null = typeof localStorage === 'undefined' ? null : localStorage): Locale | null {
-	try {
-		const v = s?.getItem(STORAGE_KEY);
-		return isLocale(v) ? v : null;
-	} catch {
-		return null;
-	}
-}
-
-export function storeLocale(locale: Locale, s: Storage | null = typeof localStorage === 'undefined' ? null : localStorage): void {
-	try {
-		s?.setItem(STORAGE_KEY, locale);
-	} catch {
-		// Not kept: the choice still applies for this visit (and to the account, when signed in).
-	}
-}
-
-/**
- * The account's language (app_user.locale) when signed in and chosen, else
- * this device's choice, else Afrikaans when it is the browser's first
- * language, else English.
- */
-export function resolveLocale(
-	accountLocale: string | null | undefined,
-	stored: Locale | null,
-	languages: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages ?? [navigator.language]
-): Locale {
-	if (isLocale(accountLocale)) return accountLocale;
-	if (stored) return stored;
-	return /^af\b/i.test(languages[0] ?? '') ? 'af' : 'en';
 }

@@ -2328,6 +2328,17 @@ address, reset password, the farmer invite). The modeller workspace and the
   typed `Partial<Record<MessageKey, string>>` (an unknown key fails
   `pnpm check`); it is loaded lazily, the first time someone picks
   Afrikaans. A key without Afrikaans shows in English.
+- **Loading.** Only the translated routes load the catalogue: they import
+  it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
+  dynamic `import()` on the first translated route, then renders the route
+  once the language is set (a readiness flag, with Try again if the chunk
+  fails), so no route shows one language and then another. The workspace
+  and `/share` never download it: the number, date, notice and chart-size
+  rules they share with the farm view live in catalogue-free modules
+  (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
+  `farm/chartGeometry.ts`), `passwordProblem` returns a key, and the
+  "confirm your email" banner is imported only for an unconfirmed address.
+  `lib/i18n/boundary.test.ts` guards it.
 - **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
   `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
   `.two` / `.few`) form through `Intl.PluralRules`; `tRich(key, vars)`

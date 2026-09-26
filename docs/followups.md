@@ -1186,12 +1186,18 @@ No Afrikaans wording ships yet: none is reviewed.
       turnaround above, so the new keys join the same sheet.
 - [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
       the total (the English catalogue is ~7 KB; each key also appears at its
-      call site). After merging main on 2026-09-26 `pnpm check:bundle`
-      measured 925 KB against the 921 KB ceiling (largest chunk 43 KB, at its
-      ceiling). WP-2.5's brief was not to move the ceiling: the operator
-      either raises `BUDGET.totalCodeKb` with a change-log entry or asks for
-      a trim (shorter keys, or splitting the catalogue per surface so the
-      workspace never loads it). Trigger: before this branch merges to main.
+      call site). The catalogue now loads only on the translated routes (the
+      workspace and `/share` never download its ~8 KB chunk), but the guard
+      counts lazy chunks too, so the split costs ~2 KB of total: 932 KB
+      before, 934 KB after, against main's 929 KB ceiling (largest chunk
+      43 KB, at its ceiling). Fitting under 929 without a raise needs weight
+      removed, not moved: the durable option is English-as-key messages
+      (gettext style: the English sits at the call site and `af.ts` maps it,
+      so no separate English catalogue ships, ~5–7 KB), which reworks the
+      catalogue, the sheet and the tests; build-time key shortening saves
+      ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
+      raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
+      this branch merges to main.
 - [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
       `check:i18n` listing of stale entries): today `content.af.test.ts`
       fails on a stale `sourceHash` and the sheet names the new hash.
