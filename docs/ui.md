@@ -1638,8 +1638,8 @@ run's report to chosen members every week or month.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow, EWR by month, and the **Uncertainty bands** (their own
      panel and menu entry, beside the findings they qualify).
-  3. **Farms & users**: curtailment (with the other water users and the EWR
-     sites tables), farm detail.
+  3. **Farms & users**: curtailment (led by the share-the-pain board, with
+     the other water users and the EWR sites tables), farm detail.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
@@ -1851,6 +1851,39 @@ run's report to chosen members every week or month.
   farm detail's supply chart calls the line "Abstraction demand". *EWR charge*
   is a positive volume charged (m³/day), the same sign the curtailment table
   and every export use (below).
+- <a id="share-the-pain"></a>**Share the pain** (issue #53 R3,
+  `curtailment/ShareThePainBoard.svelte`, view model
+  `curtailment/shareThePain.ts`; [design/planning-outputs.md §3.3](./design/planning-outputs.md#33-r3-the-share-the-pain-board-s-presentation-only)).
+  On the Runs tab the curtailment panel leads with a board under its
+  *Curtailment targets* heading and period line, over the same reporting
+  window (it follows the [picker](#report-window)); the per-farm table
+  follows under a *Per farm* heading. The printable report leaves the board
+  out (`CurtailmentTable`'s `board` prop). Three stages, side by side, each
+  as a share of the group's own demand: **1. Today** (supplied ÷ demand),
+  **2. Equitable share** (equitable share volume ÷ demand: the same % for
+  every farm, marked * for the fixed `EQUITABLE_SHARE_FOOTNOTE`, plus a line
+  that SA restrictions are set per user category), **3. EWR met** (volume
+  left ÷ demand: the equitable share less the farm's EWR supply cut). A row
+  of three cards gives the farm totals per stage; the table has one row per
+  farm (a bar, the whole %, the m³/day), an **All farms** total row, then
+  **Other water users (outside the equitable share)**: each user its own
+  row with a *senior, not curtailed* or *junior, curtailed* badge, *not in
+  the share* at stage 2, and at stage 3 what it takes after its supply cut
+  (junior) or all it takes (senior), with an **All other users** total.
+  Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
+  The % uses *Demand left %*'s rules (`fmtDemandLeft`): bounded to 0–100 %,
+  "no demand" for a group with no demand (never a negative demand, which the
+  client's sketch showed), "—" under 1 m³/day. A note under stage 3 names
+  what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
+  cut beyond its equitable share, a senior user's charge that stands, or a
+  junior user's charge beyond what it takes. The middle stage is a
+  `ShareRule` (only `{ kind: 'equal' }` today); a per-category restriction
+  waits for client question O4 ([plan.md](./plan.md#decision-support-outputs-2026-09-26)).
+  Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
+  equal share, and seeded engine runs whose totals match the engine's),
+  `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
+  `e2e/tests/share-the-pain.spec.ts` (the rendered board against the tables
+  under it, the window picker, axe in both themes and on a phone).
 - **Curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
