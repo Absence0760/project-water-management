@@ -157,8 +157,9 @@
 		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
 		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
+		const boreholes = (editor.model.boreholes ?? []).filter((b) => b.nodeId === id).length;
 		const isFarm = nodes.find((n) => n.id === id)?.kind === 'farm';
-		const question = removeMessage({ name, isFarm, areas, transfers: refs, cover, farmers: farmerCount ? (farmerCount[id] ?? 0) : null });
+		const question = removeMessage({ name, isFarm, areas, transfers: refs, cover, boreholes, farmers: farmerCount ? (farmerCount[id] ?? 0) : null });
 		if (question && !confirm(question)) return;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
@@ -465,6 +466,9 @@
 				landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === selected.id)}
 				onaddcover={() => editor.addLandCover(selected.id)}
 				onremovecover={(id) => editor.removeLandCover(id)}
+				boreholes={(editor.model.boreholes ?? []).filter((b) => b.nodeId === selected.id)}
+				onaddborehole={() => editor.addBorehole(selected.id)}
+				onremoveborehole={(id) => editor.removeBorehole(id)}
 			/>
 			{#if selected.kind === 'farm' && projectId}
 				<Lazy load={loadYield}>

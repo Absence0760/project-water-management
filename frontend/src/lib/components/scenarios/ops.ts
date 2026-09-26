@@ -10,6 +10,8 @@ import {
 	upgradeLegacyModel,
 	validateScenarioOps,
 	type AppliedOp,
+	type BoreholeMode,
+	type BoreholeTarget,
 	type ModelInput,
 	type NetworkNode,
 	type NodeSetField,
@@ -126,6 +128,8 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'transfer.remove': 'Remove a transfer',
 	'landCover.add': 'Add land cover',
 	'landCover.remove': 'Remove land cover',
+	'borehole.add': 'Add a borehole',
+	'borehole.remove': 'Remove a borehole',
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall'
 };
@@ -198,6 +202,16 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const p = m?.landCover?.find((x) => x.id === op.patchId);
 			return p ? `${nodeName(p.nodeId)}: remove ${coverLabel(p.coverClass)} (${fmtNum(p.areaKm2, 3, true)} km²)` : 'Remove a land-cover patch';
 		}
+		case 'borehole.add': {
+			const b = op.borehole;
+			const cap = b.annualCapM3 === null ? 'no annual cap' : `at most ${fmtNum(b.annualCapM3)} m³/a`;
+			const into = b.target === 'dam' ? ', into the dam' : '';
+			return `${nodeName(b.nodeId)}: add the borehole “${b.name}”, ${fmtNum(b.capacityM3Day)} m³/day ${b.mode}${into}, ${cap}, depletion ${fmtNum(b.depletionFactor * 100, 1, true)} %`;
+		}
+		case 'borehole.remove': {
+			const b = m?.boreholes?.find((x) => x.id === op.boreholeId);
+			return b ? `${nodeName(b.nodeId)}: remove the borehole “${b.name}”` : 'Remove a borehole';
+		}
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
 			// An unset date or PE input has a meaning (start of data; pan × A-pan, as the engine runs it): show it as the "was".
@@ -251,6 +265,15 @@ export interface OpDraft {
 	coverClass: string;
 	coverAreaKm2: string;
 	densityPct: string;
+	/** borehole.remove: the borehole; borehole.add: the new one's fields (WP-3.9). */
+	boreholeId: string;
+	bhName: string;
+	bhCapacityM3Day: string;
+	bhAnnualCapM3: string;
+	bhMode: BoreholeMode;
+	bhTarget: BoreholeTarget;
+	bhEmergencyPct: string;
+	bhDepletionPct: string;
 	seriesKind: ScalableSeriesKind;
 	changePct: string;
 	from: string;
@@ -285,6 +308,14 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		coverClass: LAND_COVER_CLASSES[0].id,
 		coverAreaKm2: '',
 		densityPct: '100',
+		boreholeId: '',
+		bhName: '',
+		bhCapacityM3Day: '',
+		bhAnnualCapM3: '',
+		bhMode: 'supplemental',
+		bhTarget: 'direct',
+		bhEmergencyPct: '30',
+		bhDepletionPct: '0',
 		seriesKind: SCALABLE_SERIES_KINDS[0],
 		changePct: '',
 		from: '',
@@ -406,6 +437,28 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				break;
 			case 'landCover.remove':
 				op = { op: 'landCover.remove', patchId: need(d.patchId, 'a land-cover patch') };
+				break;
+			case 'borehole.add': {
+				const name = d.bhName.trim();
+				if (!name) throw new DraftError('enter a name for the borehole');
+				op = {
+					op: 'borehole.add',
+					borehole: {
+						id: newId(),
+						nodeId: need(d.nodeId, 'a farm or other user'),
+						name,
+						capacityM3Day: number(d.bhCapacityM3Day, 'the capacity')!,
+						annualCapM3: number(d.bhAnnualCapM3, 'the annual cap', { nullable: true }),
+						mode: d.bhMode,
+						emergencyBelowPct: number(d.bhEmergencyPct, 'the emergency level', { scale: 100 })!,
+						target: d.bhTarget,
+						depletionFactor: number(d.bhDepletionPct, 'the stream depletion', { scale: 100 })!
+					}
+				};
+				break;
+			}
+			case 'borehole.remove':
+				op = { op: 'borehole.remove', boreholeId: need(d.boreholeId, 'a borehole') };
 				break;
 			case 'settings.set': {
 				spec = draftSpec(d);

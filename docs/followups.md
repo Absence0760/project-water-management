@@ -122,6 +122,17 @@ Tick items off (or move them into an issue) as they are done.
         kernel) and the values; depletion the river can't give is dropped,
         not carried over. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-3.9 individual boreholes (engine 0.36.0): confirm the supply order
+        (primary direct, then dam-target, then the dam and river, then
+        supplemental, then emergency), what a dam-target borehole does in each
+        mode (primary keeps the dam topped up; supplemental adds today's
+        shortfall and first lifts a dam below dead storage; emergency refills
+        a low dam), and that annual caps reset on 1 October. Should a project
+        carry each property's own GN 538 volume (area × the schedule's rate,
+        by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
+        the first licence application with boreholes. Also: one depletion lag
+        per node is shared by its boreholes; per-borehole lags if a
+        geohydrology report gives different response times.
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
         catchment (invasives, plantations, riparian stands) and their
         condensed areas? The class reductions are indicative mature-stand
@@ -1125,8 +1136,8 @@ the suggested order (the IDs carry the detail):
 Left out of the first build because the contract or an API doesn't carry it
 yet; each lands with the work package named.
 
-- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
-      `forecast` in `FarmView` (WP-2.12, design E2).
+- [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
+      with WP-2.12 (`farm.forecast` when the published run is a forecast run).
 - [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
       before the named translator reviews it, and `FarmView` carries one
       `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
@@ -1241,6 +1252,25 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
+      K1, found building WP-2.12, 2026-09-26). The land-cover Q75, EWR rule
+      tables read against the record's flow-duration curve, and GR4J's
+      warm-up on a record shorter than it are record-wide, so days added at
+      the end move values at the start (about 1e-8 relative on long records).
+      Forecast mode works round it with a second run for the history, so the
+      join between history and forecast is continuous only up to that noise.
+      Durable fix: fit those statistics on a fixed window (the calibration
+      window, or the record to the last observed day), then prefix stability
+      holds for `runModel` itself and `runForecastChecked` can splice
+      nothing. An engine behaviour change, so the engine owner's call and an
+      `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
+      or a user asking why a forecast run's first forecast day steps.
+- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
+      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
+      job lands, a GEFS ingest that changes days should also queue a forecast
+      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
+      keeps the newest unkept forecast run), deduped per project like the
+      re-run. Trigger: now (WP-2.11 is merged into this branch).
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").

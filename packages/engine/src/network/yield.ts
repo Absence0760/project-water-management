@@ -197,7 +197,8 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	const ratio = baseCap > 0 ? cap / baseCap : 0;
 	const curve = base.damCurve && ratio > 0 ? { volume: base.damCurve.volume.map((v) => v * ratio), area: base.damCurve.area.map((a) => a * ratio) } : undefined;
 	const demand = new Float64Array(p.days);
-	// The dam's own yield: its boreholes (WP-1.34) don't count towards it.
+	// The dam's own yield: its boreholes (WP-1.34), including those that pump
+	// into the dam (WP-3.9), don't count towards it (pending the hydrologist).
 	const { borehole: _borehole, damCurve: _curve, ...rest } = base;
 	const node: PlanNode = {
 		...rest,

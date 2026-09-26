@@ -94,3 +94,18 @@ export function printScale(devicePixelRatio: number): number {
 	const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
 	return dpr >= PRINT_PIXEL_RATIO ? 1 : PRINT_PIXEL_RATIO / dpr;
 }
+
+/**
+ * A daily chart's labelled band (the forecast days, WP-2.12): its span in
+ * epoch seconds, from the start of `from` to the end of `to` (the data's last
+ * day when absent), clipped to the data. null when the band misses the data
+ * entirely, or there is no data.
+ */
+export function bandSpan(band: { from: string; to?: string }, x: readonly number[]): { start: number; end: number } | null {
+	if (!x.length) return null;
+	const lo = x[0]!;
+	const hi = x[x.length - 1]! + 86_400;
+	const start = Math.max(lo, Date.parse(`${band.from}T00:00:00Z`) / 1000);
+	const end = Math.min(hi, band.to ? Date.parse(`${band.to}T00:00:00Z`) / 1000 + 86_400 : hi);
+	return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null;
+}

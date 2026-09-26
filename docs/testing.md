@@ -38,6 +38,12 @@ and never run the suites one after another. Measured on the 20-core dev laptop
   `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run.
+- **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
+  WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
+  6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
+  packages/engine exec vitest run src/forecast.invariants.test.ts` (about
+  21 minutes, one worker; 2026-09-26: 20 000 cases clean once two seeds'
+  invalid inputs were told apart).
 - **Workbook parity** (`frontend/src/lib/spreadsheet/import/sourceWorkbooks.test.ts`):
   local only (it skips without the client workbooks and Python/openpyxl); each
   case spawns `extract_project.py` for ~30 s, so the cases run concurrently.

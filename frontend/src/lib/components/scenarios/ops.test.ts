@@ -203,6 +203,21 @@ describe('buildOp', () => {
 		// A settings change, the PE input included, is a baseline assumption whoever owns what.
 		expect(classifyOp(built[11]!, [UP, LO, G])).toBe('baseline');
 	});
+
+	it('builds and describes a borehole to add and one to remove (WP-3.9)', () => {
+		const add = buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: ' BH new ', bhCapacityM3Day: '250', bhAnnualCapM3: '40000', bhMode: 'primary', bhDepletionPct: '20' }), m, id);
+		expect(add.ok, JSON.stringify(add)).toBe(true);
+		const op = (add as { op: ScenarioOp }).op;
+		expect(op).toMatchObject({ op: 'borehole.add', borehole: { nodeId: UP, name: 'BH new', capacityM3Day: 250, annualCapM3: 40_000, mode: 'primary', target: 'direct', emergencyBelowPct: 0.3, depletionFactor: 0.2 } });
+		expect(describeOp(op, base())).toBe('Upper farm: add the borehole “BH new”, 250 m³/day primary, at most 40,000 m³/a, depletion 20 %');
+		const after = applyScenario(base(), [op]);
+		expect(after.problems).toEqual([]);
+		const boreholeId = (op as { borehole: { id: string } }).borehole.id;
+		const remove = buildOp(draft({ kind: 'borehole.remove', boreholeId }), m, id);
+		expect(remove).toEqual({ ok: true, op: { op: 'borehole.remove', boreholeId } });
+		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the borehole “BH new”');
+		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
+	});
 });
 
 describe('opItems', () => {

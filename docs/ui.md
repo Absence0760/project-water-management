@@ -566,6 +566,18 @@ does. The intro states the thresholds the API returns.
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
+  one-node form, farms and other users: always the note **Low confidence:
+  Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
+  report.** **+ Add borehole** adds one (supplemental, straight to the crop, no
+  capacity or cap yet); each has a **Name**, **Capacity** (m³/day), **Annual
+  cap** (m³/a, empty = none), **Mode** (supplemental / primary / emergency /
+  none; emergency only with a dam), **Runs below** (% of dam, emergency only),
+  **Pumps into** (the crop or the farm dam; farms only, the dam only with one)
+  and **Stream depletion** (% of pumping). Below them: the caps' total and the
+  GN 538 context (up to 40 000 m³/a per property, depending on its size; the
+  app never decides legality). Read-only for viewers; fields stack on a phone.
+  Removing the node asks about its boreholes too.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -1305,6 +1317,32 @@ run's report to chosen members every week or month.
   list. It is sticky, and a long list scrolls inside its panel (at least
   7.5rem tall) so the rail fits the window without clipping. Narrower, the
   rail stacks above the results.
+- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
+  When the project has a forecast series (`rain_forecast_mm`, uploaded or
+  fed by CHIRPS-GEFS), the run bar has **Run forecast** beside Run model: the
+  record as an ordinary run, then the days after the last recorded rain on
+  forecast rain, shown apart. The project keeps one forecast run (a new one
+  replaces the last unless it is pinned, published or cited). **Run model**
+  itself now stops at the last recorded rain, so an ordinary run never
+  contains forecast days. A forecast run carries a **Forecast** tag in the
+  list and a "Forecast from …" badge in its header linking to its own panel
+  (`forecast/ForecastPanel.svelte`, its own chunk, `#res-forecast`, the menu
+  entry **Forecast** right after Summary): which days, from how much forecast
+  rain after which recorded day; per farm the lowest dam level expected, the
+  days short expected and the share of demand supplied, farms short on a
+  forecast day first; and the outlet's EWR days at risk, counts only. No
+  misleading certainty (the persona rules): every figure is "expected" or
+  "about", in whole percent (`forecast/forecast.ts`, which a test holds to
+  never saying "will"), under a "Modelled on forecast rain, not measured"
+  tag, with a line saying every other figure of the run covers the days
+  before the forecast only. Every daily chart of a forecast run (EWR vs
+  outflow, the hydrograph, dam storage, supply vs demand, the explorer)
+  shades the forecast days with a hatched band and a dashed edge, labelled
+  "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
+  option), so the band never rests on colour alone; the figure carries
+  `data-band-from`. The flow-duration curve has no time axis, so no band.
+  The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
+  flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
@@ -1509,7 +1547,15 @@ run's report to chosen members every week or month.
   over that area (`RunSummaryView.svelte`).
 - **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
   a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes (`RunSummaryView.svelte`).
+  stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
+  (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
+  by water year**: the GN 538 context note (up to 40 000 m³/a per property;
+  modelled use only, the app never decides legality), the low-confidence note,
+  then per farm or user the mean pumped per year (partial years weighted by
+  their days), the most in one year, the annual caps, how many years pumped
+  above the GN 538 ceiling (flagged) and how many reached a cap; and per node
+  a collapsed table of every water year: days, pumped, into the dam, stream
+  depletion and each borehole's volume (of its cap, marked when reached).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run
@@ -2146,7 +2192,16 @@ published.
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
-  CSV download and the disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+  CSV download and the disclaimer. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  wording in `farm/forecastCard.ts`) comes after "Looking back" only when
+  the WUA published a forecast run: a "Forecast" kicker and a dashed edge
+  set it apart from the cards about what happened; "Lowest dam level
+  expected: about 38 % around 20 Jan" (no dam, no line), "You may be short
+  on 3 of the 14 days" (or that the model doesn't expect a short day), and
+  the forecast's own dates with "Forecasts change, and this is worked out
+  by the model, not a promise. Only a notice from your WUA is a
+  restriction." A forecast made more than 3 days ago says how old it is
+  first. The dam page shows the same card under its chart.
 - **Wording.** Every visible string and number rule lives in pure modules
   under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
   `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture

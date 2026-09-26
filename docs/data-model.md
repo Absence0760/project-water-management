@@ -64,9 +64,10 @@ erDiagram
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
+| `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, or `auto` for the re-run after new data | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (044), `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
@@ -232,10 +233,10 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   (see **Stored run inputs**).
 - **Each trigger is capped apart** (`model_run.trigger`, 042_auto_rerun.sql:
   `manual`, the default and every existing row; `auto`, the debounced re-run
-  after new data, WP-2.11; `forecast`, reserved for WP-2.12). The 20 above
+  after new data, WP-2.11; `forecast`, a forecast run, WP-2.12). The 20 above
   count `manual` runs only; of the unkept runs of each automatic trigger only
   the newest is kept (`AUTOMATIC_RUNS_KEPT`, 1). So a project with a daily
-  feed holds at most 20 manual runs, 1 auto run, and the kept ones (a pinned,
+  feed holds at most 20 manual runs, 1 auto run, 1 forecast run, and the kept ones (a pinned,
   nominated, published or scenario-cited auto run is kept like any other),
   and an auto run never pushes a person's run out. Scenario runs and imports
   are `manual`.
@@ -307,6 +308,13 @@ the same number. Pinning doesn't touch the note's stamp. A partial index
 (`model_run_pinned_idx`, `WHERE pinned`) keeps counting a project's pins
 cheap. `pinned` is on every run's metadata (`RunMeta`), so a feature that needs
 a kept base run (scenarios, issue #18) can read it from the run list.
+
+**Forecast runs (`trigger = 'forecast'`, 042_auto_rerun.sql, WP-2.12,
+[model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).** Capped like
+any automatic trigger (above): the newest unkept forecast run replaces the
+one before. A forecast run's input snapshot holds the forecast tail; every
+other run's doesn't (the backend stores the input it ran on, cut at the
+tail).
 
 **Evidence nomination (010_run_nomination.sql).** Which run, and so which
 runoff model, the project stands behind as evidence, so an applicant can't
@@ -855,7 +863,7 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `project` | the row |
   | `project_member` | their own row only, never the list (it holds neighbours' emails) |
   | `node` | their linked farms, and the gauges; no other farm, not even its name, and no other water user |
-  | `crop_area`, `land_cover` | rows on their linked farms |
+  | `crop_area`, `land_cover`, `borehole` | rows on their linked farms (`borehole`: migration 043) |
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |

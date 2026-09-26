@@ -28,7 +28,8 @@ import {
 	type PairedMember,
 	type RecordCoverage,
 	type ResolvedEnsembleOptions,
-	type RunInputsSnapshot
+	type RunInputsSnapshot,
+	withoutForecastTail
 } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -51,14 +52,16 @@ export const CHECKED_MEMBERS = 3;
  */
 export async function runModelInput(db: Db, projectId: string, runId: string): Promise<ModelInput> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<{ inputs: RunInputsSnapshot & { settings: ModelInput['settings']; model: ModelInput['model'] } }>(
-		'SELECT inputs FROM model_run WHERE project_id = $1 AND id = $2',
+	const { rows } = await db.query<{ inputs: RunInputsSnapshot & { settings: ModelInput['settings']; model: ModelInput['model'] }; trigger: string }>(
+		'SELECT inputs, "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
 		[projectId, runId]
 	);
 	const snap = rows[0]?.inputs;
 	if (!snap) throw new ApiError(404, 'not found');
 	try {
-		return await loadRunInput(db, runId);
+		const input = await loadRunInput(db, runId);
+		// A forecast run (WP-2.12) stores its input with the forecast tail; its figures, and so its bands, are the history's.
+		return rows[0]!.trigger === 'forecast' ? withoutForecastTail(input) : input;
 	} catch (err) {
 		if (!(err instanceof RunInputError) || err.problem !== 'not_reproducible') throw err;
 	}

@@ -4,6 +4,7 @@ export * from './calendar';
 export * from './compare';
 export * from './demand';
 export * from './flow';
+export * from './forecast';
 export * from './project';
 export * from './manifest';
 export * from './run';

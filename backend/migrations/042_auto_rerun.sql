@@ -6,8 +6,8 @@
 --
 --   1. model_run.trigger: what made the run. 'manual' (a person pressed Run,
 --      queued a re-run, imported, or ran a scenario), 'auto' (the debounced
---      re-run after new data), 'forecast' (reserved for WP-2.12). Existing
---      rows are 'manual'. The storage cap (runs/execute.ts trimRuns) counts
+--      re-run after new data), 'forecast' (a forecast-mode run, WP-2.12,
+--      runs/execute.ts). Existing rows are 'manual'. The storage cap (runs/execute.ts trimRuns) counts
 --      each trigger on its own: an auto run never pushes a person's run out.
 --
 --   2. app_enqueue_rerun(): the debounced enqueue behind the new-data hook

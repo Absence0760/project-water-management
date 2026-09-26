@@ -10,6 +10,8 @@ import {
 	ProjectionInputError,
 	upgradeLegacyModel,
 	type CatchmentView,
+	type FarmProjection,
+	type ForecastSummary,
 	type NetworkNode,
 	type ProjectionRun,
 	type RestrictionLevel,
@@ -171,12 +173,45 @@ async function getPublication(db: Db, id: string): Promise<Publication> {
 	return toPublication(rows[0]!, true);
 }
 
+/**
+ * A farm's projection with its forecast days (WP-2.12) when the published run
+ * is a forecast run: the farmer's "Next 14 days". Figures of the forecast
+ * run's summary.forecast; the rest of the projection covers history only
+ * (dataUntil is the day before the first forecast day).
+ */
+export function withFarmForecast(view: FarmProjection, forecast: { summary: ForecastSummary; madeOn: string } | null): FarmProjection {
+	if (!forecast) return view;
+	const f = forecast.summary;
+	const farm = f.perFarm.find((p) => p.nodeId === view.nodeId);
+	if (!farm) return view;
+	return {
+		...view,
+		forecast: {
+			from: f.from,
+			to: f.to,
+			days: f.days,
+			madeOn: forecast.madeOn,
+			minDamPct: farm.minDamPct,
+			minDamDate: farm.minDamDate ?? null,
+			deficitDays: farm.deficitDays,
+			suppliedFraction: farm.suppliedFraction
+		}
+	};
+}
+
 /** A saved run's model snapshot and its series, as the engine's projection reads them. */
 async function loadProjectionRun(
 	db: Db,
 	projectId: string,
 	runId: string
-): Promise<{ run: ProjectionRun; engineVersion: string; runoffModel: string; calibration: StoredCatchmentView['calibration'] } | null> {
+): Promise<{
+	run: ProjectionRun;
+	engineVersion: string;
+	runoffModel: string;
+	calibration: StoredCatchmentView['calibration'];
+	/** A forecast run's summary.forecast (WP-2.12) and the day it was made (UTC); null for an ordinary run. */
+	forecast: { summary: ForecastSummary; madeOn: string } | null;
+} | null> {
 	const { rows } = await db.query<{
 		start_date: string;
 		end_date: string;
@@ -185,14 +220,20 @@ async function loadProjectionRun(
 		runoff_model: string;
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
 		observed_until: string | null;
+		forecast: ForecastSummary | null;
+		made_on: string;
 	}>(
 		// observed_until: the last day of the observed rain drivers in the run's
 		// input snapshot (catchment gauge, CHIRPS), not the forecast: a run that
-		// goes on past it on forecast rain is projected only to here.
+		// goes on past it on forecast rain is projected only to here. A forecast
+		// run (WP-2.12) knows exactly: its history ends the day before its first
+		// forecast day.
 		`SELECT start_date, end_date, engine_version, inputs->'model' AS model,
-			(SELECT max((s.value->>'startDate')::date + (s.value->>'length')::int - 1)
-			 FROM jsonb_each(inputs->'series') s
-			 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0) AS observed_until,
+			COALESCE(to_char((summary->'forecast'->>'from')::date - 1, 'YYYY-MM-DD'),
+				(SELECT to_char(max((s.value->>'startDate')::date + (s.value->>'length')::int - 1), 'YYYY-MM-DD')
+				 FROM jsonb_each(inputs->'series') s
+				 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0)) AS observed_until,
+			summary->'forecast' AS forecast, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS made_on,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, summary->'calibration' AS calibration
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
@@ -219,7 +260,8 @@ async function loadProjectionRun(
 		},
 		engineVersion: r.engine_version,
 		runoffModel: r.runoff_model,
-		calibration: c ? { nse: c.nse ?? null, pbias: c.pbias ?? null, kge: c.kge ?? null } : null
+		calibration: c ? { nse: c.nse ?? null, pbias: c.pbias ?? null, kge: c.kge ?? null } : null,
+		forecast: r.forecast ? { summary: r.forecast, madeOn: r.made_on } : null
 	};
 }
 
@@ -245,7 +287,7 @@ export async function publishRun(db: Db, projectId: string, body: z.infer<typeof
 			snapshotFarms
 		]);
 		const liveIds = new Set(live.map((r) => r.id));
-		views = snapshotFarms.filter((id) => liveIds.has(id)).map((id) => farmProjection(loaded.run, id, analysis!));
+		views = snapshotFarms.filter((id) => liveIds.has(id)).map((id) => withFarmForecast(farmProjection(loaded.run, id, analysis!), loaded.forecast));
 	} catch (err) {
 		if (err instanceof ProjectionInputError) throw new ApiError(409, `this run can't be published: ${err.message}`);
 		throw err;

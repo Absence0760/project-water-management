@@ -68,9 +68,14 @@ export interface ScenarioCheck {
  * loadRunInput's message.
  */
 export async function loadBaseInput(db: Db, projectId: string, runId: string): Promise<ModelInput> {
-	const { rows } = await db.query<{ scenarioId: string | null }>('SELECT scenario_id AS "scenarioId" FROM model_run WHERE project_id = $1 AND id = $2', [projectId, runId]);
+	const { rows } = await db.query<{ scenarioId: string | null; trigger: string }>(
+		'SELECT scenario_id AS "scenarioId", "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
+		[projectId, runId]
+	);
 	if (!rows[0]) throw new ApiError(404, 'base run not found');
 	if (rows[0].scenarioId) throw new ApiError(409, 'that run is a scenario run; base a scenario on a run of the model itself');
+	// A forecast run's input runs on past the record on forecast rain (WP-2.12); a scenario is judged on history.
+	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; base a scenario on an ordinary run of the model');
 	try {
 		return await loadRunInput(db, runId);
 	} catch (err) {

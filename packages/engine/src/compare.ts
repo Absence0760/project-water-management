@@ -20,6 +20,7 @@ import {
 	defaultProjectSettings,
 	resolvePe,
 	upgradeLegacyModel,
+	type Borehole,
 	type CalibrationStats,
 	type CropDef,
 	type FarmSummary,
@@ -1102,6 +1103,24 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
 			else if (!same(x.condensed, y.condensed) || x.factors !== y.factors)
 				out.push({ area: 'network', kind: 'changed', subject: y.farm, text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${x.factors !== y.factors ? ', reductions changed' : ''}` });
+		}
+	}
+
+	// --- individual boreholes (WP-3.9), by id, then by (node name, borehole name) so copies line up ---
+	{
+		const nodeRenameBh = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
+		const ownerA = (bh: Borehole) => nodeRenameBh.get(bh.nodeId) ?? na.node(bh.nodeId) ?? '';
+		const ownerB = (bh: Borehole) => nb.node(bh.nodeId) ?? '';
+		const bores = matchByIdThenName(a.boreholes ?? [], b.boreholes ?? [], (x) => x.id, (x) => `${(b.boreholes ?? []).includes(x) ? ownerB(x) : ownerA(x)}\u0000${x.name}`);
+		const describe = (x: Borehole) =>
+			`${fmtValue(x.capacityM3Day, 0)} m³/day, ${x.mode}${x.target === 'dam' ? ' into the dam' : ''}, annual cap ${x.annualCapM3 === null ? 'none' : `${fmtValue(x.annualCapM3, 0)} m³`}, depletion ${fmtValue(x.depletionFactor)}`;
+		for (const x of bores.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Borehole "${x.name}" removed from ${ownerA(x)} (was ${describe(x)})` });
+		for (const y of bores.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Borehole "${y.name}" added to ${ownerB(y)} (${describe(y)})` });
+		for (const [x, y] of bores.pairs) {
+			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
+			const fields = ['name', 'capacityM3Day', 'annualCapM3', 'mode', 'emergencyBelowPct', 'target', 'depletionFactor'] as const;
+			if (moved || fields.some((f) => !same(x[f], y[f])))
+				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: borehole "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${x.emergencyBelowPct !== y.emergencyBelowPct ? `, emergency level ${fmtValue(x.emergencyBelowPct)} → ${fmtValue(y.emergencyBelowPct)}` : ''}` });
 		}
 	}
 
