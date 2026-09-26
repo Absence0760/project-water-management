@@ -523,6 +523,18 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   snapshot's start, length or SHA-256; never expected, and the run is then
   not presented as reproduced). No backfill: older runs keep hash-only
   snapshots.
+- **Checking a reproduction** (`GET …/runs/:runId/reproduce`,
+  `backend/src/runs/reproduce.ts`, [api.md](./api.md#runs)): the server
+  re-runs `runModelChecked(loadRunInput(run))` with its current engine and
+  compares the summary (path by path, as RFC 8785 canonical JSON after the
+  same JSON normalisation storage applies) and every `run_series` array
+  (value for value, non-finite as `null`), answering `identical`, `differs`
+  (with the list: summary paths, series with their differing days, first
+  date and largest difference), `not_reproducible`, `inconsistent` or
+  `failed`. Read-only; nothing is stored. `RunMeta.reproducible` is the same
+  test `loadRunInput` makes (the run has stored references, or no input
+  series at all), so the Runs tab can tag a run from before 021 without a
+  request.
 - **Garbage collection and retention.** A reference goes with its run
   (cascade: trimmed by the cap, deleted by an editor, or the whole project).
   The statement-level `run_input_series_gc` trigger (`series_blob_gc`,

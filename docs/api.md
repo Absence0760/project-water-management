@@ -683,6 +683,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, `[]` when none | viewer |
 | POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, or a project at its limit of 50 nominations | editor |
+| GET | `/projects/:id/runs/:runId/reproduce` | – | `200 Reproduction`: the run re-run on the server from its stored inputs (`loadRunInput`) with the current engine, its summary and every daily output compared with what was stored (WP-3.1). `{ status, identical, engineVersionThen, engineVersionNow, differences, truncated, message? }`: `status` is `identical`, `differs` (`differences` lists up to 50: `{ kind: 'summary', path }`, `{ kind: 'series', key, nodeId, label, days, firstDate, maxAbsDiff }`, `{ kind: 'series_missing' \| 'series_extra', key, nodeId, label }`; `truncated` counts the rest), `not_reproducible` (a run from before stored inputs, `message` says so), `inconsistent` (a stored input fails its check against the run's record: never presented as the run) or `failed` (today's engine refuses the stored input, `message` has its reason). `404` for a run not in this project | viewer |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
   with the engine's reason, and nothing is stored: no rainfall series, a
@@ -696,7 +697,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   history names, runs a publication holds (at most 12, [Publication](#publication))
   and cited runs (a scenario's base) are exempt and don't count against the
   20. A scenario's runs count like any other.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible }` —
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
   fetch (audit H1, workbook comparison only — not evidence). `notes` is the
@@ -716,7 +717,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   a run of the model). `citedBy` is what keeps the run for good
   (`{ kind: 'publication' | 'scenario', id, name }[]`, oldest first, the
   citations you can see; a publication's `name` is the day it was published,
-  `YYYY-MM-DD` UTC; `[]` when none).
+  `YYYY-MM-DD` UTC; `[]` when none). `reproducible` is whether the run's
+  input series are stored (021_series_blob), so `…/reproduce` can re-run it;
+  `false` for a run from before stored inputs.
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display

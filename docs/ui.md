@@ -1205,7 +1205,9 @@ run's report to chosen members every week or month.
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
-  (latest, Published, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
+  (latest, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
+  base, **Inputs not stored** for a run from before stored inputs, which
+  can't be re-run from them, Workbook comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -1451,7 +1453,16 @@ run's report to chosen members every week or month.
   **different runoff model** ("1 run made after the nominated evidence run “A”
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
-  miss a later model switch. The
+  miss a later model switch.
+  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
+  chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
+  inputs, **Check reproduction** (viewers too) re-runs it on the server from
+  them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
+  version), **Differs in N places** (each listed: a summary value, or a
+  node's series with its differing days, first date and largest difference;
+  an error when the engine is the same version, a warning when it changed),
+  **Not reproducible**, or why a stored input can't be used. A run from
+  before stored inputs says so instead of offering the check. The
   flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
