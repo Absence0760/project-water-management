@@ -346,9 +346,10 @@ merges into:
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
   source normally lags: 12 days for CHIRPS, under 12 days ahead for the
-  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`,
-  `disabled`. A feed not fetched two days after it was attached is stale ("the
-  background worker may not be running"). Emailing owners about a stale feed
+  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
+  (not fetched yet, or not since a new place or series was saved),
+  `disabled`. A feed not fetched two days after it was attached or changed is
+  stale ("the background worker may not be running"). Emailing owners about a stale feed
   is WP-2.13.
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
