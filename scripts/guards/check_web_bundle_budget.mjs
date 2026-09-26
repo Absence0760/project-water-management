@@ -775,6 +775,15 @@
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.
+// 2026-09-26  total 918 → 929 KB (measured 924, from 914 on main @
+//             3f0f056). Issue #17 board A4, Compare runs: a baseline and up
+//             to two what-ifs. The CompareView chunk (already lazy, the
+//             workspace tab's and /compare's) grows 5.3 KB with the run
+//             cards, the outcomes table, the takeaways and compare/summary.ts;
+//             the "days below the reserve, each year" chart is a new lazy
+//             chunk (ReserveYearsChart, 3.2 KB with the engine's
+//             reserveDaysByWaterYear). No page chunk or largest chunk moves;
+//             no new dependency. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -785,7 +794,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 918,
+	totalCodeKb: 929,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

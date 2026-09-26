@@ -708,7 +708,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'compare-runs',
 		title: 'Compare runs and try what-ifs',
-		summary: 'See exactly which inputs changed between two runs and what that did to the results.',
+		summary: 'Set up to two what-ifs against a baseline: which inputs changed, what that did to the results, and every figure in full.',
 		kind: 'howto',
 		tab: 'compare',
 		sections: [
@@ -719,19 +719,21 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Run a baseline.',
-							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again.',
-							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (B) against the published baseline (A), or against the run before it when nothing is published; either side can pick any run from any project you can see.',
-							'Read **What changed** (every input difference) before **Headline results** (A, B and the change).'
+							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if.',
+							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
+							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
+							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value, and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
+							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'Results are daily averages over each run’s own period. When the two runs cover different periods the page warns you: part of the change then comes from the dates, not from your edit.'
+						text: 'Results are daily averages over each run’s own period. When runs cover different periods the page warns you, and so do the takeaways: part of the change then comes from the dates, not from your edit. A takeaway appears only for a material change (a day a year below the reserve, a point of the demand supplied, a farm crossing 95 %); the table shows everything.'
 					},
 					{
 						type: 'p',
-						text: 'Each side shows its run notes, and the page says when either run is, or was, the project’s evidence run. The comparison’s address holds both runs, so a comparison can be bookmarked or shared with anyone who can see both projects.'
+						text: 'Each run shows its run notes in the full comparison, and the page says when either run is, or was, the project’s evidence run. The page’s address holds every run on it, so a comparison can be bookmarked or shared with anyone who can see the projects.'
 					}
 				]
 			}

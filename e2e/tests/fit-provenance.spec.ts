@@ -5,6 +5,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { whatChanged } from '../support/compare.ts';
 
 /** The <dd> next to a <dt> in a definition list. */
 const definition = (scope: Locator, term: string) => scope.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) }).locator('xpath=following-sibling::dd[1]');
@@ -128,7 +129,7 @@ test('a calibration exclusion needs a reason, and shows in What changed and on t
 
 	const after = await createRun(page.request, project.id, 'After');
 	await page.goto(`/compare?a=${project.id}:${before}&b=${project.id}:${after}`);
-	await expect(page.getByText('Calibration exclusion WY 2021/22 added: “Rain gauge moved”')).toBeVisible();
+	await expect(whatChanged(page).getByText('Calibration exclusion WY 2021/22 added: “Rain gauge moved”')).toBeVisible();
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${after}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'After' })).toBeVisible();

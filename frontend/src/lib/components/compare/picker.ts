@@ -1,4 +1,5 @@
-// URL state and default choices for the compare page's two run pickers.
+// URL state and default choices for the compare page's run pickers: the
+// baseline (`a`), what-if 1 (`b`) and the optional what-if 2 (`c`, issue #17 A4).
 // A run reference is "<projectId>:<runId>" — the same form GET /compare/runs takes.
 import type { RunMeta } from '$lib/api/types';
 import { runYears } from '$lib/components/runs/runList';
@@ -58,24 +59,37 @@ export function defaultRunFor(runs: readonly RunMeta[], other: RunRef | null, pr
 	return (runs.find((r) => r.id !== avoid) ?? runs[0])?.id ?? null;
 }
 
-/** Search string for the page with both sides chosen (keeps other params out). */
-export function compareSearch(a: RunRef | null, b: RunRef | null, project?: string | null): string {
+/**
+ * The run to add as a second what-if: the newest run of the project that
+ * isn't already the baseline or what-if 1 there. null when every run is
+ * taken (the picker then waits for a choice).
+ */
+export function defaultWhatIf(runs: readonly Pick<RunMeta, 'id'>[], taken: readonly (RunRef | null)[], projectId: string): string | null {
+	const avoid = new Set(taken.filter((r): r is RunRef => !!r && r.projectId === projectId).map((r) => r.runId));
+	return runs.find((r) => !avoid.has(r.id))?.id ?? null;
+}
+
+/** Search string for the page with its runs chosen (keeps other params out). `c` is the second what-if. */
+export function compareSearch(a: RunRef | null, b: RunRef | null, project?: string | null, c: RunRef | null = null): string {
 	const q = new URLSearchParams();
 	if (a) q.set('a', formatRef(a));
 	if (b) q.set('b', formatRef(b));
-	if (!a && !b && project) q.set('project', project);
+	if (c) q.set('c', formatRef(c));
+	if (!a && !b && !c && project) q.set('project', project);
 	const s = q.toString();
 	return s ? `?${s}` : '';
 }
 
 /**
  * The workspace's Compare runs tab for a pair (issue #17): `?tab=compare`
- * plus the pair, never `project=` (the tab's project is the page's).
+ * plus the pair and an optional second what-if `c`, never `project=` (the
+ * tab's project is the page's).
  */
-export function compareTabHref(a: RunRef | null, b: RunRef | null): string {
+export function compareTabHref(a: RunRef | null, b: RunRef | null, c: RunRef | null = null): string {
 	const q = new URLSearchParams({ tab: 'compare' });
 	if (a) q.set('a', formatRef(a));
 	if (b) q.set('b', formatRef(b));
+	if (c) q.set('c', formatRef(c));
 	return `?${q}`;
 }
 

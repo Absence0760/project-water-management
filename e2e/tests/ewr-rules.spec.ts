@@ -7,6 +7,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { copyProject, createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { whatChanged } from '../support/compare.ts';
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
@@ -220,7 +221,7 @@ test('run comparison compares Reserve compliance and lists the rule-table change
 
 	await page.goto(`/compare?a=${id}:${before}&b=${copy}:${after}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(page.getByText('EWR rule table at the outlet: EWR values changed in Jan')).toBeVisible();
+	await expect(whatChanged(page).getByText('EWR rule table at the outlet: EWR values changed in Jan')).toBeVisible();
 	const section = page.getByRole('region', { name: 'Reserve compliance by month' });
 	await expect(section.getByText('The two runs used different rule tables here, so the rates measure against different rules.')).toBeVisible();
 	const table = section.getByRole('table', { name: /^Reserve compliance at Outlet/ });
