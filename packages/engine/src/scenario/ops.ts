@@ -9,6 +9,8 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	LAND_COVER_CLASSES,
+	PE_KINDS,
+	PE_SOURCE_MAX,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
 	type CalibrationFlowKind,
@@ -19,6 +21,7 @@ import {
 	type LandCoverPatch,
 	type NetworkNode,
 	type NodeKind,
+	type PeInput,
 	type Transfer,
 	type ZeroRainMode
 } from '../project';
@@ -205,6 +208,8 @@ export interface SettingsPathValues {
 	'gr4j.x4': number;
 	'gr4j.warmupDays': number;
 	chirpsBiasCorrection: ChirpsBiasMode;
+	/** GR4J's PE input, whole (engine ≥ 0.31.0, issue #39). */
+	pe: PeInput;
 	'zeroRainRuns.mode': ZeroRainMode;
 	'zeroRainRuns.accumulationMode': AccumulationMode;
 	'calibration.a': number;
@@ -224,6 +229,28 @@ export interface SettingsPathValues {
 	calibrationFlowKind: CalibrationFlowKind | null;
 }
 export type SettingsPath = keyof SettingsPathValues;
+
+/**
+ * settings.pe, whole: `{ kind: 'pan' }`, or `{ kind: 'monthly', mm, source }`
+ * with 12 values 0–10 000 mm (the A-pan row's range) and a source note of 1 to
+ * PE_SOURCE_MAX characters (a directly given PE must say where it came from).
+ * No other keys, so nothing unchecked reaches the settings.
+ */
+const peInput: Check = (v) => {
+	if (typeof v !== 'object' || v === null || Array.isArray(v)) return 'must be a PE input ({ kind: "pan" } or { kind: "monthly", mm, source })';
+	const o = v as Record<string, unknown>;
+	const kindErr = oneOf(PE_KINDS)(o.kind);
+	if (kindErr) return `kind ${kindErr}`;
+	const allowed = o.kind === 'pan' ? ['kind'] : ['kind', 'mm', 'source'];
+	const extra = Object.keys(o).filter((k) => !allowed.includes(k));
+	if (extra.length) return `has unknown field(s) ${extra.join(', ')} for kind ${String(o.kind)}`;
+	if (o.kind === 'pan') return null;
+	const mmErr = monthlyOf(range(0, 10_000))(o.mm);
+	if (mmErr) return `mm ${mmErr}`;
+	if (typeof o.source !== 'string' || !o.source.trim()) return 'source must say where the monthly PE came from';
+	if (o.source.length > PE_SOURCE_MAX) return `source must be at most ${PE_SOURCE_MAX} characters`;
+	return null;
+};
 
 const gr4j = (key: string): Check => {
 	const p = GR4J_PARAMS.find((x) => x.key === key)!;
@@ -248,6 +275,7 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	'gr4j.x4': gr4j('x4'),
 	'gr4j.warmupDays': range(0, 3650, { int: true }),
 	chirpsBiasCorrection: oneOf(CHIRPS_BIAS_MODES),
+	pe: peInput,
 	'zeroRainRuns.mode': oneOf(ZERO_RAIN_MODES),
 	'zeroRainRuns.accumulationMode': oneOf(ACCUMULATION_MODES),
 	'calibration.a': range(0, 100, { loOpen: true }),

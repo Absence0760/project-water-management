@@ -58,6 +58,7 @@ function settingsOp(g: Rng, input: ModelInput): ScenarioOp {
 		['lakeEvapFactor', () => g.float(0, 2)],
 		['apanMm', () => monthly(g, () => g.float(0, 300))],
 		['panCoefficient', () => monthly(g, () => g.float(0.3, 1.2))],
+		['pe', () => (g.bool(0.3) ? { kind: 'pan' } : { kind: 'monthly', mm: monthly(g, () => g.float(0, 250)), source: g.pick(['station ET₀', 'A-pan × 0.8, corrected']) })],
 		['ewrPragmaticM3PerDay', () => monthly(g, () => g.pick([0, g.float(0, 1e5)]))],
 		['flowShareMethod', () => g.pick(['area', 'hiLo', 'manual'])],
 		['hiLoSplit.hi', () => g.frac()],

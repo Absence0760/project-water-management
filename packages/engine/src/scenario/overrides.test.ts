@@ -233,6 +233,36 @@ describe('applyScenario: each op', () => {
 		expect(r.problems[0]).toMatch(/op 2 \(settings\.set\): the reporting window starts/);
 	});
 
+	it('settings.set pe replaces GR4J\'s PE input whole, checked, and is baseline (engine ≥ 0.31.0)', () => {
+		const mm = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];
+		const monthly = { kind: 'monthly', mm, source: 'farm AWS FAO-56 ET₀' } as const;
+		const r = applyScenario(base(), [{ op: 'settings.set', path: 'pe', value: monthly as never }]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.settings.pe).toEqual(monthly);
+		// A copy: editing the op afterwards doesn't reach the applied input.
+		expect(r.input.settings.pe).not.toBe(monthly);
+		expect(one({ op: 'settings.set', path: 'pe', value: { kind: 'pan' } }).input.settings.pe).toEqual({ kind: 'pan' });
+		const err = (value: unknown) => one({ op: 'settings.set', path: 'pe', value } as unknown as ScenarioOp).problems[0];
+		expect(err('monthly')).toMatch(/must be a PE input/);
+		expect(err({ kind: 'etc' })).toMatch(/kind must be one of pan, monthly/);
+		expect(err({ kind: 'pan', mm })).toMatch(/unknown field\(s\) mm for kind pan/);
+		expect(err({ ...monthly, mm: mm.slice(1) })).toMatch(/mm must be 12 monthly values/);
+		expect(err({ ...monthly, mm: [...mm.slice(1), -1] })).toMatch(/mm month 12: must be at least 0/);
+		expect(err({ ...monthly, mm: [NaN, ...mm.slice(1)] })).toMatch(/mm month 1: must be a finite number/);
+		expect(err({ ...monthly, mm: [10_001, ...mm.slice(1)] })).toMatch(/mm month 1: must be at most 10000/);
+		expect(err({ ...monthly, source: ' ' })).toMatch(/source must say where the monthly PE came from/);
+		expect(err({ kind: 'monthly', mm })).toMatch(/source must say/);
+		expect(err({ ...monthly, source: 'x'.repeat(601) })).toMatch(/at most 600 characters/);
+		expect(err({ ...monthly, note: 'x' })).toMatch(/unknown field\(s\) note/);
+		// Positive control: the longest source note is fine.
+		expect(err({ ...monthly, source: 'x'.repeat(600) })).toBeUndefined();
+		// Validated at the API boundary too, and rebuilt as given.
+		const v = validateScenarioOps([{ op: 'settings.set', path: 'pe', value: monthly }, { op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm } }]);
+		expect(v.ops).toEqual([{ op: 'settings.set', path: 'pe', value: monthly }]);
+		expect(v.errors).toEqual(['ops[1].value: source must say where the monthly PE came from']);
+		expect(classifyOp({ op: 'settings.set', path: 'pe', value: monthly as never }, ['A'])).toBe('baseline');
+	});
+
 	it('series.scale scales the days in range, keeps missing days, and copies only that series', () => {
 		const b = base();
 		b.series.rain_catchment_mm!.values[34] = null;

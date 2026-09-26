@@ -6,6 +6,7 @@ import {
 	sharedDaysChange,
 	matchByIdThenName,
 	metricDelta,
+	peText,
 	type ComparableRun,
 	type RunInputsSnapshot
 } from './compare';
@@ -386,6 +387,33 @@ describe('diffInputs', () => {
 			'Rooikloof: dam seepage per day 0% → 0.2%',
 			'Dam evaporation factor (× A-pan): 0.75 → 0.6'
 		]);
+	});
+
+	it('lists a change of GR4J\'s PE input (engine ≥ 0.31.0), and a run saved without one ran pan coefficient × A-pan', () => {
+		const a = snapshot();
+		const mm = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];
+		const monthly = { kind: 'monthly' as const, mm: mm as never, source: 'farm AWS FAO-56 ET₀' };
+		const b = structuredClone(a);
+		b.settings.pe = monthly;
+		expect(texts(a, b)).toEqual(['Potential evaporation (GR4J): pan coefficient × A-pan → monthly PE, 1,105 mm/yr (source: farm AWS FAO-56 ET₀)']);
+		expect(texts(b, a)).toEqual(['Potential evaporation (GR4J): monthly PE, 1,105 mm/yr (source: farm AWS FAO-56 ET₀) → pan coefficient × A-pan']);
+		// Positive control: the same PE is no change.
+		expect(texts(b, structuredClone(b))).toEqual([]);
+		// Two monthly rows: the months that changed and the annual totals.
+		const c = structuredClone(b);
+		(c.settings.pe as unknown as { mm: number[] }).mm[0] = 120;
+		expect(texts(b, c)).toEqual(['Potential evaporation (GR4J): monthly PE Oct 110 → 120 mm (1,105 → 1,115 mm/yr)']);
+		// A reworded source note is part of the record, so it is listed.
+		const d = structuredClone(b);
+		(d.settings.pe as { source: string }).source = 'SAWS station, 1991–2020';
+		expect(texts(b, d)).toEqual(['Potential evaporation (GR4J): source "farm AWS FAO-56 ET₀" → "SAWS station, 1991–2020"']);
+		// A snapshot saved before engine 0.31.0 has no pe: it ran pan × A-pan, so it matches today's default …
+		const { pe: _pe, ...pre031 } = a.settings as Record<string, unknown>;
+		const old = { ...a, settings: pre031 as RunInputsSnapshot['settings'] };
+		expect(texts(old, a)).toEqual([]);
+		// … and differs from a monthly PE.
+		expect(texts(old, b)).toEqual(['Potential evaporation (GR4J): pan coefficient × A-pan → monthly PE, 1,105 mm/yr (source: farm AWS FAO-56 ET₀)']);
+		expect(peText({ ...monthly, source: '  ' })).toBe('monthly PE, 1,105 mm/yr (no source given)');
 	});
 
 	it('lists an other water user added, and a change of its demand, return share and priority (WP-1.33)', () => {
