@@ -147,11 +147,11 @@ test('an import dialog that fails to download says so, and a reload recovers', a
 	const trigger = page.getByRole('button', { name: 'Import project file (.json)', exact: true });
 	await trigger.click();
 	const alert = page.getByRole('alert');
-	await expect(alert).toHaveText('The import could not be loaded. Check your connection, then reload the page. Reload');
+	await expect(alert).toHaveText('The import could not be loaded. Check your connection, then reload the page. Reload page');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 
 	await page.unroute(blocked);
-	await alert.getByRole('button', { name: 'Reload' }).click();
+	await alert.getByRole('button', { name: 'Reload page' }).click();
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
 	await trigger.click();
 	const dialog = page.getByRole('dialog', { name: 'Import project file' });

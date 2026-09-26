@@ -33,6 +33,7 @@
 	import { isGridId, withoutParam } from '$lib/workspace/overlays';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { provideUnsaved } from '$lib/components/common/chunkFailed';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import OpList from './OpList.svelte';
@@ -69,6 +70,8 @@
 	} = $props();
 
 	const editor = new ModelEditor();
+	// A table whose chunk fails to download warns about unrecorded edits before offering a reload.
+	provideUnsaved(() => editor.dirty);
 	let loaded = $state.raw<ModelInput | null>(null);
 	$effect(() => {
 		void loadKey;

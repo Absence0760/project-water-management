@@ -18,6 +18,7 @@
 	import { version } from '$app/environment';
 	import { base } from '$app/paths';
 	import { api, ApiError, type ImportResult, type Team } from '$lib/api';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
 	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
@@ -62,6 +63,8 @@
 	let parsed = $state<ParsedImport | null>(null);
 	let fileName = $state('');
 	let pickError = $state<string | null>(null);
+	/** The workbook reader's chunk didn't download: only a reload can fetch it (common/lazy.ts). */
+	let readerFailed = $state(false);
 	let pickFailure = $state<FailureView | null>(null);
 	let name = $state('');
 	let teamId = $state('');
@@ -111,6 +114,7 @@
 		fileName = '';
 		pickError = null;
 		pickFailure = null;
+		readerFailed = false;
 		failure = null;
 		result = null;
 		run = false;
@@ -148,8 +152,18 @@
 	async function pickWorkbook(f: File) {
 		readingWorkbook = true;
 		const mine = ++attempt;
-		const { createWorkbookImport, WorkbookImportCancelled, WorkbookImportFailed } = await import('$lib/spreadsheet/import/runner');
+		let runner: typeof import('$lib/spreadsheet/import/runner');
+		try {
+			runner = await import('$lib/spreadsheet/import/runner');
+		} catch {
+			if (mine !== attempt) return;
+			readingWorkbook = false;
+			readerFailed = true;
+			step = 'pick';
+			return;
+		}
 		if (mine !== attempt) return;
+		const { createWorkbookImport, WorkbookImportCancelled, WorkbookImportFailed } = runner;
 		const s = createWorkbookImport();
 		session = s;
 		try {
@@ -256,6 +270,7 @@
 	<form id="import-form" onsubmit={submit} aria-busy={step === 'reading' || step === 'importing' || updating}>
 		{#if step === 'pick' || step === 'reading'}
 			{#if pickError}<div class="alert alert-error" role="alert">{pickError}</div>{/if}
+			{#if readerFailed}<ChunkFailed what="The workbook reader" />{/if}
 			{#if pickFailure}
 				<div class="alert alert-error" role="alert">
 					<p class="fail-head">{pickFailure.title}</p>
