@@ -120,6 +120,30 @@ describe('createApi', () => {
 		expect(JSON.parse(pinit.body as string)).toEqual({ nextExpectedOn: null });
 	});
 
+	it('lists notes with only the filters given, counts them, and adds, edits and deletes one', async () => {
+		const note = { id: 'n1', body: 'Dam raised in 2019' };
+		const list = mockFetch(200, { notes: [note] });
+		await expect(createApi('', list).notes.list('p/1', { nodeId: 'a', runId: undefined, settingKey: '' })).resolves.toEqual([note]);
+		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/notes?nodeId=a');
+		const all = mockFetch(200, { notes: [] });
+		await createApi('', all).notes.list('p1');
+		expect((all.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/notes');
+		const counts = mockFetch(200, { project: 1, nodes: {}, runs: {}, settings: {} });
+		await expect(createApi('', counts).notes.counts('p1')).resolves.toMatchObject({ project: 1 });
+		expect((counts.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/notes/counts');
+		const post = mockFetch(201, { note });
+		await expect(createApi('', post).notes.create('p1', { body: 'x', nodeId: 'a', visibility: 'farm' })).resolves.toEqual(note);
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/notes', 'POST', { body: 'x', nodeId: 'a', visibility: 'farm' }]);
+		const patch = mockFetch(200, { note });
+		await expect(createApi('', patch).notes.edit('p1', 'n/1', 'y')).resolves.toEqual(note);
+		const [purl, pinit] = patch.mock.calls[0] as unknown as [string, RequestInit];
+		expect([purl, pinit.method, JSON.parse(pinit.body as string)]).toEqual(['/projects/p1/notes/n%2F1', 'PATCH', { body: 'y' }]);
+		const del = mockFetch(204);
+		await expect(createApi('', del).notes.remove('p1', 'n1')).resolves.toBeUndefined();
+		expect((del.mock.calls[0] as unknown as [string, RequestInit])[1].method).toBe('DELETE');
+	});
+
 	it('lists, makes and withdraws share links, and reads a share by token in the body, never the URL', async () => {
 		const link = { id: 'l1', label: 'Forum', url: 'http://x/share#t=abc' };
 		const list = mockFetch(200, { links: [link] });
