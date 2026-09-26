@@ -47,7 +47,7 @@
 
 	// The sidebar orders them by section (navSections), not by this list.
 	const TABS = [
-		{ id: 'overview', label: 'Overview' },
+		{ id: 'overview', label: 'Summary' },
 		{ id: 'network', label: 'Network' },
 		{ id: 'crops', label: 'Crops & demand' },
 		{ id: 'transfers', label: 'Transfers' },
@@ -64,6 +64,7 @@
 	const MODEL_TABS: TabId[] = ['network', 'crops', 'transfers'];
 	// Friendlier ?tab= spellings that resolve to the canonical keys above.
 	const TAB_ALIASES: Record<string, TabId> = {
+		summary: 'overview',
 		data: 'series',
 		timeseries: 'series',
 		demand: 'crops',
@@ -798,11 +799,11 @@
 			min-height: 38px;
 		}
 	}
-	/* Wide screens: a sidebar beside the section's content, in view while the
-	   page scrolls. Only from where the widest grid (the network's node table,
-	   model.spec.ts) still fits beside it, and the page grows by the sidebar's
-	   width so the content column keeps the usual maximum. */
-	@media (min-width: 1680px) {
+	/* Laptop widths and up: a sidebar beside the section's content, in view
+	   while the page scrolls. The page grows by the sidebar's width, so on a
+	   wide screen the content column keeps the usual maximum; narrower, the
+	   widest grids (the network's node table) scroll inside their own box. */
+	@media (min-width: 1100px) {
 		.page {
 			max-width: calc(1480px + 14rem);
 		}
