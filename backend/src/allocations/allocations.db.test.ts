@@ -224,8 +224,10 @@ describe('the run comparison', () => {
 });
 
 describe('the allocations export', () => {
-	const get = (u: User) =>
-		app.request(`/projects/${projectId}/allocations/export.csv`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } }).then(async (r) => ({ status: r.status, text: await r.text() }));
+	const get = async (u: User) => {
+		const r = await app.request(`/projects/${projectId}/allocations/export.csv`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } });
+		return { status: r.status, text: await r.text() };
+	};
 
 	it('quotes formula-looking cells and keeps names from viewers', async () => {
 		const res = await editor.call('POST', `/projects/${projectId}/allocations`, {

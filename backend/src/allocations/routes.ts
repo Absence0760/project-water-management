@@ -240,7 +240,10 @@ export const allocationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
 			const { rows: sources } = await db.query(`${SOURCE_SELECT} WHERE s.project_id = $1 ORDER BY s.imported_at DESC, s.id`, [id]);
-			return c.json({ allocations: await loadAllocations(db, id), sources, canSeeHolders: rank[role] >= rank.editor });
+			const allocations = await loadAllocations(db, id);
+			// The farms and water users an allocation can be matched to.
+			const nodes = await matchNodes(db, id);
+			return c.json({ allocations, sources, nodes, canSeeHolders: rank[role] >= rank.editor });
 		});
 	})
 	.post('/:id/allocations', async (c) => {
