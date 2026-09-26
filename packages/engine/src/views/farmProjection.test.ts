@@ -252,6 +252,22 @@ describe('farmProjection', () => {
 		expect(p.monthly.slice(0, 10).every((m) => m.demandM3 === 0 && m.damPctEnd === null)).toBe(true);
 	});
 
+	it('ends every window at dataUntil when the run goes on on forecast rain', () => {
+		const withForecast: ProjectionRun = { ...run, dataUntil: '2023-12-21' };
+		const f = analyseSeason(withForecast);
+		expect(f.season).toMatchObject({ fromDate: '2023-10-01', toDate: '2023-12-21' });
+		expect(f.last30).toMatchObject({ fromDate: '2023-11-22', toDate: '2023-12-21' });
+		const p = farmProjection(withForecast, 'dam', f);
+		expect(p.dataUntil).toBe('2023-12-21');
+		expect(p.season.suppliedM3).toBeCloseTo(sum(series('dam', 'supplied'), '2023-10-01', '2023-12-21'), 6);
+		expect(p.dam!.storageM3).toBe(series('dam', 'dam_storage')[idx('2023-12-21')]);
+		expect(p.river.windowDays).toBe(82);
+		expect(p.monthly.at(-1)!.suppliedM3).toBeCloseTo(sum(series('dam', 'supplied'), '2023-12-01', '2023-12-21'), 6);
+		expect(catchmentView(withForecast, f)).toMatchObject({ dataUntil: '2023-12-21', runDays: idx('2023-12-21') + 1 });
+		// Clamped to the run.
+		expect(analyseSeason({ ...run, dataUntil: '2030-01-01' }).dataUntil).toBe('2023-12-31');
+	});
+
 	it('refuses a node that is not a farm, and a run missing a series', () => {
 		expect(() => farmProjection(run, 'outlet', a)).toThrow(/not a farm/);
 		const old: ProjectionRun = { ...run, series: (n, k) => (k === 'ewr_charge_irrigation' ? undefined : run.series(n, k)) };

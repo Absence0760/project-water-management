@@ -53,9 +53,16 @@ export const PROJECTION_SERIES = {
 
 /** A saved run, as the projection sees it. */
 export interface ProjectionRun {
-	/** The run's first and last day (ISO). The last is the projection's `dataUntil`. */
+	/** The run's first and last day (ISO). */
 	startDate: string;
 	endDate: string;
+	/**
+	 * The last day with observed input data (ISO), when the run goes on past it
+	 * on forecast rain (rain_forecast_mm): every window ends here, so forecast
+	 * days never count as water received (WP-2.12 adds them as their own block).
+	 * Clamped to the run; absent = endDate.
+	 */
+	dataUntil?: string;
 	/** The run's own model snapshot (model_run.inputs.model), not the project's current model. */
 	nodes: readonly NetworkNode[];
 	transfers: readonly Transfer[];
@@ -290,8 +297,9 @@ export function analyseSeason(run: ProjectionRun): SeasonAnalysis {
 	const d0 = toEpochDay(run.startDate);
 	const days = toEpochDay(run.endDate) - d0 + 1;
 	if (!(days > 0)) throw new ProjectionInputError('the run has no days');
-	const to = days - 1;
-	const from = Math.max(0, toEpochDay(seasonStart(run.endDate)) - d0);
+	const to = Math.min(days - 1, Math.max(0, run.dataUntil ? toEpochDay(run.dataUntil) - d0 : days - 1));
+	const dataUntil = fromEpochDay(d0 + to);
+	const from = Math.max(0, toEpochDay(seasonStart(dataUntil)) - d0);
 	const from30 = Math.max(0, to - 29);
 	const window = { from, to, reportStart: fromEpochDay(d0 + from), reportEnd: fromEpochDay(d0 + to) };
 
@@ -337,7 +345,7 @@ export function analyseSeason(run: ProjectionRun): SeasonAnalysis {
 	}));
 	return {
 		startDate: run.startDate,
-		dataUntil: run.endDate,
+		dataUntil,
 		season: { from, to, fromDate: window.reportStart, toDate: window.reportEnd },
 		last30: { from: from30, to, fromDate: fromEpochDay(d0 + from30), toDate: window.reportEnd },
 		curtailment: computeCurtailment(farms, window, siteInputs),
@@ -413,7 +421,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	if (hasDam) {
 		const e = sw.to;
 		const usableM3 = node.damMinPct > 0 ? Math.max(storage[e]! - stop, 0) : null;
-		const use14 = windowSummary(supplied, run.startDate, fromEpochDay(d0 + Math.max(0, e - 13)), run.endDate)!.mean;
+		const use14 = windowSummary(supplied, run.startDate, fromEpochDay(d0 + Math.max(0, e - 13)), analysis.dataUntil)!.mean;
 		let lastSpill: string | null = null;
 		for (let t = e; t >= 0; t--) {
 			if (spill[t]! > NOISE_M3) {
@@ -447,7 +455,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 
 	// The 12 calendar months to dataUntil, oldest first; the last may be partial.
 	const monthly: MonthTotals[] = [];
-	const endY = Number(run.endDate.slice(0, 4));
+	const endY = Number(analysis.dataUntil.slice(0, 4));
 	const endM = monthOfEpochDay(d0 + sw.to);
 	for (let k = 11; k >= 0; k--) {
 		const mi = endY * 12 + (endM - 1) - k;
@@ -494,7 +502,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		damCapacityM3: cap,
 		damMinPct: node.damMinPct,
 		irrigationEfficiency: node.irrigationEfficiency,
-		dataUntil: run.endDate,
+		dataUntil: analysis.dataUntil,
 		season,
 		last30,
 		dam,
@@ -524,7 +532,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 // The catchment (run_publication.catchment_view)
 // ---------------------------------------------------------------------------
 
-/** Days not met at one EWR site: counts, never volumes (design §10.3). */
+/** Days not met at one EWR site, to dataUntil: counts, never volumes (design §10.3). */
 export interface CatchmentSite {
 	name: string;
 	isOutlet: boolean;
@@ -544,6 +552,7 @@ export interface CatchmentView {
 	dataUntil: string;
 	season: { from: string; to: string; days: number };
 	last30: { from: string; to: string; days: number };
+	/** Days from the run's start to dataUntil (the span `daysNotMet.run` counts over). */
 	runDays: number;
 	farmCount: number;
 	sites: CatchmentSite[];
@@ -559,7 +568,7 @@ export function catchmentView(run: ProjectionRun, analysis: SeasonAnalysis = ana
 	const runDays = sw.to + 1;
 	return {
 		runStart: run.startDate,
-		dataUntil: run.endDate,
+		dataUntil: analysis.dataUntil,
 		season: { from: sw.fromDate, to: sw.toDate, days: sw.to - sw.from + 1 },
 		last30: { from: lw.fromDate, to: lw.toDate, days: lw.to - lw.from + 1 },
 		runDays,
