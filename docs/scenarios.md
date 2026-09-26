@@ -444,7 +444,13 @@ rebase reporting a change that no longer applies and the `422`; a viewer
 read only; override mode recording one edit in each table as changes,
 refusing a kind change, leaving the live model untouched, undone as one
 edit, with axe; submit, withdraw, delete releasing the base; axe in light,
-dark and on a phone).
+dark and on a phone) and `e2e/tests/scenario-demand-scale.spec.ts` (Scale
+demand through the form: one farm at 50 % in December and January, the
+200 % limit refused, classed baseline then proposal once the farm is the
+proposer's, kept over a reload, run; the scenario run's daily demand is the
+base's × 0.5 on exactly those days and the base's on the rest, and the
+compare section's farm table shows that farm's demand down to the run's mean
+and the other farm's unchanged).
 
 ## Applications (WP-3.3)
 
