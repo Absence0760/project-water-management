@@ -137,3 +137,51 @@ test('an action on a feed changed elsewhere says why it failed and shows the lis
 	await expect(panel.getByRole('status').filter({ hasText: 'Status refreshed.' })).toBeVisible();
 	await expect(panel.getByRole('alert')).toHaveCount(0);
 });
+
+test('the panel works from the keyboard: focus follows the form, a bad field is marked and focused, and a pressed button keeps focus', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feeds keyboard');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	const attach = panel.getByRole('button', { name: 'Attach a feed' });
+
+	// Opening the form moves focus into it; Cancel brings it back.
+	await attach.focus();
+	await page.keyboard.press('Enter');
+	await expect(panel.getByLabel('Source')).toBeFocused();
+	await panel.getByRole('button', { name: 'Cancel' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(attach).toBeFocused();
+
+	// A bad value: the field is marked invalid, described by the message, and focused.
+	await page.keyboard.press('Enter');
+	const cells = panel.getByLabel('Grid cells');
+	await cells.fill('-20.12');
+	await panel.getByRole('button', { name: 'Attach feed' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(cells).toBeFocused();
+	await expect(cells).toHaveAttribute('aria-invalid', 'true');
+	await expect(cells).toHaveAccessibleDescription(/Cell 1 \(“-20\.12”\) should be “latitude, longitude”/);
+
+	// Attaching closes the form and returns focus to "Attach a feed".
+	await cells.fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).focus();
+	await page.keyboard.press('Enter');
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(attach).toBeFocused();
+
+	// Run now keeps focus on the button while and after it works.
+	const run = feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' });
+	await run.focus();
+	await page.keyboard.press('Enter');
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(run).toBeFocused();
+
+	// Removing takes the feed's buttons away: focus lands on the section heading, not the page body.
+	page.once('dialog', (d) => void d.accept());
+	await feed.getByRole('button', { name: 'Remove feed: Rainfall — CHIRPS' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(panel.getByText('No feeds yet.')).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Data feeds', level: 2 })).toBeFocused();
+});

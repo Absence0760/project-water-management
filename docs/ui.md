@@ -845,6 +845,14 @@ its own chunk loaded with the tab; WP-2.10,
   their weighted mean) or a **DWS station** code (checked as `A2H012`). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
+- **Keyboard and screen readers**: opening the form focuses **Source**, and
+  closing it (Cancel or a successful attach) returns focus to **Attach a
+  feed**; a bad cell or code marks its field `aria-invalid`, describes it by
+  the message and focuses it; busy buttons are `aria-disabled` so they keep
+  focus; after **Remove**, focus goes to the section heading. Messages land
+  in a live region that is always in the page. A failed action re-reads the
+  list (it was usually changed elsewhere), and a failed refresh keeps the
+  list shown.
 - When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
   default in dev and CI), a **Sample data** badge says so, and the cells hint
   names the sample grid's extent.

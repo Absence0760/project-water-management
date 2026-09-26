@@ -129,16 +129,16 @@ export function parseCells(text: string): { cells: GridCell[] } | { error: strin
 
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
 
-/** The request body for a draft, or the first problem in words. */
-export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string } {
+/** The request body for a draft, or the first problem in words and the field it is in. */
+export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'station' } {
 	const common = { source: d.source, targetKind: d.targetKind, targetName: d.targetName.trim(), schedule: d.schedule };
 	if (d.source === 'dws') {
 		const station = d.station.trim().toUpperCase();
-		if (!DWS_STATION.test(station)) return { error: 'A DWS station code looks like A2H012: letter, digit, letter, three digits.' };
+		if (!DWS_STATION.test(station)) return { error: 'A DWS station code looks like A2H012: letter, digit, letter, three digits.', field: 'station' };
 		return { body: { ...common, config: { station } } };
 	}
 	const cells = parseCells(d.cells);
-	if ('error' in cells) return cells;
+	if ('error' in cells) return { error: cells.error, field: 'cells' };
 	return { body: { ...common, config: { cells: cells.cells } } };
 }
 
