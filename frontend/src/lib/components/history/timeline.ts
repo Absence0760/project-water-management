@@ -143,7 +143,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'series.held': {
 			// An API key pushed days the data-quality rules flag (backend series/hold.ts): automatic runs wait for a person.
 			const parts = [num(s.negative) ? `${plural(num(s.negative)!, 'negative day')}` : '', num(s.outlier) ? `${plural(num(s.outlier)!, 'day')} far above its usual range` : ''].filter(Boolean);
-			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}). Check the data, then run the model`;
+			// limitFrom 'own' (055): no person-made run has read the series yet, so its usual range is the key's own, a weaker check.
+			const own = s.limitFrom === 'own' ? ' Its usual range so far is the key’s own: no run of the model has read this series yet.' : '';
+			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}).${own} Check the data, then run the model`;
 		}
 		case 'series.labelled': {
 			const p = (s.provenance ?? {}) as Record<string, unknown>;

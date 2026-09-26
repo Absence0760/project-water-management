@@ -4,7 +4,7 @@
 // in. axe in both themes, at desktop and phone width.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -117,6 +117,44 @@ test('the page states which thresholds apply, and judges by the team’s once an
 	await expect(page.getByText(`green when it was not met on under ${String(t.green)} % of them, amber under ${String(t.amber)} %, red otherwise`, { exact: false })).toBeVisible();
 	await expect(page.getByText('These are the team’s own thresholds.')).toBeVisible();
 	await expect(tableRow(page, 'Pf published T')).toContainText(statusText(now)!);
+});
+
+// The link lands on the table, not the top of the Runs tab (docs/followups.md):
+// the panels render after the run's details load, past the browser's own
+// jump, so the tab scrolls there itself and moves focus to the table's heading.
+test('“farms short this week” opens the Runs tab at the curtailment table, over the last 7 days', async ({ page, owner }) => {
+	void owner;
+	// A published team catchment whose orchards are far too big for the water: its farms go short.
+	const request = page.request;
+	const team = (await (await request.post(`${API_URL}/teams`, { data: { name: 'Portfolio WUA D' } })).json()).team as { id: string };
+	const project = await seedRunnableProject(request, 'Pf short D');
+	await putModel(request, project.id, { ...project.model, cropAreas: project.model.cropAreas.map((c) => ({ ...c, areaM2: c.areaM2 * 50 })) });
+	expect((await request.patch(`${API_URL}/projects/${project.id}`, { data: { teamId: team.id } })).status()).toBe(200);
+	const runId = await createRun(request, project.id, 'Baseline');
+	expect((await request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	const rows = (await (await request.get(`${API_URL}/teams/${team.id}/portfolio`)).json()).projects as { farmsShort7: number | null }[];
+	expect(rows[0]!.farmsShort7).toBeGreaterThan(0);
+
+	const panel = page.locator('#res-curtailment');
+	const heading = panel.getByRole('heading', { name: 'Curtailment targets' });
+	/** The panel's top sits in the upper half of the screen, clear of the sticky header and section menu. */
+	const landed = async () => {
+		await expect(panel.getByTestId('curtailment-period')).toHaveText(/^Last 7 days: daily averages over /);
+		await expect(heading).toBeFocused();
+		await expect(panel).toBeInViewport();
+		const menu = await page.getByRole('navigation', { name: 'Result sections' }).boundingBox();
+		await expect.poll(async () => (await panel.boundingBox())!.y).toBeGreaterThanOrEqual(menu!.y + menu!.height);
+		expect((await panel.boundingBox())!.y).toBeLessThan(page.viewportSize()!.height / 2);
+	};
+
+	await page.goto(`/teams/${team.id}/portfolio`);
+	await tableRow(page, 'Pf short D').getByRole('link', { name: /farms? short this week$/ }).click();
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=runs&run=${runId}&window=last7#res-curtailment$`));
+	await landed();
+
+	// Opened afresh (a bookmark, a new tab): the same.
+	await page.reload();
+	await landed();
 });
 
 test('sorts by status (worst first) and by name, and keeps the sort in the address', async ({ page, owner }) => {

@@ -85,6 +85,11 @@ describe('what an item says', () => {
 		expect(eventLine(ev('series.held', { kind: 'flow_logger_m3s', name: 'weir', negative: 2, outlier: 1 }))).toBe(
 			'Held automatic runs: new days in the Flow — logger “weir” series look wrong (2 negative days, 1 day far above its usual range). Check the data, then run the model'
 		);
+		// Judged by the key's own days (series/hold.ts, 055): the line says the check was weaker.
+		expect(eventLine(ev('series.held', { kind: 'rain_catchment_mm', name: '', outlier: 1, limitFrom: 'own' }))).toContain(
+			'look wrong (1 day far above its usual range). Its usual range so far is the key’s own: no run of the model has read this series yet. Check the data'
+		);
+		expect(eventLine(ev('series.held', { kind: 'rain_catchment_mm', name: '', outlier: 1, limitFrom: 'accepted' }))).not.toContain('key’s own');
 		expect(eventLine(ev('publication.published', { restriction: { level: 'restricted', pct: 20 }, farms: 6 }))).toBe('Published a run, restricted (20 %) to 6 farms');
 		expect(eventLine(ev('publication.notice_changed', { fields: ['restriction', 'nextExpectedOn'] }))).toBe(
 			'Changed the publication’s restriction notice and next publication date'
