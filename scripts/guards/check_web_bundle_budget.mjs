@@ -424,6 +424,17 @@
 //             engine code they call is already in the shared engine chunk.
 //             No new dependency; the largest page chunk is unchanged
 //             (39 KB). Headroom ~6 KB on the total. Issue #9 still stands.
+// 2026-09-26  total 809 → 821 KB; other ceilings unchanged. The batch merge
+//             of #5 (the /account page), #6 (tabs by role, lib/workspace/
+//             tabs.ts), #22 (the import's openpyxl decoding), #27 (the Invite
+//             farmers dialog with its CSV preview and pending invites) and
+//             #18 with its GR4J PE field, on main with #39's pan-coefficient
+//             source note. Each branch alone fit its own base's ceiling; the
+//             merge measured 815 KB (783 before #18 went in). The account page
+//             and the invite dialog are their own lazy chunks; tabs.ts is
+//             ~1 KB in the project page. No new dependency; the largest page
+//             chunk stays under 41 KB. Headroom ~6 KB. #9 (engine shipped
+//             twice, help text loaded eagerly: ~50 KB) is now the next job.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -434,7 +445,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 809,
+	totalCodeKb: 821,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,
