@@ -250,8 +250,11 @@ run for the local demo user (details in `scripts/wbt-import/README.md`):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install openpyxl
-PYTHON=.venv/bin/python pnpm seed:demo
+pnpm seed:demo
 ```
+
+The seed uses `$PYTHON` if set, else the checkout's `.venv/bin/python`, else
+`python3`.
 
 The seed picks the one b023 workbook in `Original/` that isn't `Blank_*`. If
 there are several, set `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm`. The
