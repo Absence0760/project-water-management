@@ -76,8 +76,11 @@
 </div>
 
 <style>
+	/* The app's usual page width (not a narrower cap), starting at the sidebar:
+	   the contents column sits beside it, and the tour and guides get the width
+	   (the text keeps its own reading width). */
 	.help-shell {
-		max-width: 80rem;
+		max-width: 1480px;
 	}
 	.search input {
 		width: 100%;
@@ -107,10 +110,14 @@
 	.help-col {
 		min-width: 0;
 	}
+	/* Pages size their own layout to the text column (a guide's "On this page" rail). */
+	.help-main {
+		container: help-main / inline-size;
+	}
 	@media (min-width: 900px) {
 		.help-shell {
 			display: grid;
-			grid-template-columns: 15rem minmax(0, 1fr);
+			grid-template-columns: 13rem minmax(0, 1fr);
 			gap: 2.5rem;
 			align-items: start;
 		}

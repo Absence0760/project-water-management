@@ -110,6 +110,13 @@
 	.shell-main {
 		min-width: 0;
 	}
+	/* Beside the sidebar a page starts at its edge instead of centring in the
+	   width left: centred, a capped page left a dead gap between the sidebar
+	   and the content (and another on the right). */
+	.shell.wide .shell-main :global(.page) {
+		margin-left: 0;
+		padding-left: 1.5rem;
+	}
 	/* The sidebar: full height from the top edge, in view while the page scrolls. */
 	.app-sidebar {
 		position: sticky;
