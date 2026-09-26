@@ -211,6 +211,58 @@ export interface Team {
 	projectCount: number;
 }
 
+/** GET /teams/:id/portfolio (WP-2.14, docs/api.md § Portfolio): one row per team catchment you can see. */
+export type PortfolioEwrStatus = 'green' | 'amber' | 'red' | 'unknown';
+
+export interface PortfolioProject {
+	id: string;
+	name: string;
+	role: 'viewer' | 'editor' | 'owner';
+	/** Newest day of recorded rain in the inputs (YYYY-MM-DD), or null. */
+	dataUntil: string | null;
+	lastRunAt: string | null;
+	publishedAt: string | null;
+	/** Where the figures come from: the current publication, the newest run (nothing published), or nothing. */
+	source: 'published' | 'run' | null;
+	sourceRunId: string | null;
+	/** The last day the figures cover, and its age in days on the server's `today`. */
+	figuresUntil: string | null;
+	figuresAgeDays: number | null;
+	stale: boolean;
+	/** Recorded rain after figuresUntil: the figures don't include the newest data yet. */
+	behindData: boolean;
+	/** A run newer than the published one exists. */
+	newerRun: boolean;
+	ewr: {
+		status: PortfolioEwrStatus;
+		daysNotMet30: number | null;
+		days30: number | null;
+		fraction30: number | null;
+		/** Why it is unknown (status 'unknown' only). */
+		reason?: 'no-figures' | 'no-ewr' | 'no-series';
+	};
+	/** null = unknown (not published, or published before the counts were stored). */
+	farmsShort7: number | null;
+	farmsShort30: number | null;
+	farmCount: number;
+	/** Lowest farm dam on figuresUntil, 0–1; null with no dams or when unknown (damsKnown). */
+	lowestDamPct: { nodeName: string; pct: number } | null;
+	damsKnown: boolean;
+	feeds: { total: number; ok: number; failing: number };
+	/** Firing alerts: always null until WP-2.13 (alerts) is built. */
+	alertsFiring: number | null;
+	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
+}
+
+export interface Portfolio {
+	team: { id: string; name: string; role: TeamRole };
+	/** The server's UTC date the ages are counted to. */
+	today: string;
+	/** The traffic-light thresholds: amber from this fraction of days not met, red from that. */
+	thresholds: { amber: number; red: number };
+	projects: PortfolioProject[];
+}
+
 export interface TeamMember {
 	userId: string;
 	email: string;

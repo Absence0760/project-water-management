@@ -37,6 +37,7 @@ import type {
 	SeriesRevisionMeta,
 	Member,
 	Nomination,
+	Portfolio,
 	Project,
 	ProjectFile,
 	ProjectSummary,
@@ -310,7 +311,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				),
 			/** Remove a member (admin), or yourself to leave the team. */
 			removeMember: (id: string, userId: string) =>
-				request<void>('DELETE', `${t(id)}/members/${enc(userId)}`)
+				request<void>('DELETE', `${t(id)}/members/${enc(userId)}`),
+			/** Every team catchment you can see, with its latest figures (WP-2.14). */
+			portfolio: (id: string) => request<Portfolio>('GET', `${t(id)}/portfolio`)
 		},
 		model: {
 			get: (id: string) => request<ProjectModel>('GET', `${p(id)}/model`),

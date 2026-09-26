@@ -274,7 +274,10 @@
 								<div class="group-head">
 									<h2 id="grp-{g.key}">{g.label}</h2>
 									<span class="count">{g.projects.length}<span class="visually-hidden"> projects</span></span>
-									{#if g.teamId}<a class="team-link" href="{base}/teams/{g.teamId}">Team members & settings</a>{/if}
+									{#if g.teamId}
+										<a class="team-link" href="{base}/teams/{g.teamId}/portfolio">Portfolio</a>
+										<a class="team-link" href="{base}/teams/{g.teamId}">Team members & settings</a>
+									{/if}
 								</div>
 								<ProjectTable projects={g.projects} caption={g.label} showTeam={g.key === 'shared'} oncopy={openCopy} ondelete={remove} />
 							</section>
@@ -481,6 +484,9 @@
 		margin-left: auto;
 		font-size: 0.8rem;
 		font-weight: 500;
+	}
+	.team-link + .team-link {
+		margin-left: 0.5rem;
 	}
 	.none {
 		padding: 2rem 1rem;

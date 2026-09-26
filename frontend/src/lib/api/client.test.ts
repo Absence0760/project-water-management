@@ -263,6 +263,13 @@ describe('teams client', () => {
 		expect(call(f).url).toBe('/teams/t');
 	});
 
+	it('reads the team portfolio as it comes (WP-2.14)', async () => {
+		const body = { team: { id: 't/1', name: 'WUA', role: 'viewer' }, today: '2026-09-26', thresholds: { amber: 0.05, red: 0.2 }, projects: [] };
+		const f = mockFetch(200, body);
+		expect(await createApi('', f).teams.portfolio('t/1')).toEqual(body);
+		expect(call(f)).toEqual({ url: '/teams/t%2F1/portfolio', method: 'GET', body: undefined });
+	});
+
 	it('builds member management requests with encoded ids', async () => {
 		const f = mockFetch(200, { member: { userId: 'u/1', role: 'member' }, team: { id: 't' } });
 		const api = createApi('', f);
