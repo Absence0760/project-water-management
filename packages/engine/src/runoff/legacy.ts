@@ -14,6 +14,10 @@ export const legacyNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 		rainCatchmentMm: ctx.aligned('rain_catchment_mm'),
 		rainChirpsMm: ctx.aligned('rain_chirps_mm'),
 		rainForecastMm: ctx.aligned('rain_forecast_mm')
+	}, {
+		...(ctx.warm?.resume !== undefined ? { initial: ctx.warm.resume } : {}),
+		...(ctx.warm?.captureAt !== undefined ? { captureAt: ctx.warm.captureAt } : {})
 	});
-	return { ...nf, warnings: recessionTableWarnings(ctx.settings.calibration) };
+	const { state, ...rest } = nf;
+	return { ...rest, ...(state ? { state: [...state] } : {}), warnings: recessionTableWarnings(ctx.settings.calibration) };
 };

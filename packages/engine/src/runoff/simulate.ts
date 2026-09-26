@@ -23,6 +23,8 @@ export interface RunoffTrace {
 	stores: Float64Array[];
 	storageStartMm: number;
 	storageEndMm: number;
+	/** saveState's numbers at the start of day `captureAt`, when asked. */
+	captured?: number[];
 }
 
 /**
@@ -78,16 +80,28 @@ export function simulateRunoff<P, S>(
 	model: RunoffModel<P, S>,
 	p: P,
 	forcing: RunoffForcing,
-	opts: { warmupDays: number; fill?: number; trace?: boolean; days?: number }
+	opts: {
+		warmupDays: number;
+		fill?: number;
+		trace?: boolean;
+		days?: number;
+		/** Start from this saved state (model.saveState's numbers) instead of `fill` and the warm-up (engine ≥ 0.47.0). */
+		initial?: readonly number[];
+		/** Return the state at the start of this day (0 … days) as `captured`. */
+		captureAt?: number;
+	}
 ): RunoffTrace {
 	// The warm-up cycles the whole forcing; `days` (default all) cuts the output short.
 	const len = forcing.rainMm.length;
 	const n = Math.min(len, opts.days ?? len);
 	const trace = opts.trace ?? true;
-	const st = model.init(p, opts.fill);
+	const needsState = opts.initial !== undefined || opts.captureAt !== undefined;
+	if (needsState && (!model.saveState || !model.loadState)) throw new Error(`the ${model.id} runoff model can't save its state`);
+	const st = opts.initial !== undefined ? model.loadState!(p, opts.initial) : model.init(p, opts.fill);
 	const day: DayFluxes = { qMm: 0, aetMm: 0, exchangeMm: 0 };
-	const warm = len > 0 ? Math.max(0, Math.floor(opts.warmupDays)) : 0;
+	const warm = len > 0 && opts.initial === undefined ? Math.max(0, Math.floor(opts.warmupDays)) : 0;
 	for (let k = 0; k < warm; k++) model.step(p, st, forcing.rainMm[k % len]!, forcing.petMm[k % len]!, day);
+	let captured: number[] | undefined;
 
 	const qMm = new Float64Array(n);
 	const aetMm = new Float64Array(trace ? n : 0);
@@ -96,6 +110,7 @@ export function simulateRunoff<P, S>(
 	const now = new Float64Array(model.stores.length);
 	const storageStartMm = model.storage(st);
 	for (let t = 0; t < n; t++) {
+		if (t === opts.captureAt) captured = model.saveState!(st);
 		model.step(p, st, forcing.rainMm[t]!, forcing.petMm[t]!, day);
 		qMm[t] = day.qMm;
 		if (!trace) continue;
@@ -104,7 +119,8 @@ export function simulateRunoff<P, S>(
 		model.readStores(st, now);
 		for (let j = 0; j < now.length; j++) stores[j]![t] = now[j]!;
 	}
-	return { qMm, aetMm, exchangeMm, stores, storageStartMm, storageEndMm: model.storage(st) };
+	if (opts.captureAt === n) captured = model.saveState!(st);
+	return { qMm, aetMm, exchangeMm, stores, storageStartMm, storageEndMm: model.storage(st), ...(captured ? { captured } : {}) };
 }
 
 /**
@@ -145,7 +161,12 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const p = resolveParams<Gr4jParams>(GR4J_PARAMS, ctx.settings.gr4j, 'GR4J', warnings);
 	const warmupDays = resolveWarmupDays(ctx.settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(ctx.settings, ctx);
-	const tr = simulateRunoff(gr4j, p, forcing, { warmupDays });
+	const w = ctx.warm;
+	const tr = simulateRunoff(gr4j, p, forcing, {
+		warmupDays,
+		...(w?.resume !== undefined ? { initial: w.resume } : {}),
+		...(w?.captureAt !== undefined ? { captureAt: w.captureAt } : {})
+	});
 
 	const toM3 = areaKm2 * MM_KM2_TO_M3;
 	const naturalFlowM3Day = Array.from(tr.qMm, (q) => q * toM3);
@@ -174,6 +195,7 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 			exchangeMm: total(tr.exchangeMm),
 			storageStartMm: tr.storageStartMm,
 			storageEndMm: tr.storageEndMm
-		}
+		},
+		...(tr.captured ? { state: tr.captured } : {})
 	};
 };

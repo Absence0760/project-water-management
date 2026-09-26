@@ -171,8 +171,24 @@ function rainUsed(threshold: number, catchment: number | null, chirps: number | 
 	return pick > threshold ? pick : 0;
 }
 
+/**
+ * The recession model's day-to-day state, the day before a run day
+ * (engine ≥ 0.47.0, ./warmstart): the season flag and rain used, then the
+ * base flow, its index, the response flow's index and flow, the resultant
+ * flow and its index. Plain numbers so a model-state snapshot can carry it.
+ */
+export type LegacyFlowState = [summer: number, rain: number, base: number, baseIndex: number, addedIndex: number, responseAdded: number, resultant: number, resultantIndex: number];
+
+/** Capture / resume for computeFlowColumns (engine ≥ 0.47.0). */
+export interface FlowWarm {
+	/** Start from this state instead of the steady base-flow day before the run. */
+	initial?: Readonly<LegacyFlowState> | readonly number[];
+	/** Return the state at the start of this run day (0 … days) as `captured`. */
+	captureAt?: number;
+}
+
 /** Run the [Flow data] calculation and return every intermediate column. */
-export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowInputs): FlowColumns {
+export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowInputs, warm: FlowWarm = {}): FlowColumns & { captured?: LegacyFlowState } {
 	const n = Math.max(0, Math.floor(inputs.days));
 	const cols: FlowColumns = {
 		isSummer: new Array(n),
@@ -204,8 +220,15 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 	let prevResponseAdded = 0;
 	let prevResultant = cal.baseFlowInitial;
 	let prevResultantIndex = initialIndex;
+	if (warm.initial) {
+		if (warm.initial.length !== 8) throw new Error(`the legacy flow state has ${warm.initial.length} numbers, not 8`);
+		[prevSummer, prevRain, prevBase, prevBaseIndex, prevAddedIndex, prevResponseAdded, prevResultant, prevResultantIndex] = warm.initial as LegacyFlowState;
+	}
+	let captured: LegacyFlowState | undefined;
+	const save = (): LegacyFlowState => [prevSummer, prevRain, prevBase, prevBaseIndex, prevAddedIndex, prevResponseAdded, prevResultant, prevResultantIndex];
 
 	for (let i = 0; i < n; i++) {
+		if (i === warm.captureAt) captured = save();
 		const month = monthOfEpochDay(day0 + i);
 		const rain = rainUsed(
 			cal.rainThresholdMm,
@@ -261,13 +284,15 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		prevResultant = resultant;
 		prevResultantIndex = resultantIndex;
 	}
-	return cols;
+	if (warm.captureAt === n) captured = save();
+	return captured ? { ...cols, captured } : cols;
 }
 
 /** Catchment natural flow (m³/day) from rain, plus the useful intermediates. */
-export function computeNaturalFlow(cal: CalibrationParams, inputs: NaturalFlowInputs): NaturalFlowResult {
-	const c = computeFlowColumns(cal, inputs);
+export function computeNaturalFlow(cal: CalibrationParams, inputs: NaturalFlowInputs, warm: FlowWarm = {}): NaturalFlowResult & { state?: LegacyFlowState } {
+	const c = computeFlowColumns(cal, inputs, warm);
 	return {
+		...(c.captured ? { state: c.captured } : {}),
 		naturalFlowM3Day: c.naturalFlowM3Day,
 		series: [
 			{ key: 'rain_used', label: 'Rain used', unit: 'mm', values: c.rainUsedMm },

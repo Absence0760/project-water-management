@@ -177,6 +177,8 @@ export interface FarmDailyDemand {
 	used: Float64Array;
 	/** Soil-water store at the end of the day (mm over the cropped area). */
 	storeMm: Float64Array;
+	/** The store W (m³) at the start of day `warm.captureAt`, when asked (engine ≥ 0.47.0, ./warmstart). */
+	storeAtM3?: number;
 }
 
 /**
@@ -198,13 +200,16 @@ export interface FarmDailyDemand {
  * equal to the old MAX(0, gross − Pe) (netDailyDemandM3). W starts empty.
  * `effectiveRainFraction` is one number, or one per day (the day's month's
  * value of settings.effectiveRainFractionMonthly, engine ≥ 0.43.0).
+ * `warm` (engine ≥ 0.47.0, ./warmstart): start from a store of `initialM3`
+ * instead of empty, and report the store at the start of day `captureAt`.
  */
 export function farmDailyDemand(
 	grossM3PerDay: ArrayLike<number>,
 	croppedAreaM2: number,
 	rainMm: ArrayLike<number>,
 	effectiveRainFraction: number | ArrayLike<number>,
-	storeMaxMm: number
+	storeMaxMm: number,
+	warm: { initialM3?: number; captureAt?: number } = {}
 ): FarmDailyDemand {
 	const days = grossM3PerDay.length;
 	const out: FarmDailyDemand = { net: new Float64Array(days), used: new Float64Array(days), storeMm: new Float64Array(days) };
@@ -212,8 +217,9 @@ export function farmDailyDemand(
 	// One fraction for every day, or one per day (a monthly fraction, engine ≥ 0.43.0, issue #54).
 	const perDay = typeof effectiveRainFraction === 'number' ? null : effectiveRainFraction;
 	const one = typeof effectiveRainFraction === 'number' ? effectiveRainFraction : 0;
-	let w = 0;
+	let w = warm.initialM3 ?? 0;
 	for (let t = 0; t < days; t++) {
+		if (t === warm.captureAt) out.storeAtM3 = w;
 		// A negative gross (bad crop factors) needs no water, as MAX(0, …) had it.
 		const need = Math.max(0, grossM3PerDay[t]!);
 		const available = w + rainOffsetM3(croppedAreaM2, rainMm[t]!, perDay ? perDay[t]! : one);
@@ -223,6 +229,7 @@ export function farmDailyDemand(
 		w = Math.min(maxM3, available - used);
 		out.storeMm[t] = croppedAreaM2 > 0 ? (w * 1000) / croppedAreaM2 : 0;
 	}
+	if (warm.captureAt === days) out.storeAtM3 = w;
 	return out;
 }
 

@@ -59,6 +59,28 @@ import {
 	type SeriesKind
 } from './project';
 import { resolveWr2012 } from './reference/wr2012Resolve';
+import { clonePlain, stableStringify } from './warmstart/plain';
+
+/** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
+export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
+
+/**
+ * The rain handling's fits from the whole stored record: the CHIRPS bias
+ * factors (before a run counts its fallback days) and each rain-source
+ * period's factors. A model-state snapshot pins them (engine ≥ 0.47.0,
+ * ./warmstart), so a run resumed from it uses the capture run's fits.
+ */
+export interface PreparedFits {
+	chirpsCorrection: ChirpsCorrection | null;
+	rainSourceFactors: { key: string; factors: RainSourceFactorsOf }[];
+}
+
+export interface PrepareOptions {
+	/** Use these fits instead of fitting the input's record (a CHIRPS series or a period the fits lack is still fitted). */
+	pinned?: PreparedFits;
+	/** Return the fits the run used as PreparedRun.fits. */
+	captureFits?: boolean;
+}
 
 /** The run's settings, window and aligned inputs: everything before natural flow. */
 export interface PreparedRun {
@@ -90,10 +112,12 @@ export interface PreparedRun {
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
+	/** The fits, with PrepareOptions.captureFits. */
+	fits?: PreparedFits;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
-export function prepareRun(input: ModelInput): PreparedRun {
+export function prepareRun(input: ModelInput, options: PrepareOptions = {}): PreparedRun {
 	const warnings: string[] = [];
 	const settings = mergeSettings(input.settings, warnings);
 	const series = input.series ?? {};
@@ -129,7 +153,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		throw new Error('no rainfall series: cannot work out the simulation period');
 	}
 	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
-	let prep = alignToWindow(settings, series, start, end);
+	let prep = alignToWindow(settings, series, start, end, options);
 	// Then (engine ≥ 0.45.0, issue #54) an end left unset moves in to the
 	// first / last day whose final rain (catchment, a rain-source period's
 	// series, bias-corrected CHIRPS or the forecast, after the zero-run and
@@ -144,7 +168,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		if (s !== start || e !== end) {
 			start = s;
 			end = e;
-			prep = alignToWindow(settings, series, start, end);
+			prep = alignToWindow(settings, series, start, end, options);
 		}
 		const note = defaultWindowWarning(series, settings, start, end);
 		if (note) warnings.push(note);
@@ -217,7 +241,7 @@ export function defaultWindowWarning(series: ModelInput['series'], settings: Pic
 }
 
 /** Everything prepareRun does once the window is fixed: align the series to it and apply the rain handling. */
-function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], start: number, end: number): Omit<PreparedRun, 'settings' | 'series'> {
+function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], start: number, end: number, options: PrepareOptions = {}): Omit<PreparedRun, 'settings' | 'series'> {
 	const warnings: string[] = [];
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);
@@ -244,13 +268,26 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const claimed = new Set<number>();
 	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
 	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced);
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), fitOpts);
+	const pinned = options.pinned;
+	// A pinned fit (a resumed run) stands in for the input's own; without a CHIRPS series there is nothing to correct.
+	const chirpsCorrection =
+		pinned?.chirpsCorrection && series.rain_chirps_mm
+			? clonePlain(pinned.chirpsCorrection)
+			: chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), fitOpts);
+	const chirpsFit = options.captureFits && chirpsCorrection ? clonePlain(chirpsCorrection) : null;
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
 	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
-	const rainSource = settings.rainSource.length
-		? applyRainSource(series, settings.rainSource, rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc)), catchment, start)
-		: null;
+	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc)) : [];
+	const rsKeys = options.pinned || options.captureFits ? settings.rainSource.map((p) => stableStringify(p)) : [];
+	if (pinned) {
+		rsKeys.forEach((key, k) => {
+			const pin = pinned.rainSourceFactors.find((f) => f.key === key);
+			if (pin) rsFactors[k] = clonePlain(pin.factors);
+		});
+	}
+	const rsFit = options.captureFits ? rsKeys.map((key, k) => ({ key, factors: clonePlain(rsFactors[k]!) })) : [];
+	const rainSource = settings.rainSource.length ? applyRainSource(series, settings.rainSource, rsFactors, catchment, start) : null;
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
@@ -309,7 +346,8 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		accumulation,
 		doubleMass,
 		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
-		apanDaily
+		apanDaily,
+		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
 	};
 }
 

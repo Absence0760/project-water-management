@@ -53,6 +53,8 @@ export interface AttributionInput {
 	supplied: readonly ArrayLike<number>[];
 	/** Per node, daily: Q dam storage at the end of the day (only sizes float noise; omitted = no dams). */
 	storage?: readonly ArrayLike<number>[];
+	/** Per node: Q the day before day 0, for a run resumed part-way through a record (engine ≥ 0.47.0); omitted = 0. */
+	storageBefore?: ArrayLike<number>;
 	/** Per node: consumptive share of what is supplied, k = 1 − β(1 − e), so c = G·k = G − T (audit N1). */
 	consumptivePerSupplied: ArrayLike<number>;
 	/** Each transfer rule's daily volume. */
@@ -130,7 +132,8 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 
 	const storage = input.storage;
 	/** A dam's storage today and yesterday: the scale its spill and storage gain are computed at. */
-	const dam = (i: number, t: number) => (storage ? Math.max(Math.abs(storage[i]![t]!), t > 0 ? Math.abs(storage[i]![t - 1]!) : 0) : 0);
+	const before = input.storageBefore;
+	const dam = (i: number, t: number) => (storage ? Math.max(Math.abs(storage[i]![t]!), t > 0 ? Math.abs(storage[i]![t - 1]!) : before ? Math.abs(before[i]!) : 0) : 0);
 	const jInt = new Float64Array(n);
 	const ePlus = new Float64Array(n);
 	const eRaw = new Float64Array(n);
