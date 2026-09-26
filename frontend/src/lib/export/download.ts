@@ -6,7 +6,10 @@ import { fallbackFilename, filenameFromDisposition } from './urls';
 export class DownloadError extends Error {
 	constructor(
 		readonly status: number,
-		message: string
+		message: string,
+		/** The server's stable error code (docs/api.md § Errors), for the translated pages' wording ($lib/i18n/apiError). */
+		readonly code: string | null = null,
+		readonly params: Record<string, string | number> = {}
 	) {
 		super(message);
 		this.name = 'DownloadError';
@@ -26,9 +29,13 @@ export async function fetchDownload(
 	}
 	if (!res.ok) {
 		let msg = '';
+		let code: string | null = null;
+		let params: Record<string, string | number> = {};
 		try {
-			const body = (await res.json()) as { error?: unknown };
+			const body = (await res.json()) as { error?: unknown; code?: unknown; params?: unknown };
 			if (typeof body.error === 'string') msg = body.error;
+			if (typeof body.code === 'string' && body.code) code = body.code;
+			if (body.params && typeof body.params === 'object' && !Array.isArray(body.params)) params = body.params as Record<string, string | number>;
 		} catch {
 			/* not JSON */
 		}
@@ -40,7 +47,7 @@ export async function fetchDownload(
 						? 'Not found — the run or series may have been deleted'
 						: `Download failed (${res.status})`;
 		}
-		throw new DownloadError(res.status, msg);
+		throw new DownloadError(res.status, msg, code, params);
 	}
 	const blob = await res.blob();
 	return { blob, filename: filenameFromDisposition(res.headers.get('content-disposition'), fallbackFilename(url)) };

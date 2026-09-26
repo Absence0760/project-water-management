@@ -170,7 +170,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		} catch (err) {
 			if (!(err instanceof ExportThrottled)) throw err;
 			c.header('Retry-After', String(err.retryAfter));
-			throw new ApiError(429, 'you downloaded your data a moment ago — try again in a minute');
+			throw ApiError.coded(429, 'export_throttled', 'you downloaded your data a moment ago — try again in a minute', { seconds: err.retryAfter });
 		}
 		return c.body(JSON.stringify(doc, null, 2), 200, {
 			'Content-Type': 'application/json; charset=utf-8',

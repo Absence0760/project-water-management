@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-609 strings: 515 on the site, 70 in emails, 24 in the glossary.
+610 strings: 516 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -829,6 +829,7 @@ A message from the server when something couldn’t be done, shown in a red box 
 | `error.note_author_only` | Only the person who wrote a note can change it. |  |  |
 | `error.note_delete_denied` | Only the person who wrote a note, or the WUA, can delete it. |  |  |
 | `error.unsubscribe_link_gone` | This link doesn’t work any more. |  |  |
+| `error.export_throttled` | You downloaded your data a moment ago. Try again in {wait}. | On the account page’s “Download my data”. {wait} is “1 minute” (the error.minutes rows). Keep: {wait} |  |
 
 ### error.minutes
 

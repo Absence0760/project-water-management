@@ -31,6 +31,12 @@ describe('fetchDownload', () => {
 		await expect(fetchDownload('/u', respond(null, { status: 502 }))).rejects.toThrow('Download failed (502)');
 	});
 
+	it('carries the server’s error code and params, for the translated pages', async () => {
+		const held = respond(JSON.stringify({ error: 'you downloaded your data a moment ago', code: 'export_throttled', params: { seconds: 30 } }), { status: 429 });
+		await expect(fetchDownload('/u', held)).rejects.toMatchObject({ status: 429, code: 'export_throttled', params: { seconds: 30 } });
+		await expect(fetchDownload('/u', respond(null, { status: 502 }))).rejects.toMatchObject({ code: null, params: {} });
+	});
+
 	it('reports network failures', async () => {
 		const down = (async () => {
 			throw new TypeError('fetch failed');

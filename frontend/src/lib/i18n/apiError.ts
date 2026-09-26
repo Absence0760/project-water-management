@@ -10,7 +10,6 @@
 // API's text stays one language for integrators and logs).
 //
 // The workspace doesn't use this: it shows the server's message as it is.
-import { ApiError } from '$lib/api/client';
 import { en } from './messages/en';
 import { t, tn, type MessageKey } from './locale.svelte';
 
@@ -30,15 +29,27 @@ function byStatus(status: number): MessageKey {
 	return 'error.status.unknown';
 }
 
-/** What to tell the reader about a failed request (anything thrown: a non-API error reads as a generic failure). */
+/** A failed request: an ApiError ($lib/api/client) or a DownloadError ($lib/export/download), which both carry these. */
+interface HttpFailure {
+	status: number;
+	code?: string | null;
+	params?: Record<string, string | number>;
+}
+const isHttpFailure = (e: unknown): e is HttpFailure => e instanceof Error && typeof (e as { status?: unknown }).status === 'number';
+
+/** Codes whose wording says how long to wait: `params.seconds`, as whole minutes. */
+const WAITS = new Set(['signin_locked', 'export_throttled']);
+
+/** What to tell the reader about a failed request (anything thrown: anything else reads as a generic failure). */
 export function errorText(err: unknown): string {
-	if (!(err instanceof ApiError)) return t('error.status.unknown');
+	if (!isHttpFailure(err)) return t('error.status.unknown');
 	const key = `error.${err.code}` as MessageKey;
 	if (!err.code || !(key in en)) return t(byStatus(err.status));
-	if (err.code === 'signin_locked') {
-		const seconds = n(err.params.seconds);
+	const params = err.params ?? {};
+	if (WAITS.has(err.code)) {
+		const seconds = n(params.seconds);
 		const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
 		return t(key, { wait: tn('error.minutes', minutes) });
 	}
-	return t(key, err.params);
+	return t(key, params);
 }

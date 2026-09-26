@@ -147,7 +147,9 @@ doesn't localise messages: codes keep every word a farmer reads in the
 frontend catalogue and on the translation sheet, and the API in one
 language. A code is a contract: add new ones, never rename one
 (`ERROR_CODES` in `backend/src/http/errors.ts`; a frontend test fails when a
-code has no `error.<code>` message).
+code has no `error.<code>` message). A guard (`backend/src/http/errorCodes.test.ts`)
+fails on any uncoded `ApiError` in the routes the translated pages call,
+unless it is listed there with why its status says enough.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -166,6 +168,7 @@ code has no `error.<code>` message).
 | `note_author_only` | 403 | editing someone else's note |
 | `note_delete_denied` | 403 | deleting someone else's note without the editor role |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
+| `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`

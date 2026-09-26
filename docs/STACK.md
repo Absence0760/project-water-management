@@ -266,7 +266,8 @@ Prefer reading these over guessing. Update them when behaviour changes.
   show a server error through `errorText` (`lib/i18n/apiError.ts`, from the
   API's stable `code`), never its English `error` text; a new error a farmer
   can meet gets a code in `backend/src/http/errors.ts` `ERROR_CODES` and an
-  `error.<code>` message.
+  `error.<code>` message (`http/errorCodes.test.ts` fails on an uncoded one
+  in those routes).
 - **`pnpm check` doesn't compile components.** svelte-check type-checks the
   TypeScript in `<script lang="ts">`; the Svelte compiler strips it at build
   time, and a stripping bug fails every `vite build` (production and the e2e

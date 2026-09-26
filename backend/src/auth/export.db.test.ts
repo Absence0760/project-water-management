@@ -160,6 +160,10 @@ describe('GET /auth/me/export', () => {
 		const wait = Number(again.headers.get('retry-after'));
 		expect(wait).toBeGreaterThan(0);
 		expect(wait).toBeLessThanOrEqual(EXPORT_COOLDOWN_SECONDS);
+		// The account page words it from the code, with the wait (docs/api.md § Errors).
+		const body = (await again.json()) as { code?: string; params?: { seconds?: number } };
+		expect(body.code).toBe('export_throttled');
+		expect(body.params?.seconds).toBe(wait);
 		// Another account isn't held up (positive control).
 		await asOwner('UPDATE app_user SET data_exported_at = NULL WHERE id = $1', [other.id]);
 		const theirs = await app.request('/auth/me/export', { headers: { cookie: other.cookie, origin: ORIGIN } });

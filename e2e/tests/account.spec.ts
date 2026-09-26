@@ -50,9 +50,9 @@ test('“Download my data” saves the account’s data export as a JSON file', 
 	const doc = JSON.parse(await readFile(await download.path(), 'utf8'));
 	expect(doc).toMatchObject({ format: 'water-management.subject-export', account: { email: owner.email } });
 	await expect(panel.getByRole('status')).toHaveText('Your data has been downloaded.');
-	// A second one within the minute is refused with the server's message.
+	// A second one within the minute is refused, worded from the error's code (export_throttled), not the server's English.
 	await panel.getByRole('button', { name: 'Download my data' }).click();
-	await expect(panel.getByRole('alert')).toContainText('try again in a minute');
+	await expect(panel.getByRole('alert')).toHaveText('You downloaded your data a moment ago. Try again in 1 minute.');
 });
 
 test('an unconfirmed address says so', async ({ page }) => {

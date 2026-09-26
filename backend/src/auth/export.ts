@@ -173,7 +173,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 FROM app_user WHERE id = $1`,
 			[userId]
 		);
-		if (!acct[0]) throw new ApiError(401, 'not signed in');
+		if (!acct[0]) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		const { rows: projectMemberships } = await db.query(
 			`SELECT m.project_id AS "projectId", p.name AS "projectName", m.role, m.added_at AS "addedAt"
 			 FROM project_member m LEFT JOIN project p ON p.id = m.project_id
@@ -206,7 +206,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		);
 		const { rows: hidden } = await db.query<{ doc: DefinerSections | null }>('SELECT app_subject_export() AS doc');
 		const rest = hidden[0]?.doc;
-		if (!rest) throw new ApiError(401, 'not signed in');
+		if (!rest) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		return {
 			format: 'water-management.subject-export',
 			version: SUBJECT_EXPORT_VERSION,
