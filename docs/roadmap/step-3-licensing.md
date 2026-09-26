@@ -990,6 +990,26 @@ must build WP-2.15 Phase B.
 
 ### WP-3.9 Groundwater abstraction
 
+> **Built 2026-09-26 (engine 0.32.0, migration 035), off by default; pending
+> the hydrologist.** Individual boreholes (`ProjectModel.boreholes`, table
+> `borehole`) with the four modes, the dam target and an annual cap per water
+> year, on top of WP-1.34's combined node capacity (engine 0.23.0), which
+> already had supplemental / primary / drought, the lagged depletion capped at
+> the flow with its warning, and the node fields. Differences from the text
+> below, each decided in [model.md §2.7d](../model.md) "Individual boreholes":
+> the boreholes live in the model document (`ProjectModel.boreholes`, as land
+> cover) rather than a separate API; the depletion lag stays one per node;
+> the roadmap's `groundwater_abstraction` / `streamflow_depletion` are WP-1.34's
+> `groundwater_used` (+ the new `groundwater_to_dam`) and `baseflow_depletion`,
+> not renamed; depletion is capped at the flow leaving the node (runoff plus
+> what reaches it) rather than the farm's own runoff. Annual use per farm per
+> water year, against the caps and the GN 538 ceiling, is
+> `RunSummary.groundwaterAnnualUse` (the volumes WP-3.10 reads). Also: borehole
+> scenario ops, the run comparison's input diff, the summary CSV block, the
+> farmer-aware RLS policy, fuzz and e2e (with an axe scan of the form). Soak
+> beyond 2 000 fuzz cases, and a per-property GA volume instead of the
+> ceiling, are in [followups.md](../followups.md).
+
 - **Goal.** Boreholes as a supply source, with a first-order stream-flow
   depletion effect, capped at the specialist's sustainable yield.
 - **Changes**

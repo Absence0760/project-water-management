@@ -66,6 +66,8 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
 | `landCover.add` | `patch` | Adds a land-cover patch on a farm (WP-1.35). |
 | `landCover.remove` | `patchId` | Removes a patch, e.g. clearing invasive aliens. |
+| `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
+| `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 
@@ -132,6 +134,8 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | `transfer.add` | both ends owned | baseline |
 | `transfer.set`, `transfer.remove` | both ends owned, and a new end owned too (needs `input`) | baseline |
 | `landCover.remove` | the patch is on an owned node (needs `input`) | baseline |
+| `borehole.add` | on an owned node | baseline |
+| `borehole.remove` | the borehole is on an owned node (needs `input`) | baseline |
 
 ## Validation: `validateScenarioOps`
 

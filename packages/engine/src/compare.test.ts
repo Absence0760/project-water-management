@@ -458,6 +458,19 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Land cover "invasive" removed from Rooikloof (was 1 km² condensed)']);
 	});
 
+	it('lists individual boreholes added, changed and removed, matched across a copy by node and borehole name (WP-3.9)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const bh = { id: 'bh', nodeId: 'copy-f1', name: 'BH-01', capacityM3Day: 300, annualCapM3: 40_000, mode: 'primary' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0.25 };
+		b.model.boreholes = [bh];
+		expect(texts(a, b)).toEqual(['Borehole "BH-01" added to Rooikloof (300 m³/day, primary, annual cap 40,000 m³, depletion 0.25)']);
+		// A copy with fresh ids still lines the borehole up by (node name, borehole name).
+		const c = copyWithFreshIds(b);
+		c.model.boreholes = [{ ...bh, id: 'bh-copy', nodeId: 'copy-copy-f1', annualCapM3: null, target: 'dam' }];
+		expect(texts(b, c)).toEqual(['Rooikloof: borehole "BH-01" 300 m³/day, primary, annual cap 40,000 m³, depletion 0.25 → 300 m³/day, primary into the dam, annual cap none, depletion 0.25']);
+		expect(texts(b, a)).toEqual(['Borehole "BH-01" removed from Rooikloof (was 300 m³/day, primary, annual cap 40,000 m³, depletion 0.25)']);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

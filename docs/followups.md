@@ -110,6 +110,17 @@ Tick items off (or move them into an issue) as they are done.
         kernel) and the values; depletion the river can't give is dropped,
         not carried over. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-3.9 individual boreholes (engine 0.32.0): confirm the supply order
+        (primary direct, then dam-target, then the dam and river, then
+        supplemental, then emergency), what a dam-target borehole does in each
+        mode (primary keeps the dam topped up; supplemental adds today's
+        shortfall and first lifts a dam below dead storage; emergency refills
+        a low dam), and that annual caps reset on 1 October. Should a project
+        carry each property's own GN 538 volume (area × the schedule's rate,
+        by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
+        the first licence application with boreholes. Also: one depletion lag
+        per node is shared by its boreholes; per-borehole lags if a
+        geohydrology report gives different response times.
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
         catchment (invasives, plantations, riparian stands) and their
         condensed areas? The class reductions are indicative mature-stand
