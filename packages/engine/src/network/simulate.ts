@@ -7,6 +7,7 @@
 import { curveAreaAt, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, type PlanBorehole } from './boreholes';
+import { pumpsRiverToday, riverRoom, surfaceSplit, type PlanSupply } from './supply';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -88,6 +89,14 @@ export interface PlanNode {
 	 * depletion of the river at this node.
 	 */
 	borehole?: PlanBorehole;
+	/**
+	 * A farm's supply rule and river pump (WP-3.8, ./supply.ts, docs/model.md
+	 * §2.7e); absent = the dam only (damFirst, every engine before 0.41.0).
+	 * The pump takes from the flow below the dam S, above the senior users'
+	 * requirement and a pass-inflow release's target, up to its capacity;
+	 * run of river (rule 3) also sends all inflow and runoff below the (absent) dam.
+	 */
+	supply?: PlanSupply;
 	/**
 	 * Land cover on this farm (WP-1.35, ./landcover.ts): the shares of its
 	 * runoff above and up to the low-flow threshold that it removes. Absent = none.
@@ -183,6 +192,8 @@ export interface NodeResult {
 	groundwaterToDam: Float64Array;
 	/** What each of the node's pumping units pumped per day (WP-3.9), in `borehole.units` order; absent without boreholes. */
 	boreholePumped?: Float64Array[];
+	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
+	riverAbstraction?: Float64Array;
 	/** Stream depletion taken from the node's outflow (WP-1.34), after the clamp. */
 	depletion: Float64Array;
 	/** Depletion due that the river could not give (no flow left): drawn from aquifer storage instead, reported. */
@@ -362,8 +373,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 	const res = nodes.map((n) => {
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
+		if (n.supply) r.riverAbstraction = new Float64Array(days);
 		return r;
 	});
+	// Whether each farm under the trigger rule (WP-3.8) pumped from the river yesterday.
+	const onRiver = new Uint8Array(nodes.length);
 	// Each pumping unit's volume so far this water year (WP-3.9 annual caps).
 	const bhUsed = nodes.map((n) => (n.borehole ? new Float64Array(n.borehole.units.length) : null));
 	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
@@ -539,11 +553,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			// round (L = H × %), against its own label and [Models] sheet; the
 			// client confirmed the label's meaning (engine 0.9.0, model.md §3 Q1).
 			// A split never exceeds the volume it splits.
-			let K = Math.min(H * node.pctUpstreamToDam, H);
+			// Run of river (WP-3.8): no dam, so everything passes below it, where the pump takes from.
+			const sup = node.supply;
+			const ror = sup !== undefined && sup.rule === 3;
+			let K = ror ? 0 : Math.min(H * node.pctUpstreamToDam, H);
 			let L = H - K;
-			let M = Math.min(I * node.pctRunoffToDam, I);
+			let M = ror ? 0 : Math.min(I * node.pctRunoffToDam, I);
 			let N = I - M;
-			let O = Math.min(node.divertCapacityM3Day, L + N);
+			let O = ror ? 0 : Math.min(node.divertCapacityM3Day, L + N);
 			// Senior users below (WP-1.33): the farm passes their requirement Zs
 			// below the dam (S) before it fills the dam, as far as its inflow
 			// allows: it diverts less first, then takes less of the upstream
@@ -612,15 +629,32 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			// Boreholes (WP-1.34, WP-3.9) add groundwater: supplemental after the
 			// dam and river, primary before them, emergency (drought) only while
 			// the dam is low; dam-target ones pump into the dam first (Gd).
+			// The river pump (WP-3.8, docs/model.md §2.7e): what it can take today
+			// from the flow below the dam, S, above what must pass it (the senior
+			// users' requirement; a pass-inflow release's target, so the pump
+			// never takes what the release is there to keep flowing), up to its
+			// capacity. Under the trigger rule only while switched to the river.
+			let room = 0;
+			if (sup) {
+				const river = pumpsRiverToday(sup, onRiver[i] === 1, qPrev);
+				onRiver[i] = river ? 1 : 0;
+				if (river) {
+					const rel = node.release;
+					const target = rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month[t]!]! : Z) : 0;
+					room = riverRoom(sup, S, Math.max(Zs, target));
+				}
+			}
 			let Gs: number;
+			let Gr = 0;
 			let Ggw = 0;
 			let Gd = 0;
 			let dGw = 0;
-			if (node.borehole) [Gs, Ggw, Gd, dGw] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, qPrev, avail0, node.deadStorageM3, cap);
+			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, qPrev, avail0, node.deadStorageM3, cap, room, sup?.rule ?? 1);
+			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, D, Math.max(avail0 - node.deadStorageM3, 0), room);
 			else Gs = Math.min(Math.max(avail0 - node.deadStorageM3, 0), D);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;
 			// Gs + (D − Gs) can round one ulp above D.
-			const G = Math.min(Gs + Ggw, D);
+			const G = Math.min(Gs + Ggw + Gr, D);
 			const P = avail - Gs;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
@@ -631,12 +665,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const SpRet = node.seepageReturn === undefined ? Sp : Sp * node.seepageReturn;
 			const SpLost = Sp - SpRet;
 			// Stream depletion from pumping (WP-1.34) is taken from the flow leaving the farm.
-			let Uriver = Rr + S + T + SpRet;
+			// What the river pump took (WP-3.8) leaves the flow below the dam.
+			let Uriver = Rr + (S - Gr) + T + SpRet;
 			if (Rel > 0) Uriver += Rel;
 			const Dep = deplete(node, r, t, dGw, Uriver);
 			const U = Uriver - Dep;
 			r.groundwater[t] = Ggw;
 			r.groundwaterToDam[t] = Gd;
+			if (r.riverAbstraction) r.riverAbstraction[t] = Gr;
 			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
 			// noise of the volumes involved reported as 0 (review F8).
 			const scale = Math.max(U, Z, absAA);

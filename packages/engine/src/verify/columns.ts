@@ -91,6 +91,13 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity; P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
 		optional: true
 	},
+	{
+		key: 'river_abstraction',
+		letter: 'Gr',
+		formula:
+			'the river pump, while the supply rule pumps from the river (river first, run of river; trigger from Q[t−1] < trigger × capacity until Q[t−1] ≥ stop × capacity): MIN(pump capacity, MAX(0, S − MAX(Zs, pass-inflow release target)), D − primary GW), before the dam (after it under run of river, where K = M = O = 0); part of G; U = R + S − Gr + T + returned seepage + release − Dep (WP-3.8)',
+		optional: true
+	},
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + Σ d × pumped), all of it when lag = 0; each borehole its own d', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
 	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },

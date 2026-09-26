@@ -29,6 +29,7 @@ import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
+import { supplyOf } from './network/supply';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -284,7 +285,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -341,6 +342,8 @@ function runNetwork(
 			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
+		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
+		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		if (node.kind === 'user') {
 			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
 			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
@@ -395,7 +398,8 @@ function runNetwork(
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
-			...groundwaterMeans(plan.nodes[i]!, r)
+			...groundwaterMeans(plan.nodes[i]!, r),
+			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {})
 		});
 	});
 
@@ -859,6 +863,7 @@ export function buildNetworkPlan(
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
+				...supplyOf(n, warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};

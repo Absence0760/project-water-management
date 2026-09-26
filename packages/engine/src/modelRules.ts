@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import type { ProjectModel } from './project';
+import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 
 /**
@@ -61,6 +61,14 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
 			add(`bhDrought:${n.id}`, `"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
 		if (n.downstreamNodeId === n.id) add(`self:${n.id}`, `"${n.name}" drains into itself`);
+		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
+		const supply = n.supplyRule ?? 'damFirst';
+		if (n.kind !== 'farm' && (supply !== 'damFirst' || (n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined)))
+			add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
+		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
+		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
+		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
+			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
 		// Dam survey curve (WP-3.5): only a farm has a dam, and the curve must be one the run can use.
 		if (n.damCurve && n.damCurve.length) {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
