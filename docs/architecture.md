@@ -366,13 +366,24 @@ merges into:
   with no data rather than asking for the same empty window forever (#29).
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
-  value for never erases one already there. **A feed owns the days it
-  fetches in its target series**: on a day the source has a value, that value
-  replaces what was there, whether an earlier fetch, an upload or an import
-  put it (this is how final CHIRPS replaces preliminary). Days outside the
-  fetched window are never touched, and no other series is. To keep your own
-  record next to a feed, give it its own series name (the feed's
-  `targetName`, or the upload's). The merge and the feed's health
+  value for never erases one already there. **A feed replaces only the days
+  it wrote itself** (#30, `030_feed_days`): on a day the source has a value,
+  the feed writes it if the series is empty there or holds a value this feed
+  wrote (so final CHIRPS replaces preliminary, and a re-read revises), and
+  otherwise keeps what is there, an upload's or an import's, counting those
+  days in `last_meta.kept` (the feed card's "N days kept your own values").
+  The series row remembers which days its feed wrote (`time_series.feed_id`
+  and `feed_days`, a `datemultirange`, [data-model.md § Feed days](./data-model.md#feed-days-030_feed_dayssql)),
+  changed in the same locked write as the values. A user's write takes days
+  back: `POST …/series/merge` releases the days it sends and `PUT` the whole
+  series, even where the value is the same, so from then on the user's value
+  wins. Removing the feed, or pointing it at another series, releases all its
+  days there: they become ordinary data that any later feed keeps. Days a
+  feed wrote before `030` are nobody's. Days outside the fetched window are
+  never touched, and no other series is. To compare your own record with a
+  feed side by side, give the feed its own series name (its `targetName`);
+  attaching it to a series that already has data asks first, since the two
+  records would mix. The merge and the feed's health
   commit in the job's transaction, as the job's acting user. A forecast
   result is keyed by its issue date (`meta.issued`, which its days must start
   on, 16 at most); one older than the issue the feed last merged (the

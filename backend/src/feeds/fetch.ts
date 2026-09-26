@@ -91,7 +91,7 @@ export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate
 const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
 /**
  * The most bytes of meta JSON a result may carry: data_feed.last_meta holds at
- * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and `through`, and jsonb's
+ * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged`, `kept` and `through`, and jsonb's
  * text form adds a space after each colon and comma. The per-field limits
  * alone allow ~8.5 KB of multi-byte characters.
  */

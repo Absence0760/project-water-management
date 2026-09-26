@@ -233,11 +233,22 @@ export function healthMessage(h: FeedHealth): string {
 }
 
 /**
- * The existing series a new feed would take over, or null. A feed replaces
- * its target's values on every day it fetches, uploaded and imported ones
- * included (docs/architecture.md § Data feeds), so the form asks first when
- * the target already holds data. A series another feed already writes is not
- * a takeover: the server refuses a second feed for it with its own message.
+ * The days the last fetch left alone because the series already held a value
+ * the feed didn't write (last_meta.kept, issue #30), or null when none.
+ */
+export function keptNote(meta: FeedMeta['lastMeta']): string | null {
+	const n = meta?.kept;
+	if (typeof n !== 'number' || !(n > 0)) return null;
+	return n === 1 ? '1 day kept your own value' : `${n} days kept your own values`;
+}
+
+/**
+ * The existing series a new feed would write into, or null. A feed keeps the
+ * values already there, uploaded and imported ones included, and fills only
+ * empty days (docs/architecture.md § Data feeds), so the series would mix two
+ * records: the form asks first, offering a separate series. A series another
+ * feed already writes is not asked about: the server refuses a second feed
+ * for it with its own message.
  */
 export function takeoverOf(
 	series: readonly Pick<SeriesMeta, 'kind' | 'name' | 'length'>[],

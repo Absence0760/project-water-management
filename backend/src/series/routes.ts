@@ -38,11 +38,13 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// The whole series is now the user's: a data feed writing it keeps
+			// every day from here on (feed_id NULL clears feed_days, 030_feed_days).
 			const { rows } = await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
 				 VALUES ($1, $2, $3, $4, $5, $6)
 				 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
-					start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now()
+					start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(), feed_id = NULL
 				 RETURNING ${META}`,
 				[id, body.kind, body.name, body.unit, body.startDate, body.values]
 			);
@@ -56,7 +58,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			return c.json(await mergeInto(db, id, body));
+			return c.json((await mergeInto(db, id, body)).series);
 		});
 	})
 	.delete('/:id/series/:seriesId', async (c) => {

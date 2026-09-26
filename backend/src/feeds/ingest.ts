@@ -1,7 +1,9 @@
 // Apply a fetch's result to its feed, inside the job's transaction as the
 // feed's acting user: merge the days into the target series through the same
 // path as POST /projects/:id/series/merge (series/merge.ts mergeInto), then
-// record the feed's health. A failed fetch records the failure and writes no
+// record the feed's health. The merge replaces only days this feed wrote
+// itself, and fills empty ones: an uploaded or imported value is kept, and
+// counted in last_meta.kept (030_feed_days, #30). A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
 // queue from the fetcher Lambda, so it is untrusted input. An answer holding a
 // day after the newest the source can have (latestDay), or a day outside the
@@ -93,6 +95,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 	let lastDate: string | null = null;
 	let lastValue: number | null = null;
 	let merged = 0;
+	let kept = 0;
 	if (result.startDate !== null) {
 		let lastIdx = result.values.length - 1;
 		while (lastIdx >= 0 && result.values[lastIdx] === null) lastIdx--;
@@ -106,20 +109,22 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 			});
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
-				await mergeInto(db, feed.projectId, body, { keepOnNull: true });
+				// feedId: only this feed's own days (and empty ones) are replaced; any
+				// other value, an upload or an import, is kept (030_feed_days, #30).
+				({ written: merged, kept } = await mergeInto(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id }));
 			} catch (err) {
 				// The merge refuses before writing (e.g. the series would pass 60 000 days).
 				if (!(err instanceof ApiError)) throw err;
 				await recordFeedResult(db, feed.id, { ok: false, error: `the series could not take the new days: ${err.message}` });
 				return { merged: 0, lastDate: null };
 			}
-			merged = result.values.filter((v) => v !== null).length;
 			lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
 			lastValue = result.values[lastIdx]!;
 		}
 	}
-	// `through` last, so a key of that name in the fetcher's meta never stands.
-	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged } : { ...result.meta, merged, through: window.end };
+	// Ours last, so a key of the same name in the fetcher's meta never stands.
+	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
+	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged, kept } : { ...result.meta, merged, kept, through: window.end };
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	return { merged, lastDate };
 }

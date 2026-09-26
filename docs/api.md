@@ -528,7 +528,9 @@ sent are merged into the existing series by date. Incoming values win on
 overlapping days, the series extends in either direction, and any gap days
 between the old and new ranges become `null`. `413` if the merged series would
 exceed 60 000 days. A merge that changes nothing (a re-sent batch) leaves the
-row alone, so `updatedAt` doesn't move.
+row alone, so `updatedAt` doesn't move. A merge or `PUT` by a user also takes the days it writes back from the
+series' data feed, which then keeps them rather than replacing them
+([data-model.md § Feed days](./data-model.md#feed-days-030_feed_dayssql)).
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
@@ -1043,8 +1045,10 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `actingUser` is the display name fetches run as (null once that account is
   deleted: save the feed again). `lastDataDate` is a calendar day
   (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
-  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`,
-  and `through`, the last day the fetch asked for).
+  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts), plus ours:
+  `merged` (the days it wrote), `kept` (the days it left alone because the
+  series held a value the feed didn't write: an upload or import, #30) and
+  `through` (the last day the fetch asked for).
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all

@@ -121,7 +121,7 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 test('attaching a feed to a series that already has data asks first, and offers a separate series', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feed takeover');
-	// An imported gauge record the feed would overwrite.
+	// An imported gauge record the feed would mix with (it keeps these values and fills only empty days).
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2026-01-01', values: Array.from({ length: 1200 }, (_, i) => i % 7) });
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
@@ -134,7 +134,7 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	// Nothing is attached yet: the form asks, with focus on the safe choice.
 	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — catchment” already has data (1,200 days).' });
 	await expect(ask).toBeVisible();
-	await expect(ask).toHaveAccessibleDescription(/replace its values on every day it fetches, including values you uploaded or imported.*such as “CHIRPS”/);
+	await expect(ask).toHaveAccessibleDescription(/The values already there stay, including ones you uploaded or imported: the feed fills only the days without one.*such as “CHIRPS”/);
 	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
 	await expect(separate).toBeFocused();
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
@@ -161,14 +161,14 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	await expect(feeds).toHaveCount(1);
 	await expect(feeds).toContainText('Rainfall — catchment · CHIRPS');
 
-	// Taking over on purpose: "Replace its values" attaches into the existing series.
+	// Mixing on purpose: "Fill its empty days" attaches into the existing series.
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Into series').selectOption({ label: 'Rainfall — catchment' });
 	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 	// "CHIRPS" is taken now (the first feed's series name), so the suggestion moves on.
 	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS 2' })).toBeFocused();
-	await ask.getByRole('button', { name: 'Replace its values' }).click();
+	await ask.getByRole('button', { name: 'Fill its empty days' }).click();
 	await expect(feeds).toHaveCount(2);
 	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: Rainfall — catchment from cell -20.12, 25.17.' })).toBeVisible();
 	await expect(panel.getByRole('alertdialog')).toHaveCount(0);
