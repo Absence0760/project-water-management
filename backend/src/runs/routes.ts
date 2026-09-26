@@ -8,20 +8,27 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
+import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 // `evidence` is the run's place in the evidence history (010_run_nomination);
-// `pinned` keeps it past the storage cap (015_run_pinned).
+// `pinned` keeps it past the storage cap (015_run_pinned). `scenarioId` /
+// `scenarioName`: the scenario that made the run (023_scenarios; the name the
+// run recorded once the scenario is gone); `citedBy`: what keeps it for good.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
-	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned`;
-const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
+	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned,
+	r.scenario_id AS "scenarioId", COALESCE(sc.name, r.inputs->'scenario'->>'name') AS "scenarioName",
+	${CITED_BY_SQL} AS "citedBy"`;
+const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
+	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
+/** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */
+export const RUN_META_SQL = { meta: RUN_META, from: FROM_RUN } as const;
 
 /** Longest run note, in characters (007_run_notes.sql CHECK). */
 export const RUN_NOTES_MAX = 4000;
@@ -209,11 +216,20 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			const { rows: found } = await db.query<{ pinned: boolean }>('SELECT pinned FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
+			const { rows: found } = await db.query<{ pinned: boolean; cited: boolean }>(
+				'SELECT pinned, model_run_cited(id) AS cited FROM model_run WHERE project_id = $1 AND id = $2',
+				[id, runId]
+			);
 			if (!found[0]) throw new ApiError(404, 'not found');
-			if (body.pinned && !found[0].pinned) {
+			// Unpinning a cited run would change nothing (it stays kept), so say why instead.
+			if (body.pinned === false && found[0].pinned && found[0].cited) throw new ApiError(409, await citedMessage(db, id, runId, 'so it stays kept'));
+			if (body.pinned && !found[0].pinned && !found[0].cited) {
 				// The friendly answer; the model_run_pin_limit trigger enforces it again, race-free.
-				const { rows: n } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM model_run WHERE project_id = $1 AND pinned', [id]);
+				// A cited run's pin doesn't count (023_scenarios): it is kept anyway.
+				const { rows: n } = await db.query<{ n: number }>(
+					'SELECT count(*)::int AS n FROM model_run WHERE project_id = $1 AND pinned AND NOT model_run_cited(id)',
+					[id]
+				);
 				if (n[0]!.n >= PINNED_RUNS_PER_PROJECT_MAX) throw pinLimit();
 			}
 			// Only the columns sent: a pin leaves the note (and its stamp) alone, and the other way round.
@@ -251,7 +267,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				throw new ApiError(
 					409,
 					kept[0].cited
-						? 'this run is cited, so it is kept'
+						? await citedMessage(db, id, runId)
 						: kept[0].pinned
 							? 'this run is pinned; unpin it before deleting it'
 							: 'this run is or was nominated as evidence, so it is kept'

@@ -14,6 +14,7 @@ import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
+import type { RunScenarioSnapshot } from '../runs/execute.js';
 
 /** "<projectId>:<runId>" */
 const RunRef = z
@@ -46,22 +47,43 @@ interface LoadedRun {
 	notesUpdatedBy: string | null;
 	/** The run's place in its project's evidence history (010_run_nomination); null = never nominated. */
 	evidence: RunEvidence | null;
+	/** The scenario that made the run (023_scenarios); null for a run of the model, or once the scenario is deleted. */
+	scenarioId: string | null;
+}
+
+/**
+ * The scenario a side's run came from, as the run recorded it
+ * (`inputs.scenario`, runs/execute.ts RunScenarioSnapshot): the ops exactly as
+ * applied and how each was classed, whatever has happened to the scenario
+ * since. `name` is the scenario's current name, or the recorded one once it is
+ * deleted. Null for a run of the model.
+ */
+export interface CompareScenario {
+	id: string;
+	name: string;
+	baseRunId: string;
+	ops: RunScenarioSnapshot['ops'];
+	opsSha256: string;
+	ownedNodeIds: string[];
+	classified: RunScenarioSnapshot['classified'];
 }
 
 async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	// requireRole: 404 when the project is invisible (never 403 — viewer is the floor).
 	await requireRole(db, ref.projectId, 'viewer');
 	if (!UUID.test(ref.runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string }>(
+	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string; scenarioName: string | null }>(
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 		        r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 		        r.summary, r.inputs, p.name AS "projectName",
 		        COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
-		        r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy"
+		        r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
+		        r.scenario_id AS "scenarioId", sc.name AS "scenarioName"
 		 FROM model_run r
 		 JOIN project p ON p.id = r.project_id
 		 JOIN app_user u ON u.id = r.created_by
 		 LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
+		 LEFT JOIN scenario sc ON sc.id = r.scenario_id
 		 WHERE r.project_id = $1 AND r.id = $2`,
 		[ref.projectId, ref.runId]
 	);
@@ -72,9 +94,21 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,
 		[ref.runId]
 	);
-	const { projectName, ...rest } = row;
+	const { projectName, scenarioName, ...rest } = row;
 	const run: LoadedRun = { ...rest, evidence: runEvidence(await listNominations(db, ref.projectId), ref.runId) };
-	return { project: { id: ref.projectId, name: projectName }, run, catchmentSeries: series };
+	const recorded = (row.inputs as { scenario?: RunScenarioSnapshot }).scenario;
+	const scenario: CompareScenario | null = recorded
+		? {
+				id: recorded.id,
+				name: scenarioName ?? recorded.name,
+				baseRunId: recorded.baseRunId,
+				ops: recorded.ops,
+				opsSha256: recorded.opsSha256,
+				ownedNodeIds: recorded.ownedNodeIds,
+				classified: recorded.classified
+			}
+		: null;
+	return { project: { id: ref.projectId, name: projectName }, run, scenario, catchmentSeries: series };
 }
 
 export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
@@ -86,8 +120,8 @@ export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 		const inB = new Map(b.catchmentSeries.map((s) => [s.key, s]));
 		const catchmentSeries = a.catchmentSeries.filter((s) => inB.get(s.key)?.unit === s.unit);
 		return c.json({
-			a: { project: a.project, run: a.run },
-			b: { project: b.project, run: b.run },
+			a: { project: a.project, run: a.run, scenario: a.scenario },
+			b: { project: b.project, run: b.run, scenario: b.scenario },
 			comparison: compareRuns(a.run, b.run),
 			changes: diffInputs(a.run.inputs, b.run.inputs),
 			catchmentSeries

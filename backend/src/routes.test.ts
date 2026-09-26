@@ -55,6 +55,23 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Scenarios (WP-3.2, 023_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	it('inventories the scenario routes as auth-gated', () => {
+		const scenarios = [
+			'GET /projects/:id/scenarios',
+			'POST /projects/:id/scenarios',
+			'GET /projects/:id/scenarios/:sid',
+			'PATCH /projects/:id/scenarios/:sid',
+			'DELETE /projects/:id/scenarios/:sid',
+			'POST /projects/:id/scenarios/:sid/runs',
+			'POST /projects/:id/scenarios/:sid/rebase'
+		];
+		for (const r of scenarios) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');
