@@ -155,7 +155,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   and `source`. An invalid `pe` is a `400` with no database text. A monthly
   row of zeros saves, but a GR4J run on it is refused (`400`, "GR4J needs
   potential evaporation…", the engine's `GR4J_NO_PET`, below), as an A-pan
-  row of zeros is. Settings stored before it
+  row of zeros is. `panCoefficientSource` (engine ≥ 0.31.1) is a trimmed
+  string of at most 600 characters, '' for none: where the pan-coefficient
+  row came from, provenance only (a fit record's `forcing` may carry it
+  too). Settings stored before it
   read back as `{ kind: 'pan' }`
   ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
   `wr2012` (engine ≥ 0.6.0; model.md §2.10c) is the optional WR2012 check:

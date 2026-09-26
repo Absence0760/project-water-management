@@ -360,7 +360,8 @@ Tick items off (or move them into an issue) as they are done.
       and `pnpm pan-sensitivity` (refuses a monthly PE) follow it. Settings
       → Flow calibration also has an FAO-56 Table 5 helper that suggests the
       pan-coefficient row from monthly RH, wind, siting and fetch; it only
-      fills the form
+      fills the form, and (engine 0.31.1) writes where the values came from
+      into the row's `panCoefficientSource` note, which fits record
       ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
 - [ ] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*).** A rain-source

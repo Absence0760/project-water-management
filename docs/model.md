@@ -335,8 +335,8 @@ predates the setting, so run comparison reads it as legacy.
   - **Presets** (`PAN_COEFFICIENT_PRESETS`, `packages/engine/src/project.ts`;
     a simulated hydrologist recommendation, pending the real one). Three
     water-year (Oct–Sep) starting points a Settings picker can fill the row
-    with — the row stays monthly and editable after, and nothing records
-    which preset (or whether one at all) was used:
+    with — the row stays monthly and editable after; picking one writes its
+    name into `panCoefficientSource` (below), which stays editable too:
     | Preset | Oct–Mar | Apr–Sep |
     | --- | --- | --- |
     | Generic | 0.70 every month | 0.70 every month |
@@ -413,8 +413,13 @@ predates the setting, so run comparison reads it as legacy.
       reduction of 0–20 %, never applied by default, and its note says when
       one was.
 
-    The helper only fills the pan-coefficient row; the values stay editable
-    and nothing is stored about the lookup. It doesn't make the presets
+    The helper only fills the pan-coefficient row and its source note; the
+    values stay editable. The note, `settings.panCoefficientSource` (engine
+    ≥ 0.31.1, free text up to 600 characters, '' = none), reads e.g. "FAO-56
+    Table 5, Case A, 10 m green crop fetch; RH and wind: <the user's note>".
+    It is provenance only: the model never reads it, a fit records it as
+    `forcing.panCoefficientSource`, and editing it alone never marks the fit
+    "Forcing changed since fit" (like the monthly PE's `source`). It doesn't make the presets
     more than indicative, and it sets no rule on how far Kp may step
     between seasons (Table 5 itself moves with the season's wind and RH).
 
