@@ -69,7 +69,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated). |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. The outflow node can't be removed. |
 | `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
-| `crop.add` | `crop` | Adds a crop definition (12 crop factors). |
+| `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
 | `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
 | `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`. |
 | `transfer.remove` | `transferId` | Removes a transfer rule. |
@@ -101,7 +101,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 Ranges are the backend's (`backend/src/model/validate.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
-`effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
+`effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
 `ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
 `runoffModel`, `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,

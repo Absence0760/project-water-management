@@ -26,7 +26,7 @@
 		type WindowChoice,
 		type WindowPreset
 	} from './reportWindow';
-	import type { NetworkNode, Transfer } from '@water-management/engine';
+	import type { CropArea, CropDef, NetworkNode, Transfer } from '@water-management/engine';
 	import { curtailmentSeriesKeys, missingSeries, prepareWindowed, type RunNetwork, type SeriesKey, type Stored } from './windowedCurtailment';
 
 	let {
@@ -53,7 +53,16 @@
 	const recompute = $derived(!!stored && !!target && !sameWindow(target, stored));
 	/** The network the run used: its model snapshot, else today's. */
 	const runNetwork = $derived<RunNetwork>(
-		run.model?.nodes ? { nodes: run.model.nodes as NetworkNode[], transfers: (run.model.transfers as Transfer[] | undefined) ?? [] } : network
+		run.model?.nodes
+			? {
+					nodes: run.model.nodes as NetworkNode[],
+					transfers: (run.model.transfers as Transfer[] | undefined) ?? [],
+					// Crops with their own irrigation efficiency (engine ≥ 0.43.0) set a farm's consumptive share.
+					crops: (run.model.crops as CropDef[] | undefined) ?? [],
+					cropAreas: (run.model.cropAreas as CropArea[] | undefined) ?? [],
+					apanMm: (run.settings?.apanMm as number[] | undefined) ?? []
+				}
+			: network
 	);
 	const keys = $derived(stored ? curtailmentSeriesKeys(stored, runNetwork) : null);
 	/** Why this run can't be re-windowed (saved before the series it needs existed); null when it can. */

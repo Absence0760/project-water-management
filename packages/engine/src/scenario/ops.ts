@@ -204,6 +204,8 @@ export function transferFieldError(field: string, value: unknown): string | null
 export interface SettingsPathValues {
 	februaryDays: number;
 	effectiveRainFraction: number;
+	/** Monthly effective-rain fractions (engine ≥ 0.43.0); null = the one fraction in every month. */
+	effectiveRainFractionMonthly: number[] | null;
 	effectiveRainStoreMm: number;
 	lakeEvapFactor: number;
 	/** Monthly lake factors (WP-3.5); null = the one factor in every month. */
@@ -273,6 +275,7 @@ const gr4j = (key: string): Check => {
 const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	februaryDays: range(28, 29),
 	effectiveRainFraction: frac,
+	effectiveRainFractionMonthly: nullable(monthlyOf(frac)),
 	effectiveRainStoreMm: range(0, 500),
 	lakeEvapFactor: range(0, 2),
 	lakeEvapFactorMonthly: nullable(monthlyOf(range(0, 2))),
@@ -505,7 +508,9 @@ const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
-	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0')
+	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0'),
+	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
+	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
 };
 const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
 const LAND_COVER_FIELDS: Record<string, Check> = {
@@ -567,7 +572,7 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
 			break;
 		case 'crop.add':
-			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder'])) as unknown as CropDef };
+			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationEfficiency'])) as unknown as CropDef };
 			break;
 		case 'transfer.add':
 			op = { op: 'transfer.add', transfer: sub('transfer', TRANSFER_FIELDS) as unknown as Transfer };

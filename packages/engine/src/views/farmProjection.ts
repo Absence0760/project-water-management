@@ -32,7 +32,8 @@ import {
 	type ReportWindow
 } from '../network/curtailment';
 import { buildTopology, canonicalOrder } from '../network/topology';
-import type { CurtailmentFarm, CurtailmentSummary, NetworkNode, Transfer } from '../project';
+import type { CropArea, CurtailmentFarm, CurtailmentSummary, NetworkNode, Transfer } from '../project';
+import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
 
 /** A stored daily series: run_series.values, where a missing (non-finite) day is null. */
@@ -78,6 +79,17 @@ export interface ProjectionRun {
 	/** The run's own model snapshot (model_run.inputs.model), not the project's current model. */
 	nodes: readonly NetworkNode[];
 	transfers: readonly Transfer[];
+	/**
+	 * The snapshot's crops and crop areas and the run's monthly A-pan
+	 * (settings.apanMm): a farm whose crops carry their own irrigation
+	 * efficiency runs on a combined one (engine ≥ 0.43.0, ../demand.ts
+	 * farmIrrigationEfficiency), which its consumptive share follows. Absent
+	 * = each farm's own irrigationEfficiency, right for any run whose crops
+	 * carry none.
+	 */
+	crops?: readonly CropEfficiencyInput[];
+	cropAreas?: readonly CropArea[];
+	apanMm?: ArrayLike<unknown>;
 	/** A stored series of the run (null node = catchment); undefined when the run has none. */
 	series(nodeId: string | null, key: string): StoredValues | undefined;
 }
@@ -276,7 +288,7 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 		outflow,
 		supplied,
 		storage,
-		consumptivePerSupplied: nodes.map(consumptiveShare),
+		consumptivePerSupplied: nodes.map((n) => consumptiveShare(n, run)),
 		transfers: rules,
 		sites: siteNodes.map((node, si) => ({
 			node,
@@ -288,14 +300,20 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 	return { res, pos, siteNodes, approximate };
 }
 
+/** The farm's irrigation efficiency as runModel ran it: its own (1 outside (0, 1]), combined with its crops' own (engine ≥ 0.43.0). */
+function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm'>): number {
+	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, run.apanMm ?? []) : e;
+}
+
 /** k = 1 − β(1 − e) for a farm, 1 − r for another water user, 1 for a gauge; clamped as runModel clamps them (run.ts irrigation, otherUsers). */
-function consumptiveShare(n: NetworkNode): number {
+function consumptiveShare(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm'>): number {
 	if (n.kind === 'user') {
 		const r = n.userReturnPct ?? 0;
 		return 1 - (Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0);
 	}
 	if (n.kind !== 'farm') return 1;
-	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+	const e = runEfficiency(n, run);
 	const b = Number.isFinite(n.lossReturnFraction) ? Math.min(Math.max(n.lossReturnFraction, 0), 1) : 0;
 	return 1 - b * (1 - e);
 }
@@ -412,7 +430,7 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 			supplied: need(run, n.id, 'supplied', days),
 			ewrCharge: need(run, n.id, 'ewr_charge', days),
 			ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
-			consumptivePerSupplied: consumptiveShare(n)
+			consumptivePerSupplied: consumptiveShare(n, run)
 		};
 		return [{ i, input }];
 	});
@@ -429,7 +447,7 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 				supplied: need(run, n.id, 'supplied', days),
 				returned: need(run, n.id, 'return_flow', days),
 				ewrCharge: need(run, n.id, 'ewr_charge', days),
-				consumptivePerSupplied: consumptiveShare(n)
+				consumptivePerSupplied: consumptiveShare(n, run)
 			});
 		}
 	}
@@ -630,7 +648,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		name: node.name,
 		damCapacityM3: cap,
 		damMinPct: node.damMinPct,
-		irrigationEfficiency: node.irrigationEfficiency,
+		irrigationEfficiency: runEfficiency(node, run),
 		dataUntil: analysis.dataUntil,
 		season,
 		last30,

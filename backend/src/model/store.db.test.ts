@@ -159,6 +159,42 @@ describe('model store', () => {
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});
 
+	it('round-trips a crop’s own irrigation efficiency and the monthly effective-rain fraction (engine 0.43.0, issue #54)', async () => {
+		const u = await signUp('CropDemand');
+		const projectId = await newProject(u, 'Crop demand options');
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { sortOrder: 1 });
+		const drip = { id: crypto.randomUUID(), name: 'Citrus', sortOrder: 0, cropFactor: monthly(0.5), irrigationEfficiency: 0.9 };
+		const plain = { id: crypto.randomUUID(), name: 'Pasture', sortOrder: 1, cropFactor: monthly(0.55) };
+		const areas = [
+			{ nodeId: farm.id, cropId: drip.id, areaM2: 10_000 },
+			{ nodeId: farm.id, cropId: plain.id, areaM2: 20_000 }
+		];
+		const put = (crops: Record<string, unknown>[]) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops, cropAreas: areas, transfers: [] });
+		expect((await put([drip, plain])).status).toBe(200);
+		let got = await withUser(u.id, (db) => loadModel(db, projectId));
+		// A crop without one reads back without the key, so an older document is unchanged.
+		expect(got.crops).toEqual([drip, plain]);
+		expect('irrigationEfficiency' in got.crops[1]!).toBe(false);
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.crops).toEqual([drip, plain]);
+
+		// null clears it; out of (0, 1] is refused, the stored value untouched.
+		expect((await put([{ ...drip, irrigationEfficiency: null }, plain])).status).toBe(200);
+		got = await withUser(u.id, (db) => loadModel(db, projectId));
+		expect(got.crops[0]).toEqual({ id: drip.id, name: drip.name, sortOrder: 0, cropFactor: drip.cropFactor });
+		for (const bad of [0, 1.2, -0.5, '0.9']) expect((await put([{ ...drip, irrigationEfficiency: bad }, plain])).status, String(bad)).toBe(400);
+
+		// The monthly effective-rain fraction: PATCH, read back, cleared with null; out of 0–1 refused.
+		const f = [0.5, 0.55, 0.6, 0.65, 0.65, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.45];
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { effectiveRainFractionMonthly: f } })).status).toBe(200);
+		const s = await withUser(u.id, (db) => loadSettingsAndModel(db, projectId));
+		expect((s.settings as { effectiveRainFractionMonthly: number[] }).effectiveRainFractionMonthly).toEqual(f);
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { effectiveRainFractionMonthly: [...f.slice(0, 11), 1.1] } })).status).toBe(400);
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { effectiveRainFractionMonthly: null } })).status).toBe(200);
+		const cleared = await withUser(u.id, (db) => loadSettingsAndModel(db, projectId));
+		expect((cleared.settings as { effectiveRainFractionMonthly: unknown }).effectiveRainFractionMonthly).toBeNull();
+	});
+
 	it('loads an empty model as empty lists, and settings with the model in one call', async () => {
 		const u = await signUp('Empty');
 		const projectId = await newProject(u, 'Empty');

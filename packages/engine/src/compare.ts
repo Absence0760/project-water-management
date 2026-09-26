@@ -733,6 +733,9 @@ function diffSettings(
 	// Monthly lake factors (WP-3.5); null = the one factor in every month.
 	const lk = optionalMonthlyChange(a.lakeEvapFactorMonthly, b.lakeEvapFactorMonthly, '', 'the one factor');
 	if (lk) push('Monthly dam evaporation factors', `Monthly dam evaporation factors: ${lk}`);
+	// Monthly effective-rain fractions (engine ≥ 0.43.0); null = the one fraction in every month.
+	const er = optionalMonthlyChange(a.effectiveRainFractionMonthly, b.effectiveRainFractionMonthly, '', 'the one fraction');
+	if (er) push('Monthly effective rain fractions', `Monthly effective rain fractions: ${er}`);
 	const pe = peChange(a.pe, b.pe);
 	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
@@ -795,7 +798,8 @@ function diffSettings(
 		'zeroRainRuns',
 		'fitRecord',
 		'pe',
-		'lakeEvapFactorMonthly'
+		'lakeEvapFactorMonthly',
+		'effectiveRainFractionMonthly'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -1087,6 +1091,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" renamed from "${x.name}"` });
 		const c = monthlyChange((x as CropDef).cropFactor, (y as CropDef).cropFactor, '');
 		if (c) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" crop factor: ${c}` });
+		// A crop's own irrigation efficiency (engine ≥ 0.43.0); none = the farm's.
+		const ea = (x as CropDef).irrigationEfficiency ?? null;
+		const eb = (y as CropDef).irrigationEfficiency ?? null;
+		const eff = (v: number | null) => (v === null ? "the farm's" : pct(v));
+		if (!same(ea, eb)) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" irrigation efficiency: ${eff(ea)} → ${eff(eb)}` });
 	}
 
 	// --- land cover (WP-1.35), keyed by (farm name, class) so copies line up ---

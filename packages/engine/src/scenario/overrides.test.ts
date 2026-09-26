@@ -604,6 +604,27 @@ describe('validateScenarioOps', () => {
 		expect(ops).toEqual([{ op: 'demand.scale', factor: 0, nodeIds: ['A'], months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], category: 'user' }]);
 	});
 
+	it('takes a crop’s own irrigation efficiency and the monthly effective-rain fraction (engine 0.43.0)', () => {
+		const crop = { id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.5) };
+		const f = new Array(12).fill(0.6);
+		const good = validateScenarioOps([
+			{ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0.9 } },
+			{ op: 'crop.add', crop: { ...crop, id: 'c3', name: 'Olives', irrigationEfficiency: null } },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: f },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: null }
+		]);
+		expect(good.errors).toEqual([]);
+		expect((good.ops[0] as { crop: { irrigationEfficiency?: number } }).crop.irrigationEfficiency).toBe(0.9);
+		const bad = validateScenarioOps([
+			{ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0 } },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: [...f.slice(0, 11), 1.5] }
+		]);
+		expect(bad.ops).toEqual([]);
+		expect(bad.errors).toHaveLength(2);
+		// Applied, the scenario runs the crop on its own efficiency.
+		expect(one({ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0.9 } }).input.model.crops.find((c) => c.id === 'c2')?.irrigationEfficiency).toBe(0.9);
+	});
+
 	it('names every error by path and drops the bad entries', () => {
 		const { ops, errors } = validateScenarioOps([
 			{ op: 'node.set', nodeId: 'A', field: 'kind', value: 'gauge' },

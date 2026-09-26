@@ -777,6 +777,27 @@ describe('SettingsPatch.lakeEvapFactorMonthly (WP-3.5)', () => {
 	});
 });
 
+describe('SettingsPatch.effectiveRainFractionMonthly (engine 0.43.0, issue #54)', () => {
+	const ok = (effectiveRainFractionMonthly: unknown) => SettingsPatch.safeParse({ effectiveRainFractionMonthly }).success;
+
+	it('accepts 12 fractions of 0–1, or null for the one fraction every month', () => {
+		expect(ok(null)).toBe(true);
+		expect(ok([0.5, 0.55, 0.6, 0.65, 0.65, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.45])).toBe(true);
+		expect(ok(new Array(12).fill(1))).toBe(true);
+		// A row of zeros is the modeller's call (the run warns about it), not an error.
+		expect(ok(new Array(12).fill(0))).toBe(true);
+	});
+
+	it('rejects a short or long row, a fraction outside 0–1, a percentage or a non-number', () => {
+		for (const v of [[0.5], new Array(13).fill(0.5), [...new Array(11).fill(0.5), -0.1], [...new Array(11).fill(0.5), 1.01], new Array(12).fill(65), 'monthly'])
+			expect(ok(v), JSON.stringify(v)).toBe(false);
+	});
+
+	it('is null for a project that never set it (the run uses effectiveRainFraction)', () => {
+		expect(mergeSettings({}).effectiveRainFractionMonthly).toBeNull();
+	});
+});
+
 describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 	const issues = (ewrRules: unknown) => {
 		const r = SettingsPatch.safeParse({ ewrRules });

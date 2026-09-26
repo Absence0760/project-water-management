@@ -11,6 +11,96 @@ export interface Crop {
 	name: string;
 	/** Crop factor per water-year month (Oct–Sep). */
 	cropFactor: Monthly;
+	/** The crop's own irrigation efficiency, 0 < e ≤ 1 (engine ≥ 0.43.0); absent = the farm's. */
+	irrigationEfficiency?: number;
+}
+
+/** What farmIrrigationEfficiency reads of a crop: a CropDef or a Crop. */
+export interface CropEfficiencyInput {
+	id: string;
+	cropFactor: ArrayLike<unknown>;
+	irrigationEfficiency?: number | null;
+}
+
+/** A crop's own efficiency when it is one (0 < e ≤ 1); anything else falls back to the farm's. */
+export function ownCropEfficiency(e: unknown): number | undefined {
+	return typeof e === 'number' && e > 0 && e <= 1 ? e : undefined;
+}
+
+/**
+ * A farm's irrigation efficiency from its crops' (engine ≥ 0.43.0, issue #54,
+ * docs/model.md §2.3). Each crop uses its own efficiency e_c when it has one,
+ * else the farm's e_f, and the farm's efficiency is their harmonic mean
+ * weighted by each crop's annual gross requirement:
+ *
+ *   w_c = area_c × Σ_m MAX(0, cropFactor_c[m]) × MAX(0, A-pan[m])
+ *   e   = Σ w_c ÷ Σ (w_c ÷ e_c)
+ *
+ * so the abstraction D = F ÷ e is Σ F_c ÷ e_c when each crop's share F_c of
+ * the requirement F is its share of the gross, and the application losses
+ * (1 − e)·G are each crop's losses summed. One number per farm, not per
+ * month: the network step keeps one efficiency per farm (model.md §2.3 says
+ * what that leaves out). With no A-pan anywhere the weights are area ×
+ * Σ crop factor. A farm none of whose cropped crops carries its own
+ * efficiency returns e_f untouched, so absent fields give bit-identical runs.
+ *
+ * Crops are summed in id order, as buildDemand sums them (order invariance).
+ */
+export function farmIrrigationEfficiency(
+	farmEfficiency: number,
+	crops: readonly CropEfficiencyInput[],
+	areaM2ByCropId: ReadonlyMap<string, number>,
+	apanMm: ArrayLike<unknown>
+): number {
+	const grown = crops.filter((c) => (areaM2ByCropId.get(c.id) ?? 0) > 0);
+	if (!grown.some((c) => ownCropEfficiency(c.irrigationEfficiency) !== undefined)) return farmEfficiency;
+	grown.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	const num = (v: unknown) => {
+		const x = Number(v);
+		return Number.isFinite(x) && x > 0 ? x : 0;
+	};
+	let w = 0, wOverE = 0, k = 0, kOverE = 0;
+	for (const c of grown) {
+		const area = areaM2ByCropId.get(c.id)!;
+		const e = ownCropEfficiency(c.irrigationEfficiency) ?? farmEfficiency;
+		let byApan = 0, byFactor = 0;
+		for (let m = 0; m < 12; m++) {
+			const f = num(c.cropFactor[m]);
+			byApan += f * num(apanMm[m]);
+			byFactor += f;
+		}
+		w += area * byApan;
+		wOverE += (area * byApan) / e;
+		k += area * byFactor;
+		kOverE += (area * byFactor) / e;
+	}
+	if (w > 0) return w / wOverE;
+	if (k > 0) return k / kOverE;
+	return farmEfficiency;
+}
+
+/**
+ * farmIrrigationEfficiency straight from a model document: the farm's crop
+ * areas (crops the model knows, summed per crop) and its A-pan. For readers
+ * of a saved run (verify/checks.ts, views/farmProjection.ts) that need the
+ * efficiency runModel used. `farmEfficiency` should already be the one the
+ * run used (a value outside (0, 1] runs as 1).
+ */
+export function modelFarmEfficiency(
+	farmEfficiency: number,
+	nodeId: string,
+	crops: readonly CropEfficiencyInput[],
+	cropAreas: readonly { nodeId: string; cropId: string; areaM2: number }[],
+	apanMm: ArrayLike<unknown>
+): number {
+	if (!crops.some((c) => ownCropEfficiency(c.irrigationEfficiency) !== undefined)) return farmEfficiency;
+	const known = new Set(crops.map((c) => c.id));
+	const areas = new Map<string, number>();
+	const rows = cropAreas.filter((a) => a.nodeId === nodeId && known.has(a.cropId));
+	// The same order buildDemand sums them in: crop id, then area.
+	rows.sort((a, b) => (a.cropId < b.cropId ? -1 : a.cropId > b.cropId ? 1 : a.areaM2 - b.areaM2));
+	for (const a of rows) areas.set(a.cropId, (areas.get(a.cropId) ?? 0) + a.areaM2);
+	return farmIrrigationEfficiency(farmEfficiency, crops, areas, apanMm);
 }
 
 /**
@@ -106,22 +196,27 @@ export interface FarmDailyDemand {
  * The store is kept in m³ over the cropped area (Smax = area × storeMaxMm ÷
  * 1000), so storeMaxMm = 0 gives W = 0 every day and a net demand bit for bit
  * equal to the old MAX(0, gross − Pe) (netDailyDemandM3). W starts empty.
+ * `effectiveRainFraction` is one number, or one per day (the day's month's
+ * value of settings.effectiveRainFractionMonthly, engine ≥ 0.43.0).
  */
 export function farmDailyDemand(
 	grossM3PerDay: ArrayLike<number>,
 	croppedAreaM2: number,
 	rainMm: ArrayLike<number>,
-	effectiveRainFraction: number,
+	effectiveRainFraction: number | ArrayLike<number>,
 	storeMaxMm: number
 ): FarmDailyDemand {
 	const days = grossM3PerDay.length;
 	const out: FarmDailyDemand = { net: new Float64Array(days), used: new Float64Array(days), storeMm: new Float64Array(days) };
 	const maxM3 = (croppedAreaM2 * storeMaxMm) / 1000;
+	// One fraction for every day, or one per day (a monthly fraction, engine ≥ 0.43.0, issue #54).
+	const perDay = typeof effectiveRainFraction === 'number' ? null : effectiveRainFraction;
+	const one = typeof effectiveRainFraction === 'number' ? effectiveRainFraction : 0;
 	let w = 0;
 	for (let t = 0; t < days; t++) {
 		// A negative gross (bad crop factors) needs no water, as MAX(0, …) had it.
 		const need = Math.max(0, grossM3PerDay[t]!);
-		const available = w + rainOffsetM3(croppedAreaM2, rainMm[t]!, effectiveRainFraction);
+		const available = w + rainOffsetM3(croppedAreaM2, rainMm[t]!, perDay ? perDay[t]! : one);
 		const used = Math.min(available, need);
 		out.used[t] = used;
 		out.net[t] = need - used;

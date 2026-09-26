@@ -5,7 +5,7 @@
 // so they must balance as exactly as the random fuzz networks do. Built
 // without the stored fit (several seconds; it only changes GR4J's
 // parameters): examples.test.ts covers the examples as seeded.
-import { runModel, SUPPLY_DEFAULTS } from '@water-management/engine';
+import { defaultProjectSettings, runModel, SUPPLY_DEFAULTS } from '@water-management/engine';
 import { checkAll, sameOutput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
@@ -52,6 +52,30 @@ describe('engine invariants on the example catchments', () => {
 		expect(sameOutput(out, runModel(explicit))).toBe(true);
 		expect(out.series.some((s) => s.key === 'river_abstraction')).toBe(false);
 	}, 60_000);
+
+	// Crop demand options (engine 0.43.0, issue #54): unset, they change nothing,
+	// bit for bit; set, every invariant still holds on a real-sized network.
+	it(`${examples[0]!.name}: absent crop efficiencies and monthly effective rain give the identical run`, () => {
+		const base = inputOf(examples[0]!);
+		const before = runModel(base);
+		const unset = structuredClone(base);
+		unset.model.crops = unset.model.crops.map((c) => ({ ...c, irrigationEfficiency: null }));
+		unset.settings = { ...unset.settings, effectiveRainFractionMonthly: null };
+		expect(runModel(unset)).toEqual(before);
+		// The annual fraction written out for every month is the same run too.
+		const repeated = structuredClone(base);
+		const annual = repeated.settings.effectiveRainFraction ?? defaultProjectSettings().effectiveRainFraction;
+		repeated.settings = { ...repeated.settings, effectiveRainFractionMonthly: new Array(12).fill(annual) as never };
+		expect(runModel(repeated).series).toEqual(before.series);
+	}, 60_000);
+
+	it(`${examples[0]!.name}: every invariant holds with per-crop efficiencies and a monthly effective-rain fraction`, () => {
+		const input = inputOf(examples[0]!);
+		input.model.crops = input.model.crops.map((c, i) => ({ ...c, irrigationEfficiency: [0.9, 0.75, 0.85][i % 3] }));
+		input.settings = { ...input.settings, effectiveRainFractionMonthly: [0.5, 0.6, 0.7, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.45] as never };
+		expect(checkAll(input, 1)).toBeNull();
+	}, 60_000);
+
 	// The GR4J-run timing budget lives in examples.perf.test.ts, its own vitest
 	// project (run serially via `pnpm test:perf`, not part of `pnpm test`) —
 	// see docs/followups.md "Wall-clock test flakes under load" (2026-09-24).
