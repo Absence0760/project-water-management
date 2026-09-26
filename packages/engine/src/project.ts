@@ -793,6 +793,14 @@ export interface NetworkNode {
 export const SUPPLY_RULES = ['damFirst', 'riverFirst', 'trigger', 'runOfRiver'] as const;
 export type SupplyRule = (typeof SUPPLY_RULES)[number];
 
+/** Each supply rule in plain words, as run comparison, the scenario form and the node form show it. */
+export const SUPPLY_RULE_LABEL: Record<SupplyRule, string> = {
+	damFirst: 'dam only',
+	riverFirst: 'river first',
+	trigger: 'dam, river when low',
+	runOfRiver: 'run of river'
+};
+
 /** What a node without the supply fields runs as: the dam only, no river pump (WP-3.8). */
 export const SUPPLY_DEFAULTS = {
 	supplyRule: 'damFirst',
