@@ -70,6 +70,16 @@ export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate
 	}
 }
 
+/** Text Postgres will store: it refuses U+0000 in text and in jsonb. */
+const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
+/**
+ * The most bytes of meta JSON a result may carry: data_feed.last_meta holds at
+ * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and jsonb's
+ * text form adds a space after each colon and comma. The per-field limits
+ * alone allow ~8.5 KB of multi-byte characters.
+ */
+export const FEED_META_MAX_BYTES = 3072;
+
 /** The fetcher's answer: days to merge (nulls are gaps, never erasures), or a failure. */
 export const FetchResult = z.discriminatedUnion('ok', [
 	z
@@ -79,11 +89,14 @@ export const FetchResult = z.discriminatedUnion('ok', [
 			startDate: SeriesStartDate.nullable(),
 			values: z.array(z.number().finite().nonnegative().nullable()).max(MAX_SERIES_VALUES),
 			/** What the source said about the data, for the status panel. Small and flat. */
-			meta: z.record(z.string().max(40), z.union([z.string().max(100), z.number().finite()])).refine((m) => Object.keys(m).length <= 20)
+			meta: z
+				.record(StoredText(40), z.union([StoredText(100), z.number().finite()]))
+				.refine((m) => Object.keys(m).length <= 20)
+				.refine((m) => Buffer.byteLength(JSON.stringify(m)) <= FEED_META_MAX_BYTES, `meta is over ${FEED_META_MAX_BYTES} bytes`)
 		})
 		.strict()
 		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values'),
-	z.object({ ok: z.literal(false), error: z.string().min(1).max(FEED_ERROR_MAX) }).strict()
+	z.object({ ok: z.literal(false), error: StoredText(FEED_ERROR_MAX).min(1) }).strict()
 ]);
 export type FetchResult = z.output<typeof FetchResult>;
 

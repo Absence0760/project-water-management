@@ -351,12 +351,24 @@ merges into:
   never reaches before it, where the series may hold the owner's own data.
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
-  value for never erases one already there. The merge and the feed's health
+  value for never erases one already there. **A feed owns the days it
+  fetches in its target series**: on a day the source has a value, that value
+  replaces what was there, whether an earlier fetch, an upload or an import
+  put it (this is how final CHIRPS replaces preliminary). Days outside the
+  fetched window are never touched, and no other series is. To keep your own
+  record next to a feed, give it its own series name (the feed's
+  `targetName`, or the upload's). The merge and the feed's health
   commit in the job's transaction, as the job's acting user. A forecast
   result is keyed by its issue date (`meta.issued`, which its days must start
   on, 16 at most); one older than the issue the feed last merged (the
   `ingest-results` queue does not keep order) is dropped, series and health
-  untouched, so an older forecast never overwrites a newer one.
+  untouched, so an older forecast never overwrites a newer one. Re-reading an
+  unchanged window (CHIRPS does, every day) leaves the series row alone, so
+  its `updatedAt` ("new data since the last run") moves only when a value
+  does. An answer with a day after the newest the source can have (today, or
+  a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
+  would otherwise pin the feed's newest date, which only moves forward, in
+  the future.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who

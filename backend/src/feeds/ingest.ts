@@ -3,7 +3,8 @@
 // path as POST /projects/:id/series/merge (series/merge.ts mergeInto), then
 // record the feed's health. A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
-// queue from the fetcher Lambda, so it is untrusted input.
+// queue from the fetcher Lambda, so it is untrusted input. An answer holding a
+// day after the newest the source can have (latestDay) is refused whole.
 //
 // A CHIRPS-GEFS result is one whole issue, keyed by its issue date: its days
 // start on that date and number at most GEFS_DAYS. The newest issue merged
@@ -15,10 +16,15 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { mergeInto, SeriesBody } from '../series/merge.js';
-import { SOURCES } from './config.js';
-import { FetchResult } from './fetch.js';
+import { type FeedSource, SOURCES } from './config.js';
+import { FetchResult, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { type FeedRow, lockFeedIssued, recordFeedResult } from './store.js';
+
+/** The newest day a source can have on `today` (UTC): a forecast's 16th day, else today. */
+export function latestDay(source: FeedSource, today: string): string {
+	return source === 'chirps_gefs' ? fromEpochDay(toEpochDay(today) + GEFS_DAYS - 1) : today;
+}
 
 export interface IngestOutcome {
 	merged: number;
@@ -40,6 +46,15 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise
 	const result = parsed.data;
 	if (!result.ok) {
 		await recordFeedResult(db, feed.id, { ok: false, error: result.error });
+		return { merged: 0, lastDate: null };
+	}
+	// A day the source can't have published yet (a wrong clock or a bad
+	// message) would become the feed's newest date, which only moves forward:
+	// every later window would start after it and the feed would never read
+	// real days again. Refuse the whole answer.
+	const latest = latestDay(feed.source, utcToday());
+	if (result.startDate !== null && toEpochDay(result.startDate) + result.values.length - 1 > toEpochDay(latest)) {
+		await recordFeedResult(db, feed.id, { ok: false, error: `the fetcher’s answer had days after ${latest}, so nothing was written` });
 		return { merged: 0, lastDate: null };
 	}
 	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
