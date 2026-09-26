@@ -275,6 +275,11 @@ instead of the endpoints would cost more (~$33 + data), and the fetcher
 Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
 needing one.
 
+These are the minimal (default) figures. The full, highly available
+configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $110–115 in
+us-east-1) is costed in
+[docs/deployment-tiers.md](../docs/deployment-tiers.md).
+
 ## Operator steps
 
 Claude does not run any of these, and none of them print a secret. Replace

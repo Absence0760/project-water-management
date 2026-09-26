@@ -808,4 +808,6 @@ the report renderer run outside the VPC for the same reason. Total ≈ $50/month
 us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
 is set from `budget_monthly_usd` (default 60; raise it to ~80 for
-af-south-1).
+af-south-1). The minimal (defaults) and full (Multi-AZ, highly available)
+configurations, their tfvars and monthly cost are compared in
+[deployment-tiers.md](./deployment-tiers.md).
