@@ -383,6 +383,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		effectiveRainFraction: 0.65,
 		effectiveRainStoreMm: 25,
 		lakeEvapFactor: 0.75,
+		lakeEvapFactorMonthly: null,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },

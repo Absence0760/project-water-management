@@ -11,6 +11,7 @@ import {
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
 	isIsoDate,
+	nodeAddFieldError,
 	nodeFieldError,
 	settingsValueError,
 	transferFieldError,
@@ -90,7 +91,7 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
 					if (!Number.isInteger(v)) fail('the new node\'s sortOrder must be a whole number');
 					continue;
 				}
-				const e = nodeFieldError(k, v);
+				const e = nodeAddFieldError(k, v);
 				if (e) fail(`the new node's ${k} ${e}`);
 			}
 			const [node] = upgradeLegacyModel({ nodes: [cloneData(op.node)] }).nodes as NetworkNode[];

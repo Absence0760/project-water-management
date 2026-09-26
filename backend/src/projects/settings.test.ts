@@ -749,8 +749,8 @@ describe('SettingsPatch.lakeEvapFactorMonthly (WP-3.5)', () => {
 		for (const v of [[0.7], new Array(13).fill(0.7), [...new Array(11).fill(0.7), -0.1], [...new Array(11).fill(0.7), 2.5], 'monthly']) expect(ok(v), JSON.stringify(v)).toBe(false);
 	});
 
-	it('is absent for a project that never set it (the run uses lakeEvapFactor)', () => {
-		expect(mergeSettings({}).lakeEvapFactorMonthly).toBeUndefined();
+	it('is null for a project that never set it (the run uses lakeEvapFactor)', () => {
+		expect(mergeSettings({}).lakeEvapFactorMonthly).toBeNull();
 	});
 });
 

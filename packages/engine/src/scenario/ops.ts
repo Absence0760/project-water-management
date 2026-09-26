@@ -416,6 +416,11 @@ const NODE_FIELDS: Record<string, Check> = {
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
 	)
 };
+/** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
+export function nodeAddFieldError(field: string, value: unknown): string | null {
+	const c = NODE_FIELDS[field];
+	return c ? c(value) : `"${field}" is not a node field`;
+}
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
 const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES]);
 const CROP_FIELDS: Record<string, Check> = {

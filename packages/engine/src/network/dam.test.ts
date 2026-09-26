@@ -6,6 +6,7 @@ import type { DamCurvePoint, ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { checkInvariants } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
+import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
 import { curveAreaAt, damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
 
@@ -191,6 +192,23 @@ describe('dam storage (WP-3.5)', () => {
 		g.nodes[0]!.damCurve = SURVEY;
 		expect(modelRuleProblems(g)).toEqual(['"G": dam survey curve: only a farm has a dam']);
 		expect(modelRuleProblems(input({ damCurve: SURVEY }).model)).toEqual([]);
+	});
+
+	it('a scenario can add a dam with a survey curve and set its release rule, but not break the curve rule', () => {
+		const base = input({});
+		const dam = { ...node('N', 'farm', 'A', { damCapacityM3: 100_000, damCurve: SURVEY }), sortOrder: 5 };
+		const ok = applyScenario(base, [
+			{ op: 'node.add', node: dam },
+			{ op: 'node.set', nodeId: 'A', field: 'damReleaseRule', value: 'passInflow' },
+			{ op: 'node.set', nodeId: 'A', field: 'damSeepageReturnPct', value: 0.5 },
+			{ op: 'settings.set', path: 'lakeEvapFactorMonthly', value: flat(0.8) }
+		]);
+		expect(ok.problems).toEqual([]);
+		expect(ok.input.model.nodes.find((n) => n.id === 'N')!.damCurve).toEqual(SURVEY);
+		const bad = applyScenario(base, [{ op: 'node.add', node: { ...dam, damCurve: [SURVEY[1]!] } }]);
+		expect(bad.problems.join()).toMatch(/dam survey curve: a survey curve needs at least two rows/);
+		const junk = applyScenario(base, [{ op: 'node.add', node: { ...dam, damCurve: 'steep' as never } }]);
+		expect(junk.problems.join()).toMatch(/damCurve must be up to 200 rows/);
 	});
 
 	it('monthly lake factors move evaporation month by month', () => {
