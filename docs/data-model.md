@@ -60,7 +60,7 @@ erDiagram
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql) | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`, `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Two keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr } }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist; how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
+| `project` | One catchment/place: name, description, optional `team_id`, `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [063](#legacy-runoff-settings-removed-063_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Two keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr } }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist; how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep), a display `sort_order` (003) and an optional `irrigation_efficiency` (061, engine ≥ 0.43.0, issue #54: 0 < e ≤ 1 by CHECK, NULL = the farm's `node.irrigation_efficiency`; a farm runs on its crops' efficiencies weighted by annual requirement, [model.md §2.3](./model.md#23-irrigation-demand) step 6) | `[Crop demand]` crop table (b023 has no per-crop efficiency; the AI workbook v004's `Crop_Factors` sheet has one) |
@@ -346,7 +346,8 @@ B on … because …". A run can be nominated again later (A, B, A).
   says. Runs are immutable except `notes`, so the copy can't drift.
 - **Rules the trigger enforces** (the API checks them first for a clear `409`):
   the run belongs to the same project (`foreign_key_violation`); it is not a
-  legacy-model run, which is workbook comparison only (audit H1); it is not
+  legacy-model run (a stored run from before engine 1.0.0), which is
+  workbook comparison only (audit H1); it is not
   already the current nomination; the project has fewer than **50**
   nominations. The trigger takes a per-project advisory lock, so two
   nominations can't race past these checks or share a timestamp.
@@ -435,7 +436,9 @@ again when a run snapshots the settings (`executeRun`), so each
 `model_run.inputs.settings` carries the fit record as it stood for that run's
 parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
-they add no policy. They are small: a fit record is a few KB.
+they add no policy. They are small: a fit record is a few KB. A fit record
+of the legacy runoff model was cleared by migration 063 (engine 1.0.0), and
+`mergeSettings` drops one on read.
 
 ### Change history and audit log (030_history.sql)
 
@@ -1701,6 +1704,30 @@ project. `job` holds status, progress and errors.
 - **Indexes**: `(project_id, created_at DESC)` (the list, and the project
   key), `base_run_id`, `job_id`, `created_by`; on members the unique
   `(sweep_id, position)` and `(sweep_id, lower(name))`, and `project_id`.
+
+### Legacy runoff settings removed (063_remove_legacy_runoff.sql)
+
+Engine 1.0.0 removed the legacy b023 recession runoff model (issue #16,
+[model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)). 063 changes
+`project.settings` only, so the stored rows say what runs:
+
+- `runoffModel` other than `'gr4j'` (that is, `'legacy'`) becomes `'gr4j'`;
+- `calibration` loses the legacy model's keys (the engine's
+  `RETIRED_CALIBRATION_KEYS`: `a`, `b`, `summerFactor`, `winterFactor`,
+  `summerMonths`, `baseFlowInitial`, `baseResetRatio`, `winterTodayRainMm`,
+  `winterNextDayRainMm`, `shiftPeakIndexLo`, `shiftPeakIndexHi`,
+  `amplitudeM3Day`, `recessionDaysMax`, `recessionFactors`,
+  `recessionCurveM3Day`), keeping `rainThresholdMm` and `catchmentAreaKm2`;
+- a `fitRecord` of any model but GR4J is set to null.
+
+The engine (`prepare.ts`) and the backend (`projects/settings.ts`
+`mergeSettings`) do the same to any settings they read, so a run's snapshot
+never names `'legacy'` for a GR4J run. Stored runs (`model_run.inputs`) and
+scenario ops are left as they are: a run whose settings say `'legacy'`, or
+name no runoff model, ran the legacy model and stays readable, badged and
+never re-run, and a scenario op is hashed (`ops_sha256`), so an op on a
+retired settings path stays stored and the engine refuses it with a reason
+([scenarios.md](./scenarios.md)). No table, column, policy or grant changes.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 
