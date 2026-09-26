@@ -2163,6 +2163,41 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Crop factors (issue #54 item 1)
+
+- [x] **Reference crop library and Load crop factors** (2026-09-26). ARC/SABI
+      A-pan factors (winter rainfall, Tables 4.13–4.15; pecan from 4.10) and
+      SABI 2021 system efficiencies, loaded into the crop table from the Crops
+      tab with a diff and the demand difference, saved through the normal
+      save bar ([model.md §2.3 item 8](./model.md), [ui.md § Load crop
+      factors](./ui.md#load-crop-factors)). No project's numbers change by
+      default.
+- [ ] **The hydrologist's choice (Q9/Q10).** Which crop set each catchment
+      uses (library, v004 × Kp, their own) and which irrigation systems the
+      farms have. Then record the choice and evidence in
+      `docs/engine-audit.md` and load it (the dialog does the loading).
+      Also for them to confirm: a Table 4.14 part month (e.g. mealies to
+      15 Feb) keeps its printed factor rather than being prorated, and the
+      stage-to-month rule for vegetables (model.md §2.3 item 8). Trigger:
+      their answer on #46.
+- [ ] **The AI workbook v004 can't be loaded.** The browser importer reads
+      b023 only (it needs b023's named ranges), and v004's `Crop_Factors` /
+      `Crop_Areas` sheets are node-based with none. Durable fix: a small
+      reader for those two sheets beside `spreadsheet/import/crops.ts`
+      (sheet by name, the month header row), as a third source in the
+      dialog, where Kp (default 0.75 for it) already applies. Until then a
+      modeller enters v004's values by hand. Trigger: the hydrologist wants
+      v004's set compared (Q9), with a synthetic v004-shaped fixture for the
+      test (never the client file).
+- [ ] **Two tables of indicative irrigation efficiencies.** The node form's
+      system helper uses the engine's `IRRIGATION_SYSTEMS` (micro 0.85,
+      sprinkler 0.75, flood 0.65, "typical values"), the dialog the SABI
+      2021 ranges with Q10's values (`crops/library.ts` `LIBRARY_SYSTEMS`:
+      micro 0.82, permanent sprinkler 0.80, surface 0.70 …). Durable fix:
+      once Q10 is answered, keep one table (SABI 2021, with its source) in
+      the engine and use it in both places; that changes what a new pick in
+      the node form sets, not any saved value. Trigger: Q10.
+
 ## Notes (WP-2.7)
 
 - [x] **Notes in the project export and copy** (2026-09-26). The export
