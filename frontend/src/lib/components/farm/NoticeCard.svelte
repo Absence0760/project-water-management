@@ -6,7 +6,9 @@
 	import type { NoticeVm } from './cards';
 	import { NO_RESTRICTION } from './cards';
 
-	let { notice }: { notice: NoticeVm | null } = $props();
+	// `lang`: the language the WUA's words are in, when it isn't the page's
+	// (the /share page's Afrikaans notice); our own label stays unmarked.
+	let { notice, lang = null }: { notice: NoticeVm | null; lang?: string | null } = $props();
 </script>
 
 {#if notice}
@@ -23,14 +25,14 @@
 				<span>{notice.label}</span>
 			</div>
 		{/if}
-		<h2 id="notice-h">
+		<h2 id="notice-h" lang={notice.label ? (lang ?? undefined) : undefined}>
 			{#if !notice.label}
 				<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /></svg>
 			{/if}
 			{notice.heading}
 		</h2>
 		{#if notice.body}
-			{#each notice.body.split('\n') as para, i (i)}<p>{para}</p>{/each}
+			{#each notice.body.split('\n') as para, i (i)}<p lang={lang ?? undefined}>{para}</p>{/each}
 		{/if}
 		{#if notice.pctLine}<p>{notice.pctLine}</p>{/if}
 		<p class="by">{notice.byline}</p>

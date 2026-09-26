@@ -99,6 +99,7 @@ pnpm dev:s3:down | dev:s3:status | dev:s3:logs
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
+pnpm test:changed           # the fast loop: typecheck + only the tests your change reaches (docs/testing.md)
 pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
@@ -125,9 +126,13 @@ pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 +
 
 ## Running tests
 
-**While you work, run only what you touched** (CLAUDE.md rule 12):
+**While you work, run only what you touched** (CLAUDE.md rule 12). The
+quick way is `pnpm test:changed`: typecheck plus `vitest --changed` for what
+your working changes touch, DB tests included when Postgres is up, never e2e
+([testing.md](./testing.md)). By hand:
 
 ```bash
+pnpm test:changed                                             # typecheck + the vitest files your changes touch
 pnpm check                                                    # typecheck (fast; always)
 pnpm -C backend exec vitest run --project unit src/<area>     # backend unit files you changed
 pnpm -C backend exec vitest run --project db src/<area>       # backend DB/RLS files (needs dev:db:up)
@@ -193,6 +198,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
+- `docs/testing.md`: which test command when, and how long each takes
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/design/`: design specs written before a build (the farmer view, issue #14), each with its prototype

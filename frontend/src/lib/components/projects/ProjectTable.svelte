@@ -3,6 +3,8 @@
 	// Updated columns fold into a meta line under the name so nothing scrolls
 	// sideways. Data freshness (dataUntil) is a badge: stale or missing data is
 	// flagged, and editors get an "Add data" shortcut into the upload dialog.
+	// A click anywhere on a row opens the project (the name link stretches over
+	// the row; see .name::after).
 	import { base } from '$app/paths';
 	import { hasRole, type ProjectSummary } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
@@ -172,6 +174,28 @@
 	.name {
 		font-weight: 600;
 		font-size: 0.95rem;
+	}
+	/* The whole row opens the project: the name link's box stretches over the
+	   row (a "stretched link"), so a click anywhere on it is a real link click
+	   (Ctrl/Cmd-click and middle-click open a new tab, the status bar shows the
+	   address) while the keyboard and screen readers still meet one named link
+	   per row, not a clickable row. The row's own links and buttons, and the
+	   badges whose title explains them, sit above the stretch. */
+	.projects tbody tr {
+		position: relative;
+		cursor: pointer;
+	}
+	.name::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+	.team,
+	.act,
+	.fresh,
+	.run[title] {
+		position: relative;
+		z-index: 1;
 	}
 	.desc {
 		display: -webkit-box;

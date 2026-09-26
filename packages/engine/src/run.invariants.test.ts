@@ -1,60 +1,20 @@
 // Property-based checks of the engine: random valid inputs (./testing/fuzz.ts)
 // must satisfy the physical invariants in ./testing/invariants.ts every day at
-// every node. On a failure the seed and a shrunk reproduction are printed.
-// Soak run (FUZZ_SEED picks the first seed):
-//   FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
+// every node. This file holds the pinned regression seeds; the random soak is
+// sharded across ./fuzz/*.test.ts so it runs on several cores. Soak run
+// (FUZZ_SEED picks the first seed; FUZZ_MAX_FAILURES=100 lists every failure):
+//   FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { upgradeLegacyModel, type ModelInput } from './project';
-import { randomInput, shrink } from './testing/fuzz';
+import { randomInput } from './testing/fuzz';
 import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
 
-const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-const CASES = Number(env.FUZZ_CASES ?? 400);
-const SEED0 = Number(env.FUZZ_SEED ?? 1);
-// Stop after this many failing seeds (each is shrunk, which is slow). A
-// diagnostic soak raises it so one run lists every failing seed:
-//   FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts -t "random cases"
-const MAX_FAILURES = Number(env.FUZZ_MAX_FAILURES ?? 3);
-// ~25 ms per case (four model runs each); leave generous headroom for a soak.
-const TIMEOUT = Math.max(120_000, CASES * 200);
-
-/** The rule a failure message names, without node ids and day numbers, so shrinking keeps the same failure. */
-const ruleOf = (msg: string) => msg.split(':')[0]!.replace(/n\d+ day \d+|day \d+|\(seed \d+[^)]*\)/g, '').trim();
-
 describe('engine invariants on random networks', () => {
-	it(`${CASES} random cases from seed ${SEED0}`, () => {
-		const failures: string[] = [];
-		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < MAX_FAILURES; seed++) {
-			const input = randomInput(seed);
-			const bad = checkAll(input, seed);
-			if (!bad) continue;
-			const rule = ruleOf(bad);
-			const small = shrink(input, (x) => {
-				const b = checkAll(x, seed);
-				return b !== null && ruleOf(b) === rule;
-			});
-			failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
-		}
-		expect(failures.join('\n\n')).toBe('');
-	}, TIMEOUT);
-
-	it(`${CASES} random cases from seed ${SEED0}, GR4J runoff`, () => {
-		const failures: string[] = [];
-		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < MAX_FAILURES; seed++) {
-			const input = randomInput(seed, { runoffModel: 'gr4j' });
-			const bad = checkAll(input, seed);
-			if (!bad) continue;
-			const rule = ruleOf(bad);
-			const small = shrink(input, (x) => {
-				const b = checkAll(x, seed);
-				return b !== null && ruleOf(b) === rule;
-			});
-			failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
-		}
-		expect(failures.join('\n\n')).toBe('');
-	}, TIMEOUT);
+	// The random soak itself (checkAll on FUZZ_CASES seeds, legacy and GR4J) is
+	// sharded across src/fuzz/*.test.ts so it runs on several cores; the pinned
+	// regression seeds stay here.
 
 	it('doubling crop areas can raise the supply fraction only through return flow (seed 25)', () => {
 		// Why checkDoubledCropAreas zeroes the loss return fractions: with return

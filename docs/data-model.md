@@ -672,8 +672,37 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   viewers and above only. RLS can't hide one column, so it is readable by a
   farmer at the database level; the publish dialog says farmers don't see it
   through the app ([security.md](./security.md)).
-- Not built yet: share links (`share_link`, `app_share_view`), WP-2.3 phase 2
-  ([followups.md](./followups.md)); the audit log of notice changes (WP-2.4).
+- Share links read the current publication through their own definer
+  functions ([§ Share links](#share-links-025_share_linkssql)). Not built
+  yet: the audit log of notice changes (WP-2.4).
+
+### Share links (025_share_links.sql)
+
+Read-only links to the current publication for people outside the project
+(WP-2.3 phase 2; [api.md § Share](./api.md#share),
+[security.md § Share links](./security.md#share-links)).
+
+- `share_link (id, project_id → project CASCADE, label ≤ 100, token_hash
+  bytea UNIQUE (SHA-256, CHECK 32 bytes), created_by → app_user SET NULL,
+  created_at, expires_at NOT NULL (1–365 days after created_at, CHECK),
+  revoked_at, revoked_by → app_user SET NULL, last_used_at)`. Indexed on
+  `(project_id, created_at DESC)`, `created_by` and `revoked_by`. The
+  `share_link_issue` trigger stamps `created_by` / `created_at` and clears
+  the revocation and use stamps on insert.
+- **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
+  `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
+  catalogue test's column-only and keep-forever lists): a link is revoked,
+  never removed, and goes with its project.
+- `app_share_view(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live link
+  of a project with a current publication, one row of `project_name,
+  published_at, published_by (display name), catchment_view (allowlisted
+  keys, the outlet unnamed), restriction_level, restriction_pct, notice_en,
+  notice_af, next_expected_on`; no row otherwise. Sets `last_used_at` when
+  it answers and the last bump is over an hour old.
+- `app_share_series(p_hash, p_key)` (`SECURITY DEFINER`, `STABLE`): one row
+  of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
+  recent_start, recent[] (the last 365 days)` for a catchment key of the
+  current published run, only with at least 5 farm holders (`FARMER_K`).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
@@ -756,6 +785,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   included, written by editors, deleted by owners; `publication_farm` read by
   viewers and the linked farmers, inserted by editors, never changed (see
   § Publications above).
+- Share links (025): `share_link` read, created and revoked by owners only,
+  never deleted; the public reads only through `app_share_view` /
+  `app_share_series` (see § Share links above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

@@ -40,7 +40,9 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		/^WR2012 check: the run has no complete water year inside the reference period/,
 		/^Simulated natural flow is 1\d % below the WR2012 naturalised MAR for X99Z .*Note the difference/,
 		// The plausibility check (engine 0.25.0): the fitted GR4J falls more than 10 % short of the invented weir record in two years.
-		/^Natural flow below observed \+ abstraction in 2 of 14 water years \(2014\/15, 2015\/16\)/
+		/^Natural flow below observed \+ abstraction in 2 of 14 water years \(2014\/15, 2015\/16\)/,
+		// Its forecast feed runs 10 days past the recorded rain (engine 0.28.0 names those days).
+		/^10 days \(2025-01-01 to 2025-01-10\) of this run use forecast rain, not recorded rain/
 	]
 };
 
