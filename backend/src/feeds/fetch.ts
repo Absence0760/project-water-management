@@ -62,6 +62,15 @@ export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate
 	}
 }
 
+/**
+ * The most UTF-8 bytes of JSON a result's meta may take. data_feed.last_meta
+ * holds 4096 (018_feeds.sql CHECK) and ingest adds the merged count, so a
+ * result that passed the key / length limits but not the column's byte limit
+ * would fail its job on the CHECK instead of being refused as invalid.
+ */
+export const FETCH_META_MAX_BYTES = 3900;
+const metaBytes = (m: object) => new TextEncoder().encode(JSON.stringify(m)).length;
+
 /** The fetcher's answer: days to merge (nulls are gaps, never erasures), or a failure. */
 export const FetchResult = z.discriminatedUnion('ok', [
 	z
@@ -71,13 +80,16 @@ export const FetchResult = z.discriminatedUnion('ok', [
 			startDate: SeriesStartDate.nullable(),
 			values: z.array(z.number().finite().nonnegative().nullable()).max(MAX_SERIES_VALUES),
 			/** What the source said about the data, for the status panel. Small and flat. */
-			meta: z.record(z.string().max(40), z.union([z.string().max(100), z.number().finite()])).refine((m) => Object.keys(m).length <= 20)
+			meta: z.record(z.string().max(40), z.union([z.string().max(100), z.number().finite()])).refine((m) => Object.keys(m).length <= 20 && metaBytes(m) <= FETCH_META_MAX_BYTES)
 		})
 		.strict()
 		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values'),
 	z.object({ ok: z.literal(false), error: z.string().min(1).max(FEED_ERROR_MAX) }).strict()
 ]);
 export type FetchResult = z.output<typeof FetchResult>;
+
+/** The longest window per source, as fetchWindow caps it (GEFS reads its 16 days whatever the window). */
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: 365 * DWS_MAX_YEARS };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -93,6 +105,13 @@ export const FetchRequestSchema = z
 		const config = configSchema(v.source).safeParse(v.config);
 		if (!config.success) {
 			ctx.addIssue({ code: 'custom', path: ['config'], message: 'not a valid config for the source' });
+			return z.NEVER;
+		}
+		// No more days than fetchWindow ever asks for: the fetcher is the
+		// door to the internet, and a request is a message off a queue.
+		const days = toEpochDay(v.end) - toEpochDay(v.start) + 1;
+		if (days > MAX_WINDOW_DAYS[v.source]) {
+			ctx.addIssue({ code: 'custom', path: ['end'], message: 'the window is longer than one fetch reads' });
 			return z.NEVER;
 		}
 		return { ...v, config: config.data };

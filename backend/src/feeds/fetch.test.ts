@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtureHttp } from './fixtures.js';
+import { DWS_MAX_YEARS } from './sources/dws.js';
 import type { FeedHttp } from './http.js';
 import {
 	CHIRPS_FIRST_DAYS,
 	CHIRPS_MAX_DAYS,
 	CHIRPS_REVISION_DAYS,
+	FETCH_META_MAX_BYTES,
 	FetchRequestSchema,
 	FetchResult,
 	fetchWindow,
@@ -145,5 +147,38 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'dws', config: grid }).success).toBe(false);
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps', config: { station: 'X0H000' } }).success).toBe(false);
 		expect(FetchRequestSchema.safeParse({ ...base, source: 'chirps', config: grid, extra: 1 }).success).toBe(false);
+	});
+
+	// The fetcher is the door to the internet: a request can't make it read
+	// more than one fetchWindow would ever ask for.
+	it('refuses a window longer than the source’s own cap', () => {
+		const req = (source: string, config: unknown, start: string, end: string) =>
+			FetchRequestSchema.safeParse({ source, config, start, end, today: '2026-06-01' }).success;
+		const add = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+		expect(req('chirps', grid, '2026-01-01', add('2026-01-01', CHIRPS_MAX_DAYS - 1))).toBe(true);
+		expect(req('chirps', grid, '2026-01-01', add('2026-01-01', CHIRPS_MAX_DAYS))).toBe(false);
+		expect(req('chirps', grid, '1981-01-01', '2026-05-31')).toBe(false);
+		expect(req('dws', { station: 'X0H000' }, '2006-06-01', add('2006-06-01', 365 * DWS_MAX_YEARS - 1))).toBe(true);
+		expect(req('dws', { station: 'X0H000' }, '1906-06-01', '2026-06-01')).toBe(false);
+		// An empty window (a start date configured in the future) is fine: it reads nothing.
+		expect(req('chirps', grid, '2026-07-01', '2026-05-31')).toBe(true);
+	});
+
+	it('every window fetchWindow asks for passes (positive control)', () => {
+		const today = '2026-06-01';
+		for (const last of [null, '2026-05-28', '2020-01-01', '1990-01-01']) {
+			for (const [source, config] of [['chirps', { ...grid, startDate: '1990-01-01' }], ['chirps', grid], ['chirps_gefs', grid], ['dws', { station: 'X0H000', startDate: '1950-01-01' }], ['dws', { station: 'X0H000' }]] as const) {
+				const w = fetchWindow(source, config as never, last, today);
+				expect(FetchRequestSchema.safeParse({ source, config, ...w, today }).success, `${source} ${last}`).toBe(true);
+			}
+		}
+	});
+});
+
+describe('FetchResult meta fits its column (018_feeds.sql: 4 KB of JSON)', () => {
+	it('refuses meta over FETCH_META_MAX_BYTES of UTF-8 JSON, even within the key and length limits', () => {
+		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'é'.repeat(38)}`, 'é'.repeat(100)]));
+		expect(FetchResult.safeParse({ ok: true, startDate: '2026-01-01', values: [1], meta }).success).toBe(false);
+		expect(FETCH_META_MAX_BYTES).toBeLessThan(4096);
 	});
 });

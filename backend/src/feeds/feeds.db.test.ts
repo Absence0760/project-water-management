@@ -12,7 +12,7 @@ import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
-import { utcToday } from './fetch.js';
+import { FETCH_META_MAX_BYTES, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { claimDueFeeds } from './store.js';
@@ -334,6 +334,31 @@ describe('the production hand-off (ingest-results → feed_ingest)', () => {
 		await tick();
 		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
+	});
+
+	it('a result whose meta passes the key and length limits but not the column’s 4 KB is refused as invalid, not a failing job', async () => {
+		const o = await fetchJob();
+		// 20 keys of 40 characters and values of 100, each character two bytes in UTF-8: ~5.7 KB of JSON.
+		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'é'.repeat(38)}`, 'é'.repeat(100)]));
+		await acceptIngestResult(msg(o, { ...result, meta }));
+		await tick();
+		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
+		expect((await asOwner(`SELECT status FROM job WHERE kind = 'feed_ingest' AND project_id = $1`, [o.pid]))[0].status).toBe('done');
+	});
+
+	it('the largest meta FetchResult accepts fits the column, with the merged count added (positive control)', async () => {
+		const o = await fetchJob();
+		// 20 keys of 40 characters, values of two-byte characters as long as the byte limit allows.
+		const fill = (n: number) => Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'k'.repeat(38)}`, 'é'.repeat(n)]));
+		let n = 100;
+		while (new TextEncoder().encode(JSON.stringify(fill(n))).length > FETCH_META_MAX_BYTES) n--;
+		const meta = fill(n);
+		expect(new TextEncoder().encode(JSON.stringify(meta)).length).toBeLessThanOrEqual(FETCH_META_MAX_BYTES);
+		expect(new TextEncoder().encode(JSON.stringify(meta)).length).toBeGreaterThan(FETCH_META_MAX_BYTES - 100);
+		await acceptIngestResult(msg(o, { ...result, meta }));
+		await tick();
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: '2026-01-03' });
 	});
 
 	it('drops a result for a feed saved with new settings since the fetch', async () => {
