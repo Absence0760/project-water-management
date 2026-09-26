@@ -824,7 +824,7 @@ def extract(
                 note = run_of_river_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"], n["pctRunoffToDam"])
                 if note:
                     wb.notes.append(note)
-        dams =[n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
+        dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
         if dams:
             wb.notes.append(
                 f"{len(dams)} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam "
