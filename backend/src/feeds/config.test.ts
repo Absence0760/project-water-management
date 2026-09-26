@@ -50,6 +50,19 @@ describe('FeedInput', () => {
 		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: 'CHIRPS begins on 1981-01-01' });
 	});
 
+	// Only river gauges (H codes) are requested correctly and write a river
+	// flow: a reservoir's (R) daily table is its spillway discharge, and the
+	// other letters (E, N, T…) are weather, rainfall or tidal stations.
+	it.each(['X0R000', 'X0E000', 'X0N000', 'X0T000', 'X0L000'])('refuses the non-river-gauge station %s, saying why', (station) => {
+		const r = FeedInput.safeParse({ source: 'dws', config: { station } });
+		expect(r.success).toBe(false);
+		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'station'], message: expect.stringMatching(/river gauge.*H code/) });
+	});
+
+	it('accepts a river gauge in any drainage region, upper-casing it', () => {
+		expect(FeedInput.parse({ source: 'dws', config: { station: 'a2h012' } }).config).toMatchObject({ station: 'A2H012' });
+	});
+
 	it('points a config issue at config.<field>', () => {
 		const r = FeedInput.safeParse({ source: 'dws', config: { station: 'nope' } });
 		expect(r.error!.issues[0]!.path).toEqual(['config', 'station']);

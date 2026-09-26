@@ -971,8 +971,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
   - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
     1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
-    `{ station }`, a code like `A2H012` (letter, digit, letter, three digits;
-    upper-cased). Both take optional `startDate` (the first fetch's first day,
+    `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
+    three digits; upper-cased; a reservoir `R`, weather `E` or other station
+    is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,
     and a floor no later fetch reads before; for `chirps`, not before
     `1981-01-01`, where CHIRPS begins) and `staleAfterDays` (overrides the source's staleness threshold);
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,

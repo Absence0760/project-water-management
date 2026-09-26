@@ -1201,6 +1201,12 @@ role and not before it.
         the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
         the rest are counted: agree with the hydrologist whether flagged flows
         (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
+        Only H (river gauge) codes are accepted, sent as `SiteType=RIV`
+        (#35). Also check a gauge that belongs to a dam: archived pages ask
+        for some H stations (a dam's canals and downstream river gauge, e.g.
+        those listed under a reservoir's HyDataSets page) with
+        `SiteType=DC`; if RIV fails for one, derive DC from the catalogue
+        rather than the code letter, which can't tell them apart.
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

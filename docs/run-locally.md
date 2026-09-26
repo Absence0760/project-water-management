@@ -165,7 +165,7 @@ answers every source from the synthetic files in `backend/fixtures/feeds/`,
 re-dated to today, and the panel shows a "Sample data" badge. The sample grid
 is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
 25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
-feed), and any station code for DWS (e.g. `X0H000`).
+feed), and any river-gauge (H) code for DWS (e.g. `X0H000`).
 
 Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
 they fetch daily on their own, and "Run now" fetches at once. Without it:

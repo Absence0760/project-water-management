@@ -43,6 +43,7 @@ describe('draftToBody', () => {
 
 	it('explains a bad station or cells', () => {
 		expect(draftToBody({ ...emptyDraft('dws'), station: 'X0H00' })).toEqual({ error: expect.stringMatching(/looks like A2H012/), field: 'station' });
+		expect(draftToBody({ ...emptyDraft('dws'), station: 'x0r000' })).toEqual({ error: expect.stringMatching(/river gauge.*H code/), field: 'station' });
 		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '' })).toEqual({ error: expect.stringMatching(/at least one/), field: 'cells' });
 	});
 });

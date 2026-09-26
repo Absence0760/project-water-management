@@ -869,7 +869,7 @@ its own chunk loaded with the tab; WP-2.10,
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write), an optional series name, the schedule, and either **Grid cells**
   (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`). The
+  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
