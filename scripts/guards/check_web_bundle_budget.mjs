@@ -825,6 +825,20 @@
 //             (#17's Summary, Teams and Crops pages) were each measured without
 //             the other's growth; together with #54 2a's Unit labels (+0.3 KB)
 //             they measure 953. Headroom ~4 KB; the i18n catalogue trim is due.
+// 2026-09-26  total 949 → 959 KB (measured 955; the branch measured 924
+//             from 914 on main @ 3f0f056, +10). Issue #17 board A4, Compare runs: a baseline and up
+//             to two what-ifs. The CompareView chunk (already lazy, the
+//             workspace tab's and /compare's) grows 5.3 KB with the run
+//             cards, the outcomes table, the takeaways and compare/summary.ts;
+//             the "days below the reserve, each year" chart is a new lazy
+//             chunk (ReserveYearsChart, 3.2 KB with the engine's
+//             reserveDaysByWaterYear). No page chunk or largest chunk moves;
+//             no new dependency. Headroom ~4 KB; the bundle-weight trim
+//             under way should bring this back down.
+// 2026-09-26  total 959 → 967 KB (measured 963). A merge: the 949 → 957
+//             entry above and #17's 949 → 959 Compare runs entry were each
+//             measured without the other's growth; together they measure 963.
+//             Headroom ~4 KB; the bundle-weight trim under way is due.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -835,7 +849,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 957,
+	totalCodeKb: 967,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

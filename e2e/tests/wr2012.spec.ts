@@ -5,6 +5,7 @@
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { whatChanged } from '../support/compare.ts';
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 
@@ -112,8 +113,8 @@ test('run comparison lists the WR2012 inputs that changed and compares the ratio
 
 	await page.goto(`/compare?a=${project.id}:${before}&b=${copy}:${after}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(page.getByText('WR2012 reference added (Z99A, MAR 6 Mm³/a over 60 km², 1990/91 – 2025/26)')).toBeVisible();
-	await expect(page.getByText('WR2012 calibration penalty: off → on')).toBeVisible();
+	await expect(whatChanged(page).getByText('WR2012 reference added (Z99A, MAR 6 Mm³/a over 60 km², 1990/91 – 2025/26)')).toBeVisible();
+	await expect(whatChanged(page).getByText('WR2012 calibration penalty: off → on')).toBeVisible();
 	await expect(page.getByRole('heading', { name: /^WR2012 check/ })).toBeVisible();
 	const table = page.getByRole('table', { name: 'WR2012 check for both runs' });
 	await expect(table.getByRole('rowheader', { name: 'MAR ratio, whole run' })).toBeVisible();
