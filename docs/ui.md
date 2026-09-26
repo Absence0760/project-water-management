@@ -1869,7 +1869,10 @@ them scenarios).
   into…) is listed there and disables Record until it is undone; the
   tables' own problems ("Fix before saving") block it too. While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
-  Delete wait, and leaving the page asks first. The "Add a change" form and rebase are hidden while
+  Delete wait, and leaving the page asks first. The status moves (an
+  application's Submit, Withdraw, Reopen and decision included) also wait
+  while a run is in flight: the run re-reads the scenario when it ends, and
+  that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
   override mode is open.
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline

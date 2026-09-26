@@ -125,6 +125,7 @@
 	// --- editing the ops, with undo ------------------------------------------------
 	let past = $state.raw<ScenarioOp[][]>([]);
 	let saving = $state(false);
+	let running = $state(false);
 	let error = $state<string | null>(null);
 	let note = $state('');
 	// A different scenario starts a fresh undo history, closes override mode and
@@ -175,7 +176,12 @@
 	let overriding = $state(false);
 	/** Override mode has edits not yet recorded: the list, undo, run, status moves and delete wait for them. */
 	let overrideDirty = $state(false);
-	const busy = $derived(saving || overrideDirty);
+	/**
+	 * Saving, unrecorded override edits, or a run in flight. A status move waits
+	 * for a run too: the run's re-read of the scenario (ScenariosTab `ran`) could
+	 * otherwise land after a submit and put the draft status back on screen.
+	 */
+	const busy = $derived(saving || overrideDirty || running);
 	const removeAt = (i: number) => saveOps(s.ops.filter((_, j) => j !== i), `Change ${i + 1} removed.`);
 	async function undo() {
 		const prev = past[past.length - 1];
@@ -218,7 +224,6 @@
 	}
 
 	// --- run ---------------------------------------------------------------------------
-	let running = $state(false);
 	let runProblems = $state<string[]>([]);
 	async function run() {
 		running = true;
@@ -394,7 +399,7 @@
 		{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
 	{/if}
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 	{#if error}
 		<div class="alert alert-error" role="alert">
