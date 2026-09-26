@@ -257,6 +257,17 @@
 	];
 	const dotBand = (id: string) => (colourBy === 'supply' ? (latestSupply?.get(id)?.band ?? null) : null);
 	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
+	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen).
+	let mapEl: HTMLDivElement | undefined = $state();
+	let mapTop = $state(0);
+	$effect(() => {
+		if (!mapEl) return;
+		const measure = () => (mapTop = mapEl ? mapEl.getBoundingClientRect().top + window.scrollY : 0);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
 	function gridsKeydown(e: KeyboardEvent) {
@@ -367,6 +378,8 @@
 		</div>
 		<div class="net-actions">
 			{@render layoutSwitch()}
+			<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
 				<div class="grids-pop" role="group" aria-label="Open as a grid">
@@ -377,13 +390,13 @@
 			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add node</button>{/if}
 		</div>
 	</div>
-	<div class="map-layout">
+	<div class="map-layout" bind:this={mapEl} style:--map-top="{mapTop}px">
 		<section class="panel map-card" aria-labelledby="sch-h">
 			<div class="panel-head">
 				<h3 id="sch-h">Catchment map</h3>
 				{@render colourByControl()}
 			</div>
-			{@render drawing(true)}
+			<div class="map-body">{@render drawing(true)}</div>
 		</section>
 		<aside class="map-side" aria-label="Nodes">
 			<section class="panel side-box" aria-label="Selected node">
@@ -406,7 +419,7 @@
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
 				{/if}
 			</section>
-			<section class="panel side-box" aria-labelledby="all-nodes-h">
+			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
 				<h3 class="list-h" id="all-nodes-h">All nodes</h3>
 				<ul class="node-list" aria-labelledby="all-nodes-h">
 					{#each nodes as n (n.id)}
@@ -1051,7 +1064,8 @@
 	}
 	.map-layout {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 22rem;
+		/* The side column gives up a little width on smaller screens; the map needs it more. */
+		grid-template-columns: minmax(0, 1fr) clamp(17rem, 24vw, 22rem);
 		gap: 1rem;
 		align-items: start;
 	}
@@ -1155,6 +1169,41 @@
 		}
 		.node-row {
 			min-height: 44px;
+		}
+	}
+	/* From 900 px the layout is exactly the height left in the window (less
+	   the save bar when it shows); the drawing and the node list take what
+	   their cards leave, each scrolling inside itself. */
+	@media (min-width: 900px) {
+		.map-layout {
+			height: max(520px, calc(100vh - var(--map-top, 0px) - var(--dock-h, 0px) - 1rem));
+			align-items: stretch;
+		}
+		.map-card {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+		}
+		.map-body {
+			flex: 1;
+			min-height: 0;
+		}
+		.map-side {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+		}
+		.nodes-box {
+			flex: 1;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+		}
+		.nodes-box .node-list {
+			flex: 1;
+			min-height: 0;
+			max-height: none;
+			align-content: start;
 		}
 	}
 </style>

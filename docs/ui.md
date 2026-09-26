@@ -596,12 +596,24 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
     [grid modal](#grid-modal), *Node table* switches to the Table layout;
     Escape or a click outside closes it) and, for editors, **+ Add node**
     (which opens the new node on its form).
-  - **Catchment map** card: *Colour farms by* in its header and the
-    schematic filling the card (`NetworkSchematic`'s `fill`: a small drawing
-    scales up to the card's width, at most 1.35× and no taller than the
-    460 px box; a big one keeps its size and scrolls, as elsewhere), then the
-    legend. Colouring by supply is **on by default** once the project has a
-    run.
+  - **Catchment map** card: *Colour farms by* in its header, the schematic
+    filling the card, and one legend line under it. Colouring by supply is
+    **on by default** once the project has a run.
+  - **Screen use:** from 900 px the layout is exactly the height left in the
+    window below its top edge (less the save bar when it shows; at least
+    520 px), measured on load and resize. The drawing takes the card's height
+    after the legend, and the node list takes the side column's height after
+    the node card, each scrolling inside itself. `NetworkSchematic`'s `fill`
+    lays the tree out to the box rather than zooming it: columns are at least
+    wide enough that no label runs into the next node on its row, and spread
+    until the right-most label reaches the box's edge (at most 1.8× the usual
+    150 px); rows spread to the box's height the same way (only from 900 px,
+    where the box's height is set by the page, not by the drawing). Text stays
+    at its usual size, and a network wider than the box at its tightest
+    spacing scrolls. The side column is `clamp(17rem, 24vw, 22rem)`.
+  - **Legend line:** the shapes, the supply bands present, the run they come
+    from ("Farms coloured by … in run “test”, ran today", read out) and the
+    drag hint, which becomes the live drop status while dragging.
   - Beside it (one column below 900 px, the map first), two cards:
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes

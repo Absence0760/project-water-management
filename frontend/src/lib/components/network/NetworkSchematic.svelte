@@ -5,6 +5,7 @@
 	// edit it, or (editors) drag it onto another node to change what it drains
 	// into. The "Drains into" selects are the keyboard path to the same edit;
 	// the list below the drawing is its text equivalent.
+	import { MediaQuery } from 'svelte/reactivity';
 	import type { NetworkNode, Transfer } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { drainageTree } from '$lib/model/tree';
@@ -33,17 +34,19 @@
 		/** Colour farms by how much of their demand a run supplied (null = the plain drawing). */
 		supply?: SchematicSupply | null;
 		/**
-		 * Fill the box it sits in (the Network's Map layout, issue #17): a small
-		 * drawing scales up to the box's width, at most FILL_MAX_SCALE and no
-		 * taller than the box; a big one keeps its size and scrolls, as usual.
+		 * Fill the box it sits in (the Network's Map layout, issue #17): the
+		 * columns and rows spread out to the box's width and height (at most
+		 * FILL_MAX_SPREAD times their usual spacing), text at its usual size; a
+		 * network too big for the box keeps the usual spacing and scrolls. The
+		 * legend is one line. The parent gives it its height.
 		 */
 		fill?: boolean;
 	} = $props();
 
-	const FILL_MAX_SCALE = 1.35;
-	/** The fill box's height (px): the drawing never scales taller. */
-	const FILL_BOX_H = 460;
+	const FILL_MAX_SPREAD = 1.8;
+	const wide = new MediaQuery('min-width: 900px');
 	let boxW = $state(0);
+	let boxH = $state(0);
 
 	const supplyOf = (id: string) => supply?.byNode.get(id);
 	const bands = $derived(supply ? bandsPresent(supply.byNode) : []);
@@ -113,18 +116,45 @@
 
 	const COL_W = 150;
 	const ROW_H = 74;
+	/** Spacing to fill the box (fill mode): at least `min`, at most FILL_MAX_SPREAD times the usual spacing. */
+	const spread = (min: number, usual: number, room: number, gaps: number) =>
+		fill && gaps > 0 && room > 0 ? Math.min(usual * FILL_MAX_SPREAD, Math.max(min, room / gaps)) : min;
 	const PAD_X = 24;
 	const PAD_Y = 22;
 
 	const layout = $derived(schematicLayout(nodes));
+	// Fill mode sizes the columns from the labels actually drawn, not the widest possible one, so a
+	// catchment that fits the card isn't pushed off its right edge. Columns are at least wide enough
+	// that no label runs into the next node on its row; they spread as far as every node's label still ends inside
+	// the box (at most FILL_MAX_SPREAD × the usual spacing); and the drawing ends at the right-most
+	// label. Elsewhere: the fixed spacing, as before.
+	const labelRight = (ln: SchematicNode) => labelBox({ x: 0, y: 0 }, short(name(ln.node)), metaText(ln)).x1 + 8;
+	// A label only needs clearing where another node sits to its right on the same row.
+	const minColW = $derived.by(() => {
+		if (!fill) return COL_W;
+		let need = 60;
+		const rows = new Map<number, SchematicNode[]>();
+		for (const n of layout.nodes) rows.set(n.row, [...(rows.get(n.row) ?? []), n]);
+		for (const row of rows.values()) {
+			row.sort((a, b) => a.col - b.col);
+			for (let i = 1; i < row.length; i++) need = Math.max(need, (labelRight(row[i - 1]!) + 4) / (row[i]!.col - row[i - 1]!.col));
+		}
+		return need;
+	});
+	const fitColW = $derived(
+		Math.min(Infinity, ...layout.nodes.filter((n) => n.col > 0).map((n) => (boxW - 2 - PAD_X * 2 - 12 - labelRight(n)) / n.col))
+	);
+	const colW = $derived(fill && boxW > 0 && layout.cols > 1 ? Math.max(minColW, Math.min(COL_W * FILL_MAX_SPREAD, fitColW)) : minColW);
+	const rightEdge = $derived(fill ? Math.max(0, ...layout.nodes.map((n) => n.col * colW + labelRight(n))) : 0);
+	// Rows spread only where the parent fixes the box's height (the Map layout from 900 px); below that
+	// the box is as tall as the drawing, and spreading to it would feed back on itself.
+	const rowH = $derived(wide.current ? spread(ROW_H, ROW_H, boxH - 2 - PAD_Y * 2 - 30, layout.rows - 1) : ROW_H);
 	const tree = $derived(drainageTree(nodes));
 	const pos = $derived(
-		new Map(layout.nodes.map((n) => [n.node.id, { x: PAD_X + 12 + n.col * COL_W, y: PAD_Y + n.row * ROW_H }]))
+		new Map(layout.nodes.map((n) => [n.node.id, { x: PAD_X + 12 + n.col * colW, y: PAD_Y + n.row * rowH }]))
 	);
-	const width = $derived(PAD_X * 2 + 12 + (layout.cols - 1) * COL_W + 126);
-	const height = $derived(PAD_Y * 2 + Math.max(layout.rows - 1, 0) * ROW_H + 30);
-	// Only upwards: a drawing wider than the box keeps its size and scrolls.
-	const scale = $derived(fill && boxW > 0 ? Math.max(1, Math.min(FILL_MAX_SCALE, (boxW - 2) / width, (FILL_BOX_H - 24) / height)) : 1);
+	const width = $derived(fill ? PAD_X * 2 + 12 + rightEdge : PAD_X * 2 + 12 + (layout.cols - 1) * colW + 126);
+	const height = $derived(PAD_Y * 2 + Math.max(layout.rows - 1, 0) * rowH + 30);
 	const maxArea = $derived(Math.max(1e-9, ...layout.nodes.map((n) => n.cumulativeAreaKm2)));
 	const areaOf = $derived(new Map(layout.nodes.map((n) => [n.node.id, n.cumulativeAreaKm2])));
 
@@ -134,7 +164,7 @@
 		const a = pos.get(fromId);
 		const b = pos.get(toId);
 		if (!a || !b) return '';
-		const midY = b.y - ROW_H / 2;
+		const midY = b.y - rowH / 2;
 		if (Math.abs(a.x - b.x) < 0.5) return `M${a.x},${a.y + 10} V${b.y - 13}`;
 		return `M${a.x},${a.y + 10} V${midY} H${b.x} V${b.y - 13}`;
 	}
@@ -166,12 +196,13 @@
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
-	<div class="scroller" class:fill data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW}>
+	<div class="sch" class:fill>
+	<div class="scroller" class:fill data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW} bind:clientHeight={boxH}>
 		<svg
 			bind:this={svgEl}
 			viewBox="0 0 {width} {height}"
-			width={width * scale}
-			height={height * scale}
+			width={width}
+			height={height}
 			aria-hidden="true"
 			class="schematic"
 			class:dragging={drag?.moved}
@@ -252,6 +283,49 @@
 		</svg>
 	</div>
 
+	{#if fill}
+		<!-- One line under the map: the shapes, the supply bands and the run
+		     they come from, then the drag hint. While dragging, the hint is the
+		     live drop status instead. -->
+		<div class="legend-line">
+			<ul class="legend" aria-hidden="true">
+				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Farm</li>
+				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><rect class="farm dam" x="-8" y="-8" width="16" height="16" rx="3" /></svg> With dam</li>
+				<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
+				<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow</li>
+				{#if nodes.some((n) => n.kind === 'user')}<li><svg width="16" height="16" viewBox="-11 -11 22 22"><path class="user" d="M0,-9 L9,0 L0,9 L-9,0 Z" /></svg> Other user</li>{/if}
+				<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
+				{#each bands as b (b)}
+					<li data-supply={b}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {BAND_LABEL[b]}</li>
+				{/each}
+			</ul>
+			{#if supply}
+				<p class="supply-run">
+					Farms coloured by share of irrigation demand supplied in run “{supply.runName}”, ran {supply.ago}.
+					{#if supply.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+				</p>
+			{/if}
+			{#if editable}
+				<p class="drag-status" aria-live="polite">
+					{#if drag?.moved}
+						{#if overCheck && !overCheck.ok}
+							Can't drop here: {overCheck.reason}.
+						{:else if drag.over}
+							Release to make {dragName} drain into {nameOf(drag.over)}.
+						{:else if drag.valid.size === 0}
+							{nodes.find((n) => n.id === drag?.id)?.downstreamNodeId === null
+								? `${dragName} is the outflow gauge and stays at the outlet; use "Make outflow gauge" on another node to change that.`
+								: `No other node can take ${dragName} without making a loop.`}
+						{:else}
+							Drop {dragName} on the node it should drain into. Esc cancels.
+						{/if}
+					{:else}
+						Drag a node onto another to change what it drains into.
+					{/if}
+				</p>
+			{/if}
+		</div>
+	{:else}
 	{#if editable}
 		<p class="drag-status" aria-live="polite">
 			{#if drag?.moved}
@@ -300,6 +374,9 @@
 		</div>
 	{/if}
 
+	{/if}
+	</div>
+
 	<!-- Text equivalent of the drawing: each node under the node it drains into. -->
 	<ul class="visually-hidden" aria-label="Drainage tree">
 		{#each tree.rows as row (row.node.id)}
@@ -344,10 +421,37 @@
 		margin: 0 auto;
 		font-family: var(--font-sans);
 	}
+	/* Fill mode: a flex column the parent sizes; the drawing's box takes the
+	   height left after the legend line and scrolls both ways when the
+	   network is bigger than it. */
+	.sch.fill {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 0;
+	}
 	.scroller.fill {
+		flex: 1;
+		min-height: 0;
 		display: flex;
 		align-items: center;
-		min-height: 460px;
+		overflow: auto;
+	}
+	.legend-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.2rem 1rem;
+		margin-top: 0.5rem;
+		font-size: 0.8rem;
+		color: var(--text-2);
+	}
+	.legend-line .legend,
+	.legend-line p {
+		margin: 0;
+	}
+	.legend-line .drag-status {
+		color: var(--text-muted);
 	}
 	/* A flex item would otherwise shrink below its size instead of scrolling. */
 	.scroller.fill .schematic {
@@ -355,7 +459,7 @@
 	}
 	@media (max-width: 899px) {
 		.scroller.fill {
-			min-height: 0;
+			flex: none;
 		}
 	}
 	.river {

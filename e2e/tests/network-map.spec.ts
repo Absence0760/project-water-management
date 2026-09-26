@@ -41,6 +41,16 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	const upperNode = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
 	await expect(upperNode).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
 	await expect(upperNode.locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
+	// The layout uses the screen: it reaches the bottom of the window, and a small catchment's drawing
+	// fits its card without scrolling sideways (its columns spread to the card, text at its usual size).
+	const viewport = page.viewportSize()!;
+	const layoutBox = (await page.locator('.map-layout').boundingBox())!;
+	expect(layoutBox.y + layoutBox.height).toBeGreaterThan(viewport.height - 40);
+	expect(layoutBox.y + layoutBox.height).toBeLessThanOrEqual(viewport.height);
+	const box = page.locator('.map-card .scroller');
+	expect(await box.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+	const drawn = (await page.locator('.map-card svg.schematic').boundingBox())!;
+	expect(drawn.width).toBeGreaterThan((await box.boundingBox())!.width * 0.6);
 	await expect(page.getByText('Select a node on the map or in the list to see it here.')).toBeVisible();
 	// The table isn't on the page in this layout.
 	await expect(page.locator('table.net')).toHaveCount(0);
