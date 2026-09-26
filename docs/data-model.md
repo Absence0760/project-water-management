@@ -650,8 +650,12 @@ list of overrides (engine `ScenarioOp`) on a **base run**, applied to that
 run's stored input (above), never the live model.
 
 - **`scenario`**: `id`, `project_id` (→ `project`, cascade), `name` (1–200
-  characters, unique per project ignoring case and surrounding spaces:
-  `scenario_name_idx`, which also covers the project foreign key),
+  characters, unique ignoring case and surrounding spaces: a team scenario's
+  among the project's team scenarios (`scenario_team_name_idx`), an
+  application's among its owner's applications
+  (`scenario_application_name_idx`), since 049, so that naming a draft never
+  says a hidden one exists; `scenario_project_idx` covers the project foreign
+  key),
   `description` (≤ 4 000), `base_run_id` (→ `model_run`, `NO ACTION`), `ops
   jsonb` (an array of at most 500 ops and 1 MiB of JSON text, `CHECK`),
   `ops_sha256` (hex, the SHA-256 of the ops as RFC 8785 canonical JSON,
@@ -945,7 +949,9 @@ contributor < viewer < editor < owner`. `044_contributor_role.sql` adds the
 enum value alone (it can't be used in the transaction that adds it);
 `045_contributor_scope.sql` adds everything else, and
 `046_contributor_runs.sql` takes every run row (and other farms' run series)
-away from a contributor.
+away from a contributor. `049_applicant_oracles.sql` closes what they could
+learn by probing: who is a member (sharing), and whether a hidden
+application has a name.
 
 - **Below viewer, like a farmer.** Every existing policy and every
   `requireRole(…, 'viewer')` refuses a contributor untouched (fail closed);
@@ -996,10 +1002,21 @@ away from a contributor.
   added_at)`**: the people an applicant shares an application with.
   `(project_id, user_id)` references `project_member` `ON DELETE CASCADE`
   (leaving the project ends the share), with covering indexes. A trigger
-  admits only an application of the same project, a contributor-or-above
-  member, never its owner. RLS: read by whoever reads the application; only
-  its owner adds; the owner removes anyone and anyone listed may leave; no
-  update.
+  admits only an application of the same project, a member
+  `app_share_allowed(project, owner, member)` allows (049), never its owner.
+  RLS: read by whoever reads the application; only its owner adds; the owner
+  removes anyone and anyone listed may leave; no update.
+- **`project_member.party`** (049, text ≤ 80, trimmed, null for none): the
+  **applying party** the project owner puts a member in (the applicant, their
+  consultant, their client). `app_share_allowed`: a contributor-or-above
+  member who isn't the owner and, while the owner is a contributor, is in
+  the owner's party (compared ignoring case); an owner who is a viewer or
+  above may share with any contributor-or-above member.
+  `app_share_candidates(project)` lists, for the current user, whom they may
+  share with (id and display name, never an email): the only way an
+  applicant names someone, so no answer says who else is a member.
+  `project_member_prune_shares` (after a change of party or role) deletes
+  the shares the rule no longer allows.
 - **Who reads a scenario** is one function, `app_scenario_visible(project,
   id, origin, status, owner)` (taking columns so the insert's `RETURNING`
   passes it); `app_scenario_readable(id)` looks the row up and calls it. A

@@ -441,9 +441,9 @@ out, and a re-import of an export records itself as a `project-file` import.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
+| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
-| PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
+| PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
 `409 a project must keep at least one owner` when demoting or removing the
@@ -1139,7 +1139,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | `{ scenarios: Scenario[] }`, newest first | viewer |
-| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (names are unique per project, ignoring case) | editor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
@@ -1159,9 +1159,15 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   op still names that id, and the current base's name wins. Display only;
   it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
-  | 'baseline')[] }`: the ops applied to the base (engine `applyScenario`,
+  | 'baseline')[], renamed? }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`
-  and `checkError` says why only if the base can't be rebuilt.
+  and `checkError` says why only if the base can't be rebuilt. `renamed:
+  { kind: 'node' | 'crop', id, name, as }[]` (viewer and up only, never a
+  contributor; also on a scenario run's response) lists an application's
+  hidden farms and crops given a suffixed name in its runs because the
+  applicant gave one of theirs that name (049, [scenarios.md §
+  Applications](./scenarios.md#applications-wp-33)); always `[]` for a team
+  scenario.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether
@@ -1206,15 +1212,19 @@ below work on it too, for an editor.
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted | editor |
-| POST | `/projects/:id/scenarios/:sid/members` | `{ email }` | `201 { members }` (`200` if already shared). `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike; `409` for a team scenario or yourself | owner of the application |
+| GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 
-- **What a contributor sees of the base** (`…/base`, and the check's
-  messages): the settings, their own farms and the gauges in full, every
+- **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and
-  land cover (D2's recommended default, pending the client). They never
+  land cover (D2's recommended default, pending the client). The check's
+  messages quote only those names, and a name taken only by something hidden
+  collides with nothing (049: the application is checked in its applicant's
+  namespace, [scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+  They never
   receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
   answer them `403`.
 - A contributor linked to a farm also reads its farm view

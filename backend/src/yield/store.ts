@@ -64,7 +64,7 @@ export function yieldDedupeKey(r: YieldRequest): string {
 export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest, 'runId' | 'scenarioId'>): Promise<ModelInput> {
 	if (r.scenarioId) {
 		const scenario = await loadScenario(db, projectId, r.scenarioId);
-		const check = checkScenario(await loadBaseInput(db, projectId, scenario.baseRunId), scenario.ops, scenario.ownedNodeIds);
+		const check = checkScenario(await loadBaseInput(db, projectId, scenario.baseRunId), scenario);
 		if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
 		return check.input;
 	}

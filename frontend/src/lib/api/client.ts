@@ -282,6 +282,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member
 				),
+			/** Put an applicant in an applying party, or take them out (null); owners only. */
+			setParty: (id: string, userId: string, party: string | null) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -544,9 +547,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The assessor's decision: an editor who didn't make the application. */
 			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
-			/** Share an application with another applicant-or-above member of the project (its owner only). */
-			share: (id: string, sid: string, email: string) =>
-				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { email }).then((r) => r.members),
+			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
+			shareCandidates: (id: string, sid: string) =>
+				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),
+			/** Share an application with one of its shareCandidates (its owner only). */
+			share: (id: string, sid: string, userId: string) =>
+				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { userId }).then((r) => r.members),
 			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
 			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
 			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)

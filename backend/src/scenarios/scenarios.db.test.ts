@@ -104,7 +104,7 @@ describe('a dam-raise scenario', () => {
 			runCount: 0,
 			lastRun: null
 		});
-		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [] }], problems: [], classified: ['baseline'] });
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [] }], problems: [], classified: ['baseline'], renamed: [] });
 		// The farm made the proposer's own: the same op is a proposal.
 		const owned = await owner.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
 		expect(owned.status).toBe(200);

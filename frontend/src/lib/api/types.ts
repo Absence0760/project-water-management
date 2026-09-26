@@ -160,6 +160,8 @@ export interface Member {
 	email: string;
 	displayName: string;
 	role: Role;
+	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
+	party: string | null;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -683,6 +685,12 @@ export interface ScenarioCheck {
 	applied: AppliedOp[];
 	problems: string[];
 	classified: OpClass[];
+	/**
+	 * An application's farms and crops, hidden from its applicant, renamed in
+	 * its runs because the applicant gave one of their own that name (049).
+	 * Sent to viewers and up only, never to an applicant.
+	 */
+	renamed?: { kind: 'node' | 'crop'; id: string; name: string; as: string }[];
 }
 
 /**

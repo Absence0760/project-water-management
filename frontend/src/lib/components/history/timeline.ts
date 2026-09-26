@@ -102,6 +102,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.self ? `${who} left the project` : `Removed ${who} (${str(s.role)})`;
 		case 'member.role':
 			return `Changed ${who}’s role from ${str(s.from)} to ${str(s.to)}`;
+		case 'member.party':
+			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
 		case 'farmer.linked':
 			return `Linked ${who} to the farm ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
