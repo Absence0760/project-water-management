@@ -321,30 +321,54 @@ merges into:
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
-| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs; today's issue, else yesterday's |
-| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: an HTML page whose `<pre>` holds `DATE D_AVG_FR QUAL` rows; at most 20 years per request. Our network gets HTTP 403 from the site, so this format is taken from two open-source clients that parse it (see [followups.md](./followups.md)) |
+| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
+| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;
   a fetch reads a few tens of KB per day. The reader refuses anything outside
-  that layout (BigTIFF, tiles, a predictor, another sample type) rather than
-  guess, and snaps the float32-rounded 0.05° pixel scale, which otherwise
-  drifts a whole pixel across the grid.
+  that layout (BigTIFF, tiles, a predictor, another sample type, a GDAL
+  scale / offset, GeoKeys other than geographic WGS 84 in degrees) rather
+  than guess, matches `GDAL_NODATA` as the float32 it was stored as, places a
+  PixelIsPoint tiepoint at the pixel's centre (GeoTIFF 1.0 § 2.5.2.2), and
+  snaps the float32-rounded 0.05° pixel scale, which otherwise drifts a whole
+  pixel across the grid.
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
   or outside the grid, a server error page answered with HTTP 200: the fetch
   fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
-  feed shows as failing. A DWS row without a usable value is a gap, never a
-  zero.
+  feed shows as failing. A DWS row without a usable value, or with a quality code
+  that says the data is missing (`DWS_GAP_CODES`), is a gap, never a zero.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
-  reads the newest issue. DWS re-reads a year before its newest day (verified
-  data is revised in arrears), 10 years on the first fetch.
-- **Merging** goes through `series/merge.ts mergeInto`, the same path as
+  reads the newest complete issue and merges all 16 days, so each issue
+  replaces the last from its issue date on; one caught half-written is never
+  merged (the fetch falls back to yesterday's, or fails and retries). DWS re-reads a year before its newest day (verified
+  data is revised in arrears), 10 years on the first fetch; rows the page
+  dates outside that window, or after today, are dropped (`outside`).
+  A feed's `startDate` is a floor for every fetch, not just the first: the re-read
+  never reaches before it, where the series may hold the owner's own data.
+- **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
-  value for never erases one already there. The merge and the feed's health
-  commit in the job's transaction, as the job's acting user.
+  value for never erases one already there. **A feed owns the days it
+  fetches in its target series**: on a day the source has a value, that value
+  replaces what was there, whether an earlier fetch, an upload or an import
+  put it (this is how final CHIRPS replaces preliminary). Days outside the
+  fetched window are never touched, and no other series is. To keep your own
+  record next to a feed, give it its own series name (the feed's
+  `targetName`, or the upload's). The merge and the feed's health
+  commit in the job's transaction, as the job's acting user. A forecast
+  result is keyed by its issue date (`meta.issued`, which its days must start
+  on, 16 at most); one older than the issue the feed last merged (the
+  `ingest-results` queue does not keep order) is dropped, series and health
+  untouched, so an older forecast never overwrites a newer one. Re-reading an
+  unchanged window (CHIRPS does, every day) leaves the series row alone, so
+  its `updatedAt` ("new data since the last run") moves only when a value
+  does. An answer with a day after the newest the source can have (today, or
+  a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
+  would otherwise pin the feed's newest date, which only moves forward, in
+  the future.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who
@@ -355,9 +379,10 @@ merges into:
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
   source normally lags: 12 days for CHIRPS, under 12 days ahead for the
-  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`,
-  `disabled`. A feed not fetched two days after it was attached is stale ("the
-  background worker may not be running"). Emailing owners about a stale feed
+  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
+  (not fetched yet, or not since a new place or series was saved),
+  `disabled`. A feed not fetched two days after it was attached or changed is
+  stale ("the background worker may not be running"). Emailing owners about a stale feed
   is WP-2.13.
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):

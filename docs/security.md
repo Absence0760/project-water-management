@@ -337,6 +337,21 @@ In short:
     "is this run cited" for a run id the caller already holds, and sees every
     citation even when a narrower policy hides the citing row from the caller,
     so a trim never tries to delete a run someone else's scenario rests on.
+- **Scenarios are the project's, and a submitted one can't be changed**
+  (024_scenarios, [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)).
+  Viewers read, editors write; farmers read nothing, because a scenario's ops
+  and its base run name every farm (fail closed, as for `model_run`). The
+  `scenario_guard` trigger (`SECURITY DEFINER`, pinned `search_path`; it
+  reads `model_run` past RLS only to compare two project ids) stamps the owner
+  from the session, refuses a base run of another project even to an editor of
+  both, and freezes a scenario's ops, base and owned nodes once it isn't a
+  draft, whatever the API does; a scenario run records the ops it applied, and
+  their SHA-256, in its own immutable snapshot. Ops are untrusted input: the
+  engine's validator rebuilds each from its known fields (unknown keys never
+  reach the database), ids must be UUIDs, and at most 500 ops and 1 MiB are
+  stored. A run series can name only a node of its own run's snapshot
+  (`run_series_nodes_in_run`), so no run can be given series for another
+  project's node.
 - **Data feeds run as the owner who configured them** (018_feeds,
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Owners
   attach and change feeds (RLS); saving stamps the saver as the feed's acting
@@ -442,9 +457,13 @@ In short:
   - Only fixed hosts are fetched: the URL is built from the source and a
     validated config (cells as numbers in range, a station matching
     `^[A-Z]\d[A-Z]\d{3}$`), never from user text, so a feed can't be pointed
-    at an arbitrary URL (no SSRF). `FEED_SOURCE=fixtures` is the default
+    at an arbitrary URL (no SSRF). The live client enforces it too: it asks
+    only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
+    follows redirects itself, at most 3, each re-checked, so a redirect
+    can't send the fetcher (open egress) to another host or plain HTTP.
+    `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
-  - Every response is bounded: 20 s timeout, 4 MB cap whether declared or
+  - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
     streamed, range reads for the grids. A GeoTIFF is parsed by our own
     bounds-checked reader (dimensions, strip sizes and LZW codes checked;
     anything outside the known layout refused), and a DWS page by a strict
@@ -455,8 +474,11 @@ In short:
     (`feeds/errors.ts`), never an upstream body.
   - In production the fetch happens in the **fetcher Lambda, outside the VPC
     and with no database access**: its role may only receive fetch requests and
-    send results. The worker validates each result again (`FetchResult`: size,
-    dates, values, a flat `meta`), checks it answers a real `feed_fetch` job of
+    send results, and it refuses a request for a longer window than one fetch
+    reads (120 CHIRPS days, 20 DWS years). The worker validates each result
+    again (`FetchResult`: size, dates, values, a flat `meta` within `last_meta`'s
+    byte budget, no U+0000, so nothing it accepts can fail the database after
+    the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
     as the feed's acting user. A compromised fetcher could at worst send wrong
     numbers for feeds that asked it, into the series those feeds already

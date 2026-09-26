@@ -6,7 +6,9 @@ import {
 	type DailySeries,
 	type ModelInput,
 	type ModelOutput,
+	type OpClass,
 	type RunVerification,
+	type ScenarioOp,
 	type SeriesKind
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
@@ -65,7 +67,10 @@ export function runsKeptPerProject(env: string | undefined = process.env.RUNS_KE
 	return env !== undefined && env.trim() !== '' && Number.isInteger(n) && n >= 1 ? n : DEFAULT_RUNS_KEPT;
 }
 
-/** Most pinned runs per project (the model_run_pin_limit trigger, 015_run_pinned.sql, enforces the same number). */
+/**
+ * Most pinned runs per project (the model_run_pin_limit trigger, 015_run_pinned.sql, enforces the same number).
+ * A cited run's pin doesn't count (024_scenarios.sql): it is kept anyway.
+ */
 export const PINNED_RUNS_PER_PROJECT_MAX = 10;
 
 /**
@@ -78,13 +83,47 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * history of 12). The single exemption path for all of them, so they can't
  * drift apart.
  *
- * A new kind of citation (a scenario's base run, WP-3.2; an evidence pack or
- * assessment, WP-3.13/3.14) is not added here: its migration adds one EXISTS
+ * A new kind of citation is not added here: its migration adds one EXISTS
  * clause to `model_run_cited` (CREATE OR REPLACE; the pattern is in
- * 021_series_blob.sql), and this expression, trimRuns and the DELETE route
- * pick it up unchanged.
+ * 021_series_blob.sql), as 024_scenarios.sql did for a scenario's base run,
+ * and this expression, trimRuns and the DELETE route pick it up unchanged.
  */
 export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
+
+/**
+ * What cites a run, as a SQL expression over `model_run r`: a jsonb list of
+ * `{ kind, id, name }`, oldest first, of the citations the caller can see
+ * (RLS): publications (022_publication.sql; `name` is the day it was
+ * published, YYYY-MM-DD) and scenarios (024_scenarios.sql). Evidence packs and
+ * assessments add their kinds here with their migrations. `model_run_cited`
+ * answers "is it cited at all", including citations the caller can't see.
+ */
+export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', c.kind, 'id', c.id, 'name', c.name) ORDER BY c.at, c.id), '[]'::jsonb) FROM (
+		SELECT 'publication' AS kind, p.id, to_char(p.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS name, p.published_at AS at FROM run_publication p WHERE p.run_id = r.id
+		UNION ALL
+		SELECT 'scenario', s.id, s.name, s.created_at FROM scenario s WHERE s.base_run_id = r.id
+	) c)`;
+
+/** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, UTC). */
+export interface RunCitation {
+	kind: 'publication' | 'scenario';
+	id: string;
+	name: string;
+}
+
+/**
+ * Why a cited run is kept, for a 409: `this run is cited by the publication of
+ * 2026-09-25, scenario "A", so it is kept`, or without names when the caller
+ * can see none of its citations.
+ */
+export async function citedMessage(db: Db, projectId: string, runId: string, tail = 'so it is kept'): Promise<string> {
+	const { rows } = await db.query<{ cited: RunCitation[] }>(`SELECT ${CITED_BY_SQL} AS cited FROM model_run r WHERE r.project_id = $1 AND r.id = $2`, [projectId, runId]);
+	const cited = rows[0]?.cited ?? [];
+	if (!cited.length) return `this run is cited, ${tail}`;
+	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : `${c.kind} "${c.name}"`));
+	const more = cited.length > 3 ? ` and ${cited.length - 3} more` : '';
+	return `this run is cited by ${names.join(', ')}${more}, ${tail}`;
+}
 
 /**
  * Serialise the project's run writes and removals to the end of the caller's
@@ -144,7 +183,26 @@ interface SnapshotSeries {
 }
 
 /**
- * Run the engine and persist outputs. Returns the new run id.
+ * What a scenario run records about the scenario that made it, in its input
+ * snapshot (`model_run.inputs.scenario`): the ops exactly as applied, their
+ * hash, the base run and how each op was classed. Immutable with the run, so
+ * compare shows the ops that produced it even after the scenario is edited,
+ * rebased or deleted (docs/scenarios.md).
+ */
+export interface RunScenarioSnapshot {
+	id: string;
+	/** The scenario's name when the run was made. */
+	name: string;
+	baseRunId: string;
+	ops: ScenarioOp[];
+	opsSha256: string;
+	ownedNodeIds: string[];
+	/** classifyScenario(base, ops, ownedNodeIds), one per op. */
+	classified: OpClass[];
+}
+
+/**
+ * Run the live model and persist it. Returns the new run id.
  *
  * The run's input series are stored too (021_series_blob.sql): each kind's
  * values go to `series_blob` under their SHA-256 (only if the project doesn't
@@ -153,7 +211,22 @@ interface SnapshotSeries {
  * later, whatever happens to the live series.
  */
 export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
-	const input = await loadModelInput(db, projectId);
+	return runAndStore(db, projectId, label, await loadModelInput(db, projectId));
+}
+
+/**
+ * Run the engine on `input` and persist the run, its outputs and its stored
+ * inputs: the one save path, shared by executeRun (the live model) and
+ * executeScenarioRun (a scenario applied to its base run's input, with
+ * `scenario` set, scenarios/execute.ts). Doesn't trim; the caller does.
+ */
+export async function runAndStore(
+	db: Db,
+	projectId: string,
+	label: string,
+	input: ModelInput,
+	scenario?: RunScenarioSnapshot
+): Promise<{ id: string; output: ModelOutput }> {
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
 	const output = runModelChecked(input);
 	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
@@ -170,12 +243,13 @@ export async function executeRun(db: Db, projectId: string, label: string): Prom
 				k,
 				{ startDate: v.startDate, length: v.values.length, valuesSha256: hashes[k]! } satisfies SnapshotSeries
 			])
-		)
+		),
+		...(scenario ? { scenario } : {})
 	};
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)
-		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7) RETURNING id`,
-		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary)]
+		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id)
+		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null]
 	);
 	const runId = rows[0]!.id;
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).

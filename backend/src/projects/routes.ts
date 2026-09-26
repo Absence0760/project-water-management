@@ -36,6 +36,8 @@ type ProjectRow = {
 	/** Last day covered by any of the project's time series ('YYYY-MM-DD'), or null. */
 	data_until: string | null;
 	last_run_at: Date | null;
+	/** When the current publication was published (022_publication), or null. */
+	published_at: Date | null;
 };
 
 const summary = (r: ProjectRow) => ({
@@ -47,7 +49,8 @@ const summary = (r: ProjectRow) => ({
 	createdAt: r.created_at.toISOString(),
 	updatedAt: r.updated_at.toISOString(),
 	dataUntil: r.data_until,
-	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null
+	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
+	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
 const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.settings) });
 
@@ -64,7 +67,11 @@ const SELECT_PROJECT = `
 		-- run, so either one would read "up to date" while the rain lags.
 		(SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
 			WHERE ts.project_id = p.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0) AS data_until,
-		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at
+		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at,
+		-- The current publication's date (022_publication; its partial unique
+		-- index answers it). Every member reads run_publication, farmers too.
+		(SELECT pub.published_at FROM run_publication pub
+			WHERE pub.project_id = p.id AND pub.superseded_at IS NULL) AS published_at
 	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 
 const name = z.string().trim().min(1).max(200);

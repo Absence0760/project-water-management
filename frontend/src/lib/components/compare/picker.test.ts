@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
-import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, runOptionLabel } from './picker';
+import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
 
 const run = (id: string, label = ''): RunMeta => ({
 	id,
@@ -38,6 +38,21 @@ describe('picker defaults', () => {
 		});
 	});
 
+	it('opens with A = the published baseline when it isn’t the latest run', () => {
+		const pub = { ...run('older'), published: true };
+		expect(defaultPair('p', [run('new'), run('old'), pub])).toEqual({
+			a: { projectId: 'p', runId: 'older' },
+			b: { projectId: 'p', runId: 'new' }
+		});
+	});
+
+	it('falls back to the previous run when the latest run is the published one', () => {
+		expect(defaultPair('p', [{ ...run('new'), published: true }, run('old')])).toEqual({
+			a: { projectId: 'p', runId: 'old' },
+			b: { projectId: 'p', runId: 'new' }
+		});
+	});
+
 	it('has no default pair with fewer than two runs', () => {
 		expect(defaultPair('p', [run('only')])).toBeNull();
 		expect(defaultPair('p', [])).toBeNull();
@@ -56,6 +71,7 @@ describe('picker defaults', () => {
 		const fmt = (iso: string) => iso.slice(0, 10);
 		expect(runOptionLabel(run('r', 'Baseline'), fmt)).toBe('Baseline · 2026-09-23 · 2000–2020');
 		expect(runOptionLabel(run('r'), fmt)).toBe('Untitled run · 2026-09-23 · 2000–2020');
+		expect(runOptionLabel({ ...run('r', 'Base'), published: true }, fmt, true)).toBe('Base · 2026-09-23 · 2000–2020 · latest · published');
 	});
 
 	it('adds the Runs list tags that apply, in its order', () => {
@@ -63,5 +79,25 @@ describe('picker defaults', () => {
 		const tagged: RunMeta = { ...run('r', 'Dam raise'), evidence: 'current', pinned: true, legacy: true };
 		expect(runOptionLabel(tagged, fmt, true)).toBe('Dam raise · 2026-09-23 · 2000–2020 · latest · evidence · pinned · workbook comparison');
 		expect(runOptionLabel({ ...run('r', 'Old'), evidence: 'past' }, fmt)).toBe('Old · 2026-09-23 · 2000–2020 · former evidence');
+	});
+});
+
+describe('publishedBaseline (the "Compare with published" offer)', () => {
+	const runs = [run('r3'), { ...run('r2'), published: true }, run('r1')];
+	const ref = (runId: string, projectId = 'p') => ({ projectId, runId });
+
+	it('offers B’s project’s published run as A', () => {
+		expect(publishedBaseline(runs, ref('r1'), ref('r3'))).toEqual(ref('r2'));
+		expect(publishedBaseline(runs, null, ref('r3'))).toEqual(ref('r2'));
+		// A from another project: the offer is still B's project's baseline.
+		expect(publishedBaseline(runs, ref('x', 'q'), ref('r3'))).toEqual(ref('r2'));
+	});
+
+	it('offers nothing when it would change nothing', () => {
+		expect(publishedBaseline(runs, ref('r2'), ref('r3'))).toBeNull(); // A is already it
+		expect(publishedBaseline(runs, ref('r1'), ref('r2'))).toBeNull(); // B is the published run
+		expect(publishedBaseline([run('r3'), run('r1')], ref('r1'), ref('r3'))).toBeNull(); // nothing published
+		expect(publishedBaseline(undefined, ref('r1'), ref('r3'))).toBeNull(); // runs not loaded yet
+		expect(publishedBaseline(runs, ref('r1'), null)).toBeNull(); // no B
 	});
 });

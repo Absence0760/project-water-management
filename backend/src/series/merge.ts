@@ -62,6 +62,11 @@ export function mergeDaily(existing: Daily | null, incoming: Daily, { keepOnNull
 	return { startDate: fromEpochDay(start), values: out };
 }
 
+/** The same days and values (a stored double round-trips exactly, so === is equality). */
+export function sameDaily(a: Daily, b: Daily): boolean {
+	return a.startDate === b.startDate && a.values.length === b.values.length && a.values.every((v, i) => v === b.values[i]);
+}
+
 export interface SeriesMetaRow {
 	id: string;
 	kind: string;
@@ -95,6 +100,18 @@ export async function mergeSeries(db: Db, projectId: string, body: SeriesBody, o
 	const existing = cur[0] ? { startDate: cur[0].start_date, values: cur[0].values } : null;
 	const merged = mergeDaily(existing, { startDate: body.startDate, values: body.values }, options);
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
+	const c = cur[0];
+	const before = c ? { id: c.id, unit: c.unit, startDate: c.start_date, values: c.values } : null;
+	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
+	// leave the row, so updated_at still says when the values last changed.
+	if (cur[0] && cur[0].unit === body.unit && sameDaily(existing!, merged)) {
+		const { rows } = await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
+			projectId,
+			body.kind,
+			body.name
+		]);
+		return { meta: rows[0]!, before, after: merged };
+	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
 		 VALUES ($1, $2, $3, $4, $5, $6)
@@ -103,6 +120,5 @@ export async function mergeSeries(db: Db, projectId: string, body: SeriesBody, o
 		 RETURNING ${SERIES_META}`,
 		[projectId, body.kind, body.name, body.unit, merged.startDate, merged.values]
 	);
-	const c = cur[0];
-	return { meta: rows[0]!, before: c ? { id: c.id, unit: c.unit, startDate: c.start_date, values: c.values } : null, after: merged };
+	return { meta: rows[0]!, before, after: merged };
 }

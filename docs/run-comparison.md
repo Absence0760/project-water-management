@@ -10,12 +10,25 @@ project D copied from C and then modified.
 
 Open `/compare?project=<id>` (the **Compare runs** link on the Runs tab's
 runs list; the page links **Back to runs**). The page starts on that
-project's **previous run (A — baseline)** and **latest run (B — changed)**.
+project's **latest run (B — changed)** against its **published baseline
+(A — baseline)**, the run stakeholders see (WP-2.3), when there is one and
+it isn't the latest; otherwise against the **previous run**
+(`defaultPair` in `compare/picker.ts`).
+
+**Compare with published.** Whenever the pair is chosen and B's project has
+a published run that is neither B nor already A, a **Compare with
+published** button under the pickers sets A to it and keeps B
+(`publishedBaseline`), so "what does this change do against what
+stakeholders were shown?" is one click. The Runs tab's results header has
+the same link for any run other than the published one
+(`/compare?a=<published>&b=<that run>`). An explicit `?a=`/`?b=` is never
+replaced: the published run is only pre-selected when the page opens with
+`?project=` alone, and otherwise offered.
 Each side has its own project and run picker, so either side can point at
 another project. Each run option reads like a Runs list row, as text
 (`runOptionLabel` in `compare/picker.ts`): label · when it ran · the years it
-covers, then the tags that apply (latest, evidence or former evidence,
-pinned, workbook comparison), e.g. "Baseline · 2026-09-23 15:06 · 1981–2025 ·
+covers, then the tags that apply (latest, published, evidence or former
+evidence, pinned, workbook comparison), e.g. "Baseline · 2026-09-23 15:06 · 1981–2025 ·
 latest · pinned". Switching a side to another project picks that project's
 newest run that isn't already the other side. The URL holds the choice
 (`/compare?a=<projectId>:<runId>&b=<projectId>:<runId>`), so a comparison can be
@@ -198,6 +211,27 @@ name**:
   then by name.
 - **Crop areas** are matched by (farm name, crop name). **Transfers** are
   matched by id, then by their "from → to" route.
+
+## Scenario runs
+
+A [scenario](./scenarios.md) run is an ordinary run with `scenarioId` set, so
+comparing it with its base (`?a=<p>:<baseRun>&b=<p>:<scenarioRun>`) needs
+nothing new. A scenario keeps its base's ids, so every change lines up **by
+id**: a 20 % dam raise on Rooikloof is one "What changed" line, *Rooikloof:
+dam capacity 100,000 m³ → 120,000 m³*, and Rooikloof's farm row pairs with
+itself. A node the scenario added shows under "Only in run B", one it removed
+under "Only in run A".
+
+`GET /compare/runs` adds each side's **scenario**
+([api.md § Compare runs](./api.md#compare-runs)): its name, the ops exactly as
+that run applied them and how each op was classed (`proposal` or `baseline`,
+[scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+They come from the run's own snapshot (`inputs.scenario`), not from the
+scenario as it is now, so a scenario edited, rebased or deleted since still
+shows the ops that produced the run. The compare page's **Scenario overrides**
+section (the Scenarios tab work, stage D of issue #18) lists them above "What
+changed", with the red "Baseline assumptions changed" callout when any op is
+`baseline`.
 
 ## What the input diff can and can't see
 

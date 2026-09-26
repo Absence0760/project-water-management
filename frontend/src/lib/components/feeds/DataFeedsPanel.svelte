@@ -6,10 +6,10 @@
 	Its own chunk: SettingsTab loads it lazily. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
 	import { kindLabel } from '$lib/series/kinds';
-	import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, feedsApi, needsAttention, STATE_LABELS } from './feeds';
+	import { describePlace, describeRunsAs, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, errorText, feedsApi, healthMessage, needsAttention, STATE_LABELS } from './feeds';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -19,60 +19,103 @@
 	let data = $state<FeedList | null>(null);
 	let loadError = $state<string | null>(null);
 	let busy = $state<string | null>(null);
+	let refreshing = $state(false);
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let adding = $state(false);
 	let draft = $state<FeedDraft>(emptyDraft());
 	let formError = $state<string | null>(null);
+	/** The field formError is about (a client-side check), for aria-invalid and focus. */
+	let formField = $state<'cells' | 'station' | null>(null);
+	let heading = $state<HTMLElement>();
+	let attachButton = $state<HTMLButtonElement>();
 
-	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const source = $derived(data?.sources.find((s) => s.source === draft.source));
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
+	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
-	async function reload() {
-		loadError = null;
+	// Only the newest list request may land: an older one answering late
+	// (a slow first load, a double press of Refresh) must not overwrite it.
+	let seq = 0;
+	/** Re-read the list. Never throws: with a list already shown, a failure keeps it and says so. */
+	async function reload(): Promise<boolean> {
+		const mine = ++seq;
 		try {
-			data = await feeds.list();
+			const next = await feeds.list();
+			if (mine !== seq) return false;
+			data = next;
+			loadError = null;
+			return true;
 		} catch (e) {
-			loadError = msg(e);
+			if (mine !== seq) return false;
+			if (data) error = `Couldn’t refresh the data feeds: ${errorText(e)}`;
+			else loadError = errorText(e);
+			return false;
 		}
 	}
 	onMount(reload);
 
-	function startAdding() {
+	async function refresh() {
+		if (refreshing) return;
+		message = error = null;
+		refreshing = true;
+		if (await reload()) message = 'Status refreshed.';
+		refreshing = false;
+	}
+
+	// Focus follows the form: into it when it opens, back to "Attach a feed"
+	// when it closes, so a keyboard user is never dropped on the page body.
+	async function startAdding() {
 		draft = emptyDraft('chirps', data?.sources.find((s) => s.source === 'chirps')?.kinds);
-		formError = null;
+		formError = formField = null;
 		adding = true;
+		await tick();
+		document.getElementById(`${uid}-src`)?.focus();
+	}
+
+	async function closeForm() {
+		adding = false;
+		await tick();
+		attachButton?.focus();
 	}
 
 	function pickSource(s: FeedDraft['source']) {
 		draft.source = s;
 		draft.targetKind = data?.sources.find((x) => x.source === s)?.kinds[0] ?? '';
+		// A problem with the other source's field no longer applies.
+		formError = formField = null;
 	}
 
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
+		if (busy) return;
 		const parsed = draftToBody(draft);
 		if ('error' in parsed) {
 			formError = parsed.error;
+			formField = parsed.field;
+			await tick();
+			document.getElementById(`${uid}-${parsed.field}`)?.focus();
 			return;
 		}
 		busy = 'add';
-		formError = message = error = null;
+		formError = formField = message = error = null;
+		let attached = false;
 		try {
 			const feed = await feeds.create(parsed.body);
-			adding = false;
+			attached = true;
 			message = `Feed attached: ${describeTarget(feed)} from ${describePlace(feed)}. It runs on the next schedule, or now with “Run now”.`;
-			await reload();
 		} catch (err) {
-			formError = msg(err);
-		} finally {
-			busy = null;
+			formError = errorText(err);
 		}
+		// Either way the list may have moved (another owner's feed for the same series is the usual 409).
+		await reload();
+		busy = null;
+		if (attached) await closeForm();
 	}
 
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove') {
-		if (what === 'remove' && !confirm(`Remove the ${f.source === 'dws' ? 'DWS' : 'CHIRPS'} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
+		if (busy) return;
+		if (what === 'remove' && !confirm(`Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
 		busy = f.id;
 		message = error = null;
 		try {
@@ -86,18 +129,21 @@
 				await feeds.remove(f.id);
 				message = 'Feed removed.';
 			}
-			await reload();
 		} catch (e) {
-			error = msg(e);
-		} finally {
-			busy = null;
+			error = errorText(e);
 		}
+		// Also after a failure: it usually means the list is out of date (the
+		// feed was switched off or removed elsewhere), so show what is there now.
+		await reload();
+		busy = null;
+		// A removed feed takes its buttons with it: keep focus in the section.
+		if (what === 'remove' && !data?.feeds.some((x) => x.id === f.id)) heading?.focus();
 	}
 </script>
 
 <section class="panel" id="set-feeds" aria-labelledby="{uid}-h">
 	<div class="panel-head">
-		<h2 id="{uid}-h">Data feeds</h2>
+		<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds</h2>
 		{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
 	</div>
 	<p class="hint muted">
@@ -109,7 +155,7 @@
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
 			Couldn’t load the data feeds: {loadError}
-			<button type="button" class="btn btn-sm" onclick={reload}>Try again</button>
+			<button type="button" class="btn btn-sm" onclick={refresh}>Try again</button>
 		</div>
 	{:else if !data}
 		<p class="muted" role="status">Loading…</p>
@@ -128,22 +174,22 @@
 					<li class="feed" data-state={f.health.state}>
 						<div class="head">
 							<span class="state state-{f.health.state}">{STATE_LABELS[f.health.state]}</span>
-							<strong>{data.sources.find((s) => s.source === f.source)?.label ?? f.source}</strong>
+							<strong>{sourceLabel(f)}</strong>
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
-						<p class="where muted small">{describePlace(f)} · {f.schedule}{f.actingUser ? ` · runs as ${f.actingUser}` : ' · no acting owner: save it again'}</p>
-						<p class="health">{f.health.message}</p>
+						<p class="where muted small">{describePlace(f)} · {f.schedule}{describeRunsAs(f)}</p>
+						<p class="health">{healthMessage(f.health.message)}</p>
 						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
-									<button type="button" class="btn btn-sm" disabled={busy === f.id} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
+									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
 								{/if}
 								{#if data.canEdit}
-									<button type="button" class="btn btn-sm" disabled={busy === f.id} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>
+									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>
 										{f.enabled ? 'Switch off' : 'Switch on'}
 									</button>
-									<button type="button" class="btn btn-sm btn-danger" disabled={busy === f.id} aria-label="Remove feed: {describeTarget(f)}" onclick={() => act(f, 'remove')}>Remove</button>
+									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === f.id} aria-label="Remove feed: {describeTarget(f)}" onclick={() => act(f, 'remove')}>Remove</button>
 								{/if}
 							</div>
 						{/if}
@@ -153,13 +199,14 @@
 		{/if}
 
 		<div class="row">
-			<button type="button" class="btn btn-sm" onclick={reload} disabled={busy !== null}>Refresh status</button>
+			<button type="button" class="btn btn-sm" onclick={refresh} aria-disabled={busy !== null || refreshing}>{refreshing ? 'Refreshing…' : 'Refresh status'}</button>
 			{#if data.canEdit && !adding}
-				<button type="button" class="btn btn-sm btn-primary" onclick={startAdding}>Attach a feed</button>
+				<button type="button" class="btn btn-sm btn-primary" bind:this={attachButton} onclick={startAdding}>Attach a feed</button>
 			{/if}
 		</div>
 
-		{#if message}<p class="muted" role="status">{message}</p>{/if}
+		<!-- Always in the page, so screen readers announce each new message. -->
+		<div role="status">{#if message}<p class="muted">{message}</p>{/if}</div>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 		{#if adding}
@@ -193,23 +240,41 @@
 				{#if draft.source === 'dws'}
 					<div class="field">
 						<label for="{uid}-station">DWS station</label>
-						<input id="{uid}-station" type="text" maxlength="6" autocomplete="off" bind:value={draft.station} aria-describedby="{uid}-station-h" />
+						<input
+							id="{uid}-station"
+							type="text"
+							required
+							autocomplete="off"
+							autocapitalize="characters"
+							spellcheck="false"
+							bind:value={draft.station}
+							aria-invalid={formField === 'station' || undefined}
+							aria-describedby="{uid}-station-h{formField === 'station' ? ` ${uid}-err` : ''}"
+						/>
 						<span class="hint" id="{uid}-station-h">The gauge code, e.g. A2H012. Verified DWS data lags by months: use it for calibration, not day-to-day operation.</span>
 					</div>
 				{:else}
 					<div class="field">
 						<label for="{uid}-cells">Grid cells</label>
-						<textarea id="{uid}-cells" rows="3" bind:value={draft.cells} aria-describedby="{uid}-cells-h"></textarea>
+						<textarea
+							id="{uid}-cells"
+							rows="3"
+							required
+							spellcheck="false"
+							bind:value={draft.cells}
+							aria-invalid={formField === 'cells' || undefined}
+							aria-describedby="{uid}-cells-h{formField === 'cells' ? ` ${uid}-err` : ''}"
+						></textarea>
 						<span class="hint" id="{uid}-cells-h">
 							One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
 							holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
 						</span>
 					</div>
 				{/if}
-				{#if formError}<p class="err" role="alert">{formError}</p>{/if}
+				{#if formError}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
 				<div class="row">
-					<button type="submit" class="btn btn-primary btn-sm" disabled={busy === 'add'}>{busy === 'add' ? 'Attaching…' : 'Attach feed'}</button>
-					<button type="button" class="btn btn-sm" onclick={() => (adding = false)}>Cancel</button>
+					<button type="submit" class="btn btn-primary btn-sm" aria-disabled={busy === 'add'}>{busy === 'add' ? 'Attaching…' : 'Attach feed'}</button>
+					<button type="button" class="btn btn-sm" onclick={closeForm}>Cancel</button>
 				</div>
 			</form>
 		{/if}
@@ -288,5 +353,10 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.85rem;
+	}
+	/* Busy buttons stay focusable (aria-disabled, not disabled) but look it. */
+	.btn[aria-disabled='true'] {
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 </style>
