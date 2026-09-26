@@ -9,20 +9,28 @@
 // one due.
 import pg from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// FEED_FETCHER=sqs tests capture the fetch requests instead of sending them;
+// every other test fetches inline and sends nothing.
+const { sent } = vi.hoisted(() => ({ sent: [] as unknown[] }));
+vi.mock('../jobs/transport.js', async (orig) => ({
+	...(await orig<typeof import('../jobs/transport.js')>()),
+	sendToQueue: async (_url: string | undefined, _name: string, message: unknown) => void sent.push(message)
+}));
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
-import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
 import { FEED_META_MAX_BYTES, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { MAX_FEEDS } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
-import { claimFeed, feedForJob, listDueFeeds } from './store.js';
+import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
 afterEach(async () => {
+	sent.length = 0;
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 	await asOwner('DELETE FROM data_feed');
@@ -530,40 +538,53 @@ describe('the scheduler', () => {
 	});
 });
 
-describe('the production hand-off (ingest-results → feed_ingest)', () => {
-	const result = { ok: true, startDate: '2026-01-01', values: [1.5, null, 2.5], meta: { days: 3 } };
-
-	async function fetchJob() {
+describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher → ingest-results → feed_ingest)', () => {
+	type FetchMsg = { fetchJobId: string; feedId: string; feedVersion: string; request: { start: string; end: string } };
+	/** Run the queued feed_fetch the production way: it records its window on the feed and sends the request (captured). */
+	async function runFetchJob(): Promise<FetchMsg> {
+		vi.stubEnv('FEED_FETCHER', 'sqs');
+		vi.stubEnv('FETCH_REQUESTS_QUEUE_URL', 'https://sqs.test/fetch-requests');
+		sent.length = 0;
+		expect((await tick()).done).toBe(1);
+		vi.unstubAllEnvs();
+		expect(sent).toHaveLength(1);
+		return sent[0] as FetchMsg;
+	}
+	async function fetchJob(over: Record<string, unknown> = {}) {
 		const owner = await signUp('Ingester');
 		const pid = await project(owner);
-		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] } })).body.feed;
-		const version = (await asOwner(`SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS v FROM data_feed WHERE id = $1`, [feed.id]))[0].v as string;
-		const { job } = await withUser(owner.id, (db) => enqueueJob(db, { projectId: pid, kind: 'feed_fetch', payload: { feedId: feed.id }, delaySeconds: 3600 }));
-		return { owner, pid, feedId: feed.id as string, jobId: job.id, version };
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, ...over })).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		const m = await runFetchJob();
+		return { owner, pid, feedId, jobId: m.fetchJobId, version: m.feedVersion, window: { start: m.request.start, end: m.request.end } };
 	}
-	const msg = (o: { feedId: string; jobId: string; version: string }, r: unknown = result) => ({ v: 1 as const, type: 'ingest' as const, fetchJobId: o.jobId, feedId: o.feedId, feedVersion: o.version, result: r });
+	/** Days from the first the fetch asked for. */
+	const result = (o: { window: { start: string } }, values: (number | null)[] = [1.5, null, 2.5]) => ({ ok: true, startDate: o.window.start, values, meta: { days: values.length } });
+	const msg = (o: { feedId: string; jobId: string; version: string }, r: unknown) => ({ v: 1 as const, type: 'ingest' as const, fetchJobId: o.jobId, feedId: o.feedId, feedVersion: o.version, result: r });
+	const plus = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-	it('queues a feed_ingest job as the fetch job’s user, which merges the days', async () => {
+	it('queues a feed_ingest job as the fetch job’s user, which merges the days and records how far it read', async () => {
 		const o = await fetchJob();
-		expect(await acceptIngestResult(msg(o))).toBe('queued');
+		expect(o.window).toEqual({ start: addDays(-60), end: addDays(-1) });
+		expect(await acceptIngestResult(msg(o, result(o)))).toBe('queued');
 		// A redelivered message while the first waits is the same job.
-		expect(await acceptIngestResult(msg(o))).toBe('queued');
+		expect(await acceptIngestResult(msg(o, result(o)))).toBe('queued');
 		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_ingest' AND project_id = $1`, [o.pid]))[0].n).toBe(1);
 		await tick();
 		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([1.5, null, 2.5]);
-		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: '2026-01-03', last_value: 2.5, consecutive_failures: 0 });
+		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: plus(o.window.start, 2), last_value: 2.5, consecutive_failures: 0, last_meta: { through: o.window.end } });
 	});
 
 	it('refuses a message that names another feed’s job, or no job', async () => {
 		const o = await fetchJob();
 		const p = await fetchJob();
-		expect(await acceptIngestResult(msg({ ...o, feedId: p.feedId }))).toBe('unknown_fetch');
-		expect(await acceptIngestResult(msg({ ...o, jobId: '00000000-0000-4000-8000-000000000000' }))).toBe('unknown_fetch');
+		expect(await acceptIngestResult(msg({ ...o, feedId: p.feedId }, result(o)))).toBe('unknown_fetch');
+		expect(await acceptIngestResult(msg({ ...o, jobId: '00000000-0000-4000-8000-000000000000' }, result(o)))).toBe('unknown_fetch');
 	});
 
 	it('records an invalid result as a failed fetch, writing nothing', async () => {
 		const o = await fetchJob();
-		await acceptIngestResult(msg(o, { ok: true, startDate: '2026-01-01', values: [-5], meta: {} }));
+		await acceptIngestResult(msg(o, { ok: true, startDate: o.window.start, values: [-5], meta: {} }));
 		await tick();
 		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
@@ -573,14 +594,14 @@ describe('the production hand-off (ingest-results → feed_ingest)', () => {
 		const o = await fetchJob();
 		// 20 keys of 40 characters and values of 100, each character two bytes in UTF-8: ~5.7 KB of JSON.
 		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'é'.repeat(38)}`, 'é'.repeat(100)]));
-		await acceptIngestResult(msg(o, { ...result, meta }));
+		await acceptIngestResult(msg(o, { ...result(o), meta }));
 		await tick();
 		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
 		expect((await asOwner(`SELECT status FROM job WHERE kind = 'feed_ingest' AND project_id = $1`, [o.pid]))[0].status).toBe('done');
 	});
 
-	it('the largest meta FetchResult accepts fits the column, with the merged count added (positive control)', async () => {
+	it('the largest meta FetchResult accepts fits the column, with the merged count and how far it read added (positive control)', async () => {
 		const o = await fetchJob();
 		// 20 keys of 40 characters, values of two-byte characters as long as the byte limit allows.
 		const fill = (n: number) => Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'k'.repeat(38)}`, 'é'.repeat(n)]));
@@ -589,28 +610,161 @@ describe('the production hand-off (ingest-results → feed_ingest)', () => {
 		const meta = fill(n);
 		expect(new TextEncoder().encode(JSON.stringify(meta)).length).toBeLessThanOrEqual(FEED_META_MAX_BYTES);
 		expect(new TextEncoder().encode(JSON.stringify(meta)).length).toBeGreaterThan(FEED_META_MAX_BYTES - 100);
-		await acceptIngestResult(msg(o, { ...result, meta }));
+		await acceptIngestResult(msg(o, { ...result(o), meta }));
 		await tick();
-		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: '2026-01-03' });
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: plus(o.window.start, 2), last_meta: { through: o.window.end } });
 	});
 
 	it('drops a result for a feed saved with new settings since the fetch', async () => {
 		const o = await fetchJob();
-		await acceptIngestResult(msg(o));
+		await acceptIngestResult(msg(o, result(o)));
 		await o.owner.call('PATCH', `/projects/${o.pid}/feeds/${o.feedId}`, { config: { cells: [cell(), cell()] } });
 		await tick();
 		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ last_attempt_at: null });
 	});
+
+	// Issue #31: ingest-results can redeliver and reorder.
+	it('drops a late answer to an older fetch once a newer fetch has been sent, whatever order the answers come in', async () => {
+		const o = await fetchJob();
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const newer = await runFetchJob();
+		expect(newer.fetchJobId).not.toBe(o.jobId);
+
+		// The newer fetch's answer (final values), then the older one's (preliminary, higher).
+		await acceptIngestResult(msg({ ...o, jobId: newer.fetchJobId }, result(o, [5, 5, 5])));
+		await tick();
+		const applied = await feedRow(o.feedId);
+		await acceptIngestResult(msg(o, result(o, [9, 9, 9])));
+		await tick();
+		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([5, 5, 5]);
+		// Nor does it touch the feed's health.
+		expect(await feedRow(o.feedId)).toEqual(applied);
+
+		// The other order: an older fetch's answer arriving before the newer one's is dropped too.
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const third = await runFetchJob();
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const fourth = await runFetchJob();
+		await acceptIngestResult(msg({ ...o, jobId: third.fetchJobId }, result(o, [1, 1, 1])));
+		await tick();
+		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([5, 5, 5]);
+		// Positive control: the newest fetch's answer applies.
+		await acceptIngestResult(msg({ ...o, jobId: fourth.fetchJobId }, result(o, [6, 6, 6])));
+		await tick();
+		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([6, 6, 6]);
+	});
+
+	it('applies an answer once: a redelivery after it was applied changes nothing, not even the attempt time', async () => {
+		const o = await fetchJob();
+		await acceptIngestResult(msg(o, result(o, [2, 2])));
+		await tick();
+		const applied = await feedRow(o.feedId);
+		// The owner corrects a day after the answer was applied.
+		await o.owner.call('PUT', `/projects/${o.pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: o.window.start, values: [7, 7] });
+		// The same message again, after the first feed_ingest finished (so not deduplicated as pending).
+		expect(await acceptIngestResult(msg(o, result(o, [2, 2])))).toBe('queued');
+		await tick();
+		expect(await feedRow(o.feedId)).toEqual(applied);
+		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([7, 7]);
+	});
+
+	it('refuses an answer with days outside the window the fetch asked for: a failed fetch, nothing written', async () => {
+		for (const [label, startDate, values] of [
+			['a day before the window', addDays(-61), [1, 1]],
+			// Today is a day CHIRPS could have (latestDay), but the fetch asked only up to yesterday.
+			['a day after the window', addDays(-2), [1, 1, 1]]
+		] as const) {
+			const o = await fetchJob();
+			await acceptIngestResult(msg(o, { ok: true, startDate, values: [...values], meta: { days: values.length } }));
+			await tick();
+			expect(await series(o.owner, o.pid, 'rain_chirps_mm'), label).toBeNull();
+			expect(await feedRow(o.feedId), label).toMatchObject({
+				consecutive_failures: 1,
+				last_data_date: null,
+				last_error: `the fetcher’s answer had days outside ${o.window.start} to ${o.window.end}, the days it was asked for, so nothing was written`
+			});
+		}
+		// Positive control: the window's own first and last days.
+		const o = await fetchJob();
+		await acceptIngestResult(msg(o, { ok: true, startDate: o.window.start, values: new Array(60).fill(1), meta: { days: 60 } }));
+		await tick();
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: o.window.end });
+	});
+
+	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
+	it('an empty answer records how far it read, so the next fetch moves past the empty stretch', async () => {
+		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: '1960-01-01' }, targetKind: 'flow_observed_m3s' });
+		expect(o.window).toEqual({ start: '1960-01-01', end: '1979-12-26' });
+		// Nothing before the station opened.
+		await acceptIngestResult(msg(o, { ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0 } }));
+		await tick();
+		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: null, consecutive_failures: 0, last_meta: { through: '1979-12-26' } });
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		// A year of overlap before the last day read, not back to 1960.
+		expect((await runFetchJob()).request).toMatchObject({ start: '1978-12-27', end: '1998-12-21' });
+	});
+
+	it('a startDate in the future asks for no days: the fetch still goes out, an empty answer is fine and any day is refused', async () => {
+		const o = await fetchJob({ config: { cells: [cell()], startDate: addDays(10) } });
+		expect(o.window).toEqual({ start: addDays(10), end: addDays(-1) });
+		await acceptIngestResult(msg(o, { ok: true, startDate: null, values: [], meta: { days: 0 } }));
+		await tick();
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: { days: 0, merged: 0 } });
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const next = await runFetchJob();
+		await acceptIngestResult(msg({ ...o, jobId: next.fetchJobId }, { ok: true, startDate: addDays(-2), values: [1], meta: { days: 1 } }));
+		await tick();
+		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1 });
+	});
+
+	it('only the running fetch job of that feed, as its user, can record a window; an owner can’t write one directly', async () => {
+		const o = await fetchJob();
+		const other = await signUp('NotAMember');
+		const begin = (uid: string) => withUser(uid, (db) => db.query(`SELECT app_begin_feed_fetch($1, $2, '2026-01-01', '2026-01-02')`, [o.feedId, o.jobId]));
+		// The fetch job has finished: it isn't running any more.
+		await expect(begin(o.owner.id)).rejects.toMatchObject({ code: '42501' });
+		await expect(begin(other.id)).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(other.id, (db) => db.query('SELECT * FROM app_take_feed_fetch($1, $2)', [o.feedId, o.jobId]))).rejects.toMatchObject({ code: '42501' });
+		await withUser(o.owner.id, (db) => db.query(`UPDATE data_feed SET fetch_job_id = gen_random_uuid(), fetch_start = '1900-01-01', fetch_end = '2100-01-01' WHERE id = $1`, [o.feedId]));
+		const row = (await asOwner(`SELECT fetch_job_id, to_char(fetch_start, 'YYYY-MM-DD') AS s, to_char(fetch_end, 'YYYY-MM-DD') AS e FROM data_feed WHERE id = $1`, [o.feedId]))[0];
+		// Positive control: what the fetch job recorded stands.
+		expect(row).toEqual({ fetch_job_id: o.jobId, s: o.window.start, e: o.window.end });
+	});
+
+	it('two ingests of one answer at once: the second waits for the first, then finds it applied', async () => {
+		const o = await fetchJob();
+		let taken!: () => void;
+		let commit!: () => void;
+		const firstHasTaken = new Promise<void>((r) => (taken = r));
+		const firstMayCommit = new Promise<void>((r) => (commit = r));
+		const first = withUser(o.owner.id, async (db) => {
+			const w = await takeFeedFetch(db, o.feedId, o.jobId);
+			taken();
+			await firstMayCommit;
+			return w;
+		});
+		await firstHasTaken;
+		let secondDone = false;
+		const second = withUser(o.owner.id, (db) => takeFeedFetch(db, o.feedId, o.jobId)).finally(() => (secondDone = true));
+		const waiting = async () => (await asOwner('SELECT 1 FROM pg_locks WHERE NOT granted')).length > 0;
+		await expect.poll(async () => secondDone || (await waiting()), { timeout: 10_000 }).toBe(true);
+		commit();
+		expect(await first).toEqual(o.window);
+		expect(await second).toBeNull();
+	});
 });
 
 describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → series/merge.ts mergeInto)', () => {
+	const WIDE = { start: '1850-01-01', end: utcToday() };
 	/** A feed of a fresh project; `ingest` applies a result as the job does, as its acting user. */
 	async function setup(name: string, over: Record<string, unknown> = {}) {
 		const owner = await signUp(name);
 		const pid = await project(owner);
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, ...over })).body.feed.id as string;
-		const ingest = (raw: unknown) => withUser(owner.id, async (db) => ingestResult(db, (await feedForJob(db, pid, id))!, raw));
+		// A window wide enough for every day these tests write; the window check has its own tests.
+		const ingest = (raw: unknown, window = WIDE) => withUser(owner.id, async (db) => ingestResult(db, (await feedForJob(db, pid, id))!, raw, window));
 		return { owner, pid, id, ingest };
 	}
 	const ok = (startDate: string, values: (number | null)[], meta: Record<string, string | number> = { days: values.length }) => ({ ok: true, startDate, values, meta });
@@ -641,7 +795,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		const { owner, pid, id, ingest } = await setup('Atomic');
 		await expect(
 			withUser(owner.id, async (db) => {
-				await ingestResult(db, (await feedForJob(db, pid, id))!, ok('2026-01-01', [1, 2]));
+				await ingestResult(db, (await feedForJob(db, pid, id))!, ok('2026-01-01', [1, 2]), WIDE);
 				throw new Error('the job failed after the merge');
 			})
 		).rejects.toThrow('the job failed after the merge');

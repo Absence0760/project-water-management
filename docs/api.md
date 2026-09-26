@@ -1034,7 +1034,8 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `actingUser` is the display name fetches run as (null once that account is
   deleted: save the feed again). `lastDataDate` is a calendar day
   (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
-  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`).
+  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`,
+  and `through`, the last day the fetch asked for).
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all

@@ -4,7 +4,13 @@
 // record the feed's health. A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
 // queue from the fetcher Lambda, so it is untrusted input. An answer holding a
-// day after the newest the source can have (latestDay) is refused whole.
+// day after the newest the source can have (latestDay), or a day outside the
+// window the fetch asked for, is refused whole (issue #31). The window comes
+// from our side, never from the answer: the inline fetch passes its own, and
+// the production feed_ingest job claims the one its feed_fetch job recorded
+// (store.ts takeFeedFetch), which also drops any answer but the newest
+// fetch's. A successful answer records the window's end as last_meta.through,
+// how far the feed has read, so fetchWindow moves past empty days (#29).
 //
 // A CHIRPS-GEFS result is one whole issue, keyed by its issue date: its days
 // start on that date and number at most GEFS_DAYS. The newest issue merged
@@ -17,7 +23,7 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { mergeInto, SeriesBody } from '../series/merge.js';
 import { type FeedSource, SOURCES } from './config.js';
-import { FetchResult, utcToday } from './fetch.js';
+import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { type FeedRow, lockFeedIssued, recordFeedChecked, recordFeedResult } from './store.js';
 
@@ -37,7 +43,12 @@ const INVALID = 'the fetcher’s answer was not valid, so nothing was written';
 const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Record<string, string | number> }) =>
 	r.startDate === null || (r.meta.issued === r.startDate && r.values.length <= GEFS_DAYS);
 
-export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise<IngestOutcome> {
+/**
+ * `window` is what the fetch asked for. A forecast is checked by its issue
+ * instead (it reads the newest issue, whatever the window), and records no
+ * `through`.
+ */
+export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow): Promise<IngestOutcome> {
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
 		await recordFeedResult(db, feed.id, { ok: false, error: INVALID });
@@ -55,6 +66,19 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise
 	const latest = latestDay(feed.source, utcToday());
 	if (result.startDate !== null && toEpochDay(result.startDate) + result.values.length - 1 > toEpochDay(latest)) {
 		await recordFeedResult(db, feed.id, { ok: false, error: `the fetcher’s answer had days after ${latest}, so nothing was written` });
+		return { merged: 0, lastDate: null };
+	}
+	// A day the fetch didn't ask for: a bug, or an answer for another request.
+	// Merging it could overwrite days the feed doesn't own (before startDate).
+	if (
+		feed.source !== 'chirps_gefs' &&
+		result.startDate !== null &&
+		(result.startDate < window.start || fromEpochDay(toEpochDay(result.startDate) + result.values.length - 1) > window.end)
+	) {
+		await recordFeedResult(db, feed.id, {
+			ok: false,
+			error: `the fetcher’s answer had days outside ${window.start} to ${window.end}, the days it was asked for, so nothing was written`
+		});
 		return { merged: 0, lastDate: null };
 	}
 	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
@@ -94,6 +118,8 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise
 			lastValue = result.values[lastIdx]!;
 		}
 	}
-	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta: { ...result.meta, merged } });
+	// `through` last, so a key of that name in the fetcher's meta never stands.
+	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged } : { ...result.meta, merged, through: window.end };
+	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	return { merged, lastDate };
 }

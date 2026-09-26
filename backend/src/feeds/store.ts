@@ -4,6 +4,7 @@
 import type { SeriesKind } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import type { FeedConfig, FeedInput, FeedSchedule, FeedSource } from './config.js';
+import type { FetchWindow } from './fetch.js';
 import { type FeedHealth, feedHealth } from './health.js';
 
 /** A feed as the API returns it. */
@@ -40,6 +41,8 @@ export interface FeedRow {
 	targetName: string;
 	enabled: boolean;
 	lastDataDate: string | null;
+	/** The last day the latest successful fetch asked for (last_meta.through): fetchWindow's progress through empty days. */
+	readThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
 }
@@ -91,7 +94,9 @@ export async function deleteFeed(db: Db, projectId: string, feedId: string): Pro
 export async function feedForJob(db: Db, projectId: string, feedId: string): Promise<FeedRow | null> {
 	const { rows } = await db.query<FeedRow>(
 		`SELECT id, project_id AS "projectId", source, config, target_kind AS "targetKind", target_name AS "targetName", enabled,
-			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate", to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version
+			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
+			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
+			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]
 	);
@@ -108,6 +113,28 @@ export async function lockFeedIssued(db: Db, feedId: string): Promise<string | n
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('feed_ingest:' || $1::text, 0))`, [feedId]);
 	const { rows } = await db.query<{ issued: string | null }>(`SELECT last_meta->>'issued' AS issued FROM data_feed WHERE id = $1`, [feedId]);
 	return rows[0]?.issued ?? null;
+}
+
+/**
+ * Record the fetch a feed_fetch job is about to send and the days it asks for
+ * (app_begin_feed_fetch, 028): the answer that comes back is checked against
+ * this window, and any older fetch's answer is dropped from now on.
+ */
+export async function beginFeedFetch(db: Db, feedId: string, jobId: string, window: FetchWindow): Promise<void> {
+	await db.query('SELECT app_begin_feed_fetch($1, $2, $3, $4)', [feedId, jobId, window.start, window.end]);
+}
+
+/**
+ * Claim the window of the fetch an answer is for (app_take_feed_fetch, 028).
+ * Null when that fetch isn't the feed's newest or its answer was already
+ * applied: the answer must be dropped.
+ */
+export async function takeFeedFetch(db: Db, feedId: string, jobId: string): Promise<FetchWindow | null> {
+	const { rows } = await db.query<FetchWindow>(
+		`SELECT to_char(window_start, 'YYYY-MM-DD') AS start, to_char(window_end, 'YYYY-MM-DD') AS "end" FROM app_take_feed_fetch($1, $2)`,
+		[feedId, jobId]
+	);
+	return rows[0] ?? null;
 }
 
 export type FeedOutcome =
