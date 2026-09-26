@@ -81,3 +81,23 @@ describe('parseDwsDaily on other pages', () => {
 		expect(r.rejected).toBe(3);
 	});
 });
+
+// A row in the fixed-width layout the DWS page declares in its own format block:
+// "POS. 1-8 = Date … POS. 10-18 = Daily avg flow rate in cubic metres/sec 99999.999
+// POS. 20-24 = Quality code". A gap row leaves columns 10-18 blank.
+const row = (date: string, value: string, qual: string) => `${date} ${value.padStart(9)} ${qual.padStart(5)}`.trimEnd();
+
+describe('parseDwsDaily: a gap row with only a quality code', () => {
+	it('reads the code as the quality, not as the flow', () => {
+		const r = parseDwsDaily(page(['DATE       D_AVG_FR  QUAL', row('20210101', '1.897', '1'), row('20210102', '', '170'), row('20210103', '2.092', '1')].join('\n')));
+		expect(r.values).toEqual([1.897, null, 2.092]);
+		expect(r.quality).toEqual({ '1': 2, '170': 1 });
+		expect(r.rejected).toBe(1);
+	});
+
+	it('still reads a lone number in the flow column as the flow', () => {
+		const r = parseDwsDaily(page(['DATE       D_AVG_FR  QUAL', row('20210101', '12', ''), row('20210102', '0.5', '')].join('\n')));
+		expect(r.values).toEqual([12, 0.5]);
+		expect(r.quality).toEqual({});
+	});
+});

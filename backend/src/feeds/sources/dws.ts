@@ -17,7 +17,9 @@
 //
 // Parsed defensively: no <pre>, a different header, or a server error page
 // fails the fetch (FeedFormatError) and writes nothing. A row whose value
-// isn't a non-negative number is a gap (null), counted in the result.
+// isn't a non-negative number is a gap (null), counted in the result. A gap
+// row can leave the flow column blank and still carry a quality code
+// ("20210102             170"): the code is read by its column, never as a flow.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import { FeedFormatError } from '../errors.js';
 
@@ -53,6 +55,34 @@ const decode = (s: string) =>
 const SERVER_ERROR = /scriptserver|can't connect to|unable to establish connection/i;
 const MAX_ROWS = 20 * 366 + 10;
 
+interface Columns {
+	/** Where the flow column's label ends and the QUAL label ends (exclusive), in the header line. */
+	valueEnd: number;
+	qualEnd: number;
+}
+
+function headerColumns(headerLine: string): Columns | null {
+	const qual = headerLine.search(/\bQUAL\b/);
+	if (qual === -1) return null;
+	return { valueEnd: headerLine.slice(0, qual).trimEnd().length, qualEnd: qual + 4 };
+}
+
+/**
+ * A row's date, flow and quality code. The page is fixed-width with numbers
+ * right-aligned under their labels, and a gap row leaves the flow blank
+ * ("20210102             170"), so a row with one field after the date is
+ * placed by where that field ends: a whole number ending under QUAL is the
+ * code, anything else is the flow.
+ */
+function rowFields(raw: string, cols: Columns | null): [string, string | undefined, string | undefined] {
+	const fields = [...raw.matchAll(/\S+/g)].map((m) => ({ text: m[0], end: m.index + m[0].length }));
+	const [d, a, b] = fields;
+	if (!a) return [d!.text, undefined, undefined];
+	if (b) return [d!.text, a.text, b.text];
+	const underQual = cols !== null && /^\d+$/.test(a.text) && Math.abs(a.end - cols.qualEnd) < Math.abs(a.end - cols.valueEnd);
+	return underQual ? [d!.text, undefined, a.text] : [d!.text, a.text, undefined];
+}
+
 /** Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a gap. */
 export function parseDwsDaily(page: string): DwsDays {
 	if (SERVER_ERROR.test(page)) throw new FeedFormatError('the DWS site answered with a server error page');
@@ -63,20 +93,24 @@ export function parseDwsDaily(page: string): DwsDays {
 		throw new FeedFormatError('the DWS page has no data table');
 	}
 	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0 };
-	const lines = body.split(/\r?\n/).map((l) => l.trim());
-	const h = lines.findIndex((l) => /^DATE(\s|$)/i.test(l));
+	// Lines keep their leading spaces: a row's columns are read against the header's.
+	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
+	const h = lines.findIndex((l) => /^\s*DATE(\s|$)/i.test(l));
 	if (h === -1) throw new FeedFormatError('the DWS table has no DATE header');
-	const header = lines[h]!.toUpperCase().split(/\s+/);
+	const headerLine = lines[h]!.toUpperCase();
+	const header = headerLine.trim().split(/\s+/);
 	if (header[0] !== 'DATE' || header[1] !== 'D_AVG_FR') {
 		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D_AVG_FR, got ${header.slice(0, 3).join(' ').slice(0, 60)})`);
 	}
+	const cols = headerColumns(headerLine);
 
 	const byDay = new Map<number, number | null>();
 	const quality: Record<string, number> = {};
 	let rejected = 0;
-	for (const line of lines.slice(h + 1)) {
+	for (const raw of lines.slice(h + 1)) {
+		const line = raw.trim();
 		if (!/^\d{8}(\s|$)/.test(line)) continue;
-		const [d, v, q] = line.split(/\s+/);
+		const [d, v, q] = rowFields(raw, cols);
 		const iso = `${d!.slice(0, 4)}-${d!.slice(4, 6)}-${d!.slice(6, 8)}`;
 		let day = NaN;
 		try {
