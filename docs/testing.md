@@ -44,7 +44,8 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 - **Backend db suite**: runs serially (one Postgres test database). It took
   ~5 min until the RLS role functions moved to PL/pgSQL (026, security.md:
   policies were re-planning them for every row) and passwords were hashed at
-  bcrypt's minimum cost under vitest (`auth/password.ts`; 12 elsewhere).
+  bcrypt's minimum cost under vitest (`auth/password.ts`; the e2e API server
+  too, with `PASSWORD_HASH_COST=4`, e2e/README.md; 12 elsewhere).
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.
