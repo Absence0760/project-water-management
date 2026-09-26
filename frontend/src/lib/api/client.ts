@@ -10,6 +10,7 @@ import type {
 	PairedMember,
 	RecordCoverage,
 	ProjectModel,
+	ScenarioOp,
 	ProjectSettings,
 	SeriesMeta
 } from '@water-management/engine';
@@ -39,6 +40,10 @@ import type {
 	RunCatchmentDay,
 	RunDay,
 	RunSeriesRef,
+	Scenario,
+	ScenarioCheck,
+	ScenarioStatus,
+	ScenarioWithCheck,
 	Team,
 	TeamMember,
 	TeamRole,
@@ -350,6 +355,34 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			complete: (id: string, runId: string, uid: string, body: { members: MemberResult[]; coverage: RecordCoverage[] } | { members: PairedMember[] }) =>
 				request<{ ensemble: Ensemble }>('POST', `${p(id)}/runs/${enc(runId)}/uncertainty/${enc(uid)}/result`, body).then((r) => r.ensemble)
 		},
+		/**
+		 * Scenarios: named overrides on a base run (docs/api.md § Scenarios).
+		 * A run that can't apply every op answers 422 with the lines in
+		 * `ApiError.details.problems` (scenarioProblems).
+		 */
+		scenarios: {
+			list: (id: string) => request<{ scenarios: Scenario[] }>('GET', `${p(id)}/scenarios`).then((r) => r.scenarios),
+			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
+			create: (id: string, body: { name: string; baseRunId: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[] }) =>
+				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios`, body),
+			/** Change what is sent; `ops` replaces the whole list (409 unless the scenario is a draft). */
+			update: (
+				id: string,
+				sid: string,
+				body: { name?: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[]; status?: ScenarioStatus }
+			) => request<ScenarioWithCheck>('PATCH', `${p(id)}/scenarios/${enc(sid)}`, body),
+			remove: (id: string, sid: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}`),
+			/** Run it on its base run's stored input; counts toward the project's run cap like any run. */
+			run: (id: string, sid: string, label?: string) =>
+				request<{ run: Run; removedRunIds?: string[]; applied: ScenarioCheck['applied']; classified: ScenarioCheck['classified'] }>(
+					'POST',
+					`${p(id)}/scenarios/${enc(sid)}/runs`,
+					label ? { label } : {}
+				).then((r) => ({ ...r, removedRunIds: r.removedRunIds ?? [] })),
+			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
+			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
+				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun })
+		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */
 			runs: (a: string, b: string) =>
@@ -359,3 +392,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 }
 
 export type Api = ReturnType<typeof createApi>;
+
+/** The ops a scenario run refused over (422 from api.scenarios.run), or [] for any other error. */
+export function scenarioProblems(err: unknown): string[] {
+	if (!(err instanceof ApiError) || err.status !== 422) return [];
+	const p = (err.details as { problems?: unknown } | null | undefined)?.problems;
+	return Array.isArray(p) ? p.filter((x): x is string => typeof x === 'string') : [];
+}

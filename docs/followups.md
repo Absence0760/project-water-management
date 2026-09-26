@@ -1071,6 +1071,15 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **The Sandspruit example fails `catchments.test.ts` on main** (seen
+      2026-09-25 on origin/main at 9590fa1, before the scenario merge): engine
+      0.28.0's forecast-rain warning (3ae50b9) fires on the example's last 10
+      days (2025-01-01 … 2025-01-10), which the test's expected-warnings list
+      doesn't include. Either the example's rain source for those days is
+      wrong, or the list needs the new warning with a reason. Owner: the
+      forecast-rain change.
+
+
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
   scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
@@ -1078,34 +1087,44 @@ role and not before it.
   `executeRun` storing inputs, `loadRunInput` (byte-identical round trip on
   the three examples), the run-input route for uncertainty bands using it.
   Left open:
-  - [ ] **Scenarios add the first "cited" clause** (WP-3.2): its migration
-        `CREATE OR REPLACE`s `model_run_cited` with `EXISTS (SELECT 1 FROM
-        scenario s WHERE s.base_run_id = p_run)` (021's header has it
-        verbatim), with a `RESTRICT` foreign key. In the same WP: the unpin
-        route answers `409 run is cited by …` on a cited run, and cited runs
-        stop counting against `PINNED_RUNS_PER_PROJECT_MAX` (today the pin
-        trigger counts every pinned run). Trigger: WP-3.2.
+  - [x] **Scenarios add the first "cited" clause** (WP-3.2, 024_scenarios,
+        2026-09-25): `model_run_cited` is `EXISTS (SELECT 1 FROM scenario s
+        WHERE s.base_run_id = p_run)`, with a `NO ACTION` key (checked at the
+        end of the statement, so a project delete still cascades); the unpin
+        and delete routes answer `409 this run is cited by scenario "…"`;
+        cited runs don't count against `PINNED_RUNS_PER_PROJECT_MAX`.
   - [ ] **`GET …/runs/:runId/reproduce`** (`{ identical, engineVersionThen,
-        engineVersionNow, differences }`), `RunMeta.reproducible` and
-        `citedBy`, and the Runs tab's "Reproducible" badge, "Cited" lock and
-        "Check reproduction" action. `loadRunInput` + `runModelChecked` +
+        engineVersionNow, differences }`), `RunMeta.reproducible`, and the
+        Runs tab's "Reproducible" badge, "Cited" lock and "Check
+        reproduction" action. (`RunMeta.citedBy` is built, WP-3.2.) `loadRunInput` + `runModelChecked` +
         canonical JSON is the whole server side; the route and UI are what
         remain. Trigger: WP-3.2's compare view, or an assessor asking.
-  - [ ] **WP-2.3's publication-history trim skips cited runs' publications.**
-        Trigger: WP-2.3 landing (no publications exist yet).
+  - [x] **WP-2.3's publication-history trim skips cited runs' publications**
+        (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
+        newest 12, every publication whose run a scenario is based on, so
+        the base keeps its "published" record. (A publication is itself a
+        citation since 022, so "cited" here means cited by something else;
+        evidence packs and assessments add their clause the same way.)
 
 - **Scenarios** (issue #18, WP-3.2, 2026-09-25;
   [scenarios.md](./scenarios.md)). Built: the engine part,
   `packages/engine/src/scenario/` (`applyScenario`, `classifyOp`,
   `classifyScenario`, `validateScenarioOps`), with the invariant and
-  no-silent-change fuzz. Left open:
-  - [ ] **Backend, data model, API and the Scenarios tab** (the rest of
-        WP-3.2). WP-3.1's stored run inputs (above) are built, so the base can be loaded with `loadRunInput`.
-  - [ ] **One home for the model's save rules.** `scenario/structure.ts`
-        repeats `backend/src/model/validate.ts` `modelProblems`, so a rule
-        added to one can miss the other. Move the rules into the engine and
-        have `modelProblems` call them. Trigger: the backend scenario routes,
-        which must accept exactly what `applyScenario` produces.
+  no-silent-change fuzz; the backend, data model and API
+  (`024_scenarios.sql`, `backend/src/scenarios/`, `executeScenarioRun`,
+  rebase, the scenario per side in compare) and the frontend API client
+  (`api.scenarios`). Left open:
+  - [ ] **The Scenarios tab** (stage D): the list and its empty state, the
+        override-mode editor that records edits as ops with undo, the
+        "Based on run X" banner and the red "Baseline assumptions changed"
+        callout, the compare page's Scenario overrides section (reusing the
+        #8 overlay), the Runs tab's cited lock, e2e (a 20 % dam raise run and
+        compared) and axe. Everything it needs is in `api.scenarios` and
+        `CompareSide.scenario`.
+  - [x] **One home for the model's save rules** (2026-09-25): the rules are
+        the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
+        `scenario/structure.ts` and `modelProblems` both call it, and a fuzz
+        test checks a scenario applied to a valid model always passes them.
   - [ ] **Later ops**: `ewrSite.set`, `allocation.set`, moving a node or
         inserting one mid-river, `crop.set`, `landCover.set`
         ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).

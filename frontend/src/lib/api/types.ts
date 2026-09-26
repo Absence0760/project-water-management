@@ -1,11 +1,13 @@
 // Wire shapes from docs/api.md that aren't in @water-management/engine.
 import type {
+	AppliedOp,
 	CatchmentView,
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
 	InputChange,
 	MemberResult,
+	OpClass,
 	PairedMember,
 	PairedSummary,
 	ProjectModel,
@@ -15,7 +17,8 @@ import type {
 	RestrictionLevel,
 	RunComparison,
 	RunInputsSnapshot,
-	RunSummary
+	RunSummary,
+	ScenarioOp
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
@@ -229,6 +232,30 @@ export interface RunMeta {
 	pinned?: boolean;
 	/** The project's current publication holds this run (022_publication, WP-2.3). Absent from an older API. */
 	published?: boolean;
+	/**
+	 * The scenario that made the run (024_scenarios); null for a run of the
+	 * live model, or once the scenario is deleted. Absent from an older API.
+	 */
+	scenarioId?: string | null;
+	/** That scenario's name (the name the run recorded, once the scenario is deleted); null for a run of the model. */
+	scenarioName?: string | null;
+	/**
+	 * What cites the run, so it is kept for good (no delete, no trim, no
+	 * unpin): the publications that hold it and the scenarios based on it
+	 * that you can see, oldest first. Absent from an older API.
+	 */
+	citedBy?: RunCitation[];
+}
+
+/**
+ * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
+ * day it was published (YYYY-MM-DD, UTC). Evidence packs and assessments
+ * (WP-3.13/3.14) will add kinds.
+ */
+export interface RunCitation {
+	kind: 'publication' | 'scenario';
+	id: string;
+	name: string;
 }
 
 /** Most pinned runs per project (backend PINNED_RUNS_PER_PROJECT_MAX, 015_run_pinned.sql). */
@@ -379,6 +406,23 @@ export interface CompareSide {
 	project: { id: string; name: string };
 	/** `evidence` is null when the run was never nominated, absent from an older API. */
 	run: Omit<Run, 'evidence'> & { inputs: RunInputsSnapshot; evidence?: RunEvidence | null };
+	/** The scenario that made this side's run; null for a run of the model. Absent from an older API. */
+	scenario?: CompareScenario | null;
+}
+
+/**
+ * The scenario a compared run came from, as the run recorded it: the ops
+ * exactly as applied and how each was classed (`classified[i]` is ops[i]'s).
+ * `name` is the scenario's current name, or the recorded one once deleted.
+ */
+export interface CompareScenario {
+	id: string;
+	name: string;
+	baseRunId: string;
+	ops: ScenarioOp[];
+	opsSha256: string;
+	ownedNodeIds: string[];
+	classified: OpClass[];
 }
 
 /** GET /compare/runs response (docs/api.md § Compare runs). Deltas are b − a. */
@@ -389,6 +433,63 @@ export interface RunCompareResponse {
 	changes: InputChange[];
 	/** Catchment series both runs stored with the same unit. */
 	catchmentSeries: { key: string; label: string; unit: string }[];
+}
+
+/** A scenario's place in its workflow (024_scenarios). Ops, owned nodes and base change only while `draft`. */
+export type ScenarioStatus = 'draft' | 'submitted' | 'withdrawn' | 'decided';
+
+/** Status changes the API allows (backend scenarios/schema.ts STATUS_MOVES). */
+export const SCENARIO_STATUS_MOVES: Record<ScenarioStatus, readonly ScenarioStatus[]> = {
+	draft: ['submitted'],
+	submitted: ['withdrawn', 'decided'],
+	withdrawn: ['draft'],
+	decided: []
+};
+
+/** A scenario: named overrides on a base run (GET /projects/:id/scenarios, docs/api.md § Scenarios). */
+export interface Scenario {
+	id: string;
+	name: string;
+	description: string;
+	baseRunId: string;
+	/** The base run, for the "Based on run X" banner. */
+	baseRun: { id: string; label: string; createdAt: string };
+	ops: ScenarioOp[];
+	/** SHA-256 of the ops as canonical JSON; a run of the scenario records the same hash. */
+	opsSha256: string;
+	/** The proposer's own nodes: ops on them are proposals, the rest baseline assumptions. */
+	ownedNodeIds: string[];
+	ownerUserId: string;
+	/** The owner's display name. */
+	owner: string | null;
+	status: ScenarioStatus;
+	createdAt: string;
+	updatedAt: string;
+	/** Runs of this scenario still stored, and the newest. */
+	runCount: number;
+	lastRun: { id: string; label: string; createdAt: string } | null;
+}
+
+/**
+ * The scenario's ops applied to its base run: which applied (`applied[].index`
+ * into ops, with notes on side effects), which don't (`problems`, one line
+ * each, e.g. after a rebase) and how each is classed (`classified[i]`). Any
+ * `baseline` means the red "Baseline assumptions changed" callout.
+ */
+export interface ScenarioCheck {
+	applied: AppliedOp[];
+	problems: string[];
+	classified: OpClass[];
+}
+
+/**
+ * GET / POST / PATCH …/scenarios/:sid answer. `check` is null (and
+ * `checkError` says why) only when the base run can't be rebuilt.
+ */
+export interface ScenarioWithCheck {
+	scenario: Scenario;
+	check: ScenarioCheck | null;
+	checkError: string | null;
 }
 
 const RANK: Record<Role, number> = { farmer: -1, viewer: 0, editor: 1, owner: 2 };

@@ -337,6 +337,21 @@ In short:
     "is this run cited" for a run id the caller already holds, and sees every
     citation even when a narrower policy hides the citing row from the caller,
     so a trim never tries to delete a run someone else's scenario rests on.
+- **Scenarios are the project's, and a submitted one can't be changed**
+  (024_scenarios, [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)).
+  Viewers read, editors write; farmers read nothing, because a scenario's ops
+  and its base run name every farm (fail closed, as for `model_run`). The
+  `scenario_guard` trigger (`SECURITY DEFINER`, pinned `search_path`; it
+  reads `model_run` past RLS only to compare two project ids) stamps the owner
+  from the session, refuses a base run of another project even to an editor of
+  both, and freezes a scenario's ops, base and owned nodes once it isn't a
+  draft, whatever the API does; a scenario run records the ops it applied, and
+  their SHA-256, in its own immutable snapshot. Ops are untrusted input: the
+  engine's validator rebuilds each from its known fields (unknown keys never
+  reach the database), ids must be UUIDs, and at most 500 ops and 1 MiB are
+  stored. A run series can name only a node of its own run's snapshot
+  (`run_series_nodes_in_run`), so no run can be given series for another
+  project's node.
 - **Data feeds run as the owner who configured them** (018_feeds,
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Owners
   attach and change feeds (RLS); saving stamps the saver as the feed's acting

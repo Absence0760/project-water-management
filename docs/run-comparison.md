@@ -212,6 +212,27 @@ name**:
 - **Crop areas** are matched by (farm name, crop name). **Transfers** are
   matched by id, then by their "from → to" route.
 
+## Scenario runs
+
+A [scenario](./scenarios.md) run is an ordinary run with `scenarioId` set, so
+comparing it with its base (`?a=<p>:<baseRun>&b=<p>:<scenarioRun>`) needs
+nothing new. A scenario keeps its base's ids, so every change lines up **by
+id**: a 20 % dam raise on Rooikloof is one "What changed" line, *Rooikloof:
+dam capacity 100,000 m³ → 120,000 m³*, and Rooikloof's farm row pairs with
+itself. A node the scenario added shows under "Only in run B", one it removed
+under "Only in run A".
+
+`GET /compare/runs` adds each side's **scenario**
+([api.md § Compare runs](./api.md#compare-runs)): its name, the ops exactly as
+that run applied them and how each op was classed (`proposal` or `baseline`,
+[scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+They come from the run's own snapshot (`inputs.scenario`), not from the
+scenario as it is now, so a scenario edited, rebased or deleted since still
+shows the ops that produced the run. The compare page's **Scenario overrides**
+section (the Scenarios tab work, stage D of issue #18) lists them above "What
+changed", with the red "Baseline assumptions changed" callout when any op is
+`baseline`.
+
 ## What the input diff can and can't see
 
 Each run stores a snapshot of its inputs in `model_run.inputs`: the settings

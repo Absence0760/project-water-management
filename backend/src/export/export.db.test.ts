@@ -270,7 +270,7 @@ describe('legacy run CSV comment (audit H1)', () => {
 });
 
 describe('all-farms export after the network changed', () => {
-	it('uses a renamed farm\'s current name and drops a deleted farm (its series went with it)', async () => {
+	it('uses a renamed farm\'s current name and keeps a deleted farm, named as the run knew it (a run keeps its series, 024_scenarios)', async () => {
 		const { body } = await owner.call('POST', '/projects', { name: 'Changed network' });
 		const pid = body.project.id;
 		const out = node('Outlet', null);
@@ -286,7 +286,7 @@ describe('all-farms export after the network changed', () => {
 		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A [I] (m³/day),Farm B [I] (m³/day)'); // positive control
 
 		expect((await put([out, { ...a, name: 'Farm A (renamed)' }])).status).toBe(200);
-		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A (renamed) [I] (m³/day)');
+		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A (renamed) [I] (m³/day),Farm B [I] (m³/day)');
 	});
 });
 
