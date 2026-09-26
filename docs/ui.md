@@ -1244,6 +1244,60 @@ page, and closes again when you pick a page.
 - **Search** (`/help/search?q=`): results update as you type in the sidebar's
   box, which keeps focus; guides first, then glossary terms.
 
+## Farmer view (`/farm`)
+
+The phone-first view for a farmer (WP-2.6); the design is
+[design/farmer-view.md](./design/farmer-view.md) and its prototype boards.
+It renders a `FarmView` (`packages/engine/src/views/farmView.ts`) from
+`GET /projects/:id/farm/:nodeId`, the current publication projected for one
+farm; `GET /projects/:id/farm` lists the farms and says whether anything is
+published.
+
+- **Routes.** `/farm` lists every farm linked to the user across projects
+  (notice level, received %, dam %, or "Not published yet"), and goes
+  straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
+  switcher when the farmer has several there), with `/why` ("Why about
+  83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
+  entries in the `farmer` category ("What do these words mean?"). The root
+  page sends a user whose every membership is `farmer` to `/farm`; the
+  workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
+  `/farm/[id]`.
+- **Frame.** The farm pages have their own header ("My farm", Menu: your
+  farms, the words, "Don't keep a copy on this phone", sign out); the app
+  header isn't shown. One 560 px column, a 16 px base, 44 px targets,
+  nothing under 13 px, existing tokens only, light and dark.
+- **Main page, top to bottom:** the name and the dates line ("Published by
+  the WUA on …. Data up to …", amber with its age when stale); the WUA's
+  notice first (warning or danger fill, icon and level in words), or "No
+  restriction from the WUA"; water received this season with the ML/m³
+  switch (kept on the phone until the account preference exists); the dam
+  (hidden without one) with the days-left line, or the no-stop-level
+  wording; "Looking back", the model's card (dashed, neutral "Model: …"
+  chip, never the notice's fills), a single link line under a `restricted`
+  notice; the last 12 months (inline SVG bars at the rendered width, a
+  summary sentence and a full table behind "Show the numbers"); last
+  season; the farm on the river (counts, the outlet's last 30 days, the
+  privacy sentence and "Who can see my farm"); the CSV download and the
+  disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+- **Wording.** Every visible string and number rule lives in pure modules
+  under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
+  `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture
+  (`fixture.ts`); a test keeps the design's "never says" words out.
+- **States.** Skeleton cards with a hidden status and "Slow signal?" after
+  3 s; no publication; an error with Try again (a contact line after the
+  second failure, never raw error text); access removed (403/404), which
+  also clears the saved copy.
+- **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
+  user and farm in `localStorage`, shown at once with "Updating…". Without a
+  signal it stays under a dark strip ("No signal. These are the figures
+  saved on this phone at …") over a reduced view. Cleared on sign-out, on a
+  403/404, when another user signs in, after 30 days unused, and by the
+  Menu's opt-out. No service worker, no polling: the page refetches when it
+  becomes visible again.
+- **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
+  Network tab's node detail); it shows under a "You're previewing … as its
+  farmer sees it" banner and keeps no copy.
+
 ## Viewers
 
 Viewers see a "View only" note. Inputs render as plain values instead of

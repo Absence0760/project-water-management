@@ -973,6 +973,33 @@ the suggested order (the IDs carry the detail):
       without a run, raw values plus quality flags only. Waiting on the
       operator to confirm this is what they want (2026-09-24).
 
+## Farmer view (WP-2.6, #25)
+
+Left out of the first build because the contract or an API doesn't carry it
+yet; each lands with the work package named.
+
+- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
+      `forecast` in `FarmView` (WP-2.12, design E2).
+- [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
+      before the named translator reviews it, and `FarmView` carries one
+      `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
+      translator is named.
+- [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
+      says the WUA can name them; needs an endpoint listing the people with
+      access to a farm.
+- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
+      `FarmIndex`; the pages say "your WUA".
+- [ ] **"Email me when …"** links (the notice / low-dam alert and "Email me
+      when it's ready"): WP-2.13.
+- [ ] **"Not available: the model's data starts on …"** needs the run's
+      first date; `lastSeason` is null without it, so the page says the data
+      doesn't reach back.
+- [ ] **Account volume unit**: the ML/m³ switch is kept in `localStorage`
+      until `app_user.volume_unit` (WP-2.5).
+- [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
+      farm API and the seeded publication (the backend half of #25); run it
+      once both are merged.
+
 ## UI
 
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
