@@ -74,6 +74,29 @@ describe('SettingsPatch.chirpsBiasCorrection', () => {
 	});
 });
 
+describe('SettingsPatch.chirpsFitPeriod (engine ≥ 0.29.0)', () => {
+	const ok = (chirpsFitPeriod: unknown) => SettingsPatch.safeParse({ chirpsFitPeriod }).success;
+	const r = (fromWaterYear: number, toWaterYear: number, reason = 'new network') => ({ fromWaterYear, toWaterYear, reason });
+
+	it('accepts the modes and non-overlapping water-year ranges, each with a reason', () => {
+		expect(ok('all')).toBe(true);
+		expect(ok('segments')).toBe(true);
+		expect(ok([r(1990, 2004), r(2005, 2019)])).toBe(true);
+		expect(ok([r(2005, 2005)])).toBe(true);
+	});
+
+	it('refuses anything the engine would drop', () => {
+		for (const bad of ['latest', '', null, 1, [], [r(2005, 2004)], [r(1990, 2004, ' ')], [r(1990, 2004), r(2004, 2010)], [r(1799, 1800)], [{ ...r(1990, 1999), extra: 1 }], [r(1990.5, 1999)]]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('defaults to the whole record for settings stored before it existed', () => {
+		expect(mergeSettings({}).chirpsFitPeriod).toBe('all');
+		expect(mergeSettings({ chirpsFitPeriod: [r(1990, 2004)] }).chirpsFitPeriod).toEqual([r(1990, 2004)]);
+	});
+});
+
 describe('SettingsPatch.gr4j and panCoefficient', () => {
 	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
 
@@ -424,6 +447,15 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing', keepDry: [], missing: [] } } })).toBe(true);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, accumulationMode: 'smear' } } })).toBe(false);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: ' ' }] } } })).toBe(false);
+	});
+
+	it('accepts an optional CHIRPS fit period and factor sets inside forcing (engine ≥ 0.29.0)', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
+		const sets = [{ label: 'double-mass segment 1990/91–1999/00, filling up to 1999/00', factors: [...new Array(11).fill(1.5), null] }];
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'segments', chirpsFactors: sets } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: [{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'x' }], chirpsFactors: null } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'latest' } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFactors: [{ label: 'x', factors: [1, 2] }] } })).toBe(false); // 12 months
 	});
 
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {

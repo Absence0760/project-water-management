@@ -355,6 +355,36 @@ describe('CHIRPS bias factors block', () => {
 		]);
 	});
 
+	it('adds the fit period, and each fit segment’s factors (engine ≥ 0.29.0)', () => {
+		const seg = (from: number, fillFrom: number | null, fillTo: number | null, reason: string | null) => ({
+			source: (reason ? 'listed' : 'doubleMass') as 'listed' | 'doubleMass',
+			fromWaterYear: from, toWaterYear: from + 9, reason, slope: reason ? null : 1.2,
+			fitFrom: reason ? from : fillFrom, fitTo: reason ? from + 9 : fillTo, fillFrom, fillTo,
+			pooled: corr.pooled, months: corr.months, fallbackDays: 31, correctedDays: 31, fallbackRawMm: 10, fallbackCorrectedMm: 17
+		});
+		const all = [...chirpsFactorLines({ ...corr, fitPeriod: { period: 'all', ranges: [], segments: [], note: null } })];
+		expect(all.slice(16)).toEqual(['Fit period,whole record']);
+		const none = [...chirpsFactorLines({ ...corr, fitPeriod: { period: 'segments', ranges: [], segments: [], note: 'noBreak' } })];
+		expect(none.slice(16)).toEqual(['Fit period,double-mass segments', 'Double-mass segments asked for but the double-mass check finds no break: the factors above fill every gap']);
+		const ranges = [{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'old network' }, { fromWaterYear: 2005, toWaterYear: 2014, reason: 'new network' }];
+		const lines = [
+			...chirpsFactorLines({
+				...corr,
+				outsideRangeDaysLeftOut: 1826,
+				fitPeriod: { period: 'ranges', ranges, segments: [seg(1990, null, 2001, 'old network'), seg(2005, 2002, null, 'new network')], note: null }
+			})
+		];
+		expect(lines[16]).toBe('Fit period,listed water years: 1990/91–1999/00 (old network); 2005/06–2014/15 (new network)');
+		expect(lines[17]).toMatch(/^The factors above are fitted over all listed ranges together/);
+		expect(lines[18]).toBe('Shared days outside the listed fit ranges left out of every fit,1826');
+		expect(lines[19]).toBe('Fit segment,listed range 1990/91–1999/00 (old network),fitted on water years,1990,1999,fills water years,record start,2001,reason,old network,double-mass slope (×),');
+		expect(lines[20]!.startsWith('Month,Factor applied,Source')).toBe(true);
+		expect(lines[21]).toBe('Oct,2,own month,2,no,100,200,100,0');
+		expect(lines[33]!.startsWith('Pooled,2,all months together')).toBe(true);
+		expect(lines[34]).toMatch(/^Fit segment,listed range 2005\/06–2014\/15 \(new network\),fitted on water years,2005,2014,fills water years,2002,record end,/);
+		expect(lines).toHaveLength(49);
+	});
+
 	it('says why there are no factors', () => {
 		expect([...chirpsFactorLines({ ...corr, mode: 'none' })][1]).toMatch(/used as uploaded/);
 		expect([...chirpsFactorLines(null)][1]).toMatch(/No CHIRPS series/);

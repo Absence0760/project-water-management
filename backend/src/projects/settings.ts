@@ -3,6 +3,7 @@ import {
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
+	CHIRPS_FIT_PERIOD_MODES,
 	defaultProjectSettings,
 	EXCLUSION_REASON_MAX,
 	exclusionError,
@@ -198,6 +199,34 @@ const periodList = (noun: string) =>
 		.refine((list) => new Set(list.map(exclusionKey)).size === list.length, `a ${noun} period is listed twice`);
 
 export const CalibrationExclusion = datedPeriod('calibration exclusion');
+
+/**
+ * settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): 'all', 'segments',
+ * or water-year ranges, each with a reason, none overlapping. The engine
+ * resolves the same rules (rain.ts resolveChirpsFitPeriod), so a stored value
+ * never runs differently from what was validated.
+ */
+const waterYear = z.number().int().min(1800).max(2200);
+const ChirpsFitPeriod = z.union([
+	z.enum(CHIRPS_FIT_PERIOD_MODES),
+	z
+		.array(
+			z
+				.object({
+					fromWaterYear: waterYear,
+					toWaterYear: waterYear,
+					reason: z.string().trim().min(1, 'a CHIRPS fit range needs a reason').max(EXCLUSION_REASON_MAX)
+				})
+				.strict()
+				.refine((r) => r.fromWaterYear <= r.toWaterYear, 'a CHIRPS fit range must end at or after the water year it starts')
+		)
+		.min(1, 'list at least one CHIRPS fit range')
+		.max(EXCLUSIONS_MAX)
+		.refine(
+			(list) => list.every((r, i) => list.every((x, j) => j === i || r.fromWaterYear > x.toWaterYear || r.toWaterYear < x.fromWaterYear)),
+			'CHIRPS fit ranges must not overlap'
+		)
+]);
 const ExclusionList = periodList('calibration exclusion');
 
 const scoreValue = z.number().finite().nullable();
@@ -290,6 +319,13 @@ export const FitRecord = z
 				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 				apanMm: monthly,
 				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional(),
+				// Engine ≥ 0.29.0 (issue #40): the CHIRPS fit period, and the factors per fit segment. Optional, as above.
+				chirpsFitPeriod: ChirpsFitPeriod.optional(),
+				chirpsFactors: z
+					.array(z.object({ label: z.string().max(600), factors: z.array(z.number().finite().nullable()).length(12) }).strict())
+					.max(EXCLUSIONS_MAX + 3)
+					.nullable()
+					.optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
 				zeroRainRuns: z
 					.object({
@@ -341,6 +377,8 @@ export const SettingsPatch = z
 			.strict(),
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
+		// Which part of the record the CHIRPS factors are fitted on (engine rain.ts, issue #40); replaced whole.
+		chirpsFitPeriod: ChirpsFitPeriod,
 		// Flagged zero-rain runs (engine rain.ts, CR-20): any subset may be
 		// patched; each list is replaced whole.
 		zeroRainRuns: z
