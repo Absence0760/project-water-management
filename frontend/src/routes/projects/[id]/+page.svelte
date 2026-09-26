@@ -679,6 +679,11 @@
 		   tab's own sticky actions (Settings). */
 		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
 	}
+	/* A page sized to the window (the Network's Map, issue #17) needs only a
+	   gutter below it, plus the save bar when it shows. */
+	.page:has(:global(.map-layout)) {
+		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
+	}
 	.head {
 		display: flex;
 		align-items: center;

@@ -47,6 +47,8 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	const layoutBox = (await page.locator('.map-layout').boundingBox())!;
 	expect(layoutBox.y + layoutBox.height).toBeGreaterThan(viewport.height - 40);
 	expect(layoutBox.y + layoutBox.height).toBeLessThanOrEqual(viewport.height);
+	// …and the page itself doesn't scroll: nothing but blank padding would be below.
+	await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
 	const box = page.locator('.map-card .scroller');
 	expect(await box.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 	const drawn = (await page.locator('.map-card svg.schematic').boundingBox())!;

@@ -600,8 +600,11 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
     filling the card, and one legend line under it. Colouring by supply is
     **on by default** once the project has a run.
   - **Screen use:** from 900 px the layout is exactly the height left in the
-    window below its top edge (less the save bar when it shows; at least
-    520 px), measured on load and resize. The drawing takes the card's height
+    window below its top edge, less what the page keeps below it (its bottom
+    padding and the save bar's room; at least 520 px), both measured on load
+    and whenever the page resizes, so **the page itself doesn't scroll**. On
+    this page the workspace's bottom padding is 1rem (plus the save bar), not
+    the usual 4rem. The drawing takes the card's height
     after the legend, and the node list takes the side column's height after
     the node card, each scrolling inside itself. `NetworkSchematic`'s `fill`
     lays the tree out to the box rather than zooming it: columns are at least
@@ -614,6 +617,9 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Farms coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
+  - The **Grids** menu closes through its element (`details.open`), not its
+    bound state: the `toggle` event that updates the state is async, so an
+    Escape right after opening would otherwise leave it open.
   - Beside it (one column below 900 px, the map first), two cards:
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
