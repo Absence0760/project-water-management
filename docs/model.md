@@ -3329,8 +3329,8 @@ it never changes a run's results.
   `runModel` less the plausibility checks (§2.10d) and the assurance of
   supply (§2.11a–b), neither of which any member result reads, so a member's
   series and summary are otherwise identical and that code stays out of the
-  calibration worker. 25–55 ms on the example catchments, so 300 members take
-  8–16 s in the browser's calibration worker.
+  calibration worker. 15–35 ms on the example catchments (Node, warm; 2026-09-26),
+  so 300 members take roughly 5–11 s in the browser's calibration worker.
 - **For the hydrologist** (plan.md question 18): the default thresholds
   (KGE′ ≥ 0.5, ±50 % low-flow bias, WR2012 up to *query*), the pan
   coefficient's ±0.1, and whether 300 members suffice, are defaults to

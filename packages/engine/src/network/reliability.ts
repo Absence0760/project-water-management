@@ -527,35 +527,43 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 	const c = Object.fromEntries(keys.map((k) => [k, new Float64Array(days)])) as unknown as DailyTotals;
 	c.storage = new Float64Array(days);
 	c.initialStorage = x.accountNodes.reduce((a, n) => a + n.initialStorageM3, 0);
-	const day = Object.fromEntries(keys.map((k) => [k, 0])) as Record<(typeof keys)[number], number>;
+	// Node by node, each over every day: a day's total still adds the nodes in
+	// the list's (node-id) order, starting from 0, so every total is the same
+	// float as summing the day's nodes in turn; a column at a time avoids a
+	// keyed read and write per term per day (~5 ms a run on an example).
+	const add = (into: Float64Array, a: ArrayLike<number>) => {
+		for (let t = 0; t < days; t++) into[t] = into[t]! + a[t]!;
+	};
+	// A missing optional series adds 0, which leaves a total unchanged (a total starts at +0, so it is never -0).
+	const addOptional = (into: Float64Array, a: ArrayLike<number> | undefined) => {
+		if (a) for (let t = 0; t < days; t++) into[t] = into[t]! + (a[t] ?? 0);
+	};
 	for (let t = 0; t < days; t++) {
-		for (const k of keys) day[k] = 0;
-		let storage = 0;
-		day.natural = x.natural[t]!;
-		day.outflow = x.outflow[t]!;
-		for (const n of x.accountNodes) {
-			day.runoff += n.runoff[t]!;
-			day.landCover += n.landCover[t]!;
-			day.transfer += n.transfer[t]!;
-			if (n.kind === 'farm') {
-				day.farmSupplied += n.supplied[t]!;
-				day.farmReturned += n.returned[t]!;
-			} else if (n.kind === 'user') {
-				day.userSupplied += n.supplied[t]!;
-				day.userReturned += n.returned[t]!;
-			}
-			day.rainOnDam += n.rainOnDam?.[t] ?? 0;
-			day.evaporation += n.evaporation?.[t] ?? 0;
-			day.seepage += n.seepage?.[t] ?? 0;
-			day.seepageLost += n.seepageLost?.[t] ?? 0;
-			day.release += n.release?.[t] ?? 0;
-			// Groundwater into supply and (WP-3.9) into the dam: both come into the network.
-			day.groundwater += n.groundwater[t]! + (n.groundwaterToDam?.[t] ?? 0);
-			day.depletion += n.depletion[t]!;
-			storage += n.storage[t]!;
+		c.natural[t] = x.natural[t]!;
+		c.outflow[t] = x.outflow[t]!;
+	}
+	for (const n of x.accountNodes) {
+		add(c.runoff, n.runoff);
+		add(c.landCover, n.landCover);
+		add(c.transfer, n.transfer);
+		if (n.kind === 'farm') {
+			add(c.farmSupplied, n.supplied);
+			add(c.farmReturned, n.returned);
+		} else if (n.kind === 'user') {
+			add(c.userSupplied, n.supplied);
+			add(c.userReturned, n.returned);
 		}
-		for (const k of keys) c[k][t] = day[k];
-		c.storage[t] = storage;
+		addOptional(c.rainOnDam, n.rainOnDam);
+		addOptional(c.evaporation, n.evaporation);
+		addOptional(c.seepage, n.seepage);
+		addOptional(c.seepageLost, n.seepageLost);
+		addOptional(c.release, n.release);
+		// Groundwater into supply and (WP-3.9) into the dam: both come into the network.
+		const gw = n.groundwater;
+		const gwDam = n.groundwaterToDam;
+		for (let t = 0; t < days; t++) c.groundwater[t] = c.groundwater[t]! + (gw[t]! + (gwDam?.[t] ?? 0));
+		add(c.depletion, n.depletion);
+		add(c.storage, n.storage);
 	}
 	return c;
 }
