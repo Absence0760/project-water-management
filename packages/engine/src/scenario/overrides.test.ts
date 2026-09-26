@@ -136,6 +136,23 @@ describe('applyScenario: each op', () => {
 		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
 	});
 
+	it('node.add takes a farm with its supply rule and river pump (WP-3.8), under the same rules as a save', () => {
+		const supply = { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400, supplyTriggerPct: 0.3, supplyStopPct: 0.7 } as const;
+		const r = one({ op: 'node.add', node: node('N', { name: 'Pump farm', downstreamNodeId: 'B', ...supply }) });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'N')).toMatchObject(supply);
+		// Left out, they take the engine's defaults: the dam only, no pump.
+		expect(nodeOf(one({ op: 'node.add', node: node('N', { name: 'Plain farm', downstreamNodeId: 'B' }) }).input, 'N')).toMatchObject({ supplyRule: 'damFirst', pumpCapacityM3Day: null });
+		// A value out of range, and a rule the model rules refuse (trigger needs a dam).
+		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyRule: 'pumpFirst' as never }) }).problems[0]).toMatch(/supplyRule must be one of/);
+		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyStopPct: 1.5 }) }).problems[0]).toMatch(/supplyStopPct/);
+		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyRule: 'trigger' }) }).problems[0]).toMatch(/trigger supply rule needs a farm dam/);
+		// validateScenarioOps keeps them.
+		const v = validateScenarioOps([{ op: 'node.add', node: node('N', { downstreamNodeId: 'A', ...supply }) }]);
+		expect(v.errors).toEqual([]);
+		expect((v.ops[0] as { node: NetworkNode }).node).toMatchObject(supply);
+	});
+
 	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
 		expect(one({ op: 'node.add', node: node('A', { name: 'X', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown node nowhere/);

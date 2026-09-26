@@ -15,6 +15,8 @@ import {
 	LAND_COVER_CLASSES,
 	PE_KINDS,
 	PE_SOURCE_MAX,
+	SUPPLY_DEFAULTS,
+	SUPPLY_RULES,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
 	type CalibrationFlowKind,
@@ -481,6 +483,13 @@ function pickFields(src: Obj, fields: Record<string, Check>, optional: ReadonlyS
 }
 const cloneValue = (v: unknown): unknown => (Array.isArray(v) ? v.map(cloneValue) : isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, cloneValue(x)])) : v);
 
+/** The supply rule and river pump fields (WP-3.8), with the backend's ranges. */
+const SUPPLY_FIELD_CHECKS: Record<keyof typeof SUPPLY_DEFAULTS, Check> = {
+	supplyRule: oneOf(SUPPLY_RULES),
+	pumpCapacityM3Day: nullable(nonNeg),
+	supplyTriggerPct: frac,
+	supplyStopPct: frac
+};
 const NODE_FIELDS: Record<string, Check> = {
 	id,
 	kind: oneOf(['farm', 'gauge', 'user']),
@@ -492,7 +501,11 @@ const NODE_FIELDS: Record<string, Check> = {
 		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every((r) => isObj(r) && isNum(r.levelM) && isNum(r.areaM2) && isNum(r.volumeM3))
 			? null
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
-	)
+	),
+	// A new farm may bring its supply rule and river pump (WP-3.8); the kind,
+	// dam and trigger/stop rules are modelRuleProblems' (structure.ts). There
+	// is no node.set for them yet (step-3-licensing.md WP-3.8, still to do).
+	...SUPPLY_FIELD_CHECKS
 };
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -500,7 +513,7 @@ export function nodeAddFieldError(field: string, value: unknown): string | null 
 	return c ? c(value) : `"${field}" is not a node field`;
 }
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
-const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES]);
+const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES, ...Object.keys(SUPPLY_FIELD_CHECKS)]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,
