@@ -3,18 +3,22 @@
 // model's state on a decision date, at a few demand levels.
 //
 // For each analogue water year and each demand level, one member: the base
-// input's record up to the day before the decision date, then the season
-// driven by that analogue year's rain and evaporation, with the level's
-// demand.scale ops applied from the decision date on. Each member is a full
-// run of the model (runModelWithoutChecks): the engine has no way to start
-// from a saved state, so the state on the decision date is the history's,
-// re-run. That is forecast mode's continuation (../forecast.ts): the season
-// is a forecast tail, the analogue's rain in `rain_forecast_mm` after every
-// observed series is cut at the decision date. As in forecast mode, the
-// record-wide statistics (the land-cover low-flow threshold, the Reserve's
-// natural duration curve, CHIRPS factors fitted on the whole record) are
-// refitted on each member's own record, so a member's history is the base
-// run's to float noise, not to the bit.
+// run's state at the start of the decision date, then the season driven by
+// that analogue year's rain and evaporation (the analogue's rain in
+// `rain_forecast_mm`, as forecast mode's tail, ../forecast.ts), with the
+// level's demand.scale ops applied from the decision date on. The history
+// runs once: the base input is run to the decision date and its state
+// captured (../warmstart, model.md §2.16), and each member runs only the
+// season from that snapshot (outlookSeasonInput + runModelFrom). The
+// snapshot pins the record-wide statistics (the land-cover low-flow
+// threshold, the Reserve's natural duration curves, the CHIRPS and
+// rain-source factors) from the base run, so a member's history is the
+// base run's to the bit and the analogue never refits it.
+//
+// The older path (`warmStart: false`, outlookMemberInput + a full run per
+// member) re-runs the history in every member and refits those statistics
+// on each member's own record (history + analogue season); it is kept, for
+// the backend job that runs members one at a time and for comparison.
 //
 // Per demand level, across the analogue years: season-end dam storage, the
 // share of demand met, and the river's requirement (Reserve months met with
@@ -30,7 +34,8 @@
 // start on the decision date. Pure: no I/O. Deterministic.
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import type { DailySeries, ModelInput, ModelOutput, SeriesKind } from '../project';
-import { runModelWithoutChecks } from '../run';
+import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
+import type { ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
 import { applyScenario } from '../scenario/overrides';
 import { quantileSorted } from '../uncertainty/bands';
@@ -207,6 +212,48 @@ export function outlookMemberInput(
 	ops: readonly ScenarioOp[] = [],
 	start: { storageM3?: Readonly<Record<string, number>> } = {}
 ): { input: ModelInput; problems: string[] } {
+	const { s, a, seasonRain } = memberSeason(input, baseRun, season, analogue);
+
+	const series: ModelInput['series'] = {};
+	for (const [k, v] of Object.entries(input.series) as [SeriesKind, DailySeries | undefined][]) {
+		if (!v) continue;
+		const c = cutAt(v, s.from);
+		if (c) series[k] = c;
+	}
+	series.rain_forecast_mm = historyThen(input.series.rain_forecast_mm, s.from, seasonRain);
+	if (input.series.evap_apan_mm) series.evap_apan_mm = historyThen(input.series.evap_apan_mm, s.from, valuesOn(input.series.evap_apan_mm, a, s.days));
+
+	return withLevel({ settings: memberSettings(input, s, baseRun.startDate, start), model: input.model, series }, ops);
+}
+
+/**
+ * One member's season alone, for a run from a snapshot of the base input at
+ * the decision date (runModelFrom(captureModelState(input, decisionDate),
+ * …), engine ≥ 0.47.0): outlookMemberInput's member without the history. Its
+ * only series are the season's: the analogue's rain as the forecast rain and
+ * its daily A-pan when the project has one, both from the decision date; the
+ * window is the season; the settings, the ops (demand factors from the
+ * decision date) and the storage `start` are outlookMemberInput's, so a
+ * member run from the snapshot is that member's season with the history's
+ * state and statistics pinned from the base run. Throws as
+ * outlookMemberInput does.
+ */
+export function outlookSeasonInput(
+	input: ModelInput,
+	baseRun: OutlookBaseRun,
+	season: OutlookSeason,
+	analogue: OutlookAnalogue,
+	ops: readonly ScenarioOp[] = [],
+	start: { storageM3?: Readonly<Record<string, number>> } = {}
+): { input: ModelInput; problems: string[] } {
+	const { s, a, seasonRain } = memberSeason(input, baseRun, season, analogue);
+	const series: ModelInput['series'] = { rain_forecast_mm: { startDate: s.decisionDate, values: seasonRain } };
+	if (input.series.evap_apan_mm) series.evap_apan_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_apan_mm, a, s.days) };
+	return withLevel({ settings: memberSettings(input, s, s.decisionDate, start), model: input.model, series }, ops);
+}
+
+/** Check a member's base, season and analogue (outlookMemberInput's throws), and take the analogue's rain from the base run. */
+function memberSeason(input: ModelInput, baseRun: OutlookBaseRun, season: OutlookSeason, analogue: OutlookAnalogue): { s: ResolvedSeason; a: number; seasonRain: (number | null)[] } {
 	const s = resolveSeason(season);
 	const r0 = toEpochDay(baseRun.startDate);
 	const r1 = r0 + baseRun.days - 1;
@@ -222,19 +269,14 @@ export function outlookMemberInput(
 		const v = rain[a + i - r0];
 		seasonRain[i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
 	}
+	return { s, a, seasonRain };
+}
 
-	const series: ModelInput['series'] = {};
-	for (const [k, v] of Object.entries(input.series) as [SeriesKind, DailySeries | undefined][]) {
-		if (!v) continue;
-		const c = cutAt(v, s.from);
-		if (c) series[k] = c;
-	}
-	series.rain_forecast_mm = historyThen(input.series.rain_forecast_mm, s.from, seasonRain);
-	if (input.series.evap_apan_mm) series.evap_apan_mm = historyThen(input.series.evap_apan_mm, s.from, valuesOn(input.series.evap_apan_mm, a, s.days));
-
+/** A member's settings: the window from `from` to the season end, demand factors from the decision date, the storage reset, and rain-source periods clipped to the history. */
+function memberSettings(input: ModelInput, s: ResolvedSeason, from: string, start: { storageM3?: Readonly<Record<string, number>> }): ModelInput['settings'] {
 	const settings: ModelInput['settings'] = {
 		...input.settings,
-		simulationStart: baseRun.startDate,
+		simulationStart: from,
 		simulationEnd: s.seasonEnd,
 		demandFactorFrom: s.decisionDate,
 		...(start.storageM3 ? { damStorageReset: { date: s.decisionDate, storageM3: { ...start.storageM3 } } } : {})
@@ -247,7 +289,11 @@ export function outlookMemberInput(
 			return [p.end > last ? { ...p, end: last } : p];
 		});
 	}
-	const member: ModelInput = { settings, model: input.model, series };
+	return settings;
+}
+
+/** The member with a level's ops applied. */
+function withLevel(member: ModelInput, ops: readonly ScenarioOp[]): { input: ModelInput; problems: string[] } {
 	if (!ops.length) return { input: member, problems: [] };
 	const r = applyScenario(member, ops);
 	return { input: r.input, problems: r.problems };
@@ -461,6 +507,60 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
 	siteNodeId?: string | null;
 	/** Share of analogue years for the planning figure, in (0, 1]; default DEFAULT_PLANNING_SHARE. */
 	planningShare?: number;
+	/**
+	 * Run each member from a snapshot of the base input at the decision date
+	 * (default true, engine ≥ 0.47.0): the history runs once. false: every
+	 * member re-runs the history (outlookMemberInput), the older path.
+	 */
+	warmStart?: boolean;
+	/** The snapshot to start from (captureModelState(input, decisionDate)); captured here when absent. */
+	snapshot?: ModelStateSnapshot;
+}
+
+/**
+ * The base run and the snapshot at `date` for an outlook: the ones given, or
+ * one run that gives both (runModelCapturing), or a plain run when the date
+ * is outside it (the member builders then say why).
+ */
+export function outlookBaseAndSnapshot(input: ModelInput, date: string, given: { baseRun?: OutlookBaseRun; snapshot?: ModelStateSnapshot } = {}): { baseRun: OutlookBaseRun; snapshot: ModelStateSnapshot | null } {
+	if (given.snapshot && given.snapshot.date !== date) throw new RangeError(`the snapshot is of ${given.snapshot.date}, not ${date}`);
+	if (given.baseRun && given.snapshot) return { baseRun: given.baseRun, snapshot: given.snapshot };
+	const tryCapture = () => {
+		try {
+			return runModelCapturing(input, date);
+		} catch (e) {
+			if (e instanceof RangeError) return null;
+			throw e;
+		}
+	};
+	if (given.baseRun) {
+		const r0 = toEpochDay(given.baseRun.startDate);
+		const inside = toEpochDay(date) > r0 && toEpochDay(date) <= r0 + given.baseRun.days;
+		return { baseRun: given.baseRun, snapshot: given.snapshot ?? (inside ? captureModelState(input, date) : null) };
+	}
+	const cap = tryCapture();
+	return cap ? { baseRun: cap.output, snapshot: given.snapshot ?? cap.snapshot } : { baseRun: runModelWithoutChecks(input), snapshot: given.snapshot ?? null };
+}
+
+/**
+ * One member's measures, run from a snapshot of the base input at the
+ * season's first day (engine ≥ 0.47.0): outlookSeasonInput, runModelFrom
+ * and outlookMember in one. `problems` when the ops don't apply (then no
+ * member). What the backend job runs per member once it holds a snapshot.
+ */
+export function runOutlookMember(
+	snapshot: ModelStateSnapshot,
+	input: ModelInput,
+	baseRun: OutlookBaseRun,
+	season: OutlookSeason,
+	analogue: OutlookAnalogue,
+	ops: readonly ScenarioOp[] = [],
+	siteNodeId: string | null = null
+): { member: OutlookMember | null; problems: string[] } {
+	if (snapshot.date !== resolveSeason(season).decisionDate) throw new RangeError(`the snapshot is of ${snapshot.date}, not the season's first day ${season.decisionDate}`);
+	const m = outlookSeasonInput(input, baseRun, season, analogue, ops);
+	if (m.problems.length) return { member: null, problems: m.problems };
+	return { member: outlookMember(runModelFrom(snapshot, m.input), m.input.model, season, analogue, siteNodeId), problems: [] };
 }
 
 function stat(values: readonly (number | null)[], enough: boolean): OutlookStat | null {
@@ -593,29 +693,33 @@ function storageBefore(input: ModelInput, baseRun: OutlookBaseRun, s: ResolvedSe
 
 /**
  * The seasonal outlook: every analogue × every level, run and summarised.
- * Members = analogue years × levels that run, each a full model run
- * (runModelWithoutChecks), so the cost is linear in both. Levels whose ops
- * aren't all demand.scale, or don't apply, are reported with their problems
- * and not run.
+ * Members = analogue years × levels that run, each a run of the season from
+ * the base run's snapshot at the decision date (warmStart, the default), or
+ * with warmStart false a full run of the history and the season. Levels
+ * whose ops aren't all demand.scale, or don't apply, are reported with
+ * their problems and not run.
  */
 export function runSeasonalOutlook(input: ModelInput, options: SeasonalOutlookOptions): SeasonalOutlook {
 	const season: OutlookSeason = { decisionDate: options.decisionDate, seasonEnd: options.seasonEnd };
 	const s = resolveSeason(season);
-	const baseRun = options.baseRun ?? runModelWithoutChecks(input);
+	const warm = options.warmStart !== false;
+	const got = warm ? outlookBaseAndSnapshot(input, s.decisionDate, options) : null;
+	const baseRun = got?.baseRun ?? options.baseRun ?? runModelWithoutChecks(input);
+	const snapshot = got?.snapshot ?? null;
 	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
 	const siteNodeId = options.siteNodeId ?? null;
+	// A member: from the snapshot, or (warmStart false) the history re-run.
+	const memberOf = (a: OutlookAnalogue, m: { input: ModelInput }) => outlookMember(snapshot ? runModelFrom(snapshot, m.input) : runModelWithoutChecks(m.input), m.input.model, season, a, siteNodeId);
+	const build = snapshot ? outlookSeasonInput : outlookMemberInput;
 	const levels = options.levels.map((level) => {
 		let problems = outlookLevelProblems(level);
 		const members: OutlookMember[] = [];
 		if (!problems.length && analogues.length) {
 			// The ops apply alike to every member (the same model); check them once.
-			const first = outlookMemberInput(input, baseRun, season, analogues[0]!, level.ops);
+			const first = build(input, baseRun, season, analogues[0]!, level.ops);
 			problems = first.problems;
 			if (!problems.length) {
-				for (const [k, a] of analogues.entries()) {
-					const m = k === 0 ? first : outlookMemberInput(input, baseRun, season, a, level.ops);
-					members.push(outlookMember(runModelWithoutChecks(m.input), m.input.model, season, a, siteNodeId));
-				}
+				for (const [k, a] of analogues.entries()) members.push(memberOf(a, k === 0 ? first : build(input, baseRun, season, a, level.ops)));
 			}
 		} else if (!problems.length) {
 			// No analogue to run: still check the member input can be built (the dates, the base).
