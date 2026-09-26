@@ -429,8 +429,11 @@ needs one.
   with its base run.
 - **Base run.** An ordinary run of the model only, as for a scenario: not a
   scenario run, not a forecast run (a sweep is judged on history).
-  R5's outlook will need a sweep from a run's state on a decision date;
-  that is R5's to add.
+  R5's outlook needs a sweep from a run's state on a decision date: the
+  engine builds those members (`outlookMemberInput`, [model.md
+  §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)),
+  the job that runs and stores them is not built yet
+  ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml)).
 
 API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 ([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`

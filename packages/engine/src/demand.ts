@@ -3,7 +3,7 @@
 //
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
-import { daysPerMonth, type Monthly } from './calendar';
+import { daysPerMonth, toEpochDay, type Monthly } from './calendar';
 import type { NetworkNode } from './project';
 
 export interface Crop {
@@ -247,4 +247,16 @@ export function demandFactorOf(n: NetworkNode, warnings: string[]): Float64Array
 	}
 	if (bad) warnings.push(`${n.kind} "${n.name}": a demand factor that isn't a number ≥ 0 runs as 1`);
 	return out;
+}
+
+/**
+ * The run day (0-based) from which demand factors apply
+ * (settings.demandFactorFrom, engine ≥ 0.44.0, issue #53 R5): 0 when it is
+ * null / absent (every day), else its day in the run, clamped to 0 when it
+ * is before the run (every day) and to `days` when after it (no day).
+ * `from` is already checked to be an ISO date (prepare.ts).
+ */
+export function demandFactorStart(from: string | null | undefined, start: number, days: number): number {
+	if (from === null || from === undefined) return 0;
+	return Math.min(Math.max(toEpochDay(from) - start, 0), days);
 }
