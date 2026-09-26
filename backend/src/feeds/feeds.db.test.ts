@@ -454,6 +454,13 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		}
 	});
 
+	it('removing a feed keeps the days it wrote (as the remove dialog says)', async () => {
+		const { owner, pid, id, ingest } = await setup('Remover');
+		await ingest(ok('2026-01-01', [1, 2]));
+		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2026-01-01', values: [1, 2] });
+	});
+
 	it('refuses an answer with days the source can’t have yet, which would otherwise pin the newest date in the future', async () => {
 		const { owner, pid, id, ingest } = await setup('Future');
 		await ingest(ok(addDays(-2), [1, 2]));
