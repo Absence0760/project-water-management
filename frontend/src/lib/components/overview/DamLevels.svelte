@@ -1,96 +1,53 @@
 <script lang="ts">
 	// Summary → Dam levels: each dam's storage at the end of the latest run and
-	// at its lowest in the run's last year (damLevels.ts), emptiest first. The
-	// run summary has no dam figures, so each dam's daily dam_storage series is
-	// fetched through the Runs tab's cache, a few at a time. Capacity and the
-	// minimum level come from the run's own model, so a later edit doesn't skew
-	// them. Its own chunk, loaded by OverviewTab once the run's record is in.
-	import { api, type Run, type RunSeriesRef } from '$lib/api';
+	// at its lowest in the run's last year (damLevels.ts), emptiest first.
+	// OverviewTab fetches the levels (they feed its Dams today card too) and
+	// shows this table below the first screen; its own chunk. It stays here
+	// until the planned Dams page exists (issue #17).
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { cachedSeries } from '$lib/components/runs/cache';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import { runHref } from './attention';
-	import { levelBand, loadDamLevels, LOW_PCT, type DamLevel } from './damLevels';
+	import { levelBand, LOW_PCT, type DamLevel } from './damLevels';
 
 	let {
-		projectId,
-		run,
-		refs,
-		liveNodes
+		runId,
+		levels,
+		total,
+		done,
+		loading,
+		error,
+		retry
 	}: {
-		projectId: string;
-		run: Run;
-		/** The run's stored series (its detail record). */
-		refs: RunSeriesRef[];
-		/** The model's nodes, for a run saved before it kept its own model. */
-		liveNodes: readonly { id: string; name: string; damCapacityM3: number; damMinPct: number }[];
+		runId: string;
+		/** Emptiest first (loadDamLevels). */
+		levels: DamLevel[];
+		/** Dams in the run, and how many are fetched so far. */
+		total: number;
+		done: number;
+		loading: boolean;
+		error: string | null;
+		retry: () => void;
 	} = $props();
 
 	/** Rows shown before "Show all". */
 	const FIRST = 8;
-	/** Series fetched at once. */
-	const AT_ONCE = 4;
-
-	type DamNode = { id: string; name: string; damCapacityM3?: unknown; damMinPct?: unknown };
-	const dams = $derived.by(() => {
-		const snap = (run.model?.nodes as DamNode[] | undefined) ?? [];
-		const nodes: DamNode[] = snap.length ? snap : [...liveNodes];
-		const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
-		return nodes
-			.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
-			.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
-	});
-
-	let levels = $state.raw<DamLevel[]>([]);
-	let done = $state(0);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let attempt = $state(0);
 	let showAll = $state(false);
-
-	$effect(() => {
-		const id = run.id;
-		const list = dams;
-		void attempt;
-		levels = [];
-		done = 0;
-		error = null;
-		loading = list.length > 0;
-		if (!list.length) return;
-		loadDamLevels(
-			list,
-			(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(projectId, id, 'dam_storage', nodeId)),
-			AT_ONCE,
-			(n) => {
-				if (id === run.id) done = n;
-			}
-		)
-			.then((l) => {
-				if (id === run.id) levels = l;
-			})
-			.catch((e) => {
-				if (id === run.id) error = e instanceof Error ? e.message : String(e);
-			})
-			.finally(() => {
-				if (id === run.id) loading = false;
-			});
-	});
 
 	const shown = $derived(showAll ? levels : levels.slice(0, FIRST));
 	const pct = (v: number) => `${fmtNum(v, 0)}%`;
 	const BAND_WORDS = { 'at-min': 'at its minimum level', low: `below ${LOW_PCT}%`, ok: '' } as const;
 </script>
 
-{#if dams.length}
+{#if total}
 	<section class="panel dams" aria-labelledby="dams-h" aria-busy={loading}>
 		<div class="panel-head">
 			<h2 id="dams-h">Dam levels</h2>
-			<a href={runHref(run.id)}>Open in Runs</a>
+			<a href={runHref(runId)}>Open in Runs</a>
 		</div>
 		{#if loading}
-			<p class="muted" role="status">Loading dam levels ({done} of {dams.length})…</p>
+			<p class="muted" role="status">Loading dam levels ({done} of {total})…</p>
 		{:else}
-		<LoadState loading={false} {error} retry={() => attempt++}>
+		<LoadState loading={false} {error} {retry}>
 			{#if levels.length === 0}
 				<p class="muted">This run stored no dam storage to show.</p>
 			{:else}

@@ -23,6 +23,7 @@
 		log = $bindable(false),
 		recentDays,
 		recentLabel = 'Recent',
+		windows,
 		toolbar,
 		caption,
 		shade = [],
@@ -46,6 +47,14 @@
 		/** Daily charts longer than this open zoomed to the last N days, with a "Full period" button. */
 		recentDays?: number;
 		recentLabel?: string;
+		/**
+		 * Daily charts: time windows offered as one switch (e.g. 30 days / 1
+		 * year / All, `days: null` = the whole record), each ending on the last
+		 * day, in place of the recentDays / Full period pair. Opens on the one
+		 * whose days equal `recentDays` (else the last). The pressed button is
+		 * the window shown; a zoom or pan releases it.
+		 */
+		windows?: readonly { label: string; days: number | null }[];
 		toolbar?: Snippet;
 		caption?: string;
 		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption`). */
@@ -92,7 +101,13 @@
 	);
 	const hasData = $derived(plotted.some((ys) => ys.some((v) => v !== null)));
 	const spanDays = $derived(isTime && aligned.x.length ? (aligned.x[aligned.x.length - 1]! - aligned.x[0]!) / 86_400 : 0);
-	const canWindow = $derived(!!recentDays && spanDays > recentDays * 1.2);
+	const canWindow = $derived(!windows && !!recentDays && spanDays > recentDays * 1.2);
+	// The window switch: which window was picked, and the x range it set (so a zoom or pan releases it).
+	let picked = $state<number | null>(null);
+	let pickedView = $state.raw<{ min: number; max: number } | null>(null);
+	const activeWindow = $derived(
+		picked !== null && view && pickedView && Math.abs(view.min - pickedView.min) < 1 && Math.abs(view.max - pickedView.max) < 1 ? picked : null
+	);
 	const dataLo = $derived(aligned.x[0] ?? 0);
 	const dataHi = $derived(aligned.x[aligned.x.length - 1] ?? 0);
 	const canPan = $derived(!print && isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
@@ -247,7 +262,10 @@
 		// looking at; a first build, or a window the new data doesn't cover,
 		// opens on the recent period as before.
 		if (isTime && prev && prev.min >= dataLo && prev.max <= dataHi && prev.max - prev.min < dataHi - dataLo) plot.setScale('x', prev);
-		else if (canWindow) showRecent();
+		else if (windows?.length && isTime) {
+			const open = windows.findIndex((w) => w.days === recentDays);
+			applyWindow(picked ?? (open >= 0 ? open : windows.length - 1));
+		} else if (canWindow) showRecent();
 		if (isTime && pannable) attachPan(plot);
 	}
 
@@ -336,6 +354,17 @@
 		const max = aligned.x[aligned.x.length - 1]!;
 		plot.setScale('x', { min: max - recentDays * 86_400, max });
 	}
+	/** One of `windows`: its last N days (all of the record when shorter, or for `days: null`). */
+	function applyWindow(i: number) {
+		const w = windows?.[i];
+		if (!plot || !w || !aligned.x.length) return;
+		const max = dataHi;
+		const min = w.days === null ? dataLo : Math.max(dataLo, max - w.days * 86_400);
+		picked = i;
+		// Compared with the view the setScale hook reports (uPlot applies it in a microtask).
+		pickedView = { min, max };
+		plot.setScale('x', { min, max });
+	}
 	function showAll() {
 		if (!plot || !aligned.x.length) return;
 		plot.setScale('x', { min: aligned.x[0]!, max: aligned.x[aligned.x.length - 1]! });
@@ -418,6 +447,13 @@
 				<span class="seg" role="group" aria-label="Move through the record">
 					<button type="button" class="btn btn-sm" disabled={!canPan || view!.min <= dataLo} onclick={() => step(-1)}>◀ Earlier</button>
 					<button type="button" class="btn btn-sm" disabled={!canPan || view!.max >= dataHi} onclick={() => step(1)}>Later ▶</button>
+				</span>
+			{/if}
+			{#if windows?.length && isTime && hasData}
+				<span class="seg" role="group" aria-label="Time window">
+					{#each windows as w, i (w.label)}
+						<button type="button" class="btn btn-sm" aria-pressed={activeWindow === i} onclick={() => applyWindow(i)}>{w.label}</button>
+					{/each}
 				</span>
 			{/if}
 			{#if canWindow && hasData}

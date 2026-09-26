@@ -1,9 +1,12 @@
 <script lang="ts">
 	// Summary → the latest run's outflow against the pragmatic EWR, the Runs
-	// tab's "EWR vs simulated outflow" chart (flowSeries.ts) over the last
-	// year. Its own chunk (it pulls in uPlot), loaded by OverviewTab only once
-	// the run's record is in. Series come through the Runs tab's cache, so
-	// opening the run there next draws at once.
+	// tab's "EWR vs simulated outflow" chart (flowSeries.ts), with a 30 days /
+	// 1 year / All switch and the days below the reserve shaded (the run's
+	// ewr_shortfall series, summaryChart.ts). Its own chunk (it pulls in uPlot),
+	// loaded by OverviewTab only once the run's record is in. Series come
+	// through the Runs tab's cache, so opening the run there next draws at once.
+	// With `fill` the chart takes the height its panel is given (the Summary's
+	// first screen fits the window, issue #17 A1) instead of a fixed one.
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -12,12 +15,15 @@
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import { ewrChartSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
+	import { fmtNum } from '$lib/format/number';
+	import { belowReserve, FLOW_OPEN_DAYS, FLOW_WINDOWS } from './summaryChart';
 
 	let {
 		projectId,
 		runId,
 		refs,
-		forecastFrom = null
+		forecastFrom = null,
+		fill = false
 	}: {
 		projectId: string;
 		runId: string;
@@ -25,15 +31,21 @@
 		refs: RunSeriesRef[];
 		/** A forecast run's first forecast day: the chart shades from it. */
 		forecastFrom?: string | null;
+		/** Fill the panel's height (its parent sizes it). */
+		fill?: boolean;
 	} = $props();
 
 	const SLOTS = [
 		['simulated', 'simulated_outflow'],
-		['ewr', 'ewr']
+		['ewr', 'ewr'],
+		['shortfall', 'ewr_shortfall']
 	] as const;
+	/** The chart's height when it doesn't fill, and the least it gets when it does. */
+	const FIXED_H = 240;
+	const MIN_H = 180;
 
 	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte).
-	let flows = $state.raw<CatchmentFlows>({});
+	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let log = $state(true);
@@ -52,7 +64,7 @@
 			})
 		)
 			.then((pairs) => {
-				if (id === runId) flows = Object.fromEntries(pairs) as CatchmentFlows;
+				if (id === runId) flows = Object.fromEntries(pairs);
 			})
 			.catch((e) => {
 				if (id === runId) error = e instanceof Error ? e.message : String(e);
@@ -65,33 +77,84 @@
 	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
 	const series = $derived(ewrChartSeries(flows, conv));
 	const band = $derived(forecastBand(forecastFrom));
+	const shade = $derived(flows.shortfall ? belowReserve(flows.shortfall) : []);
+	const shortDays = $derived(shade.reduce((n, r) => n + (Date.parse(r.end) - Date.parse(r.start)) / 86_400_000 + 1, 0));
+	const caption = $derived(
+		flows.shortfall && shortDays === 0
+			? 'The outflow never fell below the dashed EWR line: the EWR was met every day.'
+			: flows.shortfall
+			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'} the outflow was below the dashed EWR line (EWR not met).`
+			: 'Days the outflow dips below the dashed EWR line count as EWR not met.'
+	);
+
+	// Filling: the plot gets what the slot leaves after the chart's own head,
+	// legend and caption (measured from the drawn chart, so wrapping is counted).
+	let slot: HTMLDivElement | undefined = $state();
+	let fig: HTMLDivElement | undefined = $state();
+	let fillH = $state(FIXED_H);
+	$effect(() => {
+		if (!fill || !slot || !fig) return;
+		const s = slot;
+		const f = fig;
+		const measure = () => {
+			const wrap = f.querySelector<HTMLElement>('.u-wrap');
+			if (!wrap) return;
+			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
+			if (Math.abs(target - fillH) > 2) fillH = target;
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(s);
+		ro.observe(f);
+		return () => ro.disconnect();
+	});
+	const height = $derived(fill ? fillH : FIXED_H);
 </script>
 
-<section class="panel flow" aria-labelledby="flow-h" aria-busy={loading}>
+<section class="panel flow" class:fill aria-labelledby="flow-h" aria-busy={loading}>
 	<h2 id="flow-h">Flow vs reserve</h2>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
 		{:else}
-			<LineChart
-				title="EWR vs simulated outflow"
-				unit="m³/s"
-				height={220}
-				{series}
-				logToggle
-				bind:log
-				recentDays={365}
-				recentLabel="Last year"
-				{band}
-				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
-			/>
+			<div class="slot" bind:this={slot}>
+				<div bind:this={fig}>
+					<LineChart
+						title="EWR vs simulated outflow"
+						unit="m³/s"
+						{height}
+						{series}
+						{shade}
+						logToggle
+						bind:log
+						recentDays={FLOW_OPEN_DAYS}
+						windows={FLOW_WINDOWS}
+						pannable={false}
+						{band}
+						{caption}
+					/>
+				</div>
+			</div>
 		{/if}
 	</LoadState>
 </section>
 
 <style>
 	.flow h2 {
-		margin: 0 0 0.5rem;
+		margin: 0 0 0.25rem;
 		font-size: 1.05rem;
+	}
+	.flow.fill {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		margin: 0;
+	}
+	/* The slot is sized by the panel, not by the chart, so the chart can be fitted to it. */
+	.fill .slot {
+		flex: 1 1 0;
+		min-height: 0;
+		overflow: hidden;
 	}
 </style>

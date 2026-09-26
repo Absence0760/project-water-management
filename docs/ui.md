@@ -278,38 +278,68 @@ shorter than the cap looks as before.
 
 The tab a project opens on (id `overview`, no `?tab=`; `?tab=summary` is an
 alias). It was called Overview until issue #17 (option A · Results first)
-put the results first. Top to bottom:
+put the results first; its first screen follows board A1 of the redesign
+(issue #17, "option A's simplicity, nothing lost"). Top to bottom:
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
-   leads: there is nothing to summarise yet.
-2. The latest run's results, the "Needs attention" list, the **Flow vs
-   reserve** chart and **Dam levels** (below), the active alerts ([§ Alerts](#alerts)) and the
-   published baseline.
-3. **Once there is a run**, the setup checklist comes here, below the results
-   (usually as the one-line "Setup complete").
-4. **The model**: eight headline facts, then project details, the import
-   record (an imported project only), recent notes ([§ Notes](#notes)), team
-   and members.
+   leads, then Needs attention: there is nothing to summarise yet, so there
+   is no KPI row, chart or supply list.
+2. **The first screen, once there is a run**: the **Latest run** KPI row
+   (four cards, the mean outflow in the line under them), then two columns:
+   the **Flow vs reserve** chart on the left, and on the right (a column
+   280–340 px wide) **Needs attention** above **Supply by farm**. From
+   1100 × 620 px (`FIT_QUERY` in `OverviewTab.svelte`) the block is exactly
+   the height left in the window below its own top edge (measured with a
+   `ResizeObserver` on `body`, as the Network's map, less the save bar
+   when it shows; at least 560 px): the chart fills what the KPIs leave, the
+   side column's cards scroll inside themselves, and the page doesn't need
+   scrolling to see any of it. Narrower, the columns stack and the chart is
+   240 px tall; on a phone the KPIs are 2 × 2.
+3. **Below the first screen**, until the planned Dams and Project pages
+   exist: the active alerts ([§ Alerts](#alerts)), the published baseline,
+   **Dam levels**, the setup checklist (usually the one-line "Setup
+   complete"), then **The model**: eight headline facts, project details,
+   the import record (an imported project only), recent notes
+   ([§ Notes](#notes)), team, members, farmers and share links.
 
 - **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
   record is in: the Runs tab's *EWR vs simulated outflow* chart
-  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) over the last
-  year, shading a forecast run's forecast days. It is its own chunk, since it
-  pulls in uPlot, so the page's first paint doesn't wait for it. Its series
-  come through the Runs tab's `cachedSeries`, and it fetches only the series
-  the run stored ("This run stored no outflow or EWR series." otherwise).
+  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) with a
+  **30 days / 1 year / All** switch (LineChart's `windows`: each window ends
+  on the run's last day, it opens on a year, the pressed button is the window
+  shown and a drag-zoom releases it), shading a forecast run's forecast days.
+  The **days below the reserve are shaded** (LineChart's `shade`), from the
+  run's own `ewr_shortfall` series (`overview/summaryChart.ts`
+  `belowReserve`: negative on a day the engine counted as EWR not met), so
+  the caption's count ("Shaded: the 23 days the outflow was below the dashed
+  EWR line") is the EWR card's; a run that always met it says so. On the
+  first screen it fills its panel (`fill`: the plot gets the panel's height
+  less the chart's own head, legend and caption, measured from the drawn
+  chart). It is its own chunk, since it pulls in uPlot, so the page's first
+  paint doesn't wait for it. Its series come through the Runs tab's
+  `cachedSeries`, and it fetches only the series the run stored ("This run
+  stored no outflow or EWR series." otherwise).
+- **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
+  `overview/supplyBars.ts`): every farm in the latest run with a bar and the
+  % of its demand supplied, fullest first and emptiest last, in the Network's
+  supply bands (`network/supplyColour.ts`: amber below `SUPPLY_TARGET`, red
+  below `LOW_SUPPLY`, with a key; a farm with no demand says "no demand"
+  and goes last). A farm's name opens its [farm drawer](#farm-drawer)
+  (`farmDrawerHref`), unless it has left the model since the run. Its own
+  chunk (it waits for the run's record anyway).
 - **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
-  under Flow vs reserve once the latest run's record is in: every dam in the
-  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series), emptiest
-  first. Each row has the dam's capacity, its storage at the end of the run as
+  below the first screen once the latest run's record is in: every dam in the
+  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series,
+  `damsInRun`), emptiest first. Each row has the dam's capacity, its storage at the end of the run as
   a bar and a % of capacity (a tick marks its minimum operating level, and
   "below 30%" or "at its minimum level" is written beside the %, so colour is
   never the only cue), the lowest it reached in the run's last 365 days with
   the first day of that low, and the days in that year at or below the
   minimum. Capacity and minimum come from the run's own model
   (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them. The run summary has no dam figures, so each dam's daily series is
-  fetched through the Runs tab's `cachedSeries`, four at a time, with
+  them. The run summary has no dam figures, so `OverviewTab` fetches each
+  dam's daily series through the Runs tab's `cachedSeries`, four at a time
+  (`loadDamLevels`), for this table and the **Dams today** card, with
   "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
   **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
   dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
@@ -332,9 +362,16 @@ put the results first. Top to bottom:
   the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
-  why not, as on the Runs tab; "–" without observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
-  is only in a run's daily series, not its summary, so it has no card; the
-  **Dam levels** panel below reads those series. Each
+  why not, as on the Runs tab; "–" without observed flow). They show in the
+  order Reserve · Irrigation supplied · **Dams today** · NSE. *Dams today*
+  (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
+  storage at the end of the run as a share of their total capacity (weighted
+  by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
+  days"; none when the run is shorter), flagged below 30 %; it reads the dam
+  series fetched for Dam levels, so it says "loading dam levels" until they
+  are in, and "no dams in the run" without any. *Mean simulated outflow*
+  (m³/s, % of natural, its change) is the line under the cards, with the
+  run the changes are against. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
@@ -344,7 +381,7 @@ put the results first. Top to bottom:
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
 - **Published baseline** (WP-2.3, `overview/PublishedBaseline.svelte`),
-  under Latest run (shown with or without runs): what stakeholders and farmers see. It fetches
+  below the first screen, after the active alerts (shown with or without runs): what stakeholders and farmers see. It fetches
   `GET /projects/:id/publication` and names the published run (a link to it
   in Runs, with its period from the page's runs list), when and by whom it
   was published, the notice level with its percentage ("Advisory · 15 %"),
@@ -363,11 +400,16 @@ put the results first. Top to bottom:
   a person's act unless the project chose "Publish if there are no new
   warnings" in Settings; nothing here publishes.
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
-  `overview/attention.ts`): one sentence and one link per item, hidden when
-  there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
+  `overview/attention.ts`): a card per item, hidden when there is nothing.
+  Each card has a short title ("1 of 2 farms below 95%"), a one- or two-line
+  detail and its link; the link covers the whole card, and a second link sits
+  above it. The card is coloured by its `tone`: red when the worst short farm
+  is below `LOW_SUPPLY`, amber for a short farm above it, run warnings and
+  stale data, grey for new rainfall and unplanted farms (the title always says
+  what's wrong, so colour is never the only cue). Items: farms below `SUPPLY_TARGET` in the latest run (the
   worst named, links to the run, and, while it is still a farm in the model,
   a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
-  the latest run's warnings, rainfall the latest run hasn't used
+  the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
   (`newDataSinceRun`, links to Runs to re-run), input data older than
   `STALE_DAYS` (`freshness`, links to Data), and farms with no planted area
   once anything is planted (one farm: **Set its planted areas**, the farm

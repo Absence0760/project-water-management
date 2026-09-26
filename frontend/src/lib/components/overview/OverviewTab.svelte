@@ -4,7 +4,7 @@
 	import { api, type Project, type Run, type RunMeta } from '$lib/api';
 	import AlertsPanel from '$lib/components/alerts/AlertsPanel.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
-	import { detailCache } from '$lib/components/runs/cache';
+	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { downloads } from '$lib/export';
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
@@ -13,7 +13,8 @@
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
-	import { pickRuns } from './latestRun';
+	import { pickRuns, type DamsState } from './latestRun';
+	import { damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import MembersPanel from './MembersPanel.svelte';
 	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
@@ -25,8 +26,10 @@
 
 	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
 	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
-	// Dam levels fetch a daily series per dam: their own chunk too.
-	const loadDamLevels = () => import('./DamLevels.svelte');
+	// The Dam levels table: its own chunk too (the levels are fetched here, for the Dams today card as well).
+	const loadDamTable = () => import('./DamLevels.svelte');
+	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
+	const loadSupply = () => import('./SupplyByFarm.svelte');
 
 	let {
 		project,
@@ -152,6 +155,97 @@
 
 	// The latest run's stored series (its detail record, cached by fetchRun), for the flow chart.
 	const latestRefs = $derived(latestRun ? (detailCache.get(latestRun.id)?.series ?? []) : []);
+	/** The latest run's record, once it is the one picked (not a stale one while the next loads). */
+	const shown = $derived(latestRun && latestRun.id === pick?.latest.id ? latestRun : null);
+
+	// --- dams: each dam's level at the end of the latest run (damLevels.ts), for
+	// the Dams today card and the Dam levels table. Each dam's daily storage
+	// series comes through the Runs cache, a few at a time. Capacity and the
+	// minimum level come from the run's own model, so a later edit doesn't skew them.
+	let damLevels = $state.raw<DamLevel[]>([]);
+	let damsTotal = $state(0);
+	let damsDone = $state(0);
+	let damsLoading = $state(false);
+	let damsError = $state<string | null>(null);
+	let damsAttempt = $state(0);
+	let damsKey = '';
+	$effect(() => {
+		const run = shown;
+		const key = run ? `${run.id}|${damsAttempt}` : '';
+		untrack(() => {
+			if (key === damsKey) return;
+			damsKey = key;
+			damLevels = [];
+			damsDone = 0;
+			damsError = null;
+			if (!run) {
+				damsTotal = 0;
+				damsLoading = false;
+				return;
+			}
+			const id = run.id;
+			const list = damsInRun(
+				run.model?.nodes as { id: string }[] | undefined,
+				editor.model.nodes,
+				detailCache.get(id)?.series ?? []
+			);
+			damsTotal = list.length;
+			damsLoading = list.length > 0;
+			if (!list.length) return;
+			const current = () => damsKey === key;
+			loadDamLevels(
+				list,
+				(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(project.id, id, 'dam_storage', nodeId)),
+				4,
+				(n) => {
+					if (current()) damsDone = n;
+				}
+			)
+				.then((l) => {
+					if (current()) damLevels = l;
+				})
+				.catch((e) => {
+					if (current()) damsError = msg(e);
+				})
+				.finally(() => {
+					if (current()) damsLoading = false;
+				});
+		});
+	});
+	const damsState = $derived.by((): DamsState => {
+		if (damsError) return { state: 'error' };
+		if (damsLoading) return { state: 'loading' };
+		const today = damsToday(damLevels);
+		return today ? { state: 'ready', today } : { state: 'none' };
+	});
+
+	// --- the first screen (issue #17 A1): KPIs, then the flow chart beside
+	// Needs attention and Supply by farm. On a wide, tall enough window it is
+	// exactly the height left below its own top edge (measured, not assumed, as
+	// the Network's map), the chart filling what the KPIs leave; the rest of the
+	// Summary follows below it.
+	const FIT_QUERY = '(min-width: 1100px) and (min-height: 620px)';
+	let fit = $state(false);
+	$effect(() => {
+		const mq = matchMedia(FIT_QUERY);
+		const on = () => (fit = mq.matches);
+		on();
+		mq.addEventListener('change', on);
+		return () => mq.removeEventListener('change', on);
+	});
+	let firstEl: HTMLDivElement | undefined = $state();
+	let firstTop = $state(0);
+	$effect(() => {
+		if (!firstEl) return;
+		const el = firstEl;
+		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
+	const runFarms = $derived(shown?.summary.farms ?? []);
+	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 
 	const today = localIsoDate();
 	const attentionItems = $derived(
@@ -214,37 +308,47 @@
 	}
 </script>
 
-<!-- Summary (issue #17, option A): the results first. Before the first run
-     there are none, so the setup checklist leads instead. -->
-{#if !pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
-
-{#if pick}
-	<LatestRun
-		meta={pick.latest}
-		run={latestRun}
-		previousMeta={pick.previous}
-		previous={previousRun}
-		evidence={pick.evidence}
-		loading={runLoading}
-		error={runError}
-		{previousError}
-		retry={retryRuns}
-	/>
-{/if}
-
-<NeedsAttention items={attentionItems} />
-
-{#if latestRun && latestRun.id === pick?.latest.id}
-	<Lazy load={loadFlowVsReserve}>
-		{#snippet children(FlowVsReserve)}
-			<FlowVsReserve projectId={project.id} runId={latestRun!.id} refs={latestRefs} forecastFrom={latestRun!.summary.forecast?.from ?? null} />
-		{/snippet}
-	</Lazy>
-	<Lazy load={loadDamLevels}>
-		{#snippet children(DamLevels)}
-			<DamLevels projectId={project.id} run={latestRun!} refs={latestRefs} liveNodes={editor.model.nodes} />
-		{/snippet}
-	</Lazy>
+<!-- Summary (issue #17, option A, board A1): the results first. Before the
+     first run there are none, so the setup checklist leads instead. -->
+{#if !pick}
+	<SetupChecklist {steps} tabs={visibleTabs} />
+	{#if attentionItems.length}<div class="pre-run"><NeedsAttention items={attentionItems} /></div>{/if}
+{:else}
+	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+		<LatestRun
+			meta={pick.latest}
+			run={latestRun}
+			previousMeta={pick.previous}
+			previous={previousRun}
+			evidence={pick.evidence}
+			loading={runLoading}
+			error={runError}
+			{previousError}
+			retry={retryRuns}
+			dams={damsState}
+		/>
+		<div class="cols" class:solo={!attentionItems.length && !runFarms.length}>
+			<div class="chart-cell">
+				{#if shown}
+					<Lazy load={loadFlowVsReserve}>
+						{#snippet children(FlowVsReserve)}
+							<FlowVsReserve projectId={project.id} runId={shown!.id} refs={latestRefs} forecastFrom={shown!.summary.forecast?.from ?? null} fill={fit} />
+						{/snippet}
+					</Lazy>
+				{/if}
+			</div>
+			{#if attentionItems.length || runFarms.length}
+				<div class="side">
+					<NeedsAttention items={attentionItems} />
+					{#if runFarms.length}
+						<Lazy load={loadSupply}>
+							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} />{/snippet}
+						</Lazy>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	</div>
 {/if}
 
 <!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
@@ -252,6 +356,22 @@
 
 <!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
 <PublishedBaseline projectId={project.id} {runs} {canEdit} />
+
+{#if shown && damsTotal}
+	<Lazy load={loadDamTable}>
+		{#snippet children(DamLevels)}
+			<DamLevels
+				runId={shown!.id}
+				levels={damLevels}
+				total={damsTotal}
+				done={damsDone}
+				loading={damsLoading}
+				error={damsError}
+				retry={() => damsAttempt++}
+			/>
+		{/snippet}
+	</Lazy>
+{/if}
 
 {#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
 
@@ -319,6 +439,63 @@
 </div>
 
 <style>
+	.first {
+		display: grid;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+	.pre-run {
+		margin-bottom: 1rem;
+	}
+	.cols {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 340px);
+		gap: 1rem;
+		align-items: start;
+	}
+	.cols.solo {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.chart-cell,
+	.side {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		min-width: 0;
+	}
+	.chart-cell :global(.flow) {
+		margin-bottom: 0;
+	}
+	@media (max-width: 1099px) {
+		.cols {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	/* Wide and tall enough: the first screen is the height left in the window
+	   below its top (less the save bar when it shows), the chart takes what
+	   the KPIs leave, and the side column's cards scroll inside themselves. */
+	.first.fit {
+		height: max(560px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+	.fit .cols {
+		min-height: 0;
+		align-items: stretch;
+	}
+	.fit .chart-cell,
+	.fit .side {
+		min-height: 0;
+	}
+	.fit .side > :global(.attention) {
+		flex: 0 1 auto;
+		min-height: 0;
+		overflow: auto;
+	}
+	.fit .side > :global(.supply) {
+		flex: 1 1 auto;
+		min-height: 6rem;
+		overflow: auto;
+	}
 	.model-h {
 		margin: 1.25rem 0 0.5rem;
 		font-size: 1.05rem;
