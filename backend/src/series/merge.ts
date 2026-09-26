@@ -88,8 +88,12 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
 // "new data since the last run" even for corrections inside the run period.
 // product / productVersion: what the values are (031_series_provenance.sql), null = not recorded.
+// rebuilding: a data feed is backfilling a confirmed replacement of this
+// series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
-	product, product_version AS "productVersion"`;
+	product, product_version AS "productVersion",
+	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
+		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
 
 export interface MergeOptions {
 	/** A null in the incoming days leaves the existing value (default: it overwrites). */
@@ -146,6 +150,7 @@ export interface SeriesMetaRow {
 	updatedAt: string;
 	product: string | null;
 	productVersion: string | null;
+	rebuilding: boolean;
 }
 
 /** Any day with a value. */

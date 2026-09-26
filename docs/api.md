@@ -511,7 +511,9 @@ naming `startDate`, not a server error).
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, rebuilding }` —
+`rebuilding` is true while a data feed backfills a confirmed replacement of the
+series (its values stay as they are until the swap);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 
@@ -1056,8 +1058,10 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     an unrecorded one. Without it, attaching (or re-targeting, or switching
     the product) onto such a series is `409 { error, details: { code:
     "series_version", holds, writes } }` (`holds` null = unrecorded). With it,
-    the feed's next fetch replaces the series whole in its own version and
-    keeps the old values as a restorable series revision. A replacement is a
+    the feed backfills the new record in a stage (the live series unchanged
+    meanwhile) and swaps it in whole once caught up, keeping the old values
+    as a restorable series revision. On PATCH, `replaceSeries: false`
+    withdraws a pending replacement and discards its stage. A replacement is a
     full backfill: without a `startDate` the feed gets the series' first day
     with a value; a later one, or the `sat` product for a series reaching
     before 1998, is `409 { error, details: { code: "series_backfill", firstDay } }`
@@ -1065,7 +1069,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 - `FeedMeta = { id, source, config, targetKind, targetName, enabled, schedule,
   createdAt, updatedAt, actingUser, lastAttemptAt, lastSuccessAt,
   lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health,
-  writes, series, versionConflict, replaceFrom }`. `writes`: the product and
+  writes, series, versionConflict, replaceFrom, rebuilding }`. `rebuilding`:
+  a confirmed replacement being backfilled, `{ startDate, through, updatedAt }`
+  (the new record so far and when it last grew), or null. `writes`: the product and
   version the feed writes (`{ product: "CHIRPS sat", version: "3.0" }`; null
   for the forecast and DWS); `series`: the target now, `{ filled, provenance }`
   or null when it doesn't exist; `versionConflict`: the target holds values
@@ -1089,7 +1095,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `{ code: "no-data" }` (fetches succeed but have found nothing yet),
   - `{ code: "not-fetched", since, after }` (not fetched since it was `attached` / `changed` on `since`: is the worker running?),
   - `{ code: "waiting" }` (waiting for its first fetch),
-  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day).
+  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day),
+  - `{ code: "rebuilding", from, through }` (state `pending`: a confirmed replacement is backfilling; the live series is unchanged until it completes),
+  - `{ code: "rebuild-stalled", from, through, since }` (state `stale`: the same, but it hasn't grown since `since`).
 
   A client should fall back to the `state` for a code it doesn't know.
   `lastError` is written by the server, never an upstream body or database

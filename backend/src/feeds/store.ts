@@ -41,6 +41,13 @@ export interface FeedMeta {
 	versionConflict: boolean;
 	/** An owner confirmed the feed may replace the target while it holds this (`CHIRPS/2.0`, '' = unrecorded); the next fetch does it. */
 	replaceFrom: string | null;
+	/**
+	 * A confirmed replacement being backfilled (feed_stage, 031): the new
+	 * record's first and last day so far and when it last grew. The live
+	 * series keeps its old values until the backfill is caught up. Null when
+	 * none is staged.
+	 */
+	rebuilding: { startDate: string; through: string; updatedAt: string } | null;
 }
 
 /** The row the handlers work from. */
@@ -66,9 +73,14 @@ const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_
 	f.last_attempt_at AS "lastAttemptAt", f.last_success_at AS "lastSuccessAt", to_char(f.last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
 	f.last_value AS "lastValue", f.consecutive_failures AS "consecutiveFailures", f.last_error AS "lastError", f.last_meta AS "lastMeta",
 	f.replace_series_from AS "replaceFrom", t.id IS NOT NULL AS "seriesExists", t.product AS "seriesProduct", t.product_version AS "seriesProductVersion",
-	COALESCE(cardinality(array_remove(t."values", NULL)) > 0, false) AS "seriesFilled"`;
+	COALESCE(cardinality(array_remove(t."values", NULL)) > 0, false) AS "seriesFilled",
+	CASE WHEN st.feed_id IS NULL THEN NULL ELSE jsonb_build_object(
+		'startDate', to_char(st.start_date, 'YYYY-MM-DD'),
+		'through', to_char(st.start_date + cardinality(st."values") - 1, 'YYYY-MM-DD'),
+		'updatedAt', st.updated_at) END AS rebuilding`;
 const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
-	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name`;
+	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
+	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
 
 type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict'> & {
 	seriesExists: boolean;
@@ -146,9 +158,10 @@ export async function createFeed(db: Db, projectId: string, input: FeedInput, re
 /**
  * Replace a feed's settings as the signed-in owner, who becomes the acting
  * user. False when not found. `replaceFrom`: a new confirmation (a string),
- * or undefined to keep the feed's own (the trigger drops it on a re-target).
+ * null to withdraw one, or undefined to keep the feed's own (the trigger
+ * drops it on a re-target, and discards a staged replacement on any change).
  */
-export async function updateFeed(db: Db, projectId: string, feedId: string, input: FeedInput, replaceFrom?: string): Promise<boolean> {
+export async function updateFeed(db: Db, projectId: string, feedId: string, input: FeedInput, replaceFrom?: string | null): Promise<boolean> {
 	const { rowCount } = await db.query(
 		`UPDATE data_feed SET source = $3, config = $4, target_kind = $5, target_name = $6, enabled = $7, schedule = $8,
 			replace_series_from = CASE WHEN $9::boolean THEN $10 ELSE replace_series_from END

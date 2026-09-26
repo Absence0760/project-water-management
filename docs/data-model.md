@@ -1008,7 +1008,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29) |
-| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (031): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest replaces the series whole only while it still holds exactly that, then clears it (`app_feed_replace_done`). Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (031): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -1048,6 +1048,15 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     series under the owner's confirmation; clears `replace_series_from`, as
     the job's user, who must be an editor (an editor can't write `data_feed`
     directly).
+  - **`feed_stage`** (031): one row per feed with a confirmed replacement
+    being backfilled: `start_date` + `values` (≤ 60 000, the new record so
+    far), the `product` / `product_version` it will be labelled, the
+    `replace_from` it was confirmed against, `updated_at` (when it last grew:
+    a day without growth is `rebuild-stalled`). Cascades with the feed and
+    the project. RLS: SELECT viewers; INSERT / UPDATE / DELETE editors, for a
+    feed of the same project (the ingest writes it as the feed's acting user;
+    an owner's save of the feed discards it through `data_feed_stamp`).
+    Nothing reads it for a run: runs read `time_series` only.
   - `app_feed_fetch_now(feed)` (031): "Run now" while the feed's fetch is
     pending but waiting (a backfill's next window, a retry): makes that job
     due now, as an editor, and says whether it moved one (`water_app` can't

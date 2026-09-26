@@ -165,7 +165,9 @@ export const feedRoutes = new Hono<AuthEnv>()
 				input.targetName !== cur.targetName ||
 				!sameProvenance(feedProvenance(input.source, input.config), cur.writes);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, changed);
-			if (!(await updateFeed(db, id, fid, checked, replaceFrom).catch(conflict))) throw new ApiError(404, 'not found');
+			// replaceSeries: false withdraws a pending replacement (the trigger discards its stage); absent keeps it.
+			const replace = patch.replaceSeries === false ? null : replaceFrom;
+			if (!(await updateFeed(db, id, fid, checked, replace).catch(conflict))) throw new ApiError(404, 'not found');
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });

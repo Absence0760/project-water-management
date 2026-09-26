@@ -409,13 +409,25 @@ merges into:
     or a partial overwrite: the feed starts at the series' first day with a
     value (filled in when the owner gave no start date; a later one is a
     409), and a series reaching before 1998 can only be replaced by `rnl`
-    (409 for `sat`). The next fetch **replaces the series whole** with the fetched
-    days in the feed's version, keeps the old values and label as a
-    `feed_replace` series revision (restorable from the History tab), logs
-    `series.replaced` with the version change, and uses the confirmation up
-    (`app_feed_replace_done`). While the series holds anything else (it was
-    relabelled since), the fetch is refused again; re-targeting drops the
-    confirmation.
+    (409 for `sat`).
+  - **The replacement is staged** (`feed_stage`, 031). The backfill's windows
+    build the new record in the feed's stage while the live series keeps its
+    old values and label, so a run in the meantime (hours: a window a
+    minute, 70 new days each) uses the whole old record, never a partial new
+    one. The feed shows `rebuilding` (how far it has got; health `pending`,
+    reason `rebuilding`, or `stale` / `rebuild-stalled` after a day without
+    growing), the series list marks the series `rebuilding`, and the Runs tab
+    says runs use the current series until it completes. When a window
+    reaches the newest day the source can have, the ingest **swaps the stage
+    in whole**, in one transaction: the series becomes the new record in the
+    feed's version, the old values and label are kept as a `feed_replace`
+    series revision (restorable from the History tab), `series.replaced` is
+    logged with the version change, the confirmation is used up
+    (`app_feed_replace_done`) and the stage deleted. While the series holds
+    anything else (it was relabelled since), the fetch is refused again and
+    the stage waits. Withdrawing the confirmation (`replaceSeries: false`),
+    a new one, re-targeting or a new config discards the stage
+    (`data_feed_stamp`); removing the feed takes it with it.
   - The replacement changes the forcing: the next run's CHIRPS factors are
     fitted on the new values, the fit record flags "forcing changed since
     fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and

@@ -28,16 +28,20 @@
 // target that holds values of another product or version, or an unrecorded
 // one, is never merged into: the fetch is recorded as failed, saying so,
 // unless an owner confirmed replacing the series (data_feed.replace_series_from
-// names what it held then). While it still holds exactly that, the ingest
-// replaces the series whole with the fetched days, keeping the old values as
-// a `feed_replace` series revision, and uses up the confirmation. The fit
-// record then flags the forcing as changed (engine fitRecordStatus), and the
-// run comparison notes the new version.
-import { fromEpochDay, provenanceKey, provenanceLabel, toEpochDay } from '@water-management/engine';
+// names what it held then). While it still holds exactly that, the fetched
+// days are **staged** (feed_stage), not written into the live series, which
+// keeps its old values and label: a run meanwhile uses the whole old record,
+// never a partial new one. When the backfill reaches the newest day the
+// source can have, the stage is swapped in whole, in this transaction (the
+// old values kept as a `feed_replace` series revision, the label changed,
+// the confirmation used up, the stage deleted). The fit record then flags the
+// forcing as changed (engine fitRecordStatus), and the run comparison notes
+// the new version.
+import { fromEpochDay, provenanceKey, provenanceLabel, toEpochDay, type SeriesProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
-import { hasValues, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
+import { hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
 import { replaceSeries } from '../series/routes.js';
 import { type FeedSource, feedProvenance, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
@@ -57,10 +61,12 @@ export const BACKFILL_NEXT_SECONDS = 60;
  * on (its end is recorded as `through`), so the chain ends when the feed is
  * caught up. As the acting user, in the ingest's transaction.
  */
+/** The window reached the newest day the source can have: a CHIRPS day is yesterday at best, a DWS day today. */
+const caughtUp = (feed: FeedRow, window: FetchWindow) =>
+	window.end >= (feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
+
 async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow): Promise<void> {
-	if (feed.source === 'chirps_gefs') return;
-	const newest = feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday();
-	if (window.end >= newest) return;
+	if (feed.source === 'chirps_gefs' || caughtUp(feed, window)) return;
 	await enqueueJob(db, {
 		projectId: feed.projectId,
 		kind: 'feed_fetch',
@@ -94,6 +100,74 @@ async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutco
 		await recordAudit(db, feed.projectId, 'feed.failed', { feedId: feed.id, source: feed.source, targetKind: feed.targetKind, targetName: feed.targetName, error });
 	}
 	return { merged: 0, lastDate: null };
+}
+
+type OkResult = Extract<FetchResult, { ok: true }>;
+
+/**
+ * A confirmed replacement's fetch (see the header): merge the days into the
+ * feed's stage, and swap the stage in once the backfill is caught up. The
+ * live series is untouched until then.
+ */
+async function stageReplacement(
+	db: Db,
+	feed: FeedRow,
+	result: OkResult,
+	window: FetchWindow,
+	writes: SeriesProvenance,
+	held: SeriesProvenance | null
+): Promise<IngestOutcome> {
+	const { rows } = await db.query<{ startDate: string; values: (number | null)[] }>(
+		`SELECT to_char(start_date, 'YYYY-MM-DD') AS "startDate", "values" FROM feed_stage WHERE feed_id = $1 FOR UPDATE`,
+		[feed.id]
+	);
+	let stage: { startDate: string; values: (number | null)[] } | null = rows[0] ?? null;
+	let lastDate: string | null = null;
+	let lastValue: number | null = null;
+	let merged = 0;
+	const unit = SOURCES[feed.source].unit;
+	if (result.startDate !== null && result.values.some((v) => v !== null)) {
+		// Canonical unit, as a series is stored (series/merge.ts).
+		const body = SeriesBody.parse({ kind: feed.targetKind, name: feed.targetName, unit, startDate: result.startDate, values: result.values });
+		const next = mergeDaily(stage, { startDate: body.startDate, values: body.values }, { keepOnNull: true });
+		if (next.values.length > MAX_SERIES_VALUES) return failed(db, feed, `the series could not take the new days: series would exceed ${MAX_SERIES_VALUES} days`);
+		await db.query(
+			`INSERT INTO feed_stage (feed_id, project_id, start_date, "values", product, product_version, replace_from)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (feed_id) DO UPDATE SET start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now()`,
+			[feed.id, feed.projectId, next.startDate, next.values, writes.product, writes.version, feed.replaceFrom ?? '']
+		);
+		stage = next;
+		let lastIdx = result.values.length - 1;
+		while (result.values[lastIdx] === null) lastIdx--;
+		merged = result.values.filter((v) => v !== null).length;
+		lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
+		lastValue = result.values[lastIdx]!;
+	}
+	const done = caughtUp(feed, window) && stage !== null;
+	let meta: Record<string, string | number>;
+	if (done) {
+		// Caught up: the new record goes in whole, in this transaction.
+		try {
+			await replaceSeries(
+				db,
+				feed.projectId,
+				{ kind: feed.targetKind, name: feed.targetName, unit, startDate: stage!.startDate, values: stage!.values, provenance: writes },
+				{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source } }
+			);
+		} catch (err) {
+			if (!(err instanceof ApiError)) throw err;
+			return failed(db, feed, `the series could not take the new days: ${err.message}`);
+		}
+		await db.query('DELETE FROM feed_stage WHERE feed_id = $1', [feed.id]);
+		await feedReplaceDone(db, feed.id);
+		meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
+	} else {
+		meta = { ...result.meta, merged, staged: stage?.values.length ?? 0, through: window.end };
+	}
+	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
+	await continueBackfill(db, feed, window);
+	return { merged, lastDate };
 }
 
 /**
@@ -134,6 +208,23 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 		}
 	}
 
+	const writes = feedProvenance(feed.source, feed.config);
+	if (writes) {
+		// The version guard, on the locked row: nothing can relabel or refill it between the check and the write.
+		const cur = await lockSeries(db, feed.projectId, feed.targetKind, feed.targetName);
+		const held = cur ? rowProvenance({ product: cur.product ?? null, productVersion: cur.productVersion ?? null }) : null;
+		if (!seriesAccepts(writes, cur ? { filled: hasValues(cur.values), provenance: held } : null)) {
+			if (feed.replaceFrom !== provenanceKey(held)) {
+				return failed(
+					db,
+					feed,
+					`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
+				);
+			}
+			return stageReplacement(db, feed, result, window, writes, held);
+		}
+	}
+
 	let lastDate: string | null = null;
 	let lastValue: number | null = null;
 	let merged = 0;
@@ -148,39 +239,6 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				startDate: result.startDate,
 				values: result.values
 			});
-			const writes = feedProvenance(feed.source, feed.config);
-			// The version guard, on the locked row: nothing can relabel or refill it between the check and the write.
-			const cur = writes ? await lockSeries(db, feed.projectId, feed.targetKind, feed.targetName) : null;
-			const held = cur ? rowProvenance({ product: cur.product ?? null, productVersion: cur.productVersion ?? null }) : null;
-			if (writes && !seriesAccepts(writes, cur ? { filled: hasValues(cur.values), provenance: held } : null)) {
-				if (feed.replaceFrom !== provenanceKey(held)) {
-					return failed(
-						db,
-						feed,
-						`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
-					);
-				}
-				// Confirmed: the series becomes the fetched days, whole, in the feed's version.
-				try {
-					await replaceSeries(
-						db,
-						feed.projectId,
-						{ ...body, provenance: writes },
-						{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source } }
-					);
-				} catch (err) {
-					if (!(err instanceof ApiError)) throw err;
-					return failed(db, feed, `the series could not take the new days: ${err.message}`);
-				}
-				await feedReplaceDone(db, feed.id);
-				merged = result.values.filter((v) => v !== null).length;
-				lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
-				lastValue = result.values[lastIdx]!;
-				const meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
-				await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
-				await continueBackfill(db, feed, window);
-				return { merged, lastDate };
-			}
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
 				// provenance: labels a new or empty series with what the feed writes.

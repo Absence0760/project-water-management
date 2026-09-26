@@ -989,48 +989,74 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).status).toBe(200);
 	});
 
-	it('the confirmed path: replaces the series whole in the feed’s version, keeps the old values as a restorable revision, uses up the confirmation, and flags the fit', async () => {
-		const { owner, pid, seriesId } = await withV2('Replacer');
-		// A replacement is a full backfill: a start date after the series' first day is refused …
+	it('a replacement is a full backfill: a start date after the series’ first day is refused, and none gets that day', async () => {
+		const { owner, pid } = await withV2('Backfill');
 		const later = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
 		expect(later.status).toBe(409);
 		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 2001-01-01 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
-		// … and without one the feed gets the series' first day.
 		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(confirm.status).toBe(201);
-		const id = confirm.body.feed.id;
 		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0', config: { startDate: '2001-01-01' } });
+	});
+
+	it('the confirmed path is staged: runs keep the whole old series while it backfills, then it swaps in atomically, kept as a restorable revision, and flags the fit', async () => {
+		const owner = await signUp('Replacer');
+		const pid = await project(owner);
+		// A v2 record from 150 days ago: the backfill takes two windows (120 days, then the rest to yesterday).
+		const first = addDays(-150);
+		const put = await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: first, values: [1, 2, 3], ...V2 });
+		const seriesId = put.body.id as string;
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id;
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		expect((await tick()).done).toBe(1);
-		// The series is the fetched days only, from its old first day: no v2 day is left to splice.
-		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
-		expect(s.startDate).toBe('2001-01-01');
-		expect(s.values).toHaveLength(120);
-		expect(s.values.every((v) => v !== null)).toBe(true);
-		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
-		const row = await feedRow(id);
-		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: '2001-04-30', last_meta: { replaced: 'CHIRPS v2.0', through: '2001-04-30' } });
-		// The backfill goes on a window at a time (a minute apart), not a window a day.
+
+		// Window 1 is staged. The live series, its label, and what a run would read are all the old record, whole.
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: first, values: [1, 2, 3] });
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS', product_version: '2.0' });
+		const during = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
+		expect(during.series.rain_chirps_mm).toEqual({ startDate: first, values: [1, 2, 3], provenance: { product: 'CHIRPS', version: '2.0' } });
+		const [stage] = await asOwner(`SELECT to_char(start_date, 'YYYY-MM-DD') AS start, cardinality("values") AS n, product, product_version FROM feed_stage WHERE feed_id = $1`, [id]);
+		expect(stage).toEqual({ start: first, n: 120, product: 'CHIRPS sat', product_version: '3.0' });
+		// Progress is visible, on the feed and on the series, and says it is rebuilding, not "old data".
+		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
+		expect(feed).toMatchObject({
+			versionConflict: true,
+			replaceFrom: 'CHIRPS/2.0',
+			rebuilding: { startDate: first, through: addDays(-31) },
+			health: { state: 'pending', reason: { code: 'rebuilding', from: first, through: addDays(-31) } },
+			lastMeta: { staged: 120 }
+		});
+		const listed = (await owner.call('GET', `/projects/${pid}/series`)).body.series[0];
+		expect(listed).toMatchObject({ kind: 'rain_chirps_mm', rebuilding: true, product: 'CHIRPS' });
+		// No revision or series event yet: nothing has changed in the series.
+		expect(await asOwner(`SELECT id FROM series_revision WHERE project_id = $1 AND reason = 'feed_replace'`, [pid])).toEqual([]);
+		// The backfill goes on a window at a time (a minute apart), not a window a day; Run now pulls it forward.
 		const pending = () => asOwner(`SELECT run_after > now() AS later FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1 AND status = 'queued'`, [id]);
 		expect(await pending()).toEqual([{ later: true }]);
-		expect((await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [id]))[0]).toEqual({ replace_series_from: null });
-		// The v2 values are kept, with their label, as a feed_replace revision …
-		const revs = await asOwner(`SELECT id, reason, product, product_version, "values" FROM series_revision WHERE project_id = $1 ORDER BY id DESC`, [pid]);
-		expect(revs[0]).toMatchObject({ reason: 'feed_replace', product: 'CHIRPS', product_version: '2.0', values: [1, 2, 3] });
-		// … the history says what happened …
-		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'series.replaced' ORDER BY id DESC LIMIT 1`, [pid]);
-		expect(ev.subject).toMatchObject({ feedId: id, source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } });
-		// … the feed is healthy, and Run now pulls the waiting window forward (the same job, due now), which merges as usual.
-		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null });
 		const again = await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		expect(again).toMatchObject({ status: 200, body: { created: false } });
 		expect(await pending()).toEqual([{ later: false }]);
 		expect((await tick()).done).toBe(1);
-		// Each window re-reads the last 50 days (the revision re-read), so it moves on 70.
-		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_data_date: '2001-07-08' });
-		expect((await series(owner, pid, 'rain_chirps_mm'))!).toMatchObject({ startDate: '2001-01-01' });
-		// The refit: the live input (what the in-browser fit and Settings read) carries the new label, which
-		// fitRecordStatus compares with the one a fit recorded (engine provenance.test.ts), so a fit on v2.0 is flagged.
+
+		// Window 2 reached yesterday: the stage swapped in whole, in its version, and is gone.
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(first);
+		expect(s.values.length).toBeGreaterThanOrEqual(147);
+		expect(s.values.slice(0, 120).every((v) => v !== null)).toBe(true);
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
+		expect(await asOwner('SELECT feed_id FROM feed_stage WHERE feed_id = $1', [id])).toEqual([]);
+		expect((await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [id]))[0]).toEqual({ replace_series_from: null });
+		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0' } });
+		expect(await pending()).toEqual([]);
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null, rebuilding: null });
+		expect((await owner.call('GET', `/projects/${pid}/series`)).body.series[0]).toMatchObject({ rebuilding: false });
+		// The v2 values are kept, with their label, as one feed_replace revision, and the history says so.
+		const revs = await asOwner(`SELECT id, reason, product, product_version, "values" FROM series_revision WHERE project_id = $1 ORDER BY id DESC`, [pid]);
+		expect(revs[0]).toMatchObject({ reason: 'feed_replace', product: 'CHIRPS', product_version: '2.0', values: [1, 2, 3] });
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'series.replaced' ORDER BY id DESC LIMIT 1`, [pid]);
+		expect(ev.subject).toMatchObject({ feedId: id, source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } });
+
+		// The refit: the live input carries the new label, which fitRecordStatus compares with the one a fit recorded.
 		const live = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
 		expect(live.series.rain_chirps_mm.provenance).toEqual({ product: 'CHIRPS sat', version: '3.0' });
 		// Only the fields fitRecordStatus reads: a fit made under these settings, on the v2.0 series.
@@ -1049,8 +1075,65 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 		// Restoring the kept values brings their label back with them (and the feed would refuse to write again).
 		expect((await owner.call('POST', `/projects/${pid}/series/${seriesId}/revisions/${revs[0].id}/restore`, {})).status).toBe(200);
 		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS', product_version: '2.0' });
-		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2001-01-01', values: [1, 2, 3] });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: first, values: [1, 2, 3] });
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: true });
+	});
+
+	it('withdrawing a pending replacement, or re-targeting the feed, discards its stage and leaves the series as it was', async () => {
+		const owner = await signUp('Withdraw');
+		const pid = await project(owner);
+		const first = addDays(-150);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: first, values: [1, 2, 3], ...V2 });
+		const confirm = { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true };
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, confirm)).body.feed.id;
+		const stage = () => asOwner('SELECT feed_id FROM feed_stage WHERE feed_id = $1', [id]);
+		const stageOnce = async () => {
+			await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+			expect((await tick()).done).toBe(1);
+			expect(await stage()).toHaveLength(1);
+		};
+		await stageOnce();
+		// A save that doesn't touch the confirmation or the target keeps the stage …
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).body.feed).toMatchObject({ replaceFrom: 'CHIRPS/2.0' });
+		expect(await stage()).toHaveLength(1);
+		// … withdrawing (replaceSeries: false) discards it.
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { replaceSeries: false })).body.feed).toMatchObject({ replaceFrom: null, rebuilding: null, versionConflict: true });
+		expect(await stage()).toEqual([]);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: first, values: [1, 2, 3] });
+		// Confirmed again, staged again; then re-targeting discards it too.
+		await asOwner(`DELETE FROM job WHERE kind = 'feed_fetch'`);
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { replaceSeries: true })).status).toBe(200);
+		await stageOnce();
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { targetName: 'Elsewhere' })).body.feed).toMatchObject({ replaceFrom: null, rebuilding: null });
+		expect(await stage()).toEqual([]);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: first, values: [1, 2, 3] });
+		// Removing the feed takes a stage with it (cascade).
+		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { targetName: '', replaceSeries: true });
+		await asOwner(`DELETE FROM job WHERE kind = 'feed_fetch'`);
+		await stageOnce();
+		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
+		expect(await stage()).toEqual([]);
+	});
+
+	it('feed_stage RLS: viewers read a stage, strangers and viewers can’t write one, and a stage can’t name another project’s feed', async () => {
+		const owner = await signUp('StageOwner');
+		const viewer = await signUp('StageViewer');
+		const stranger = await signUp('StageStranger');
+		const pid = await project(owner);
+		const other = await project(stranger, 'Other');
+		await member(owner, pid, viewer, 'viewer');
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		const insert = (uid: string, projectId: string) =>
+			withUser(uid, (db) =>
+				db.query(`INSERT INTO feed_stage (feed_id, project_id, start_date, "values", product, product_version, replace_from) VALUES ($1, $2, '2020-01-01', '{1}', 'CHIRPS sat', '3.0', '')`, [id, projectId])
+			);
+		await expect(insert(viewer.id, pid)).rejects.toMatchObject({ code: '42501' });
+		await expect(insert(stranger.id, other)).rejects.toMatchObject({ code: '42501' });
+		// Positive control: the owner (an editor) writes it; the viewer reads it; the stranger doesn't.
+		await insert(owner.id, pid);
+		expect((await withUser(viewer.id, (db) => db.query('SELECT feed_id FROM feed_stage WHERE feed_id = $1', [id]))).rows).toHaveLength(1);
+		expect((await withUser(stranger.id, (db) => db.query('SELECT feed_id FROM feed_stage WHERE feed_id = $1', [id]))).rows).toHaveLength(0);
+		expect((await withUser(viewer.id, (db) => db.query('DELETE FROM feed_stage WHERE feed_id = $1', [id]))).rowCount).toBe(0);
 	});
 
 	it('a confirmation names what the series held: a series relabelled since is refused again, and re-targeting drops it', async () => {

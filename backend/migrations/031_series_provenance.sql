@@ -32,7 +32,17 @@
 --    that, so a later upload of something else needs a new confirmation.
 --    Confirming restarts the feed's history (as re-targeting does), so it
 --    backfills from its start date. app_feed_replace_done clears it once the
---    replacement is made. A replacement is a full backfill: the routes start
+--    replacement is made.
+--  * feed_stage: a confirmed replacement is **staged**, never written into the
+--    live series window by window. The feed's fetches build the new product's
+--    record here while the live series keeps its old values and label, so a
+--    run in the meantime uses the whole old record, never a partial new one.
+--    When the backfill reaches the newest day the ingest swaps it in, in one
+--    transaction (values, label, a feed_replace revision, the audit event),
+--    and deletes the stage. One row per feed (cascades with it); a new
+--    confirmation, withdrawing it, or re-targeting the feed discards it
+--    (data_feed_stamp). RLS: viewers read (progress in the panel), editors
+--    write (the ingest runs as the feed's acting user, an editor). A replacement is a full backfill: the routes start
 --    the feed at the series' first day, and each fetch that stops short of the
 --    newest day queues the next window a minute on (feeds/ingest.ts);
 --    app_feed_fetch_now lets "Run now" pull that waiting fetch forward.
@@ -61,6 +71,37 @@ ALTER TABLE data_feed
 COMMENT ON COLUMN data_feed.replace_series_from IS
 	'An owner confirmed this feed may replace its target series while the series holds this product/version (031; '''' = not recorded). Cleared by app_feed_replace_done once replaced, and by re-targeting.';
 
+CREATE TABLE feed_stage (
+	feed_id         uuid PRIMARY KEY REFERENCES data_feed(id) ON DELETE CASCADE,
+	project_id      uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+	-- The new record so far: values[i] is day start_date + i; NULL = no reading.
+	start_date      date NOT NULL,
+	"values"        double precision[] NOT NULL CHECK (cardinality("values") <= 60000),
+	-- What it will be labelled, and what the live series held when the owner confirmed.
+	product         text NOT NULL CHECK (product ~ '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$'),
+	product_version text NOT NULL CHECK (product_version ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$'),
+	replace_from    text NOT NULL CHECK (char_length(replace_from) <= 64),
+	created_at      timestamptz NOT NULL DEFAULT now(),
+	updated_at      timestamptz NOT NULL DEFAULT now()
+);
+-- Covers the project_id foreign key (feed_id is covered by the primary key).
+CREATE INDEX feed_stage_project_idx ON feed_stage (project_id);
+
+COMMENT ON TABLE feed_stage IS
+	'A confirmed series replacement being backfilled by its data feed (031): swapped into time_series whole when caught up, so runs never see a partial record. water_app: SELECT (viewer), INSERT/UPDATE/DELETE (editor, for a feed of the same project).';
+
+ALTER TABLE feed_stage ENABLE ROW LEVEL SECURITY;
+CREATE POLICY feed_stage_select ON feed_stage FOR SELECT USING (app_has_role(project_id, 'viewer'));
+CREATE POLICY feed_stage_insert ON feed_stage FOR INSERT WITH CHECK (
+	app_has_role(project_id, 'editor') AND EXISTS (SELECT 1 FROM data_feed f WHERE f.id = feed_stage.feed_id AND f.project_id = feed_stage.project_id)
+);
+CREATE POLICY feed_stage_update ON feed_stage FOR UPDATE USING (app_has_role(project_id, 'editor')) WITH CHECK (
+	app_has_role(project_id, 'editor') AND EXISTS (SELECT 1 FROM data_feed f WHERE f.id = feed_stage.feed_id AND f.project_id = feed_stage.project_id)
+);
+CREATE POLICY feed_stage_delete ON feed_stage FOR DELETE USING (app_has_role(project_id, 'editor'));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON feed_stage TO water_app;
+
 UPDATE time_series t SET product = 'CHIRPS sat', product_version = '3.0'
 FROM data_feed f
 WHERE f.source = 'chirps' AND f.project_id = t.project_id AND f.target_kind = t.kind AND f.target_name = t.name
@@ -69,7 +110,9 @@ WHERE f.source = 'chirps' AND f.project_id = t.project_id AND f.target_kind = t.
 -- From 029_feed_fetch.sql's definition (the latest), plus the replace
 -- confirmation: re-targeting drops a confirmation the same save didn't give
 -- (it named the old series' contents), and a new confirmation restarts the
--- feed's history like a re-target, so it fetches from its start date.
+-- feed's history like a re-target, so it fetches from its start date. Any
+-- change to the confirmation, the target or the config discards the feed's
+-- staged replacement (feed_stage): it was built for the old one.
 CREATE OR REPLACE FUNCTION data_feed_stamp() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
@@ -115,6 +158,11 @@ CREATE OR REPLACE FUNCTION data_feed_stamp() RETURNS trigger
 				AND NEW.replace_series_from IS NOT DISTINCT FROM OLD.replace_series_from THEN
 				-- The confirmation named what the old target held.
 				NEW.replace_series_from := NULL;
+			END IF;
+			IF NEW.replace_series_from IS DISTINCT FROM OLD.replace_series_from OR NEW.source IS DISTINCT FROM OLD.source
+				OR NEW.config IS DISTINCT FROM OLD.config OR NEW.target_kind IS DISTINCT FROM OLD.target_kind
+				OR NEW.target_name IS DISTINCT FROM OLD.target_name THEN
+				DELETE FROM feed_stage WHERE feed_id = OLD.id;
 			END IF;
 			IF NEW.source IS DISTINCT FROM OLD.source OR NEW.config IS DISTINCT FROM OLD.config
 				OR NEW.target_kind IS DISTINCT FROM OLD.target_kind OR NEW.target_name IS DISTINCT FROM OLD.target_name
