@@ -1798,13 +1798,12 @@ from the WP:
       `#res-*` fragment once its results render (a Runs-tab change, so
       coordinate with whoever owns `components/runs/`). Trigger: the WUA
       persona or a user reports it, or the next Runs-tab round.
-- [ ] **No perf guard on the portfolio query.** Measured once at a median
-      51 ms for 10 × 60-farm catchments (roadmap WP-2.14 status); the
-      backend `perf` vitest project has no database, so it can't hold a
-      budget on it. Durable fix: a `perf-db` project with the db project's
-      global setup and a `portfolio.perf.test.ts` (10 × 60, budget 500 ms,
-      median of 7). Trigger: the next query that needs a DB timing budget, or
-      the portfolio growing a new join.
+- [x] **No perf guard on the portfolio query** (done 2026-09-26). The
+      backend's `perf-db` vitest project (the db project's global setup) runs
+      `portfolio/portfolio.db.perf.test.ts`: 10 published catchments × 60
+      farms, 10-year runs, budget 500 ms, median of 7 (measured 41 ms).
+      `pnpm test:backend:perf:db`, alone, not in `pnpm test` or CI
+      ([testing.md § Performance budgets](./testing.md#performance-budgets)).
 
 ## Firm yield (WP-3.6)
 
