@@ -32,7 +32,10 @@
 --    that, so a later upload of something else needs a new confirmation.
 --    Confirming restarts the feed's history (as re-targeting does), so it
 --    backfills from its start date. app_feed_replace_done clears it once the
---    replacement is made.
+--    replacement is made. A replacement is a full backfill: the routes start
+--    the feed at the series' first day, and each fetch that stops short of the
+--    newest day queues the next window a minute on (feeds/ingest.ts);
+--    app_feed_fetch_now lets "Run now" pull that waiting fetch forward.
 --  * Backfill: a series some CHIRPS feed already writes is marked CHIRPS sat
 --    3.0, the only product the feed has fetched before this migration. Nothing is deployed yet, so
 --    this only touches development data; a series that mixed an import with
@@ -158,5 +161,30 @@ CREATE FUNCTION app_feed_replace_done(p_feed uuid) RETURNS void
 	END
 	$$;
 
-REVOKE ALL ON FUNCTION app_feed_replace_done(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app_feed_replace_done(uuid) TO water_app;
+-- "Run now" when the feed's fetch is already pending but waiting: a
+-- backfill's next window (feeds/ingest.ts queues it a minute on, so a long
+-- backfill, such as a confirmed replacement's, goes a window at a time rather
+-- than a window a day) or a failed fetch's retry. The pending job becomes due
+-- now instead of the press doing nothing. water_app can't UPDATE job, so this
+-- touches only that feed's pending feed_fetch (its dedupe key), for an editor.
+CREATE FUNCTION app_feed_fetch_now(p_feed uuid) RETURNS boolean
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_project uuid;
+		v_moved integer;
+	BEGIN
+		SELECT f.project_id INTO v_project FROM data_feed f WHERE f.id = p_feed;
+		IF v_project IS NULL OR NOT app_has_role(v_project, 'editor') THEN
+			RAISE EXCEPTION 'not permitted' USING ERRCODE = 'insufficient_privilege';
+		END IF;
+		UPDATE job j SET run_after = now()
+		WHERE j.project_id = v_project AND j.kind = 'feed_fetch' AND j.dedupe_key = 'feed_fetch:' || p_feed::text
+		  AND j.status IN ('queued', 'failed') AND j.run_after > now();
+		GET DIAGNOSTICS v_moved = ROW_COUNT;
+		RETURN v_moved > 0; -- true: a waiting fetch was made due, so wake the worker
+	END
+	$$;
+
+REVOKE ALL ON FUNCTION app_feed_replace_done(uuid), app_feed_fetch_now(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_feed_replace_done(uuid), app_feed_fetch_now(uuid) TO water_app;

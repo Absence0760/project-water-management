@@ -186,6 +186,9 @@ describe('GET /compare/runs', () => {
 				text: 'Rainfall (CHIRPS) is now CHIRPS sat v3.0 (was CHIRPS v2.0): the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds'
 			}
 		]);
+		// The run's own detail carries its input series' labels (for its fit record's "forcing changed since fit").
+		const detail = await u.call('GET', `/projects/${projectId}/runs/${v2}`);
+		expect(detail.body.run.inputSeries.rain_chirps_mm.provenance).toEqual({ product: 'CHIRPS', version: '2.0' });
 		// "Changes since this run" says it too.
 		const since = await u.call('GET', `/projects/${projectId}/runs/${v2}/changes-since`);
 		expect(since.body.changes.map((c: { text: string }) => c.text)).toEqual([expect.stringMatching(/^Rainfall \(CHIRPS\) is now CHIRPS sat v3\.0 \(was CHIRPS v2\.0\)/)]);

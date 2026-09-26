@@ -1048,6 +1048,10 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     series under the owner's confirmation; clears `replace_series_from`, as
     the job's user, who must be an editor (an editor can't write `data_feed`
     directly).
+  - `app_feed_fetch_now(feed)` (031): "Run now" while the feed's fetch is
+    pending but waiting (a backfill's next window, a retry): makes that job
+    due now, as an editor, and says whether it moved one (`water_app` can't
+    UPDATE `job`).
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.

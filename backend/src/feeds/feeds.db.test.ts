@@ -935,6 +935,8 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		await tick();
 		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
+		// Caught up (its window reached yesterday): no next window is queued.
+		expect(await asOwner(`SELECT id FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1 AND status = 'queued'`, [id])).toEqual([]);
 		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
 		expect(feed).toMatchObject({ writes: { product: 'CHIRPS sat', version: '3.0' }, series: { filled: true }, versionConflict: false, replaceFrom: null });
 	});
@@ -989,19 +991,28 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 
 	it('the confirmed path: replaces the series whole in the feed’s version, keeps the old values as a restorable revision, uses up the confirmation, and flags the fit', async () => {
 		const { owner, pid, seriesId } = await withV2('Replacer');
-		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
+		// A replacement is a full backfill: a start date after the series' first day is refused …
+		const later = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
+		expect(later.status).toBe(409);
+		expect(later.body).toMatchObject({ error: expect.stringMatching(/start date must be 2001-01-01 or earlier/), details: { code: 'series_backfill', firstDay: '2001-01-01' } });
+		// … and without one the feed gets the series' first day.
+		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
 		expect(confirm.status).toBe(201);
 		const id = confirm.body.feed.id;
-		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0' });
+		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0', config: { startDate: '2001-01-01' } });
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		expect((await tick()).done).toBe(1);
-		// The series is the fetched days only, from the feed's start date: no v2 day is left to splice.
+		// The series is the fetched days only, from its old first day: no v2 day is left to splice.
 		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
-		expect(s.startDate).toBe(addDays(-20));
-		expect(s.values.length).toBeLessThanOrEqual(20);
+		expect(s.startDate).toBe('2001-01-01');
+		expect(s.values).toHaveLength(120);
+		expect(s.values.every((v) => v !== null)).toBe(true);
 		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
 		const row = await feedRow(id);
-		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0' } });
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: '2001-04-30', last_meta: { replaced: 'CHIRPS v2.0', through: '2001-04-30' } });
+		// The backfill goes on a window at a time (a minute apart), not a window a day.
+		const pending = () => asOwner(`SELECT run_after > now() AS later FROM job WHERE kind = 'feed_fetch' AND payload->>'feedId' = $1 AND status = 'queued'`, [id]);
+		expect(await pending()).toEqual([{ later: true }]);
 		expect((await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [id]))[0]).toEqual({ replace_series_from: null });
 		// The v2 values are kept, with their label, as a feed_replace revision …
 		const revs = await asOwner(`SELECT id, reason, product, product_version, "values" FROM series_revision WHERE project_id = $1 ORDER BY id DESC`, [pid]);
@@ -1009,11 +1020,15 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 		// … the history says what happened …
 		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'series.replaced' ORDER BY id DESC LIMIT 1`, [pid]);
 		expect(ev.subject).toMatchObject({ feedId: id, source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } });
-		// … the feed is healthy and the next fetch merges as usual.
+		// … the feed is healthy, and Run now pulls the waiting window forward (the same job, due now), which merges as usual.
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null });
-		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		const again = await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		expect(again).toMatchObject({ status: 200, body: { created: false } });
+		expect(await pending()).toEqual([{ later: false }]);
 		expect((await tick()).done).toBe(1);
-		expect((await feedRow(id)).consecutive_failures).toBe(0);
+		// Each window re-reads the last 50 days (the revision re-read), so it moves on 70.
+		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_data_date: '2001-07-08' });
+		expect((await series(owner, pid, 'rain_chirps_mm'))!).toMatchObject({ startDate: '2001-01-01' });
 		// The refit: the live input (what the in-browser fit and Settings read) carries the new label, which
 		// fitRecordStatus compares with the one a fit recorded (engine provenance.test.ts), so a fit on v2.0 is flagged.
 		const live = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
@@ -1040,7 +1055,7 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 
 	it('a confirmation names what the series held: a series relabelled since is refused again, and re-targeting drops it', async () => {
 		const { owner, pid, seriesId } = await withV2('Specific');
-		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true })).body.feed.id;
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id;
 		// Someone says the series is the rnl product after all: not what the owner agreed to replace.
 		expect((await owner.call('PATCH', `/projects/${pid}/series/${seriesId}`, { product: 'CHIRPS rnl', productVersion: '3.0' })).status).toBe(200);
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
@@ -1051,6 +1066,19 @@ describe('the CHIRPS version guard (031_series_provenance)', () => {
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { replaceSeries: true })).body.feed).toMatchObject({ replaceFrom: 'CHIRPS rnl/3.0' });
 		// … and re-targeting the feed drops it: it named the old target's contents.
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { targetName: 'Elsewhere' })).body.feed).toMatchObject({ replaceFrom: null });
+	});
+
+	it('a series reaching before 1998 is replaced only by the rnl product, end to end', async () => {
+		const owner = await signUp('Pre98');
+		const pid = await project(owner);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1990-06-01', values: [null, 1, 2], ...V2 });
+		const sat = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true });
+		expect(sat.status).toBe(409);
+		expect(sat.body.error).toMatch(/starts on 1990-06-02, before CHIRPS v3’s sat product begins \(1998-01-01\).*use the rnl product/);
+		const rnl = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], product: 'rnl' }, replaceSeries: true });
+		expect(rnl.status).toBe(201);
+		// From the first day with a value.
+		expect(rnl.body.feed).toMatchObject({ config: { product: 'rnl', startDate: '1990-06-02' }, writes: { product: 'CHIRPS rnl', version: '3.0' } });
 	});
 
 	it('an rnl feed reads the rnl product from 1981, and is another forcing than sat: switching product asks again', async () => {

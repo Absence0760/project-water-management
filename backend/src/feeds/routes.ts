@@ -13,7 +13,18 @@ import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { provenanceLabel, sameProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
-import { CHIRPS_DAILY_PRODUCTS, FEED_SCHEDULES, FEED_SOURCES, FeedInput, FeedPatch, feedProvenance, SOURCES } from './config.js';
+import {
+	CHIRPS_DAILY_PRODUCTS,
+	CHIRPS_PRODUCT_FIRST_DAY,
+	chirpsProduct,
+	FEED_SCHEDULES,
+	FEED_SOURCES,
+	FeedInput,
+	FeedPatch,
+	feedProvenance,
+	type GridConfig,
+	SOURCES
+} from './config.js';
 import { utcToday } from './fetch.js';
 import { feedSourceMode } from './http.js';
 import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, seriesAccepts, targetSeries, updateFeed } from './store.js';
@@ -39,16 +50,45 @@ const conflict = (err: unknown): never => {
  * unless the owner confirms replacing it (`replaceSeries: true`). The
  * confirmation is returned as the key of what the series holds now; the
  * ingest replaces the series whole only while it still holds exactly that.
- * Undefined: nothing to confirm (or, for a save that doesn't change what the
- * feed writes where, nothing asked).
+ *
+ * A replacement is a **full backfill**, never a shorter record: the feed
+ * reads from the series' first day. Without a start date the feed gets that
+ * one; a later start date is refused, and so is the `sat` product for a
+ * series reaching before 1998, which only `rnl` covers (one product end to
+ * end). `input` comes back with the start date filled in.
+ *
+ * `replaceFrom` undefined: nothing to confirm (or, for a save that doesn't
+ * change what the feed writes where, nothing asked).
  */
-async function versionCheck(db: Db, projectId: string, input: FeedInput, changed: boolean): Promise<string | undefined> {
+async function versionCheck(db: Db, projectId: string, input: FeedInput, changed: boolean): Promise<{ input: FeedInput; replaceFrom?: string }> {
 	const writes = feedProvenance(input.source, input.config);
-	if (!writes) return undefined;
+	if (!writes) return { input };
 	const series = await targetSeries(db, projectId, input.targetKind, input.targetName);
-	if (seriesAccepts(writes, series)) return undefined;
-	if (input.replaceSeries) return replaceKey(series!);
-	if (!changed) return undefined;
+	if (seriesAccepts(writes, series)) return { input };
+	if (input.replaceSeries) {
+		const config = input.config as GridConfig;
+		const product = chirpsProduct(config);
+		const first = CHIRPS_PRODUCT_FIRST_DAY[product];
+		const from = series!.firstDay!;
+		if (from < first && product === 'sat') {
+			throw new ApiError(
+				409,
+				`the series starts on ${from}, before CHIRPS v3’s sat product begins (${first}): a replacement backfills the whole record from one product, so use the rnl product (from ${CHIRPS_PRODUCT_FIRST_DAY.rnl})`,
+				{ code: 'series_backfill', firstDay: from }
+			);
+		}
+		const need = from < first ? first : from;
+		if (config.startDate !== undefined && config.startDate > need) {
+			throw new ApiError(
+				409,
+				`a replacement backfills the whole record: the series starts on ${from}, so the feed’s start date must be ${need} or earlier (or left empty)`,
+				{ code: 'series_backfill', firstDay: from }
+			);
+		}
+		const startDate = config.startDate ?? need;
+		return { input: { ...input, config: { ...config, startDate } }, replaceFrom: replaceKey(series!) };
+	}
+	if (!changed) return { input };
 	throw new ApiError(
 		409,
 		`the series holds ${provenanceLabel(series!.provenance)} rainfall and this feed writes ${provenanceLabel(writes)}: merging them would splice two versions into one record. Confirm replacing the series (its values are kept in the history), or point the feed at another series`,
@@ -89,8 +129,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 			await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('data_feed_cap:' || $1::text, 0))`, [id]);
 			const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [id]);
 			if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
-			const replaceFrom = await versionCheck(db, id, input, true);
-			const fid = await createFeed(db, id, input, replaceFrom ?? null).catch(conflict);
+			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
+			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
 			const feed = await getFeed(db, id, fid, utcToday());
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'created', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
 			return feed;
@@ -124,8 +164,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 				input.targetKind !== cur.targetKind ||
 				input.targetName !== cur.targetName ||
 				!sameProvenance(feedProvenance(input.source, input.config), cur.writes);
-			const replaceFrom = await versionCheck(db, id, input, changed);
-			if (!(await updateFeed(db, id, fid, input, replaceFrom).catch(conflict))) throw new ApiError(404, 'not found');
+			const { input: checked, replaceFrom } = await versionCheck(db, id, input, changed);
+			if (!(await updateFeed(db, id, fid, checked, replaceFrom).catch(conflict))) throw new ApiError(404, 'not found');
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
@@ -154,8 +194,12 @@ export const feedRoutes = new Hono<AuthEnv>()
 			const feed = await getFeed(db, id, fid, utcToday());
 			if (!feed) throw new ApiError(404, 'not found');
 			if (!feed.enabled) throw new ApiError(409, 'the feed is switched off');
-			return enqueueJob(db, { projectId: id, kind: 'feed_fetch', payload: { feedId: fid }, dedupeKey: feedFetchDedupeKey(fid) });
+			const r = await enqueueJob(db, { projectId: id, kind: 'feed_fetch', payload: { feedId: fid }, dedupeKey: feedFetchDedupeKey(fid) });
+			// A fetch already pending may be waiting (a backfill's next window, a retry): now means now.
+			const pulled = !r.created && (await db.query<{ moved: boolean }>('SELECT app_feed_fetch_now($1) AS moved', [fid])).rows[0]!.moved;
+			return { ...r, pulled };
 		});
-		if (result.created) await wakeWorker(result.job.id);
-		return c.json(result, result.created ? 202 : 200);
+		const { pulled, ...body } = result;
+		if (body.created || pulled) await wakeWorker(body.job.id);
+		return c.json(body, body.created ? 202 : 200);
 	});

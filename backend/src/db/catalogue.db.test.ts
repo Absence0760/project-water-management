@@ -294,6 +294,7 @@ describe('schema catalogue', () => {
 			{ proname: 'app_claim_feed', pinned: true, secdef: true },
 			{ proname: 'app_due_feeds', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
+			{ proname: 'app_feed_fetch_now', pinned: true, secdef: true },
 			{ proname: 'app_feed_is_due', pinned: true, secdef: false },
 			{ proname: 'app_feed_replace_done', pinned: true, secdef: true },
 			{ proname: 'app_feed_schedule_failed', pinned: true, secdef: true },

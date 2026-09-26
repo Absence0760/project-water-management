@@ -99,17 +99,33 @@ export async function getFeed(db: Db, projectId: string, feedId: string, today: 
 	return rows[0] ? toMeta(rows[0], today) : null;
 }
 
-/** A series' fill and provenance, for a feed's version check (null when it doesn't exist). */
-export async function targetSeries(db: Db, projectId: string, kind: string, name: string): Promise<{ filled: boolean; provenance: SeriesProvenance | null } | null> {
-	const { rows } = await db.query<{ product: string | null; productVersion: string | null; filled: boolean }>(
-		`SELECT product, product_version AS "productVersion", cardinality(array_remove("values", NULL)) > 0 AS filled
+/**
+ * A series' fill, provenance and first day with a value, for a feed's
+ * version check (null when it doesn't exist; firstDay null when it holds no value).
+ */
+export async function targetSeries(
+	db: Db,
+	projectId: string,
+	kind: string,
+	name: string
+): Promise<{ filled: boolean; provenance: SeriesProvenance | null; firstDay: string | null } | null> {
+	const { rows } = await db.query<{ product: string | null; productVersion: string | null; firstDay: string | null }>(
+		`SELECT product, product_version AS "productVersion",
+			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay"
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`,
 		[projectId, kind, name]
 	);
 	const r = rows[0];
 	if (!r) return null;
-	return { filled: r.filled, provenance: r.product !== null && r.productVersion !== null ? { product: r.product, version: r.productVersion } : null };
+	return {
+		filled: r.firstDay !== null,
+		provenance: r.product !== null && r.productVersion !== null ? { product: r.product, version: r.productVersion } : null,
+		firstDay: r.firstDay
+	};
 }
+
+/** One pending fetch per feed (the jobs' dedupe key): Run now, the scheduler and a backfill's next window share it. */
+export const feedFetchDedupeKey = (feedId: string) => `feed_fetch:${feedId}`;
 
 /** The replace_series_from value that confirms replacing `series` (its key), for the routes. */
 export const replaceKey = (series: { provenance: SeriesProvenance | null }): string => provenanceKey(series.provenance);

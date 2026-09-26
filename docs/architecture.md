@@ -405,7 +405,11 @@ merges into:
   - the confirmation (`data_feed.replace_series_from`) names what the series
     held when the owner confirmed (`CHIRPS/2.0`, `''` for unrecorded), and
     restarts the feed's history like a re-target, so it fetches from its
-    start date. The next fetch **replaces the series whole** with the fetched
+    start date. **A replacement is a full backfill**, never a shorter record
+    or a partial overwrite: the feed starts at the series' first day with a
+    value (filled in when the owner gave no start date; a later one is a
+    409), and a series reaching before 1998 can only be replaced by `rnl`
+    (409 for `sat`). The next fetch **replaces the series whole** with the fetched
     days in the feed's version, keeps the old values and label as a
     `feed_replace` series revision (restorable from the History tab), logs
     `series.replaced` with the version change, and uses the confirmation up
@@ -421,6 +425,14 @@ merges into:
   A series whose version was never recorded can be labelled without touching
   its values (`PATCH /projects/:id/series/:seriesId`), which is how an owner
   vouches that it already is what the feed writes.
+- **Backfill continues at once.** A fetch whose window stopped short of the
+  newest day the source can have (CHIRPS and DWS windows are capped: 120
+  days for CHIRPS) queues the feed's next fetch a minute later
+  (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts) instead of waiting for the
+  schedule, so a long backfill (a replacement, or an early start date) goes a
+  window at a time rather than a window a day. Each CHIRPS window re-reads
+  the last 50 days, so it moves on 70. "Run now" while that fetch waits makes
+  it due now (`app_feed_fetch_now`, 031).
 - **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
   `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
   A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has

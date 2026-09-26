@@ -42,7 +42,33 @@ import { replaceSeries } from '../series/routes.js';
 import { type FeedSource, feedProvenance, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
-import { type FeedRow, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
+import { enqueueJob } from '../jobs/queue.js';
+import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
+
+/** A backfill's next window waits this long, so one fetch after another never floods the source (or a test's tick). */
+export const BACKFILL_NEXT_SECONDS = 60;
+
+/**
+ * A fetch whose window stopped short of the newest day the source can have
+ * (a backfill capped at one window's days: 120 for CHIRPS) queues the next
+ * window at once instead of waiting a day. Without this a replaced series
+ * (issue #40 part c), or a feed with an early start date, took one window a
+ * day: months for a CHIRPS record back to 1981. Each answer moves the window
+ * on (its end is recorded as `through`), so the chain ends when the feed is
+ * caught up. As the acting user, in the ingest's transaction.
+ */
+async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow): Promise<void> {
+	if (feed.source === 'chirps_gefs') return;
+	const newest = feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday();
+	if (window.end >= newest) return;
+	await enqueueJob(db, {
+		projectId: feed.projectId,
+		kind: 'feed_fetch',
+		payload: { feedId: feed.id },
+		dedupeKey: feedFetchDedupeKey(feed.id),
+		delaySeconds: BACKFILL_NEXT_SECONDS
+	});
+}
 
 /** The newest day a source can have on `today` (UTC): a forecast's 16th day, else today. */
 export function latestDay(source: FeedSource, today: string): string {
@@ -152,6 +178,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				lastValue = result.values[lastIdx]!;
 				const meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
 				await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
+				await continueBackfill(db, feed, window);
 				return { merged, lastDate };
 			}
 			try {
@@ -173,5 +200,6 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 	// `through` last, so a key of that name in the fetcher's meta never stands.
 	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged } : { ...result.meta, merged, through: window.end };
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
+	await continueBackfill(db, feed, window);
 	return { merged, lastDate };
 }
