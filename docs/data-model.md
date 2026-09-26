@@ -995,7 +995,12 @@ application has a name.
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
   its owner decides it, with an outcome and nothing else changed; the
-  decision is set once. `scenario_drop_application_runs` deletes a deleted
+  decision is set once. The one change it lets through is the assessor's
+  account going (052): an update whose only change is `decided_by` becoming
+  NULL, once the account it named no longer exists (the foreign key's
+  `SET NULL`), passes untouched, so the decision stays with no assessor.
+  While the account exists, clearing `decided_by` is refused like any other
+  change to a decision. `scenario_drop_application_runs` deletes a deleted
   application's runs that nothing keeps (else `SET NULL` would show them to
   every viewer).
 - **`scenario_member (scenario_id, project_id, user_id, added_by,

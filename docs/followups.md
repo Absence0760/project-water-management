@@ -2211,17 +2211,14 @@ own. Loop in the CISO or security analyst before acting on any of them.
       feeds, 031) and leave them out of the limit, or take the limit from
       the published run's inputs. Trigger: the first production gateway
       key, or a hold that should have fired and didn't.
-- [ ] **Deleting an assessor's account is refused (session B, WP-3.3).**
-      `scenario_guard` (045_contributor_scope.sql, the branch that raises
-      "a decision is recorded when the scenario is decided, and never
-      changes") also refuses the foreign key's `ON DELETE SET NULL` on
-      `scenario.decided_by`, so an account that decided an application can't
-      be deleted: the same bug 048 fixed in `note_guard`. Fix (session B's
-      to make, from 045's definition): let an update through untouched when
-      its only change is `decided_by` becoming NULL (water_app can't write
-      `decided_by` outside a decision, which the guard stamps), then add the
-      case to `auth/account-deletion.db.test.ts`. Trigger: before the first
-      application is decided on production.
+- [x] **Deleting an assessor's account is refused (session B, WP-3.3).**
+      Fixed in 052_scenario_decider_deletion.sql: `scenario_guard` (from
+      045's definition) lets an update through untouched when its only
+      change is `decided_by` becoming NULL and the account it named no
+      longer exists, which only the foreign key's `ON DELETE SET NULL`
+      produces. While the account exists, clearing or changing
+      `decided_by` is still refused. `auth/account-deletion.db.test.ts`
+      covers both.
 - [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
       pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
       with the verdicts recorded in step-2 §9, and the 60-farm load
