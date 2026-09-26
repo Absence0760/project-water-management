@@ -231,18 +231,19 @@ CREATE FUNCTION app_run_kept(p_run uuid) RETURNS boolean
 	END
 	$$;
 
--- A published run's stored input, for the server: its snapshot and label.
+-- A published run's stored input, for the server: its snapshot, label and
+-- trigger (042: a forecast run is refused as a base, as for a team scenario).
 -- Answers a contributor or above, for a run of the model itself (not a
 -- scenario run) that a publication of this project names (current or in the
 -- history); anyone else gets no row. The API never
 -- returns `inputs` to a contributor (scenarios/applicant.ts projects it).
 CREATE FUNCTION app_published_run_input(p_project uuid, p_run uuid)
-	RETURNS TABLE (created_at timestamptz, label text, inputs jsonb)
+	RETURNS TABLE (created_at timestamptz, label text, inputs jsonb, "trigger" text)
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 	AS $$
 	BEGIN
 		RETURN QUERY
-			SELECT r.created_at, r.label, r.inputs FROM model_run r
+			SELECT r.created_at, r.label, r.inputs, r."trigger"::text FROM model_run r
 			WHERE r.id = p_run AND r.project_id = p_project AND r.scenario_id IS NULL
 			  AND app_has_role(p_project, 'contributor')
 			  AND EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = p_run AND p.project_id = p_project);

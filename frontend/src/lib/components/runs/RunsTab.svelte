@@ -52,6 +52,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
 	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
 	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
+	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
+	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
 	const loadTableDialog = () => import('$lib/components/export/DailyTableDialog.svelte');
 
@@ -211,13 +213,17 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 
 	async function run(e: SubmitEvent) {
 		e.preventDefault();
+		await start(false);
+	}
+	/** Run the model, or (forecast) a forecast run: the history as an ordinary run, then the forecast days (WP-2.12). */
+	async function start(forecast: boolean) {
 		running = true;
 		actionError = null;
 		elapsed = 0;
 		const t0 = Date.now();
 		timer = setInterval(() => (elapsed = Math.floor((Date.now() - t0) / 1000)), 250);
 		try {
-			const { run: r, removedRunIds } = await api.runs.create(projectId, label.trim() || undefined);
+			const { run: r, removedRunIds } = await api.runs.create(projectId, label.trim() || undefined, { forecast });
 			label = '';
 			const { summary: _summary, ...meta } = r;
 			// Drop the oldest runs the server trimmed to stay within its cap.
@@ -313,6 +319,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(seriesEnd).sort().pop()}`);
 		return reasons.length ? reasons : null;
 	});
+	// A forecast run needs forecast rain (a forecast series, uploaded or fed by CHIRPS-GEFS); the server says if none is past the record.
+	const hasForecast = $derived(!!series?.some((x) => x.kind === 'rain_forecast_mm'));
 	// What a run still needs (the engine refuses to run without these).
 	const missing = $derived.by(() => {
 		const out: string[] = [];
@@ -357,6 +365,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
 			{running ? 'Running model…' : 'Run model'}
 		</button>
+		{#if hasForecast}
+			<button
+				type="button"
+				class="btn"
+				disabled={running || missing.length > 0 || !!overAllocated}
+				title="The record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart. Keeps one forecast run."
+				onclick={() => start(true)}>Run forecast</button
+			>
+		{/if}
 		<p class="note" role="status" aria-live="polite">
 			{#if running}
 				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
@@ -427,10 +444,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto'}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast'}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
 										{#if r.trigger === 'auto'}<span class="tag" title="Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.">Auto</span>{/if}
+										{#if r.trigger === 'forecast'}<span class="tag tag-warn" title="A forecast run: the days from {r.forecastFrom} run on forecast rain and are shown apart; its other figures cover the record before them. Only the newest forecast run is kept, unless it is pinned or published.">Forecast</span>{/if}
 										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
 										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
@@ -498,6 +516,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<span class="badge">Former evidence</span>
 						{/if}
 						{#if detail.run.id === currentPublishedRunId}<a class="badge badge-owner" href="#res-publication">Published</a>{/if}
+						{#if summary.forecast}<a class="badge badge-warn" href="#res-forecast">Forecast from {summary.forecast.from}</a>{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<!-- The note leads the reader to the Record group, below the results (sections.ts). -->
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
@@ -520,6 +539,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} startDate={detail.run.startDate} endDate={detail.run.endDate} />
 				</section>
 			</section>
+			{#if summary.forecast}
+				<Lazy load={loadForecastPanel}>
+					{#snippet children(ForecastPanel)}
+						<ForecastPanel forecast={summary.forecast!} {nodeNames} />
+					{/snippet}
+				</Lazy>
+			{/if}
 			<RunCharts
 				{projectId}
 				runId={detail.run.id}
@@ -528,6 +554,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{nodeNames}
 				{nodeOrder}
 				{damCapacity}
+				forecastFrom={summary.forecast?.from ?? null}
 			>
 				{#snippet riverLead()}
 					{#if summary.ewrAssurance?.length}

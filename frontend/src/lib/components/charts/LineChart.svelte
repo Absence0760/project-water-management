@@ -9,7 +9,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { alignDaily, fmtCompact, isolatedIndices, panWindow, printScale, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, fmtCompact, isolatedIndices, panWindow, printScale, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -26,6 +26,7 @@
 		toolbar,
 		caption,
 		shade = [],
+		band,
 		pannable = true,
 		print = false,
 		printWidth = 680,
@@ -49,6 +50,12 @@
 		caption?: string;
 		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption`). */
 		shade?: { start: string; end: string }[];
+		/**
+		 * Daily charts: one labelled band behind the lines from `from` (to `to`,
+		 * else the end), hatched, named on the plot and in a text key under it,
+		 * so it never rests on colour alone. The forecast days (WP-2.12).
+		 */
+		band?: { from: string; to?: string; label: string; note: string };
 		/**
 		 * Daily charts: Shift+drag moves the view through the record, with
 		 * Earlier / Later buttons as the non-drag route (shown once there is
@@ -155,7 +162,16 @@
 			...(print ? { select: { show: false, left: 0, top: 0, width: 0, height: 0 } } : {}),
 			hooks: {
 				draw: [() => (ready = true)],
-				...(isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {}),
+				...(isTime && (shade.length || band)
+					? {
+							drawClear: [
+								(u: uPlot) => {
+									if (shade.length) drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16));
+									if (band) drawBand(u, token('--series-4', '#7a4fc4'), token('--text', '#1f2421'));
+								}
+							]
+						}
+					: {}),
 				setScale: [
 					(u: uPlot, key: string) => {
 						if (key !== 'x') return;
@@ -277,6 +293,44 @@
 		ctx.restore();
 	}
 
+	/** The labelled band: a light tint with diagonal hatching (so it reads without colour), a dashed edge, its label at the top. */
+	function drawBand(u: uPlot, color: string, text: string) {
+		const span = band ? bandSpan(band, aligned.x) : null;
+		if (!span || !band) return;
+		const { ctx, bbox } = u;
+		const x0 = Math.max(bbox.left, u.valToPos(span.start, 'x', true));
+		const x1 = Math.min(bbox.left + bbox.width, u.valToPos(span.end, 'x', true));
+		if (!(x1 > x0)) return;
+		ctx.save();
+		ctx.fillStyle = withAlpha(color, 0.1);
+		ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height);
+		ctx.beginPath();
+		ctx.rect(x0, bbox.top, x1 - x0, bbox.height);
+		ctx.clip();
+		ctx.strokeStyle = withAlpha(color, 0.28);
+		ctx.lineWidth = k;
+		for (let d = x0 - bbox.height; d < x1; d += 8 * k) {
+			ctx.beginPath();
+			ctx.moveTo(d, bbox.top + bbox.height);
+			ctx.lineTo(d + bbox.height, bbox.top);
+			ctx.stroke();
+		}
+		ctx.restore();
+		ctx.save();
+		ctx.strokeStyle = color;
+		ctx.lineWidth = 1.5 * k;
+		ctx.setLineDash([4 * k, 3 * k]);
+		ctx.beginPath();
+		ctx.moveTo(x0, bbox.top);
+		ctx.lineTo(x0, bbox.top + bbox.height);
+		ctx.stroke();
+		ctx.fillStyle = text;
+		ctx.font = `${12 * k}px system-ui, sans-serif`;
+		ctx.textBaseline = 'top';
+		if (x1 - x0 > 40 * k) ctx.fillText(band.label, x0 + 4 * k, bbox.top + 4 * k);
+		ctx.restore();
+	}
+
 	function showRecent() {
 		if (!plot || !recentDays || !aligned.x.length) return;
 		const max = aligned.x[aligned.x.length - 1]!;
@@ -322,7 +376,7 @@
 
 	// Rebuild when data, unit, scale, height or theme change…
 	$effect(() => {
-		void [plotted, unit, height, themeTick, hasData, host, log, series, shade];
+		void [plotted, unit, height, themeTick, hasData, host, log, series, shade, band];
 		untrack(build);
 	});
 	// …and only resize in place when the container width changes.
@@ -345,6 +399,7 @@
 <figure
 	class="chart"
 	data-shaded={shade.length || undefined}
+	data-band-from={band && isTime && bandSpan(band, aligned.x) ? band.from : undefined}
 	data-view-start={isTime && view ? isoDay(view.min) : undefined}
 	data-view-end={isTime && view ? isoDay(view.max) : undefined}
 	data-ready={ready}
@@ -397,6 +452,9 @@
 		</div>
 	{:else}
 		<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
+	{/if}
+	{#if band && isTime && hasData && bandSpan(band, aligned.x)}
+		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {band.from}): {band.note}</span></p>
 	{/if}
 	{#if print}
 		{#if caption}<p class="hint">{caption}</p>{/if}
@@ -506,6 +564,25 @@
 		.print-box {
 			overflow: visible;
 		}
+	}
+	.band-key {
+		margin: 0.25rem 0 0;
+		font-size: 0.8125rem;
+		display: flex;
+		gap: 0.4rem;
+		align-items: baseline;
+	}
+	.band-key i {
+		flex: none;
+		display: inline-block;
+		width: 1.1rem;
+		height: 0.7rem;
+		border-left: 2px dashed var(--series-4);
+		background: repeating-linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--series-4) 30%, transparent) 0 1px,
+			color-mix(in srgb, var(--series-4) 10%, transparent) 1px 6px
+		);
 	}
 	.nodata {
 		color: var(--text-muted);

@@ -1136,8 +1136,8 @@ the suggested order (the IDs carry the detail):
 Left out of the first build because the contract or an API doesn't carry it
 yet; each lands with the work package named.
 
-- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
-      `forecast` in `FarmView` (WP-2.12, design E2).
+- [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
+      with WP-2.12 (`farm.forecast` when the published run is a forecast run).
 - [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
       before the named translator reviews it, and `FarmView` carries one
       `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
@@ -1252,6 +1252,25 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
+      K1, found building WP-2.12, 2026-09-26). The land-cover Q75, EWR rule
+      tables read against the record's flow-duration curve, and GR4J's
+      warm-up on a record shorter than it are record-wide, so days added at
+      the end move values at the start (about 1e-8 relative on long records).
+      Forecast mode works round it with a second run for the history, so the
+      join between history and forecast is continuous only up to that noise.
+      Durable fix: fit those statistics on a fixed window (the calibration
+      window, or the record to the last observed day), then prefix stability
+      holds for `runModel` itself and `runForecastChecked` can splice
+      nothing. An engine behaviour change, so the engine owner's call and an
+      `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
+      or a user asking why a forecast run's first forecast day steps.
+- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
+      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
+      job lands, a GEFS ingest that changes days should also queue a forecast
+      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
+      keeps the newest unkept forecast run), deduped per project like the
+      re-run. Trigger: now (WP-2.11 is merged into this branch).
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").

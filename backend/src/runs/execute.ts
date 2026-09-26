@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
+	forecastSplit,
 	resolveFitRecord,
+	runForecastChecked,
 	runModelChecked,
 	seriesDigest,
 	type DailySeries,
@@ -10,9 +12,11 @@ import {
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesKind,
-	type SeriesProvenance
+	type SeriesProvenance,
+	withoutForecastTail
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
@@ -253,7 +257,16 @@ export async function executeRun(
 	label: string | ((input: ModelInput) => string),
 	trigger: RunTrigger = 'manual'
 ): Promise<{ id: string; output: ModelOutput }> {
-	const input = await loadModelInput(db, projectId);
+	const live = await loadModelInput(db, projectId);
+	// Forecast mode (WP-2.12): the history as an ordinary run, the forecast days
+	// after it, summary.forecast over them. Every other run (manual, auto)
+	// leaves the forecast tail out entirely (withoutForecastTail), so forecast
+	// rain never reaches the figures farmers and regulators rely on; it stores
+	// the input it ran on, so runModel(loadRunInput(run)) still reproduces it.
+	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) {
+		throw new ApiError(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
+	}
+	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
 	return runAndStore(db, projectId, typeof label === 'function' ? label(input) : label, input, undefined, trigger);
 }
 
@@ -273,7 +286,8 @@ export async function runAndStore(
 	opts: { privateLabel?: boolean } = {}
 ): Promise<{ id: string; output: ModelOutput }> {
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
-	const output = runModelChecked(input);
+	// A forecast run is reproduced by runForecastChecked(loadRunInput(run)), an ordinary one by runModelChecked.
+	const output = trigger === 'forecast' ? runForecastChecked(input) : runModelChecked(input);
 	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
@@ -431,11 +445,11 @@ export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
  * only: never return it to a contributor (scenarios/applicant.ts projects
  * what they may see of it).
  */
-export async function loadPublishedRunInput(db: Db, projectId: string, runId: string): Promise<ModelInput> {
-	const { rows: run } = await db.query<StoredRun>('SELECT created_at, inputs FROM app_published_run_input($1, $2)', [projectId, runId]);
+export async function loadPublishedRunInput(db: Db, projectId: string, runId: string): Promise<{ input: ModelInput; trigger: RunTrigger }> {
+	const { rows: run } = await db.query<StoredRun & { trigger: RunTrigger }>('SELECT created_at, inputs, "trigger" FROM app_published_run_input($1, $2)', [projectId, runId]);
 	if (!run[0]) throw new RunInputError('not_found', 'run not found');
 	const { rows: refs } = await db.query<StoredRef>('SELECT kind, start_date, sha256, "values" FROM app_published_run_series($1, $2)', [projectId, runId]);
-	return rebuildRunInput(run[0], refs);
+	return { input: rebuildRunInput(run[0], refs), trigger: run[0].trigger };
 }
 
 interface StoredRun {

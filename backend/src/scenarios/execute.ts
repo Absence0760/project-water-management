@@ -93,16 +93,25 @@ export interface ScenarioCheck {
  */
 export async function loadBaseInput(db: Db, projectId: string, runId: string, role?: Role): Promise<ModelInput> {
 	if (role === 'contributor') {
+		let base: Awaited<ReturnType<typeof loadPublishedRunInput>>;
 		try {
-			return await loadPublishedRunInput(db, projectId, runId);
+			base = await loadPublishedRunInput(db, projectId, runId);
 		} catch (err) {
 			if (err instanceof RunInputError) throw new ApiError(err.problem === 'not_found' ? 404 : 409, err.problem === 'not_found' ? 'published run not found' : err.message);
 			throw err;
 		}
+		// As below: an application is judged on history, not on forecast rain (WP-2.12).
+		if (base.trigger === 'forecast') throw new ApiError(409, 'the published run is a forecast run; an application needs an ordinary run of the model published');
+		return base.input;
 	}
-	const { rows } = await db.query<{ scenarioId: string | null }>('SELECT scenario_id AS "scenarioId" FROM model_run WHERE project_id = $1 AND id = $2', [projectId, runId]);
+	const { rows } = await db.query<{ scenarioId: string | null; trigger: string }>(
+		'SELECT scenario_id AS "scenarioId", "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
+		[projectId, runId]
+	);
 	if (!rows[0]) throw new ApiError(404, 'base run not found');
 	if (rows[0].scenarioId) throw new ApiError(409, 'that run is a scenario run; base a scenario on a run of the model itself');
+	// A forecast run's input runs on past the record on forecast rain (WP-2.12); a scenario is judged on history.
+	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; base a scenario on an ordinary run of the model');
 	try {
 		return await loadRunInput(db, runId);
 	} catch (err) {

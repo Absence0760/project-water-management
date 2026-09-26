@@ -60,33 +60,42 @@ const SELECT = `SELECT id, run_id AS "runId", full_name AS "fullName", registrat
 export const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
 /** The run's statement as the engine builds it, with its hash; 404 for no such run. */
-async function statementFor(db: Db, projectId: string, runId: string): Promise<{ statement: SignoffStatement; sha256: string; legacy: boolean }> {
+async function statementFor(
+	db: Db,
+	projectId: string,
+	runId: string
+): Promise<{ statement: SignoffStatement; sha256: string; legacy: boolean; forecast: boolean }> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<{ engine_version: string; scenario: boolean; legacy: boolean }>(
+	const { rows } = await db.query<{ engine_version: string; scenario: boolean; legacy: boolean; forecast: boolean }>(
 		`SELECT engine_version, scenario_id IS NOT NULL AS scenario,
-			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+			"trigger" = 'forecast' AS forecast
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
 	const r = rows[0];
 	if (!r) throw new ApiError(404, 'not found');
 	const statement = signoffStatement({ id: runId, engineVersion: r.engine_version, scenario: r.scenario });
-	return { statement, sha256: sha256(signoffStatementText(statement)), legacy: r.legacy };
+	return { statement, sha256: sha256(signoffStatementText(statement)), legacy: r.legacy, forecast: r.forecast };
 }
+
+/** Why a forecast run (WP-2.12) can't be signed off. */
+export const FORECAST_NOT_SIGNABLE =
+	'a forecast run cannot be signed off: a sign-off is judged on the record, and its last days are modelled on forecast rain; sign an ordinary run of the model';
 
 export const signoffRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs/:runId/signoffs', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
-			const { statement, sha256: statementSha256, legacy } = await statementFor(db, id, runId);
+			const { statement, sha256: statementSha256, legacy, forecast } = await statementFor(db, id, runId);
 			const { rows } = await db.query<SignoffRow>(`${SELECT} WHERE project_id = $1 AND run_id = $2 ORDER BY signed_at, id`, [id, runId]);
 			return c.json({
 				statement,
 				statementSha256,
 				disclaimer: { version: DISCLAIMER.version, status: DISCLAIMER.status },
 				// Why the caller can't sign, or null when they can.
-				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : null,
+				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : forecast ? FORECAST_NOT_SIGNABLE : null,
 				signoffs: rows
 			});
 		});
@@ -98,8 +107,10 @@ export const signoffRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
-			const { statement, sha256: expected, legacy } = await statementFor(db, id, runId);
+			const { statement, sha256: expected, legacy, forecast } = await statementFor(db, id, runId);
 			if (legacy) throw new ApiError(409, LEGACY);
+			// A sign-off is judged on history; a forecast run's tail is modelled on forecast rain (WP-2.12).
+			if (forecast) throw new ApiError(409, FORECAST_NOT_SIGNABLE);
 			if (body.statementSha256 !== expected)
 				throw new ApiError(409, 'the sign-off statement has changed since it was shown (a new limitation or wording); read it again and sign the new one');
 			const missing = statement.confirmations.filter((k) => !body.confirmed.includes(k.id));
@@ -123,4 +134,3 @@ export const signoffRoutes = new Hono<AuthEnv>()
 			return c.json({ signoff: out[0] }, 201);
 		});
 	});
-

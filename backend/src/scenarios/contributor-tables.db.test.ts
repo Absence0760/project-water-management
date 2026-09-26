@@ -237,3 +237,19 @@ describe('what these tables say about an application hidden from a viewer (045)'
 		expect(await idsAs(viewer, 'yield_result')).toEqual(expect.arrayContaining([yieldOnScenario, yieldOnRun]));
 	});
 });
+
+describe('a published forecast run (WP-2.12) as an application’s base', () => {
+	it('is refused, as a team scenario’s is; an ordinary published run is the control', async () => {
+		expect((await owner.call('PUT', `${P()}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2020-03-01', values: new Array(10).fill(4) })).status).toBe(200);
+		const f = await owner.call('POST', `${P()}/runs`, { label: 'forecast', forecast: true });
+		expect(f.status, JSON.stringify(f.body)).toBe(201);
+		expect((await owner.call('POST', `${P()}/publication`, { runId: f.body.run.id })).status).toBe(201);
+		const refused = await applicant.call('POST', `${P()}/scenarios`, { name: 'On the forecast', baseRunId: f.body.run.id });
+		expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+		expect(refused.body.error).toMatch(/forecast run/);
+		const team = await editor.call('POST', `${P()}/scenarios`, { name: 'Team on the forecast', baseRunId: f.body.run.id });
+		expect(team.status).toBe(409);
+		const ok = await applicant.call('POST', `${P()}/scenarios`, { name: 'On the baseline', baseRunId: published });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+	});
+});

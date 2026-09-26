@@ -396,9 +396,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},
 		runs: {
-			/** Runs a model; `removedRunIds` are the oldest runs the server trimmed to stay within its cap. */
-			create: (id: string, label?: string) =>
-				request<{ run: Run; removedRunIds?: string[] }>('POST', `${p(id)}/runs`, label ? { label } : {}).then((r) => ({
+			/**
+			 * Runs a model; `removedRunIds` are the oldest runs the server trimmed to stay within its cap
+			 * (for a forecast run, WP-2.12: the project's older forecast run).
+			 */
+			create: (id: string, label?: string, opts: { forecast?: boolean } = {}) =>
+				request<{ run: Run; removedRunIds?: string[] }>('POST', `${p(id)}/runs`, {
+					...(label ? { label } : {}),
+					...(opts.forecast ? { forecast: true } : {})
+				}).then((r) => ({
 					run: r.run,
 					removedRunIds: r.removedRunIds ?? []
 				})),

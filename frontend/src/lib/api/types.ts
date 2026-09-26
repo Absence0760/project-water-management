@@ -369,6 +369,8 @@ export interface RunMeta {
 	 * that you can see, oldest first. Absent from an older API.
 	 */
 	citedBy?: RunCitation[];
+	/** A forecast run's first forecast day (summary.forecast.from); null otherwise. Absent from an older API. */
+	forecastFrom?: string | null;
 	/**
 	 * Its input series are stored (021_series_blob), so GET …/reproduce can
 	 * re-run it; false for a run from before stored inputs. Absent from an older API.

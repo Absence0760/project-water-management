@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DownloadError } from '$lib/export/download';
-import { collectWorkbookInput, type ExportProgress } from './collect';
+import { collectWorkbookInput, FORECAST_FLAG_HEADER, withForecastFlag, type ExportProgress } from './collect';
 
 const P = 'p1';
 const R = 'r1';
@@ -102,5 +102,15 @@ describe('collectWorkbookInput', () => {
 	it('falls back to a generic file name without the server one', async () => {
 		const { fn } = fakeFetch({ 'summary.csv': () => new Response('Project,X\r\n') });
 		expect((await collectWorkbookInput(req, fn, () => {})).filename).toBe('run_workbook.xlsx');
+	});
+});
+
+describe('withForecastFlag (WP-2.12)', () => {
+	it('leads a forecast run’s daily sheet with 1 on each forecast day and 0 before', () => {
+		const table = { name: 'Catchment', startDate: '2026-09-24', columns: [{ header: 'Rain', unit: 'mm', values: [1, 2, 3, 4, 5] }] };
+		const flagged = withForecastFlag(table, '2026-09-27');
+		expect(flagged.columns.map((c) => c.header)).toEqual([FORECAST_FLAG_HEADER, 'Rain']);
+		expect(Array.from(flagged.columns[0]!.values)).toEqual([0, 0, 0, 1, 1]);
+		expect(flagged.columns[1]).toBe(table.columns[0]);
 	});
 });

@@ -22,7 +22,9 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // `reproducible`: its input series are stored (021_series_blob), so
 // GET …/reproduce can re-run it. The same test loadRunInput makes: a run
 // with input series but no stored references is from before 021;
-// `trigger`: what made it, 'manual' or 'auto' (042_auto_rerun, WP-2.11).
+// `trigger`: what made it, 'manual', 'auto' or 'forecast' (042_auto_rerun,
+// WP-2.11, WP-2.12); `forecastFrom`: a forecast run's first forecast day
+// (summary.forecast.from), else null.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
@@ -34,7 +36,7 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	${CITED_BY_SQL} AS "citedBy",
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
-	r.trigger`;
+	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom"`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 /** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */
@@ -59,16 +61,19 @@ const RunPatchBody = z
 
 export const runRoutes = new Hono<AuthEnv>()
 	.post('/:id/runs', async (c) => {
-		const body = z.object({ label: z.string().trim().max(200).default('') }).parse(await c.req.json().catch(() => ({})));
+		// forecast (WP-2.12): a forecast-mode run, kept apart from the manual runs' cap (one per project).
+		const body = z
+			.object({ label: z.string().trim().max(200).default(''), forecast: z.boolean().default(false) })
+			.parse(await c.req.json().catch(() => ({})));
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const { id: runId } = await executeRun(db, id, body.label).catch((err: Error) => {
+			const { id: runId } = await executeRun(db, id, body.label, body.forecast ? 'forecast' : 'manual').catch((err: Error) => {
 				// Engine problems (bad inputs, missing series) are the user's to fix.
 				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
 				throw new ApiError(400, `model run failed: ${err.message}`);
 			});
-			// Keep the newest N runs per project (the new one included).
+			// Keep the newest N manual runs per project (the new one included), and the newest unkept run of each automatic trigger (a forecast run replaces the last).
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [runId]);
 			return c.json({ run: rows[0], removedRunIds }, 201);
