@@ -500,6 +500,15 @@
 //             (reserve/) with its settings editors and heat map. No new
 //             dependency; the largest page chunk stays at 41 KB. The engine
 //             split (#9) is the way back for both the total and the worker.
+// 2026-09-26  total 874 → 886 KB; other ceilings unchanged. The WUA
+//             portfolio dashboard (WP-2.14): /teams/:id/portfolio, its own
+//             lazy route chunk (~6 KB gzip: the table, the phone cards, the
+//             traffic-light wording and sorting), plus links from the team
+//             page and the project list. Merged on main after WP-2.9 and
+//             WP-3.4/3.7/3.10 (873 KB); the merge measured 880 KB. No page's
+//             first load grew; no new dependency; the largest page chunk
+//             stays 40 KB. Headroom ~6 KB. #9's engine split is still the
+//             way back down.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -510,7 +519,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 874,
+	totalCodeKb: 886,
 	largestChunkKb: 41,
 	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,
