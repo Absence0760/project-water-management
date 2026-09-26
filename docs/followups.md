@@ -1846,6 +1846,16 @@ from the WP:
   applies 025 before 028's default-privilege change, so 025 needs its own
   `REVOKE`).
 
+- [ ] **Split the help content chunk.** `lib/help/content.ts` (every help
+      entry and the glossary, one module) is the largest page chunk at 42 KB
+      gzip, over the 41 KB it held since 2026-09-24; the per-chunk ceiling was
+      raised to 43 KB when WP-3.5's dam entries landed (2026-09-26,
+      `check_web_bundle_budget.mjs`). Durable fix: one module per help
+      category behind a small index (id → category), so a HelpTip loads its
+      own category and only the glossary and search pages load them all.
+      Trigger: the next help entries that push it past 43 KB, or #9's engine
+      split, whichever comes first.
+
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.
 - Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database.
