@@ -359,7 +359,6 @@ Tick items off (or move them into an issue) as they are done.
       hydrologist applies a rain-source period to the client record and the
       share of rain on heavy days (≥ 20 mm) in the period differs from the
       reference era by more than the calibration band allows.
-
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
