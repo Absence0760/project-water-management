@@ -138,7 +138,14 @@ describe('owning API keys', () => {
 
 describe('authenticating with a key', () => {
 	it('answers whoami for a live key, and one 401 for every bad one', async () => {
-		const { id, secret } = await newKey(projectId, { name: 'Whoami key' });
+		// The upper-case case below needs a prefix with a letter in it: an
+		// all-digit prefix (about 2 % of keys) upper-cases to itself.
+		let key = await newKey(projectId, { name: 'Whoami key' });
+		while (!/^wm_[0-9a-f]*[a-f]/.test(key.secret.slice(0, 11))) {
+			await asOwner('DELETE FROM api_key WHERE id = $1', [key.id]);
+			key = await newKey(projectId, { name: 'Whoami key' });
+		}
+		const { id, secret } = key;
 		const ok = await ingest('GET', '/whoami', secret);
 		expect(ok.status).toBe(200);
 		expect(ok.body).toEqual({ project: { id: projectId, name: 'Keyed catchment' }, key: { id, name: 'Whoami key', scopes: ['series:write'], allowedSeries: null } });
