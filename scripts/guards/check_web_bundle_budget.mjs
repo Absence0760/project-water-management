@@ -305,8 +305,8 @@
 //             the Runs chunks). Measured merged over main e097008: 701 KB.
 //             Headroom ~6 KB. Issue #9 (bring the bundle down) still stands:
 //             the farm view's ~35 KB loads only for farmers, but the total
-//             guard counts every lazy chunk.
-//             The farmer view on its own (first measured as 652 → 688): the phone-first
+//             guard counts every lazy chunk. The farmer view's share,
+//             measured on its own base (647 → 682 KB): the phone-first
 //             farmer view (WP-2.6, issue #25, docs/design/farmer-view.md):
 //             /farm, /farm/[projectId] and its "Why?" and dam pages, the
 //             farmer glossary page. Measured on the base eaafecd → this
