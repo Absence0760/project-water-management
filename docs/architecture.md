@@ -323,8 +323,8 @@ merges into:
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
   or outside the grid, a server error page answered with HTTP 200: the fetch
   fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
-  feed shows as failing. A DWS row without a usable value is a gap, never a
-  zero.
+  feed shows as failing. A DWS row without a usable value, or with a quality code
+  that says the data is missing (`DWS_GAP_CODES`), is a gap, never a zero.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS

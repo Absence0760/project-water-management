@@ -132,6 +132,20 @@ describe('parseDwsDaily: a gap row with only a quality code', () => {
 		expect(r.quality).toEqual({ '1': 1, '170': 1, '171': 1, '7': 1 });
 	});
 
+	it('keeps a row whose code says the data is missing as a gap, even with a number in the flow column', () => {
+		const codes = ['151', '165', '170', '172', '246', '247', '255'];
+		const r = parseDwsDaily(recorded([row('20210101', '1.5', '1'), ...codes.map((c, i) => row(`2021010${i + 2}`, '0.000', c))]));
+		expect(r.values).toEqual([1.5, ...codes.map(() => null)]);
+		expect(r.rejected).toBe(codes.length);
+		expect(Object.keys(r.quality).sort()).toEqual(['1', ...codes].sort());
+	});
+
+	it('keeps a flagged but real flow (above rating, estimated, extrapolated) as the flow', () => {
+		const r = parseDwsDaily(recorded([row('20210101', '9.5', '60'), row('20210102', '8.5', '65'), row('20210103', '7.5', '150'), row('20210104', '0.000', '2')]));
+		expect(r.values).toEqual([9.5, 8.5, 7.5, 0]);
+		expect(r.rejected).toBe(0);
+	});
+
 	it('still reads a lone number in the flow column as the flow', () => {
 		const r = parseDwsDaily(page(['DATE       D_AVG_FR  QUAL', row('20210101', '12', ''), row('20210102', '0.5', '')].join('\n')));
 		expect(r.values).toEqual([12, 0.5]);

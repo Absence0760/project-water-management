@@ -1117,12 +1117,13 @@ role and not before it.
         our (non-South-African) network, so the parser follows the request two
         open-source clients make (RivRetrieve-Python, aquascope) and the
         layout of an archived daily page (web.archive.org, 2024: the header
-        is `D AVG F/R`, not the clients' `D_AVG_FR`). Trigger: the first deploy. From the fetcher's region,
-        attach a DWS feed to a throwaway project and check it goes OK; if the
+        is `D AVG F/R`, not the clients' `D_AVG_FR`). Trigger: the first
+        deploy. From the fetcher's region, attach a DWS feed to a throwaway project and check it goes OK; if the
         page differs, the feed fails loudly (nothing is written) and
-        `sources/dws.ts` plus its fixture change together. The quality codes
-        are counted, not interpreted: agree with the hydrologist which ones
-        should become gaps.
+        `sources/dws.ts` plus its fixture change together. Codes that say
+        the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
+        the rest are counted: agree with the hydrologist whether flagged flows
+        (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

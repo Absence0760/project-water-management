@@ -49,7 +49,7 @@ export interface DwsDays {
 	values: (number | null)[];
 	/** Rows by quality code, as DWS gave them (not interpreted). */
 	quality: Record<string, number>;
-	/** Rows whose value was missing or not a usable number (kept as gaps). */
+	/** Rows whose value was missing, not a usable number, or coded as missing (DWS_GAP_CODES): kept as gaps. */
 	rejected: number;
 }
 
@@ -61,6 +61,17 @@ const decode = (s: string) =>
 		.replace(/&lt;/g, '<')
 		.replace(/&gt;/g, '>')
 		.replace(/&amp;/g, '&');
+
+/**
+ * Quality codes that say the day has no flow, whatever number sits in the
+ * flow column (DWS's legend, Verified/HyCodes.aspx): print code M (151 and
+ * 255 "Data Missing", 170 "Permanent Gap", 172 "Temporary Gap", 246 "No
+ * cross-sectional area upstream of notch/structure"), 165 "no flow
+ * calculated" and 247 "no calculation performed". Such a row is a gap, so a
+ * placeholder 0.000 never lands as a dry day. Other codes (above rating,
+ * estimates, unaudited) are real if uncertain flows: kept and counted.
+ */
+export const DWS_GAP_CODES: ReadonlySet<string> = new Set(['151', '165', '170', '172', '246', '247', '255']);
 
 const SERVER_ERROR = /scriptserver|can't connect to|unable to establish connection/i;
 const MAX_ROWS = 20 * 366 + 10;
@@ -140,7 +151,7 @@ export function parseDwsDaily(raw: string): DwsDays {
 		if (byDay.has(day)) throw new FeedFormatError(`the DWS table lists ${iso} twice`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError('the DWS table has more rows than one request can hold');
 		const n = v !== undefined && /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(v) ? Number(v) : NaN;
-		if (Number.isFinite(n) && n >= 0) {
+		if (Number.isFinite(n) && n >= 0 && !DWS_GAP_CODES.has(q ?? '')) {
 			byDay.set(day, n);
 		} else {
 			byDay.set(day, null);
