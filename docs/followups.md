@@ -1780,7 +1780,28 @@ role and not before it.
       reader scrolls, taps or presses a key themselves, or the hash changes.
       /farm/words had the same one-shot scroll and uses it too. Tests:
       `anchor.test.ts`; help.spec.ts's hash tests passed 45/45 at
-      `--repeat-each=15 --workers=8`.
+      `--repeat-each=15 --workers=8`. A traced repro (help.spec.ts at
+      `--repeat-each=40..50`, 12 workers: 2–6 failures a run before) showed
+      the re-flow was the glossary's own stylesheet, not the font (only `h1`
+      uses Outfit): the scroll ran with the entry's `scroll-margin-top` at
+      `0px` and the unstyled entries ~3,000 px taller, landing at the page
+      end; the body's resize when the CSS lands is what `holdAnchor` catches.
+      Why the page renders before its CSS: the next entry.
+- [ ] **A client navigation can render its page before the page's CSS has
+      loaded** (found tracing the entry above). SvelteKit calls each route
+      node's loader twice per navigation (a warm-up in `load_route`, then
+      the real call in `load_node`), and Vite's preload helper awaits a
+      chunk's CSS only on the first call (the second finds it in its `seen`
+      map and returns at once; unchanged on Vite main). So when a page's
+      stylesheet is slower than its JavaScript (a loaded machine, a slow
+      link), the page paints unstyled for a moment, and anything measured
+      then is wrong. Durable fix: in the root layout,
+      `onNavigate(() => stylesheetsReady())`, where `stylesheetsReady()`
+      resolves once every `<link rel="stylesheet">` without a `.sheet` has
+      fired `load` or `error` (SvelteKit awaits `onNavigate` before the DOM
+      update); with a prototype, two loaded runs of help.spec.ts (1,440
+      tests) had no failures where the unpatched build failed 2–6 a run. Worth reporting upstream (SvelteKit or Vite). Trigger: an
+      unstyled flash reported, or the next change to the root layout.
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
@@ -1944,14 +1965,17 @@ from the WP:
 - [x] **Alerts column.** `alertsFiring` counts the firing `alert_event`
       rows per project in the portfolio query, and the page shows it
       (WP-2.13).
-- [ ] **"Farms short this week" lands at the top of the Runs tab.** The link
-      is `?tab=runs&run=…&window=last7#res-curtailment`: the curtailment
-      table now opens on the last 7 days (the reporting-window picker, #44),
-      but the Runs tab renders its results after loading, so the browser
-      can't scroll to the fragment. Durable fix: RunsTab scrolls to a
-      `#res-*` fragment once its results render (a Runs-tab change, so
-      coordinate with whoever owns `components/runs/`). Trigger: the WUA
-      persona or a user reports it, or the next Runs-tab round.
+- [x] **"Farms short this week" lands at the top of the Runs tab** (fixed
+      2026-09-26). The link is `?tab=runs&run=…&window=last7#res-curtailment`,
+      but the Runs tab renders its results after loading, so the browser's
+      own jump found nothing. RunsTab now scrolls to a `#res-*` fragment once
+      the run's details have rendered (once per visit; later jumps are the
+      browser's), holds it there with `holdAnchor` while the panels above
+      load, and moves focus to the panel's heading (`tabindex="-1"`, no
+      second scroll), so Tab carries on from there. Test: portfolio.spec.ts
+      "“farms short this week” opens the Runs tab at the curtailment table"
+      (the link, then a reload); it failed before the fix (landed at the
+      top) and passed 30/30 at `--repeat-each=30`, 12 workers.
 - [x] **No perf guard on the portfolio query** (done 2026-09-26). The
       backend's `perf-db` vitest project (the db project's global setup) runs
       `portfolio/portfolio.db.perf.test.ts`: 10 published catchments × 60
@@ -2298,17 +2322,16 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `ingest/ingest.db.test.ts` (a key pushing in batches can't raise its
       own limit; another key's and a person's days still count),
       `series/hold.test.ts`.
-- [ ] **The ingest hold has no reference for a series one key fills.** When
-      the days left without the key's own are fewer than the outlier rule's
-      100 (a logger series nothing else writes), `limitWithout` falls back
-      to the series without the push only, which the key's earlier pushes
-      shape, so slow poisoning of such a series still lifts its limit
-      (053 closed it for series with other sources). Durable fix: take the
-      limit for those days from what a person last accepted, the inputs of
-      the project's latest manual run (`run_input_series`), which a key
-      can't write. Trigger: the first production gateway key that is the
-      only writer of its series, or a hold that should have fired and
-      didn't.
+- [x] **The ingest hold has no reference for a series one key fills.**
+      Fixed in 056_accepted_series.sql: `run_input_series.series_id` records
+      which series each input of a run was read from, and when the series
+      without the key's days is too short to judge by, the limit comes from
+      the latest manual run's input of that series (what a person accepted;
+      `limitFrom: 'accepted'`). Until a manual run has read the series the
+      limit is deliberately the key-shaped one (`limitFrom: 'own'`, said in
+      the held event, the response and the History line): security.md §
+      API keys gives the reasoning. Tests: `ingest/ingest.db.test.ts`,
+      `series/hold.test.ts`.
 - [x] **Deleting an assessor's account is refused (session B, WP-3.3).**
       Fixed in 052_scenario_decider_deletion.sql: `scenario_guard` (from
       045's definition) lets an update through untouched when its only

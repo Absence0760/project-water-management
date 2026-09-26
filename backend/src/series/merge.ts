@@ -6,7 +6,7 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
-import { anomalousPushedDays, type HeldDays } from './hold.js';
+import { acceptedInput, anomalousPushedDays, type HeldDays, othersSuffice } from './hold.js';
 import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
 
 export { MAX_SERIES_VALUES, SeriesStartDate };
@@ -513,7 +513,17 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
 	}
 	// A key's push whose days look wrong holds the automatic re-run for a person to review (series/hold.ts).
-	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.before, body, r.keyDays) : null;
+	// The accepted reference (the latest manual run's input) is read only when the series without the key's days is too short to judge by.
+	const flagged =
+		opts.via === 'api_key' && daysChanged > 0
+			? anomalousPushedDays(
+					body.kind,
+					r.before,
+					body,
+					r.keyDays,
+					r.before && !othersSuffice(r.before, body, r.keyDays) ? await acceptedInput(db, r.meta.id) : null
+				)
+			: null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
 	const rerun = flagged ? null : await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
