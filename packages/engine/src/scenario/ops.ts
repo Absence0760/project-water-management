@@ -5,7 +5,9 @@
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
 	ACCUMULATION_MODES,
+	BOREHOLE_MODES,
 	BOREHOLE_RULES,
+	BOREHOLE_TARGETS,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_CURVE_MAX_ROWS,
@@ -18,6 +20,7 @@ import {
 	type CalibrationFlowKind,
 	type ChirpsBiasMode,
 	type AccumulationMode,
+	type Borehole,
 	type CropDef,
 	type FlowShareMethod,
 	type LandCoverPatch,
@@ -357,6 +360,9 @@ export type ScenarioOp =
 	| { op: 'transfer.remove'; transferId: string }
 	| { op: 'landCover.add'; patch: LandCoverPatch }
 	| { op: 'landCover.remove'; patchId: string }
+	/** A new borehole on a farm or other user (WP-3.9). */
+	| { op: 'borehole.add'; borehole: Borehole }
+	| { op: 'borehole.remove'; boreholeId: string }
 	| SettingsSetOp
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
 	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string };
@@ -373,6 +379,8 @@ export const SCENARIO_OP_NAMES = [
 	'transfer.remove',
 	'landCover.add',
 	'landCover.remove',
+	'borehole.add',
+	'borehole.remove',
 	'settings.set',
 	'series.scale'
 ] as const satisfies readonly ScenarioOpName[];
@@ -438,6 +446,17 @@ const LAND_COVER_FIELDS: Record<string, Check> = {
 	densityPct: frac,
 	factors: nullable((v) => (isObj(v) && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
 };
+const BOREHOLE_FIELDS: Record<string, Check> = {
+	id,
+	nodeId: id,
+	name: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be a name of at most 200 characters'),
+	capacityM3Day: nonNeg,
+	annualCapM3: nullable(nonNeg),
+	mode: oneOf(BOREHOLE_MODES),
+	emergencyBelowPct: frac,
+	target: oneOf(BOREHOLE_TARGETS),
+	depletionFactor: frac
+};
 const NONE = new Set<string>();
 
 function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp | null {
@@ -498,6 +517,12 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			break;
 		case 'landCover.remove':
 			op = { op: 'landCover.remove', patchId: need('patchId', id) as string };
+			break;
+		case 'borehole.add':
+			op = { op: 'borehole.add', borehole: sub('borehole', BOREHOLE_FIELDS) as unknown as Borehole };
+			break;
+		case 'borehole.remove':
+			op = { op: 'borehole.remove', boreholeId: need('boreholeId', id) as string };
 			break;
 		case 'settings.set': {
 			const path = need('path', (v) => (typeof v === 'string' && v in SETTINGS_CHECKS ? null : 'is not a setting a scenario can change'));

@@ -653,6 +653,15 @@ below 1, `dam_seepage_lost`; `summary.waterBalance` rows gain
 `damReleaseM3` and `damSeepageLostM3` when present (the residual subtracts
 the lost seepage), and `summary.csv` the same two columns.
 
+`ProjectModel.boreholes` (engine ≥ 0.36.0, WP-3.9; optional, and absent from
+`GET` when the project has none) is `{ id, nodeId, name, capacityM3Day,
+annualCapM3 (null = no cap), mode ('none' | 'supplemental' | 'primary' |
+'emergency'), emergencyBelowPct (0–1), target ('direct' | 'dam'),
+depletionFactor (0–1) }[]`, at most 5 000. `PUT` refuses a borehole on a gauge
+or an unknown node, and an emergency or dam-target borehole on a node without a
+farm dam; `mode`, `emergencyBelowPct`, `target` and `depletionFactor` default
+to supplemental, 0.3, direct and 0.
+
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
@@ -873,6 +882,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- `summary.groundwaterAnnualUse` (engine ≥ 0.36.0, WP-3.9; only with
+  boreholes) is one row per farm or user with boreholes (node-id order) per
+  water year the run touches: `{ nodeId, name, kind, waterYear (start year),
+  label ('2003/04'), days, abstractionM3 (pumped to the crop + into the dam),
+  toDamM3, streamDepletionM3, annualCapM3 (Σ caps, null if any borehole can
+  pump uncapped), gaLimitM3 (40 000, the GN 538 ceiling per property, context
+  only), boreholes: [{ id (null = the combined capacity), name, abstractionM3,
+  annualCapM3, capReached }] }`. It is the modelled groundwater abstraction per
+  farm per water year that licensing comparisons (WARMS, WP-3.10) read. A node
+  with a dam-target borehole has the run series `groundwater_to_dam`, and its
+  farm summary `avgGroundwaterToDamM3Day`. The summary CSV adds a
+  "Groundwater abstraction by water year" block.
 - `summary.landCover` (engine ≥ 0.24.0; only with land cover) is
   `{ lowFlowThresholdM3Day, reductionM3Day, fractionOfNatural, byClass:
   { coverClass, condensedKm2, reductionM3Day, mmPerYear }[] }`; farms with

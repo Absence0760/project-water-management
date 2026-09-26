@@ -1,7 +1,7 @@
 // Boreholes and stream depletion (WP-1.34, docs/model.md §2.7d): hand-worked
 // cases on a fixed natural flow.
 import { describe, expect, it } from 'vitest';
-import type { ModelInput, NetworkNode } from '../project';
+import type { Borehole, ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { checkGroundwater, checkInvariants } from '../verify/checks';
 import { randomInput } from '../testing/fuzz';
@@ -186,5 +186,143 @@ describe('boreholes (WP-1.34)', () => {
 		const input = randomInput(4623, { runoffModel: 'gr4j' });
 		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n24's supply fraction/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
+	});
+});
+
+describe('individual boreholes (WP-3.9)', () => {
+	const bh = (over: Partial<Borehole> = {}): Borehole => ({
+		id: 'b1',
+		nodeId: 'A',
+		name: 'BH1',
+		capacityM3Day: 800,
+		annualCapM3: null,
+		mode: 'supplemental',
+		emergencyBelowPct: 0.3,
+		target: 'direct',
+		depletionFactor: 0,
+		...over
+	});
+	const withBores = (i: ModelInput, b: Borehole[]): ModelInput => ({ ...i, model: { ...i.model, boreholes: b } });
+	const ok = (o: ReturnType<typeof run>) => expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+
+	it('no boreholes, or only ones switched off, give the same output to the bit', () => {
+		const plain = run(input({}, 2000, 3), [1000, 3000, 500]);
+		const off = run(withBores(input({}, 2000, 3), [bh({ mode: 'none' }), bh({ id: 'b2', capacityM3Day: 0 })]), [1000, 3000, 500]);
+		expect(JSON.stringify(off.series)).toBe(JSON.stringify(plain.series));
+		expect(off.summary.groundwaterAnnualUse).toBeUndefined();
+		expect(off.summary.farms).toEqual(plain.summary.farms);
+	});
+
+	it("a node's combined borehole capacity (WP-1.34) and one uncapped direct borehole with the same values run identically", () => {
+		const natural = [1000, 10_000, 1500, 200];
+		const combined = run(input({ boreholeCapacityM3Day: 800, boreholeRule: 'supplemental', streamDepletionFrac: 0.4, streamDepletionLagDays: 3 }, 2000, 4), natural);
+		const single = run(withBores(input({ streamDepletionLagDays: 3 }, 2000, 4), [bh({ depletionFactor: 0.4 })]), natural);
+		ok(single);
+		for (const k of ['groundwater_used', 'baseflow_depletion', 'depletion_store', 'supplied', 'outflow']) expect(col(single, 'A', k)).toEqual(col(combined, 'A', k));
+	});
+
+	it('each borehole has its own mode: primary pumps before the river, supplemental after it', () => {
+		// A dam-less farm needing 2000 m³/day: a primary borehole of 500 and a supplemental one of 800.
+		const o = run(withBores(input({}, 2000, 3), [bh({ id: 'p', name: 'P', mode: 'primary', capacityM3Day: 500 }), bh({ id: 's', name: 'S' })]), [1000, 10_000, 1500]);
+		ok(o);
+		// Day 0: 500 primary, the river's 1000, 500 supplemental. Days 1–2: 500 primary, the river covers the rest.
+		expect(col(o, 'A', 'groundwater_used')).toEqual([1000, 500, 500]);
+		expect(col(o, 'A', 'supplied')).toEqual([2000, 2000, 2000]);
+		const year = o.summary.groundwaterAnnualUse!;
+		expect(year).toHaveLength(1);
+		expect(year[0]!.boreholes.map((b) => [b.id, b.abstractionM3])).toEqual([
+			['p', 1500],
+			['s', 500]
+		]);
+	});
+
+	it('an annual cap stops a borehole for the rest of the water year; it pumps again from 1 October', () => {
+		// Sep 28 – Oct 3, 2021, dry, a dam-less farm needing ~3000 m³/day; 1000 m³/day capacity, 2500 m³ a year.
+		const i = withBores(input({}, 3000, 6), [bh({ capacityM3Day: 1000, annualCapM3: 2500, depletionFactor: 0.2 })]);
+		i.settings.apanMm = flat(3000) as never;
+		i.series.rain_catchment_mm = { startDate: '2021-09-28', values: new Array(6).fill(0) };
+		const o = run(i, new Array(6).fill(0));
+		ok(o);
+		expect(col(o, 'A', 'groundwater_used')).toEqual([1000, 1000, 500, 1000, 1000, 500]);
+		const rows = o.summary.groundwaterAnnualUse!;
+		expect(rows.map((r) => [r.label, r.days, r.abstractionM3, r.annualCapM3, r.gaLimitM3])).toEqual([
+			['2020/21', 3, 2500, 2500, 40_000],
+			['2021/22', 3, 2500, 2500, 40_000]
+		]);
+		expect(rows[0]!.boreholes[0]!.capReached).toBe(true);
+		expect(o.summary.warnings.some((w) => w.startsWith('borehole annual cap reached') && w.includes('A: BH1'))).toBe(true);
+		// The self-check reads the caps from the summary: a year over its cap is caught.
+		const bad = structuredClone(o);
+		bad.summary.groundwaterAnnualUse![0]!.boreholes[0]!.annualCapM3 = 2000;
+		expect(checkGroundwater(i, bad)).toMatch(/over its annual cap 2000/);
+		const lost = structuredClone(o);
+		lost.summary.groundwaterAnnualUse!.pop();
+		expect(checkGroundwater(i, lost)).toMatch(/no row for water year 2021/);
+	});
+
+	it('a dam-target borehole pumps into the dam: supplemental covers the day, primary fills it, and neither makes it spill', () => {
+		// A 10 000 m³ dam, empty, no inflow, a farm needing 500 m³/day; a borehole of 2000 m³/day into the dam.
+		const dam = { damCapacityM3: 10_000, damInitialPct: 0 };
+		const supp = run(withBores(input(dam, 500, 8), [bh({ capacityM3Day: 2000, target: 'dam' })]), new Array(8).fill(0));
+		const prim = run(withBores(input(dam, 500, 8), [bh({ capacityM3Day: 2000, target: 'dam', mode: 'primary' })]), new Array(8).fill(0));
+		ok(supp);
+		ok(prim);
+		expect(col(supp, 'A', 'groundwater_to_dam')).toEqual(new Array(8).fill(500));
+		expect(col(supp, 'A', 'groundwater_used')).toEqual(new Array(8).fill(0));
+		expect(col(supp, 'A', 'supplied')).toEqual(new Array(8).fill(500));
+		expect(col(prim, 'A', 'groundwater_to_dam')).toEqual([2000, 2000, 2000, 2000, 2000, 2000, 1000, 500]);
+		expect(col(prim, 'A', 'dam_storage')).toEqual([1500, 3000, 4500, 6000, 7500, 9000, 9500, 9500]);
+		expect(col(prim, 'A', 'spill')).toEqual(new Array(8).fill(0));
+		expect(prim.summary.farms[0]!.avgGroundwaterToDamM3Day).toBe(13_500 / 8);
+		expect(prim.summary.groundwaterAnnualUse![0]).toMatchObject({ abstractionM3: 13_500, toDamM3: 13_500 });
+		// The water balance counts water pumped into the dam as groundwater in.
+		expect(prim.summary.waterBalance!.total.groundwaterM3).toBe(13_500);
+		expect(Math.abs(prim.summary.waterBalance!.total.residualM3)).toBeLessThan(1e-6);
+	});
+
+	it('a supplemental dam-target borehole first lifts a dam below its dead storage to it', () => {
+		// Dead storage 20 % of 10 000; the dam starts at 10 %: 1000 below it. Demand 500.
+		const o = run(withBores(input({ damCapacityM3: 10_000, damInitialPct: 0.1, damMinPct: 0.2 }, 500, 2), [bh({ capacityM3Day: 5000, target: 'dam' })]), [0, 0]);
+		ok(o);
+		expect(col(o, 'A', 'groundwater_to_dam')).toEqual([1500, 500]);
+		expect(col(o, 'A', 'supplied')).toEqual([500, 500]);
+	});
+
+	it('an emergency borehole runs only while the dam is below its level', () => {
+		const a = { damCapacityM3: 10_000, damInitialPct: 1 };
+		const o = run(withBores(input(a, 3000, 5), [bh({ capacityM3Day: 2500, mode: 'emergency', emergencyBelowPct: 0.5 })]), [0, 0, 0, 0, 0]);
+		ok(o);
+		expect(col(o, 'A', 'groundwater_used')).toEqual([0, 0, 0, 2000, 2500]);
+	});
+
+	it('acceptance: a supplemental borehole raises reliability on a deficit farm and lowers the downstream flow by its depletion', () => {
+		// The farm's runoff all passes below it (nothing into a dam, no diversion): it has only its boreholes.
+		const farm = { pctRunoffToDam: 0 };
+		const natural = [5000, 5000, 5000];
+		const without = run(input(farm, 2000, 3), natural);
+		const withB = run(withBores(input(farm, 2000, 3), [bh({ capacityM3Day: 1000, depletionFactor: 0.5 })]), natural);
+		ok(withB);
+		expect(without.summary.farms[0]!.fractionSupplied).toBe(0);
+		expect(withB.summary.farms[0]!.fractionSupplied).toBe(0.5);
+		expect(col(withB, null, 'simulated_outflow')).toEqual(col(without, null, 'simulated_outflow').map((v) => v - 500));
+		expect(withB.summary.groundwaterAnnualUse![0]).toMatchObject({ abstractionM3: 3000, streamDepletionM3: 1500, annualCapM3: null });
+	});
+
+	it('warns about boreholes that cannot run as entered', () => {
+		const i = withBores(input({}, 1000, 2), [
+			bh({ id: 'a', name: 'ToDam', target: 'dam' }),
+			bh({ id: 'b', name: 'Emerg', mode: 'emergency' }),
+			bh({ id: 'c', name: 'OnGauge', nodeId: 'G' }),
+			bh({ id: 'd', name: 'Nowhere', nodeId: 'X' })
+		]);
+		const o = run(i, [0, 0]);
+		ok(o);
+		const w = o.summary.warnings.join('\n');
+		expect(w).toMatch(/borehole "ToDam" pumps into a dam but there is none/);
+		expect(w).toMatch(/borehole "Emerg" runs in emergency mode but there is no dam/);
+		expect(w).toMatch(/gauge "G": a gauge only measures; its 1 borehole is skipped/);
+		expect(w).toMatch(/borehole "Nowhere" refers to a node that does not exist/);
+		// Both remaining boreholes pump straight to the crop.
+		expect(col(o, 'A', 'groundwater_used')).toEqual([1000, 1000]);
 	});
 });

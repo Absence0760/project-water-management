@@ -132,8 +132,8 @@ describe('compareAllocations', () => {
 	});
 
 	// Invariant (WP-3.10 checkAllocations): the modelled use, summed over water
-	// years and both sources, is the run's supplied series summed, and every
-	// run day falls in exactly one water year.
+	// years and both sources, is the run's supplied series summed (plus what was
+	// pumped into the dam, WP-3.9), and every run day falls in exactly one water year.
 	it('keeps modelled use equal to the Σ supplied series', () => {
 		let seed = 7;
 		const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -151,6 +151,21 @@ describe('compareAllocations', () => {
 			);
 			expect(x.surface.years.reduce((s, y) => s + y.days, 0)).toBe(n);
 		}
+	});
+
+	it('counts groundwater pumped into the dam as groundwater use when pumped (WP-3.9)', () => {
+		// 10 days of 1 October 2001: 100 supplied/day of which 30 groundwater to the crop, and 20/day pumped into the dam.
+		const supplied = new Array(10).fill(100);
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(supplied, new Array(10).fill(30), { groundwaterToDam: new Array(10).fill(20) })],
+			allocations: [alloc(1000)]
+		});
+		const x = r.nodes[0]!;
+		expect(x.groundwater.years[0]!.modelledM3).toBeCloseTo(500, 9);
+		expect(x.surface.years[0]!.modelledM3).toBeCloseTo(700, 9);
+		// Σ over both sources = Σ supplied + Σ pumped into the dam.
+		expect(x.groundwater.years[0]!.modelledM3 + x.surface.years[0]!.modelledM3).toBeCloseTo(1200, 9);
 	});
 
 	it('gives the same result at UTC+14 and UTC−11', () => {

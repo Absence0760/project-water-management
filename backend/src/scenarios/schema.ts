@@ -44,6 +44,13 @@ function opIds(op: ScenarioOp): [string, unknown][] {
 			];
 		case 'landCover.remove':
 			return [['patchId', op.patchId]];
+		case 'borehole.add':
+			return [
+				['borehole.id', op.borehole.id],
+				['borehole.nodeId', op.borehole.nodeId]
+			];
+		case 'borehole.remove':
+			return [['boreholeId', op.boreholeId]];
 		case 'settings.set':
 		case 'series.scale':
 			return [];

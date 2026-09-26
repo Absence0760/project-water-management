@@ -246,7 +246,10 @@ name**:
 - **Reserve compliance** sites: the outlet with the outlet, a gauge by id,
   then by name.
 - **Crop areas** are matched by (farm name, crop name). **Transfers** are
-  matched by id, then by their "from → to" route.
+  matched by id, then by their "from → to" route. **Individual boreholes**
+  (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
+  name): added, removed, or changed with the old and new capacity, mode,
+  target, annual cap and depletion.
 
 ## Scenario runs
 
