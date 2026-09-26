@@ -684,6 +684,11 @@
 //             and node list, and lib/workspace/overlays.ts. Headroom ~5 KB.
 //             Four raises today: the English-as-key i18n trim (~5–7 KB,
 //             docs/followups.md) is due before the next.
+// 2026-09-26  total 973 → 977 KB (measured 975). Issue #54: the upload's
+//             overwrite confirm, History's "Restore the earlier values", and
+//             the help entries for the supply rules and crop demand options.
+//             A stopgap the operator chose over the trim: the i18n trim is
+//             now overdue and comes before any further raise. Headroom 2 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -694,7 +699,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 973,
+	totalCodeKb: 977,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
