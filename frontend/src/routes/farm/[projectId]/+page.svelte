@@ -25,7 +25,7 @@
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
 	import { readUnit } from '$lib/components/farm/savedCopy';
-	import { t } from '$lib/i18n/locale.svelte';
+	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
@@ -62,7 +62,7 @@
 			<!-- No signal: the reduced view over the saved copy (board 8). -->
 			<section class="card" aria-labelledby="o-notice">
 				<h2 id="o-notice">{t('farm.page.offlineNotice', { level: levelWord(view.publication.restriction.level) })}</h2>
-				{#if notice?.title}<p>{notice.title}</p>{/if}
+				{#if notice?.title}<p lang={notice.lang && notice.lang !== wordsLang() ? notice.lang : undefined}>{notice.title}</p>{/if}
 			</section>
 			<section class="card" aria-labelledby="o-glance">
 				<h2 id="o-glance">{t('farm.page.glance')}</h2>
@@ -75,7 +75,7 @@
 			</section>
 			<p class="sub">{stateText('needsConnection')}</p>
 		{:else}
-			<NoticeCard {notice} noneText={noRestriction()} />
+			<NoticeCard {notice} noneText={noRestriction()} pageLang={wordsLang()} />
 			<!-- The farm's own dam alert, while it is firing (WP-2.13). -->
 			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
 			<SupplyCard farm={view.farm} bind:unit />

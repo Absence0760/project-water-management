@@ -142,7 +142,7 @@ describe('what the WUA decided; what this is not', () => {
 	it('match board 4', () => {
 		expect(txt(wuaDecided(vaalbankFixture()))).toBe('Only a notice from your WUA is a restriction. Right now: Advisory. Please cut back where you can.');
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'none', pct: null, notice: null };
+		v.publication.restriction = { level: 'none', pct: null, noticeEn: null, noticeAf: null };
 		expect(txt(wuaDecided(v))).toBe('Only a notice from your WUA is a restriction. Right now: no restriction.');
 		expect(whatThisIsNot(farm())).toEqual([
 			'Not your allocation or licence. It doesn’t know your registered water use.',

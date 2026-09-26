@@ -3,7 +3,7 @@ import type { FarmIndex, FarmView } from '@water-management/engine';
 import { ApiError } from '$lib/api/client';
 import { clearFarmMemo, FarmState } from './farmState.svelte';
 import { vaalbankFixture } from './fixture';
-import { readSaved, writeSaved } from './savedCopy';
+import { readSaved, SAVED_KEY, writeSaved } from './savedCopy';
 
 const P = 'p-sandspruit';
 const N = 'n-vaalbank';
@@ -129,7 +129,7 @@ describe('FarmState', () => {
 		await s.load(P, N);
 		expect(s.phase.kind).toBe('ready');
 		expect(s.preview).toBe(true);
-		expect(localStorage.getItem('wm.farm.saved.v1')).toBeNull();
+		expect(localStorage.getItem(SAVED_KEY)).toBeNull();
 		const f = new FarmState(fakeApi(), () => 'u1');
 		await f.load(P, N);
 		expect(f.preview).toBe(false);
@@ -140,7 +140,7 @@ describe('FarmState', () => {
 		await s.load(P, N);
 		expect(s.phase.kind).toBe('ready');
 		expect(s.preview).toBe(false);
-		expect(localStorage.getItem('wm.farm.saved.v1')).not.toBeNull();
+		expect(localStorage.getItem(SAVED_KEY)).not.toBeNull();
 	});
 
 	it('reuses a view fetched a moment ago on the next farm page', async () => {

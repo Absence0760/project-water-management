@@ -550,9 +550,11 @@ settled something this spec left open:*
 - *The binding site (`river.bindingSite`) is recomputed from the run's
   stored flows with the engine's attribution, since a run doesn't store it
   (exact unless the transfer rules form a loop; followups.md).*
-- *`FarmView.publication.restriction` gains an optional `noticeLang`, so the
-  page can show "not translated" when the notice falls back to the other
-  language (§7).*
+- *`FarmView.publication.restriction` carries both notices (`noticeEn`,
+  `noticeAf`), and the page picks the reader's language, showing "not
+  translated" when it falls back to the other (§7). (First built as one
+  `notice` picked by `?lang` with a `noticeLang`; changed in WP-2.5 so a
+  language switch and the saved copy need no second request.)*
 - *A legacy-runoff-model run can't be published (audit H1).*
 - *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop
   level); "all when your dam was down to its stop level" reads for dam farms

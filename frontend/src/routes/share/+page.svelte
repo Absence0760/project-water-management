@@ -79,7 +79,7 @@
 				<p class="dates">{publishedLine(view)}</p>
 			</div>
 
-			<NoticeCard {notice} noneText="No restriction from the WUA" lang={notice?.lang === 'af' ? 'af' : null} />
+			<NoticeCard {notice} noneText="No restriction from the WUA" pageLang="en" />
 
 			<section class="card" aria-labelledby="reserve-h">
 				<h2 id="reserve-h">The river’s ecological reserve</h2>

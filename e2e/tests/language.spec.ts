@@ -1,27 +1,20 @@
 // Language and units (WP-2.5, docs/ui.md § Language): the EN | AF switch on
 // the sign-in pages, the farm view and the account page; the choice is kept
 // on the device and, signed in, on the account (PATCH /auth/me), with the
-// farm view's numbers following it at once (a decimal comma in Afrikaans).
+// farm view's numbers following it at once (a decimal comma in Afrikaans),
+// and the WUA's own Afrikaans notice too (it is the WUA's words, not ours).
 //
 // No Afrikaans wording is reviewed yet (docs/i18n/af-translation-sheet.md),
 // so the words stay English and <html lang> stays "en": the page never claims
 // to be Afrikaans while its words are English. The emails are covered by
 // backend/src/auth/locale.db.test.ts (e2e mail goes to the server log).
 import type { APIRequestContext, Page } from '@playwright/test';
-import { register } from '../support/api.ts';
+import { createRun, register, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
-import { ANALYST, FARMER1, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
-
-test.beforeAll(async ({ playwright }) => {
-	test.setTimeout(90_000);
-	const api = await playwright.request.newContext();
-	await seedExamplesOnce(api);
-	await api.dispose();
-});
 
 const me = async (request: APIRequestContext) => ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { locale: string | null; volumeUnit: string } }).user;
 const switchIn = (page: Page) => page.getByRole('group', { name: 'Language' }).first();
@@ -43,26 +36,34 @@ test('the sign-in page switches language, marks each option with its own lang, a
 	await expectNoViolations(page);
 });
 
-test('a farmer’s choice of language and unit is saved to the account, and the farm view writes a decimal comma in Afrikaans', async ({ page, playwright }) => {
+test('a farmer’s choice of language and unit is saved to the account; the farm view writes a decimal comma, and the WUA’s own Afrikaans notice', async ({ page, signIn }) => {
 	await page.setViewportSize(PHONE);
-	// A fresh farmer on Vaalbank, so the seeded farmers' own preferences stay as they are for other specs.
+	// Its own published catchment and a fresh farmer, so neither the seeded
+	// farmers' preferences nor the seeded catchments' farmer lists change under
+	// other specs (examples.spec.ts counts Sandspruit's farmers).
+	const wua = await signIn('Taal WUA');
+	const project = await seedRunnableProject(wua.page.request, 'Taal catchment');
+	const runId = await createRun(wua.page.request, project.id, 'Baseline');
+	// The WUA writes both notices; these stand in for its words (the app never writes restriction text).
+	const restriction = { level: 'advisory', pct: null, noticeEn: 'English notice from the WUA, for the test.', noticeAf: '[af] Afrikaans notice from the WUA, for the test.' };
+	const pub = await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction } });
+	expect(pub.status(), await pub.text()).toBe(201);
 	const farmer = await register(page.context().request, 'Taal Farmer');
-	const staff = await playwright.request.newContext();
-	expect((await staff.post(`${API_URL}/auth/login`, { data: FARMER1 })).ok()).toBe(true);
-	const { projects } = (await (await staff.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
-	const projectId = projects.find((p) => p.role === 'farmer')!.id;
-	const { farms } = (await (await staff.get(`${API_URL}/projects/${projectId}/farm`)).json()) as { farms: { nodeId: string }[] };
-	expect((await staff.post(`${API_URL}/auth/login`, { data: ANALYST })).ok()).toBe(true);
-	const added = await staff.post(`${API_URL}/projects/${projectId}/farmers`, { data: { email: farmer.email, nodeIds: [farms[0]!.nodeId] } });
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	const added = await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } });
 	expect(added.status(), await added.text()).toBe(201);
-	await staff.dispose();
 
 	await page.goto('/farm');
-	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
+	await expect(page).toHaveURL(new RegExp(`/farm/${project.id}$`));
+	const projectId = project.id;
 	const supply = page.getByRole('region', { name: 'Water you received this season' });
 	await supply.getByRole('button', { name: 'ML' }).click();
 	await expect(supply.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
 	await expect.poll(async () => (await me(page.request)).volumeUnit).toBe('ML');
+
+	// English first.
+	const notice = page.locator('#notice');
+	await expect(notice.getByText(restriction.noticeEn)).toBeVisible();
 
 	const numbers = page.getByRole('region', { name: 'Last 12 months, in ML' });
 	await numbers.getByText('Show the numbers', { exact: true }).click();
@@ -74,6 +75,10 @@ test('a farmer’s choice of language and unit is saved to the account, and the 
 	await expect(table).not.toContainText(/\d\.\d\sML/);
 	await expect.poll(async () => (await me(page.request)).locale).toBe('af');
 	await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+	// The WUA's Afrikaans is real, so it follows the choice at once, marked as Afrikaans on the English page.
+	await expect(notice.getByText(restriction.noticeAf)).toHaveAttribute('lang', 'af');
+	await expect(notice).not.toContainText(restriction.noticeEn);
+	await expect(notice).not.toContainText('only.');
 
 	// From the account now, not just this device: a fresh browser signed in as the farmer starts in Afrikaans and ML.
 	await page.context().clearCookies();

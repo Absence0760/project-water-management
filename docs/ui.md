@@ -2268,7 +2268,13 @@ published.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
-  restriction from the WUA"; water received this season with the ML/m³
+  restriction from the WUA". The notice is in the language the reader
+  chose (the WUA's own Afrikaans follows the switch at once, even while
+  the page's words are still English, and carries `lang="af"`), or in the
+  one the WUA wrote, with "The WUA wrote this notice in English only" (or
+  "in Afrikaans only") under it (design §7). `FarmView` carries both
+  (`noticeEn`, `noticeAf`), so a switch needs no request and the saved copy
+  holds both (`farm/notice.ts` `pickNotice`, shared with `/share`); water received this season with the ML/m³
   switch (saved to the account, `app_user.volume_unit`, and kept on the
   phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level

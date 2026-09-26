@@ -69,7 +69,7 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	expect(view.status()).toBe(200);
 	const body = await view.json();
 	expect(body.farm.name).toBe('Upper farm');
-	expect(body.publication.restriction).toEqual({ level: 'restricted', pct: 25, notice: 'The river is low. Please irrigate at night.', noticeLang: 'en' });
+	expect(body.publication.restriction).toEqual({ level: 'restricted', pct: 25, noticeEn: 'The river is low. Please irrigate at night.', noticeAf: null });
 	expect(body.publication.nextExpectedOn).toBe('2022-02-15');
 	expect(JSON.stringify(body)).not.toContain('Lower farm');
 });

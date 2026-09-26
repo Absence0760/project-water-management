@@ -162,9 +162,14 @@ export interface FarmView {
 			level: RestrictionLevel;
 			/** The WUA's percentage, 0–100 (run_publication.restriction_pct), not a fraction. */
 			pct: number | null;
-			notice: string | null;
-			/** The language `notice` is in: the other one when the viewer's language has none (design §7, "not translated"). Absent without a notice. */
-			noticeLang?: 'en' | 'af';
+			/**
+			 * The WUA's notice as it wrote it, in English and in Afrikaans (either
+			 * may be null). The page shows the one in the reader's language, or the
+			 * other with a "not translated" line (design §7), so a language switch
+			 * or the saved copy on the phone needs no second request.
+			 */
+			noticeEn: string | null;
+			noticeAf: string | null;
 		};
 		/** E10: when the WUA expects to publish next; null if not set. */
 		nextExpectedOn: string | null;

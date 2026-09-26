@@ -88,7 +88,8 @@ export function vaalbankFixture(): FarmView {
 			restriction: {
 				level: 'advisory',
 				pct: null,
-				notice:
+				noticeAf: null,
+				noticeEn:
 					'Please cut back where you can\nThe river at the outlet is below its reserve. Irrigate at night and cut back where you can. The board meets on 20 Jan to decide on restrictions.'
 			},
 			nextExpectedOn: null

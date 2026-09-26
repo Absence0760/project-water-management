@@ -99,6 +99,19 @@ describe('the saved copy (§9)', () => {
 		expect(readSaved('u1', 'p', 'n1', T0, s)).not.toBeNull();
 	});
 
+	it('drops a copy kept in the older format (one notice) rather than show it, and never leaves it behind', () => {
+		const s = memory();
+		s.m.set('wm.farm.saved.v1', JSON.stringify({ userId: 'u1', entries: { 'p/n1': { view, savedAt: T0, usedAt: T0 } } }));
+		expect(readSaved('u1', 'p', 'n1', T0, s)).toBeNull();
+		expect(s.m.has('wm.farm.saved.v1')).toBe(false);
+		s.m.set('wm.farm.saved.v1', '{}');
+		clearAllSaved(s);
+		expect(s.m.has('wm.farm.saved.v1')).toBe(false);
+		s.m.set('wm.farm.saved.v1', '{}');
+		setKeepsCopy(false, s);
+		expect(s.m.has('wm.farm.saved.v1')).toBe(false);
+	});
+
 	it('treats broken, blocked or missing storage as "no copy"', () => {
 		const s = memory();
 		s.m.set(SAVED_KEY, '{not json');

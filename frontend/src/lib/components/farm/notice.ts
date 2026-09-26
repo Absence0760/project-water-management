@@ -4,6 +4,8 @@
 // re-exports it).
 import type { RestrictionLevel } from '@water-management/engine';
 
+export type NoticeLang = 'en' | 'af';
+
 export interface NoticeVm {
 	level: RestrictionLevel;
 	/** "Notice from the WUA · Advisory", above the heading; null when it is the heading. */
@@ -16,6 +18,24 @@ export interface NoticeVm {
 	byline: string;
 	/** The notice's first line (its title), for the "Why?" page and the offline view. */
 	title: string | null;
+	/** The language the WUA's words are in; null without words. */
+	lang: NoticeLang | null;
+	/** "The WUA wrote this notice in English only.": when the words aren't in the reader's language (design §7). */
+	langNote: string | null;
+}
+
+/**
+ * The WUA's notice in the reader's language, or in the other one when theirs
+ * isn't written (design §7); null when it wrote neither. Blank counts as not
+ * written.
+ */
+export function pickNotice(r: { noticeEn: string | null; noticeAf: string | null }, reader: NoticeLang): { text: string; lang: NoticeLang } | null {
+	const en = r.noticeEn?.trim() ? r.noticeEn : null;
+	const af = r.noticeAf?.trim() ? r.noticeAf : null;
+	if (reader === 'af' && af) return { text: af, lang: 'af' };
+	if (en) return { text: en, lang: 'en' };
+	if (af) return { text: af, lang: 'af' };
+	return null;
 }
 
 /**

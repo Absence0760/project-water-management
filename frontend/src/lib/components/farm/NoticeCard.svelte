@@ -5,11 +5,14 @@
 	// WUA" in the success fill. Only this card uses those fills (§6.2).
 	import type { NoticeVm } from './notice';
 
-	// `lang`: the language the WUA's words are in, when it isn't the page's
-	// (the /share page's Afrikaans notice); our own label stays unmarked.
+	// `pageLang`: the language the page's words are in (<html lang>). The WUA's
+	// words carry their own `lang` when they are in the other language (an
+	// Afrikaans notice on an English page); our own label and the "not
+	// translated" line stay unmarked.
 	// `noneText`: the "No restriction from the WUA" heading, in the page's words
 	// (the farm view's comes from the catalogue, /share's is English).
-	let { notice, noneText, lang = null }: { notice: NoticeVm | null; noneText: string; lang?: string | null } = $props();
+	let { notice, noneText, pageLang }: { notice: NoticeVm | null; noneText: string; pageLang: string } = $props();
+	const lang = $derived(notice?.lang && notice.lang !== pageLang ? notice.lang : undefined);
 </script>
 
 {#if notice}
@@ -26,15 +29,16 @@
 				<span>{notice.label}</span>
 			</div>
 		{/if}
-		<h2 id="notice-h" lang={notice.label ? (lang ?? undefined) : undefined}>
+		<h2 id="notice-h" lang={notice.label ? lang : undefined}>
 			{#if !notice.label}
 				<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /></svg>
 			{/if}
 			{notice.heading}
 		</h2>
 		{#if notice.body}
-			{#each notice.body.split('\n') as para, i (i)}<p lang={lang ?? undefined}>{para}</p>{/each}
+			{#each notice.body.split('\n') as para, i (i)}<p {lang}>{para}</p>{/each}
 		{/if}
+		{#if notice.langNote}<p class="lang-note">{notice.langNote}</p>{/if}
 		{#if notice.pctLine}<p>{notice.pctLine}</p>{/if}
 		<p class="by">{notice.byline}</p>
 	</section>
@@ -84,7 +88,8 @@
 		gap: 8px;
 		align-items: flex-start;
 	}
-	.by {
+	.by,
+	.lang-note {
 		font-size: 14px;
 		color: var(--text-2);
 	}

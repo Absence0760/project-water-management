@@ -113,11 +113,11 @@ test('the seeded farmer reads their published farm and the advisory notice', asy
 	const index = await (await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm`)).json();
 	expect(index.farms.map((f: { name: string }) => f.name)).toEqual(['Vaalbank']);
 	expect(index.publication.restriction.level).toBe('advisory');
-	const view = await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm/${index.farms[0].nodeId}?lang=af`);
+	const view = await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm/${index.farms[0].nodeId}`);
 	expect(view.status()).toBe(200);
 	const body = await view.json();
 	expect(body.farm.name).toBe('Vaalbank');
-	expect(body.publication.restriction).toMatchObject({ level: 'advisory', noticeLang: 'af' });
-	expect(body.publication.restriction.notice).toMatch(/^Die rivier is laag/);
+	expect(body.publication.restriction.level).toBe('advisory');
+	expect(body.publication.restriction.noticeAf).toMatch(/^Die rivier is laag/);
 	expect(body.farm.monthly).toHaveLength(12);
 });

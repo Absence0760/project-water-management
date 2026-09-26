@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-516 strings: 422 on the site, 70 in emails, 24 in the glossary.
+518 strings: 424 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -323,6 +323,8 @@ Farm view: the WUA’s notice card, first on the page.
 | `farm.notice.label` | Notice from the WUA · {level} | Keep: {level} |  |
 | `farm.notice.pct` | Set by the WUA: {pct} of registered use. | A percentage of the farm’s registered water use. Keep: {pct} |  |
 | `farm.notice.none` | No restriction from the WUA |  |  |
+| `farm.notice.onlyEn` | The WUA wrote this notice in English only. | Under the WUA’s notice when the reader chose Afrikaans and the WUA wrote it only in English. |  |
+| `farm.notice.onlyAf` | The WUA wrote this notice in Afrikaans only. | Under the WUA’s notice when the reader chose English and the WUA wrote it only in Afrikaans. |  |
 
 ### farm.page
 

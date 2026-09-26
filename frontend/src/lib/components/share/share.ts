@@ -10,7 +10,7 @@
 // signed-in farmer surfaces; docs/followups.md § Afrikaans), so its words are
 // English here rather than borrowed from the farm view's catalogue keys.
 import type { PublicationRestriction, SharedCatchmentView, ShareView } from '$lib/api/types';
-import { splitNotice, type NoticeVm } from '$lib/components/farm/notice';
+import { pickNotice, splitNotice, type NoticeVm } from '$lib/components/farm/notice';
 import { fmtDay, fmtPct, fmtStampDay, NBSP } from '$lib/components/farm/numbers';
 
 const LEVEL_WORD: Record<PublicationRestriction['level'], string> = { none: 'No restriction', advisory: 'Advisory', restricted: 'Restriction' };
@@ -47,21 +47,11 @@ export function prefersAfrikaans(languages: readonly string[]): boolean {
 	return false;
 }
 
-/** The notice in the reader's language, or in the other one when theirs isn't written; null without one. */
-export function pickNotice(r: PublicationRestriction, languages: readonly string[]): { text: string; lang: 'en' | 'af' } | null {
-	const af = r.noticeAf?.trim() ? r.noticeAf : null;
-	const en = r.noticeEn?.trim() ? r.noticeEn : null;
-	if (prefersAfrikaans(languages) && af) return { text: af, lang: 'af' };
-	if (en) return { text: en, lang: 'en' };
-	if (af) return { text: af, lang: 'af' };
-	return null;
-}
-
 /** The WUA's notice card (the farmer view's NoticeCard lays it out); null for level `none`. */
-export function shareNotice(view: ShareView, languages: readonly string[]): (NoticeVm & { lang: 'en' | 'af' | null }) | null {
+export function shareNotice(view: ShareView, languages: readonly string[]): NoticeVm | null {
 	const { restriction: r, publishedAt, publishedBy } = view.publication;
 	if (r.level === 'none') return null;
-	const picked = pickNotice(r, languages);
+	const picked = pickNotice(r, prefersAfrikaans(languages) ? 'af' : 'en');
 	const { title, body } = splitNotice(picked?.text ?? null);
 	const label = `Notice from the WUA · ${LEVEL_WORD[r.level]}`;
 	return {
@@ -73,7 +63,8 @@ export function shareNotice(view: ShareView, languages: readonly string[]): (Not
 		pctLine: !title && !body && r.pct != null ? `Set by the WUA: ${fmtPct(r.pct / 100)} of registered use.` : null,
 		byline: `${publishedBy ?? 'A former member'}, ${fmtStampDay(publishedAt)}`,
 		title,
-		lang: picked?.lang ?? null
+		lang: picked?.lang ?? null,
+		langNote: null
 	};
 }
 

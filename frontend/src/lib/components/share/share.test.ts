@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ShareView } from '$lib/api/types';
-import { DEAD_LINK, farmsLine, pickNotice, prefersAfrikaans, publishedLine, readShareToken, reserveRows, shareNotice } from './share';
+import { DEAD_LINK, farmsLine, prefersAfrikaans, publishedLine, readShareToken, reserveRows, shareNotice } from './share';
 
 /** Intl joins dates and our figures with no-break spaces; compare with plain ones. */
 const sp = (s: string | null | undefined) => s?.replace(/[  ]/g, ' ');
@@ -52,15 +52,6 @@ describe('the notice', () => {
 		expect(prefersAfrikaans(['en-ZA', 'af'])).toBe(false);
 		expect(prefersAfrikaans(['zu'])).toBe(false);
 		expect(prefersAfrikaans([])).toBe(false);
-	});
-
-	it('reads English, or Afrikaans for an Afrikaans browser, falling back to the language that is written', () => {
-		const r = view().publication.restriction;
-		expect(pickNotice(r, ['en'])).toEqual({ text: r.noticeEn, lang: 'en' });
-		expect(pickNotice(r, ['af'])).toEqual({ text: r.noticeAf, lang: 'af' });
-		expect(pickNotice({ ...r, noticeAf: null }, ['af'])).toEqual({ text: r.noticeEn, lang: 'en' });
-		expect(pickNotice({ ...r, noticeEn: '  ' }, ['en'])).toEqual({ text: r.noticeAf, lang: 'af' });
-		expect(pickNotice({ ...r, noticeEn: null, noticeAf: null }, ['en'])).toBeNull();
 	});
 
 	it('builds the notice card: title, text, the percentage and who published it', () => {

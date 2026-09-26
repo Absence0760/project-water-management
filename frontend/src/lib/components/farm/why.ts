@@ -7,9 +7,10 @@
 // - the pump figure is per day the river needed it, with the season average after;
 // - the dam part is information, not an instruction (no release-works flag yet, E9).
 import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView } from '@water-management/engine';
-import { t, tRich } from '$lib/i18n/locale.svelte';
+import { i18n, t, tRich } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
 import { levelWord, pumpLessAsked, seasonSpan, splitNotice } from './cards';
+import { pickNotice } from './notice';
 import { count, fmtDay, fmtM3Day, fmtNumber, fmtPct, joinAnd, litresPerSecond, NBSP, roundAbout } from './format';
 
 /** "Why about 83 %?", or a plainer title when there's no headline. */
@@ -186,7 +187,8 @@ export function step3(farm: FarmProjection): Step3 | null {
 export function wuaDecided(view: FarmView): Rich {
 	const r = view.publication.restriction;
 	if (r.level === 'none') return tRich('farm.why.decidedNone');
-	const { title } = splitNotice(r.notice);
+	// The same words as the notice card: in the language the reader chose, else the other.
+	const { title } = splitNotice(pickNotice(r, i18n.locale)?.text ?? null);
 	const out = tRich('farm.why.decided', { level: levelWord(r.level) });
 	// The WUA's own title, after the level, in the WUA's words.
 	return title ? [...out, ` ${title.replace(/[.!]?$/, '.')}`] : out;

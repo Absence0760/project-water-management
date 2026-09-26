@@ -1617,7 +1617,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above | farmer |
-| GET | `/projects/:id/farm/:nodeId?lang=en\|af` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my farm", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
@@ -1634,10 +1634,10 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `madeOn` the day the run was made (UTC); nothing about any other farm.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
-- `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice, noticeLang? }, nextExpectedOn }`.
-  `notice` is in the `lang` asked for (default `en`), or in the other
-  language when that one is empty; `noticeLang` says which (absent without
-  a notice).
+- `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn }`.
+  The WUA's notice in both languages as it wrote them (either may be
+  `null`); the page shows the reader's language, or the other with a "not
+  translated" line (design §7), so a language switch needs no request.
 - `outlet30 = { name, daysNotMet, days }`: the outlet over the 30 days to
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)

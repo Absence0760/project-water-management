@@ -1148,10 +1148,11 @@ yet; each lands with the work package named.
 
 - [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
       with WP-2.12 (`farm.forecast` when the published run is a forecast run).
-- [ ] **Afrikaans notice on the farm page**: `FarmView` carries one
-      `notice`, not `notice_en` / `notice_af` (design §7); the /share page
-      already picks between them. Trigger: the translation turnaround in
-      § Afrikaans (WP-2.5).
+- [x] **Afrikaans notice on the farm page**: `FarmView` carries both
+      (`noticeEn`, `noticeAf`, no more `?lang`); the page shows the one in
+      the language the reader chose, marked with its `lang`, or the other
+      with "The WUA wrote this notice in English only" (design §7). The
+      saved copy moved to `wm.farm.saved.v2` (a v1 copy is dropped).
 - [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
       says the WUA can name them; needs an endpoint listing the people with
       access to a farm.

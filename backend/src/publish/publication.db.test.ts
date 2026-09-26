@@ -319,7 +319,7 @@ describe('what a farmer reads', () => {
 			project: { id: projectId, name: 'Publication' },
 			farm: { nodeId: farms[0]!.id, name: 'Farm One', dataUntil: '2023-12-29', season: { from: '2023-10-01', to: '2023-12-29' } },
 			context: { farmsUpstream: 2, farmsDownstream: 0, farmCount: 6 },
-			publication: { publishedBy: 'Peditor', restriction: { level: 'restricted', pct: 25.5, notice: 'Irrigation cut by 25 %.', noticeLang: 'en' }, nextExpectedOn: null },
+			publication: { publishedBy: 'Peditor', restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null }, nextExpectedOn: null },
 			outlet30: { name: 'Weir', days: 30 },
 			stale: true
 		});
@@ -345,9 +345,9 @@ describe('what a farmer reads', () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/publication`)).body.current).toHaveProperty('note');
 	});
 
-	it('falls back to the other language when the viewer’s notice is missing', async () => {
-		const af = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}?lang=af`);
-		expect(af.body.publication.restriction).toEqual({ level: 'restricted', pct: 25.5, notice: 'Irrigation cut by 25 %.', noticeLang: 'en' });
+	it('carries the notice in both languages as the WUA wrote them (the page picks one)', async () => {
+		const res = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`);
+		expect(res.body.publication.restriction).toEqual({ level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null });
 	});
 
 	it('404s a farm the farmer isn’t linked to, even with a publication (positive control: their own is 200)', async () => {

@@ -21,7 +21,6 @@ const isoDate = z
 	.string()
 	.regex(/^\d{4}-\d{2}-\d{2}$/)
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
-const ViewQuery = z.object({ lang: z.enum(['en', 'af']).default('en') });
 const CsvQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
@@ -106,7 +105,6 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 	// Everything the farm page renders, in one response (design §9).
 	.get('/:id/farm/:nodeId', async (c) => {
 		const { id, nodeId } = c.req.param();
-		const q = ViewQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireFarm(db, id, nodeId);
 			const cur = await currentFor(db, id, nodeId);
@@ -123,8 +121,6 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const farm: FarmProjection = showShare
 				? cur.view
 				: { ...cur.view, river: { ...cur.view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
-			const [own, other] = q.lang === 'af' ? [cur.notice_af, cur.notice_en] : [cur.notice_en, cur.notice_af];
-			const noticeLang = own ? q.lang : other ? (q.lang === 'af' ? 'en' : 'af') : null;
 			const cv = cur.catchment_view;
 			const outlet = cv.sites.find((s) => s.isOutlet) ?? cv.sites[0];
 			const body: FarmView = {
@@ -138,9 +134,9 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					restriction: {
 						level: cur.restriction_level,
 						pct: cur.restriction_pct === null ? null : Number(cur.restriction_pct),
-						notice: own ?? other ?? null,
-						// Which language `notice` is in: the other one when the viewer's isn't written (design §7).
-						...(noticeLang ? { noticeLang } : {})
+						// Both, as the WUA wrote them: the page picks the reader's language (design §7).
+						noticeEn: cur.notice_en,
+						noticeAf: cur.notice_af
 					},
 					nextExpectedOn: cur.next_expected_on
 				},

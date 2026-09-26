@@ -58,7 +58,7 @@ const variants: [string, (v: FarmView) => void][] = [
 	['only low rain', (v) => v.farm.river.sites.forEach((s) => (s.daysOnlyNatural = s.daysNotMet))],
 	['never asked', (v) => ((v.farm.river.chargedDays = 0), (v.farm.river.sites = []))],
 	['no headline', (v) => ((v.farm.river.headline = null), (v.farm.river.band = null), (v.farm.season.fraction = null))],
-	['restricted', (v) => (v.publication.restriction = { level: 'restricted', pct: 20, notice: null })],
+	['restricted', (v) => (v.publication.restriction = { level: 'restricted', pct: 20, noticeEn: null, noticeAf: null })],
 	[
 		'with a forecast (WP-2.12)',
 		(v) =>

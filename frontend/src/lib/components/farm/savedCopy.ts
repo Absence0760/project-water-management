@@ -15,7 +15,9 @@
 import type { FarmView } from '@water-management/engine';
 import type { VolumeUnit } from './format';
 
-export const SAVED_KEY = 'wm.farm.saved.v1';
+// v2: FarmView's notice became noticeEn / noticeAf (WP-2.5); a v1 copy is dropped, never shown without its notice.
+export const SAVED_KEY = 'wm.farm.saved.v2';
+const OLD_SAVED_KEYS = ['wm.farm.saved.v1'];
 export const NO_COPY_KEY = 'wm.farm.no-copy';
 export const UNIT_KEY = 'wm.farm.unit';
 /** A copy nobody has opened for this long is dropped. */
@@ -47,8 +49,14 @@ function storage(s?: Storage | null): Storage | null {
 
 const key = (projectId: string, nodeId: string) => `${projectId}/${nodeId}`;
 
+/** Remove copies kept under an older format (they'd hold a farm's figures past sign-out otherwise). */
+function dropOld(s: Storage): void {
+	for (const k of OLD_SAVED_KEYS) s.removeItem(k);
+}
+
 function load(s: Storage): Store | null {
 	try {
+		dropOld(s);
 		const raw = s.getItem(SAVED_KEY);
 		if (!raw) return null;
 		const v = JSON.parse(raw) as Store;
@@ -99,6 +107,7 @@ export function setKeepsCopy(keep: boolean, s?: Storage | null): void {
 		else {
 			st.setItem(NO_COPY_KEY, '1');
 			st.removeItem(SAVED_KEY);
+			dropOld(st);
 		}
 	} catch {
 		// Nothing to do: storage is unavailable.
@@ -175,6 +184,7 @@ export function clearAllSaved(s?: Storage | null): void {
 	if (!st) return;
 	try {
 		st.removeItem(SAVED_KEY);
+		dropOld(st);
 	} catch {
 		// Storage unavailable: nothing was kept.
 	}

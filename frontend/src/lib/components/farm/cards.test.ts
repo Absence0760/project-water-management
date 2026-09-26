@@ -1,7 +1,7 @@
 // The main page's strings, pinned to the design's boards
 // (docs/design/farmer-view-prototype/Main.dc.html, Farms.dc.html) with the
 // Vaalbank fixture, plus the rules the design states for the other cases.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { FarmProjection, FarmView } from '@water-management/engine';
 import {
 	compareCard,
@@ -23,6 +23,7 @@ import {
 	systemName, accessLine } from './cards';
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
+import { setLocale } from '$lib/i18n/locale.svelte';
 
 const sp = (s: string | null | undefined) => s?.replace(/ /g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);
@@ -64,17 +65,52 @@ describe('the notice', () => {
 
 	it('is null with no restriction (the page says "No restriction from the WUA")', () => {
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'none', pct: null, notice: null };
+		v.publication.restriction = { level: 'none', pct: null, noticeEn: null, noticeAf: null };
 		expect(noticeCard(v)).toBeNull();
 	});
 
 	it('names a restriction and, with no text, carries only the published percentage', () => {
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'restricted', pct: 20, notice: null };
+		v.publication.restriction = { level: 'restricted', pct: 20, noticeEn: null, noticeAf: null };
 		const n = noticeCard(v)!;
 		expect(n.heading).toBe('Notice from the WUA · Restriction');
 		expect(n.label).toBeNull();
 		expect(sp(n.pctLine)).toBe('Set by the WUA: 20 % of registered use.');
+	});
+
+	describe('in the language the reader chose (design §7)', () => {
+		afterEach(() => setLocale('en'));
+		const both = () => {
+			const v = vaalbankFixture();
+			v.publication.restriction = { level: 'advisory', pct: null, noticeEn: 'Irrigate at night', noticeAf: '[af] Irrigate at night' };
+			return v;
+		};
+
+		it('reads the English to an English reader, with no line about it', () => {
+			expect(noticeCard(both())).toMatchObject({ heading: 'Irrigate at night', lang: 'en', langNote: null });
+		});
+
+		it('reads the WUA’s Afrikaans to someone who chose Afrikaans, though our own words are still English', async () => {
+			await setLocale('af', {});
+			expect(noticeCard(both())).toMatchObject({ heading: '[af] Irrigate at night', lang: 'af', langNote: null, label: 'Notice from the WUA · Advisory' });
+		});
+
+		it('falls back to the language the WUA wrote, and says so', async () => {
+			const enOnly = both();
+			enOnly.publication.restriction.noticeAf = null;
+			await setLocale('af', {});
+			expect(noticeCard(enOnly)).toMatchObject({ heading: 'Irrigate at night', lang: 'en', langNote: 'The WUA wrote this notice in English only.' });
+			await setLocale('en');
+			const afOnly = both();
+			afOnly.publication.restriction.noticeEn = '  ';
+			expect(noticeCard(afOnly)).toMatchObject({ heading: '[af] Irrigate at night', lang: 'af', langNote: 'The WUA wrote this notice in Afrikaans only.' });
+		});
+
+		it('has no language without words (the percentage alone)', () => {
+			const v = vaalbankFixture();
+			v.publication.restriction = { level: 'restricted', pct: 20, noticeEn: null, noticeAf: null };
+			expect(noticeCard(v)).toMatchObject({ lang: null, langNote: null });
+		});
 	});
 
 	it('splits a notice into title and text', () => {

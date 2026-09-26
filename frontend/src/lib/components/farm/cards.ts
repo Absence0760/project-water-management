@@ -12,9 +12,9 @@
 // constants, for the same reason.
 import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
 import { STALE_DAYS } from '$lib/components/series/freshness';
-import { t, tRich, type MessageKey } from '$lib/i18n/locale.svelte';
+import { i18n, t, tRich, type MessageKey } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
-import { splitNotice, type NoticeVm } from './notice';
+import { pickNotice, splitNotice, type NoticeVm } from './notice';
 import {
 	count,
 	daysBetween,
@@ -59,11 +59,17 @@ export const levelWord = (level: RestrictionLevel) => t(`farm.level.${level}`);
 
 export { splitNotice, type NoticeVm } from './notice';
 
-/** null for level `none` (the page shows "No restriction from the WUA"). */
+/**
+ * null for level `none` (the page shows "No restriction from the WUA"). The
+ * WUA's words in the language the reader chose, or in the other one with a
+ * line saying so (design §7): the chosen language, not the page's words,
+ * since the WUA's Afrikaans is real even while our own isn't translated yet.
+ */
 export function noticeCard(view: FarmView): NoticeVm | null {
 	const r = view.publication.restriction;
 	if (r.level === 'none') return null;
-	const { title, body } = splitNotice(r.notice);
+	const picked = pickNotice(r, i18n.locale);
+	const { title, body } = splitNotice(picked?.text ?? null);
 	const label = t('farm.notice.label', { level: levelWord(r.level) });
 	return {
 		level: r.level,
@@ -73,7 +79,9 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
 		pctLine: !title && !body && r.pct != null ? t('farm.notice.pct', { pct: fmtPct(r.pct / 100) }) : null,
 		byline: `${view.publication.publishedBy}, ${fmtStampDay(view.publication.publishedAt)}`,
-		title
+		title,
+		lang: picked?.lang ?? null,
+		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'farm.notice.onlyEn' : 'farm.notice.onlyAf') : null
 	};
 }
 
