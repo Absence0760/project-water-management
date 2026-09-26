@@ -117,7 +117,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await expect(page.getByRole('region', { name: 'Input time series' }).getByRole('row')).toHaveCount(3);
 
 	// --- run the model ---------------------------------------------------------------
-	await tab(page, 'Runs').click();
+	await tab(page, 'Runs & results').click();
 	await page.getByLabel(/^Run label/).fill('Catchment D baseline');
 	await page.getByRole('button', { name: 'Run model' }).click();
 
@@ -165,6 +165,6 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	// Catchment D still opens with its model and run.
 	await projectRow(page, 'Catchment D').getByRole('link', { name: 'Catchment D', exact: true }).click();
 	await expect(page).toHaveURL(projectUrl);
-	await tab(page, 'Runs').click();
+	await tab(page, 'Runs & results').click();
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toBeVisible();
 });

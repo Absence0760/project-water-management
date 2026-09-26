@@ -18,6 +18,8 @@
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
+	const loadFarmDrawer = () => import('$lib/components/crops/FarmCropsDrawer.svelte');
 	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
 	const loadApplicantView = () => import('$lib/components/scenarios/ApplicantView.svelte');
 </script>
@@ -45,6 +47,7 @@
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
+	import { withoutFarm } from '$lib/components/crops/farmDrawer';
 	import { hasModelInputsToggle, navSections, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
 
 	// The sidebar orders them by section (navSections), not by this list.
@@ -290,6 +293,18 @@
 			return;
 		}
 		if (!confirm(UNSAVED)) nav.cancel();
+	});
+
+	// --- the farm drawer: open while the URL names a farm ---------------------
+	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
+	// goes to where the drawer was opened from rather than reopening it.
+	const drawerFarm = $derived(page.url.searchParams.get('farm'));
+	let drawerOpen = $state(false);
+	$effect(() => {
+		drawerOpen = !!drawerFarm;
+	});
+	$effect(() => {
+		if (!drawerOpen && untrack(() => drawerFarm)) goto(withoutFarm(page.url), { replaceState: true, noScroll: true, keepFocus: true });
 	});
 
 	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
@@ -568,6 +583,21 @@
 			</div>
 			</div>
 
+			{#if drawerFarm}
+				<Lazy load={loadFarmDrawer}>
+					{#snippet children(FarmCropsDrawer)}
+						<FarmCropsDrawer
+							bind:open={drawerOpen}
+							{editor}
+							settings={project!.settings}
+							nodeId={drawerFarm}
+							readonly={!canEdit}
+							onsave={saveModel}
+							bind:reason={saveReason}
+						/>
+					{/snippet}
+				</Lazy>
+			{/if}
 			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
 			{#if canEdit}
 				{#if addMounted}

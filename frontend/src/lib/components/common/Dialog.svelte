@@ -10,9 +10,12 @@
 		// Near full-viewport, for a big data table: the body becomes a flex column so a child
 		// with `flex: 1; min-height: 0` takes the remaining height and scrolls on its own.
 		full = false,
+		// A sheet down the right edge, full height, for editing one thing beside the page
+		// (the per-farm planted areas, crops/FarmCropsDrawer.svelte). Full width on a phone.
+		side = false,
 		children,
 		actions
-	}: { open?: boolean; title: string; wide?: boolean; full?: boolean; children: Snippet; actions: Snippet } =
+	}: { open?: boolean; title: string; wide?: boolean; full?: boolean; side?: boolean; children: Snippet; actions: Snippet } =
 		$props();
 
 	let el: HTMLDialogElement | undefined = $state();
@@ -25,7 +28,7 @@
 	});
 </script>
 
-<dialog bind:this={el} class:wide class:full aria-labelledby={titleId} onclose={() => (open = false)}>
+<dialog bind:this={el} class:wide class:full class:side aria-labelledby={titleId} onclose={() => (open = false)}>
 	<h2 id={titleId}>{title}</h2>
 	<div class="body">{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
@@ -71,6 +74,21 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+	dialog.side {
+		margin: 0 0 0 auto;
+		width: min(480px, 100%);
+		height: 100%;
+		max-height: 100%;
+		border-width: 0 0 0 1px;
+		border-radius: 0;
+	}
+	dialog.side[open] {
+		display: flex;
+		flex-direction: column;
+	}
+	dialog.side .body {
+		flex: 1;
 	}
 	/* Room for the close button so a long title never runs under it. */
 	h2 {

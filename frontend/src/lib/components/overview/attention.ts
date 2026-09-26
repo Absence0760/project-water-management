@@ -4,6 +4,7 @@
 // it is fixed or read. An empty list hides the panel.
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
+import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { describeAge } from '$lib/components/series/coverage';
 import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
@@ -17,8 +18,10 @@ export interface AttentionItem {
 	text: string;
 	/** The link's words: what to do about it. */
 	action: string;
-	/** `?tab=…` (and `&run=…` for a run). */
+	/** `?tab=…` (and `&run=…` for a run), or `?farm=…` for the farm drawer. */
 	href: string;
+	/** A second link, after the first: the one farm's planted areas (the farm drawer, issue #17). */
+	also?: { action: string; href: string };
 }
 
 export interface AttentionInput {
@@ -54,6 +57,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 			const worst = short.reduce((a, f) => (f.fractionSupplied < a.fractionSupplied ? f : a));
 			const target = fmtPct(SUPPLY_TARGET, 0);
 			const worstText = `${worst.name || 'An unnamed farm'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
+			// Its planted areas, when it is still a farm in the model (the run may be older than an edit).
+			const inModel = model.nodes.some((n) => n.id === worst.nodeId && n.kind === 'farm');
 			out.push({
 				id: 'short-farms',
 				text:
@@ -61,7 +66,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 						? `${worstText}, below the ${target} target.`
 						: `${worstText}, the least of the ${fmtNum(short.length)} farms below ${target} (of ${fmtNum(farms.length)}).`,
 				action: 'See the farm results',
-				href: runHref(latest.id)
+				href: runHref(latest.id),
+				...(inModel ? { also: { action: 'Its planted areas', href: farmDrawerHref(null, worst.nodeId) } } : {})
 			});
 		}
 		const warnings = summary.warnings?.length ?? 0;
@@ -100,13 +106,14 @@ export function attention(input: AttentionInput): AttentionItem[] {
 	// is planted: before that, the setup checklist's crops step says so.
 	const planted = new Set(model.cropAreas.filter((a) => a.areaM2 > 0).map((a) => a.nodeId));
 	if (planted.size) {
-		const bare = model.nodes.filter((n) => n.kind === 'farm' && !planted.has(n.id)).map((n) => n.name || 'Unnamed farm');
+		const bare = model.nodes.filter((n) => n.kind === 'farm' && !planted.has(n.id));
+		// One farm: straight to its planted areas; several: the Crops tab's table.
 		if (bare.length)
 			out.push({
 				id: 'unplanted',
-				text: `${nameList(bare)} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
-				action: 'Set crop areas',
-				href: '?tab=crops'
+				text: `${nameList(bare.map((n) => n.name || 'Unnamed farm'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
+				action: bare.length === 1 ? 'Set its planted areas' : 'Set crop areas',
+				href: bare.length === 1 ? farmDrawerHref(null, bare[0]!.id) : '?tab=crops'
 			});
 	}
 	return out;
