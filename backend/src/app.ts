@@ -16,6 +16,7 @@ import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
+import { noteRoutes } from './notes/routes.js';
 import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
@@ -105,6 +106,7 @@ export function createApp() {
 	projects.route('/', publicationRoutes);
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
+	projects.route('/', noteRoutes);
 	app.route('/projects', projects);
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.

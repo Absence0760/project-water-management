@@ -45,6 +45,9 @@ erDiagram
   app_user |o--o{ data_feed : "acts as (nullable)"
   project_member ||--o{ farm_link : "farmer's farms"
   node     ||--o{ farm_link : "linked farmers"
+  project  ||--o{ note : "notes"
+  node     |o--o{ note : "about (nullable)"
+  model_run |o--o{ note : "about (nullable)"
 ```
 
 ## Tables and their workbook origin
@@ -429,7 +432,9 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
-  `report_schedule.configured`, `scenario.created/changed/deleted`, and
+  `report_schedule.configured`, `scenario.created/changed/deleted`,
+  `note.deleted` (a note hidden by its author or an editor: its target, the
+  author's name and whether it was their own, never the body), and
   restores. `api_key.*` is reserved.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
@@ -852,6 +857,51 @@ Read-only links to the current publication for people outside the project
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
+
+### Notes (035_notes.sql)
+
+Plain-text notes and comments kept against what they are about (WP-2.7;
+[api.md § Notes](./api.md#notes), [ui.md § Notes](./ui.md#notes)).
+
+- `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
+  created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
+  text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
+  setting_key text, visibility 'team' | 'farm')`.
+  - **The target** is a nullable typed foreign key, not a polymorphic id, so
+    the foreign keys and the same-project trigger (`assert_same_project
+    ('node_id', 'run_id')`) work. `note_one_target` allows at most one of
+    `node_id`, `run_id`, `setting_key`; none is a project-level note.
+    `setting_key` is a settings group (`flow`, `ewr`, …) or path
+    (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
+  - **A note goes with its target**: a deleted node or run, or a trimmed
+    run, takes its notes (cascade). Saving the model upserts nodes by id, so
+    a save keeps them.
+  - **`visibility`**: `team` (viewers and above) or `farm` (also the farmers
+    linked to the note's node). `note_farm_on_node` requires a node for
+    `farm`; the API also requires the node to be a farm.
+  - Indexed on `(project_id, created_at DESC)` and each foreign key.
+- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
+  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
+  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
+  trigger lets only the author change the body, stamps `edited_at` and
+  `deleted_by` itself, and refuses to touch a deleted note.
+- **RLS.**
+  - SELECT: viewers and above see every note that isn't deleted; editors, and
+    a note's author, also see deleted ones (Postgres checks an updated row
+    against the SELECT policies, so an author who isn't an editor couldn't
+    otherwise delete their own note). A farmer sees `farm` notes on their
+    linked nodes (`app_farm_nodes`), never a `team` note, a run, settings or
+    project note, or another farm's.
+  - INSERT, as yourself (`author_id = app_current_user_id()`), never already
+    edited or deleted: a viewer and above anywhere; a farmer only on a linked
+    node and only with `visibility = 'farm'`.
+  - UPDATE: a visible, undeleted note, by its author or an editor. Editors
+    moderate: they soft-delete, they can't rewrite (`note_guard`).
+  - No DELETE policy.
+- The API lists no deleted note to anyone. Deleting records `note.deleted`
+  in the audit log; adding and editing don't (the row carries its author,
+  `created_at` and `edited_at`).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 

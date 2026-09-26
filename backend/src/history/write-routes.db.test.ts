@@ -299,6 +299,15 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['report_schedule.configured'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/report-schedules/${c.scheduleId}`)
 	},
+	// --- notes ------------------------------------------------------------------------
+	{
+		route: `DELETE ${P}/notes/:noteId`,
+		records: ['note.deleted'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/notes`, { body: 'Guard note', nodeId: c.farmId });
+			return c.owner.call('DELETE', `${at(c)}/notes/${r.body.note.id}`);
+		}
+	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts runAndStore)' },
@@ -306,6 +315,8 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
+	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (035_notes.sql)' },
+	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (035_notes.sql note_guard)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
 ];
 

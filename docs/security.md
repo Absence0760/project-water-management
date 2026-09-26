@@ -307,6 +307,15 @@ In short:
   notice change `updated_by` / `updated_at`; the full audit log is WP-2.4.
   Share links (a public, token-bearing catchment page) are not built yet
   (WP-2.3 phase 2).
+- **Notes (WP-2.7, 035).** The note routes admit the farmer role and leave
+  the scoping to RLS: a farmer reads and writes only `farm`-visible notes on
+  their linked farms (`note_select_farmer`, `note_insert`), never a `team`
+  note or a run, settings, project or other farm's note. Only the author
+  edits a body (`note_guard`); a delete is soft, the body kept for editors'
+  audit trail and hidden from everyone else. Bodies are plain text, rendered
+  with Svelte's escaping (no `{@html}`, no markdown). Tests:
+  `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
+  the note routes among the farmer-allowed ones.
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
