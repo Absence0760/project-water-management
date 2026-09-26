@@ -183,7 +183,11 @@ level (anything else would change the history the season starts from).
   them). Each member is stored once and never updated; `summariseOutlook`
   is the result. Up to 6 levels and the newest 40 analogue years (240
   member runs), 2 pending per user, the newest 20 per project. A member
-  the engine refuses is stored as failed and the outlook carries on.
+  the engine refuses is stored as failed and the outlook carries on. The
+  job still runs each member as a full run of the history and the season;
+  since engine 0.47.0 the engine can run them from one snapshot of the
+  history instead (model.md §2.16, `runOutlookMember`), the job's switch
+  still to make.
 - **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
   season as a month and day each end (default 1 October – 30 April,
   pending the client's O3) and the planning share (default 80 %, pending
@@ -273,8 +277,10 @@ WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:
 - **the backend half**: a job like R5's outlook job, bands × years ×
-  levels members (`outlookMemberInput(…, { storageM3 })` per band, then
-  `reviewTriggerTable`), with its own member limits; the project settings
+  levels members (from the review date's snapshot with each band's
+  storage, `withDamStorage`, then `outlookSeasonInput` + `runModelFrom`
+  per member; or `outlookMemberInput(…, { storageM3 })` re-running the
+  history), then `reviewTriggerTable`, with its own member limits; the project settings
   for the review date (O3) and, if the WUA sets them, the band edges;
 - **the WUA screen**: the table beside the outlook, each row in
   `describeTriggerRow`'s words, the pending defaults marked, the notes and
