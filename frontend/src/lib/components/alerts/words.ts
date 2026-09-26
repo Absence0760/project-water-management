@@ -1,7 +1,8 @@
 // Alert emails on the translated pages (WP-2.13, docs/ui.md § Alerts): the
 // alert emails page, the unsubscribe page and the farm view's alert card,
 // from the message catalogue. Pure, so it is unit-tested apart from the pages.
-import type { AlertChoice, AlertEvent, AlertMode, Unsubscribed } from '$lib/api/types';
+import type { AlertChoice, AlertEvent, AlertMode, Unsubscribed, User } from '$lib/api/types';
+import { ApiError } from '$lib/api/client';
 import { t, type MessageKey } from '$lib/i18n/locale.svelte';
 
 export const ALERT_MODES: readonly AlertMode[] = ['immediate', 'daily_digest', 'off'];
@@ -27,6 +28,19 @@ export const modeLabel = (m: AlertMode) => t(`alerts.mode.${m}` as MessageKey);
 export function unsubscribedText(u: Unsubscribed): string {
 	if (u.kind === 'all') return t('unsubscribe.doneAll', { project: u.project.name });
 	return t('unsubscribe.done', { kind: t(`unsubscribe.kind.${u.kind}` as MessageKey), project: u.project.name });
+}
+
+// ---- Paused: SES suppressed the address (the account and alert pages' banner) ----
+
+/** Why alert emails are paused, in a sentence naming the address. */
+export function suppressedText(s: NonNullable<User['mailSuppressed']>, email: string): string {
+	return t(s.reason === 'complaint' ? 'alerts.suppressed.complaint' : 'alerts.suppressed.bounce', { email });
+}
+
+/** What the banner says when turning mail back on failed: the day's wait (429), else the server's message. */
+export function resumeProblem(e: unknown): string {
+	if (e instanceof ApiError && e.status === 429) return t('alerts.suppressed.tooSoon');
+	return e instanceof Error ? e.message : String(e);
 }
 
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);

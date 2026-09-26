@@ -626,10 +626,29 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   `alert-mail-failures`, alert sends failing for 15 minutes. Both read the
   worker's embedded metrics (`AlertMailsSent`, `AlertMailsFailed` in
   `water-management/Jobs`).
-- **SES suppression.** Bounced and complaining addresses are on the
-  configuration set's suppression list, so SES drops mail to them; the app
-  doesn't yet turn their alerts off or show a banner
-  ([followups.md § Alerts](./followups.md)).
+- **SES suppression → the app** (`infra/ses.tf`, plan-only until the first
+  deploy). Bounced and complaining addresses are on the configuration set's
+  suppression list, so SES drops mail to them. The same set also publishes
+  `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`, which
+  delivers them raw to the SQS queue `mail-events` (SSE, a DLQ after 5
+  receives, the `mail-events-dlq-depth` alarm), which triggers the worker.
+  The worker (`mail/suppression.ts`) flags the person with that address
+  (`app_user.mail_suppressed_at`, 057) and pauses their alert emails; the
+  account and alert pages show a banner, and **Turn alert emails back on**
+  (`POST /me/alerts/resume`) takes the address off the suppression list
+  (`ses:DeleteSuppressedDestination`, the API role only; once a day per
+  person). A transient bounce (a full mailbox) changes nothing.
+  - *Trust.* The topic's policy admits only SES, for this configuration set
+    in this account; the queue's admits only the topic; and the worker reads
+    a record as an SES event only when its event source is `mail-events`
+    (`MAIL_EVENTS_QUEUE_ARN` in its environment), never from its other
+    queues, and parses it strictly.
+  - *Runbook: the DLQ alarms.* The worker couldn't record a bounce 5 times
+    (usually the database was down); that person's alerts are still on.
+    Redrive `mail-events-dlq` once the worker is healthy. To suppress by
+    hand, as the schema owner: `UPDATE app_user SET mail_suppressed_at =
+    now(), mail_suppressed_reason = 'bounce' WHERE email = '…'`.
+  - Locally: `pnpm dev:mail:bounce <email>` ([run-locally.md § Alerts](./run-locally.md#alerts)).
 
 ## Reports
 

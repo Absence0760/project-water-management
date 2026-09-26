@@ -8,7 +8,7 @@ and dev database are left alone.
 
 ```bash
 pnpm dev:db:up            # docker Postgres on :5434 (once per session)
-pnpm dev:s3:up && pnpm dev:mail:up   # MinIO + Mailpit, for server-report.spec.ts (it skips, saying so, without them; never in CI)
+pnpm dev:s3:up && pnpm dev:mail:up   # MinIO + Mailpit, for server-report.spec.ts, and Mailpit for alerts-mailpit.spec.ts (each skips, saying so, without them; never in CI)
 pnpm test:e2e:install     # once: download Playwright's Chromium
 pnpm test:e2e             # the whole suite, headless
 pnpm test:e2e:ui          # Playwright UI mode (watch, time-travel debugging)

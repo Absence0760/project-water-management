@@ -2209,32 +2209,47 @@ Left, each with its trigger:
 
 ## Alerts (WP-2.13)
 
-- [ ] **SES suppression turns a person's alerts off, with a banner.** SES
-      already drops mail to a bounced or complaining address (the
-      configuration set's suppression list), but the app doesn't know: the
-      person's alerts stay on and nothing tells them. Durable fix: an SES
-      event destination (bounce, complaint) to SNS → the jobs queue, a
-      handler that sets the address's `alert_subscription` rows to `off`
-      and a flag on `app_user`, and a banner on the account and alerts
-      pages. Trigger: SES production access (a prerequisite of Step 2), and
-      before the first farmer gets an alert on production.
-- [ ] **End-to-end through Mailpit.** The roadmap's e2e (a fixture forecast
-      drives a dam below 30 % → an Afrikaans mail for the farmer in Mailpit
-      → one-click unsubscribe → no second mail on the next crossing) isn't
-      built: the flow is proven by `backend/src/alerts/alerts.db.test.ts`
-      (memory outbox, real ticks) and the pages by `e2e/tests/alerts.spec.ts`.
-      Durable fix: a spec that runs `runJobsTick` against Mailpit
-      (`pnpm dev:mail:up`, as `server-report.spec.ts` does) and reads the
-      message through Mailpit's API. Trigger: the reviewed Afrikaans alert
-      wording lands (§ Afrikaans), so the mail it checks is the real one.
+- [x] **SES suppression turns a person's alerts off, with a banner.**
+      Built (057_alert_followups, `mail/suppression.ts`, `infra/ses.tf`):
+      the configuration set publishes bounces and complaints to SNS
+      `ses-events` → SQS `mail-events` → the worker, which flags the
+      address (`app_user.mail_suppressed_at`) and pauses the person's alert
+      emails; the account and alert pages show a banner with **Turn alert
+      emails back on** (`POST /me/alerts/resume`, which also takes the
+      address off SES's suppression list, once a day). Paused rather than
+      set to `off`, so the person's choices come back as they were. A
+      dedicated queue, not the jobs queue: the worker trusts each queue for
+      its own kind of message only. Locally: `pnpm dev:mail:bounce <email>`.
+      The Terraform is plan-tested, not applied (Phase 6).
+- [x] **End-to-end through Mailpit.** Built in English:
+      `e2e/tests/alerts-mailpit.spec.ts`. A synthetic 14-day dry forecast,
+      run and published, takes a farm's dam below the WUA's level (set
+      between the dam today and the forecast's lowest, so the forecast is
+      what crosses); one worker tick (`runJobsTick`) mails the farmer
+      through Mailpit; the spec reads the email through Mailpit's API (the
+      farm and the forecast named, no other farm, the RFC 8058 headers at
+      the API with the link's token), opens its *Stop these emails* link
+      signed out, and checks the next crossing mails the WUA but not the
+      farmer. It needs `pnpm dev:mail:up` and skips without it locally,
+      never in CI (`server-report.spec.ts`'s rule). The Afrikaans run waits
+      for the reviewed wording: the spec's `LANGUAGES` list has a marked
+      hook for it (next item).
 - [ ] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
       `alerts.*`, `unsubscribe.*` and `farm.alerts.*` page keys are on
       `docs/i18n/af-translation-sheet.md`; until they come back an Afrikaans
-      reader gets English (marked `lang="en"`). Trigger: § Afrikaans.
-- [ ] **Per-feed staleness levels.** `data_stale` is one rule per catchment,
-      measured past each feed's own usual delay. Durable fix: a
-      `node_id`-like `feed_id` on `alert_rule` for `data_stale`. Trigger: a
-      WUA asks for a different level per feed.
+      reader gets English (marked `lang="en"`). When they land, add the
+      `af` entry to `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` (the
+      AFRIKAANS HOOK), so the Mailpit e2e checks the Afrikaans mail too.
+      Trigger: § Afrikaans.
+- [x] **Per-feed staleness levels.** Built (057 `alert_rule.feed_id`):
+      one `data_stale` rule per feed, each at its own level past that
+      feed's usual delay, with a default per source (CHIRPS 3 days,
+      CHIRPS-GEFS 2, DWS 30: `SOURCES[source].staleAlertDays`); the rule
+      editor lists them under **Data feeds behind**, and a feed added once
+      they are on gets its rule at its source's default. 051's
+      catchment-wide rules became one per feed at the same level, in place
+      (history kept); a catchment with no feed keeps its choice until its
+      first feed adopts it.
 - [ ] **Open rates and farmer feedback** (the roadmap's recommendation
       before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
       click tracking on the configuration set (POPIA: say so in the privacy

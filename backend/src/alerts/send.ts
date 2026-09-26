@@ -13,7 +13,8 @@
 //
 // Each mail is built in a transaction *as its recipient* (withUser), under
 // RLS: their access is checked again now (app_alert_my_mode: a member removed
-// since the event, or who turned the alert off, gets nothing), and the mail
+// since the event, or who turned the alert off, gets nothing; nor does an
+// address SES has suppressed since, mail/suppression.ts), and the mail
 // can only say what they may read, so a farmer's names their own farm and
 // nothing of a neighbour's. The mail goes out after that transaction, and the
 // outcome is recorded in the worker's own context (app_alert_finish). A
@@ -110,16 +111,24 @@ interface Context {
 	project: { id: string; name: string };
 }
 
-/** Who the transaction's user is, for this project: null when they can't receive mail (no verified address, no access). */
-async function context(db: Db, projectId: string): Promise<Context | null> {
-	const { rows } = await db.query<{ email: string; locale: string | null; verified: boolean; role: string | null; name: string | null }>(
-		`SELECT u.email, u.locale, u.email_verified_at IS NOT NULL AS verified, app_project_role($1)::text AS role,
-			(SELECT p.name FROM project p WHERE p.id = $1) AS name
+/** Why a delivery goes unsent when SES has suppressed its address (057_alert_followups). */
+export const SUPPRESSED = 'the address is suppressed (a bounce or complaint)';
+
+/**
+ * Who the transaction's user is, for this project: why not, when they can't
+ * receive mail (no verified address, no access, or SES suppressed the
+ * address since the delivery was made: mail/suppression.ts).
+ */
+async function context(db: Db, projectId: string): Promise<Context | string> {
+	const { rows } = await db.query<{ email: string; locale: string | null; verified: boolean; suppressed: boolean; role: string | null; name: string | null }>(
+		`SELECT u.email, u.locale, u.email_verified_at IS NOT NULL AS verified, u.mail_suppressed_at IS NOT NULL AS suppressed,
+			app_project_role($1)::text AS role, (SELECT p.name FROM project p WHERE p.id = $1) AS name
 		 FROM app_user u WHERE u.id = app_current_user_id()`,
 		[projectId]
 	);
 	const r = rows[0];
-	if (!r?.verified || !r.role || !r.name) return null;
+	if (!r?.verified || !r.role || !r.name) return 'no longer a member, or no confirmed address';
+	if (r.suppressed) return SUPPRESSED;
 	return { recipient: { email: r.email, locale: r.locale, farmer: r.role === 'farmer' }, role: r.role, project: { id: projectId, name: r.name } };
 }
 
@@ -176,7 +185,7 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 /** One delivery's mail, built as its recipient. */
 async function prepareOne(db: Db, c: Claimed, secret: string): Promise<Prepared> {
 	const ctx = await context(db, c.project_id);
-	if (!ctx) return { skip: 'no longer a member, or no confirmed address' };
+	if (typeof ctx === 'string') return { skip: ctx };
 	const f = await facts(db, c);
 	if (typeof f === 'string') return { skip: f };
 	const { rows: mode } = await db.query<{ mode: AlertMode }>('SELECT app_alert_my_mode($1, $2, $3) AS mode', [c.project_id, c.kind, c.node_id]);
@@ -232,7 +241,7 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 	try {
 		ready = await withUser(first.user_id, async (db): Promise<Ready> => {
 			const ctx = await context(db, first.project_id);
-			if (!ctx) return { skip: 'no longer a member, or no confirmed address' };
+			if (typeof ctx === 'string') return { skip: ctx };
 			const items: AlertFacts[] = [];
 			const used: Claimed[] = [];
 			const skipped: { c: Claimed; why: string }[] = [];

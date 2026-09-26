@@ -3,12 +3,16 @@
 // kept on reload); an alert email's unsubscribe link works signed out, asks
 // before it acts, says what it turned off and takes the token out of the
 // address bar; a replaced or tampered link says it no longer works. Both
-// pages pass axe, on a phone.
+// pages pass axe, on a phone. A bounced address (SES, stood in for by
+// `pnpm dev:mail:bounce`) pauses a person's alert emails behind a banner on
+// the account and alert pages, which turns them back on. An editor sets a
+// staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
-import { seedRunnableProject } from '../support/api.ts';
+import { createProject, seedRunnableProject } from '../support/api.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { simulateBounce } from '../support/jobs.ts';
 
 const PHONE = { width: 360, height: 740 };
 
@@ -89,4 +93,61 @@ test('an alert email’s unsubscribe link works signed out, asks first, and a de
 	} finally {
 		await context.close();
 	}
+});
+
+test('a bounced address pauses the alert emails behind a banner, which turns them back on', async ({ signIn }) => {
+	const farmer = await signIn('Bounced farmer');
+	const email = farmer.user.email;
+	expect(await simulateBounce(email)).toContain('alert emails paused');
+
+	const p = farmer.page;
+	await p.setViewportSize(PHONE);
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	const banner = p.locator('[data-mail-suppressed="bounce"]');
+	await expect(banner.getByText(`Your alert emails are paused. Our emails to ${email} bounced back: the address may be wrong, or the mailbox full or closed.`)).toBeVisible();
+	await expect(banner.getByText(`Once ${email} can receive email again, turn alert emails back on. Your choices are kept.`)).toBeVisible();
+	await expectNoViolations(p);
+
+	// The account page says the same, and turns them back on.
+	await p.goto('/account');
+	const onAccount = p.locator('[data-mail-suppressed="bounce"]');
+	await expect(onAccount).toBeVisible();
+	await expectNoViolations(p);
+	await onAccount.getByRole('button', { name: 'Turn alert emails back on' }).click();
+	await expect(p.getByRole('status').filter({ hasText: 'Alert emails are back on.' })).toBeVisible();
+	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+});
+
+test('an editor sets a staleness level per data feed, starting from its source’s default', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Stale levels catchment');
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/feeds`, { data: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] } } });
+	expect(res.status(), await res.text()).toBe(201);
+	const feedId = ((await res.json()) as { feed: { id: string } }).feed.id;
+
+	await page.goto(`/projects/${project.id}`);
+	const panel = page.getByRole('region', { name: 'Active alerts' });
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await panel.getByRole('button', { name: 'Set up alert emails' }).click();
+	const feeds = panel.getByRole('group', { name: 'Data feeds behind' });
+	await expect(feeds.getByText('Each feed has its own level: the days past that feed’s usual delay before it alerts.')).toBeVisible();
+	const on = feeds.getByRole('checkbox', { name: 'CHIRPS daily rainfall' });
+	const level = feeds.getByRole('spinbutton', { name: 'Alert after (days later than usual for this feed)' });
+	await expect(on).not.toBeChecked();
+	// CHIRPS's default level, off until switched on.
+	await expect(level).toHaveValue('3');
+	await expect(level).toBeDisabled();
+	await expectNoViolations(page, { include: '.alerts' });
+
+	await on.check();
+	await level.fill('5');
+	await panel.getByRole('button', { name: 'Save alert rules' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+	const saved = await page.request.get(`${API_URL}/projects/${project.id}/alert-rules`);
+	const rule = ((await saved.json()).rules as { kind: string; feedId: string | null; threshold: number; enabled: boolean }[]).find((r) => r.kind === 'data_stale')!;
+	expect(rule).toMatchObject({ feedId, threshold: 5, enabled: true });
 });

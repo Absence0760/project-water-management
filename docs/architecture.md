@@ -570,7 +570,8 @@ flowchart LR
    RLS). Values come from the current publication (dam level: the farm's
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
-   is held), the data feeds and the dead jobs. `alerts/rules.ts` decides
+   is held), the data feeds (staleness per feed, each at its own level) and
+   the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly
    opened event is fanned out (`app_alert_fan_out`) to one delivery per
@@ -594,6 +595,15 @@ flowchart LR
 The worker Lambda's metric line carries `AlertMailsSent` and
 `AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on
 failing sends.
+
+**Bounces and complaints** come back the other way: SES's configuration set
+publishes `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`,
+delivered raw to the SQS queue `mail-events`, which triggers the worker
+Lambda (`infra/ses.tf`). The worker reads a record as an SES event only when
+it came from that queue, and `mail/suppression.ts` flags the address
+(`app_mail_suppress`, 057): that person's alert emails pause, with a banner
+on their account and alert pages, until they turn mail back on. Locally,
+`pnpm dev:mail:bounce <email>` runs the same handler.
 
 ## Data feeds
 

@@ -17,7 +17,8 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * RENDER_API_URL: the built site and the e2e API, not the dev servers) in the
  * worker's own headless Chromium, stores the PDF in the local MinIO
  * (`pnpm dev:s3:up`), and mails through Mailpit (`pnpm dev:mail:up`), with
- * links to the e2e site.
+ * links to the e2e site. Alert emails go to Mailpit too, their one-click
+ * unsubscribe pointing at the e2e API (alerts-mailpit.spec.ts).
  *
  * `schedule: false` runs only jobs already queued: no feed or report
  * schedule queues anything, so a spec that queues its own work (a yield)
@@ -36,9 +37,26 @@ export async function runJobsTick({ schedule = true }: { schedule?: boolean } = 
 			RENDER_SITE_URL: WEB_URL,
 			RENDER_API_URL: API_URL,
 			SITE_URL: WEB_URL,
+			// Alert emails' RFC 8058 one-click address: this checkout's e2e API.
+			API_PUBLIC_URL: API_URL,
 			STORAGE: 'local',
 			MAIL_TRANSPORT: 'smtp'
 		},
+		timeout: 60_000
+	});
+	return stdout.trim();
+}
+
+/**
+ * Stand in for an SES bounce or complaint for `email`, the way `pnpm
+ * dev:mail:bounce` does locally (backend/scripts/mail-bounce.ts): the event
+ * SES would publish, through the worker's own handler, against the e2e
+ * database. The account's alert emails pause, behind the banner.
+ */
+export async function simulateBounce(email: string, kind: 'bounce' | 'complaint' = 'bounce'): Promise<string> {
+	const { stdout } = await promisify(execFile)('pnpm', ['exec', 'tsx', 'scripts/mail-bounce.ts', email, ...(kind === 'complaint' ? ['--complaint'] : [])], {
+		cwd: backendDir,
+		env: { ...process.env, DATABASE_URL: APP_E2E_URL },
 		timeout: 60_000
 	});
 	return stdout.trim();

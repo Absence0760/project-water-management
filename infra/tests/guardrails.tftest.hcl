@@ -4,7 +4,7 @@
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin, and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -365,6 +365,33 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:sns:af-south-1:000000000000:water-management-prod-alerts"
+  }
+}
+
+# SES bounces and complaints → the worker (ses.tf, WP-2.13 follow-up)
+override_resource {
+  target          = aws_sns_topic.ses_events
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:af-south-1:000000000000:water-management-ses-events"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.mail_events
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mail-events"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mail-events"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.mail_events_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mail-events-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mail-events-dlq"
   }
 }
 
@@ -878,10 +905,10 @@ run "background_jobs" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
-      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn], one(s.resources)) &&
+      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, aws_sqs_queue.mail_events.arn], one(s.resources)) &&
       alltrue([for a in s.actions : !strcontains(a, "*")])
     ])
-    error_message = "The SQS endpoint policy must name only the jobs, data-feed and render queues, one per statement, with no wildcard actions."
+    error_message = "The SQS endpoint policy must name only the jobs, data-feed, render and mail-events queues, one per statement, with no wildcard actions."
   }
   assert {
     condition = toset(flatten([for s in data.aws_iam_policy_document.sqs_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
@@ -933,6 +960,122 @@ run "background_jobs" {
       aws_cloudwatch_metric_alarm.alert_storm.alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
     error_message = "The alert-storm alarm must read the metric lambda-worker.ts emits (AlertMailsSent) and notify the alerts topic."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# SES bounces and complaints → the app (ses.tf, WP-2.13 follow-up)
+# ---------------------------------------------------------------------------
+
+run "mail_suppression" {
+  command = plan
+
+  # --- The event destination: bounces and complaints, to the ses-events topic ------
+  assert {
+    condition = (
+      aws_sesv2_configuration_set_event_destination.suppression.configuration_set_name == aws_sesv2_configuration_set.main.configuration_set_name &&
+      aws_sesv2_configuration_set_event_destination.suppression.event_destination[0].enabled &&
+      toset(aws_sesv2_configuration_set_event_destination.suppression.event_destination[0].matching_event_types) == toset(["BOUNCE", "COMPLAINT"]) &&
+      aws_sesv2_configuration_set_event_destination.suppression.event_destination[0].sns_destination[0].topic_arn == aws_sns_topic.ses_events.arn
+    )
+    error_message = "The configuration set publishes bounces and complaints (and nothing else) to the ses-events topic."
+  }
+
+  # --- Trust down the chain: SES (this set, this account) → topic → queue ------------
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.ses_events_topic.statement) == 1 &&
+      data.aws_iam_policy_document.ses_events_topic.statement[0].actions == toset(["sns:Publish"]) &&
+      data.aws_iam_policy_document.ses_events_topic.statement[0].resources == toset([aws_sns_topic.ses_events.arn]) &&
+      toset(flatten([for p in data.aws_iam_policy_document.ses_events_topic.statement[0].principals : p.identifiers])) == toset(["ses.amazonaws.com"]) &&
+      anytrue([for c in data.aws_iam_policy_document.ses_events_topic.statement[0].condition : c.variable == "aws:SourceArn" && c.values == tolist([aws_sesv2_configuration_set.main.arn])]) &&
+      anytrue([for c in data.aws_iam_policy_document.ses_events_topic.statement[0].condition : c.variable == "aws:SourceAccount" && c.values == tolist(["000000000000"])])
+    )
+    error_message = "Only SES, for this configuration set in this account, may publish to the ses-events topic."
+  }
+  assert {
+    condition     = aws_sns_topic_policy.ses_events.arn == aws_sns_topic.ses_events.arn
+    error_message = "The ses-events topic carries its publish policy."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.mail_events_queue.statement) == 1 &&
+      data.aws_iam_policy_document.mail_events_queue.statement[0].actions == toset(["sqs:SendMessage"]) &&
+      data.aws_iam_policy_document.mail_events_queue.statement[0].resources == toset([aws_sqs_queue.mail_events.arn]) &&
+      toset(flatten([for p in data.aws_iam_policy_document.mail_events_queue.statement[0].principals : p.identifiers])) == toset(["sns.amazonaws.com"]) &&
+      one(data.aws_iam_policy_document.mail_events_queue.statement[0].condition).variable == "aws:SourceArn" &&
+      one(data.aws_iam_policy_document.mail_events_queue.statement[0].condition).values == tolist([aws_sns_topic.ses_events.arn])
+    )
+    error_message = "Only the ses-events topic may send to the mail-events queue."
+  }
+  assert {
+    condition = (
+      aws_sns_topic_subscription.mail_events.topic_arn == aws_sns_topic.ses_events.arn &&
+      aws_sns_topic_subscription.mail_events.protocol == "sqs" &&
+      aws_sns_topic_subscription.mail_events.endpoint == aws_sqs_queue.mail_events.arn &&
+      aws_sns_topic_subscription.mail_events.raw_message_delivery
+    )
+    error_message = "The topic delivers raw SES events (no SNS envelope, mail/suppression.ts) to the mail-events queue."
+  }
+
+  # --- The queue: encrypted, a DLQ after 5 receives, visibility past the worker's timeout ---
+  assert {
+    condition     = aws_sqs_queue.mail_events.sqs_managed_sse_enabled && aws_sqs_queue.mail_events_dlq.sqs_managed_sse_enabled
+    error_message = "Both mail-events queues must be encrypted (SSE-SQS): they hold addresses."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sqs_queue.mail_events.redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.mail_events.redrive_policy).deadLetterTargetArn == aws_sqs_queue.mail_events_dlq.arn &&
+      aws_sqs_queue.mail_events.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+    )
+    error_message = "mail-events dead-letters after 5 receives, with visibility at least 6x the worker's timeout."
+  }
+
+  # --- The worker consumes it, and knows which queue is which ---------------------------
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.worker_mail_events.event_source_arn == aws_sqs_queue.mail_events.arn &&
+      aws_lambda_event_source_mapping.worker_mail_events.function_name == aws_lambda_function.worker.arn &&
+      aws_lambda_function.worker.environment[0].variables["MAIL_EVENTS_QUEUE_ARN"] == aws_sqs_queue.mail_events.arn
+    )
+    error_message = "mail-events triggers the worker, which reads a record as an SES event only from that queue (MAIL_EVENTS_QUEUE_ARN)."
+  }
+  assert {
+    condition = (
+      toset(flatten([for s in data.aws_iam_policy_document.worker_mail_events.statement : s.resources])) == toset([aws_sqs_queue.mail_events.arn]) &&
+      alltrue([for s in data.aws_iam_policy_document.worker_mail_events.statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*") && a != "sqs:SendMessage"])]) &&
+      aws_iam_role_policy.worker_mail_events.role == aws_iam_role.worker_lambda.id
+    )
+    error_message = "The worker may only receive from the mail-events queue (never send to it)."
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "MAIL_EVENTS_QUEUE_ARN")
+    error_message = "The API reads no SES events."
+  }
+
+  # --- Turning mail back on: the API may take an address off the suppression list ------
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.lambda_ses_release.statement) == 1 &&
+      data.aws_iam_policy_document.lambda_ses_release.statement[0].actions == toset(["ses:DeleteSuppressedDestination"]) &&
+      aws_iam_role_policy.lambda_ses_release.role == aws_iam_role.lambda.id
+    )
+    error_message = "Only the API role may release a suppressed address, and only that action."
+  }
+  assert {
+    condition     = !contains(flatten([for s in data.aws_iam_policy_document.lambda_ses.statement : tolist(s.actions)]), "ses:DeleteSuppressedDestination")
+    error_message = "The shared send policy (the worker has it too) must not release suppressed addresses."
+  }
+
+  # --- Alarm ------------------------------------------------------------------------
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.mail_events_dlq.name &&
+      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The mail-events DLQ must alarm on depth > 0."
   }
 }
 

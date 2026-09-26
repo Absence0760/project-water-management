@@ -1,8 +1,10 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
-	// while signed in, a link to the alert emails page (WP-2.13), and "download
-	// my data" (POPIA, GET /auth/me/export). The header's account menu links here. docs/ui.md § App
+	// while signed in, a link to the alert emails page (WP-2.13), with a
+	// banner when SES stopped delivering to the address (alert emails paused
+	// until the person turns them back on), and "download my data" (POPIA,
+	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
 	import { base } from '$app/paths';
 	import { PUBLIC_API_URL } from '$env/static/public';
@@ -11,6 +13,7 @@
 	import { session } from '$lib/auth/session.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
+	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
@@ -60,6 +63,24 @@
 			unitSaved = true;
 		} catch (err) {
 			unitError = msg(err);
+		}
+	}
+
+	// ---- Alert emails paused (SES suppressed the address) ----
+	let resuming = $state(false);
+	let resumed = $state(false);
+	let resumeError = $state<string | null>(null);
+	async function resumeMail() {
+		resuming = true;
+		resumeError = null;
+		try {
+			await api.alerts.resume();
+			if (session.user) session.user = { ...session.user, mailSuppressed: null };
+			resumed = true;
+		} catch (err) {
+			resumeError = resumeProblem(err);
+		} finally {
+			resuming = false;
 		}
 	}
 
@@ -205,6 +226,17 @@
 
 		<section class="panel" aria-labelledby="alerts-h">
 			<h2 id="alerts-h">{t('account.alerts')}</h2>
+			{#if session.user.mailSuppressed}
+				<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
+					<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>
+					<p>{t('alerts.suppressed.fix', { email: session.user.email })}</p>
+					{#if resumeError}<p class="resume-error" role="alert">{resumeError}</p>{/if}
+					<button type="button" class="btn btn-sm" onclick={resumeMail} disabled={resuming}>
+						{resuming ? t('alerts.suppressed.resuming') : t('alerts.suppressed.resume')}
+					</button>
+				</div>
+			{/if}
+			<p class="status" role="status" aria-live="polite">{resumed ? t('alerts.suppressed.resumed') : ''}</p>
 			<p class="muted intro">{t('account.alertsHint')}</p>
 			<p><a href="{base}/account/alerts">{t('account.alertsLink')}</a></p>
 		</section>
@@ -350,6 +382,16 @@
 		margin: 0;
 		font-size: 0.9rem;
 		color: var(--text-2);
+	}
+	.suppressed {
+		margin-bottom: 0.75rem;
+	}
+	.suppressed p {
+		margin: 0 0 0.5rem;
+		overflow-wrap: anywhere;
+	}
+	.resume-error {
+		font-weight: 600;
 	}
 	@media (max-width: 480px) {
 		.facts div {

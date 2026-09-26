@@ -32,7 +32,7 @@ describe('PATCH /auth/me { locale, volumeUnit }', () => {
 		const u = await signUp('Prefs');
 		const a = await u.call('PATCH', '/auth/me', { locale: 'af' });
 		expect(a.status).toBe(200);
-		expect(a.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Prefs', emailVerified: true, locale: 'af', volumeUnit: 'm3' });
+		expect(a.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Prefs', emailVerified: true, locale: 'af', volumeUnit: 'm3', mailSuppressed: null });
 		const b = await u.call('PATCH', '/auth/me', { volumeUnit: 'ML' });
 		expect(b.body.user).toMatchObject({ displayName: 'Prefs', locale: 'af', volumeUnit: 'ML' });
 		const c = await u.call('PATCH', '/auth/me', { displayName: 'Renamed' });

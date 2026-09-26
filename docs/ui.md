@@ -2506,10 +2506,12 @@ the catalogue, [§ Language](#language)); both unit-tested.
   alert is firing". An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
-  data feed behind, restriction notice, background jobs failed, data feed
-  failing) and per farm dam, each with its level (dam % of capacity, days,
-  failures or jobs; range-checked in the form and by the API), a *Firing*
-  mark, and Save. It says that nothing is sent until a kind is switched on,
+  restriction notice, background jobs failed, data feed failing), per farm
+  dam, and, under **Data feeds behind**, per data feed ("CHIRPS daily
+  rainfall (Upper)", "(feed switched off)" when it is), each with its level
+  (dam % of capacity; days, a feed's past its own usual delay, defaulting by
+  source; failures or jobs; range-checked in the form and by the API), a
+  *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): per catchment you can open,
@@ -2522,6 +2524,16 @@ the catalogue, [§ Language](#language)); both unit-tested.
   alert on yet. A catchment muted by a digest's unsubscribe says so, with
   *Turn alert emails back on*. It notes the daily cap (5 right away, the rest
   in the next morning's summary).
+- **Paused alert emails** (translated; on `/account/alerts` and in the
+  account page's **Alert emails** panel): when SES stopped delivering to the
+  person's address (`user.mailSuppressed`), a warning banner says so and
+  why: "Your alert emails are paused. Our emails to <address> bounced back:
+  the address may be wrong, or the mailbox full or closed." (or "… was
+  marked as spam, so we stopped sending."), "Once <address> can receive
+  email again, turn alert emails back on. Your choices are kept.", and
+  **Turn alert emails back on** (`POST /me/alerts/resume`; "Alert emails are
+  back on." in a status line). Turned back on and refused again within a
+  day, it says to check the address and try tomorrow.
 - **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
   signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
   token from the fragment (`#t=…`) once, strips it from the address bar,
@@ -2542,6 +2554,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   otherwise, or when the alerts can't be loaded.
 - **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
   (a warning badge), from `alertsFiring`.
+- Tested by `e2e/tests/alerts.spec.ts` (the pages, the banner, the rule
+  editor's feed levels) and `e2e/tests/alerts-mailpit.spec.ts` (a forecast
+  crossing mailed through Mailpit by the worker, its unsubscribe link, no
+  mail on the next crossing; needs `pnpm dev:mail:up`).
 
 ## Share page (`/share`)
 

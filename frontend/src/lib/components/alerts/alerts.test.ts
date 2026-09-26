@@ -1,8 +1,9 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
-import { eventText, groupRules, thresholdFromInput, thresholdProblem, thresholdToInput } from './alerts';
-import { choiceLabel, farmAlertText, fragmentToken, modeLabel, unsubscribedText } from './words';
+import { eventText, feedRuleLabel, groupRules, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+import { ApiError } from '$lib/api/client';
+import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, unsubscribedText } from './words';
 
 // A token's shape (43 base64url characters); low entropy, so no secret scanner mistakes it for a key.
 const TOKEN = 'a'.repeat(20) + '_-' + 'b'.repeat(21);
@@ -14,6 +15,7 @@ const event = (over: Partial<AlertEvent> = {}): AlertEvent => ({
 	threshold: 0.3,
 	nodeId: 'n1',
 	nodeName: 'Farm One',
+	feedId: null,
 	openedAt: '2026-09-26T08:00:00Z',
 	clearedAt: null,
 	detail: { source: 'latest', pct: 0.08, date: '2026-09-20' },
@@ -47,6 +49,25 @@ describe('the preferences page’s words', () => {
 	});
 });
 
+describe('the paused-alerts banner (SES suppressed the address)', () => {
+	it('says why, naming the address', () => {
+		expect(suppressedText({ reason: 'bounce', at: '2026-09-20T08:00:00Z' }, 'ann@example.com')).toBe(
+			'Your alert emails are paused. Our emails to ann@example.com bounced back: the address may be wrong, or the mailbox full or closed.'
+		);
+		expect(suppressedText({ reason: 'complaint', at: '2026-09-20T08:00:00Z' }, 'ann@example.com')).toBe(
+			'Your alert emails are paused. An email we sent to ann@example.com was marked as spam, so we stopped sending.'
+		);
+	});
+
+	it('explains the day’s wait (429), and passes any other failure’s message through', () => {
+		expect(resumeProblem(new ApiError(429, 'too soon'))).toBe(
+			'Emails to this address were refused again less than a day after you turned them back on. Check the address, then try again tomorrow.'
+		);
+		expect(resumeProblem(new ApiError(500, 'Internal error'))).toBe('Internal error');
+		expect(resumeProblem('offline')).toBe('offline');
+	});
+});
+
 describe('the workspace’s Active alerts', () => {
 	it('writes each firing alert as a sentence', () => {
 		expect(eventText(event())).toBe('Farm One: dam about 8 % on 20 Sep 2026 (alert below 30 %)');
@@ -77,12 +98,30 @@ describe('the rule editor', () => {
 		expect(thresholdProblem('restriction_published', 0)).toBeNull();
 	});
 
-	it('puts the catchment’s rules before the farms’ dam rules', () => {
-		const r = (kind: AlertRule['kind'], enabled = false): AlertRule => ({ id: null, kind, nodeId: kind === 'dam_below' ? 'n' : null, nodeName: null, threshold: 1, enabled, firing: false });
-		const g = groupRules([r('dam_below'), r('data_stale'), r('dam_below', true)]);
-		expect(g.catchment.map((x) => x.kind)).toEqual(['data_stale']);
+	it('puts the catchment’s rules first, then the farms’ dam rules, then a staleness rule per data feed', () => {
+		const r = (kind: AlertRule['kind'], enabled = false): AlertRule => ({
+			id: null,
+			kind,
+			nodeId: kind === 'dam_below' ? 'n' : null,
+			nodeName: null,
+			feedId: kind === 'data_stale' ? 'f' : null,
+			feedName: kind === 'data_stale' ? 'DWS gauge flow (gauge)' : null,
+			feedEnabled: kind === 'data_stale' ? true : null,
+			threshold: 1,
+			enabled,
+			firing: false
+		});
+		const g = groupRules([r('dam_below'), r('data_stale'), r('ewr_forecast_fail'), r('dam_below', true)]);
+		expect(g.catchment.map((x) => x.kind)).toEqual(['ewr_forecast_fail']);
 		expect(g.farms).toHaveLength(2);
+		expect(g.feeds.map((x) => x.feedId)).toEqual(['f']);
 		expect(g.anyOn).toBe(true);
+	});
+
+	it('labels a feed’s staleness rule by the feed, and says when the feed is switched off', () => {
+		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: true })).toBe('CHIRPS daily rainfall (Upper)');
+		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: false })).toBe('CHIRPS daily rainfall (Upper) (feed switched off)');
+		expect(thresholdLabel('data_stale')).toBe('Alert after (days later than usual for this feed)');
 	});
 });
 

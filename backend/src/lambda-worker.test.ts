@@ -10,6 +10,8 @@ const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
 vi.mock('./feeds/schedule.js', () => ({ acceptIngestResult: (m: unknown) => acceptIngestResult(m) }));
 const acceptRenderResult = vi.fn(async (_m: unknown) => 'queued' as string);
 vi.mock('./reports/schedule.js', () => ({ acceptRenderResult: (m: unknown) => acceptRenderResult(m) }));
+const acceptMailEvent = vi.fn(async (_b: string): Promise<unknown> => ({ reason: 'bounce', suppressed: 1 }));
+vi.mock('./mail/suppression.js', () => ({ acceptMailEvent: (b: string) => acceptMailEvent(b) }));
 
 const { handler, metricLine, METRIC_NAMESPACE } = await import('./lambda-worker.js');
 
@@ -90,6 +92,62 @@ describe('handler', () => {
 		await expect(handler({ Records: [{ messageId: 'm1', body }] } as never)).rejects.toThrow('ECONNREFUSED');
 		expect(runTick).not.toHaveBeenCalled();
 		acceptIngestResult.mockClear();
+	});
+
+	describe('the mail-events queue (SES bounces and complaints)', () => {
+		const MAIL_ARN = 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events';
+		const JOBS_ARN = 'arn:aws:sqs:af-south-1:000000000000:water-management-jobs';
+		const ses = JSON.stringify({ eventType: 'Bounce', bounce: { bounceType: 'Permanent', bouncedRecipients: [{ emailAddress: 'a@example.com' }] } });
+		afterEach(() => {
+			vi.unstubAllEnvs();
+			acceptMailEvent.mockClear();
+			acceptIngestResult.mockClear();
+		});
+
+		it('applies a record from the mail-events queue as an SES event, and logs counts, never the address', async () => {
+			vi.stubEnv('MAIL_EVENTS_QUEUE_ARN', MAIL_ARN);
+			const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+			await handler({ Records: [{ messageId: 'm1', eventSourceARN: MAIL_ARN, body: ses }] } as never);
+			expect(acceptMailEvent).toHaveBeenCalledWith(ses);
+			expect(log).toHaveBeenCalledWith(JSON.stringify({ event: 'mail_suppressed', messageId: 'm1', reason: 'bounce', people: 1 }));
+			expect(log.mock.calls.flat().join('\n')).not.toContain('a@example.com');
+			expect(runTick).toHaveBeenCalledTimes(1);
+		});
+
+		it('trusts only its queue: an SES-shaped message on another queue is never applied (positive control above)', async () => {
+			vi.stubEnv('MAIL_EVENTS_QUEUE_ARN', MAIL_ARN);
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			await handler({ Records: [{ messageId: 'm1', eventSourceARN: JOBS_ARN, body: ses }] } as never);
+			expect(acceptMailEvent).not.toHaveBeenCalled();
+			expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'job_message_ignored', messageId: 'm1' }));
+		});
+
+		it('with no mail-events queue configured, nothing is read as an SES event (local and tests)', async () => {
+			vi.stubEnv('MAIL_EVENTS_QUEUE_ARN', '');
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			await handler({ Records: [{ messageId: 'm1', eventSourceARN: '', body: ses }] } as never);
+			expect(acceptMailEvent).not.toHaveBeenCalled();
+		});
+
+		it('never reads a job message that arrives on the mail-events queue as one (it is logged and dropped)', async () => {
+			vi.stubEnv('MAIL_EVENTS_QUEUE_ARN', MAIL_ARN);
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			acceptMailEvent.mockResolvedValueOnce('invalid');
+			const ingest = JSON.stringify({ v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000002', feedId: '00000000-0000-4000-8000-000000000003', feedVersion: 'v1', result: {} });
+			await handler({ Records: [{ messageId: 'm1', eventSourceARN: MAIL_ARN, body: ingest }] } as never);
+			expect(acceptIngestResult).not.toHaveBeenCalled();
+			expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'mail_event_dropped', messageId: 'm1', reason: 'invalid' }));
+		});
+
+		it('fails the batch when the database is down, so SQS retries the event', async () => {
+			vi.stubEnv('MAIL_EVENTS_QUEUE_ARN', MAIL_ARN);
+			acceptMailEvent.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+			await expect(handler({ Records: [{ messageId: 'm1', eventSourceARN: MAIL_ARN, body: ses }] } as never)).rejects.toThrow('ECONNREFUSED');
+			expect(runTick).not.toHaveBeenCalled();
+		});
 	});
 
 	it('lets a failed tick throw, so SQS retries the batch (and dead-letters it after 5)', async () => {

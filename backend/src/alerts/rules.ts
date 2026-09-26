@@ -9,7 +9,7 @@
 //   kind                   value                                fires when        re-arms when
 //   dam_below              the farm's dam, ÷ capacity           < t               ≥ t + 5 points
 //   ewr_forecast_fail      forecast days the outlet EWR fails   ≥ t               ≤ max(0, t − 2)
-//   data_stale             days a feed is past its usual delay  > t               < t
+//   data_stale (per feed)  days the feed is past its usual delay > t               < t
 //   feed_failing           fetches in a row that failed         ≥ t               0
 //   job_dead               jobs dead in the last 24 hours       ≥ t               0
 //   restriction_published  (no value: every change of the WUA's notice is one event)
@@ -27,6 +27,7 @@ export const FARM_KINDS: readonly AlertKind[] = ['dam_below'];
 export const DEFAULT_THRESHOLDS: Readonly<Record<AlertKind, number>> = Object.freeze({
 	dam_below: 0.3,
 	ewr_forecast_fail: 3,
+	// The fallback only: each feed's rule defaults to its source's level (feeds/config.ts staleAlertDays).
 	data_stale: 3,
 	restriction_published: 0,
 	job_dead: 1,

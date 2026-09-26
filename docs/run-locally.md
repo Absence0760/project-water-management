@@ -167,6 +167,20 @@ go to Mailpit like every other email, sent by the worker, so run
 `ALERTS_ENABLED=false` in `backend/.env.development.local` is the kill
 switch (restart the worker): nothing is sent, and waiting mails are dropped.
 
+**A bounce or complaint.** There is no SES locally, so nothing ever
+bounces. `pnpm dev:mail:bounce <email>` stands in for it: it builds the event
+SES would publish for that address and runs it through the worker's own
+handler (`mail/suppression.ts`) against the local database. Add
+`--complaint` for a spam complaint, or `--transient` for a full mailbox
+(which changes nothing). That person's alert emails pause, and their
+account and alert pages show why, with **Turn alert emails back on**
+(which, locally, just clears the flag; in production it also takes the
+address off SES's suppression list).
+
+```bash
+pnpm dev:mail:bounce farmer1@example.com
+```
+
 ## Background jobs
 
 Some work runs later, in a worker, instead of inside a request: a queued
@@ -396,7 +410,7 @@ pnpm dev:db:reset           # DELETE all local data, recreate and migrate
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
 pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF when MinIO is up, and skips (saying so) when it isn't
-pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up)
+pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 pnpm check:i18n             # what has no Afrikaans yet, and any stale glossary translation; fails if the sheet (docs/i18n/af-translation-sheet.md) is out of date or a translation is stale
 pnpm gen:i18n:sheet         # rewrite it after adding or changing a message, or landing an Afrikaans translation
