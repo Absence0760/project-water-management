@@ -528,7 +528,8 @@
 //             is one module per help category (docs/followups.md §
 //             Housekeeping), and #9's engine split for the total. No new
 //             dependency.
-// 2026-09-26  total 900 → 907 KB (measured 905), calibration worker
+// 2026-09-26  total 900 → 909 KB (measured 905; 907 merged with main's
+//             WP-2.11 automatic re-runs, which raised no ceiling), calibration worker
 //             61 → 64 KB (measured 62); largest chunk stays 43 KB (measured
 //             42.2, the help content: no headroom left, so the split in
 //             docs/followups.md § Housekeeping is next). WP-3.9's individual
@@ -547,7 +548,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 907,
+	totalCodeKb: 909,
 	largestChunkKb: 43,
 	largestWorkerKb: 64,
 	largestSpreadsheetWorkerKb: 95,

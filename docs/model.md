@@ -1932,7 +1932,7 @@ capacity per node can't say any of that. **Off by default**: a model without
 `boreholes` (and nodes with only `mode: 'none'` boreholes) runs to the bit as
 before, a test asserts it.
 
-**Fields** (`ProjectModel.boreholes`, migration 042; farms and other users):
+**Fields** (`ProjectModel.boreholes`, migration 043; farms and other users):
 
 | Field | Meaning |
 | --- | --- |

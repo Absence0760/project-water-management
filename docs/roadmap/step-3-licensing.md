@@ -1068,7 +1068,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.9 Groundwater abstraction
 
-> **Built 2026-09-26 (engine 0.36.0, migration 042), off by default; pending
+> **Built 2026-09-26 (engine 0.36.0, migration 043), off by default; pending
 > the hydrologist.** Individual boreholes (`ProjectModel.boreholes`, table
 > `borehole`) with the four modes, the dam target and an annual cap per water
 > year, on top of WP-1.34's combined node capacity (engine 0.23.0), which
