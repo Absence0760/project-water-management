@@ -625,8 +625,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
 	// Engine ≥ 0.30.0; a snapshot without it had none.
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
-	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
-	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
+	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
+	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'last day with rain') },
 	// Engine ≥ 0.44.0; set only by the seasonal outlook's members, never a project setting.
 	demandFactorFrom: { label: 'Demand factors apply from', fmt: (v) => (v ? String(v) : 'the run start') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },

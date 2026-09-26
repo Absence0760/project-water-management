@@ -265,6 +265,27 @@ describe('scenario ops', () => {
 		for (const id of [c.farm.id, c.other.id]) expect(stored[0]!.inputs.model.nodes.find((n) => n.id === id)!.demandFactor).toEqual(new Array(12).fill(0.85));
 	});
 
+	it('checks consecutive node.set ops on one farm as one edit: skipped whole with one problem, counted per op in the 422; complete, it runs', async () => {
+		const u = await signUp('Grouper');
+		const c = await catchment(u);
+		const base = await run(u, c.projectId, 'Baseline');
+		const set = (field: string, value: unknown) => ({ op: 'node.set', nodeId: c.farm.id, field, value }) as ScenarioOp;
+		// Run of river with a pump, but Rooikloof keeps its dam: the group breaks the save rule.
+		const created = await u.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'River pump', baseRunId: base, ops: [set('supplyRule', 'runOfRiver'), set('pumpCapacityM3Day', 900)] });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const sid = created.body.scenario.id as string;
+		expect(created.body.check.problems).toEqual([expect.stringMatching(/^ops 1–2 \(node\.set, "Rooikloof"\): "Rooikloof": run of river has no dam/)]);
+		expect(created.body.check.applied).toEqual([]);
+		const refused = await u.call('POST', `/projects/${c.projectId}/scenarios/${sid}/runs`, {});
+		expect(refused.status).toBe(422);
+		expect(refused.body.error).toBe("2 ops of this scenario don't apply to its base run");
+		// The dam emptied in the same group (here in the middle) completes the edit: every op applies and it runs.
+		const fixed = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ops: [set('supplyRule', 'runOfRiver'), set('damCapacityM3', 0), set('pumpCapacityM3Day', 900)] });
+		expect(fixed.body.check.problems).toEqual([]);
+		expect(fixed.body.check.applied.map((a: { index: number }) => a.index)).toEqual([0, 1, 2]);
+		await runScenario(u, c.projectId, sid);
+	});
+
 	it("refuses a run series naming a node outside the run's own model", async () => {
 		const u = await signUp('Planter');
 		const c = await catchment(u);
