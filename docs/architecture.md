@@ -328,9 +328,12 @@ merges into:
   no dependency): the header, the image directory at the end of the file,
   then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;
   a fetch reads a few tens of KB per day. The reader refuses anything outside
-  that layout (BigTIFF, tiles, a predictor, another sample type) rather than
-  guess, and snaps the float32-rounded 0.05° pixel scale, which otherwise
-  drifts a whole pixel across the grid.
+  that layout (BigTIFF, tiles, a predictor, another sample type, a GDAL
+  scale / offset, GeoKeys other than geographic WGS 84 in degrees) rather
+  than guess, matches `GDAL_NODATA` as the float32 it was stored as, places a
+  PixelIsPoint tiepoint at the pixel's centre (GeoTIFF 1.0 § 2.5.2.2), and
+  snaps the float32-rounded 0.05° pixel scale, which otherwise drifts a whole
+  pixel across the grid.
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
   or outside the grid, a server error page answered with HTTP 200: the fetch
   fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
