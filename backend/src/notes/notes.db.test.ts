@@ -146,7 +146,10 @@ describe('farmers', () => {
 	});
 
 	it("refuses a farmer's team note, project note and note on another farm", async () => {
-		expect((await add(farmer, { body: 'x', nodeId: farmA.id, visibility: 'team' })).status).toBe(403);
+		const team = await add(farmer, { body: 'x', nodeId: farmA.id, visibility: 'team' });
+		expect(team.status).toBe(403);
+		// A stable code the farm page words in the reader's language (docs/api.md § Errors).
+		expect(team.body.code).toBe('note_farmer_own_farm');
 		expect((await add(farmer, { body: 'x' })).status).toBe(403);
 		expect((await add(farmer, { body: 'x', settingKey: 'calibration.a' })).status).toBe(403);
 		expect((await add(farmer, { body: 'x', runId })).status).toBe(403);

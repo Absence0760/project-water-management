@@ -3,8 +3,10 @@
 	// page): the catchment's published result for someone outside the project,
 	// signed out, on a phone. The token is in the fragment (/share#t=…), which a
 	// browser never sends to a server; it is read once, dropped from the
-	// address bar (as the reset pages drop ?token=), and POSTed. Every word is
-	// in lib/components/share/share.ts.
+	// address bar (as the reset pages drop ?token=), and POSTed. Its words come
+	// from the message catalogue (WP-2.5): lib/components/share/share.ts and
+	// the share.* keys. The page is in the language this device chose, else
+	// the browser's (the root layout), with the EN | AF switch in its header.
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -13,7 +15,9 @@
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
 	import { loadShare, type ShareLoad } from '$lib/components/share/load';
-	import { ABOUT, DEAD_LINK, farmsLine, LOAD_FAILED, NO_CHART, NO_LINK, publishedLine, readShareToken, reserveRows, shareNotice } from '$lib/components/share/share';
+	import { farmsLine, publishedLine, readShareToken, reserveRows, shareNotice } from '$lib/components/share/share';
+	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	let token: string | null = null;
 	let result = $state<ShareLoad | null>(null);
@@ -39,12 +43,10 @@
 		window.addEventListener('hashchange', onHash);
 		return () => window.removeEventListener('hashchange', onHash);
 	});
-
-	const languages = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language];
 </script>
 
 <svelte:head>
-	<title>{result?.state === 'ready' ? `${result.view.project.name} · Shared catchment view` : 'Shared catchment view'} · Water Management</title>
+	<title>{t('common.pageTitle', { page: result?.state === 'ready' ? t('share.titleNamed', { name: result.view.project.name }) : t('share.title') })}</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
@@ -52,37 +54,37 @@
 <div class="share">
 	<header class="share-header">
 		<span class="brand"><BrandMark size={26} /><span class="title">Water Management</span></span>
-		<span class="tag">Shared view</span>
+		<div class="end"><span class="tag">{t('share.tag')}</span><LanguageSwitch compact /></div>
 	</header>
 
 	<main class="share-main" data-share-state={result?.state ?? 'loading'} aria-busy={result ? undefined : 'true'}>
 		{#if !result}
-			<p class="sub" role="status">Loading…</p>
+			<p class="sub" role="status">{t('share.loading')}</p>
 		{:else if result.state === 'nolink' || result.state === 'dead'}
 			<section class="card dead" aria-labelledby="dead-h">
-				<h1 id="dead-h">This link doesn’t open anything</h1>
-				<p role="alert">{result.state === 'dead' ? DEAD_LINK : NO_LINK}</p>
+				<h1 id="dead-h">{t('share.deadTitle')}</h1>
+				<p role="alert">{result.state === 'dead' ? t('share.deadLink') : t('share.noLink')}</p>
 			</section>
 		{:else if result.state === 'error'}
 			<section class="card" aria-labelledby="err-h">
-				<h1 id="err-h">Shared catchment view</h1>
-				<p role="alert">{LOAD_FAILED}</p>
-				<button type="button" class="btn" onclick={load}>Try again</button>
+				<h1 id="err-h">{t('share.title')}</h1>
+				<p role="alert">{t('share.loadFailed')}</p>
+				<button type="button" class="btn" onclick={load}>{t('common.tryAgain')}</button>
 			</section>
 		{:else}
 			{@const view = result.view}
 			{@const cv = view.publication.catchmentView}
-			{@const notice = shareNotice(view, languages)}
+			{@const notice = shareNotice(view)}
 			<div>
 				<h1>{view.project.name}</h1>
-				<p class="sub">Catchment water balance, shared read-only</p>
+				<p class="sub">{t('share.sub')}</p>
 				<p class="dates">{publishedLine(view)}</p>
 			</div>
 
-			<NoticeCard {notice} noneText="No restriction from the WUA" pageLang="en" />
+			<NoticeCard {notice} noneText={t('farm.notice.none')} pageLang={wordsLang()} />
 
 			<section class="card" aria-labelledby="reserve-h">
-				<h2 id="reserve-h">The river’s ecological reserve</h2>
+				<h2 id="reserve-h">{t('share.reserveTitle')}</h2>
 				<ul class="sites">
 					{#each reserveRows(cv) as row, i (i)}
 						<li class="site {row.state}">
@@ -106,14 +108,14 @@
 			{#if result.months}
 				<FlowChart months={result.months} />
 			{:else}
-				<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? 'Couldn’t load the flow chart just now.' : NO_CHART}</p>
+				<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('share.chartFailed') : t('share.noChart')}</p>
 			{/if}
 
 			<section class="card" aria-labelledby="about-h">
-				<h2 id="about-h">About this page</h2>
-				<p>{ABOUT}</p>
+				<h2 id="about-h">{t('share.aboutTitle')}</h2>
+				<p>{t('share.about')}</p>
 				<p class="sub">{farmsLine(cv)}</p>
-				<p class="fine">A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.</p>
+				<p class="fine">{t('share.fine')}</p>
 			</section>
 		{/if}
 	</main>
@@ -145,6 +147,11 @@
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 17px;
+	}
+	.end {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 	}
 	.tag {
 		font-size: 14px;

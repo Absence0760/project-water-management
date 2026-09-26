@@ -105,7 +105,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			}
 			return { row, mail: await verificationMail(db, row.id, row.email) };
 		});
-		if (!result) throw new ApiError(409, 'an account with that email already exists');
+		if (!result) throw ApiError.coded(409, 'account_exists', 'an account with that email already exists');
 		if (result.mail) await trySendMail(result.mail);
 		await issueSession(c, result.row.id);
 		return c.json({ user: toUser(result.row) }, 201);
@@ -127,10 +127,10 @@ export const authRoutes = new Hono<AuthEnv>()
 		});
 		if (lockedSeconds > 0) {
 			c.header('Retry-After', String(lockedSeconds));
-			throw new ApiError(429, lockedMessage(lockedSeconds));
+			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
 		}
 		const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
-		if (!row || !ok) throw new ApiError(401, 'wrong email or password');
+		if (!row || !ok) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		await withoutUser((db) => db.query('SELECT app_login_succeeded($1)', [body.email]));
 		await issueSession(c, row.id);
 		return c.json({ user: toUser(row) });
@@ -156,7 +156,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			]);
 			return rows[0];
 		});
-		if (!row) throw new ApiError(401, 'not signed in');
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		return c.json({ user: toUser(row) });
 	})
 	.patch('/me', requireUser, async (c) => {
@@ -173,7 +173,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			);
 			return rows[0];
 		});
-		if (!row) throw new ApiError(401, 'not signed in');
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		return c.json({ user: toUser(row) });
 	})
 	// Change the password while signed in. The current password is checked
@@ -193,13 +193,13 @@ export const authRoutes = new Hono<AuthEnv>()
 			if (!row) return { lockedSeconds: 0, row: undefined };
 			return { lockedSeconds: await countAttempt(db, row.email), row };
 		});
-		if (!row) throw new ApiError(401, 'not signed in');
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		if (lockedSeconds > 0) {
 			c.header('Retry-After', String(lockedSeconds));
-			throw new ApiError(429, lockedMessage(lockedSeconds));
+			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
 		}
 		if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
-			throw new ApiError(403, 'your current password is wrong');
+			throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
 		}
 		const newHash = await hashPassword(body.newPassword);
 		// As the user (withUser), so email_token's RLS lets the reset links be deleted.
@@ -219,7 +219,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			await db.query('SELECT app_login_succeeded($1)', [updated.email]);
 			return updated;
 		});
-		if (!user) throw new ApiError(409, 'your password was changed somewhere else a moment ago — sign in again');
+		if (!user) throw ApiError.coded(409, 'password_changed_elsewhere', 'your password was changed somewhere else a moment ago — sign in again');
 		// Issued after the watermark, so this device stays signed in.
 		await issueSession(c, userId);
 		return c.json({ user: toUser(user) });

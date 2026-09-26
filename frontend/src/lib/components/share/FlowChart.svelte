@@ -5,6 +5,7 @@
 	// is aria-hidden; a visually hidden sentence sums it up and "Show the
 	// numbers" is a table of every month drawn.
 	import { CHART_FONT_PX, LABEL_Y } from '$lib/components/farm/chartGeometry';
+	import { t } from '$lib/i18n/locale.svelte';
 	import { flowCaption, flowChart, flowRows, flowSummary, type FlowMonth } from './chart';
 
 	let { months }: { months: FlowMonth[] } = $props();
@@ -13,11 +14,11 @@
 </script>
 
 <section class="card" aria-labelledby="flow-h">
-	<h2 id="flow-h">River flow each month, in m³ a day</h2>
+	<h2 id="flow-h">{t('share.chart.title')}</h2>
 	<p class="visually-hidden">{flowSummary(months)}</p>
 	<div class="legend" aria-hidden="true">
-		<span><span class="key flow"></span>Flow at the outlet</span>
-		<span><span class="key ewr"></span>Ecological reserve</span>
+		<span><span class="key flow"></span>{t('share.chart.flow')}</span>
+		<span><span class="key ewr"></span>{t('share.chart.reserve')}</span>
 	</div>
 	<div class="plot" bind:clientWidth={width}>
 		{#if chart}
@@ -36,10 +37,10 @@
 	</div>
 	<p class="fine">{flowCaption(months)}</p>
 	<details>
-		<summary>Show the numbers</summary>
+		<summary>{t('farm.chart.showNumbers')}</summary>
 		<table class="numbers">
-			<caption class="visually-hidden">Mean flow at the outlet and the ecological reserve each month, in m³ a day</caption>
-			<thead><tr><th scope="col">Month</th><th scope="col">Flow</th><th scope="col">Reserve</th></tr></thead>
+			<caption class="visually-hidden">{t('share.chart.caption')}</caption>
+			<thead><tr><th scope="col">{t('share.chart.month')}</th><th scope="col">{t('share.chart.flowCol')}</th><th scope="col">{t('share.chart.reserveCol')}</th></tr></thead>
 			<tbody>
 				{#each flowRows(months) as r (r.label)}
 					<tr><th scope="row">{r.label}</th><td>{r.flow}</td><td>{r.ewr}</td></tr>

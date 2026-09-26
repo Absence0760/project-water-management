@@ -1174,7 +1174,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
 No Afrikaans wording ships yet: none is reviewed.
 
-- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (432
+- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (604
       strings: site, emails, farmer glossary) goes to the client's named
       translator (roadmap Step 2, prerequisite 6). When it comes back: copy
       each line into `frontend/src/lib/i18n/messages/af.ts`,
@@ -1187,16 +1187,22 @@ No Afrikaans wording ships yet: none is reviewed.
 - [ ] **Afrikaans boards** at 360 px (strings run 20–30 % longer) and an axe
       pass on every translated page in Afrikaans. Trigger: the first
       reviewed batch lands.
-- [ ] **Not yet in the catalogue**, still English for everyone: the
-      `/share` page (`share/share.ts`), the notes list inside "Notes about
-      your farm" (`notes/NotesList.svelte`, shared with the workspace), and
-      API error messages shown as-is on the sign-in and account pages (only
-      the login's `401` is worded client-side). Trigger: the translation
-      turnaround above, so the new keys join the same sheet.
+- [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
+      `share.*` keys, with the switch in its header; it still imports none
+      of the workspace's code, `boundary.test.ts`), the notes list inside
+      "Notes about your farm" (`NotesList` takes a `words` prop: English
+      `notes/words.ts` for the workspace, `farm/notesWords.ts` from the
+      catalogue), and the server errors a farmer can see: the API sends a
+      stable `code` (`ERROR_CODES`, [api.md § Errors](./api.md#errors)) and
+      `lib/i18n/apiError.ts` words it, or the status, from the catalogue;
+      the server doesn't localise ([ui.md § Language](./ui.md#language)).
+      The new keys are on the sheet. The bundle measured 927 KB (926.5)
+      against the 925 KB ceiling after this: see the next item.
 - [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
       the total (the English catalogue is ~7 KB; each key also appears at its
       call site). The catalogue now loads only on the translated routes (the
-      workspace and `/share` never download its ~8 KB chunk), but the guard
+      workspace never downloads its ~8 KB chunk; `/share` does, now it is
+      translated), but the guard
       counts lazy chunks too, so the split costs ~2 KB of total: 932 KB
       before, 934 KB after, against main's 929 KB ceiling (largest chunk
       43 KB, at its ceiling). Fitting under 929 without a raise needs weight
@@ -1207,6 +1213,11 @@ No Afrikaans wording ships yet: none is reviewed.
       ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
       raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
       this branch merges to main.
+      **2026-09-26 (i18n follow-ups branch):** main measured 925 of 925 KB;
+      translating `/share`, the farm notes list and the server errors
+      (~86 keys, the error-code helper) takes it to 927 KB (926.5 exact),
+      largest chunk still 43 KB. Not raised on the branch: the operator
+      decides between a raise and the English-as-key rework above.
 - [x] **Help drift tooling** from the plan: `pnpm gen:i18n:stamp <id>`
       (`scripts/guards/i18n_stamp.mjs`) re-stamps a glossary translation's
       `sourceHash` from the current English and rewrites the sheet;

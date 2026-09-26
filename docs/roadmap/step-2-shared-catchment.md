@@ -793,10 +793,13 @@ audit log of model changes yet" from Known gaps).
 >   fail otherwise). An unknown key still fails `pnpm check`.
 > - **`<html lang>` follows the words**, not the choice: it stays `en` until
 >   the Afrikaans catalogue is complete, and dates follow it too; numbers
->   switch to the decimal comma at once. The workspace and `/share` stay
->   `en`.
-> - **The switch** is on the sign-in pages, the farm header and the account
->   page, not the workspace header (the workspace isn't translated).
+>   switch to the decimal comma at once, and so does the WUA's own notice
+>   (its Afrikaans is real). The workspace stays `en`.
+> - **The switch** is on the sign-in pages, the farm header, the `/share`
+>   header and the account page, not the workspace header (the workspace
+>   isn't translated).
+> - **Server errors** are worded on the client from a stable `code` the API
+>   sends ([api.md § Errors](../api.md#errors)); the server doesn't localise.
 > - **`invite.locale`** already existed (034); 050 adds `app_user.locale`
 >   (NULL = not chosen) and `volume_unit`, and `app_accept_invites` gives a
 >   new account its invite's locale. Sign-up takes the page's `locale`.

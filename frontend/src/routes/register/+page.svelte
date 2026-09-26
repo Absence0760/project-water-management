@@ -10,6 +10,7 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { i18n, readStoredLocale, t, tRich } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
@@ -56,7 +57,7 @@
 			if (err instanceof ApiError && err.status === 409 && session.user) {
 				session.user = { ...session.user, emailVerified: true };
 				resendMsg = t('register.alreadyConfirmed');
-			} else resendMsg = err instanceof Error ? err.message : String(err);
+			} else resendMsg = errorText(err);
 		} finally {
 			resending = false;
 		}
@@ -112,7 +113,7 @@
 			session.user = user;
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			error = errorText(err);
 		} finally {
 			busy = false;
 		}

@@ -53,14 +53,15 @@
 	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
 
 	// Language (WP-2.5, docs/ui.md § Language), on the translated surfaces
-	// only (sign-in pages, the farm view, the account and alert pages): the modeller
-	// workspace and /share are English and never load the message catalogue.
+	// only (sign-in pages, the farm view, the account and alert pages, the
+	// public /share page): the modeller workspace is English and never loads
+	// the message catalogue.
 	// The i18n module is imported on the first translated route; the language
 	// is the account's when signed in and chosen, else this device's, else the
 	// browser's, re-resolved when the user signs in or out or changes it (the
 	// switch updates session.user). The route renders once that language is
 	// set (i18nReady), so it never shows one language and then another.
-	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts)(\/|$)/.test(page.url.pathname.slice(base.length)));
+	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share)(\/|$)/.test(page.url.pathname.slice(base.length)));
 	type I18n = typeof import('$lib/i18n/locale.svelte');
 	let i18nModule = $state.raw<I18n | null>(null);
 	let i18nReady = $state(false);

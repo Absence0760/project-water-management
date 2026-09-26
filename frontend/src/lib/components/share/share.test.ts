@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ShareView } from '$lib/api/types';
-import { DEAD_LINK, farmsLine, prefersAfrikaans, publishedLine, readShareToken, reserveRows, shareNotice } from './share';
+import { setLocale } from '$lib/i18n/locale.svelte';
+import { farmsLine, publishedLine, readShareToken, reserveRows, shareNotice } from './share';
 
 /** Intl joins dates and our figures with no-break spaces; compare with plain ones. */
 const sp = (s: string | null | undefined) => s?.replace(/[  ]/g, ' ');
@@ -46,29 +47,31 @@ describe('readShareToken', () => {
 });
 
 describe('the notice', () => {
-	it('prefers Afrikaans only when the browser does', () => {
-		expect(prefersAfrikaans(['af-ZA', 'en'])).toBe(true);
-		expect(prefersAfrikaans(['de-DE', 'af'])).toBe(true);
-		expect(prefersAfrikaans(['en-ZA', 'af'])).toBe(false);
-		expect(prefersAfrikaans(['zu'])).toBe(false);
-		expect(prefersAfrikaans([])).toBe(false);
-	});
+	afterEach(() => setLocale('en'));
 
 	it('builds the notice card: title, text, the percentage and who published it', () => {
-		const n = shareNotice(view(), ['en'])!;
+		const n = shareNotice(view())!;
 		expect(n).toMatchObject({ level: 'advisory', label: 'Notice from the WUA · Advisory', heading: 'Please cut back', body: 'Irrigate at night.', lang: 'en' });
 		// The WUA's own words carry the cut; the percentage stands alone only without them.
 		expect(n.pctLine).toBeNull();
-		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, noticeEn: null, noticeAf: null } }), ['en'])!.pctLine)).toBe('Set by the WUA: 15 % of registered use.');
+		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, noticeEn: null, noticeAf: null } }))!.pctLine)).toBe('Set by the WUA: 15 % of registered use.');
 		expect(sp(n.byline)).toMatch(/^Thandi Mokoena, 1[12] Jan 2024$/);
-		expect(shareNotice(view(), ['af'])).toMatchObject({ heading: 'Sny asseblief terug', lang: 'af' });
+	});
+
+	it('reads the notice in the language the page chose, or the other with a line saying so', async () => {
+		await setLocale('af', {});
+		expect(shareNotice(view())).toMatchObject({ heading: 'Sny asseblief terug', lang: 'af', langNote: null });
+		const enOnly = view({ restriction: { level: 'advisory', pct: null, noticeEn: 'Please cut back', noticeAf: null } });
+		expect(shareNotice(enOnly)).toMatchObject({ heading: 'Please cut back', lang: 'en', langNote: 'The WUA wrote this notice in English only.' });
+		await setLocale('en');
+		expect(shareNotice(view())).toMatchObject({ heading: 'Please cut back', lang: 'en', langNote: null });
 	});
 
 	it('with no text, heads the card with the level; with none, has no card', () => {
-		const n = shareNotice(view({ restriction: { level: 'restricted', pct: null, noticeEn: null, noticeAf: null } }), ['en'])!;
+		const n = shareNotice(view({ restriction: { level: 'restricted', pct: null, noticeEn: null, noticeAf: null } }))!;
 		expect(n).toMatchObject({ heading: 'Notice from the WUA · Restriction', label: null, body: null, pctLine: null, lang: null });
-		expect(shareNotice(view({ restriction: { level: 'none', pct: null, noticeEn: null, noticeAf: null } }), ['en'])).toBeNull();
-		expect(shareNotice(view({ publishedBy: null }), ['en'])!.byline).toMatch(/^A former member, /);
+		expect(shareNotice(view({ restriction: { level: 'none', pct: null, noticeEn: null, noticeAf: null } }))).toBeNull();
+		expect(shareNotice(view({ publishedBy: null }))!.byline).toMatch(/^A former member, /);
 	});
 });
 
@@ -97,9 +100,8 @@ describe('the words', () => {
 		]);
 	});
 
-	it('counts the farms without naming one, and says what a dead link is', () => {
+	it('counts the farms without naming one', () => {
 		expect(sp(farmsLine(view().publication.catchmentView))).toBe('6 farms in the catchment.');
 		expect(sp(farmsLine({ ...view().publication.catchmentView, farmCount: 1 }))).toBe('1 farm in the catchment.');
-		expect(DEAD_LINK).toBe('This link has expired or was withdrawn. Ask whoever sent it for a new one.');
 	});
 });

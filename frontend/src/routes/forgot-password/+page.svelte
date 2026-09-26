@@ -5,6 +5,7 @@
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
@@ -23,7 +24,7 @@
 			await emailAuth.forgotPassword(email.trim());
 			sentTo = email.trim();
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			error = errorText(err);
 		} finally {
 			busy = false;
 		}

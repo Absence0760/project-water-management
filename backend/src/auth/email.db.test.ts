@@ -28,6 +28,7 @@ describe('email verification', () => {
 		const again = await anon('POST', '/auth/verify-email', { token });
 		expect(again.status).toBe(400);
 		expect(again.body.error).toMatch(/invalid or has expired/);
+		expect(again.body.code).toBe('link_invalid');
 	});
 
 	it('rejects expired, malformed and unknown tokens', async () => {

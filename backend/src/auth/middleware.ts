@@ -12,7 +12,7 @@ export type AuthEnv = { Variables: { userId: string } };
  */
 export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	const session = await readSessionClaims(c);
-	if (!session) throw new ApiError(401, 'not signed in');
+	if (!session) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 	if (session.scope && !scopeAllows(session.scope, c.req.method, c.req.path)) {
 		throw new ApiError(403, 'this session can only read one report');
 	}

@@ -102,12 +102,22 @@ const NO_IMPORT_REPORT = 'no import report';
 export class ApiError extends Error {
 	readonly status: number;
 	readonly details: unknown;
+	/**
+	 * The server's stable error code, on the errors a farmer can meet
+	 * (docs/api.md § Errors); null otherwise. The translated pages word an
+	 * error from this and the status ($lib/i18n/apiError), never from `message`.
+	 */
+	readonly code: string | null;
+	/** Values for the code's wording (e.g. `seconds` for a sign-in lockout). */
+	readonly params: Record<string, string | number>;
 
-	constructor(status: number, message: string, details?: unknown) {
+	constructor(status: number, message: string, details?: unknown, code: string | null = null, params: Record<string, string | number> = {}) {
 		super(message);
 		this.name = 'ApiError';
 		this.status = status;
 		this.details = details;
+		this.code = code;
+		this.params = params;
 	}
 }
 
@@ -178,9 +188,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			}
 		}
 		if (!res.ok) {
-			const obj = (data && typeof data === 'object' ? data : {}) as { error?: unknown; details?: unknown };
+			const obj = (data && typeof data === 'object' ? data : {}) as { error?: unknown; details?: unknown; code?: unknown; params?: unknown };
 			const msg = typeof obj.error === 'string' && obj.error ? obj.error : statusText(res.status);
-			throw new ApiError(res.status, msg + describeDetails(obj.details), obj.details);
+			const code = typeof obj.code === 'string' && obj.code ? obj.code : null;
+			const params = obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params) ? (obj.params as Record<string, string | number>) : {};
+			throw new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params);
 		}
 		return data as T;
 	}

@@ -77,7 +77,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/reset-password', async (c) => {
 		const body = z.object({ token, password }).parse(await readJson(c));
 		const hash = parseToken(body.token);
-		if (!hash) throw new ApiError(400, INVALID_LINK);
+		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		const newHash = await hashPassword(body.password);
 		const ok = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ user_id: string | null }>(
@@ -102,14 +102,14 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			await markVerified(db, userId);
 			return true;
 		});
-		if (!ok) throw new ApiError(400, INVALID_LINK);
+		if (!ok) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		clearSession(c);
 		return c.body(null, 204);
 	})
 	.post('/verify-email', async (c) => {
 		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
-		if (!hash) throw new ApiError(400, INVALID_LINK);
+		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		const ok = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ user_id: string | null }>(
 				"SELECT app_consume_email_token($1, 'verify') AS user_id",
@@ -120,7 +120,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			await markVerified(db, userId);
 			return true;
 		});
-		if (!ok) throw new ApiError(400, INVALID_LINK);
+		if (!ok) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		return c.json({ verified: true });
 	})
 	.post('/resend-verification', requireUser, async (c) => {
@@ -130,11 +130,11 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 				[c.get('userId')]
 			);
 			const user = rows[0];
-			if (!user) throw new ApiError(401, 'not signed in');
-			if (user.verified) throw new ApiError(409, 'your email address is already verified');
+			if (!user) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+			if (user.verified) throw ApiError.coded(409, 'already_verified', 'your email address is already verified');
 			return verificationMail(db, c.get('userId'), user.email);
 		});
-		if (!mail) throw new ApiError(429, 'a confirmation email was sent a moment ago — check your inbox, or try again in a minute');
+		if (!mail) throw ApiError.coded(429, 'verification_sent_recently', 'a confirmation email was sent a moment ago — check your inbox, or try again in a minute');
 		await trySendMail(mail);
 		return c.json({ sent: true }, 202);
 	})
@@ -143,7 +143,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/invite-info', async (c) => {
 		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
-		if (!hash) throw new ApiError(404, 'this invitation is invalid or has expired');
+		if (!hash) throw ApiError.coded(404, 'invite_invalid', 'this invitation is invalid or has expired');
 		const row = await withoutUser(async (db) => {
 			const { rows } = await db.query<{
 				email: string;
@@ -153,7 +153,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			}>('SELECT * FROM app_invite_for_token($1)', [hash]);
 			return rows[0];
 		});
-		if (!row) throw new ApiError(404, 'this invitation is invalid or has expired');
+		if (!row) throw ApiError.coded(404, 'invite_invalid', 'this invitation is invalid or has expired');
 		return c.json({
 			invite: { email: row.email, projectName: row.project_name, teamName: row.team_name, invitedBy: row.inviter_name }
 		});

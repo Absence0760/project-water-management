@@ -58,11 +58,18 @@ describe('sign-in lockout', () => {
 
 	it('locks an address after 5 attempts without the right password, then backs off', async () => {
 		const u = await signUp('Locked');
-		for (let i = 0; i < 5; i++) expect((await login(u.email, 'wrong guess')).status).toBe(401);
+		for (let i = 0; i < 5; i++) {
+			const wrong = await login(u.email, 'wrong guess');
+			expect(wrong.status).toBe(401);
+			expect(wrong.body.code).toBe('wrong_credentials');
+		}
 		// Even the right password is refused while locked — and the password isn't checked.
 		const locked = await login(u.email, 'correct horse');
 		expect(locked.status).toBe(429);
 		expect(locked.body.error).toMatch(/too many sign-in attempts for this address — try again in a minute/);
+		// The translated sign-in page words it from the code, with the wait in seconds (docs/api.md § Errors).
+		expect(locked.body.code).toBe('signin_locked');
+		expect(locked.body.params.seconds).toBe(Number(locked.headers.get('retry-after')));
 		expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
 		expect(Number(locked.headers.get('retry-after'))).toBeLessThanOrEqual(60);
 		// Same address in another case is the same lock.
@@ -195,7 +202,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		for (let i = 0; i < 4; i++) {
 			const res = await change(u.cookie, 'wrong guess', 'battery staple');
 			expect(res.status).toBe(403);
-			expect(res.body).toEqual({ error: 'your current password is wrong' });
+			expect(res.body).toEqual({ error: 'your current password is wrong', code: 'wrong_current_password' });
 		}
 		// A wrong guess doesn't end the session.
 		expect((await u.call('GET', '/auth/me')).status).toBe(200);

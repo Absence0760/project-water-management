@@ -115,6 +115,36 @@ address moments ago, or sign-in is locked for this address (with
 unexpected is `500 { error: "Internal server error" }`; raw database error
 text never reaches the client.
 
+**Error codes (WP-2.5).** An error a farmer can meet on a translated page
+also carries a stable `code` (and, for some, `params`):
+`{ error, code, params? }`. `error` stays English, for developers,
+integrators and logs; the translated pages (sign-in, account, alert and farm
+pages) never show it, and word the error from `code`, or from the status
+when there is no code (`frontend/src/lib/i18n/apiError.ts`). The server
+doesn't localise messages: codes keep every word a farmer reads in the
+frontend catalogue and on the translation sheet, and the API in one
+language. A code is a contract: add new ones, never rename one
+(`ERROR_CODES` in `backend/src/http/errors.ts`; a frontend test fails when a
+code has no `error.<code>` message).
+
+| Code | Status | When |
+| --- | --- | --- |
+| `not_signed_in` | 401 | no valid session |
+| `wrong_credentials` | 401 | sign-in with a wrong email or password |
+| `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
+| `account_exists` | 409 | sign-up with an address that has an account |
+| `wrong_current_password` | 403 | `POST /auth/change-password` |
+| `password_changed_elsewhere` | 409 | a concurrent password change won |
+| `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
+| `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
+| `verification_sent_recently` | 429 | the same, within the resend cooldown |
+| `invite_invalid` | 404 | `POST /auth/invite-info` for a dead invitation |
+| `note_farmer_own_farm` | 403 | a farmer's note anywhere but their own farm, shown to the farm |
+| `note_farm_visibility` | 400 | a farm-visible note on something that isn't a farm |
+| `note_author_only` | 403 | editing someone else's note |
+| `note_delete_denied` | 403 | deleting someone else's note without the editor role |
+| `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
+
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
 lists their projects with `role: "farmer"`, `dataUntil: null` and

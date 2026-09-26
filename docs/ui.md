@@ -2053,7 +2053,10 @@ March") is kept against what it is about.
 - **Farmer view.** *Notes about your farm* (`farm/FarmNotes.svelte`) lists
   the farmer's own notes and the WUA's farm-visible ones on that farm, and
   adds a note, always shown to the farm. The WUA previewing the page sees the
-  same farm-visible notes, read only.
+  same farm-visible notes, read only. It is the same `NotesList`, given the
+  catalogue's words (`words` prop, `farm/notesWords.ts`; server errors
+  through `errorText`), so the farmer's copy is translated while the
+  workspace's stays English and never loads the catalogue.
 - **Plain text only.** The body is rendered with Svelte's escaping, never
   `{@html}` or markdown; line breaks are kept with `white-space: pre-line`
   (the e2e test pins markup showing as typed).
@@ -2323,16 +2326,16 @@ English and Afrikaans for everything a farmer touches (WP-2.5): the farm
 view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
 email" banner, the account page and its alert emails page
-(`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), and the
-emails a farmer receives (confirm address, reset password, the farmer
-invite, the alert emails and their digest). The modeller workspace and the
-`/share` page stay English.
+(`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
+public shared view (`/share`), and the emails a farmer receives (confirm
+address, reset password, the farmer invite, the alert emails and their
+digest). The modeller workspace stays English.
 
 - **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
   name in its own language, the button marked with that `lang`, `aria-pressed`
   on the current one; "EN | AF" in the phone headers, the full name as the
   accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
-  pages' header, and under **Language and units** on the account page, which
+  pages' and the `/share` page's header, and under **Language and units** on the account page, which
   also sets the farm view's volume unit (m³ or ML).
 - **Which language.** The account's `locale` when signed in and chosen, else
   this device's choice (`localStorage` `wm.locale`, try/catch), else
@@ -2353,11 +2356,26 @@ invite, the alert emails and their digest). The modeller workspace and the
   dynamic `import()` on the first translated route, then renders the route
   once the language is set (a readiness flag, with Try again if the chunk
   fails), so no route shows one language and then another. The workspace
-  and `/share` never download it: the number, date, notice and chart-size
-  rules they share with the farm view live in catalogue-free modules
+  never downloads it: the number, date, notice and chart-size
+  rules it shares with the farm view live in catalogue-free modules
   (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
-  `farm/chartGeometry.ts`), `passwordProblem` returns a key, and the
+  `farm/chartGeometry.ts`), `passwordProblem` returns a key, the notes list
+  takes the farm card's words as a prop (`notes/words.ts`: `NOTES_EN` for
+  the workspace, `farm/notesWords.ts` from the catalogue), and the
   "confirm your email" banner is imported only for an unconfirmed address.
+  `/share` loads the catalogue but none of the workspace's code: it imports
+  only its own modules, the farm view's shared ones and the i18n
+  (`lib/i18n/boundary.test.ts` guards both).
+- **Server errors.** The translated pages never show the API's English
+  `error` text. The API sends a stable `code` with every error a farmer can
+  meet (and `params`, e.g. the lockout's seconds; [api.md §
+  Errors](./api.md#errors)); `lib/i18n/apiError.ts` `errorText` words it
+  from the catalogue's `error.<code>`, or by status when there is no code
+  (no signal, a server problem, a refusal). Stable codes rather than the
+  server localising by `app_user.locale` / `Accept-Language`: every word a
+  farmer reads stays in one catalogue and on the translation sheet, a
+  signed-out page needs no language sent to the server, and the API keeps
+  one language for integrators and logs.
   `lib/i18n/boundary.test.ts` guards it.
 - **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
   `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
@@ -2439,7 +2457,9 @@ the catalogue, [§ Language](#language)); both unit-tested.
   emails for Rietvlei any more." (or "any alert emails", for a digest's link)
   with *Manage alerts*. A dead link ("This link doesn't work any more: a
   newer email may have replaced it, or you may no longer be a member") and a
-  link without its token have their own states. The page sets
+  link without its token have their own states: only the API's 404 (or 400)
+  means the link is dead; no signal or a server problem keeps the question
+  and its button, with the reason above them, to try again. The page sets
   `no-referrer`, like the reset pages.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
@@ -2460,13 +2480,17 @@ signed in or out, for someone outside the project, on a phone first.
   `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way. The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
-  Management · Shared view"), not the app's; it is a route chunk of its own,
-  loaded only when opened.
+  Management · Shared view", with the EN | AF switch), not the app's; it is
+  a route chunk of its own, loaded only when opened. Its words come from the
+  message catalogue (`share/share.ts`, the `share.*` keys, and the farm
+  view's for the notice card; [§ Language](#language)), in this device's
+  choice or the browser's language.
 - **Top to bottom:** the catchment's name; "Published by *name* on *date*.
   Data up to *date*." (and the next expected update); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in English, or in Afrikaans when the browser
-  prefers it and the WUA wrote one (marked `lang="af"`); **The river's
+  restriction from the WUA"), in the reader's language or the other with a
+  "not translated" line, as on the farm view (marked with its `lang` when
+  it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
   gauge, with a check or warning icon, the last 30 days and the season in
   words; the **monthly flow chart** (mean flow at the outlet, solid, against

@@ -205,6 +205,17 @@ describe('createApi', () => {
 		expect(err).toBeInstanceOf(ApiError);
 		expect(err.status).toBe(409);
 		expect(err.message).toBe('Name already taken');
+		expect(err.code).toBeNull();
+		expect(err.params).toEqual({});
+	});
+
+	it('carries the server’s stable error code and its params (docs/api.md § Errors)', async () => {
+		const api = createApi('', mockFetch(429, { error: 'too many sign-in attempts', code: 'signin_locked', params: { seconds: 120 } }));
+		const err = await api.auth.login('a@example.com', 'x').catch((e) => e);
+		expect(err).toMatchObject({ status: 429, code: 'signin_locked', params: { seconds: 120 }, message: 'too many sign-in attempts' });
+		// Junk in either field is dropped, not trusted.
+		const junk = await createApi('', mockFetch(400, { error: 'x', code: 7, params: [1] })).auth.me().catch((e) => e);
+		expect(junk).toMatchObject({ code: null, params: {} });
 	});
 
 	it('appends zod issue details to 400 messages', async () => {

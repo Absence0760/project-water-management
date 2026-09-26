@@ -9,13 +9,14 @@
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '$lib/api';
 	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel } from '$lib/components/alerts/words';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 
 	let projects = $state<ProjectAlerts[] | null>(null);
 	let loadError = $state<string | null>(null);
 	/** Per project: saving, saved, or an error message. */
 	let status = $state<Record<string, { saving?: boolean; saved?: boolean; error?: string }>>({});
 
-	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+	const msg = errorText;
 	const slot = (p: ProjectAlerts, c: AlertChoice) => `alert-${p.id}-${c.kind}-${c.nodeId ?? 'all'}`;
 
 	async function load() {

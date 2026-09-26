@@ -88,6 +88,17 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await expectNoViolations(shared);
 	await shared.emulateMedia({ colorScheme: 'light' });
 
+	// The page is translated (WP-2.5): its header has the language switch. No
+	// Afrikaans is reviewed yet, so the words and <html lang> stay English; the
+	// WUA wrote only an English notice, and the card says so.
+	await expect(shared.locator('html')).toHaveAttribute('lang', 'en');
+	const af = shared.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' });
+	await af.click();
+	await expect(af).toHaveAttribute('aria-pressed', 'true');
+	await expect(notice).toContainText('The WUA wrote this notice in English only.');
+	await expect(shared.locator('html')).toHaveAttribute('lang', 'en');
+	await expect(reserve.getByText('At the catchment outlet')).toBeVisible();
+
 	// Opening it counts as a use.
 	await page.reload();
 	await expect(row).not.toContainText('Never');

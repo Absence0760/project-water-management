@@ -326,7 +326,7 @@ async function unsubscribe(token: string): Promise<{ kind: AlertKind | 'all'; pr
 	return rows[0] ? { kind: rows[0].kind, projectName: rows[0].project_name, nodeName: rows[0].node_name } : null;
 }
 
-const gone = () => new ApiError(404, 'this unsubscribe link is not valid any more');
+const gone = () => ApiError.coded(404, 'unsubscribe_link_gone', 'this unsubscribe link is not valid any more');
 
 /**
  * POST /alerts/unsubscribe. Two callers:

@@ -257,12 +257,16 @@ Prefer reading these over guessing. Update them when behaviour changes.
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
 - **i18n keys (WP-2.5).** Farmer-facing strings (farm view, sign-in pages,
-  account page) come from `frontend/src/lib/i18n/messages/en.ts` through
+  account and alert pages, `/share`) come from `frontend/src/lib/i18n/messages/en.ts` through
   `t()` / `tn()` / `tRich()`; farmer emails from
   `backend/src/mail/i18n/en.ts` through `mailT()`. Never hard-code a string
   there, never write Afrikaans that hasn't been reviewed, and run
   `pnpm gen:i18n:sheet` after changing a message ([ui.md §
-  Language](./ui.md#language)). The workspace stays English.
+  Language](./ui.md#language)). The workspace stays English. Those pages
+  show a server error through `errorText` (`lib/i18n/apiError.ts`, from the
+  API's stable `code`), never its English `error` text; a new error a farmer
+  can meet gets a code in `backend/src/http/errors.ts` `ERROR_CODES` and an
+  `error.<code>` message.
 - **`pnpm check` doesn't compile components.** svelte-check type-checks the
   TypeScript in `<script lang="ts">`; the Svelte compiler strips it at build
   time, and a stripping bug fails every `vite build` (production and the e2e

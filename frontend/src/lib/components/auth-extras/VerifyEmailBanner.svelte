@@ -8,6 +8,7 @@
 	import { session } from '$lib/auth/session.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -29,7 +30,7 @@
 				session.user = { ...session.user, emailVerified: true };
 				return;
 			}
-			message = err instanceof Error ? err.message : String(err);
+			message = errorText(err);
 		} finally {
 			busy = false;
 		}

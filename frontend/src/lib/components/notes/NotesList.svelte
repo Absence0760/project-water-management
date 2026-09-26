@@ -6,11 +6,14 @@
 	`farmer` is the farm view: a farmer's note is always shown to the farm.
 	`farmOnly` lists only farm-visible notes: the WUA previewing a farm page
 	sees what its farmers see (the API already limits a farmer to those).
+	`words`: what a farmer's copy says (./words.ts), English by default; the
+	farm card passes the catalogue's, so this list never imports it.
 -->
 <script lang="ts">
 	import { api, NOTE_MAX, type Note } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
 	import { bodyProblem, createBody, normaliseBody, targetQuery, type NoteTarget } from './notes';
+	import { NOTES_EN, type NotesWords } from './words';
 
 	let {
 		projectId,
@@ -19,6 +22,7 @@
 		farmer = false,
 		farmOnly = false,
 		emptyText = 'No notes yet.',
+		words = NOTES_EN,
 		onChanged
 	}: {
 		projectId: string;
@@ -27,6 +31,7 @@
 		farmer?: boolean;
 		farmOnly?: boolean;
 		emptyText?: string;
+		words?: NotesWords;
 		/** After a note is added, edited or deleted (the count badges refresh). */
 		onChanged?: () => void;
 	} = $props();
@@ -44,7 +49,7 @@
 	const shown = $derived(notes && farmOnly ? notes.filter((n) => n.visibility === 'farm') : notes);
 	const showShare = $derived(!farmer && target.kind === 'node' && target.isFarm);
 	const draftLength = $derived(normaliseBody(draft).length);
-	const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+	const message = (err: unknown) => words.error(err);
 
 	async function load() {
 		loadError = null;
@@ -64,7 +69,7 @@
 
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
-		const problem = bodyProblem(draft);
+		const problem = bodyProblem(draft, words);
 		if (problem) {
 			error = problem;
 			return;
@@ -91,7 +96,7 @@
 
 	async function saveEdit(e: SubmitEvent, n: Note) {
 		e.preventDefault();
-		const problem = bodyProblem(editDraft);
+		const problem = bodyProblem(editDraft, words);
 		if (problem) {
 			error = problem;
 			return;
@@ -111,8 +116,7 @@
 	}
 
 	async function remove(n: Note) {
-		const whose = n.mine ? 'your note' : `${n.author ?? 'this person'}’s note`;
-		if (!confirm(`Delete ${whose}? It is hidden from everyone; editors keep it in the audit trail.`)) return;
+		if (!confirm(words.confirmDelete(n))) return;
 		busy = true;
 		error = null;
 		try {
@@ -129,35 +133,35 @@
 
 <div class="notes" data-notes-ready={notes !== null || loadError !== null ? 'true' : undefined}>
 	{#if loadError}
-		<div class="alert alert-error" role="alert">Couldn’t load the notes: {loadError}</div>
+		<div class="alert alert-error" role="alert">{words.loadFailed(loadError)}</div>
 	{:else if shown === null}
-		<p class="muted" aria-busy="true">Loading notes…</p>
+		<p class="muted" aria-busy="true">{words.loading}</p>
 	{:else if shown.length === 0}
 		<p class="muted">{emptyText}</p>
 	{:else}
-		<ul class="list" aria-label="Notes">
+		<ul class="list" aria-label={words.list}>
 			{#each shown as n (n.id)}
 				<li class="note">
 					{#if editing === n.id}
 						<form onsubmit={(e) => saveEdit(e, n)}>
-							<label for="{uid}-edit" class="visually-hidden">Edit note</label>
+							<label for="{uid}-edit" class="visually-hidden">{words.editLabel}</label>
 							<textarea id="{uid}-edit" rows="3" bind:value={editDraft} maxlength={NOTE_MAX + 200}></textarea>
 							<div class="row">
-								<button type="submit" class="btn btn-primary btn-sm" disabled={busy}>Save</button>
-								<button type="button" class="btn btn-sm" onclick={() => (editing = null)}>Cancel</button>
+								<button type="submit" class="btn btn-primary btn-sm" disabled={busy}>{words.save}</button>
+								<button type="button" class="btn btn-sm" onclick={() => (editing = null)}>{words.cancel}</button>
 							</div>
 						</form>
 					{:else}
 						<p class="body">{n.body}</p>
 					{/if}
 					<p class="meta muted">
-						<span>{n.mine ? 'You' : (n.author ?? 'A former member')}</span>
+						<span>{n.mine ? words.you : (n.author ?? words.formerMember)}</span>
 						· <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time>
-						{#if n.editedAt}<span title="Edited {fmtDate(n.editedAt, true)}">· edited</span>{/if}
+						{#if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
 						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to the farm</span>{/if}
 						{#if canWrite && editing !== n.id}
-							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>Edit<span class="visually-hidden"> note from {fmtDate(n.createdAt, true)}</span></button>{/if}
-							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>Delete<span class="visually-hidden"> note from {fmtDate(n.createdAt, true)}</span></button>{/if}
+							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
+							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
 						{/if}
 					</p>
 				</li>
@@ -167,18 +171,18 @@
 
 	{#if canWrite}
 		<form class="add" onsubmit={add}>
-			<label for="{uid}-new">Add a note</label>
+			<label for="{uid}-new">{words.add}</label>
 			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
 			<p id="{uid}-help" class="muted small">
-				Plain text.
-				{#if farmer}Read by the WUA and anyone else linked to this farm.{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this farm’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				{words.plainText}
+				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this farm’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
 				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
 			</p>
 			{#if showShare}
 				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this farm’s farmers</label>
 			{/if}
 			<div class="row">
-				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? 'Saving…' : 'Add note'}</button>
+				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>
 			</div>
 		</form>
 	{/if}

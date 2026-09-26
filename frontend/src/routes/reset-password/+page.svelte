@@ -9,6 +9,7 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
@@ -39,8 +40,8 @@
 			session.user = null;
 			done = true;
 		} catch (err) {
-			if (err instanceof ApiError && err.status === 400 && /link/i.test(err.message)) linkDead = true;
-			else error = err instanceof Error ? err.message : String(err);
+			if (err instanceof ApiError && err.code === 'link_invalid') linkDead = true;
+			else error = errorText(err);
 		} finally {
 			busy = false;
 		}

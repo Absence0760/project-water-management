@@ -2,8 +2,16 @@ import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
 
-/** Throw from a handler to return `{ error }` with a status. */
+/**
+ * Throw from a handler to return `{ error }` with a status. `error` is
+ * English for developers and integrators; the translated pages never show it.
+ */
 export class ApiError extends Error {
+	/** A stable, farmer-visible error code (ERROR_CODES); the translated pages word it from their catalogue. */
+	code?: ErrorCode;
+	/** Values the client's wording fills in (e.g. `seconds` for a lockout). */
+	params?: Record<string, number | string>;
+
 	constructor(
 		readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429,
 		message: string,
@@ -11,7 +19,45 @@ export class ApiError extends Error {
 	) {
 		super(message);
 	}
+
+	/**
+	 * An error a farmer can meet on a translated page (the sign-in, account,
+	 * alert and farm pages): the response carries `code` (and `params`), which
+	 * the client words in the reader's language (docs/api.md § Errors). The
+	 * English `message` stays for everyone else.
+	 */
+	static coded(status: ApiError['status'], code: ErrorCode, message: string, params?: Record<string, number | string>): ApiError {
+		const e = new ApiError(status, message);
+		e.code = code;
+		if (params) e.params = params;
+		return e;
+	}
 }
+
+/**
+ * Every error code the API sends (docs/api.md § Errors). A code is a
+ * contract: the frontend's catalogue has an `error.<code>` message for each
+ * (frontend/src/lib/i18n/apiError.test.ts), so rename none; add new ones.
+ * Errors without a code are worded on the client by their status.
+ */
+export const ERROR_CODES = [
+	'not_signed_in',
+	'account_exists',
+	'wrong_credentials',
+	'signin_locked',
+	'wrong_current_password',
+	'password_changed_elsewhere',
+	'link_invalid',
+	'already_verified',
+	'verification_sent_recently',
+	'invite_invalid',
+	'note_farmer_own_farm',
+	'note_farm_visibility',
+	'note_author_only',
+	'note_delete_denied',
+	'unsubscribe_link_gone'
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');
 
@@ -23,7 +69,15 @@ const PG_RLS = '42501';
 
 export function handleError(err: unknown, c: Context) {
 	if (err instanceof ApiError) {
-		return c.json({ error: err.message, ...(err.details ? { details: err.details } : {}) }, err.status);
+		return c.json(
+			{
+				error: err.message,
+				...(err.code ? { code: err.code } : {}),
+				...(err.params ? { params: err.params } : {}),
+				...(err.details ? { details: err.details } : {})
+			},
+			err.status
+		);
 	}
 	if (err instanceof ZodError) {
 		return c.json({ error: 'invalid request', details: err.issues }, 400);

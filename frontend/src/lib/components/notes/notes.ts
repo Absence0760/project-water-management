@@ -2,6 +2,7 @@
 // about, the query and create body for it, its count badge, and the words
 // for a note's target. Pure, so the rules are unit-tested.
 import { NOTE_MAX, type Note, type NoteCounts, type NoteCreate, type NotesQuery, type NoteVisibility } from '$lib/api/types';
+import { NOTES_EN, type NotesWords } from './words';
 
 /** What a drawer or list holds notes about. */
 export type NoteTarget =
@@ -125,10 +126,10 @@ export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingK
 /** The text as it is saved: trimmed, Windows line ends made plain. */
 export const normaliseBody = (s: string) => s.replace(/\r\n?/g, '\n').trim();
 
-/** Why a draft can't be saved, or null. */
-export function bodyProblem(s: string): string | null {
+/** Why a draft can't be saved, or null, in the list's words (English by default). */
+export function bodyProblem(s: string, w: Pick<NotesWords, 'writeFirst' | 'tooLong'> = NOTES_EN): string | null {
 	const t = normaliseBody(s);
-	if (!t) return 'Write something first.';
-	if (t.length > NOTE_MAX) return `Too long: ${t.length} of ${NOTE_MAX} characters.`;
+	if (!t) return w.writeFirst;
+	if (t.length > NOTE_MAX) return w.tooLong(t.length, NOTE_MAX);
 	return null;
 }

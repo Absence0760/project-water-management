@@ -10,6 +10,7 @@
 	import { session } from '$lib/auth/session.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
@@ -44,7 +45,7 @@
 			await emailAuth.resendVerification();
 			resendMsg = t('verify.sentNew', { email: session.user?.email ?? t('verify.yourAddress') });
 		} catch (err) {
-			resendMsg = err instanceof Error ? err.message : String(err);
+			resendMsg = errorText(err);
 		} finally {
 			resending = false;
 		}

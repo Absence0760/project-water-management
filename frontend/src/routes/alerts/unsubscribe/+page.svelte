@@ -10,14 +10,17 @@
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, type Unsubscribed } from '$lib/api';
+	import { api, ApiError, type Unsubscribed } from '$lib/api';
 	import { fragmentToken, unsubscribedText } from '$lib/components/alerts/words';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 
 	let token = $state<string | null>(null);
 	let status = $state<'loading' | 'ask' | 'working' | 'done' | 'dead' | 'incomplete'>('loading');
 	let done = $state<Unsubscribed | null>(null);
+	/** A failure that isn't the link's (no signal, a server problem): the question and its button stay, to try again. */
+	let failure = $state<string | null>(null);
 
 	onMount(() => {
 		token = fragmentToken(page.url.hash);
@@ -29,11 +32,17 @@
 	async function confirm() {
 		if (!token) return;
 		status = 'working';
+		failure = null;
 		try {
 			done = await api.alerts.unsubscribe(token);
 			status = 'done';
-		} catch {
-			status = 'dead';
+		} catch (e) {
+			// Only the server's "this link is no good" (404, or 400 for a malformed token) means the link is dead.
+			if (e instanceof ApiError && (e.status === 404 || e.status === 400)) status = 'dead';
+			else {
+				failure = errorText(e);
+				status = 'ask';
+			}
 		}
 	}
 </script>
@@ -47,6 +56,7 @@
 	<div data-ready={status === 'loading' ? undefined : 'true'} data-state={status}>
 		{#if status === 'ask' || status === 'working'}
 			<p>{t('unsubscribe.ask')}</p>
+			{#if failure}<div class="alert alert-error" role="alert">{failure}</div>{/if}
 			<button type="button" class="btn btn-primary" onclick={confirm} disabled={status === 'working'}>
 				{status === 'working' ? t('unsubscribe.working') : t('unsubscribe.confirm')}
 			</button>

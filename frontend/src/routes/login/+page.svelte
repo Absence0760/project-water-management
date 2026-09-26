@@ -8,6 +8,7 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 
 	// Dev-only shortcut to the seeded demo account; never in a production build.
 	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
@@ -30,9 +31,8 @@
 			session.user = await api.auth.login(email.trim(), password);
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
-			// 401 is the one answer worth wording here; a lockout (429) or anything else keeps the server's message.
-			if (err instanceof ApiError && err.status === 401) error = t('login.wrong');
-			else error = err instanceof Error ? err.message : String(err);
+			// A wrong password, a lockout (429) or anything else, worded from the error's code (docs/api.md § Errors).
+			error = err instanceof ApiError && err.status === 401 ? t('login.wrong') : errorText(err);
 		} finally {
 			busy = false;
 		}

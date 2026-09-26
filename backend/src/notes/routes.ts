@@ -192,7 +192,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 			const farmer = role === 'farmer' || role === 'contributor';
 			const visibility = body.visibility ?? (farmer ? 'farm' : 'team');
 			if (farmer && (!body.nodeId || visibility !== 'farm')) {
-				throw new ApiError(403, 'a farmer may add notes only to their own farm, shown to the farm');
+				throw ApiError.coded(403, 'note_farmer_own_farm', 'a farmer may add notes only to their own farm, shown to the farm');
 			}
 			if (body.nodeId) {
 				// RLS: a farmer sees only their linked farms (and gauges).
@@ -201,8 +201,8 @@ export const noteRoutes = new Hono<AuthEnv>()
 					[body.nodeId, id]
 				);
 				if (!rows[0]) throw notFound();
-				if (farmer && !rows[0].linked) throw new ApiError(403, 'a farmer may add notes only to their own farm, shown to the farm');
-				if (visibility === 'farm' && rows[0].kind !== 'farm') throw new ApiError(400, 'only a note on a farm can be shown to its farmers');
+				if (farmer && !rows[0].linked) throw ApiError.coded(403, 'note_farmer_own_farm', 'a farmer may add notes only to their own farm, shown to the farm');
+				if (visibility === 'farm' && rows[0].kind !== 'farm') throw ApiError.coded(400, 'note_farm_visibility', 'only a note on a farm can be shown to its farmers');
 			}
 			if (body.runId) {
 				// Farmers never reach here (above); a run of another project is not found.
@@ -224,7 +224,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 		return withUser(userId, async (db) => {
 			const role = await requireRole(db, id, 'farmer');
 			const note = await loadNote(db, id, noteId);
-			if (note.author_id !== userId) throw new ApiError(403, 'only the author may edit a note');
+			if (note.author_id !== userId) throw ApiError.coded(403, 'note_author_only', 'only the author may edit a note');
 			await db.query('UPDATE note SET body = $3 WHERE id = $1 AND project_id = $2', [noteId, id, body.body]);
 			return c.json({ note: toNote(await loadNote(db, id, noteId), userId, role) });
 		});
@@ -236,7 +236,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'farmer');
 			const note = await loadNote(db, id, noteId);
 			const own = note.author_id === userId;
-			if (!own && rank[role] < rank.editor) throw new ApiError(403, 'only the author or an editor may delete a note');
+			if (!own && rank[role] < rank.editor) throw ApiError.coded(403, 'note_delete_denied', 'only the author or an editor may delete a note');
 			// No RETURNING: a deleted note is no longer visible to its author (unless an editor).
 			await db.query('UPDATE note SET deleted_at = now() WHERE id = $1 AND project_id = $2', [noteId, id]);
 			// Never the body: the log says whose note, about what, and that it was hidden.

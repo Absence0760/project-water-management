@@ -11,8 +11,9 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { errorText } from '$lib/i18n/apiError';
 
-	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+	const msg = errorText;
 
 	// ---- Display name ----
 	let displayName = $state(session.user?.displayName ?? '');
@@ -97,7 +98,7 @@
 				passwordError = t('account.currentWrong');
 				passwordErrorField = 'current';
 			} else {
-				// 429 (the sign-in lockout) and anything else: the server's message says what to do.
+				// 429 (the sign-in lockout) and anything else, worded from the error's code (docs/api.md § Errors).
 				passwordError = msg(err);
 				passwordErrorField = null;
 			}

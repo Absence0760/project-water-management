@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-518 strings: 424 on the site, 70 in emails, 24 in the glossary.
+604 strings: 510 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -316,7 +316,7 @@ Farm view: the WUA’s restriction level, as published by the WUA.
 
 ### farm.notice
 
-Farm view: the WUA’s notice card, first on the page.
+Farm view (and the shared view): the WUA’s notice card, first on the page.
 
 | Key | English | Context | Afrikaans |
 | --- | --- | --- | --- |
@@ -510,6 +510,27 @@ Farm view: the notes card.
 | `farm.notes.title` | Notes about your farm |  |  |
 | `farm.notes.intro` | Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm. | Keep: {farm} |  |
 | `farm.notes.empty` | No notes about this farm yet. |  |  |
+| `farm.notes.loadFailed` | Couldn’t load the notes. {reason} | {reason} is one of the “Error messages” below. Keep: {reason} |  |
+| `farm.notes.loading` | Loading notes… |  |  |
+| `farm.notes.list` | Notes |  |  |
+| `farm.notes.editLabel` | Edit note |  |  |
+| `farm.notes.save` | Save |  |  |
+| `farm.notes.cancel` | Cancel |  |  |
+| `farm.notes.you` | You |  |  |
+| `farm.notes.formerMember` | A former member |  |  |
+| `farm.notes.edited` | edited |  |  |
+| `farm.notes.editedAt` | Edited {date} | Keep: {date} |  |
+| `farm.notes.edit` | Edit |  |  |
+| `farm.notes.delete` | Delete |  |  |
+| `farm.notes.noteFrom` | note from {date} | Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”. Keep: {date} |  |
+| `farm.notes.confirmMine` | Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. |  |  |
+| `farm.notes.confirmOther` | Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. | Keep: {author} |  |
+| `farm.notes.add` | Add a note |  |  |
+| `farm.notes.plainText` | Plain text. |  |  |
+| `farm.notes.audience` | Read by the WUA and anyone else linked to this farm. |  |  |
+| `farm.notes.submit` | Add note |  |  |
+| `farm.notes.writeFirst` | Write something first. |  |  |
+| `farm.notes.tooLong` | Too long: {length} of {max} characters. | {length} and {max} are numbers of characters. Keep: {length}, {max} |  |
 
 ### farm.chart
 
@@ -721,6 +742,113 @@ Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for 
 | `unsubscribe.kind.restriction_published` | restriction notice |  |  |
 | `unsubscribe.kind.job_dead` | failed background job |  |  |
 | `unsubscribe.kind.feed_failing` | failing data feed |  |  |
+
+### share
+
+The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `share.title` | Shared catchment view |  |  |
+| `share.titleNamed` | {name} · Shared catchment view | Keep: {name} |  |
+| `share.tag` | Shared view |  |  |
+| `share.loading` | Loading… |  |  |
+| `share.deadTitle` | This link doesn’t open anything |  |  |
+| `share.deadLink` | This link has expired or was withdrawn. Ask whoever sent it for a new one. |  |  |
+| `share.noLink` | This page needs the whole link. Open the link you were sent again, or ask whoever sent it for a new one. |  |  |
+| `share.loadFailed` | Couldn’t load this just now. Check your connection and try again. |  |  |
+| `share.sub` | Catchment water balance, shared read-only |  |  |
+| `share.published` | Published by {name} on {date}. Data up to {until}. | {name} is a person’s name, or “a former member” (share.formerMember); {date} and {until} are dates like “12 Jan 2024”. Keep: {date}, {name}, {until} |  |
+| `share.next` | Next update expected around {date}. | Keep: {date} |  |
+| `share.formerMember` | a former member |  |  |
+| `share.formerMemberByline` | A former member |  |  |
+| `share.reserveTitle` | The river’s ecological reserve |  |  |
+| `share.outlet` | At the catchment outlet |  |  |
+| `share.at` | At {place} | {place} is the name of a river gauge (a weir), as the WUA named it. Keep: {place} |  |
+| `share.season` | {n} of {days} below it this season (since {date}). | {n} is a number of days; {days} is like “102 days”; {date} is a date like “1 Oct 2023”. Keep: {date}, {days}, {n} |  |
+| `share.chartFailed` | Couldn’t load the flow chart just now. |  |  |
+| `share.noChart` | The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use. |  |  |
+| `share.aboutTitle` | About this page |  |  |
+| `share.about` | This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures. |  |  |
+| `share.farms` | {farms} in the catchment. | {farms} is like “6 farms”. Keep: {farms} |  |
+| `share.fine` | A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn. |  |  |
+
+### share.last30
+
+Shared view: each river site over the last 30 days. {days} is “30 days”.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `share.last30.kept` | Kept its reserve on every one of the last {days}. | Keep: {days} |  |
+| `share.last30.missedAll` | Below its reserve on all of the last {days}. | Keep: {days} |  |
+| `share.last30.missed` | Below its reserve on {n} of the last {days}. | Keep: {days}, {n} |  |
+
+### share.chart
+
+Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `share.chart.title` | River flow each month, in m³ a day |  |  |
+| `share.chart.flow` | Flow at the outlet |  |  |
+| `share.chart.reserve` | Ecological reserve |  |  |
+| `share.chart.caption` | Mean flow at the outlet and the ecological reserve each month, in m³ a day |  |  |
+| `share.chart.month` | Month |  |  |
+| `share.chart.flowCol` | Flow |  |  |
+| `share.chart.reserveCol` | Reserve |  |  |
+| `share.chart.none` | No flows to show. |  |  |
+| `share.chart.aboveAll` | The mean flow was above the reserve in every month. |  |  |
+| `share.chart.belowAll` | The mean flow was below the reserve in every month. |  |  |
+| `share.chart.below` | The mean flow was below the reserve in {n} of the {months} months. | Keep: {months}, {n} |  |
+| `share.chart.summary` | River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below. | {from} and {to} are months like “November 2023”; {verdict} is one of the three sentences above it. Keep: {from}, {to}, {verdict} |  |
+| `share.chart.span` | {from} to {to}. Monthly means of the modelled daily flow. | {from} and {to} are months like “Nov 2023”. Keep: {from}, {to} |  |
+
+### error
+
+A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `error.not_signed_in` | You’re not signed in. Sign in and try again. |  |  |
+| `error.account_exists` | An account with that email address already exists. Sign in, or reset your password. |  |  |
+| `error.wrong_credentials` | Wrong email or password. |  |  |
+| `error.signin_locked` | Too many sign-in attempts for this address. Try again in {wait}, or reset your password. | {wait} is “1 minute” or “3 minutes” (the error.minutes rows). Keep: {wait} |  |
+| `error.wrong_current_password` | Your current password is wrong. |  |  |
+| `error.password_changed_elsewhere` | Your password was changed somewhere else a moment ago. Sign in again. |  |  |
+| `error.link_invalid` | This link is invalid or has expired. Ask for a new one. |  |  |
+| `error.already_verified` | Your email address is already confirmed. |  |  |
+| `error.verification_sent_recently` | A confirmation email was sent a moment ago. Check your inbox, or try again in a minute. |  |  |
+| `error.invite_invalid` | This invitation is invalid or has expired. |  |  |
+| `error.note_farmer_own_farm` | You can add notes only to your own farm. |  |  |
+| `error.note_farm_visibility` | Only a note on a farm can be shown to its farmers. |  |  |
+| `error.note_author_only` | Only the person who wrote a note can change it. |  |  |
+| `error.note_delete_denied` | Only the person who wrote a note, or the WUA, can delete it. |  |  |
+| `error.unsubscribe_link_gone` | This link doesn’t work any more. |  |  |
+
+### error.minutes
+
+Error messages: a number of minutes inside “Try again in {wait}”.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `error.minutes.one` | {n} minute | Keep: {n} |  |
+| `error.minutes.other` | {n} minutes | Keep: {n} |  |
+
+### error.status
+
+Error messages for a problem the server gave no reason for.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `error.status.network` | Couldn’t reach the server. Check your connection and try again. |  |  |
+| `error.status.server` | Something went wrong on our side. Try again in a moment. |  |  |
+| `error.status.invalid` | That wasn’t accepted. Check what you entered and try again. |  |  |
+| `error.status.forbidden` | You don’t have access to that. |  |  |
+| `error.status.notFound` | That isn’t there any more. |  |  |
+| `error.status.conflict` | That clashes with a change made a moment ago. Reload the page and try again. |  |  |
+| `error.status.tooLarge` | That is too large to send. |  |  |
+| `error.status.tooMany` | Too many tries. Wait a minute and try again. |  |  |
+| `error.status.unknown` | Something went wrong. Try again. |  |  |
 
 ## Emails
 

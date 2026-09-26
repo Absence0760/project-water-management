@@ -93,7 +93,8 @@ test('registering an email twice is refused', async ({ page, playwright }) => {
 	await page.getByLabel('Password').fill(PASSWORD);
 	await page.getByRole('button', { name: 'Create account' }).click();
 
-	await expect(page.getByRole('alert')).toHaveText('an account with that email already exists');
+	// Worded from the error's code (account_exists) in the page's language, not the server's English (docs/api.md § Errors).
+	await expect(page.getByRole('alert')).toHaveText('An account with that email address already exists. Sign in, or reset your password.');
 });
 
 test('an unauthenticated deep link goes to login and back after signing in', async ({ page, playwright }) => {
