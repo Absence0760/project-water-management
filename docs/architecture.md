@@ -587,13 +587,15 @@ alerts plug in as a further kind.
   a base run × a season × up to 6 demand levels over the record's analogue
   years (at most the newest 40), as the editor who asked. The base run's
   stored input is rebuilt and run once (its state and rain on this engine),
-  then every level × year is one member run (`outlookMemberInput` →
-  `runModelWithoutChecks` → `outlookMember`), each stored as it finishes;
+  capturing the model's state on the decision date
+  (`outlookBaseAndSnapshot`, [model.md §2.16](./model.md)); then every
+  level × year is one member run over the season only, from that snapshot
+  (`runOutlookMember`), each stored as it finishes;
   the engine's `summariseOutlook` is the result. A member the engine
   refuses is stored as failed and the outlook carries on. At most 240
-  member runs, each a full run of the record, in one transaction: on the
-  synthetic 13-year test catchment 39 members take well under a second; the
-  cap keeps a long record inside the worker Lambda's 300 s. `progress`
+  member runs, each a season-long run, in one transaction: on the
+  synthetic test catchment 12 years × 4 levels take about 35 ms of engine
+  time (388 ms before snapshots); the cap keeps a long record inside the worker Lambda's 300 s. `progress`
   after each member, no cancel, at most 2 pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one

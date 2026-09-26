@@ -184,10 +184,9 @@ level (anything else would change the history the season starts from).
   is the result. Up to 6 levels and the newest 40 analogue years (240
   member runs), 2 pending per user, the newest 20 per project. A member
   the engine refuses is stored as failed and the outlook carries on. The
-  job still runs each member as a full run of the history and the season;
-  since engine 0.47.0 the engine can run them from one snapshot of the
-  history instead (model.md §2.16, `runOutlookMember`), the job's switch
-  still to make.
+  job runs the history once and each member over the season only, from a
+  snapshot of the decision date (engine 0.47.0, model.md §2.16,
+  `runOutlookMember`).
 - **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
   season as a month and day each end (default 1 October – 30 April,
   pending the client's O3) and the planning share (default 80 %, pending

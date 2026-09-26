@@ -4676,16 +4676,14 @@ day before for the attribution). A storage reset before the snapshot's
 day is already in its state and is dropped from the resumed run.
 
 **How a job uses it** (the outlook job, `backend/src/outlooks/store.ts`
-`computeOutlook`, which today re-runs the history per member): replace its
-base run, `runModelWithoutChecks(base)`, with
+`computeOutlook`, switched in the same release): its base run is
 `outlookBaseAndSnapshot(base, season.decisionDate)` (one run gives both the
 base output and the snapshot; the snapshot is null when the base run
 doesn't reach the decision date, and `outlookMemberInput`'s check then
-says why, as now), and each member's `outlookMemberInput` →
-`runModelWithoutChecks` with `runOutlookMember(snapshot, base, baseRun,
+says why), and each member is `runOutlookMember(snapshot, base, baseRun,
 season, analogue, level.ops)` (or its parts `outlookSeasonInput`,
 `runModelFrom`, `outlookMember`); the level probe and `summariseOutlook`
-stay as they are. So capture **once per job**, in the run the job already
+are unchanged. It captures **once per job**, in the run the job already
 makes: nothing to store, migrate or invalidate on an engine bump. The
 triggers' job takes a snapshot at the review date and, per band,
 `withDamStorage(snapshot, base, bandStartStorage(…).storageM3ByDam)`. A
