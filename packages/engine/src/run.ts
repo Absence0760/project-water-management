@@ -75,6 +75,7 @@ import {
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
+	type ForecastRainDays,
 	type FarmSummary,
 	type UserSummary,
 	type LandCoverClass,
@@ -87,7 +88,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.27.1';
+export const ENGINE_VERSION = '0.28.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -408,6 +409,7 @@ function runNetwork(
 	});
 
 	const window = resolveReportWindow(settings, start, days, warnings);
+	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -566,6 +568,7 @@ function runNetwork(
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection,
+			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainAccumulation: accumulation?.info ?? null,
 			warnings
@@ -1203,6 +1206,51 @@ function assessEwrRules(
 		out.push(a);
 	}
 	return out;
+}
+
+/**
+ * The days that ran on forecast rain (rain used = forecast because catchment
+ * rain and CHIRPS are blank), and a warning naming them: a forecast series
+ * extends the run, and the reporting window with it, past the last recorded
+ * rain, which the results otherwise don't show. undefined without a forecast
+ * series.
+ */
+function forecastRainDays(
+	input: ModelInput,
+	aligned: (k: SeriesKind) => (number | null)[],
+	start: number,
+	days: number,
+	window: { from: number; to: number; reportStart: string; reportEnd: string },
+	warnings: string[]
+): ForecastRainDays | null | undefined {
+	if (!input.series?.rain_forecast_mm) return undefined;
+	const c = aligned('rain_catchment_mm');
+	const ch = aligned('rain_chirps_mm');
+	const f = aligned('rain_forecast_mm');
+	let count = 0;
+	let first = -1;
+	let last = -1;
+	let inReport = 0;
+	let lastRecorded = -1;
+	for (let t = 0; t < days; t++) {
+		const recorded = (c[t] ?? null) !== null || (ch[t] ?? null) !== null;
+		if (recorded) lastRecorded = t;
+		else if ((f[t] ?? null) !== null) {
+			count++;
+			if (first < 0) first = t;
+			last = t;
+			if (t >= window.from && t <= window.to) inReport++;
+		}
+	}
+	if (!count) return null;
+	const from = fromEpochDay(start + first);
+	const to = fromEpochDay(start + last);
+	const span = count === 1 ? `1 day (${from})` : `${count} days (${from} to ${to}${count < last - first + 1 ? ', not all consecutive' : ''})`;
+	warnings.push(
+		`${span} of this run use forecast rain, not recorded rain (catchment or CHIRPS)` +
+			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd}), so curtailment and the EWR sites cover forecast days` : '')
+	);
+	return { days: count, from, to, inReport, lastRecorded: lastRecorded >= 0 ? fromEpochDay(start + lastRecorded) : null };
 }
 
 /**

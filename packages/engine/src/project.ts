@@ -1123,6 +1123,18 @@ export interface RunoffBalance {
 	storageEndMm: number;
 }
 
+export interface ForecastRainDays {
+	/** Days whose rain used is the forecast. */
+	days: number;
+	/** The first and last such day. */
+	from: string;
+	to: string;
+	/** How many fall inside the reporting window (curtailment, EWR sites). */
+	inReport: number;
+	/** The last day with recorded rain (catchment or CHIRPS); null when none. */
+	lastRecorded: string | null;
+}
+
 export interface RunSummary {
 	farms: FarmSummary[];
 	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
@@ -1206,6 +1218,14 @@ export interface RunSummary {
 	 * when the project has no CHIRPS series; absent on older runs.
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
+	/**
+	 * The days whose rain came from the forecast because neither catchment
+	 * rain nor CHIRPS had a value (engine ≥ 0.28.0): a forecast can extend the
+	 * run, and with it the reporting window, past the last recorded rain.
+	 * null when the project has a forecast series but no day used it; absent
+	 * without a forecast series and on older runs.
+	 */
+	forecastRain?: ForecastRainDays | null;
 	/**
 	 * Catchment rain treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20):
 	 * the flagged zero runs and listed periods, and what filled them. null when

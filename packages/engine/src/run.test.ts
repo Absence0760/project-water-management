@@ -2033,3 +2033,37 @@ describe('catchment area', () => {
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, input)).toBe(150);
 	});
 });
+
+describe('runModel — forecast rain days (engine 0.28.0)', () => {
+	// 10 days: recorded catchment rain on the first 7, forecast on the last 3.
+	const withForecast = (settings: Partial<ProjectSettings> = {}) => {
+		const x = input({ nodes: [node('A')], natural: new Array(10).fill(100), rain: [1, 0, 2, 0, 0, 3, 0, null, null, null], settings });
+		x.series!.rain_forecast_mm = { startDate: '2020-01-06', values: [9, 9, 4, 5, 6] };
+		return runModelWith(x, () => ({ naturalFlowM3Day: new Array(10).fill(100) }));
+	};
+
+	it('names the days that ran on forecast rain and how many the reporting window holds', () => {
+		const out = withForecast();
+		// Days 6–7 have recorded rain, so their forecast values are not used.
+		expect(out.summary.forecastRain).toEqual({ days: 3, from: '2020-01-08', to: '2020-01-10', inReport: 3, lastRecorded: '2020-01-07' });
+		expect(out.summary.warnings).toContain(
+			'3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (2020-01-01 to 2020-01-10), so curtailment and the EWR sites cover forecast days'
+		);
+	});
+
+	it('counts only the forecast days inside a narrower reporting window, and says nothing of it when none are', () => {
+		expect(withForecast({ reportStart: '2020-01-04', reportEnd: '2020-01-08' }).summary.forecastRain?.inReport).toBe(1);
+		const before = withForecast({ reportStart: '2020-01-01', reportEnd: '2020-01-07' });
+		expect(before.summary.forecastRain?.inReport).toBe(0);
+		expect(before.summary.warnings.find((w) => w.includes('forecast rain'))).toBe('3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS)');
+	});
+
+	it('is null when a forecast series is never used, and absent without one (positive control: no warning)', () => {
+		const x = input({ nodes: [node('A')], natural: new Array(5).fill(100), rain: [1, 1, 1, 1, 1] });
+		x.series!.rain_forecast_mm = { startDate: '2020-01-01', values: [9, 9, 9, 9, 9] };
+		const used = runModelWith(x, () => ({ naturalFlowM3Day: new Array(5).fill(100) }));
+		expect(used.summary.forecastRain).toBeNull();
+		expect(used.summary.warnings.some((w) => w.includes('forecast rain'))).toBe(false);
+		expect('forecastRain' in run({ nodes: [node('A')], natural: [100] }).summary).toBe(false);
+	});
+});

@@ -569,7 +569,15 @@ their final values once published), and a CHIRPS-GEFS feed writes the 16-day
 forecast into `rain_forecast_mm`. Neither changes the priority above: rain
 used is catchment rain, else CHIRPS (bias-corrected here, unless the mode is
 `'none'`), else the forecast, so fed CHIRPS fills only the days the catchment
-series doesn't have, and the forecast only days past both. Because the feed
+series doesn't have, and the forecast only days past both. A forecast also
+**extends the run**: the run window runs to the last day of any rain series,
+forecast included, and the reporting window (curtailment, EWR sites) defaults
+to the run's end. So the run records the days that used forecast rain
+(`summary.forecastRain`, engine ≥ 0.28.0: how many, the first and last, how
+many fall in the reporting window, and the last day of recorded rain) and
+warns: *3 days (… to …) of this run use forecast rain, not recorded rain
+(catchment or CHIRPS); all of them fall in the reporting window (…), so
+curtailment and the EWR sites cover forecast days*. Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
