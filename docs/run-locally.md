@@ -21,7 +21,8 @@ pnpm setup
 
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
-then `pnpm dev:mail:up` (Mailpit, see [Email](#email)).
+then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
+(MinIO, for report PDFs, see [Reports](#reports)).
 On first boot of the empty volume, `dev/postgres/00-roles.sql` creates the
 `water_app` login role and the `water_test` database. The migrations then
 create the schema.
@@ -46,6 +47,11 @@ No env files to write. `backend/.env.development` and
 | `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
 | `JOB_TRANSPORT` | `inprocess` | How the job worker is woken: `inprocess` (the local worker polls and LISTENs), `memory` (tests), `sqs` (production). See [Background jobs](#background-jobs) |
 | `JOB_POLL_SECONDS` | `15` | How often the local worker looks for due jobs without a wake-up |
+| `REPORT_RENDERER` | `inline` | Where a report PDF is printed: `inline` (the worker's own headless Chromium), `sqs` (production's renderer Lambda). See [Reports](#reports) |
+| `RENDER_SITE_URL` / `RENDER_API_URL` | `http://localhost:7777` / `http://localhost:3001` | The site the renderer opens, and the API it signs in to |
+| `STORAGE` | `local` | Where PDFs go: `local` = MinIO from docker-compose; `s3` in production |
+| `REPORTS_BUCKET` / `S3_ENDPOINT` | `water-reports` / `http://127.0.0.1:9002` | The bucket (created on first use) and MinIO's API |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
 
 To override something on your machine, create a gitignored
@@ -170,6 +176,31 @@ gitignored `backend/.env.development.local` and use real coordinates. CHIRPS
 and the forecast are public; the DWS site may refuse requests from outside
 South Africa (HTTP 403), which the feed shows as failing.
 
+## Reports
+
+The report page's **Generate PDF / Email me the PDF** and Settings →
+**Scheduled reports** make the PDF on the server
+([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+Locally that needs no AWS account, just three local pieces:
+
+```bash
+pnpm dev:s3:up              # MinIO: the PDFs (API :9002, console http://localhost:9003, minioadmin / minioadmin)
+pnpm dev:mail:up            # Mailpit: the emailed links (http://localhost:8026)
+pnpm test:e2e:install       # once: the Chromium the worker prints with (Playwright's, shared with e2e)
+pnpm dev:full               # the app + the worker, which renders
+```
+
+The worker renders in-process (`REPORT_RENDERER=inline`): it opens the dev
+site's report route (`RENDER_SITE_URL`, `:7777`) in headless Chromium, signs in
+with a single-use render token through the dev API (`RENDER_API_URL`,
+`:3001`), waits for the page to be ready, prints it to A4 and stores it in
+MinIO (`STORAGE=local`; the `water-reports` bucket is created on first use).
+All of that is in the committed `backend/.env.development`. The largest
+example catchment (Sandspruit, 14 pages) renders in about 3 s. Without the
+worker running a PDF stays "queued"; `pnpm dev:jobs:tick` renders it once.
+Scheduled reports are queued by the worker's tick when their time comes (a
+schedule never sends for a time that had passed when it was saved).
+
 ## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
@@ -292,8 +323,8 @@ pnpm dev:db:reset           # DELETE all local data, recreate and migrate
 ```bash
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
-pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree)
-pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere)
+pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF when MinIO is up, and skips (saying so) when it isn't
+pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 ```
 
@@ -333,6 +364,13 @@ pnpm build                  # frontend/build (static) + backend/dist/lambda.mjs
   connect ECONNREFUSED 127.0.0.1:1026` (Mailpit isn't up). Reset and
   verification emails go out at most once a minute per address, so a quick
   second request is silently skipped.
+
+**A PDF stays "queued", or fails**
+: The worker isn't running (`pnpm dev:full` or `pnpm dev:jobs:tick`). "The PDF
+  could not be stored" means MinIO isn't up (`pnpm dev:s3:status`, then
+  `pnpm dev:s3:up`). "The report could not be rendered (the browser failed)"
+  usually means Playwright's Chromium isn't installed
+  (`pnpm test:e2e:install`). The worker's console has the details.
 
 **Port 7777 or 3001 already in use**
 : The frontend port is fixed at 7777. The backend respects `PORT`.

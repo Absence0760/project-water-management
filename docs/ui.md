@@ -851,6 +851,26 @@ its own chunk loaded with the tab; WP-2.10,
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
 
+### Scheduled reports
+
+Below Data feeds, **Scheduled reports** (`#set-report-schedules`;
+`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
+the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+run's report to chosen members every week or month.
+
+- **The list**, one card per schedule: "Every Monday at 07:00
+  (Africa/Johannesburg)" or "On the 1st of every month at 06:00 (UTC)", who it
+  goes to and who it sends as, and "Next: …" with, when the last due time sent
+  nothing, why ("the project had no runs to report on"); a paused one says
+  **Paused.**
+- **Add a schedule** (editors and owners): every week (on a weekday) or month
+  (on day 1–28), the hour, the time zone (an IANA name, the browser's own by
+  default), and **Send to**: checkboxes of the project's members who can read
+  the report (farmers are not offered; you are ticked if you are one).
+  **Pause / Resume** and **Remove** (with a confirm) on each card.
+- Viewers see the list, with no buttons.
+- Tested by `e2e/tests/server-report.spec.ts`.
+
 ## Runs & results
 
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
@@ -1223,7 +1243,7 @@ exists, says so with a link to Runs & results.
   `data-report-ready` once every fetch is in (including the summary's lazy
   human-impact tables) and every chart has drawn (`isReportReady`). Until then
   the bar says "Preparing the report…" and **Download PDF** is disabled. The
-  signal is what e2e waits on, and what a server-side render (Phase B) would.
+  signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
   PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
   before each section, headings kept with what follows, rows and figures not
@@ -1235,6 +1255,27 @@ exists, says so with a link to Runs & results.
   `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
   the charts redraw synchronously, so the canvas is light before the page is
   laid out; `afterprint` puts the previous theme back.
+- **Generate PDF / Email me the PDF** (WP-2.15 Phase B, issue #26;
+  `lib/components/report/ServerPdf.svelte`, a lazy chunk loaded with the bar)
+  sit beside Download PDF for any viewer. They queue a server-side render of
+  the shown run: the background worker opens this same page in headless
+  Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
+  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+  The bar then follows the job's status (`role="status"`: "PDF queued: waiting
+  for the background worker…", "Making the PDF…", "The first try failed (…);
+  trying again shortly…", "PDF ready (9 pages). The link is on its way by
+  email.", or "The PDF could not be made: …"), polling the API every 1.5 s
+  until it settles, and offers **Download the generated PDF** (a link valid
+  for an hour). The wrapper carries `data-state` (`idle`, `starting`,
+  `queued`, `rendering`, `retrying`, `done`, `failed`). Locally the worker
+  must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
+- **The emailed link** opens `/projects/:id/reports/:jobId`
+  (`routes/projects/[id]/reports/[jobId]/+page.svelte`, its own lazy route):
+  signed out, the reader signs in first and comes back; a member sees the
+  status and, once ready, **Download the PDF** (a fresh one-hour link each
+  visit) and **Open the report in the app**. Anyone else, or a PDF past its 7
+  days, gets "This report doesn't exist any more, or you don't have access to
+  its project." Tested by `e2e/tests/server-report.spec.ts`.
 
 ## Help (`/help`)
 

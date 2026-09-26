@@ -10,7 +10,8 @@
 #   - RDS never initiates connections;
 #   - the migrate Lambda additionally needs Secrets Manager (to read the
 #     RDS-managed master credentials), reached through ONE interface endpoint;
-#   - the worker Lambda (jobs.tf) talks to Postgres and to SQS.
+#   - the worker Lambda (jobs.tf) talks to Postgres, to SQS and, for report
+#     emails, to SES (reports.tf).
 #
 # A NAT gateway would be ~$33/month + data before any traffic; an interface
 # endpoint is ~$7.30/month per AZ. If a future feature needs outbound calls
