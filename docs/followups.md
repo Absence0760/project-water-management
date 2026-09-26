@@ -1820,7 +1820,15 @@ role and not before it.
       before the fix and 40/40 after; waits under load were a few ms, and
       none reached 1 s in 1,840 tests. Unloaded click → glossary on screen:
       median 59.5 ms before, 58.9 ms after (25 runs each). Tests:
-      `stylesheets.test.ts`. Not yet reported upstream (SvelteKit / Vite).
+      `stylesheets.test.ts`.
+- [ ] **Report the CSS-before-render race upstream.** A ready-to-file
+      report (versions, cause with code references, failing trace, a fix
+      for each project, our workaround) is in
+      [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md):
+      file it on `sveltejs/kit` with a cross-reference on `vitejs/vite`.
+      Filing publishes to an outside project, so it's the operator's call.
+      Trigger: anyone with a GitHub account and ten minutes; once fixed
+      upstream, `stylesheetsReady` can go after a version bump.
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
