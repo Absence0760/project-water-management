@@ -8,10 +8,18 @@ export type Db = pg.PoolClient;
  * with is_local=true, so it is cleared at COMMIT/ROLLBACK and can never leak
  * to the next request that borrows this pooled connection. Every RLS policy
  * keys on this setting — all project-scoped queries must go through here.
+ *
+ * Also sets `app.change_set_id` to a fresh UUID: every history row the
+ * transaction writes (model_revision, series_revision, audit_event;
+ * 026_history.sql) defaults its change_set to it, so one request's rows group
+ * together in the History tab.
  */
 export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): Promise<T> {
 	return inTransaction(async (db) => {
-		await db.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+		await db.query("SELECT set_config('app.current_user_id', $1, true), set_config('app.change_set_id', $2, true)", [
+			userId,
+			crypto.randomUUID()
+		]);
 		return fn(db);
 	});
 }
