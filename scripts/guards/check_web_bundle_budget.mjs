@@ -360,6 +360,13 @@
 //             KB (+12). No page's first load grows; the largest chunk is
 //             still 37 KB. No new dependency. Headroom ~6 KB. Issue #9 still
 //             stands.
+// 2026-09-26  total 740 → 750 KB; other ceilings unchanged. CHIRPS product
+//             and version (issue #40 part c): the b023 import review's CHIRPS
+//             column choice, the Upload CSV and series-row version selects,
+//             the Data feeds panel's product / start-date fields and version
+//             question (its own lazy chunk), and the fit record's CHIRPS
+//             comparison. Measured 744 KB with it. No new dependency; the
+//             largest chunk is unchanged. Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -370,7 +377,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 740,
+	totalCodeKb: 750,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,
