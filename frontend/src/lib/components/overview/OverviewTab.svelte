@@ -28,6 +28,7 @@
 		canEdit,
 		isOwner,
 		currentUserId,
+		visibleTabs,
 		onProjectChange,
 		onLeftProject
 	}: {
@@ -40,6 +41,8 @@
 		canEdit: boolean;
 		isOwner: boolean;
 		currentUserId: string;
+		/** The tabs this member is shown (lib/workspace/tabs.ts); the setup checklist links only to these. */
+		visibleTabs: readonly string[];
 		onProjectChange: (p: Project) => void;
 		onLeftProject: () => void;
 	} = $props();
@@ -182,7 +185,7 @@
 	}
 </script>
 
-<SetupChecklist {steps} />
+<SetupChecklist {steps} tabs={visibleTabs} />
 
 {#if pick}
 	<LatestRun

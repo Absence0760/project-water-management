@@ -52,6 +52,34 @@ Tabs follow the modelling workflow:
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
+| History | `history` | `changes` | `lib/components/history/` |
+
+**Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
+`visibleTabs(role, prefs, rendered)`, decides which tabs the strip shows and
+which setup-checklist steps are links:
+
+| Role | Tabs shown |
+| --- | --- |
+| owner, editor | every tab |
+| viewer | Overview, Data, Runs & results (and Scenarios once the page has it); Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip |
+| farmer, none | Overview only (a farmer is redirected to `/farm/:id` anyway) |
+
+Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
+inputs), so adding a tab is one line; a tab the table doesn't know counts as
+an input, and a tab the page doesn't render is dropped. Overview can never be
+hidden. Whether a viewer starts with the inputs shown is one constant,
+`VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT` (`false`; a client question). The
+checkbox isn't saved: it resets when the project is opened again.
+
+This is **presentation, not access control**: RLS still lets a viewer read
+every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
+opens it, and the strip then shows that tab in its place while it is open
+(`stripTabs`), so you can see where you are. The Overview checklist keeps a
+hidden tab's step and its status, but as plain text rather than a link; its
+headline facts still link to their tabs (a deep link, as above). The
+per-member "choose your own tabs" preference is not built yet
+([followups.md](./followups.md#roles-and-what-each-member-sees)); it will
+arrive through `prefs`.
 
 The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.

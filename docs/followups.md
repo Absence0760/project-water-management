@@ -1123,13 +1123,19 @@ Open gaps:
       explicitly (unknown grants nothing); creating or moving a project
       into a team needs team member or admin; a viewer's copy is personal
       (data-model.md § Teams, ui.md § Teams).
-- [ ] **Tabs by role.** Viewers are shown tabs they can't act on and mostly
-      don't need. Build one pure function, `visibleTabs(role, prefs)`, that
+- [x] **Tabs by role** (2026-09-26, issue #6; ui.md § Tabs by role). Viewers
+      were shown tabs they can't act on and mostly don't need. One pure
+      function, `visibleTabs(role, prefs)` (`lib/workspace/tabs.ts`), that
       the tab strip and the Overview checklist (whose steps link to tabs) both use:
       - owner and editor: every tab, as now;
       - viewer: Overview and Runs & results, plus Data (charts and
         downloads); the model tabs (Network, Crops, Transfers, Settings &
-        calibration) sit behind a "Show model inputs" toggle.
+        calibration) sit behind a "Show model inputs" toggle. History (the
+        change log of those inputs) sits there too.
+
+      Still a question for the client: should viewers see the model inputs
+      by default? Built as "no", in one constant
+      (`VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT`).
 
       **This is presentation, not access control.** RLS still lets a viewer
       read every input, so a deep link (`?tab=settings`) keeps working, and
@@ -1143,7 +1149,8 @@ Open gaps:
       still opens from a deep link, and a "Hidden tabs (2)" menu brings it
       back.
 
-Tests for the last two: unit tests for `visibleTabs` across role ×
+Tests (tabs by role, built: `lib/workspace/tabs.test.ts`,
+`e2e/tests/tabs-by-role.spec.ts`; members' own tabs, to come): unit tests for `visibleTabs` across role ×
 preference, including an owner who can't lose Overview. An e2e test that a
 viewer sees the short tab set, turns on "Show model inputs", and opens a
 deep link to a hidden tab. Route-auth is unchanged. Docs: ui.md (the tabs
