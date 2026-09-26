@@ -1291,21 +1291,29 @@ No Afrikaans wording ships yet: none is reviewed.
       (two significant figures below what the fixed decimals show), the
       engine's `fdcPercentileTable` in the summary CSV, the workbook and the
       report, and `project.time_zone` (058) dating every download.
-- [ ] **Other server-side "today"s are still UTC's** (found with issue #45).
-      Download names now use the project's time zone (`project.time_zone`,
-      `projects/timeZone.ts` `localDate`), but a few server dates still count
-      from UTC's calendar day: the alert evaluator's `today`
-      (`alerts/evaluate.ts`), the feeds' `utcToday` (`feeds/fetch.ts`, which
-      is right for CHIRPS's UTC days but not for a data age shown to a
-      person), the portfolio's `today` (api.md § Portfolio) and the farm
-      view's `madeOn`. Between 22:00 and 24:00 UTC they are a day behind a
-      South African reader. **Durable fix:** date each by
-      `localDate(now, project.time_zone)` where a person reads it, keeping
-      UTC only where the source's own days are UTC (CHIRPS). **Trigger:** the
-      next change to any of them, or a persona finding of an off-by-one day.
-      The account's `my-data_<date>.json` belongs to no project, so it is
-      dated in the default zone (`DEFAULT_TIME_ZONE`) by design until users
-      have a zone of their own.
+- [x] **Other server-side "today"s are still UTC's** (found with issue #45;
+      fixed 2026-09-26). Every day the server counts or writes for a person
+      is now the calendar day in the project's time zone
+      (`projects/timeZone.ts` `localDate`; SQL through `app_time_zone`,
+      059_local_day): the alert evaluator's `today` and a forecast's
+      `madeOn` (`alerts/evaluate.ts`), the 06:00 digest and the daily cap
+      (`app_alert_claim` / `app_alert_claim_digest` now take the worker's
+      clock and work out each delivery's 06:00 from its project's zone, so
+      the evaluator, the cap and the digest agree on one local day), feed
+      health (`feeds/health.ts`: `checked`, `since` and staleness), the
+      portfolio (each row carries its own `timeZone` and `today`; the
+      team-wide `today` is gone), the farm view's `stale` and its forecast's
+      `madeOn` (stored at publish), and the dates in server-written text:
+      a publication's `citedBy` name, the auto-publish note, a restore's
+      reason, the allocation re-import refusal, the not-reproducible
+      message and an unlabelled run's name in the report email. Kept UTC
+      on purpose: `feeds/fetch.ts` `utcToday`, the fetch plumbing's clock
+      (which days to ask for, the newest a source can have), since CHIRPS
+      days are UTC days and UTC's today is never after a DWS (South
+      African) day; the sources' own dates, never shifted; the account's
+      `my-data_<date>.json`, which belongs to no project
+      (`DEFAULT_TIME_ZONE`) until users have a zone of their own.
+      Publications made before this keep the UTC `madeOn` they stored.
 - [x] **FarmDay help diagram is behind the engine** (fixed 2026-09-25):
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its

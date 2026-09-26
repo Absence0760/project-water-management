@@ -12,6 +12,8 @@ import { hashToken } from '../auth/tokens.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { outbox, type Mail } from '../mail/transport.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
+import { evaluateAlerts } from './evaluate.js';
 import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, sendAlerts } from './send.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -33,6 +35,8 @@ const FARM_NAMES = farms.map((f) => f.name);
 const FARM_ORDER = [...FARM_NAMES].sort();
 
 const tick = () => runTick({ feeds: false, reports: false, alerts: false });
+/** Today where the test projects are (their default zone, 058): the day the evaluator counts to. */
+const localToday = () => localDate(new Date(), DEFAULT_TIME_ZONE);
 /** Alert mails only (they carry List-Unsubscribe), not the sign-up confirmations. */
 const mailsTo = (u: { email: string }) => outbox.filter((m) => m.to === u.email && m.headers?.['List-Unsubscribe']);
 const tokenIn = (m: Mail) => m.text.match(/\/alerts\/unsubscribe#t=([A-Za-z0-9_-]{43})/)![1]!;
@@ -587,8 +591,8 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 		const { id: pid } = await makeProject(owner, 'Alerts stale');
 		const [feed] = await asOwner(
 			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
-			 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', 'gauge', $2, $2, now(), now(), current_date - 250, 0) RETURNING id`,
-			[pid, owner.id]
+			 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', 'gauge', $2, $2, now(), now(), $3::date - 250, 0) RETURNING id`,
+			[pid, owner.id, localToday()]
 		);
 		expect((await rules(owner, [{ kind: 'data_stale', feedId: feed.id, threshold: 3, enabled: true }], pid)).status).toBe(200);
 		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
@@ -613,8 +617,8 @@ describe('per-feed staleness levels (057 feed_id)', () => {
 		(
 			await asOwner(
 				`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, now(), now(), current_date - $8::int) RETURNING id`,
-				[pid, source, source === 'dws' ? { station: 'X0H000' } : { cells: [{ lat: -33, lon: 19 }] }, source === 'dws' ? 'flow_observed_m3s' : 'rain_chirps_mm', name, enabled, owner.id, ago]
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, now(), now(), $9::date - $8::int) RETURNING id`,
+				[pid, source, source === 'dws' ? { station: 'X0H000' } : { cells: [{ lat: -33, lon: 19 }] }, source === 'dws' ? 'flow_observed_m3s' : 'rain_chirps_mm', name, enabled, owner.id, ago, localToday()]
 			)
 		)[0].id as string;
 	const staleRules = async (pid: string) =>
@@ -734,5 +738,160 @@ describe('per-feed staleness levels (057 feed_id)', () => {
 			['DWS gauge flow (gauge)', 20, true, true]
 		]);
 		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+});
+
+// The project's own day (058 time_zone, 059): the evaluator's "today", a
+// forecast's madeOn, and the digest's 06:00 are where the catchment is, never
+// UTC's or the server's. 23:30 UTC is already the next day in South Africa.
+describe('the project’s local day', () => {
+	const zone = process.env.TZ;
+	afterAll(() => {
+		process.env.TZ = zone;
+	});
+
+	it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago'])('data_stale counts days late to the project’s today at 23:30 UTC (server TZ %s; positive control: a UTC project)', async (tz) => {
+		process.env.TZ = tz;
+		const { id: pid } = await makeProject(owner, `Local day ${tz}`);
+		// 23:30 UTC on 25 September is 01:30 on the 26th in South Africa.
+		const now = new Date('2026-09-25T23:30:00Z');
+		// A DWS feed whose newest day is 243 days before the 26th: 3 days past its 240-day delay there, 2 in UTC's reckoning.
+		const [f] = await asOwner(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date)
+			 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', 'gauge', $2, $2, now(), now(), date '2026-09-26' - 243) RETURNING id`,
+			[pid, owner.id]
+		);
+		// Threshold 2: fires past 2 days late.
+		await asOwner(`INSERT INTO alert_rule (project_id, kind, feed_id, threshold) VALUES ($1, 'data_stale', $2, 2)`, [pid, f.id]);
+		const event = async () =>
+			(await asOwner(`SELECT state, value FROM alert_event WHERE project_id = $1 AND kind = 'data_stale' ORDER BY opened_at DESC LIMIT 1`, [pid]))[0] as
+				| { state: string; value: number }
+				| undefined;
+		// Positive control first: in a UTC project it is still the 25th, 2 days late, not past the level.
+		await asOwner(`UPDATE project SET time_zone = 'UTC' WHERE id = $1`, [pid]);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid, { now }));
+		expect(await event()).toBeUndefined();
+		// South African (the default): the 26th, 3 days late, fires.
+		await asOwner(`UPDATE project SET time_zone = DEFAULT WHERE id = $1`, [pid]);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid, { now }));
+		expect(await event()).toEqual({ state: 'firing', value: 3 });
+		// Hysteresis follows the same count: UTC's 2 days late is not below the level (data_stale re-arms under it), so it keeps firing and follows the figure.
+		await asOwner(`UPDATE project SET time_zone = 'UTC' WHERE id = $1`, [pid]);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid, { now }));
+		expect(await event()).toEqual({ state: 'firing', value: 2 });
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		await asOwner(`DELETE FROM alert_delivery WHERE project_id = $1`, [pid]);
+	});
+
+	it('an EWR forecast is dated, and still current, by the project’s day (positive control: a UTC project)', async () => {
+		const { id: pid, runId } = await makeProject(owner, 'Local forecast');
+		// A forecast run made at 22:30 UTC on the 25th: 00:30 on the 26th in South Africa.
+		const setForecast = (to: string) =>
+			asOwner(`UPDATE model_run SET trigger = 'forecast', created_at = '2026-09-25T22:30:00Z', summary = jsonb_set(summary, '{forecast}', $2::jsonb) WHERE id = $1`, [
+				runId,
+				JSON.stringify({ from: '2026-09-12', to, days: 14, outletEwrDaysAtRisk: 5, perFarm: [] })
+			]);
+		await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3)`, [pid]);
+		const evaluate = async (tz: string) => {
+			await asOwner('DELETE FROM alert_event WHERE project_id = $1', [pid]);
+			await asOwner(`UPDATE project SET time_zone = $2 WHERE id = $1`, [pid, tz]);
+			await withUser(owner.id, (db) => evaluateAlerts(db, pid, { now: new Date('2026-09-25T23:40:00Z') }));
+			const rows = await asOwner(`SELECT state, detail->>'madeOn' AS "madeOn" FROM alert_event WHERE project_id = $1 AND kind = 'ewr_forecast_fail'`, [pid]);
+			return rows[0] as { state: string; madeOn: string } | undefined;
+		};
+		// Current in both: made on the 25th in UTC, on the 26th in South Africa.
+		await setForecast('2026-09-26');
+		expect(await evaluate('UTC')).toEqual({ state: 'firing', madeOn: '2026-09-25' });
+		expect(await evaluate('Africa/Johannesburg')).toEqual({ state: 'firing', madeOn: '2026-09-26' });
+		// A forecast that ends on the 25th is past at 23:40 UTC in South Africa (the 26th there)…
+		await setForecast('2026-09-25');
+		expect(await evaluate('Africa/Johannesburg')).toBeUndefined();
+		// …positive control: still current in a UTC project.
+		expect(await evaluate('UTC')).toEqual({ state: 'firing', madeOn: '2026-09-25' });
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		await asOwner(`DELETE FROM alert_event WHERE project_id = $1`, [pid]);
+	});
+
+	it('alert_digest_start is 06:00 in the given zone, whatever the session’s time zone; an unknown zone falls back to South Africa', async () => {
+		for (const session of ['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+			const at = async (instant: string, tz: string) =>
+				(
+					(await asOwner(
+						`SELECT set_config('TimeZone', $3, true), to_char(alert_digest_start($1::timestamptz, $2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI') AS s`,
+						[instant, tz, session]
+					)) as { s: string }[]
+				)[0]!.s;
+			// 06:00 SAST is 04:00 UTC; a minute before it is still the previous digest day.
+			expect(await at('2026-09-26T10:00:00Z', 'Africa/Johannesburg')).toBe('2026-09-26T04:00');
+			expect(await at('2026-09-26T03:59:00Z', 'Africa/Johannesburg')).toBe('2026-09-25T04:00');
+			expect(await at('2026-09-26T04:00:00Z', 'Africa/Johannesburg')).toBe('2026-09-26T04:00');
+			// 23:30 UTC on the 31st is 01:30 SAST on 1 November: still October's digest day there.
+			expect(await at('2026-10-31T23:30:00Z', 'Africa/Johannesburg')).toBe('2026-10-31T04:00');
+			// UTC+14 and UTC−11: 06:00 there.
+			expect(await at('2026-09-26T10:00:00Z', 'Pacific/Kiritimati')).toBe('2026-09-25T16:00'); // 00:00 on the 27th there
+			expect(await at('2026-09-26T10:00:00Z', 'Pacific/Pago_Pago')).toBe('2026-09-25T17:00'); // 23:00 on the 25th there
+			// A zone Postgres doesn't know: South Africa's, never an error.
+			expect(await at('2026-09-26T10:00:00Z', 'Not/A_Zone')).toBe('2026-09-26T04:00');
+		}
+		expect(await asOwner(`SELECT app_time_zone('Not/A_Zone') AS a, app_time_zone('Pacific/Kiritimati') AS b, app_time_zone(NULL) AS c`)).toEqual([
+			{ a: 'Africa/Johannesburg', b: 'Pacific/Kiritimati', c: 'Africa/Johannesburg' }
+		]);
+	});
+
+	it('the digest goes out after 06:00 in each project’s zone: due in South Africa, not yet in Kiritimati (positive control: later it is)', async () => {
+		const { id: sa } = await makeProject(owner, 'Digest SA');
+		const { id: kiri } = await makeProject(owner, 'Digest Kiritimati');
+		await asOwner(`UPDATE project SET time_zone = 'Pacific/Kiritimati' WHERE id = $1`, [kiri]);
+		const u = await signUp('Adigestzone');
+		for (const pid of [sa, kiri]) {
+			expect((await owner.call('POST', `/projects/${pid}/members`, { email: u.email, role: 'editor' })).status).toBe(201);
+			// An EWR forecast alert: an editor gets it by default (job_dead is off for editors).
+			const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3) RETURNING id`, [pid]);
+			const [e] = await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'cleared', 5, '{"days":5,"of":14,"from":"2026-09-12","to":"2026-09-25","madeOn":"2026-09-11"}') RETURNING id`, [rule.id, pid]);
+			// Queued at 05:30 SAST on the 26th = 03:30 UTC = 17:30 on the 26th in Kiritimati.
+			await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode, status, created_at) VALUES ($1, $2, $3, 'daily_digest', 'digest', '2026-09-26T03:30:00Z')`, [
+				e.id,
+				u.id,
+				pid
+			]);
+		}
+		const status = async (pid: string) => (await asOwner(`SELECT status FROM alert_delivery WHERE user_id = $1 AND project_id = $2`, [u.id, pid]))[0].status;
+		// 06:30 SAST (04:30 UTC): South Africa's 06:00 has passed; Kiritimati's (16:00 UTC on the 25th) was before the line was queued.
+		await sendAlerts({ now: new Date('2026-09-26T04:30:00Z') });
+		expect(await status(sa)).toBe('sent');
+		expect(await status(kiri)).toBe('digest');
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — Water Management']);
+		// 06:00 on the 27th in Kiritimati (16:00 UTC on the 26th): now it goes.
+		await sendAlerts({ now: new Date('2026-09-26T16:00:00Z') });
+		expect(await status(kiri)).toBe('sent');
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest SA — Water Management', 'Your alerts for Digest Kiritimati — Water Management']);
+	});
+
+	it('the daily cap counts since 06:00 in the project’s zone', async () => {
+		const { id: kiri } = await makeProject(owner, 'Cap Kiritimati');
+		await asOwner(`UPDATE project SET time_zone = 'Pacific/Kiritimati' WHERE id = $1`, [kiri]);
+		const u = await signUp('Acapzone');
+		expect((await owner.call('POST', `/projects/${kiri}/members`, { email: u.email, role: 'editor' })).status).toBe(201);
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3) RETURNING id`, [kiri]);
+		const event = async () =>
+			(await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'cleared', 5, '{"days":5,"of":14,"from":"2026-09-12","to":"2026-09-25","madeOn":"2026-09-11"}') RETURNING id`, [rule.id, kiri]))[0].id as string;
+		// Five immediate mails sent at 10:00 UTC today: after 06:00 in South Africa, but in Kiritimati (UTC+14) that is
+		// 00:00 local, before its 06:00, so in the previous digest day there.
+		const today = new Date().toISOString().slice(0, 10);
+		for (let i = 0; i < 5; i++)
+			await asOwner(
+				`INSERT INTO alert_delivery (event_id, user_id, project_id, mode, status, via, claimed_at, sent_at) VALUES ($1, $2, $3, 'immediate', 'sent', 'immediate', $4, $4)`,
+				[await event(), u.id, kiri, `${today}T10:00:00Z`]
+			);
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [await event(), u.id, kiri]);
+		const pending = async () => (await asOwner(`SELECT status, reason FROM alert_delivery WHERE user_id = $1 AND status NOT IN ('sent')`, [u.id]));
+		// 18:00 UTC = 08:00 on the next day in Kiritimati: a new digest day there, so the sixth mail goes now.
+		await sendAlerts({ now: new Date(`${today}T18:00:00Z`) });
+		expect(await pending()).toEqual([]);
+		// Positive control: one more at 15:00 UTC (05:00 Kiritimati, the same digest day as the five) waits for the digest.
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [await event(), u.id, kiri]);
+		await asOwner(`UPDATE alert_delivery SET claimed_at = $2 WHERE user_id = $1 AND via = 'immediate' AND claimed_at > $2`, [u.id, `${today}T10:00:00Z`]);
+		await sendAlerts({ now: new Date(`${today}T15:00:00Z`) });
+		expect(await pending()).toEqual([{ status: 'digest', reason: 'over the daily cap' }]);
 	});
 });

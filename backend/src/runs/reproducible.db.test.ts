@@ -197,10 +197,12 @@ describe('stored run inputs', () => {
 			);
 			return rows[0]!.id;
 		});
+		// Made at 22:30 UTC: the next day in South Africa, the day the message names (the project's zone, 058).
+		await asOwner(`UPDATE model_run SET created_at = '2026-09-25T22:30:00Z' WHERE id = $1`, [legacy]);
 		const err = await loadError(viewer.id, legacy);
 		expect(err).toBeInstanceOf(RunInputError);
 		expect(err.problem).toBe('not_reproducible');
-		expect(err.message).toMatch(/^this run is not reproducible from stored inputs: it was made on \d{4}-\d{2}-\d{2}, before runs stored their input series/);
+		expect(err.message).toMatch(/^this run is not reproducible from stored inputs: it was made on 2026-09-26, before runs stored their input series/);
 		// Positive control: the run it copied is reproducible.
 		await expect(withUser(viewer.id, (db) => loadRunInput(db, runId))).resolves.toBeTruthy();
 	});

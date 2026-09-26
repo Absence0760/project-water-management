@@ -1,7 +1,12 @@
 // A feed's health, as the status panel shows it: one state and the reason for
 // it, a code with its facts (the client writes the sentence and formats the
 // days, so no date is baked into server text). Pure, from the feed's health
-// columns and today's UTC date.
+// columns, today and the project's time zone: every day it reports or counts
+// to (today, when it was checked, attached or last grew) is the calendar day
+// where the catchment is (project.time_zone, 058), not UTC's, which is a day
+// behind a South African reader from 22:00 to 24:00 UTC. The source's own
+// days (lastDataDate, a staged record's from/through) are the source's dates
+// and pass through as they are.
 //
 //   disabled  switched off by an owner
 //   failing   the last fetch failed (consecutive_failures > 0)
@@ -17,13 +22,16 @@
 // `stale` is also reported on its own, so a failing feed that is out of date
 // says both.
 import { toEpochDay } from '@water-management/engine/calendar';
+import { localDate } from '../projects/timeZone.js';
 import { type FeedConfig, type FeedSource, SOURCES } from './config.js';
 
 export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled'] as const;
 export type FeedState = (typeof FEED_STATES)[number];
 
 /**
- * Why the feed is in its state. Days are calendar days (YYYY-MM-DD, UTC).
+ * Why the feed is in its state. Days are calendar days (YYYY-MM-DD): the
+ * source's own for `newest`, `from` and `through`, the project's time zone's
+ * for `checked` and `since`.
  *
  *   off           switched off; `newest` is the newest day, or null
  *   failing       `failures` fetches in a row failed, the last with `error`
@@ -81,9 +89,13 @@ export const REBUILD_STALL_DAYS = 1;
 /** A feed with no data counts as stale this long after it was attached or last saved. */
 const FIRST_DATA_GRACE_DAYS = 2;
 
-const iso = (d: Date | string) => (typeof d === 'string' ? d : d.toISOString()).slice(0, 10);
-
-export function feedHealth(f: HealthInput, today: string): FeedHealth {
+/**
+ * `f`'s health on `today`, the calendar day in `timeZone` (the caller's
+ * localDate(now, project.time_zone)); the instants it reports are dated in
+ * that zone too.
+ */
+export function feedHealth(f: HealthInput, today: string, timeZone: string): FeedHealth {
+	const iso = (d: Date | string) => localDate(typeof d === 'string' ? new Date(d) : d, timeZone);
 	const staleAfterDays = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
 	const t = toEpochDay(today);
 	const since = f.updatedAt ?? f.createdAt;

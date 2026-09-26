@@ -21,7 +21,7 @@ export interface SourceSpec {
 	unit: string;
 	/**
 	 * A feed is stale when its newest day is more than this many days before
-	 * today (UTC): the source's normal publishing lag plus a margin. Negative
+	 * today (in the project's time zone, health.ts): the source's normal publishing lag plus a margin. Negative
 	 * for a forecast, whose newest day is in the future.
 	 */
 	staleAfterDays: number;

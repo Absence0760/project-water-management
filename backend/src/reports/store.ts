@@ -171,7 +171,7 @@ export async function finishReport(db: Db, report: ReportRow, r: { pages: number
 	await db.query(`UPDATE report SET status = 'done', pages = $2, bytes = $3, finished_at = now(), error = NULL WHERE id = $1`, [report.id, r.pages, r.bytes]);
 	if (!report.emailTo.length || !report.jobId) return;
 	const { rows: facts } = await db.query<{ projectName: string; runName: string | null; requestedBy: string; requesterEmail: string }>(
-		`SELECT p.name AS "projectName", COALESCE(NULLIF(mr.label, ''), 'of ' || to_char(mr.created_at AT TIME ZONE 'UTC', 'DD Mon YYYY')) AS "runName",
+		`SELECT p.name AS "projectName", COALESCE(NULLIF(mr.label, ''), 'of ' || to_char(mr.created_at AT TIME ZONE app_time_zone(p.time_zone), 'DD Mon YYYY')) AS "runName",
 			u.display_name AS "requestedBy", u.email AS "requesterEmail"
 		 FROM project p JOIN app_user u ON u.id = $3 LEFT JOIN model_run mr ON mr.id = $2
 		 WHERE p.id = $1`,
