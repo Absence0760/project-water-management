@@ -1456,7 +1456,7 @@ on.** WP-2.8, WP-2.9 (`mergeInto`), WP-2.4. D6, D7.
 
 ### WP-2.11 Auto re-run after new data
 
-> **Status: built** (`037_auto_rerun.sql`, `backend/src/series/newData.ts`,
+> **Status: built** (`041_auto_rerun.sql`, `backend/src/series/newData.ts`,
 > `backend/src/runs/autoRun.ts`, `backend/src/publish/autoPublish.ts`,
 > `jobs/handlers/rerun.ts`; [architecture.md § Automatic runs](../architecture.md#automatic-runs)).
 > Where the build departs from the design below, and why:
@@ -1472,11 +1472,12 @@ on.** WP-2.8, WP-2.9 (`mergeInto`), WP-2.4. D6, D7.
 >   project's settings. It reads `settings.autoRun` itself (defaults as
 >   `resolveAutoRun`, held together by a DB test) and asks
 >   `app_rerun_acting_user` who the re-run runs as.
-> - **API keys: the key's creator is the acting user.** WP-2.9's merge
->   replaces `app_rerun_acting_user` (one function) to answer
->   `api_key.created_by` for a live key of the project; `job_enqueue` already
->   lets a definer caller with no user name the acting user. The job then
->   fails closed if that person is no longer an editor.
+> - **API keys: the key's creator is the acting user.**
+>   `app_rerun_acting_user` answers `api_key.created_by` for a live key of the
+>   project, and `job_enqueue` lets a definer caller with no user name the
+>   acting user. The job then fails closed if that person is no longer an
+>   editor. A key whose creator was deleted skips the re-run (no job) and
+>   never rolls the ingest back.
 > - **Dedupe key** `rerun`, shared with `POST /projects/:id/jobs` (the dedupe
 >   index is already per project, so it is `rerun:<project>` in effect). A
 >   pending manual re-run is left alone (it reads the new data when it

@@ -347,7 +347,7 @@ which already names every step-2 kind (`feed_fetch`, `feed_ingest`, `rerun`,
 
 New data runs the model by itself when a project opts in (roadmap WP-2.11;
 `backend/src/series/newData.ts`, `backend/src/runs/autoRun.ts`,
-`037_auto_rerun.sql`). Off by default: `settings.autoRun = { enabled,
+`041_auto_rerun.sql`). Off by default: `settings.autoRun = { enabled,
 debounceMinutes, publish }` (defaults `false`, `15`, `'never'`), set in
 Settings → Automatic runs.
 
@@ -373,13 +373,14 @@ Settings → Automatic runs.
   can't see the project, can queue too), with the same defaults as
   `resolveAutoRun`. Enqueues for one project serialise on an advisory lock.
 - **Who it runs as**: `app_rerun_acting_user(project)`: the signed-in
-  editor who wrote the data (for a feed, the feed's acting user). For an API
-  key, WP-2.9 replaces that one function to answer the key's creator
-  (`api_key.created_by`) while the transaction acts as a live key of the
-  project; `job_enqueue` lets a `SECURITY DEFINER` caller with no signed-in
-  user name the acting user (a plain insert with no user is still refused).
-  Like any job, the re-run runs as that person under RLS and fails closed if
-  they are no longer an editor.
+  editor who wrote the data (for a feed, the feed's acting user), or for an
+  API key's ingest the key's creator (`api_key.created_by`) while the
+  transaction acts as a live key of the project; `job_enqueue` lets a
+  `SECURITY DEFINER` caller with no signed-in user name the acting user (a
+  plain insert with no user is still refused). Like any job, the re-run runs
+  as that person under RLS and fails closed if they are no longer an editor.
+  A key whose creator's account was deleted has nobody to run as: the re-run
+  is skipped (`rerunQueuedFor: null`) and the ingest still commits.
 - **The run** (`jobs/handlers/rerun.ts`, payload `trigger: 'auto'`): does
   nothing if the project turned automatic runs off since; otherwise
   `executeRun(db, id, autoRunLabel, 'auto')`, labelled `Auto · data to

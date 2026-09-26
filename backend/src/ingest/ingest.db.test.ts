@@ -204,7 +204,7 @@ describe('ingesting days', () => {
 		expect(first.status, JSON.stringify(first.body)).toBe(200);
 		expect(first.body.series).toMatchObject({ kind: 'rain_catchment_mm', name: 'Weir gauge', unit: 'mm', startDate: '2024-03-01', length: 3 });
 		expect(first.body.daysChanged).toBe(3);
-		// WP-2.11 joins the re-run here (series/newData.ts); until then nothing is queued.
+		// Automatic runs are off in this project: nothing is queued (the queued case is below).
 		expect(first.body.rerunQueuedFor).toBeNull();
 
 		const next = await merge(secret, rain('2024-03-03', [13, 2], 'Weir gauge'));
@@ -400,5 +400,67 @@ describe('the rate limit', () => {
 		expect((await owner.call('DELETE', `/projects/${projectId}/api-keys/${id}`)).status).toBe(204);
 		const [{ w }] = await asOwner('SELECT app_api_key_take($1, 5, 1) AS w', [id]);
 		expect(w).toBe(-1);
+	});
+});
+
+describe('automatic re-runs from an ingest (041_auto_rerun.sql, WP-2.11)', () => {
+	/** A fresh project owned by `u`, automatic runs as given, and a key `u` made for it. */
+	async function keyed(u: User, autoRun: Record<string, unknown> | null) {
+		const pid = (await u.call('POST', '/projects', { name: 'Auto-run ingest' })).body.project.id as string;
+		if (autoRun) expect((await u.call('PATCH', `/projects/${pid}`, { settings: { autoRun } })).status).toBe(200);
+		const res = await createKey(pid, {}, u);
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		return { pid, keyId: res.body.key.id as string, secret: res.body.secret as string };
+	}
+	const rerunJobs = async (pid: string) =>
+		(await asOwner(`SELECT id, run_after, acting_user_id, payload FROM job WHERE project_id = $1 AND kind = 'rerun'`, [pid])) as {
+			id: string;
+			run_after: Date;
+			acting_user_id: string;
+			payload: Record<string, unknown>;
+		}[];
+
+	it('with automatic runs on, queues a re-run acting as the key’s creator and answers when it is due', async () => {
+		const { pid, secret } = await keyed(owner, { enabled: true });
+		const res = await merge(secret, rain('2026-03-01', [1, 2]));
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const jobs = await rerunJobs(pid);
+		expect(jobs).toHaveLength(1);
+		expect(jobs[0]).toMatchObject({ acting_user_id: owner.id, payload: { trigger: 'auto', cause: 'ingest' } });
+		expect(res.body.rerunQueuedFor).toBe(jobs[0]!.run_after.toISOString());
+		// The same days again change nothing: no push-back, and null.
+		const again = await merge(secret, rain('2026-03-01', [1, 2]));
+		expect(again.body.rerunQueuedFor).toBeNull();
+		expect(await rerunJobs(pid)).toHaveLength(1);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('with automatic runs off, queues nothing (positive control: the days merge)', async () => {
+		const { pid, secret } = await keyed(owner, null);
+		const res = await merge(secret, rain('2026-03-01', [1, 2]));
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({ daysChanged: 2, rerunQueuedFor: null });
+		expect(await rerunJobs(pid)).toHaveLength(0);
+	});
+
+	it('a key whose creator’s account was deleted still ingests, and skips the re-run', async () => {
+		const creator = await signUp('Kcreator');
+		const pid = (await owner.call('POST', '/projects', { name: 'Orphaned key' })).body.project.id as string;
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: creator.email, role: 'owner' })).status).toBe(201);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true } } })).status).toBe(200);
+		const res0 = await createKey(pid, {}, creator);
+		expect(res0.status).toBe(201);
+		const { key, secret } = res0.body as { key: { id: string }; secret: string };
+		// The account goes; api_key.created_by is ON DELETE SET NULL, so the key keeps working.
+		await asOwner('DELETE FROM app_user WHERE id = $1', [creator.id]);
+		expect((await asOwner('SELECT created_by FROM api_key WHERE id = $1', [key.id]))[0].created_by).toBeNull();
+
+		const res = await merge(secret, rain('2026-03-01', [4, 5]));
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body).toMatchObject({ daysChanged: 2, rerunQueuedFor: null });
+		expect(await rerunJobs(pid)).toHaveLength(0);
+		// The days are there: the ingest committed.
+		const [row] = await asOwner(`SELECT "values" FROM time_series WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [pid]);
+		expect(row.values).toEqual([4, 5]);
 	});
 });

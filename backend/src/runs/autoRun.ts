@@ -1,5 +1,5 @@
 // Automatic re-runs after new data (roadmap WP-2.11; docs/architecture.md
-// § Background work, 037_auto_rerun.sql): the project setting, the enqueue
+// § Background work, 041_auto_rerun.sql): the project setting, the enqueue
 // behind the new-data hook (series/newData.ts onSeriesDaysChanged, which
 // every source of new days calls), and the auto run's label.
 //
@@ -79,10 +79,11 @@ export interface QueuedRerun {
 /**
  * Queue or push back the project's automatic re-run (app_enqueue_rerun), or
  * nothing when the project hasn't turned automatic runs on (null). As the
- * transaction's user, who must be an editor, or, once WP-2.9's seam is in
- * (app_rerun_acting_user), as a live API key of the project, whose re-run
- * then runs as the key's creator. Anyone else: 42501, and the caller's
- * transaction rolls back.
+ * transaction's user, who must be an editor, or as a live API key of the
+ * project, whose re-run then runs as the key's creator
+ * (app_rerun_acting_user). A key whose creator's account was deleted has
+ * nobody to run as: nothing is queued (null), and the ingest still commits.
+ * Anyone else: 42501, and the caller's transaction rolls back.
  */
 export async function enqueueRerun(db: Db, projectId: string, cause: NewDataCause): Promise<QueuedRerun | null> {
 	const { rows } = await db.query<{ job_id: string; due_at: Date; created: boolean }>('SELECT job_id, due_at, created FROM app_enqueue_rerun($1, $2)', [

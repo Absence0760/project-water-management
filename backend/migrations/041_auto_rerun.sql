@@ -1,4 +1,4 @@
--- 037_auto_rerun — automatic re-runs after new data (roadmap WP-2.11;
+-- 041_auto_rerun — automatic re-runs after new data (roadmap WP-2.11;
 -- docs/architecture.md § Background work, docs/data-model.md § Jobs and
 -- § Run storage cap).
 --
@@ -27,13 +27,15 @@
 --      and time.
 --
 --   3. app_rerun_acting_user(): who a re-run queued in this transaction runs
---      as. Here, the signed-in user when they are an editor of the project.
---      The seam for API keys: WP-2.9's merge replaces this one function
---      (CREATE OR REPLACE, from this definition) to also answer the key's
---      creator (api_key.created_by) when the transaction acts as a live key
---      of this project (app_api_key_project('series:write') = p_project). The
---      re-run then runs as that person under RLS, and fails closed if they
---      are no longer an editor by then (jobs/runner.ts), like any job.
+--      as: the signed-in user when they are an editor of the project, or,
+--      when the transaction acts as a live API key of this project
+--      (039_api_keys: app_api_key_project('series:write') = p_project), the
+--      key's creator (api_key.created_by). The re-run then runs as that
+--      person under RLS, and fails closed if they are no longer an editor by
+--      then (jobs/runner.ts), like any job. A key whose creator's account was
+--      deleted (created_by NULL) has nobody to run as: app_enqueue_rerun
+--      skips the re-run (no job, no row) rather than refuse, so the key's
+--      ingest still commits.
 --
 --   4. job_enqueue (016_jobs, replaced from its latest definition): a
 --      SECURITY DEFINER caller with no signed-in user (app_enqueue_rerun for
@@ -50,7 +52,10 @@ COMMENT ON COLUMN model_run.trigger IS
 CREATE FUNCTION app_rerun_acting_user(p_project uuid) RETURNS uuid
 	LANGUAGE sql STABLE SET search_path = public
 	AS $$
-		SELECT CASE WHEN app_current_user_id() IS NOT NULL AND app_has_role(p_project, 'editor') THEN app_current_user_id() END
+		SELECT CASE
+			WHEN app_current_user_id() IS NOT NULL THEN CASE WHEN app_has_role(p_project, 'editor') THEN app_current_user_id() END
+			WHEN app_api_key_project('series:write') = p_project THEN (SELECT k.created_by FROM api_key k WHERE k.id = app_current_api_key_id())
+		END
 	$$;
 
 -- 4. From 016_jobs.sql's job_enqueue, with the one new case.
@@ -115,6 +120,11 @@ CREATE FUNCTION app_enqueue_rerun(p_project uuid, p_cause text)
 		v_max_wait constant interval := interval '120 minutes';
 	BEGIN
 		IF v_actor IS NULL THEN
+			-- A live key of this project whose creator's account was deleted:
+			-- skip the re-run, never roll the key's ingest back.
+			IF app_current_user_id() IS NULL AND app_api_key_project('series:write') = p_project THEN
+				RETURN;
+			END IF;
 			RAISE EXCEPTION 'only an editor of the project can queue a re-run' USING ERRCODE = 'insufficient_privilege';
 		END IF;
 		IF p_cause IS NULL OR p_cause NOT IN ('series', 'feed', 'ingest') THEN

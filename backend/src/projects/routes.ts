@@ -39,7 +39,7 @@ type ProjectRow = {
 	last_run_at: Date | null;
 	/** When the current publication was published (022_publication), or null. */
 	published_at: Date | null;
-	/** When the project's pending re-run is due, or null (037_auto_rerun). */
+	/** When the project's pending re-run is due, or null (041_auto_rerun). */
 	rerun_queued_for: Date | null;
 };
 
@@ -81,7 +81,7 @@ const SELECT_PROJECT = `
 		-- index answers it). Every member reads run_publication, farmers too.
 		(SELECT pub.published_at FROM run_publication pub
 			WHERE pub.project_id = p.id AND pub.superseded_at IS NULL) AS published_at,
-		-- When the pending re-run (manual or automatic, 037_auto_rerun) is due;
+		-- When the pending re-run (manual or automatic, 041_auto_rerun) is due;
 		-- job_dedupe_idx answers it. Viewers read job rows (016_jobs).
 		(SELECT j.run_after FROM job j
 			WHERE j.project_id = p.id AND j.dedupe_key = 'rerun' AND j.status IN ('queued', 'failed')) AS rerun_queued_for

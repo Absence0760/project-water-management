@@ -1,4 +1,4 @@
-// Automatic re-runs after new data (WP-2.11: 037_auto_rerun.sql,
+// Automatic re-runs after new data (WP-2.11: 041_auto_rerun.sql,
 // runs/autoRun.ts, jobs/handlers/rerun.ts, runs/execute.ts trimRuns,
 // publish/autoPublish.ts): the setting gate, the debounce and its maximum
 // wait, the dedupe, who may queue one, the auto run itself, the storage cap
@@ -307,43 +307,6 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		}
 	});
 
-	it('the API-key seam: a transaction with no user queues as whoever app_rerun_acting_user names, and only then', async () => {
-		// WP-2.9's merge replaces app_rerun_acting_user to answer a live key's
-		// creator. Stand in for it here: answer the owner when the (test-only)
-		// setting names the project, as a key context would, then put the
-		// function back. DB test files run one at a time, so nothing else sees it.
-		const owner = await signUp('AutoKey');
-		const pid = await runnable(owner, { enabled: true });
-		const [{ def }] = await asOwner(`SELECT pg_get_functiondef('app_rerun_acting_user(uuid)'::regprocedure) AS def`);
-		await asOwner(
-			`CREATE OR REPLACE FUNCTION app_rerun_acting_user(p_project uuid) RETURNS uuid LANGUAGE sql STABLE SET search_path = public AS $f$
-				SELECT CASE WHEN app_current_user_id() IS NOT NULL AND app_has_role(p_project, 'editor') THEN app_current_user_id()
-					WHEN current_setting('app.test_key_project', true) = p_project::text THEN '${owner.id}'::uuid END
-			$f$`
-		);
-		try {
-			const keyed = (project: string) =>
-				withoutUser(async (db) => {
-					await db.query(`SELECT set_config('app.test_key_project', $1, true)`, [project]);
-					return enqueueRerun(db, pid, 'ingest');
-				});
-			// Another project's "key": still nobody to run it as.
-			await expect(keyed(crypto.randomUUID())).rejects.toMatchObject({ code: '42501' });
-			// Its own: queued, as the key's creator (the stand-in's answer), not refused for want of a user.
-			const q = await keyed(pid);
-			expect(q).toMatchObject({ created: true });
-			const [job] = await rerunJobs(pid);
-			expect(job).toMatchObject({ id: q!.jobId, acting_user_id: owner.id, payload: { trigger: 'auto', cause: 'ingest' } });
-			// And it runs as that person, under RLS, like any job.
-			await makeDue(pid);
-			await runTick();
-			expect(await runs(pid)).toEqual([expect.objectContaining({ trigger: 'auto' })]);
-		} finally {
-			await asOwner(def as string);
-		}
-		const [{ now }] = await asOwner(`SELECT pg_get_functiondef('app_rerun_acting_user(uuid)'::regprocedure) AS now`);
-		expect(now).toBe(def);
-	});
 });
 
 describe('trimRuns with auto runs', () => {
