@@ -24,16 +24,30 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * (010_run_nomination.sql). A job's row changes only through the queue's
  * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql). An import
  * report is the record of what the importer flagged (017_project_import.sql).
- * A render token is issued, then consumed or purged only through
- * app_consume_render_token (022_reports.sql).
+ * A run's stored inputs are immutable: a reference goes only with its run
+ * (cascade) and a blob only when no run references it, through the
+ * series_blob_gc trigger (021_series_blob.sql). A render token is issued,
+ * then consumed or purged only through app_consume_render_token
+ * (022_reports.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'render_token']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series', 'render_token']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
  * can't be cherry-picked (014_run_uncertainty.sql).
  */
 const NO_DELETE = new Set(['run_uncertainty']);
+/**
+ * Tables with a node column that farmers never read (020_farm_scope.sql). A
+ * farmer reads run results only through a publication (WP-2.3), so run_series
+ * stays closed to them until that adds its own policy. Every other table with
+ * a node column needs a farmer-aware SELECT policy (one that calls
+ * app_farm_nodes), so a new per-farm table can't ship without a decision about
+ * farmers.
+ */
+const FARMERS_NEVER_READ = new Set(['run_series']);
+/** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
+const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
 let db: pg.Client;
 beforeAll(async () => {
@@ -139,6 +153,28 @@ describe('schema catalogue', () => {
 			);
 			expect(policies.map((p) => p.polname), `${table} update/delete policies`).toEqual([]);
 		}
+	});
+
+	it('gives every table with a node column a farmer-aware SELECT policy, or lists it as never read by farmers', async () => {
+		const { rows } = await db.query<{ table_name: string; farmer_aware: boolean }>(
+			`SELECT c.table_name,
+				EXISTS (
+					SELECT 1 FROM pg_policy p
+					WHERE p.polrelid = ('public.' || c.table_name)::regclass AND p.polcmd IN ('r', '*')
+					  AND pg_get_expr(p.polqual, p.polrelid) LIKE '%app_farm_nodes%'
+				) AS farmer_aware
+			 FROM information_schema.columns c
+			 WHERE c.table_schema = 'public' AND c.column_name ~ 'node_id$'
+			 GROUP BY c.table_name`
+		);
+		expect(rows.length).toBeGreaterThan(3);
+		const undecided = rows
+			.filter((r) => !r.farmer_aware && !FARMERS_NEVER_READ.has(r.table_name) && !FARMER_SCOPED_BY_USER.has(r.table_name))
+			.map((r) => r.table_name);
+		expect(undecided).toEqual([]);
+		// And a table on the list really is closed to farmers.
+		const listedButOpen = rows.filter((r) => r.farmer_aware && FARMERS_NEVER_READ.has(r.table_name)).map((r) => r.table_name);
+		expect(listedButOpen).toEqual([]);
 	});
 
 	it('pins search_path on every function in public', async () => {

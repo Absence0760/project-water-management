@@ -18,6 +18,7 @@ import type {
 	ImportResult,
 	EnsembleDetail,
 	EnsembleStart,
+	Farmer,
 	Member,
 	Nomination,
 	Project,
@@ -218,6 +219,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
+		/** Farmer members and their farms (WP-2.1). A farmer leaves or is removed through members.remove. */
+		farmers: {
+			list: (id: string) => request<{ farmers: Farmer[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
+			/** An existing, verified account only (invites for farmers come with WP-2.2). */
+			add: (id: string, email: string, nodeIds: string[]) =>
+				request<{ farmer: Farmer }>('POST', `${p(id)}/farmers`, { email, nodeIds }).then((r) => r.farmer),
+			setFarms: (id: string, userId: string, nodeIds: string[]) =>
+				request<{ farmer: Farmer }>('PUT', `${p(id)}/farmers/${enc(userId)}`, { nodeIds }).then((r) => r.farmer)
+		},
 		teams: {
 			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),
 			create: (name: string) => request<{ team: Team }>('POST', '/teams', { name }).then((r) => r.team),
@@ -294,7 +304,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},
 		uncertainty: {
-			/** A run's own input (its settings and model snapshot with the project's series); 409 when the data changed since. */
+			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */
 			runInput: (id: string, runId: string) => request<{ input: ModelInput }>('GET', `${p(id)}/runs/${enc(runId)}/model-input`).then((r) => r.input),
 			/** Every ensemble started for a run, newest first, without their members. */
 			list: (id: string, runId: string) => request<{ ensembles: Ensemble[] }>('GET', `${p(id)}/runs/${enc(runId)}/uncertainty`).then((r) => r.ensembles),

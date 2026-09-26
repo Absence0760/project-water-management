@@ -41,6 +41,8 @@ erDiagram
   app_user ||--o{ job : "acts as"
   project  ||--o{ data_feed : "scheduled feeds"
   app_user |o--o{ data_feed : "acts as (nullable)"
+  project_member ||--o{ farm_link : "farmer's farms"
+  node     ||--o{ farm_link : "linked farmers"
 ```
 
 ## Tables and their workbook origin
@@ -129,8 +131,10 @@ ORDINALITY` (fine for occasional reports).
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
-MB to a few tens of MB. The engine is deterministic, so any run can be recomputed from
-its `inputs` snapshot plus `engine_version`.
+MB to a few tens of MB. The engine is deterministic, so a run saved since
+migration 021 can be recomputed from its `inputs` snapshot plus its stored
+input series (`loadRunInput`, see **Stored run inputs** below) on the same
+`engine_version`.
 
 - **Cap per project.** Each new run deletes the project's oldest runs beyond
   `RUNS_KEPT_PER_PROJECT` (default **20**; unset or invalid → 20), with their
@@ -140,12 +144,15 @@ its `inputs` snapshot plus `engine_version`.
   two runs saved at the same moment can't each trim before the other commits
   and leave the project over the cap. `POST …/runs` returns the removed ids
   (`removedRunIds`). A **kept** run is never trimmed and doesn't count
-  against the cap: one an editor **pinned** (see **Pinned runs** below), or
-  one the evidence history names (current or past nomination, see **Evidence
-  nomination** below). Both go through one exemption, `RUN_KEPT_SQL` in
-  `backend/src/runs/execute.ts`, which `trimRuns` and the `DELETE` route
-  share. So a project holds at most 20 unpinned, unnominated runs, plus at
-  most 10 pinned, plus the runs its (at most 50) nominations name.
+  against the cap: one an editor **pinned** (see **Pinned runs** below), one
+  the evidence history names (current or past nomination, see **Evidence
+  nomination** below), or one something **cites** (`model_run_cited`, see
+  **Cited runs** below; none yet). All three go through one exemption,
+  `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`, which `trimRuns` and the
+  `DELETE` route share. So a project holds at most 20 unpinned, unnominated,
+  uncited runs, plus at most 10 pinned, plus the runs its (at most 50)
+  nominations name, plus the cited ones. A trimmed run's stored inputs go with
+  it (see **Stored run inputs**).
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -165,13 +172,15 @@ its `inputs` snapshot plus `engine_version`.
   and would be a second implementation to keep in step with the engine.
 
 **Run input snapshots.** `model_run.inputs` holds the settings and model data
-the run used. Input *series* are not copied into it (they are large): the run
-refers to them as they were. If a series is re-uploaded, old runs can no longer
-be recomputed exactly. For each series kind the snapshot keeps
-`{ startDate, length, valuesSha256 }`, where `valuesSha256` is the SHA-256 hex
-of `JSON.stringify(values)` (`backend/src/runs/execute.ts` `seriesHash`; it
-lives in the `inputs` jsonb, so no column or migration). Runs stored before it
-have no hash. `GET /compare/runs` returns the whole snapshot, and
+the run used. Input *series* values are not copied into it (they are large):
+for each series kind the snapshot keeps `{ startDate, length, valuesSha256 }`,
+where `valuesSha256` is the SHA-256 hex of `JSON.stringify(values)` (engine
+`seriesDigest`, hashed by `backend/src/runs/execute.ts` `seriesHash`; it lives
+in the `inputs` jsonb). Runs stored before it have no hash. Since migration
+020 the values themselves are kept once per distinct content, keyed by that
+same hash (see **Stored run inputs** below), so re-uploading a series no
+longer stops an older run being recomputed; a run saved before 020 still
+can't be. `GET /compare/runs` returns the whole snapshot, and
 `GET …/runs/:runId` its `settings`. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
@@ -307,6 +316,92 @@ parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
 they add no policy. They are small: a fit record is a few KB.
 
+### Stored run inputs (021_series_blob.sql)
+
+Roadmap WP-3.1: a run can be recomputed exactly years later, whatever
+happens to the live project. `executeRun` writes each input series' values
+to a content-addressed store and `loadRunInput(db, runId)`
+(`backend/src/runs/execute.ts`) rebuilds the run's exact `ModelInput`: the
+snapshot's settings and model plus the stored series. The DB test
+`runs/reproducible.db.test.ts` re-runs `runModelChecked(loadRunInput(run))`
+on all three example catchments and finds the stored summary and every
+daily output byte-identical (compared as RFC 8785 canonical JSON, engine
+`canonicalJson`).
+
+- **`series_blob`** `(project_id, sha256)` PK, `"values" float8[]`,
+  `created_at`. `sha256` is the snapshot's `valuesSha256` for those values
+  (hex, `CHECK`ed). The start date is not part of the content; it is on the
+  reference. Deduplicated **within a project**: a series that didn't change
+  between runs is stored once however many runs use it. Not across projects,
+  on purpose ([security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)).
+- **`run_input_series`** `(run_id, kind)` PK, `project_id`, `start_date`,
+  `sha256`: which blob each kind of the run used. `run_id` → `model_run`
+  cascade; `(project_id, sha256)` → `series_blob`, `NO ACTION` (checked at
+  the end of the statement, so deleting a whole project still cascades, but
+  no statement can leave a run pointing at a missing blob). Index
+  `(project_id, sha256)` covers both foreign keys and the lookups below.
+- **Writes.** `executeRun` stores the inputs last, after the outputs, under
+  the project's run lock (`lockProjectRuns`, the advisory lock `trimRuns`
+  already took): it asks which of the run's hashes the project already holds,
+  inserts only the new values (`ON CONFLICT DO NOTHING`), then the run's
+  references. A reference may only be inserted by an editor, for a run of the
+  same project saved in the same transaction (`model_run.created_at =
+  now()`). Nothing updates either table.
+- **Reads.** `series_blob` is visible through a `run_input_series` row the
+  user can see, which is visible through a `model_run` the user can see
+  (viewer). `loadRunInput` re-hashes each blob and checks it against the
+  snapshot's hash, start date and length.
+- **`loadRunInput` errors** (`RunInputError.problem`): `not_found` (no such
+  run visible to the user); `not_reproducible` (saved before 021, so it has
+  snapshot hashes but no stored series: "this run is not reproducible from
+  stored inputs: it was made on YYYY-MM-DD, before runs stored their input
+  series"); `inconsistent` (a stored series is missing, or disagrees with the
+  snapshot's start, length or SHA-256; never expected, and the run is then
+  not presented as reproduced). No backfill: older runs keep hash-only
+  snapshots.
+- **Garbage collection and retention.** A reference goes with its run
+  (cascade: trimmed by the cap, deleted by an editor, or the whole project).
+  The statement-level `run_input_series_gc` trigger (`series_blob_gc`,
+  `SECURITY DEFINER`, `search_path` pinned) then deletes every blob of the
+  affected projects that no remaining run references. So a blob lives exactly
+  as long as some run uses it: blobs of kept runs (pinned, nominated, cited)
+  are never collected, a trimmed run's are, unless a newer or kept run shares
+  them. The run lock serialises this against a new run reusing the same blob
+  (the trim and the `DELETE …/runs/:runId` route take it too).
+- **Storage.** Measured on the largest example (Sandspruit: 4 input series,
+  16 447 days each, about 525 KB raw): its blobs take **52 KB** on disk after
+  TOAST compression (13 KB a series), stored once. Each further run that
+  reuses them adds only its references, **~0.6 KB** (4 rows), against
+  **~5.1 MB** of `run_series` outputs for the same run; a re-uploaded series
+  adds one compressed array (~13 KB here) the first time a run uses it. So the
+  input store is about 1 % of the first run and noise after that; the
+  outputs cap (`RUNS_KEPT_PER_PROJECT`) remains what bounds a project's size.
+  A project's input store is bounded by the distinct series versions its
+  kept and newest runs used.
+- **Cost.** `executeRun` on the examples, median of 9 (runs reusing their
+  inputs): Kleinberg 823 → 837 ms, Droëvlei 617 → 644 ms, Sandspruit
+  1440 → 1469 ms (+2–4 %, one extra lookup and the reference insert; the run
+  lock is held from the input writes to commit, where the trim already held
+  it).
+
+**Cited runs (021_series_blob.sql).** A run a scenario is based on (WP-3.2),
+or that an evidence pack or assessment cites (WP-3.13, WP-3.14), must never be
+trimmed or deleted, and no editor action may lift that (unlike a pin).
+"Cited" is derived, not stored: `model_run_cited(p_run uuid)` (SQL, `STABLE
+SECURITY DEFINER`, `search_path` pinned) is part of `RUN_KEPT_SQL`, so
+`trimRuns` spares a cited run, it doesn't count against the cap, and the
+`DELETE` route answers `409 this run is cited, so it is kept`. No table cites a
+run yet, so its body is `SELECT false`. **Each citing table's migration adds
+one clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest
+body plus `OR EXISTS (SELECT 1 FROM <table> WHERE <run column> = p_run)`,
+same signature, `SECURITY DEFINER` and `search_path` (020's header has the
+scenarios example), alongside a `RESTRICT`/`NO ACTION` foreign key to
+`model_run`. `RUN_KEPT_SQL`, `trimRuns` and the route need no change.
+`SECURITY DEFINER` so a citation the caller can't see still keeps the run.
+Still to come with the first citing table (WP-3.2): the unpin `409`, `citedBy`
+on `RunMeta`, and skipping cited runs in WP-2.3's publication trim
+([followups.md](./followups.md)).
+
 ### Import reports (017_project_import.sql)
 
 When a project is imported in the browser (a b023 workbook, or a project
@@ -361,6 +456,7 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 
 | Role | Can |
 | --- | --- |
+| `farmer` | Read only the farms linked to them (`farm_link`), and leave. Nothing of the model, series or runs (§ Farmers, 019/020) |
 | `viewer` | Read the project, its model, series, runs and members |
 | `editor` | Everything a viewer can, plus change settings and model data, upload series, run the model, write a run's notes, delete runs |
 | `owner` | Everything an editor can, plus add/remove members, change roles, delete the project |
@@ -368,6 +464,66 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
+
+### Farmers (019_farmer_role.sql, 020_farm_scope.sql)
+
+A **farmer** (roadmap WP-2.1, issue #24; design
+[design/farmer-view.md](./design/farmer-view.md) §10) is a direct project
+member with the role `farmer`, linked to one or more farm nodes in
+`farm_link (project_id, node_id, user_id, added_by, added_at)`. A farm may
+have several farmers, and a farmer several farms, in any number of projects.
+Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
+[api.md](./api.md#farmers)).
+
+- **The role sorts below `viewer`** (`farmer < viewer < editor < owner`).
+  Every existing policy asks for `viewer` or above, so it refuses a farmer
+  without being touched: a table nobody wrote a farmer policy for stays closed
+  to farmers (fail closed). The backend's `requireRole` ranks it the same way,
+  so every route that asks for `viewer` answers a farmer `403`. Team roles
+  never map to `farmer`, and the effective role is the higher of the direct
+  and the team role, so a farmer who is also in the team is simply an editor
+  or viewer. `019` adds the value on its own because an enum value can't be
+  used in the transaction that added it.
+- **What a farmer reads** is added as extra permissive `SELECT` policies,
+  ORed with the viewer ones (`020`), through `app_farm_nodes(project)` (the
+  current user's linked nodes, `SECURITY DEFINER`):
+
+  | Table | A farmer may read |
+  | --- | --- |
+  | `project` | the row |
+  | `project_member` | their own row only, never the list (it holds neighbours' emails) |
+  | `node` | their linked farms, and the gauges; no other farm, not even its name, and no other water user |
+  | `crop_area`, `land_cover` | rows on their linked farms |
+  | `crop` | only the crops planted on their linked farms |
+  | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
+  | `farm_link` | their own links |
+  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no `run_series` (a farmer will read results only through a publication, WP-2.3), no invites, teams, jobs, feeds or evidence |
+
+  A farmer writes nothing: every write policy asks for `editor` or `owner`.
+- **A link needs a membership and goes with it**: `farm_link` has a foreign
+  key to `project_member (project_id, user_id) ON DELETE CASCADE`, so removing
+  a farmer, their leaving, or the project going removes their links, and a
+  deleted farm node takes its links with it. A save of the model keeps them
+  (nodes are upserted by id); a farm changed into a gauge or water user loses
+  them (trigger `node_unlink_farmers`), and the Network tab says so first. A trigger allows only `farm`
+  nodes and only members whose role is `farmer`; `assert_same_project` keeps
+  the node in the project.
+- **Anonymised context** (decision D1, option b): `app_farm_context(project,
+  node)` returns the number of farms upstream and downstream of a node and
+  the catchment's farm count, never ids or names, to a viewer or a user
+  linked to that node, and no row to anyone else.
+- **The aggregate rule** (decision D2): `app_other_farm_holders(project)`
+  counts the holders of the farms *not* linked to the current user, farms
+  linked to the same user counted once and an unlinked farm on its own. A
+  farmer-facing aggregate of farm quantities (totals, the even share) is shown
+  only when it is at least `k − 1` (`k = 5`, pending the client). One owner
+  holding three of five farms therefore can't read the other two's combined
+  figures.
+- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
+  and every `/projects/:id` route answering a farmer `400`/`403`), and a
+  catalogue test that every table with a node column has a farmer-aware
+  `SELECT` policy or is listed as never read by farmers (`run_series` until
+  WP-2.3).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
@@ -441,6 +597,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `project_import` (import reports): SELECT needs `viewer`; INSERT needs
   `owner`, as yourself, and only in the transaction that created the project;
   no UPDATE or DELETE for anyone (see § Import reports above).
+- Farmers (`farmer` role, 020): the extra farm-scoped `SELECT` policies of
+  § Farmers above; `farm_link`: viewers read every link, a farmer their own,
+  owners change them.
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

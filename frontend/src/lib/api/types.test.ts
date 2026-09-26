@@ -29,4 +29,10 @@ describe('hasRole (project roles)', () => {
 		expect(hasRole('owner', 'editor')).toBe(true);
 		expect(hasRole(null, 'viewer')).toBe(false);
 	});
+	// WP-2.1: a farmer ranks below viewer, so every workspace control hides from them.
+	it('ranks farmer below viewer', () => {
+		expect(hasRole('farmer', 'viewer')).toBe(false);
+		expect(hasRole('farmer', 'farmer')).toBe(true);
+		expect(hasRole('viewer', 'farmer')).toBe(true);
+	});
 });

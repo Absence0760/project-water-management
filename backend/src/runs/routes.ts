@@ -8,7 +8,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { executeRun, loadModelInput, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
+import { executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
@@ -236,14 +236,26 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			// A kept run (RUN_KEPT_SQL) isn't deleted: one the evidence history names
-			// is kept for good (the foreign key refuses it too); a pinned one until it is unpinned.
-			const { rows: kept } = await db.query<{ pinned: boolean; kept: boolean }>(
-				`SELECT r.pinned, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+			// The run's stored inputs may be garbage-collected with it: not while a
+			// new run of this project is taking a reference to them (lockProjectRuns).
+			await lockProjectRuns(db, id);
+			// A kept run (RUN_KEPT_SQL) isn't deleted: one something cites
+			// (model_run_cited, 021_series_blob) or the evidence history names is
+			// kept for good (their foreign keys refuse it too); a pinned one until
+			// it is unpinned.
+			const { rows: kept } = await db.query<{ pinned: boolean; cited: boolean; kept: boolean }>(
+				`SELECT r.pinned, model_run_cited(r.id) AS cited, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId]
 			);
 			if (kept[0]?.kept)
-				throw new ApiError(409, kept[0].pinned ? 'this run is pinned; unpin it before deleting it' : 'this run is or was nominated as evidence, so it is kept');
+				throw new ApiError(
+					409,
+					kept[0].cited
+						? 'this run is cited, so it is kept'
+						: kept[0].pinned
+							? 'this run is pinned; unpin it before deleting it'
+							: 'this run is or was nominated as evidence, so it is kept'
+				);
 			const { rowCount } = await db.query('DELETE FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
 			if (!rowCount) throw new ApiError(404, 'not found');
 			return c.body(null, 204);

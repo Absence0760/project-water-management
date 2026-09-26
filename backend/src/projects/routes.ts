@@ -282,7 +282,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 	.delete('/:id/members/:userId', async (c) => {
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			const role = await requireRole(db, id, 'viewer');
+			// Anyone may leave, a farmer included; only an owner removes others.
+			const role = await requireRole(db, id, 'farmer');
 			const self = userId === c.get('userId');
 			if (!self && role !== 'owner') throw new ApiError(403, 'requires owner role');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');

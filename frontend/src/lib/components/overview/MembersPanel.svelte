@@ -28,6 +28,8 @@
 	const memo = untrack(() => cached(projectId));
 	const hadCache = !!memo.members;
 	let members = $state<Member[]>(memo.members ?? []);
+	// Farmers are listed, with their farms, in FarmersPanel.
+	const shown = $derived(members.filter((m) => m.role !== 'farmer'));
 	let loading = $state(!hadCache);
 	$effect(() => {
 		if (!loading && !loadError) memo.members = $state.snapshot(members);
@@ -139,7 +141,7 @@
 			</table>
 		</div>
 	{:else}
-	<LoadState loading={false} error={loadError} retry={load} empty={members.length === 0} emptyText="No members.">
+	<LoadState loading={false} error={loadError} retry={load} empty={shown.length === 0} emptyText="No members.">
 		<div class="table-wrap">
 			<table class="data">
 				<thead>
@@ -151,7 +153,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each members as m (m.userId)}
+					{#each shown as m (m.userId)}
 						<tr>
 							<th scope="row">
 								{m.displayName}{#if m.userId === currentUserId}&nbsp;<span class="muted">(you)</span>{/if}

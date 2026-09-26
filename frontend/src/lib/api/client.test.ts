@@ -206,6 +206,17 @@ describe('teams client', () => {
 		expect(call(f, 2)).toEqual({ url: '/teams/t/members/u%2F1', method: 'PATCH', body: { role: 'admin' } });
 	});
 
+	it('farmers.* call the farmer routes and unwrap the farmer', async () => {
+		const farmer = { userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
+		const add = mockFetch(201, { farmer });
+		expect(await createApi('', add).farmers.add('p', 'f@example.com', ['n1'])).toEqual(farmer);
+		expect(add).toHaveBeenCalledWith('/projects/p/farmers', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'f@example.com', nodeIds: ['n1'] }) }));
+		const put = mockFetch(200, { farmer });
+		expect(await createApi('', put).farmers.setFarms('p', 'u', ['n1'])).toEqual(farmer);
+		expect(put).toHaveBeenCalledWith('/projects/p/farmers/u', expect.objectContaining({ method: 'PUT' }));
+		expect(await createApi('', mockFetch(200, { farmers: [farmer] })).farmers.list('p')).toEqual([farmer]);
+	});
+
 	it('members.add / teams.addMember return the member or the pending invite, never undefined', async () => {
 		const member = { userId: 'u', email: 'a@b.c', displayName: 'A', role: 'viewer' };
 		const m = await createApi('', mockFetch(201, { member })).members.add('p', 'a@b.c', 'viewer');

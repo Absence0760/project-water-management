@@ -8,6 +8,7 @@ import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
+import { farmerRoutes } from './farms/routes.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
@@ -93,6 +94,7 @@ export function createApp() {
 	projects.route('/', jobRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', reportRoutes);
+	projects.route('/', farmerRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();

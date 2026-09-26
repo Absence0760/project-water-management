@@ -1,8 +1,13 @@
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
-export type Role = 'viewer' | 'editor' | 'owner';
-const rank: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
+/**
+ * `farmer` (019_farmer_role, WP-2.1) ranks below `viewer`, so every existing
+ * `requireRole(…, 'viewer')` answers a farmer 403: routes are closed to
+ * farmers unless they ask for 'farmer' explicitly (fail closed).
+ */
+export type Role = 'farmer' | 'viewer' | 'editor' | 'owner';
+export const rank: Record<Role, number> = { farmer: -1, viewer: 0, editor: 1, owner: 2 };
 
 /**
  * Explicit role check for clear 404/403 responses. RLS enforces the same rules

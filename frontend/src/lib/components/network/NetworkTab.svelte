@@ -18,6 +18,7 @@
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { formOffScreen } from './scroll';
+	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
 
 	let {
 		editor,
@@ -96,7 +97,20 @@
 	let view = $state<'table' | 'detail'>('table');
 	onMount(() => {
 		if (!matchMedia('(min-width: 900px)').matches) view = 'detail';
+		loadFarmers();
 	});
+
+	// Farmers linked to each farm (WP-2.1), for the detail note and the delete
+	// warning. null = not loaded (or failed): removing a farm then warns anyway.
+	let farmerCount = $state<Record<string, number> | null>(null);
+	async function loadFarmers() {
+		if (!projectId) return;
+		try {
+			farmerCount = countByNode(await api.farmers.list(projectId));
+		} catch {
+			farmerCount = null; // removeMessage warns about farmers on every farm instead
+		}
+	}
 
 	let selectedId = $state<string | null>(null);
 	const selected = $derived(nodes.find((n) => n.id === selectedId) ?? nodes[0] ?? null);
@@ -137,7 +151,9 @@
 		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
 		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
-		if ((refs || areas || cover) && !confirm(`Remove "${name}"? Its ${areas} crop area(s), ${refs} transfer(s)${cover ? ` and ${cover} land-cover patch(es)` : ''} are removed too; nodes draining into it are re-routed downstream.`)) return;
+		const isFarm = nodes.find((n) => n.id === id)?.kind === 'farm';
+		const question = removeMessage({ name, isFarm, areas, transfers: refs, cover, farmers: farmerCount ? (farmerCount[id] ?? 0) : null });
+		if (question && !confirm(question)) return;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 	}
@@ -430,6 +446,7 @@
 				share={shareOf(selectedIndex)}
 				{readonly}
 				onremove={() => remove(selected.id, selected.name || 'unnamed node')}
+				farmersNote={selected.kind === 'farm' ? linkedNote(farmerCount?.[selected.id] ?? 0) : null}
 				onmove={(d) => moveBy(selected.id, d)}
 				canMoveUp={selectedIndex > 0}
 				canMoveDown={selectedIndex < nodes.length - 1}

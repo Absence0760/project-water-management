@@ -13,6 +13,7 @@
 	import LatestRun from './LatestRun.svelte';
 	import { pickRuns } from './latestRun';
 	import MembersPanel from './MembersPanel.svelte';
+	import FarmersPanel from './FarmersPanel.svelte';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 	import TeamPanel from './TeamPanel.svelte';
@@ -241,10 +242,11 @@
 		<ImportReportPanel projectId={project.id} />
 	</div>
 
-	<!-- Who can open the project: the owning team, then the people shared directly. -->
+	<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
 	<div class="col access">
 		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
 		<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
+		<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 	</div>
 </div>
 

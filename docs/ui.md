@@ -148,8 +148,18 @@ record (an imported project only), team and members.
   came from the file and renders as text only.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
-  team project), so the two panels that refer to each other sit together. Below
-  900 px it is one column in the order details, import record, team, members.
+  team project), so the two panels that refer to each other sit together, then
+  **Farmers**. Below 900 px it is one column in the order details, import
+  record, team, members, farmers.
+- **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
+  farms linked to them, by name. Owners add an existing, verified account by
+  email with a tick box per farm, change a farmer's farms, and remove one.
+  Farmers aren't in the Members list (it hides the `farmer` role), and a
+  farmer never sees this tab: their own view is WP-2.6. A link to a farm
+  deleted but not yet saved reads "a removed farm".
+- On the **Network** tab, a farm with linked farmers says how many in its
+  detail panel, and removing it asks first, naming the farmers who lose
+  access when the model is saved.
 - The **description** box grows with its text (up to about 24rem) instead of
   hiding it behind an inner scrollbar (`field-sizing: content`; browsers
   without it keep four rows).

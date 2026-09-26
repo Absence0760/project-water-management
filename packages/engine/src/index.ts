@@ -5,6 +5,7 @@ export * from './compare';
 export * from './demand';
 export * from './flow';
 export * from './project';
+export * from './manifest';
 export * from './run';
 export * from './runoff';
 export * from './calibrate/calibrate';
@@ -29,3 +30,4 @@ export { calibrationStats, waterYearOf, type CalibrationWindow } from './network
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';
 export { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, demandPctNote, EQUITABLE_SHARE_FOOTNOTE, M3_PER_DAY_PER_LS, type CurtailmentInput, type ReportWindow } from './network/curtailment';
+export * from './views/farmView';
