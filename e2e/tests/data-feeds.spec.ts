@@ -6,7 +6,7 @@
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 import { AxeBuilder } from '@axe-core/playwright';
 import type { APIRequestContext } from '@playwright/test';
-import { addMember, createProject } from '../support/api.ts';
+import { addMember, createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -116,6 +116,62 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	await feed.getByRole('button', { name: 'Switch off: Rainfall — CHIRPS' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'disabled');
 	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
+});
+
+test('attaching a feed to a series that already has data asks first, and offers a separate series', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feed takeover');
+	// An imported gauge record the feed would overwrite.
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2026-01-01', values: Array.from({ length: 1200 }, (_, i) => i % 7) });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Into series').selectOption({ label: 'Rainfall — catchment' });
+	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+
+	// Nothing is attached yet: the form asks, with focus on the safe choice.
+	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — catchment” already has data (1,200 days).' });
+	await expect(ask).toBeVisible();
+	await expect(ask).toHaveAccessibleDescription(/replace its values on every day it fetches, including values you uploaded or imported.*such as “CHIRPS”/);
+	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
+	await expect(separate).toBeFocused();
+	await expect(panel.getByText('No feeds yet.')).toBeVisible();
+	const { violations } = await new AxeBuilder({ page })
+		.include('#set-feeds')
+		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
+		.analyze();
+	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+
+	// Escape backs out to the name field.
+	await page.keyboard.press('Escape');
+	await expect(ask).toHaveCount(0);
+	const name = panel.getByLabel(/^Series name/);
+	await expect(name).toBeFocused();
+
+	// Asked again, the separate series fills the name; attaching then needs no question.
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	await ask.getByRole('button', { name: 'Use a separate series: CHIRPS' }).press('Enter');
+	await expect(ask).toHaveCount(0);
+	await expect(name).toHaveValue('CHIRPS');
+	await expect(name).toBeFocused();
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	const feeds = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feeds).toHaveCount(1);
+	await expect(feeds).toContainText('Rainfall — catchment · CHIRPS');
+
+	// Taking over on purpose: "Replace its values" attaches into the existing series.
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Into series').selectOption({ label: 'Rainfall — catchment' });
+	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	// "CHIRPS" is taken now (the first feed's series name), so the suggestion moves on.
+	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS 2' })).toBeFocused();
+	await ask.getByRole('button', { name: 'Replace its values' }).click();
+	await expect(feeds).toHaveCount(2);
+	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: Rainfall — catchment from cell -20.12, 25.17.' })).toBeVisible();
+	await expect(panel.getByRole('alertdialog')).toHaveCount(0);
 });
 
 test('an action on a feed changed elsewhere says why it failed and shows the list as it is now', async ({ page, owner }) => {

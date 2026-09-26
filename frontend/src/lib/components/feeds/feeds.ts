@@ -2,6 +2,7 @@
 // feeds). The types mirror backend/src/feeds/store.ts FeedMeta; the calls go
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
+import type { SeriesMeta } from '@water-management/engine';
 import type { Api } from '$lib/api';
 import { ApiError } from '$lib/api/client';
 import { fmtDate, fmtDay } from '$lib/format/number';
@@ -226,6 +227,39 @@ export function healthMessage(h: FeedHealth): string {
 		default:
 			return `${STATE_LABELS[h.state] ?? 'Unknown state'}.`;
 	}
+}
+
+/**
+ * The existing series a new feed would take over, or null. A feed replaces
+ * its target's values on every day it fetches, uploaded and imported ones
+ * included (docs/architecture.md § Data feeds), so the form asks first when
+ * the target already holds data. A series another feed already writes is not
+ * a takeover: the server refuses a second feed for it with its own message.
+ */
+export function takeoverOf(
+	series: readonly Pick<SeriesMeta, 'kind' | 'name' | 'length'>[],
+	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[],
+	target: Pick<FeedBody, 'targetKind' | 'targetName'>
+): Pick<SeriesMeta, 'kind' | 'name' | 'length'> | null {
+	if (feeds.some((f) => f.targetKind === target.targetKind && f.targetName === target.targetName)) return null;
+	return series.find((s) => s.kind === target.targetKind && s.name === target.targetName && s.length > 0) ?? null;
+}
+
+/**
+ * A series name for the feed that no series or feed of that kind uses yet
+ * ("CHIRPS", "CHIRPS 2", "DWS A2H012"), so the feed's values sit beside the
+ * existing record instead of replacing it.
+ */
+export function separateName(
+	body: Pick<FeedBody, 'source' | 'config' | 'targetKind'>,
+	series: readonly Pick<SeriesMeta, 'kind' | 'name'>[],
+	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
+): string {
+	const base = 'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : 'CHIRPS';
+	const taken = new Set([...series.filter((s) => s.kind === body.targetKind).map((s) => s.name), ...feeds.filter((f) => f.targetKind === body.targetKind).map((f) => f.targetName)]);
+	let name = base;
+	for (let i = 2; taken.has(name); i++) name = `${base} ${i}`;
+	return name;
 }
 
 /** How many feeds need attention (stale or failing), for the section's warning. */

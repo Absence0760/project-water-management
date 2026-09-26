@@ -14,7 +14,9 @@ import {
 	type HealthReason,
 	healthMessage,
 	needsAttention,
-	parseCells
+	parseCells,
+	separateName,
+	takeoverOf
 } from './feeds';
 
 describe('parseCells', () => {
@@ -117,6 +119,34 @@ describe('descriptions', () => {
 	it('count the feeds that need attention', () => {
 		const h = (state: string) => ({ health: { state, stale: false, staleAfterDays: 1, reason: { code: 'waiting' } } }) as never;
 		expect(needsAttention([h('ok'), h('stale'), h('failing'), h('pending'), h('disabled')])).toBe(2);
+	});
+});
+
+describe('taking over an existing series (issue #30)', () => {
+	const s = (kind: string, name: string, length = 10) => ({ kind, name, length });
+	const target = { targetKind: 'rain_catchment_mm', targetName: '' };
+
+	it('finds the target series when it already holds data', () => {
+		expect(takeoverOf([s('rain_chirps_mm', ''), s('rain_catchment_mm', '', 365)], [], target)).toEqual(s('rain_catchment_mm', '', 365));
+		// Matched by kind and exact name.
+		expect(takeoverOf([s('rain_catchment_mm', 'Gauge')], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', 'Gauge')], [], { ...target, targetName: 'Gauge' })).toEqual(s('rain_catchment_mm', 'Gauge'));
+	});
+
+	it('is no takeover for a missing or empty series, or one another feed already writes (the server refuses that)', () => {
+		expect(takeoverOf([], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', '', 0)], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', '')], [target], target)).toBeNull();
+	});
+
+	it('suggests a separate name no series or feed of that kind uses', () => {
+		const chirps = { source: 'chirps' as const, config: { cells: [{ lat: 1, lon: 2 }] }, targetKind: 'rain_catchment_mm' };
+		expect(separateName(chirps, [s('rain_catchment_mm', '')], [])).toBe('CHIRPS');
+		// Another kind's "CHIRPS" is no clash; this kind's series and feed names are.
+		expect(separateName(chirps, [s('rain_chirps_mm', 'CHIRPS')], [])).toBe('CHIRPS');
+		expect(separateName(chirps, [s('rain_catchment_mm', 'CHIRPS')], [{ targetKind: 'rain_catchment_mm', targetName: 'CHIRPS 2' }])).toBe('CHIRPS 3');
+		expect(separateName({ ...chirps, source: 'chirps_gefs' }, [], [])).toBe('CHIRPS-GEFS');
+		expect(separateName({ source: 'dws', config: { station: 'A2H012' }, targetKind: 'flow_observed_m3s' }, [], [])).toBe('DWS A2H012');
 	});
 });
 
