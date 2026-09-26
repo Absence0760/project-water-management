@@ -391,8 +391,9 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     `(event_id, user_id)`, and `app_alert_fan_out` refuses an event older
     than an hour, so an old event can't be mailed out again.
   - *At most 5 immediate alert emails per person per day*
-    (`ALERTS_DAILY_CAP`), the day running from 06:00 to 06:00 South African
-    time; the rest wait for that person's next 06:00 digest, one email per
+    (`ALERTS_DAILY_CAP`), the day running from 06:00 to 06:00 in the
+    project's time zone (059_local_day; South Africa's by default); the rest
+    wait for that person's next 06:00 digest, one email per
     catchment. A digest is bounded too: at most 20 alerts written out
     (`DIGEST_MAX_LINES`, the newest), then "…and N more" with a link to the
     app, all marked sent with it; and at most 200 lines a person are claimed

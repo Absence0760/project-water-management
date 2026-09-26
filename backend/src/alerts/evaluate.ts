@@ -25,11 +25,18 @@
 //   job_dead               the project's jobs that died in the last 24 hours.
 //   restriction_published  the current publication's restriction and notice:
 //                          any change is one event (a lift too).
+//
+// "Today" (a forecast still current, a feed's days overdue) and a forecast's
+// madeOn are the calendar day in the project's time zone (project.time_zone,
+// 058; projects/timeZone.ts localDate), the day its readers are living, as
+// the feeds page and the digest clock (059) count it. Never UTC's, which is a
+// day behind a South African reader from 22:00 to 24:00 UTC.
 import { createHash } from 'node:crypto';
 import type { FarmProjection } from '@water-management/engine';
 import { toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { SOURCES, type FeedConfig, type FeedSource } from '../feeds/config.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { heldSinceLastRun } from '../series/hold.js';
 import { step, type AlertKind } from './rules.js';
 
@@ -130,7 +137,9 @@ export const feedLabel = (source: FeedSource, targetName: string) => (targetName
 
 /** Evaluate every rule of the project once. As an editor (RLS), inside the job's transaction. */
 export async function evaluateAlerts(db: Db, projectId: string, { now = new Date() }: { now?: Date } = {}): Promise<EvalOutcome> {
-	const today = now.toISOString().slice(0, 10);
+	const { rows: proj } = await db.query<{ time_zone: string }>('SELECT time_zone FROM project WHERE id = $1', [projectId]);
+	const timeZone = proj[0]?.time_zone ?? DEFAULT_TIME_ZONE;
+	const today = localDate(now, timeZone);
 	await ensureFarmRules(db, projectId);
 	await ensureFeedRules(db, projectId);
 	const { rows: rules } = await db.query<RuleRow>(
@@ -167,15 +176,15 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		return () => (p ??= f());
 	};
 	const forecast = lazy(async () => {
-		const { rows } = await db.query<{ id: string; made_on: string; f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number } | null }>(
-			`SELECT id, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS made_on, summary->'forecast' AS f
+		const { rows } = await db.query<{ id: string; created_at: Date; f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number } | null }>(
+			`SELECT id, created_at, summary->'forecast' AS f
 			 FROM model_run WHERE project_id = $1 AND scenario_id IS NULL AND trigger = 'forecast'
 			 ORDER BY created_at DESC LIMIT 1`,
 			[projectId]
 		);
 		const r = rows[0];
 		// A forecast whose days have all passed says nothing about what's coming.
-		return r?.f && r.f.to >= today ? { runId: r.id, madeOn: r.made_on, ...r.f } : null;
+		return r?.f && r.f.to >= today ? { runId: r.id, madeOn: localDate(r.created_at, timeZone), ...r.f } : null;
 	});
 	const held = lazy(() => heldSinceLastRun(db, projectId));
 	const feeds = lazy(async () => {

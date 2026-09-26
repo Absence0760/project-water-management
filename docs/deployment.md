@@ -612,7 +612,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   | --- | --- |
   | `ALERTS_TOKEN_SECRET` | `random_password.alerts_token_secret` (48 characters). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Replacing it (`terraform apply -replace=random_password.alerts_token_secret`) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
-  | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 SAST) before the rest wait for the 06:00 digest |
+  | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
   | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |
 
 - **Headers.** Every alert email carries `List-Unsubscribe`,

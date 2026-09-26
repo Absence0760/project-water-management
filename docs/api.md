@@ -205,7 +205,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
 - `project` (`GET`/`PATCH /projects/:id`, create, import, copy) is a
   `ProjectSummary` plus `settings`, `rerunQueuedFor` and `timeZone`: an
   IANA zone name (058_project_time_zone, `Africa/Johannesburg` by default)
-  that dates the project's downloads (§ Export). A change is audited
+  that dates the project's downloads (§ Export) and every other day a
+  person reads from the server: the portfolio's ages, a feed's health, the
+  farm page's freshness and a forecast's `madeOn`, the alerts' "today" and
+  their 06:00 digest (059_local_day), and the dates in server-written text
+  (a publication's `citedBy` name, an auto-publish note, a restore's
+  reason, an unlabelled run's name in the report email). A source's own
+  days (CHIRPS, DWS) are never shifted. A change is audited
   (`project.changed` with `fields: ['time_zone']` and `timeZone: { from, to }`);
   a copy keeps it, and the project document (`export.json`, `POST
   /projects/import`) carries it as `timeZone` (absent = the default).
@@ -661,12 +667,18 @@ run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is
 left out, so nobody gets a catchment roll-up of their neighbours.
 
-- `Portfolio = { team: { id, name, role }, today, thresholds: { green, amber, source }, projects: PortfolioProject[] }`;
-  `today` is the server's UTC date the ages count to; `thresholds` are the
+- `Portfolio = { team: { id, name, role }, thresholds: { green, amber, source }, projects: PortfolioProject[] }`;
+  there is no team-wide "today": each row counts to its own project's
+  (below). `thresholds` are the
   traffic-light cut-offs every `ewr.status` below was judged by, in percent,
   and `source` says whether they are the team's (`team`) or the defaults
   (`default`), so the page can say which apply.
-- `PortfolioProject = { id, name, role, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
+- `PortfolioProject = { id, name, role, timeZone, today, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
+  - `timeZone` / `today`: the project's time zone and the calendar day
+    there when the server answered. `figuresAgeDays`, `stale` and the feeds'
+    health count to that day, so a team with catchments in several zones
+    gets each row right, and a South African row isn't a day behind from
+    22:00 to 24:00 UTC.
   - `source`: where the figures come from. `published`: the current
     publication. `run`: nothing is published, so the newest baseline run
     (not a scenario run). `null`: no run. `sourceRunId` is that run.
@@ -750,7 +762,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   own farm; everyone else one for every farm. `muted`: every alert email
   for the catchment is off (a digest's one-click unsubscribe).
 - `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
-  digest), `daily_digest` (in the 06:00 South African time summary), `off`.
+  digest), `daily_digest` (in the 06:00 summary, 06:00 in the project's time zone), `off`.
   `kind: 'all'` with `immediate` or `off` is the catchment-wide switch.
   PUT refuses (`400`) a kind your role never gets, a `nodeId` on anything but
   a farmer's dam alert, and `daily_digest` for `all`; a farmer naming a farm
@@ -762,10 +774,14 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
-  madeOn }`; `data_stale` `{ feedId, feeds: [{ label, newest, overdue }] }` (its one feed);
+  madeOn }`; `data_stale` `{ feedId, feeds: [{ label, newest, overdue }] }` (its one feed;
+  `overdue` counts to today in the project's time zone);
   `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
   `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
-  While an event fires, its `value` and `detail` follow the figure.
+  While an event fires, its `value` and `detail` follow the figure. A
+  forecast's `madeOn` is the day the run was made, and "still current" (its
+  `to` not yet past) is judged against today, both in the project's time
+  zone.
 - **Unsubscribe.** Every alert email links to the site's
   `/alerts/unsubscribe#t=<token>` (the token in the fragment, so it reaches
   no server log), and carries `List-Unsubscribe: <API/alerts/unsubscribe?token=…>`
@@ -783,9 +799,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 - One email per event per person, ever (`alert_delivery` primary key), and
   one per crossing: a firing rule sends nothing more until it clears.
 - At most **5 immediate alert emails per person per day**, the day running
-  from 06:00 to 06:00 South African time (`ALERTS_DAILY_CAP`). The rest, and
-  everything a person chose to get daily, go out in one **digest** per
-  catchment after 06:00. A digest lists at most 20 alerts (the newest), then
+  from 06:00 to 06:00 in the time zone of the project whose alert is being
+  sent (`project.time_zone`, 059_local_day; South Africa's by default;
+  `ALERTS_DAILY_CAP`). The rest, and everything a person chose to get daily,
+  go out in one **digest** per catchment after 06:00 there. A digest lists at most 20 alerts (the newest), then
   "…and N more" pointing at the app; those are marked sent with it. At most
   200 lines a person are taken per digest; older ones are dropped as over
   the limit, never sent later.
@@ -1045,7 +1062,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   a run of the model). `citedBy` is what keeps the run for good
   (`{ kind: 'publication' | 'scenario' | 'signoff', id, name }[]`, oldest
   first, the citations you can see; a publication's `name` is the day it was
-  published, `YYYY-MM-DD` UTC, a sign-off's the signer's name; `[]` when
+  published, `YYYY-MM-DD` in the project's time zone, a sign-off's the signer's name; `[]` when
   none). `reproducible` is whether the run's input series are stored
   (021_series_blob), so `…/reproduce` can re-run it; `false` for a run from
   before stored inputs. `trigger` is what made the run:
@@ -1743,7 +1760,10 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
   deficitDays, suppliedFraction }` only when the published run is a forecast
   run (WP-2.12): that farm's forecast days from the run's `summary.forecast`,
-  `madeOn` the day the run was made (UTC); nothing about any other farm.
+  `madeOn` the day the run was made, in the project's time zone when it
+  was published (publications before 059_local_day keep the UTC day they
+  stored); nothing about any other farm. `stale` counts the farm's
+  `dataUntil` to today in the project's time zone.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn }`.
@@ -1895,8 +1915,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   confirms (or the replacement is confirmed and waiting: `replaceFrom`, what
   it will replace, `CHIRPS/2.0` or `''` for unrecorded).
   `actingUser` is the display name fetches run as (null once that account is
-  deleted: save the feed again). `lastDataDate` is a calendar day
-  (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
+  deleted: save the feed again). `lastDataDate` is a calendar day of the
+  source (`YYYY-MM-DD`: CHIRPS's are UTC days, DWS's South African ones),
+  never shifted. `lastMeta` is what the source said about the last
   fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, CHIRPS's
   `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
   left alone because the series held a value the feed didn't write: an
@@ -1906,7 +1927,10 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
   and its facts; the client writes the sentence and formats the days (all
-  `YYYY-MM-DD`, UTC), so no date is baked into server text:
+  `YYYY-MM-DD`), so no date is baked into server text. `newest`, `from` and
+  `through` are the source's own days; `checked` and `since` are the days
+  those instants fell on in the project's time zone, and "stale" counts to
+  today there:
   - `{ code: "off", newest }` (switched off; `newest` is the newest day or null),
   - `{ code: "failing", failures, error, newest }` (`failures` fetches in a row failed, the last with `error`, which is `lastError`),
   - `{ code: "old-forecast", newest }` (the forecast reaches fewer than `-staleAfterDays` days ahead),

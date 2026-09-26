@@ -4,11 +4,11 @@
 // report API and its RLS, and report schedules (RLS, recipients, the tick).
 // The render itself (Chromium + MinIO) is reports/render.db.test.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { newToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
 import { SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
-import { REPORTS_PER_HOUR } from './store.js';
+import { finishReport, loadReport, REPORTS_PER_HOUR } from './store.js';
 import { issueRenderToken } from './tokens.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -260,6 +260,27 @@ describe('POST / GET /projects/:id/reports', () => {
 		expect(ok.body.url).toContain(`/water-reports/reports/${projectId}/${r.id}.pdf?`);
 		expect(ok.body.url).toContain('X-Amz-Expires=3600');
 		expect(ok.body.url).toContain('response-content-disposition=attachment');
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+});
+
+describe('the report-ready email', () => {
+	// An unlabelled run is named by the day it was made, where the catchment is
+	// (the project's zone, 058): a run made at 22:30 UTC is the next day in South Africa.
+	it('names an unlabelled run by the day it was made in the project’s time zone (positive control: a UTC project)', async () => {
+		const owner = await signUp('RepDay');
+		const { projectId, runId } = await withRun(owner, 'Report day');
+		await asOwner(`UPDATE model_run SET created_at = '2026-09-25T22:30:00Z' WHERE id = $1`, [runId]);
+		const finish = async () => {
+			const res = await owner.call('POST', `/projects/${projectId}/reports`, { email: true });
+			expect(res.status).toBe(202);
+			const [{ id }] = await asOwner('SELECT id FROM report WHERE job_id = $1', [res.body.jobId]);
+			await withUser(owner.id, async (db) => finishReport(db, (await loadReport(db, projectId, id))!, { pages: 3, bytes: 100 }));
+			return (await lastMailTo(owner.email))!.text;
+		};
+		expect(await finish()).toContain('for the run of 26 Sep 2026 (3 pages)');
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { timeZone: 'UTC' })).status).toBe(200);
+		expect(await finish()).toContain('for the run of 25 Sep 2026 (3 pages)');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });

@@ -25,7 +25,6 @@ import {
 	type GridConfig,
 	SOURCES
 } from './config.js';
-import { utcToday } from './fetch.js';
 import { feedSourceMode } from './http.js';
 import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, seriesAccepts, targetSeries, updateFeed } from './store.js';
 
@@ -108,7 +107,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, c.req.param('id'), 'viewer');
 			return c.json({
-				feeds: await listFeeds(db, c.req.param('id'), utcToday()),
+				feeds: await listFeeds(db, c.req.param('id')),
 				// What the form offers, and whether this server fetches for real.
 				sources: FEED_SOURCES.map((s) => ({ source: s, label: SOURCES[s].label, kinds: SOURCES[s].kinds, unit: SOURCES[s].unit })),
 				// CHIRPS v3's daily products; the default (sat) first.
@@ -131,7 +130,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
-			const feed = await getFeed(db, id, fid, utcToday());
+			const feed = await getFeed(db, id, fid);
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'created', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
 			return feed;
 		});
@@ -145,7 +144,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const fid = feedId(c.req.param('feedId'));
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
-			const cur = await getFeed(db, id, fid, utcToday());
+			const cur = await getFeed(db, id, fid);
 			if (!cur) throw new ApiError(404, 'not found');
 			const sourceChanged = patch.source !== undefined && patch.source !== cur.source;
 			const input = FeedInput.parse({
@@ -171,7 +170,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
-			return getFeed(db, id, fid, utcToday());
+			return getFeed(db, id, fid);
 		});
 		return c.json({ feed });
 	})
@@ -180,7 +179,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const fid = feedId(c.req.param('feedId'));
 		await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
-			const cur = await getFeed(db, id, fid, utcToday());
+			const cur = await getFeed(db, id, fid);
 			if (!cur || !(await deleteFeed(db, id, fid))) throw new ApiError(404, 'not found');
 			await recordAudit(db, id, 'feed.configured', feedSubject(fid, 'removed', cur));
 		});
@@ -193,7 +192,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const fid = feedId(c.req.param('feedId'));
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const feed = await getFeed(db, id, fid, utcToday());
+			const feed = await getFeed(db, id, fid);
 			if (!feed) throw new ApiError(404, 'not found');
 			if (!feed.enabled) throw new ApiError(409, 'the feed is switched off');
 			const r = await enqueueJob(db, { projectId: id, kind: 'feed_fetch', payload: { feedId: fid }, dedupeKey: feedFetchDedupeKey(fid) });

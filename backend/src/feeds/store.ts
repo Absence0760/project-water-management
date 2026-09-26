@@ -3,6 +3,7 @@
 // user, and the scheduler's cross-project claim.
 import { provenanceKey, sameProvenance, type SeriesKind, type SeriesProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { feedProvenance, type FeedConfig, type FeedInput, type FeedSchedule, type FeedSource } from './config.js';
 import type { FetchWindow } from './fetch.js';
 import { type FeedHealth, feedHealth } from './health.js';
@@ -77,12 +78,15 @@ const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_
 	CASE WHEN st.feed_id IS NULL THEN NULL ELSE jsonb_build_object(
 		'startDate', to_char(st.start_date, 'YYYY-MM-DD'),
 		'through', to_char(st.start_date + cardinality(st."values") - 1, 'YYYY-MM-DD'),
-		'updatedAt', st.updated_at) END AS rebuilding`;
+		'updatedAt', st.updated_at) END AS rebuilding,
+	(SELECT p.time_zone FROM project p WHERE p.id = f.project_id) AS "timeZone"`;
 const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
 	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
 	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
 
 type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict'> & {
+	/** The project's (058): the zone the feed's health counts its days in. */
+	timeZone: string | null;
 	seriesExists: boolean;
 	seriesProduct: string | null;
 	seriesProductVersion: string | null;
@@ -93,22 +97,24 @@ type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConfli
 export const seriesAccepts = (writes: SeriesProvenance | null, series: { filled: boolean; provenance: SeriesProvenance | null } | null): boolean =>
 	!writes || !series || !series.filled || sameProvenance(series.provenance, writes);
 
-function toMeta(r: FeedSelect, today: string): FeedMeta {
-	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, ...row } = r;
+function toMeta(r: FeedSelect, now: Date): FeedMeta {
+	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, timeZone: tz, ...row } = r;
+	const timeZone = tz ?? DEFAULT_TIME_ZONE;
 	const writes = feedProvenance(row.source, row.config);
 	const provenance = seriesProduct !== null && seriesProductVersion !== null ? { product: seriesProduct, version: seriesProductVersion } : null;
 	const series = seriesExists ? { filled: seriesFilled, provenance } : null;
-	return { ...row, health: feedHealth(row, today), writes, series, versionConflict: !seriesAccepts(writes, series) };
+	return { ...row, health: feedHealth(row, localDate(now, timeZone), timeZone), writes, series, versionConflict: !seriesAccepts(writes, series) };
 }
 
-export async function listFeeds(db: Db, projectId: string, today: string): Promise<FeedMeta[]> {
+/** The project's feeds, their health as of `now` in the project's time zone. */
+export async function listFeeds(db: Db, projectId: string, now = new Date()): Promise<FeedMeta[]> {
 	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 ORDER BY f.created_at, f.id`, [projectId]);
-	return rows.map((r) => toMeta(r, today));
+	return rows.map((r) => toMeta(r, now));
 }
 
-export async function getFeed(db: Db, projectId: string, feedId: string, today: string): Promise<FeedMeta | null> {
+export async function getFeed(db: Db, projectId: string, feedId: string, now = new Date()): Promise<FeedMeta | null> {
 	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 AND f.id = $2`, [projectId, feedId]);
-	return rows[0] ? toMeta(rows[0], today) : null;
+	return rows[0] ? toMeta(rows[0], now) : null;
 }
 
 /**

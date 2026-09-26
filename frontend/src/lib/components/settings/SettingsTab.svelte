@@ -1135,12 +1135,36 @@
 		background: var(--surface-2);
 		z-index: 3;
 	}
-	/* Twelve months plus the row label fit a 1280px screen: 78px holds a
-	   six-digit value (108700) with the input's own padding. */
+	/* Twelve months plus the row label fit a 1280px screen beside the
+	   workspace sidebar (shown from 1100px): a month cell is as narrow as a
+	   six-digit value (108700) allows, measured in the input's own digits,
+	   and gets any width to spare. No spin buttons, as in the Network table:
+	   Chrome keeps room for them, which pushed the row past the panel (arrow
+	   keys still step). When the row is still short of room the label wraps
+	   before the page scrolls sideways. */
 	.monthly td {
-		min-width: 78px;
-		padding-left: 0.3rem;
-		padding-right: 0.3rem;
+		/* A preferred width, so spare room keeps the label on one line first. */
+		width: calc(6.5ch + 0.7rem + 2px + 0.4rem);
+		padding-left: 0.2rem;
+		padding-right: 0.2rem;
+	}
+	table.data.monthly td :global(input) {
+		min-width: calc(6.5ch + 0.7rem + 2px);
+	}
+	.monthly td :global(input[type='number']) {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+	.monthly td :global(input[type='number']::-webkit-inner-spin-button),
+	.monthly td :global(input[type='number']::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.monthly th.sticky {
+		/* Preferred widths on every column share spare room out in proportion;
+		   13rem holds the longest row label on one line. */
+		width: 13rem;
+		white-space: normal;
 	}
 	.derived td,
 	.derived th {

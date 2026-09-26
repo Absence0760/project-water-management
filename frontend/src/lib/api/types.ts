@@ -277,6 +277,9 @@ export interface PortfolioProject {
 	id: string;
 	name: string;
 	role: 'viewer' | 'editor' | 'owner';
+	/** The project's time zone (IANA) and the calendar day there when the server answered: the day the ages count to. */
+	timeZone: string;
+	today: string;
 	/** Newest day of recorded rain in the inputs (YYYY-MM-DD), or null. */
 	dataUntil: string | null;
 	lastRunAt: string | null;
@@ -284,7 +287,7 @@ export interface PortfolioProject {
 	/** Where the figures come from: the current publication, the newest run (nothing published), or nothing. */
 	source: 'published' | 'run' | null;
 	sourceRunId: string | null;
-	/** The last day the figures cover, and its age in days on the server's `today`. */
+	/** The last day the figures cover, and its age in days on the project's `today`. */
 	figuresUntil: string | null;
 	figuresAgeDays: number | null;
 	stale: boolean;
@@ -402,8 +405,6 @@ export interface Unsubscribed {
 
 export interface Portfolio {
 	team: { id: string; name: string; role: TeamRole };
-	/** The server's UTC date the ages are counted to. */
-	today: string;
 	/** The traffic-light thresholds the statuses were judged by (the team's, or the defaults). */
 	thresholds: PortfolioThresholds;
 	projects: PortfolioProject[];

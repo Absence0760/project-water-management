@@ -147,10 +147,12 @@ describe('model revisions', () => {
 		expect(since.status).toBe(200);
 		expect(texts(since.body.changes)).toEqual(['Hilltop: dam capacity 100,000 m³ → 400,000 m³']);
 		expect(since.body.revisions).toHaveLength(1);
+		// Made at 22:30 UTC: the next day in South Africa, the day the reason names (the project's zone, 058).
+		await asOwner(`UPDATE model_run SET created_at = '2026-09-25T22:30:00Z' WHERE id = $1`, [runId]);
 		const res = await editor.call('POST', `/projects/${projectId}/runs/${runId}/restore-inputs`, {});
 		expect(res.status).toBe(201);
 		expect(res.body.revision.source).toBe('restore');
-		expect(res.body.revision.reason).toMatch(/^Inputs of the run "Baseline run" of \d{4}-\d{2}-\d{2}$/);
+		expect(res.body.revision.reason).toBe('Inputs of the run "Baseline run" of 2026-09-26');
 		const model = (await editor.call('GET', `/projects/${projectId}/model`)).body;
 		expect(model.nodes.find((n: { id: string }) => n.id === farm.id).damCapacityM3).toBe(100_000);
 		expect((await revisions()).at(-1)).toMatchObject({ source: 'restore', restored_from: null });

@@ -308,7 +308,10 @@ put the results first. Top to bottom:
   read-only for viewers). Every download of the project (CSV, JSON, the
   .xlsx workbook, the server report PDF) is dated by the calendar day there,
   so an export made just after local midnight carries today's date, not
-  UTC's yesterday. A zone the server doesn't know is refused with its error.
+  UTC's yesterday. The same day dates what the server counts for a person:
+  the portfolio's ages, the feeds' health, the farm page's "not recent"
+  notice and forecast date, and the alerts (their "today" and the 06:00
+  digest). A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then
@@ -1092,9 +1095,12 @@ running. SheetJS loads only then, in a worker, never with the page.
   Each problem is also shown next to its field.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
-coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
-sideways scrolling: each month cell is at least 78px, room for a six-digit
-value such as 250000.
+coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
+workspace sidebar without sideways scrolling: a month cell is as narrow as a
+six-digit value such as 250000 allows (sized in the input's own digits, no
+spin buttons, as in the Network table; arrow keys still step), spare width is
+shared out between the months and the row label, and the label wraps before
+the row scrolls.
 At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
 selects and period lists shrink to the screen, and only the section menu and
 the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,

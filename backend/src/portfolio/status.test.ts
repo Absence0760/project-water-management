@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { toPortfolioProject, type PortfolioRow } from './portfolio.js';
 import { ageDays, EWR_THRESHOLDS, ewrFigure, ewrStatus, isStale } from './status.js';
 
-// Rule 7: dates judged in a zone far from UTC must still count UTC days.
+// Rule 7: the server's own zone never changes a day; only the zone passed in does.
 const tz = process.env.TZ;
 afterEach(() => {
 	process.env.TZ = tz;
@@ -83,6 +83,7 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	id: 'p1',
 	name: 'Alpha',
 	role: 'viewer',
+	time_zone: 'Africa/Johannesburg',
 	data_until: '2026-09-24',
 	last_run_at: new Date('2026-09-25T06:00:00Z'),
 	last_run_id: 'run-latest',
@@ -110,13 +111,16 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 });
 
 describe('toPortfolioProject', () => {
-	const today = '2026-09-26';
+	// 12:00 SAST on 26 September.
+	const today = new Date('2026-09-26T10:00:00Z');
 
 	it('a published project reads everything from the publication', () => {
 		expect(toPortfolioProject(row(), today)).toEqual({
 			id: 'p1',
 			name: 'Alpha',
 			role: 'viewer',
+			timeZone: 'Africa/Johannesburg',
+			today: '2026-09-26',
 			dataUntil: '2026-09-24',
 			lastRunAt: '2026-09-25T06:00:00.000Z',
 			publishedAt: '2026-09-25T07:00:00.000Z',
@@ -193,18 +197,35 @@ describe('toPortfolioProject', () => {
 	});
 
 	it('feeds: ok counts as healthy, failing and stale as failing, pending and disabled as neither', () => {
-		const feed = { source: 'dws' as const, config: { station: 'X0H000' }, enabled: true, createdAt: '2026-09-01T00:00:00', updatedAt: '2026-09-01T00:00:00', lastError: null };
+		const feed = { source: 'dws' as const, config: { station: 'X0H000' }, enabled: true, createdAt: '2026-09-01T00:00:00', updatedAt: '2026-09-01T00:00:00Z', lastError: null };
 		const p = toPortfolioProject(
 			row({
 				feeds: [
-					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00', lastSuccessAt: '2026-09-26T01:00:00', lastDataDate: '2026-09-25', consecutiveFailures: 0 },
-					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00', lastSuccessAt: null, lastDataDate: null, consecutiveFailures: 2 },
-					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00', lastSuccessAt: '2026-09-26T01:00:00', lastDataDate: '2026-01-01', consecutiveFailures: 0 },
+					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00Z', lastSuccessAt: '2026-09-26T01:00:00Z', lastDataDate: '2026-09-25', consecutiveFailures: 0 },
+					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00Z', lastSuccessAt: null, lastDataDate: null, consecutiveFailures: 2 },
+					{ ...feed, lastAttemptAt: '2026-09-26T01:00:00Z', lastSuccessAt: '2026-09-26T01:00:00Z', lastDataDate: '2026-01-01', consecutiveFailures: 0 },
 					{ ...feed, enabled: false, lastAttemptAt: null, lastSuccessAt: null, lastDataDate: null, consecutiveFailures: 0 }
 				]
 			}),
 			today
 		);
 		expect(p.feeds).toEqual({ total: 4, ok: 1, failing: 2 });
+	});
+
+	// Each row counts to its own project's today (project.time_zone, 058), never
+	// UTC's or the server's: at 23:30 UTC it is already the next day in South
+	// Africa. Under skewed server zones (rule 7).
+	it.each(['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])('counts ages to the project’s own day, whatever the server’s zone (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		const late = new Date('2026-09-25T23:30:00Z'); // 01:30 SAST on the 26th
+		const sa = toPortfolioProject(row({ pub_until: '2026-09-18' }), late);
+		expect(sa).toMatchObject({ timeZone: 'Africa/Johannesburg', today: '2026-09-26', figuresAgeDays: 8, stale: true });
+		// Positive control: the same row in a UTC project is still on the 25th, 7 days old, not stale.
+		const utc = toPortfolioProject(row({ pub_until: '2026-09-18', time_zone: 'UTC' }), late);
+		expect(utc).toMatchObject({ timeZone: 'UTC', today: '2026-09-25', figuresAgeDays: 7, stale: false });
+		// A feed's newest day is judged against the same local day (a CHIRPS feed is stale past 12 days).
+		const feed = { source: 'chirps' as const, config: { cells: [{ lat: -30, lon: 20, weight: 1 }] }, enabled: true, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastError: null, lastAttemptAt: '2026-09-25T06:00:00Z', lastSuccessAt: '2026-09-25T06:00:00Z', lastDataDate: '2026-09-13', consecutiveFailures: 0 };
+		expect(toPortfolioProject(row({ feeds: [feed] }), late).feeds).toEqual({ total: 1, ok: 0, failing: 1 });
+		expect(toPortfolioProject(row({ feeds: [feed], time_zone: 'UTC' }), late).feeds).toEqual({ total: 1, ok: 1, failing: 0 });
 	});
 });

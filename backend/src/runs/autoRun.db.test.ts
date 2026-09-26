@@ -376,13 +376,15 @@ describe('auto-publish (settings.autoRun.publish)', () => {
 		const first = (await u.call('POST', `/projects/${pid}/runs`, { label: 'baseline' })).body.run.id as string;
 		const restriction = { level: 'restricted', pct: 20, noticeEn: 'Irrigate at night only', noticeAf: null };
 		expect((await u.call('POST', `/projects/${pid}/publication`, { runId: first, restriction })).status).toBe(201);
+		// Published at 22:30 UTC: the next day in South Africa, the day the note names (the project's zone, 058).
+		await asOwner(`UPDATE run_publication SET published_at = '2026-09-25T22:30:00Z' WHERE project_id = $1 AND superseded_at IS NULL`, [pid]);
 		await merge(u, pid, '2021-02-04', [1]);
 		await runTick();
 		const autoRun = (await runs(pid)).find((r) => r.trigger === 'auto')!;
 		const now = await published(pid);
 		expect(now).toMatchObject({ run_id: autoRun.id, restriction_level: 'restricted', notice_en: 'Irrigate at night only' });
 		expect(Number(now!.restriction_pct)).toBe(20);
-		expect(now!.note).toMatch(/^Published automatically/);
+		expect(now!.note).toMatch(/^Published automatically: .* the run published on 2026-09-26 didn't\.$/);
 		const [audit] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'publication.published' ORDER BY created_at DESC, id DESC LIMIT 1`, [pid]);
 		expect(audit.subject).toMatchObject({ runId: autoRun.id, auto: true });
 	});
