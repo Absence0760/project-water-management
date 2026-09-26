@@ -8,6 +8,14 @@ describe('parseCells', () => {
 		expect(parseCells('1,2; 3,4')).toEqual({ cells: [{ lat: 1, lon: 2 }, { lat: 3, lon: 4 }] });
 	});
 
+	it('reads the typeset minus sign the sample-grid hint uses, so a copied value parses', () => {
+		expect(parseCells('\u221220.12, 25.17')).toEqual({ cells: [{ lat: -20.12, lon: 25.17 }] });
+	});
+
+	it('takes a weight up to the server’s cap of 1000', () => {
+		expect(parseCells('0, 1, 1000')).toEqual({ cells: [{ lat: 0, lon: 1, weight: 1000 }] });
+	});
+
 	it.each([
 		['', /at least one grid cell/],
 		['-20.12', /Cell 1 .* should be/],
@@ -15,7 +23,8 @@ describe('parseCells', () => {
 		['1,2,3,4', /should be/],
 		['61, 25', /latitude must be between -60 and 60/],
 		['0, 181', /longitude must be between/],
-		['0, 1, 0', /weight must be above 0/],
+		['0, 1, 0', /weight must be above 0 and at most 1000/],
+		['0, 1, 1001', /weight must be above 0 and at most 1000/],
 		[Array.from({ length: 26 }, () => '1,2').join('\n'), /At most 25/]
 	])('refuses %j', (text, message) => {
 		const r = parseCells(text);

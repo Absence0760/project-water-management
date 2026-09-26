@@ -94,10 +94,18 @@ export const emptyDraft = (source: FeedSource = 'chirps', kinds: string[] = []):
 });
 
 const NUM = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+/** The largest cell weight the server takes (GridConfig). */
+const MAX_WEIGHT = 1000;
 
-/** Parse the cells box. Returns the cells, or the first problem in words. */
+/**
+ * Parse the cells box. Returns the cells, or the first problem in words. The
+ * limits are the server's (backend/src/feeds/config.ts GridConfig). A typeset
+ * minus sign (U+2212, as the sample-grid hint writes it) counts as "-", so a
+ * value copied from the page parses.
+ */
 export function parseCells(text: string): { cells: GridCell[] } | { error: string } {
 	const lines = text
+		.replace(/\u2212/g, '-')
 		.split(/\n|;/)
 		.map((l) => l.trim())
 		.filter(Boolean);
@@ -112,7 +120,7 @@ export function parseCells(text: string): { cells: GridCell[] } | { error: strin
 		const [lat, lon, weight] = parts.map(Number) as [number, number, number | undefined];
 		if (lat < -60 || lat > 60) return { error: `Cell ${i + 1}: the latitude must be between -60 and 60 (the CHIRPS grid).` };
 		if (lon < -180 || lon > 180) return { error: `Cell ${i + 1}: the longitude must be between -180 and 180.` };
-		if (weight !== undefined && !(weight > 0 && weight <= 1000)) return { error: `Cell ${i + 1}: the weight must be above 0.` };
+		if (weight !== undefined && !(weight > 0 && weight <= MAX_WEIGHT)) return { error: `Cell ${i + 1}: the weight must be above 0 and at most ${MAX_WEIGHT}.` };
 		cells.push(weight === undefined ? { lat, lon } : { lat, lon, weight });
 	}
 	return { cells };

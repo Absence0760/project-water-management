@@ -193,13 +193,13 @@
 				{#if draft.source === 'dws'}
 					<div class="field">
 						<label for="{uid}-station">DWS station</label>
-						<input id="{uid}-station" type="text" maxlength="6" autocomplete="off" bind:value={draft.station} aria-describedby="{uid}-station-h" />
+						<input id="{uid}-station" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" bind:value={draft.station} aria-describedby="{uid}-station-h" />
 						<span class="hint" id="{uid}-station-h">The gauge code, e.g. A2H012. Verified DWS data lags by months: use it for calibration, not day-to-day operation.</span>
 					</div>
 				{:else}
 					<div class="field">
 						<label for="{uid}-cells">Grid cells</label>
-						<textarea id="{uid}-cells" rows="3" bind:value={draft.cells} aria-describedby="{uid}-cells-h"></textarea>
+						<textarea id="{uid}-cells" rows="3" spellcheck="false" bind:value={draft.cells} aria-describedby="{uid}-cells-h"></textarea>
 						<span class="hint" id="{uid}-cells-h">
 							One per line: “latitude, longitude”, optionally “, weight”. The rainfall is the weighted mean of the 0.05° (about 5.5 km) cells
 							holding these points.{#if data.mode === 'fixtures'}{' '}The sample grid covers latitude −20.00 to −20.30, longitude 25.00 to 25.40.{/if}
