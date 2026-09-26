@@ -1,7 +1,7 @@
 // Runs a daily RunoffModel over a run's forcing: builds rain and potential
 // evaporation, warms the stores up, steps every day and converts mm to m³/day.
 import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
-import type { ProjectSettings } from '../project';
+import { gr4jPeMonthlyMm, type PeInput, type ProjectSettings } from '../project';
 import { requireCatchmentAreaKm2 } from './area';
 import { gr4j, GR4J_PARAMS, type Gr4jParams } from './gr4j';
 import type { DayFluxes, NaturalFlowGenerator, ParamSpec, RunContext, RunoffModel } from './types';
@@ -35,11 +35,15 @@ function daysInMonth(day: number): number {
 /**
  * Rain: the first present of catchment, CHIRPS and forecast rain, no
  * threshold (the threshold was part of the legacy model); a day with none is
- * dry (the run warns how many). PET: pan coefficient × A-pan for the month,
- * spread evenly over the month's days, so a month's PET totals exactly
- * coefficient × A-pan. Negative inputs count as 0.
+ * dry (the run warns how many). PET: the month's PE (`gr4jPeMonthlyMm`: pan
+ * coefficient × A-pan, or `settings.pe`'s monthly row, issue #39), spread
+ * evenly over the month's days, so a month's PET totals exactly that. Negative
+ * inputs count as 0.
  */
-export function runoffForcing(settings: Pick<ProjectSettings, 'apanMm' | 'panCoefficient'>, ctx: Pick<RunContext, 'startDate' | 'days' | 'aligned'>): RunoffForcing {
+export function runoffForcing(
+	settings: Pick<ProjectSettings, 'apanMm' | 'panCoefficient'> & { pe?: PeInput | null },
+	ctx: Pick<RunContext, 'startDate' | 'days' | 'aligned'>
+): RunoffForcing {
 	const { days } = ctx;
 	const c = ctx.aligned('rain_catchment_mm');
 	const ch = ctx.aligned('rain_chirps_mm');
@@ -47,10 +51,11 @@ export function runoffForcing(settings: Pick<ProjectSettings, 'apanMm' | 'panCoe
 	const rainMm = new Float64Array(days);
 	const petMm = new Float64Array(days);
 	const d0 = toEpochDay(ctx.startDate);
+	const peMm = gr4jPeMonthlyMm(settings);
 	for (let t = 0; t < days; t++) {
 		rainMm[t] = Math.max(0, c[t] ?? ch[t] ?? f[t] ?? 0);
 		const wy = waterYearIndex(monthOfEpochDay(d0 + t));
-		petMm[t] = Math.max(0, (settings.panCoefficient[wy]! * settings.apanMm[wy]!) / daysInMonth(d0 + t));
+		petMm[t] = Math.max(0, peMm[wy]! / daysInMonth(d0 + t));
 	}
 	return { rainMm, petMm };
 }
@@ -121,13 +126,13 @@ export function resolveWarmupDays(v: unknown, warnings: string[]): number {
 	return 365;
 }
 
-/** Some month has potential evaporation (A-pan × pan coefficient > 0): what GR4J needs to run. */
-export const hasPotentialEvaporation = (s: { apanMm: readonly number[]; panCoefficient: readonly number[] }): boolean =>
-	s.apanMm.some((v, m) => (v ?? 0) * (s.panCoefficient[m] ?? 0) > 0);
+/** Some month has potential evaporation (`gr4jPeMonthlyMm` > 0): what GR4J needs to run. */
+export const hasPotentialEvaporation = (s: { apanMm: readonly number[]; panCoefficient: readonly number[]; pe?: PeInput | null }): boolean =>
+	gr4jPeMonthlyMm(s).some((v) => v > 0);
 
 /** Why a GR4J run is refused when potential evaporation is 0 in every month. */
 export const GR4J_NO_PET =
-	'GR4J needs potential evaporation: A-pan × pan coefficient is 0 in every month, so the catchment would never dry out. Enter A-pan evaporation (Settings → Demand), or choose the legacy runoff model.';
+	'GR4J needs potential evaporation: it is 0 in every month (A-pan × pan coefficient, or the monthly PE row), so the catchment would never dry out. Enter A-pan evaporation (Settings → Demand) or a monthly PE row (Settings → Flow calibration), or choose the legacy runoff model.';
 
 const MM_KM2_TO_M3 = 1000; // 1 mm over 1 km² = 1 000 m³
 
