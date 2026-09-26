@@ -1305,7 +1305,7 @@ run's report to chosen members every week or month.
   list. It is sticky, and a long list scrolls inside its panel (at least
   7.5rem tall) so the rail fits the window without clipping. Narrower, the
   rail stacks above the results.
-- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0350-roadmap-wp-212)).
+- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0360-roadmap-wp-212)).
   When the project has a forecast series (`rain_forecast_mm`, uploaded or
   fed by CHIRPS-GEFS), the run bar has **Run forecast** beside Run model: the
   record as an ordinary run, then the days after the last recorded rain on
