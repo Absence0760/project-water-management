@@ -462,6 +462,11 @@ export interface MergeIntoOptions {
 	keepRevision: boolean;
 	/** Who wrote the days, for the new-data hook (series/newData.ts): a person, or an API key's ingest. */
 	via: Extract<SeriesDaysChanged['via'], 'user' | 'api_key'>;
+	/**
+	 * A null leaves the day as stored (a person's upload: a blank day in the
+	 * file never erases). Without it a null clears the day (the ingest API).
+	 */
+	keepOnNull?: boolean;
 	/** Extra fields for the audit subject (the ingest's `source` label). */
 	audit?: Record<string, unknown>;
 }
@@ -501,7 +506,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
 		);
 	}
-	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body), byKey: opts.via === 'api_key' });
+	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body), byKey: opts.via === 'api_key', keepOnNull: opts.keepOnNull });
 	const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, projectId, r0.meta, body.dayBoundary) } : r0;
 	const subject = seriesSubject(r.meta, r.before, r.after, opts.audit);
 	const daysChanged = subject.daysChanged as number;

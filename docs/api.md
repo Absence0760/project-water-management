@@ -885,7 +885,7 @@ naming `startDate`, not a server error).
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
 | PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing; a `null` day keeps its stored value, so a file never erases: clear days with a PUT) | editor |
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
@@ -1665,7 +1665,8 @@ CORS (gateways aren't browsers), JSON bodies only.
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist, only the days sent
-  are touched (a `null` clears a day), units are converted to the kind's
+  are touched (a `null` clears a day here, where the UI's merge keeps the
+  stored value), units are converted to the kind's
   canonical unit, and the version and day-boundary guards answer `409` as
   they do there. It is recorded as `series.created` / `series.merged` by the
   key (`actor_label` `API key “<name>”`); unlike a person's merge it keeps no

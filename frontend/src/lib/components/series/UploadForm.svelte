@@ -3,7 +3,7 @@
 	// data" dialog. Picking (or dropping) a file guesses which stored series it
 	// updates; an existing series defaults to append / update (POST
 	// …/series/merge), which adds new days and corrects overlapping ones but
-	// never erases a stored value the file leaves blank.
+	// never erases a stored value the file leaves blank (the server keeps it).
 	import { untrack } from 'svelte';
 	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
@@ -94,7 +94,7 @@
 	);
 	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
-	// The file in the stored unit: what a merge compares, fills and sends.
+	// The file in the stored unit, so the preview compares like with like.
 	const stored = $derived(parsed ? inStoredUnit(kind, unit.trim(), parsed.values) : null);
 	const preview = $derived(
 		parsed && stored && target && mode === 'merge' && targetValues
@@ -195,17 +195,15 @@
 		try {
 			let result: UploadResult;
 			if (target && mode === 'merge') {
-				// Send the file's span with its blank days filled from what is
-				// stored, so a partial file adds and corrects but never erases.
-				// Both are in the stored unit, so the server scales nothing.
+				// The file as it is: the server keeps the stored value of a day
+				// the file leaves blank, under the row lock, so nothing is filled here.
 				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: stored.values });
-				const off = toEpochDay(parsed.startDate) - toEpochDay(p.result.startDate);
 				const meta = await api.request<SeriesWriteResult>('POST', `/projects/${encodeURIComponent(projectId)}/series/merge`, {
 					kind,
 					name: name.trim(),
-					unit: stored.unit,
+					unit: unit.trim(),
 					startDate: parsed.startDate,
-					values: p.result.values.slice(off, off + parsed.values.length),
+					values: parsed.values,
 					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.
 					...(labelFields ?? {}),
 					// A sub-daily file's day boundary: one of the other window into a filled series is refused (409).

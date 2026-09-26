@@ -12,11 +12,9 @@ export interface UploadResult {
 }
 
 /**
- * A file's values in the unit the series is stored in (engine units.ts), so a
- * merge compares them with stored days like for like and can fill the file's
- * blank days from stored values: the merge then sends them in that unit, and
- * the server scales nothing. Sent in the file's own unit, a stored m³/s value
- * copied into a blank day of an l/s file came back 1 000 × too small. A unit
+ * A file's values in the unit the series is stored in (engine units.ts), so
+ * the merge preview compares them with stored days like for like: compared
+ * raw, 1 200 l/s against a stored 1.2 m³/s counted as a changed day. A unit
  * the table doesn't know is left as given, for the server to refuse.
  */
 export function inStoredUnit(kind: string, unit: string, values: (number | null)[]): { unit: string; values: (number | null)[] } {
