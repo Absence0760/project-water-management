@@ -1891,14 +1891,37 @@ from the WP:
 
 ## Portfolio dashboard (WP-2.14)
 
-- [ ] **Traffic-light thresholds per team (D11).** Green < 5 %, amber < 20 %
-      of the last 30 days with the outlet EWR not met are fixed defaults
-      (`backend/src/portfolio/status.ts` `EWR_THRESHOLDS`; the API returns
-      them, the page states them). Durable fix: a `team.settings` column
-      (next free migration) with a validated `portfolio.thresholds`, edited by
-      team admins on the team page, passed to `ewrStatus`. Trigger: the
-      hydrologist confirms or changes the defaults (plan.md D11), or a second
-      team wants different ones.
+- [x] **Traffic-light thresholds per team (D11)** (2026-09-26).
+      `055_team_settings` adds `team.settings` with a validated
+      `portfolio.thresholds` (green and amber cut-offs, 0–100 %, green <
+      amber; a CHECK as well as the API's zod schema, `teams/settings.ts`).
+      Team admins edit them on the team page (`PATCH /teams/:id` with
+      `settings`, `null` = the defaults); every member reads which apply. The
+      portfolio passes them to `ewrStatus` and returns them with a `source`
+      (`team` / `default`), and the page says whose they are. Each change is a
+      `team_thresholds.changed` audit event on every team project. Alerts
+      (WP-2.13) and the farm view don't use these thresholds (alerts have
+      their own per-rule ones; the farm view shows the outlet's days not met
+      without a colour), so nothing else reads them. Tests:
+      `teams/settings.test.ts`, `teams/settings.db.test.ts`,
+      `portfolio/status.test.ts`, `portfolio/portfolio.db.test.ts`, the
+      portfolio and teams e2e specs.
+- [ ] **Confirm the default traffic-light thresholds (D11).** The setting
+      above makes the numbers adjustable per team; the defaults (5 % / 20 %
+      of the last 30 days with the outlet EWR not met,
+      `portfolio/status.ts` `EWR_THRESHOLDS`) still need the hydrologist's
+      sign-off (plan.md, questions for the hydrologist, 19). The page says
+      so while a team uses them. Durable fix: the hydrologist confirms or
+      replaces them; change `EWR_THRESHOLDS`, the 055 header, and the docs
+      that quote them. Trigger: the hydrologist's answer.
+- [ ] **Bundle ceiling after the team thresholds.** The team page's
+      thresholds panel, the portfolio's thresholds sentence and the History
+      line add ~1.4 KB gzip: 925.5 KB against the 925 KB ceiling (main
+      measured 924.1 KB before them), so `pnpm check:bundle` reports 926.
+      The ceiling was left alone for the integrator to decide
+      (`scripts/guards/check_web_bundle_budget.mjs`); weight to remove
+      instead is the English-as-key catalogue in the i18n bundle item above
+      (~5–7 KB). Trigger: the merge.
 - [x] **Alerts column.** `alertsFiring` counts the firing `alert_event`
       rows per project in the portfolio query, and the page shows it
       (WP-2.13).
