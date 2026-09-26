@@ -108,6 +108,8 @@ describe('the fetcher bundle', () => {
 			bundle: true,
 			platform: 'node',
 			format: 'esm',
+			// As infra/scripts/package-lambdas.sh builds it: only the renderer ships playwright-core.
+			external: ['playwright-core'],
 			write: false,
 			metafile: true,
 			logLevel: 'silent'

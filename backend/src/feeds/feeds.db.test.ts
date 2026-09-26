@@ -553,10 +553,11 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 
 	it('a forecast may reach its sixteenth day, not a day further', async () => {
 		const { owner, pid, id, ingest } = await setup('Horizon', gefs());
-		expect(await ingest(ok(utcToday(), new Array(17).fill(1)))).toEqual({ merged: 0, lastDate: null });
+		// A whole issue dated tomorrow (a wrong clock) reaches a day past today's sixteenth.
+		expect(await ingest(ok(addDays(1), new Array(16).fill(1), { days: 16, issued: addDays(1) }))).toEqual({ merged: 0, lastDate: null });
 		expect(await series(owner, pid, 'rain_forecast_mm')).toBeNull();
 		expect((await feedRow(id)).last_error).toBe(`the fetcher’s answer had days after ${addDays(15)}, so nothing was written`);
-		expect(await ingest(ok(utcToday(), new Array(16).fill(1)))).toEqual({ merged: 16, lastDate: addDays(15) });
+		expect(await ingest(ok(utcToday(), new Array(16).fill(1), { days: 16, issued: utcToday() }))).toEqual({ merged: 16, lastDate: addDays(15) });
 	});
 
 	it('an empty window (the source had nothing) is a success that writes nothing and keeps the newest date', async () => {

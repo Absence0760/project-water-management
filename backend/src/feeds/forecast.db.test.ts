@@ -70,18 +70,19 @@ describe('forecast issues in the series', () => {
 
 	it('an older issue arriving after a newer one (a delayed or redelivered ingest-results message) changes nothing', async () => {
 		const { owner, pid, feedId, ingest } = await forecastFeed('LateIssue');
-		await ingest(issue(0, 5));
+		// Yesterday's issue stands in for "the newer one": today's is the newest the source can have.
+		await ingest(issue(-1, 5));
 		const before = await feedRow(feedId);
-		expect(await ingest(issue(-1, 1))).toEqual({ merged: 0, lastDate: null });
-		expect((await forecast(owner, pid))!).toEqual(expect.objectContaining({ startDate: day(0), values: new Array(16).fill(5) }));
+		expect(await ingest(issue(-2, 1))).toEqual({ merged: 0, lastDate: null });
+		expect((await forecast(owner, pid))!).toEqual(expect.objectContaining({ startDate: day(-1), values: new Array(16).fill(5) }));
 		// Nor does its health: the newer issue's meta stands.
 		expect(await feedRow(feedId)).toEqual(before);
 
 		// Positive controls: the same issue again (a re-fetch) and a newer one both merge.
-		expect(await ingest(issue(0, 6))).toEqual({ merged: 16, lastDate: day(15) });
-		expect(await ingest(issue(1, 7))).toEqual({ merged: 16, lastDate: day(16) });
+		expect(await ingest(issue(-1, 6))).toEqual({ merged: 16, lastDate: day(14) });
+		expect(await ingest(issue(0, 7))).toEqual({ merged: 16, lastDate: day(15) });
 		expect((await forecast(owner, pid))!.values).toEqual([6, ...new Array(16).fill(7)]);
-		expect((await feedRow(feedId)).last_meta).toMatchObject({ issued: day(1) });
+		expect((await feedRow(feedId)).last_meta).toMatchObject({ issued: day(0) });
 	});
 
 	it('two ingests of one feed at once: the older issue waits for the newer to commit, then sees it and is dropped', async () => {
