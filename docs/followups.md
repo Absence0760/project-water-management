@@ -904,7 +904,26 @@ the suggested order (the IDs carry the detail):
       `perf` projects (median of 7 after a warm-up, serial), run with
       `pnpm test:engine:perf` / `pnpm test:backend:perf`, not by
       `pnpm test` or CI. The backend's 50 ms example-catchment budget
-      still fails when the machine is busy; run it alone.
+      then failed even alone (median 75–80 ms, 2026-09-26): the run had
+      grown feature by feature, not through one bug. Bisecting the first
+      example's GR4J run (warm, outside vitest) found two steps, B4
+      multi-day accumulations (merge b042b363, ~49 → ~54 ms: a second
+      CHIRPS fit) and WP-3.4 assurance of supply (merge c789b325, ~62 →
+      ~70 ms: the water account), on top of a steady climb as each WP
+      added output series. The profile's costs were generic, not new
+      physics: copying ~150 output series (≈ 830 000 values) with
+      `Array.from` on typed arrays (~14 ms), `monthOfEpochDay` /
+      `waterYearOf` allocating a `Date` per call in every per-day loop
+      (~5 ms), and the water account's per-day keyed sums (~5 ms). Fixed
+      at the source (an indexed copy, integer calendar arithmetic checked
+      against `Date` day by day, column-wise sums in the same node order,
+      and the CHIRPS fit working out each day's water year once); every
+      output is bit-identical (hash of the full output of all three
+      examples × both runoff models), so no ENGINE_VERSION bump. Warm run
+      ~63 → ~27 ms; the test's own median 75–80 → ~42 ms. What is left
+      above the warm figure is JIT warm-up: the test times runs 2–8 of a
+      fresh process, and the first few run at 55–75 ms before V8
+      optimises the run path. Run it alone.
 - [x] **Frontend bundle split by tab** (2026-09-24): the catchment
       workspace loads each tab (and the Add data / series preview dialogs)
       on demand (`common/Lazy.svelte`, architecture.md § Code splitting).
