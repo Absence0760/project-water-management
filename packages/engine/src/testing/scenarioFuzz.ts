@@ -5,7 +5,7 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, LAND_COVER_CLASSES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
@@ -47,6 +47,11 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			return g.bool(0.1) ? null : monthly(g, () => (g.bool(0.2) ? 0 : g.float(0, 1e5)));
 		case 'userPriority':
 			return g.pick(USER_PRIORITIES);
+		case 'supplyRule':
+			// Any rule: trigger on a dam-less farm, or run of river on one with a dam, is a problem applyScenario reports.
+			return g.pick(SUPPLY_RULES);
+		case 'pumpCapacityM3Day':
+			return g.pick([null, 0, g.logFloat(1, 1e5)]);
 		default:
 			// Every other editable node field is a fraction 0–1.
 			return g.frac();

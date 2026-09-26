@@ -2350,7 +2350,11 @@ reading of this document where it didn't settle them):
 - *Invalid combinations run and warn; the API refuses them on save*
   (`modelRuleIssues`): a supply rule or pump on a gauge or other user
   (ignored), `trigger` without a dam and `runOfRiver` with one (both run as
-  river first), a stop level below the trigger (clamped up to it).
+  river first), a stop level below the trigger (clamped up to it). A
+  scenario's `node.set` of any of the four fields (or of the dam capacity)
+  that would break one of these is skipped with the rule as its problem
+  ([scenarios.md](./scenarios.md)), so a licence what-if such as "river
+  first at 1,200 m³/day" never produces a model the API would refuse.
 - *Other water users* keep taking MIN(what reaches them, demand) with no pump
   limit (§2.7c); a pump capacity on them is a later step (issue #54 item 2b).
 
