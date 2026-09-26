@@ -976,10 +976,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > **Superseded in part by [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
 > (Phases 4–5): the optimiser is **DDS** (not Nelder–Mead), the objectives add
 > KGE′, non-parametric KGE, NSE on √Q/log Q and FDC signatures, and it fits the
-> GR4J parameters as well as the legacy ones. Follow the issue where they differ.
+> GR4J parameters as well as the legacy ones (until engine 1.0.0 removed the
+> legacy model, issue #16). Follow the issue where they differ.
 > **Engine done (issue #4 phase 4):** `packages/engine/src/calibrate/` (DDS,
 > objectives, split-sample and differential split-sample validation, exclusions,
-> both models, the year-balanced KGE below); [model.md §2.10b](../model.md).
+> GR4J, the year-balanced KGE below); [model.md §2.10b](../model.md).
 > **UI done (phase 5):** Settings → Flow calibration → Fit automatically, in a
 > Web Worker (`frontend/src/lib/calibration/`), on `GET /projects/:id/model-input`;
 > Cancel terminates the worker at once. [ui.md § Settings](../ui.md).
@@ -1280,17 +1281,19 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > (`'legacy' | 'gr4j'`), not the `flowGenerator` named below. **H1 decided**
 > (persona recommendation, 2026-09-24; pending the hydrologist): legacy is
 > kept unchanged as workbook comparison only, never evidence, and GR4J is the
-> model of record ([audit H1](../engine-audit.md)). Left: IHACRES (issue #4
-> phase 7) only if asked, and removing legacy after sign-off (phase 10).
+> model of record ([audit H1](../engine-audit.md)). **Done 2026-09-26:**
+> engine 1.0.0 removed the legacy model (issue #4 phase 10, issue #16); GR4J
+> is the only runoff model and H1 is closed. Left: IHACRES (issue #4 phase 7)
+> only if asked.
 
 - **Goal:** a storm can never return more water than it brought (today a
   10 mm storm returns 4.9× its rain).
-- **Status:** GR4J is the default runoff model (engine 0.11.0) and passes
-  the event-scale invariant. The legacy model is kept unchanged but
-  labelled workbook comparison only, never evidence, on every run, badge
-  and CSV export (decided 2026-09-24 on persona recommendation, pending the
-  hydrologist, [audit H1](../engine-audit.md)). What remains is the
-  recalibration and sign-off in WP-1.25.
+- **Status: done (engine 1.0.0, 2026-09-26, issue #16).** GR4J became the
+  default in engine 0.11.0 and passes the event-scale invariant; the legacy
+  model was labelled workbook comparison only from 2026-09-24 and removed in
+  engine 1.0.0 ([audit H1](../engine-audit.md), closed). Stored legacy runs
+  keep their badge and CSV label. Recalibration with the hydrologist is
+  WP-1.25's.
 - **Changes:**
   - **engine:** a new event response in `flow.ts`:
     - event runoff = `C(R, wetness) × R × area` with C ≤ 1;
@@ -1329,6 +1332,19 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Depends on:** WP-1.1 (the H1 answer), WP-1.18.
 
 ### WP-1.25 Engine release, recalibration, sign-off
+
+- **Status: done for the engine (2026-09-26, engine 1.0.0, issue #16).**
+  1.0.0 is the consolidated version: the legacy model is gone, and with it
+  D3's temporary switch (`settings.runoffModel` now only records GR4J), migration 063 moved every project to GR4J, the 20 000-case soak
+  passed, and the regression suite's final deviation list is recorded
+  ([engine-audit.md § Regression suite](../engine-audit.md#regression-suite-deviation-list);
+  the end-to-end natural-flow comparison is retired with the record of its
+  last, passing run). The operator **waived** the written sign-off and the
+  trigger that the hydrologist first review the GR4J results with the Phase 9
+  bands (their agreement is assumed, [plan.md](../plan.md) Decisions).
+  Recalibrating the client catchment with the hydrologist and pinning that
+  baseline happen in their review (WP-1.1), not as a gate on this release.
+  The frontend has no "not yet signed off" banner to remove.
 
 - **Goal:** one signed-off engine version that the client's modelling team
   can rely on. This meets the Step 1 → 2 gate.
@@ -1997,7 +2013,7 @@ Questions for the hydrologist: the WP-1.1 pack.
 | --- | --- | --- | --- | --- |
 | D1 | Calibration record (issue #1) | The logger; the gauge; the logger with excluded periods | The logger (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
 | D2 | Audit questions H1, N1–N4, Q1, Q3, Q5, Q7, Q11–Q13, Q17, Q18 | Per engine-audit.md | Per engine-audit.md recommendations; N1 backfill e = 1 − `return_flow_pct` | Hydrologist |
-| D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term). **Taken that way:** `settings.runoffModel`, GR4J by default since engine 0.11.0, legacy for workbook comparison only (WP-1.24) | Operator + hydrologist |
+| D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term). **Taken that way:** `settings.runoffModel`, GR4J by default since engine 0.11.0, legacy for workbook comparison only (WP-1.24), removed in engine 1.0.0 (WP-1.25, issue #16) | Operator + hydrologist |
 | D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6) | Operator |
 | D5 | GitHub gates | Public repo; GitHub Enterprise (required reviewers on private repos) | Public, after the scrub | Operator |
 | D6 | History with client terms | `git filter-repo --replace-text`; publish a fresh squashed repo; accept (if terms are only public facts) | Decide after `git log -S`; a squashed fresh repo is the safest if farm names are in history. **Decided (2026-09):** `filter-repo`, then the repo recreated from the clean history (WP-1.7) | Operator + client |
