@@ -332,7 +332,13 @@ merges into:
   data is revised in arrears), 10 years on the first fetch.
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
-  value for never erases one already there. The merge and the feed's health
+  value for never erases one already there. **A feed owns the days it
+  fetches in its target series**: on a day the source has a value, that value
+  replaces what was there, whether an earlier fetch, an upload or an import
+  put it (this is how final CHIRPS replaces preliminary). Days outside the
+  fetched window are never touched, and no other series is. To keep your own
+  record next to a feed, give it its own series name (the feed's
+  `targetName`, or the upload's). The merge and the feed's health
   commit in the job's transaction, as the job's acting user. Re-reading an
   unchanged window (CHIRPS does, every day) leaves the series row alone, so
   its `updatedAt` ("new data since the last run") moves only when a value
