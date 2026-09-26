@@ -105,7 +105,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project models one river catchment day by day. Rain becomes natural flow, the flow is shared between the farms, each farm fills its dam and irrigates, and whatever is left reaches the outlet. Every run answers three questions: how much water is there, can each farm’s irrigation be met, and does enough stay in the river for the [[ewr]]?'
+						text: 'A project models one river catchment day by day. Rain becomes natural flow, the flow is shared between the units, each unit fills its dam and irrigates, and whatever is left reaches the outlet. Every run answers three questions: how much water is there, can each unit’s irrigation be met, and does enough stay in the river for the [[ewr]]?'
 					},
 					{
 						type: 'diagram',
@@ -122,9 +122,9 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'**Create the project** on the Projects page. See [[guide:create-a-project|Create a project]].',
-							'**Network**: add the farms and gauges, say what each drains into, and end at one outflow gauge. Give the farms their areas. See [[guide:build-the-network|Build the river network]].',
-							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each farm plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
-							'**Transfers** (optional): pipelines or canals from one farm’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
+							'**Network**: add the units and gauges, say what each drains into, and end at one outflow gauge. Give the units their areas. See [[guide:build-the-network|Build the river network]].',
+							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each unit plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
+							'**Transfers** (optional): pipelines or canals from one unit’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
 							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
 							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, how rain gaps are filled, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
 							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (units short of water, run warnings, new or old data and units with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
 					}
 				]
 			},
@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or use the link beside a farm in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
+						text: 'To change one unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the unit on the Network (the link appears under the drawing), or use the link beside a unit in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
@@ -225,7 +225,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'build-the-network',
 		title: 'Build the river network',
-		summary: 'Add farms and gauges, connect each one to the element it drains into, and end at one outflow gauge.',
+		summary: 'Add units and gauges, connect each one to the element it drains into, and end at one outflow gauge.',
 		kind: 'howto',
 		tab: 'network',
 		sections: [
@@ -240,7 +240,7 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'network',
 						caption:
-							'A small network. Farms are circles, farms with a dam are filled squares, gauges are triangles, and the outflow gauge is filled. The dashed arrow is a transfer between two dams.'
+							'A small network. Units are circles, units with a dam are filled squares, gauges are triangles, and the outflow gauge is filled. The dashed arrow is a transfer between two dams.'
 					}
 				]
 			},
@@ -251,18 +251,18 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
-							'Press **+ Add node** for each farm (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
+							'Press **+ Add node** for each unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
-							'Give every farm its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
-							'For a farm with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card on the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
-							'Set the farm’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
+							'Give every unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
+							'For a unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card on the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
+							'Set the unit’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
 							'Press **Save changes** on the save bar.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each farm by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour farms by** › **Supply, latest run**, on by default); a farm added since the run is hatched.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour units by** › **Supply, latest run**, on by default); a unit added since the run is hatched.'
 					}
 				]
 			},
@@ -271,7 +271,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A farm element also covers two other cases, set by its parameters:'
+						text: 'A unit also covers two other cases, set by its parameters:'
 					},
 					{
 						type: 'list',
@@ -283,7 +283,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A river that splits in two (a bifurcation) can’t be drawn. Use a transfer for the side channel, or merge the farms.'
+						text: 'A river that splits in two (a bifurcation) can’t be drawn. Use a transfer for the side channel, or merge the units.'
 					}
 				]
 			}
@@ -294,7 +294,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'set-up-crops-and-demand',
 		title: 'Set up crops and irrigation demand',
-		summary: 'Crops with monthly crop factors, the hectares on each farm, A-pan evaporation and effective rain.',
+		summary: 'Crops with monthly crop factors, the hectares on each unit, A-pan evaporation and effective rain.',
 		kind: 'howto',
 		tab: 'crops',
 		sections: [
@@ -315,7 +315,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] covers the day’s demand first; what the crop can’t use that day stays in the [[soil-water-store]] (25 mm by default) and covers the following days, so wet spells need less irrigation after the rain too. The farm then abstracts more than the crop needs, to cover its application losses ([[irrigation-efficiency]]).'
+						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] covers the day’s demand first; what the crop can’t use that day stays in the [[soil-water-store]] (25 mm by default) and covers the following days, so wet spells need less irrigation after the rain too. The unit then abstracts more than the crop needs, to cover its application losses ([[irrigation-efficiency]]).'
 					},
 					{
 						type: 'note',
@@ -331,22 +331,22 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
-							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
-							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any farm with nothing planted, whose demand is zero.',
+							'Under **Planted areas**, enter the hectares of each crop on each unit. Leave a crop blank on units that don’t grow it.',
+							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per unit and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any unit with nothing planted, whose demand is zero.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
-							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
+							'Set each unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change just one farm, select it on the **Network** and open **Planted areas** under the drawing: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'To change just one unit, select it on the **Network** and open **Planted areas** under the drawing: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'With A-pan at 0 in every month the crops need no water, and every farm looks fully supplied. The Summary’s checklist warns about this.'
+						text: 'With A-pan at 0 in every month the crops need no water, and every unit looks fully supplied. The Summary’s checklist warns about this.'
 					}
 				]
 			}
@@ -419,7 +419,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'add-a-transfer',
 		title: 'Add a transfer',
-		summary: 'Move water from one farm’s dam to another in chosen months, up to a pipe or canal capacity.',
+		summary: 'Move water from one unit’s dam to another in chosen months, up to a pipe or canal capacity.',
 		kind: 'howto',
 		tab: 'transfers',
 		sections: [
@@ -429,7 +429,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **Add transfer** and pick its source (**From**) and destination (**To**) farms.',
+							'On **Transfers**, press **Add transfer** and pick its source (**From**) and destination (**To**) units.',
 							'Tick the [[transfer-months|months]] it runs in: one toggle per month, Oct … Sep.',
 							'Enter the [[transfer-rate|maximum rate]] in m³/s, and a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
@@ -445,7 +445,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'picture',
 						shot: 'transfer',
-						caption: 'A transfer pipeline on piers, crossing the river between two farm dams.',
+						caption: 'A transfer pipeline on piers, crossing the river between two dams.',
 						stops: [
 							{ spot: 'pipe', title: 'The pipeline', text: 'Its capacity is the transfer’s [[transfer-rate|maximum rate]]; it only runs in the [[transfer-months|months]] you tick.' }
 						]
@@ -456,7 +456,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The source’s water is yesterday’s storage above the higher of the transfer’s minimum and the dam’s own [[dam-min|minimum level]], less what earlier transfers took. The room at the destination is the free space in its dam plus that day’s irrigation demand, so water is never pumped into a full dam only to spill. Transfers move before any farm irrigates.'
+						text: 'The source’s water is yesterday’s storage above the higher of the transfer’s minimum and the dam’s own [[dam-min|minimum level]], less what earlier transfers took. The room at the destination is the free space in its dam plus that day’s irrigation demand, so water is never pumped into a full dam only to spill. Transfers move before any unit irrigates.'
 					},
 					{
 						type: 'p',
@@ -505,7 +505,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the farms upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which farm causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
+						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
 					}
 				]
 			}
@@ -668,18 +668,18 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which farms fell short, the fit when there is observed flow), the headline figures and the per-farm table. Farms under 95 % supplied are flagged, with a small bar beside each farm’s %.',
+							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which units fell short, the fit when there is observed flow), the headline figures and the per-unit table. Units under 95 % supplied are flagged, with a small bar beside each unit’s %.',
 							'**River & Reserve**: Reserve compliance by month (with a rule table), EWR against outflow, EWR by month, and the uncertainty bands on those findings.',
-							'**Farms & users**: **Curtailment** (each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]), then **Farm detail**: dam storage and supply against demand, per farm.',
+							'**Units & users**: **Curtailment** (each unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]), then **Unit detail**: dam storage and supply against demand, per unit.',
 							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, **Calibration** with **Where the parameters came from**, the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
-							'**Dig deeper**: **Self-checks** (whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
+							'**Dig deeper**: **Self-checks** (whether each unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every farm, the farm table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme. Viewers can open it too.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme. Viewers can open it too.'
 					}
 				]
 			},
@@ -744,7 +744,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'how-the-model-works',
 		title: 'How the model works',
-		summary: 'The chain from daily rain to farm supply, dam storage, outflow and the EWR check.',
+		summary: 'The chain from daily rain to unit supply, dam storage, outflow and the EWR check.',
 		kind: 'concept',
 		sections: [
 			{
@@ -754,17 +754,17 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'pipeline',
 						caption:
-							'One run, every day of the simulation window. The runoff model makes the catchment’s natural flow; the network then routes it through farms and dams to the outflow gauge, where the EWR and the calibration are checked.'
+							'One run, every day of the simulation window. The runoff model makes the catchment’s natural flow; the network then routes it through units and dams to the outflow gauge, where the EWR and the calibration are checked.'
 					},
 					{
 						type: 'steps',
 						items: [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
-							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no farms.',
-							'**Shares.** Natural flow and the EWR are split between the farms by fixed [[flow-share|flow shares]].',
-							'**Demand.** Crops, A-pan and effective rain give each farm’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the farm takes from its dam and the river.',
-							'**Farm balance.** Upstream first, each farm fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one farm]].',
-							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the farms upstream of it ([[ewr-charge]]).'
+							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no units.',
+							'**Shares.** Natural flow and the EWR are split between the units by fixed [[flow-share|flow shares]].',
+							'**Demand.** Crops, A-pan and effective rain give each unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the unit takes from its dam and the river.',
+							'**Unit balance.** Upstream first, each unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one unit]].',
+							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the units upstream of it ([[ewr-charge]]).'
 						]
 					}
 				]
@@ -776,7 +776,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
-							'Every farm’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
+							'Every unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
 							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
 							'Where the engine departs from the b023 workbook, the engine audit records why.'
 						]
@@ -789,27 +789,27 @@ export const GUIDES: Guide[] = [
 	},
 	{
 		id: 'a-day-on-a-farm',
-		title: 'A day on one farm',
-		summary: 'How a farm element splits its inflows around the dam, irrigates, spills and passes water downstream.',
+		title: 'A day on one unit',
+		summary: 'How a unit element splits its inflows around the dam, irrigates, spills and passes water downstream.',
 		kind: 'concept',
 		tab: 'network',
 		sections: [
 			{
-				heading: 'One farm, up close',
+				heading: 'One unit, up close',
 				blocks: [
 					{
 						type: 'picture',
 						shot: 'farm',
-						caption: 'A farm on a tributary: its dam, the orchard it irrigates and the pipeline to a neighbour’s dam. Follow the numbers in the order the model works through a day.',
+						caption: 'A unit (here a farm) on a tributary: its dam, the orchard it irrigates and the pipeline to a neighbour’s dam. Follow the numbers in the order the model works through a day.',
 						stops: [
 							{ spot: 'upstream', title: 'Inflow from upstream', text: 'The stream brings the outflow of the elements above. The [[upstream-to-dam|upstream share]] of it enters the dam.' },
-							{ spot: 'runoff', title: 'The farm’s own runoff', text: 'The farm’s [[flow-share|share]] of the catchment’s natural flow. Its [[runoff-to-dam|own-runoff share]] drains into the dam.' },
+							{ spot: 'runoff', title: 'The unit’s own runoff', text: 'The unit’s [[flow-share|share]] of the catchment’s natural flow. Its [[runoff-to-dam|own-runoff share]] drains into the dam.' },
 							{ spot: 'storage', title: 'Dam storage', text: 'Yesterday’s storage plus rain on the dam, today’s captured inflow, diversion and transfers, less [[dam-evaporation|evaporation]], [[dam-seepage|seepage]] and irrigation, up to the [[dam-capacity|capacity]].' },
 							{ spot: 'spill', title: 'Spill over the wall', text: 'Water above capacity [[spill|spills]] and continues downstream the same day.' },
-							{ spot: 'irrigation', title: 'Irrigation draw', text: 'The dam supplies the farm’s [[irrigation-demand|irrigation demand]], or what it holds above its [[dam-min|minimum level]] if that is less.' },
+							{ spot: 'irrigation', title: 'Irrigation draw', text: 'The dam supplies the unit’s [[irrigation-demand|irrigation demand]], or what it holds above its [[dam-min|minimum level]] if that is less.' },
 							{ spot: 'crops', title: 'The crops', text: 'The crop gets the supply × the [[irrigation-efficiency|irrigation efficiency]]. Part of the losses runs back to the river as [[return-flow|return flow]]; the rest leaves the catchment.' },
 							{ spot: 'transfer', title: 'Transfer to a neighbour', text: 'A [[transfer]] can move water out of (or into) this dam in chosen months.' },
-							{ spot: 'outflow', title: 'Outflow', text: 'Spill, water that passed below the dam, seepage and return flow leave as the farm’s [[farm-outflow|outflow]], the next element’s inflow.' }
+							{ spot: 'outflow', title: 'Outflow', text: 'Spill, water that passed below the dam, seepage and return flow leave as the unit’s [[farm-outflow|outflow]], the next element’s inflow.' }
 						]
 					}
 				]
@@ -821,15 +821,15 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'farm-day',
 						caption:
-							'Water arriving from upstream and the farm’s own runoff each split into a part that enters the dam and a part that passes below it. A diversion can take some of the bypass back into the dam. Irrigation draws from the dam; spill, bypass and return flow leave downstream.'
+							'Water arriving from upstream and the unit’s own runoff each split into a part that enters the dam and a part that passes below it. A diversion can take some of the bypass back into the dam. Irrigation draws from the dam; spill, bypass and return flow leave downstream.'
 					},
 					{
 						type: 'steps',
 						items: [
 							'Upstream inflow × [[upstream-to-dam|upstream share]] enters the dam; the rest passes below it.',
-							'Farm runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
+							'Unit runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
-							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any farm irrigates.',
+							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any unit irrigates.',
 							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
 							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the returning share of the irrigation losses, back to the river the same day.',
@@ -938,7 +938,7 @@ export const GUIDES: Guide[] = [
 						stops: [
 							{ spot: 'gauge', title: 'The gauging hut', text: 'A gauge or logger records the water level, turned into [[observed-flow|observed flow]] by a rating curve. High flows beyond the highest measurement are extrapolated, so they are the least certain.' },
 							{ spot: 'weir', title: 'The weir', text: 'A control that makes level and flow relate reliably. The model’s [[outflow-gauge]] stands for this point.' },
-							{ spot: 'reach', title: 'The river above it', text: 'What arrives here is the whole catchment’s outflow, farms and dams included, which is why the whole model is scored, not the runoff model alone.' }
+							{ spot: 'reach', title: 'The river above it', text: 'What arrives here is the whole catchment’s outflow, units and dams included, which is why the whole model is scored, not the runoff model alone.' }
 						]
 					},
 					{
@@ -1065,7 +1065,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'curtailment-targets',
 		title: 'Curtailment targets',
-		summary: 'How the app compares each farm’s supply with a fairness benchmark and works out the cut that meets the EWR.',
+		summary: 'How the app compares each unit’s supply with a fairness benchmark and works out the cut that meets the EWR.',
 		kind: 'concept',
 		tab: 'runs',
 		sections: [
@@ -1074,7 +1074,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Over the [[report-window|reporting window]], add up what every farm asked for and what it received. Their ratio is the catchment’s [[equitable-share|equitable share of supply]] (a **fairness benchmark**): had the supplied water been shared in proportion to demand, every farm would have received that fraction.'
+						text: 'Over the [[report-window|reporting window]], add up what every unit asked for and what it received. Their ratio is the catchment’s [[equitable-share|equitable share of supply]] (a **fairness benchmark**): had the supplied water been shared in proportion to demand, every unit would have received that fraction.'
 					},
 					{
 						type: 'formula',
@@ -1082,12 +1082,12 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The differences cancel across the farms, so this only compares; a positive value is not water the farm can get. Each farm’s [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then split into [[ewr-charge-split|irrigating less and storing less]], and the supply cut for the irrigation part is added: the **total change** in supply. Negative means reduce. The volume left never goes below 0.'
+						text: 'The differences cancel across the units, so this only compares; a positive value is not water the unit can get. Each unit’s [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then split into [[ewr-charge-split|irrigating less and storing less]], and the supply cut for the irrigation part is added: the **total change** in supply. Negative means reduce. The volume left never goes below 0.'
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'The equitable share is a fairness benchmark only: it assumes water can move freely between farms, and ignores network position, storage, licences and existing lawful use. Not an allocation or licence condition.'
+						text: 'The equitable share is a fairness benchmark only: it assumes water can move freely between units, and ignores network position, storage, licences and existing lawful use. Not an allocation or licence condition.'
 					}
 				]
 			}
@@ -1100,9 +1100,9 @@ export const GUIDES: Guide[] = [
 /** The setup path on the /help landing page: one step per workspace tab. */
 export const SETUP_STEPS: { tab: TabId; text: string; guide: string; optional?: boolean }[] = [
 	{ tab: 'overview', text: 'Create a project, or copy one for a what-if.', guide: 'create-a-project' },
-	{ tab: 'network', text: 'Farms, dams and gauges, draining to one outlet.', guide: 'build-the-network' },
-	{ tab: 'crops', text: 'Crop factors and the hectares on each farm.', guide: 'set-up-crops-and-demand', optional: true },
-	{ tab: 'transfers', text: 'Pipelines or canals between farm dams.', guide: 'add-a-transfer', optional: true },
+	{ tab: 'network', text: 'Units, dams and gauges, draining to one outlet.', guide: 'build-the-network' },
+	{ tab: 'crops', text: 'Crop factors and the hectares on each unit.', guide: 'set-up-crops-and-demand', optional: true },
+	{ tab: 'transfers', text: 'Pipelines or canals between units’ dams.', guide: 'add-a-transfer', optional: true },
 	{ tab: 'series', text: 'Daily rain, and observed flow to calibrate.', guide: 'add-data' },
 	{ tab: 'settings', text: 'Evaporation, rain gaps, runoff parameters and the EWR.', guide: 'fit-automatically' },
 	{ tab: 'runs', text: 'Run the model, read and compare results.', guide: 'run-and-read-results' }
