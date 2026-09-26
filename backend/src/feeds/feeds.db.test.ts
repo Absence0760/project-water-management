@@ -14,6 +14,7 @@ import { enqueueJob } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
 import { FETCH_META_MAX_BYTES, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
+import { MAX_FEEDS } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { claimDueFeeds } from './store.js';
 
@@ -147,6 +148,66 @@ describe('data_feed RLS and the routes', () => {
 		expect((await owner.call('PATCH', `/projects/${pid}/feeds/not-a-uuid`, { enabled: true })).status).toBe(404);
 		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
 		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(404);
+	});
+});
+
+describe('feed routes across projects and roles', () => {
+	it('a feed id from another project is 404 on every route, even to an owner of both (IDOR); the right project works (positive control)', async () => {
+		const owner = await signUp('IdorOwner');
+		const victim = await signUp('IdorVictim');
+		const mine = await project(owner, 'Mine');
+		const theirs = await project(victim, 'Theirs');
+		const theirFeed = (await victim.call('POST', `/projects/${theirs}/feeds`, gefs())).body.feed.id as string;
+
+		for (const [method, path, body] of [
+			['PATCH', `/projects/${mine}/feeds/${theirFeed}`, { enabled: false }],
+			['DELETE', `/projects/${mine}/feeds/${theirFeed}`, undefined],
+			['POST', `/projects/${mine}/feeds/${theirFeed}/run-now`, undefined]
+		] as const) {
+			expect((await owner.call(method, path, body)).status, `${method} ${path}`).toBe(404);
+		}
+		expect((await owner.call('GET', `/projects/${mine}/feeds`)).body.feeds).toEqual([]);
+		expect(await feedRow(theirFeed)).toMatchObject({ acting_user_id: victim.id, last_scheduled_at: null });
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND payload ->> 'feedId' = $1`, [theirFeed]))[0].n).toBe(0);
+
+		// Even an owner of both projects can't move a feed from one to the other.
+		await member(victim, theirs, owner, 'owner');
+		expect((await owner.call('PATCH', `/projects/${mine}/feeds/${theirFeed}`, { enabled: false })).status).toBe(404);
+		await withUser(owner.id, (db) => db.query('UPDATE data_feed SET project_id = $1 WHERE id = $2', [mine, theirFeed]));
+		expect((await asOwner('SELECT project_id FROM data_feed WHERE id = $1', [theirFeed]))[0].project_id).toBe(theirs);
+		// Positive control: through its own project it answers.
+		expect((await owner.call('PATCH', `/projects/${theirs}/feeds/${theirFeed}`, { enabled: false })).status).toBe(200);
+	});
+
+	it('farmers are closed out of feeds (below viewer); "Run now" needs an editor', async () => {
+		const owner = await signUp('RoleOwner');
+		const editor = await signUp('RoleEditor');
+		const viewer = await signUp('RoleViewer');
+		const farmer = await signUp('RoleFarmer');
+		const pid = await project(owner);
+		await member(owner, pid, editor, 'editor');
+		await member(owner, pid, viewer, 'viewer');
+		await asOwner(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, 'farmer')`, [pid, farmer.id]);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id as string;
+
+		expect((await farmer.call('GET', `/projects/${pid}/feeds`)).status).toBe(403);
+		expect((await withUser(farmer.id, (db) => db.query('SELECT id FROM data_feed WHERE project_id = $1', [pid]))).rows).toHaveLength(0);
+		expect((await farmer.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(403);
+		expect((await viewer.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(403);
+		// Positive controls: the viewer reads it, the editor runs it.
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.feeds).toHaveLength(1);
+		expect((await editor.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(202);
+	});
+
+	it('the per-project feed cap holds under concurrent attaches', async () => {
+		const owner = await signUp('CapOwner');
+		const pid = await project(owner);
+		const dws = (i: number) => ({ source: 'dws', config: { station: 'X0H000' }, targetName: `Gauge ${i}` });
+		for (let i = 0; i < MAX_FEEDS - 2; i++) expect((await owner.call('POST', `/projects/${pid}/feeds`, dws(i))).status).toBe(201);
+		const burst = await Promise.all(Array.from({ length: 8 }, (_, i) => owner.call('POST', `/projects/${pid}/feeds`, dws(100 + i))));
+		expect(burst.filter((r) => r.status === 201)).toHaveLength(2);
+		expect(burst.filter((r) => r.status === 409).every((r) => r.body.error === `a project can have at most ${MAX_FEEDS} feeds`)).toBe(true);
+		expect((await asOwner('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [pid]))[0].n).toBe(MAX_FEEDS);
 	});
 });
 
