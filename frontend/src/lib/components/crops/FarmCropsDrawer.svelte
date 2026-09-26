@@ -4,7 +4,9 @@
 	// the shared ModelEditor, as the Crops tab's Planted areas table does, so an
 	// edit here shows there and the other way round. The sheet is modal, which
 	// makes the page's save bar unreachable while it is open, so it carries the
-	// same save row: reason, Save changes (the page's save), and Done.
+	// same save row: reason, Save changes (the page's save), and Done. Without
+	// `onsave` (override mode, scenarios/OverrideEditor.svelte, on the
+	// scenario's own editor) it has no save at all: Done only.
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -30,8 +32,8 @@
 		/** The farm (network node) whose areas are shown. */
 		nodeId: string;
 		readonly: boolean;
-		/** The page's model save (the save bar's Save changes). */
-		onsave: () => void;
+		/** The page's model save (the save bar's Save changes); absent in override mode, which records edits instead. */
+		onsave?: () => void;
 		/** The save bar's reason, shared, so it goes with whichever save runs. */
 		reason?: string;
 	} = $props();
@@ -98,6 +100,8 @@
 	{#snippet actions()}
 		{#if readonly || !node}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+		{:else if !onsave}
+			<button type="button" class="btn" onclick={() => (open = false)}>Done</button>
 		{:else}
 			<ModelSaveRow {editor} {onsave} ondone={() => (open = false)} bind:reason />
 		{/if}

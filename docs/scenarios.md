@@ -484,7 +484,12 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
   their own `ModelEditor` loaded with the scenario's model (the base run's
   snapshot with the listed ops applied, `stepInputs(...).after`). The live
-  model is never loaded or saved there. **Record** diffs the edited model
+  model is never loaded or saved there. The overlays the tables open (issue
+  #17: the Network map's Grids menu and node table, `grid=<id>`; a farm's
+  planted areas, `farm=<id>`; a node's form, `edit=<id>`) open on that same
+  editor, with Done and no save; the workspace page doesn't open its own
+  grid modal or farm drawer (the live model, with the page's save) over the
+  Scenarios tab. **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.add`, `node.remove` (re-linking as the editor does),
   `node.set` per changed field the engine lets a scenario set (a node's
@@ -523,8 +528,11 @@ the engine's own random ops, `randomOps`, round-trips), and
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
 read only; override mode recording one edit in each table as changes,
-refusing a kind change, leaving the live model untouched, undone as one
-edit, with axe; submit, withdraw, delete releasing the base; axe in light,
+through the Network's Grids → Node table (showing the scenario's model, the
+raise applied, with no save) and the farm drawer from a node card (the
+scenario's edited areas, no save), refusing a kind change, the catchment's
+model read back through the API unchanged before and after recording,
+undone as one edit, with axe; submit, withdraw, delete releasing the base; axe in light,
 dark and on a phone) and `e2e/tests/scenario-demand-scale.spec.ts` (Scale
 demand through the form: one farm at 50 % in December and January, the
 200 % limit refused, classed baseline then proposal once the farm is the

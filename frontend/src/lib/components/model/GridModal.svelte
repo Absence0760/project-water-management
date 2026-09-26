@@ -4,7 +4,10 @@
 	// away). `grid=<id>` in the URL opens it (lib/workspace/overlays.ts); the
 	// page closes it by dropping the parameter. It edits the shared
 	// ModelEditor, like the tab the grid comes from, and carries the save row,
-	// since the modal makes the page's save bar unreachable.
+	// since the modal makes the page's save bar unreachable. Without `onsave`
+	// (override mode, scenarios/OverrideEditor.svelte, on the scenario's own
+	// editor) it has no save at all: Done only, the edits waiting in override
+	// mode's record panel.
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import CropsTab from '$lib/components/crops/CropsTab.svelte';
@@ -32,8 +35,8 @@
 		editor: ModelEditor;
 		settings: ProjectSettings;
 		readonly: boolean;
-		/** The page's model save. */
-		onsave: () => void;
+		/** The page's model save; absent in override mode, which records edits instead of saving. */
+		onsave?: () => void;
 		/** The save bar's reason, shared. */
 		reason?: string;
 		projectId: string;
@@ -60,6 +63,8 @@
 	{#snippet actions()}
 		{#if readonly}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+		{:else if !onsave}
+			<button type="button" class="btn" onclick={() => (open = false)}>Done</button>
 		{:else}
 			<ModelSaveRow {editor} {onsave} ondone={() => (open = false)} bind:reason />
 		{/if}
