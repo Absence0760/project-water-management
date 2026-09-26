@@ -1385,6 +1385,16 @@ must build WP-2.15 Phase B.
 
 ### WP-3.14 Licence evidence pack
 
+> **Designed (issue #15, [design/evidence-report.md](../design/evidence-report.md)).**
+> The pack's contents, order, uncertainty display and gaming rules are set
+> there: a page-1 summary with "read these first" flags and a paired change
+> table, then the river, uncertainty, model and data, other users, and
+> appendices; every checklist item printed, "Not assessed" when absent.
+> The layout is built first as WP-2.15 Phase C (evidence mode on the report
+> route, "Draft · not issued"), and this WP's pack route renders the same
+> components from the frozen manifest instead of a second layout. The spec's
+> §10 lists what it adds to the contents below.
+
 - **Goal.** A versioned, reproducible, **immutable once issued** report to
   attach to a WULA, with a verification hash and link.
 - **Contents** (the manifest is canonical JSON, and the PDF renders it):
@@ -1556,6 +1566,13 @@ must build WP-2.15 Phase B.
 > started for the run and what differed in their rules, and refuse a pack
 > whose bands use thresholds other than the project's declared ones (the
 > pre-declared rule set in [followups.md](../followups.md)).
+
+> **Gaming rules designed** (issue #15): [design/evidence-report.md §6](../design/evidence-report.md#6-anti-gaming-measures)
+> keeps items 1–8 below and adds G1, G4–G9 and G13–G16 (nomination-only
+> evidence, one cited ensemble on declared thresholds, paired changes with
+> "worse in k of n", fixed rows with absence printed, fixed windows, months
+> not averages, flags above the table, applicant text confined to an
+> appendix, report–compare parity, no verdict colour, the EWR can't be off).
 
 - **Goal.** Read-only access for NGOs and other parties to a submitted
   scenario or an issued pack. The published baseline is already shareable
