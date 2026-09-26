@@ -1,7 +1,7 @@
 // /projects/:id/scenarios — named overrides on a base run (roadmap WP-3.2,
 // docs/api.md § Scenarios, docs/scenarios.md). Viewers read, editors write;
 // farmers get 403 like every viewer route (their farm-scoped reads are
-// elsewhere). RLS (023_scenarios.sql) enforces the same underneath.
+// elsewhere). RLS (024_scenarios.sql) enforces the same underneath.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';

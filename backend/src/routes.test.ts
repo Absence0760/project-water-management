@@ -17,7 +17,11 @@ const PUBLIC = new Set([
 	'POST /auth/forgot-password',
 	'POST /auth/reset-password',
 	'POST /auth/verify-email',
-	'POST /auth/invite-info'
+	'POST /auth/invite-info',
+	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
+	// render token is the credential, and the session it buys reads one
+	// project and run only (reports/reports.db.test.ts).
+	'POST /auth/render-session'
 ]);
 
 const app = createApp();
@@ -55,7 +59,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Scenarios (WP-3.2, 023_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
 	it('inventories the scenario routes as auth-gated', () => {
 		const scenarios = [
 			'GET /projects/:id/scenarios',
@@ -67,6 +71,40 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/rebase'
 		];
 		for (const r of scenarios) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
+	// Server-side PDF reports and their schedules (WP-2.15 Phase B): auth-gated like every project route.
+	it('inventories the report routes as auth-gated, and the render-session exchange as public', () => {
+		const reports = [
+			'POST /projects/:id/reports',
+			'GET /projects/:id/reports/:jobId',
+			'GET /projects/:id/report-schedules',
+			'POST /projects/:id/report-schedules',
+			'PATCH /projects/:id/report-schedules/:scheduleId',
+			'DELETE /projects/:id/report-schedules/:scheduleId'
+		];
+		for (const r of reports) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('POST /auth/render-session');
+	});
+
+	// Publication (WP-2.3) and the farmer's farm view (WP-2.6): auth-gated like every project route.
+	it('inventories the publication and farm-view routes as auth-gated', () => {
+		const added = [
+			'GET /projects/:id/publication',
+			'POST /projects/:id/publication',
+			'PATCH /projects/:id/publication/:pubId',
+			'GET /projects/:id/farm',
+			'GET /projects/:id/farm/:nodeId',
+			'GET /projects/:id/farm/:nodeId/export.csv',
+			'GET /projects/:id/farm/:nodeId/access'
+		];
+		for (const r of added) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -91,7 +129,8 @@ describe('route auth inventory', () => {
 		'POST /auth/forgot-password',
 		'POST /auth/reset-password',
 		'POST /auth/verify-email',
-		'POST /auth/invite-info'
+		'POST /auth/invite-info',
+		'POST /auth/render-session'
 	])('%s answers anonymous requests (400 on an empty body, not 401)', async (route) => {
 		const path = route.split(' ')[1]!;
 		const res = await app.request(path, {

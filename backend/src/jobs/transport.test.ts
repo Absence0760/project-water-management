@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { feedFetcher, jobTransport, MAX_MESSAGE_BYTES, parseFetchRequest, parseWorkerMessage, sendToQueue, wakeMessage, wakeWorker } from './transport.js';
+import {
+	feedFetcher,
+	jobTransport,
+	MAX_MESSAGE_BYTES,
+	parseFetchRequest,
+	parseRenderRequest,
+	parseWorkerMessage,
+	reportRenderer,
+	sendToQueue,
+	wakeMessage,
+	wakeWorker
+} from './transport.js';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -71,6 +82,37 @@ describe('the data-feed messages (fetch-requests / ingest-results)', () => {
 	it('sendToQueue refuses without a queue URL, and a message over the SQS limit, before any AWS call', async () => {
 		await expect(sendToQueue(undefined, 'FETCH_REQUESTS_QUEUE_URL', {})).rejects.toThrow('FETCH_REQUESTS_QUEUE_URL is not set');
 		await expect(sendToQueue('https://sqs.example/q', 'Q', { x: 'y'.repeat(MAX_MESSAGE_BYTES) })).rejects.toThrow(/larger than SQS allows/);
+	});
+});
+
+describe('the report messages (render-requests / render-results)', () => {
+	const ids = { reportId: '00000000-0000-4000-8000-000000000001', projectId: '00000000-0000-4000-8000-000000000002', runId: '00000000-0000-4000-8000-000000000003' };
+	const request = { v: 1, type: 'render', ...ids, token: 'A'.repeat(43) };
+
+	it('parses a render request, and refuses a malformed token, an extra field or a wrong type', () => {
+		expect(parseRenderRequest(JSON.stringify(request))).toEqual(request);
+		expect(parseRenderRequest(JSON.stringify({ ...request, token: 'short' }))).toBeNull();
+		// No URL rides the message: the renderer opens its own configured site only.
+		expect(parseRenderRequest(JSON.stringify({ ...request, url: 'http://169.254.169.254/' }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, type: 'rendered' }))).toBeNull();
+		expect(parseRenderRequest('garbage')).toBeNull();
+	});
+
+	it('the worker understands a render result, success or failure, and nothing more', () => {
+		const ok = { v: 1, type: 'rendered', reportId: ids.reportId, result: { ok: true, pages: 9, bytes: 1000, ms: 4000 } };
+		const failed = { v: 1, type: 'rendered', reportId: ids.reportId, result: { ok: false, error: 'the render took longer than 90 s', retry: true } };
+		expect(parseWorkerMessage(JSON.stringify(ok))).toEqual(ok);
+		expect(parseWorkerMessage(JSON.stringify(failed))).toEqual(failed);
+		// A result can't name a key, a project or a URL.
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, key: 'reports/x.pdf' }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...ok, result: { ...ok.result, key: 'reports/x.pdf' } }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...failed, result: { ...failed.result, error: 'x'.repeat(301) } }))).toBeNull();
+	});
+
+	it('REPORT_RENDERER defaults to inline (local-first) and knows only inline and sqs', () => {
+		expect(reportRenderer(undefined)).toBe('inline');
+		expect(reportRenderer('sqs')).toBe('sqs');
+		expect(() => reportRenderer('lambda')).toThrow(/unknown REPORT_RENDERER/);
 	});
 });
 

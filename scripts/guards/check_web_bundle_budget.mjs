@@ -297,7 +297,49 @@
 //             plain legend, synchronous light redraw on beforeprint) and the
 //             panels' print props are ~0.5 KB. No new dependency; no page's
 //             first load grows. Headroom ~6 KB.
+// 2026-09-25  total 665 → 673 KB; other ceilings unchanged. Server-side PDF
+//             reports (WP-2.15 Phase B, issue #26). Measured on the base
+//             3eb0bb8 (658.7 KB, as the entry above left it) → this change:
+//             667.4 KB (+8.7). All of it is lazy: the report page's "Generate
+//             PDF / Email me the PDF" control and its status polling
+//             (report/ServerPdf.svelte, 1.0 KB, loaded with the report's
+//             bar), the shared report-API helpers (report/serverPdf.ts,
+//             1.2 KB), Settings → Scheduled reports
+//             (report/ReportSchedulesPanel.svelte, 3.3 KB, loaded with the
+//             Settings tab like the data feeds panel), and the emailed
+//             link's download page, routes/projects/[id]/reports/[jobId]
+//             (1.4 KB). The rest, ~1.8 KB, is the Lazy wrappers in the report
+//             page and the Settings tab, and the route manifest. No new
+//             dependency; no page's first load grows except the report's by
+//             ~0.3 KB. Headroom ~6 KB.
 //
+// 2026-09-25  total 665 → 707 KB; other ceilings unchanged. Two changes
+//             merged together: the phone-first farmer view below (+35 KB,
+//             measured on its own base) and WP-2.3's Publication panel on the
+//             Runs tab (publish, notice editor, the Published badge, ~6 KB in
+//             the Runs chunks). Measured merged over main e097008: 701 KB.
+//             Headroom ~6 KB. Issue #9 (bring the bundle down) still stands:
+//             the farm view's ~35 KB loads only for farmers, but the total
+//             guard counts every lazy chunk. The farmer view's share,
+//             measured on its own base (647 → 682 KB): the phone-first
+//             farmer view (WP-2.6, issue #25, docs/design/farmer-view.md):
+//             /farm, /farm/[projectId] and its "Why?" and dam pages, the
+//             farmer glossary page. Measured on the base eaafecd → this
+//             change: 647 → 682 KB. The farm routes are their own chunks,
+//             loaded by nobody but a farmer (or WUA staff previewing): ~24 KB
+//             reachable only from them (the main farm page 6 KB, "Why?" 4.5,
+//             dam 3.6, the shared wording/format/chart modules 5.8, the
+//             cards' shared chunk 1.8, the rest small), the farm frame
+//             (FarmShell, Menu, saved copy) ~4 KB, their CSS ~3 KB, and the
+//             farmer help entries ~2 KB in the help chunk. A farmer's cold
+//             load of their farm is ~73 KB of JS, lighter than the project
+//             list; no workspace page gets heavier (the largest chunk is
+//             still 39 KB). Charts are inline SVG, not uPlot. No new
+//             dependency. Headroom ~6 KB.
+// 2026-09-25  total 707 → 719 KB; other ceilings unchanged. Merge of the
+//             server-side PDF reports (the 665 → 673 entry above, +8.7 KB,
+//             all lazy) with the farmer view and Publication panel (707).
+//             Measured merged: 713 KB. Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -308,7 +350,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 665,
+	totalCodeKb: 719,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

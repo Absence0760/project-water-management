@@ -1,4 +1,4 @@
-// Scenarios (roadmap WP-3.2, issue #18; 023_scenarios.sql, docs/scenarios.md):
+// Scenarios (roadmap WP-3.2, issue #18; 024_scenarios.sql, docs/scenarios.md):
 // the API end to end, and RLS on the scenario table with positive controls.
 //  - a dam-raise scenario runs as an ordinary model_run with scenario_id, and
 //    its result is exactly runModel(applyScenario(loadRunInput(base)));
@@ -406,6 +406,40 @@ describe('a cited base run', () => {
 		await runScenario(u, c.projectId, sid);
 		expect((await u.call('DELETE', `/projects/${c.projectId}`)).status).toBe(204);
 		expect(await asOwner('SELECT id FROM scenario WHERE project_id = $1', [c.projectId])).toEqual([]);
+	});
+});
+
+describe('a published base (022_publication beside 024_scenarios)', () => {
+	it("lists both citations, and the history cap keeps a scenario base's publication (positive control: an uncited one goes)", async () => {
+		const u = await signUp('PubBase');
+		const c = await catchment(u);
+		const publish = async (runId: string) => expect((await u.call('POST', `/projects/${c.projectId}/publication`, { runId })).status).toBe(201);
+		const base = await run(u, c.projectId, 'Published baseline');
+		await publish(base);
+		const sid = await create(u, c.projectId, { name: 'On the published base', baseRunId: base, ops: [damRaise(c.farm.id, 120_000)] });
+		const citedBy = (await u.call('GET', `/projects/${c.projectId}/runs`)).body.runs.find((r: { id: string }) => r.id === base).citedBy;
+		expect(citedBy.map((x: { kind: string; name: string }) => [x.kind, x.kind === 'scenario' ? x.name : 'date'])).toEqual([
+			['publication', 'date'],
+			['scenario', 'On the published base']
+		]);
+		expect(citedBy[0].name).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		// The published message wins on delete, as before the scenario; unpinning names both.
+		expect((await u.call('DELETE', `/projects/${c.projectId}/runs/${base}`)).body.error).toBe('run is published: it is, or was, the published baseline, so it is kept');
+		expect((await u.call('PATCH', `/projects/${c.projectId}/runs/${base}`, { pinned: true })).status).toBe(200);
+		expect((await u.call('PATCH', `/projects/${c.projectId}/runs/${base}`, { pinned: false })).body.error).toBe(
+			`this run is cited by the publication of ${citedBy[0].name}, scenario "On the published base", so it stays kept`
+		);
+
+		// A second published run with no scenario, then twelve more publications.
+		const uncited = await run(u, c.projectId, 'Published, uncited');
+		await publish(uncited);
+		for (let i = 0; i < 12; i++) await publish(await run(u, c.projectId, `p${i}`));
+		const history = (await u.call('GET', `/projects/${c.projectId}/publication`)).body.history.map((h: { runId: string }) => h.runId);
+		expect(history).toContain(base);
+		expect(history).not.toContain(uncited);
+		expect(history).toHaveLength(13);
+		// The scenario still runs on it.
+		await runScenario(u, c.projectId, sid);
 	});
 });
 

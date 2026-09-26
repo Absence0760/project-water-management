@@ -29,6 +29,23 @@ async function withDb<T>(fn: (db: PgClient) => Promise<T>): Promise<T> {
 	}
 }
 
+/**
+ * Run `fn` holding a Postgres advisory lock on the e2e database, so specs in
+ * parallel workers that need the same one-off setup (the seeded example
+ * catchments) do it once, in turn, instead of racing. Blocks until the lock
+ * is free; no polling.
+ */
+export async function withSetupLock<T>(key: number, fn: () => Promise<T>): Promise<T> {
+	return withDb(async (db) => {
+		await db.query('SELECT pg_advisory_lock($1)', [key]);
+		try {
+			return await fn();
+		} finally {
+			await db.query('SELECT pg_advisory_unlock($1)', [key]);
+		}
+	});
+}
+
 function newToken(): { token: string; hash: Buffer } {
 	const token = randomBytes(32).toString('base64url');
 	return { token, hash: createHash('sha256').update(token, 'utf8').digest() };

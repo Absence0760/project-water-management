@@ -100,6 +100,75 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   to hold). The `log` transport refuses to print message bodies inside Lambda,
   so a misconfigured deploy can't write live links into CloudWatch.
 
+## Render tokens
+
+Server-side PDF reports (WP-2.15 Phase B; [architecture.md § Server-side reports](./architecture.md#server-side-reports))
+add a new way in: a headless Chromium, run by the job worker or the renderer
+Lambda, must read a project as the member who asked for its report, without
+that member's password or session. It gets a **render token**, and the token
+buys a **render session** that can read one report and nothing else.
+
+- **The token** (`render_token`, `023_reports.sql`) is the `email_token`
+  pattern with purpose `report`: 32 random bytes, stored **only as their
+  SHA-256**, **single use** (consuming deletes the row), **5 minutes** (the
+  insert trigger sets the expiry whatever the caller sent), and tied to one
+  user, one project and one run. Only the requester can issue it, as
+  themselves, for a project they can view and a run of that project (RLS
+  and the trigger); a farmer can't. It is issued by the `report_render` job,
+  which runs as the requester under RLS, and never leaves the server side:
+  it goes to the local Chromium in memory, or in production over the
+  SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
+  logged, never put in a URL, and never stored raw.
+- **The exchange** (`POST /auth/render-session`, public: the token is the
+  credential) consumes the token, re-checks that the requester can still see
+  the project and that the run is still one of its runs (`403` otherwise),
+  and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` and
+  lives **10 minutes**. A used, expired, unknown or malformed token gets one
+  answer, `400`. The renderer calls it through its browser context's own
+  request client, so the cookie lives only in that throwaway context, which
+  is closed with the browser after the render.
+- **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
+  session may make **only `GET`** requests, and only to `/auth/me`,
+  `/projects/<p>`, `/projects/<p>/series` and `/projects/<p>/runs/<r>[/…]`:
+  exactly the reads the report route makes. Any other method, project, run
+  or route (the run list, members, exports, jobs, reports, teams, compare,
+  every write) answers `403`. A path with encoded characters or dot segments
+  is refused outright. A `scope` claim that isn't a well-formed pair of UUIDs
+  makes the whole token invalid, so a render session can never widen into a
+  full one. RLS still applies underneath: the session is the requester's, so
+  it sees at most what they see. It is also revoked with every other session
+  of the account (the `sessions_revoked_at` watermark).
+- **Tests:** `reports/reports.db.test.ts` checks single use, expiry, the
+  scope on another project, another run and every other kind of route, with a
+  positive control (the report's own reads answer `200`), a requester who
+  lost access between issue and use, and that farmers and strangers can't
+  issue one; `reports/scope.test.ts` pins the path rules; and
+  `reports/render.db.test.ts` has a real Chromium check that the session is
+  refused the project list mid-render.
+- **What the renderer can reach.** Locally, the dev site and API. In
+  production the renderer Lambda is outside the VPC with no database access
+  and no secrets; it opens the public site through CloudFront and the WAF
+  like any browser. Its role can receive `render-requests`, send
+  `render-results` and put objects under `reports/` in the reports bucket:
+  it can't read, list or delete a PDF. It opens only its configured
+  `RENDER_SITE_URL`: a render request carries ids and the token, never a URL.
+- **The PDFs** are in a private bucket (public access blocked, TLS only,
+  SSE-S3), under keys derived from the project and report ids (never stored
+  or taken from a message), deleted after 7 days. A download is a pre-signed
+  GET that lasts an hour, handed out only by `GET /projects/:id/reports/:jobId`
+  to a viewer of the project. **Emails carry no PDF and no download link**:
+  they link to the app's `/projects/:id/reports/:jobId` page, which needs the
+  reader signed in and still a member, so a forwarded email opens nothing.
+  Recipients must be direct project members with viewer or above, checked
+  when asked for and again when the mail is sent; a viewer may email only
+  themselves; on-demand PDFs are capped at 10 an hour per user and project.
+- **Accepted residual risks.** A pre-signed link works for its hour for
+  whoever holds it (as any download link would); keep it short and don't log
+  it. A render request dead-lettered in production still holds its token
+  until it expires (5 minutes): the DLQ is encrypted and readable only by the
+  account. The worker's inline render (local and CI only) holds the job's
+  database transaction open for the few seconds it takes.
+
 ## Authorization: per-project roles enforced by Postgres RLS
 
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
@@ -131,6 +200,26 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
+- **Publications and the farm view (WP-2.3, WP-2.6 API, 022).** A farmer reads
+  run results only through the project's current publication: its counts-only
+  `catchment_view`, their own farms' stored projections (`publication_farm`)
+  and their own farms' farm-allowlist series of the published run
+  (`run_series_select_farmer`: `demand`, `supplied`, `deficit`,
+  `dam_storage`, `spill`, `transfer`; no flow series, no catchment series,
+  nothing of an earlier publication). The farm routes
+  (`/projects/:id/farm…`) admit the farmer role, answer `404` alike for a
+  node the farmer isn't linked to, a gauge or a node that doesn't exist, and
+  null the even share below `k − 1` other holders per viewer. Tests:
+  `publish/publication.db.test.ts` scans a farmer's farm view and
+  publication list for every other farm's id and name, with positive
+  controls; `farms.db.test.ts` keeps every other `/projects/:id` route
+  refusing a farmer. The modeller's publication `note` is withheld from
+  farmers by the API but not by RLS (a column can't be hidden from one role
+  there): the publish dialog tells the modeller farmers don't see it, and it
+  must not be relied on as a secret. Publishing records `published_by`, and a
+  notice change `updated_by` / `updated_at`; the full audit log is WP-2.4.
+  Share links (a public, token-bearing catchment page) are not built yet
+  (WP-2.3 phase 2).
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
@@ -249,7 +338,7 @@ In short:
     citation even when a narrower policy hides the citing row from the caller,
     so a trim never tries to delete a run someone else's scenario rests on.
 - **Scenarios are the project's, and a submitted one can't be changed**
-  (023_scenarios, [data-model.md § Scenarios](./data-model.md#scenarios-023_scenariossql)).
+  (024_scenarios, [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)).
   Viewers read, editors write; farmers read nothing, because a scenario's ops
   and its base run name every farm (fail closed, as for `model_run`). The
   `scenario_guard` trigger (`SECURITY DEFINER`, pinned `search_path`; it
@@ -316,6 +405,9 @@ In short:
     declared, so a zip bomb is a clear "too large" error, not a crashed tab.
     Encrypted entries, ZIP64, split archives and compression methods other
     than stored and deflate are refused, and every part's CRC-32 is checked;
+  - the picked file is read from disk a slice at a time (`Blob.slice`), never
+    loaded whole, and every slice's offsets are checked against the file's
+    size first;
   - only the parts the import reads are ever unpacked (content types,
     relationships, the workbook, shared strings, styles, the b023 config
     sheets). The VBA project, the per-farm result sheets, drawings and

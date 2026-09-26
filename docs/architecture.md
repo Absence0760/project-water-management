@@ -26,6 +26,9 @@ flowchart LR
     W[Worker Lambda<br/>background jobs]
     FQ[[SQS fetch-requests<br/>ingest-results]]
     FL[Fetcher Lambda<br/>no VPC, no DB]
+    RQ[[SQS render-requests<br/>render-results]]
+    RL[Renderer Lambda<br/>container, Chromium<br/>no VPC, no DB]
+    RB[(S3 reports<br/>private, 7 days)]
     L --- EL
   end
   SRC[(CHIRPS · GEFS · DWS<br/>public sources)]
@@ -39,12 +42,17 @@ flowchart LR
   W -- "fetch request" --> FQ --> FL
   FL -- "HTTPS (range reads)" --> SRC
   FL -- "parsed days (untrusted)" --> FQ
+  W -- "render request (token)" --> RQ --> RL
+  RL -- "opens the report route<br/>(render session)" --> CF
+  RL -- "PDF" --> RB
+  L -- "pre-signed GET" --> RB
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
 (`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`
-(plus Mailpit, which catches all email; the background-job worker is an
-opt-in Node process, `pnpm dev:run:worker`, polling the same Postgres, and
+(plus Mailpit, which catches all email, and MinIO, which holds report PDFs;
+the background-job worker is an opt-in Node process, `pnpm dev:run:worker`,
+polling the same Postgres and rendering reports in the local Chromium, and
 data feeds read synthetic fixture files, never the internet). The
 browser calls the backend directly on `:3001` (CORS with credentials). In
 production, CloudFront serves the site and **proxies `/api/*` from the same
@@ -248,9 +256,10 @@ sequenceDiagram
 Work that shouldn't run inside a request, or can't fit the API Lambda's 30 s,
 goes through one job queue (roadmap WP-2.8; `backend/src/jobs/`,
 `016_jobs.sql`). Its consumers are `rerun` (a model run off the request
-path, `POST /projects/:id/jobs`) and the data feeds' `feed_fetch` /
-`feed_ingest` ([§ Data feeds](#data-feeds)); step 2's auto re-runs, alerts
-and reports plug in as further kinds.
+path, `POST /projects/:id/jobs`), the data feeds' `feed_fetch` /
+`feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
+`report_render` ([§ Server-side reports](#server-side-reports)); step 2's
+auto re-runs and alerts plug in as further kinds.
 
 - **The `job` table is the source of truth in every environment**: status,
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
@@ -269,7 +278,9 @@ and reports plug in as further kinds.
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.
-- **Each job runs as its acting user**, the editor who queued it: the worker
+- **Each job runs as its acting user**, the member who queued it (an editor,
+  or for `report_render` any viewer: `023_reports.sql` widens the job insert
+  policy for that one kind): the worker
   opens `withUser(acting_user_id)`, checks the user still holds the handler's
   role (and fails the job closed, dead with no retry, if not), reads and
   validates the payload under RLS, runs the handler, and records `done` via
@@ -371,6 +382,114 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
 audit event per merge (WP-2.4), the debounced re-run after new data (WP-2.11),
 and a bounding-box config for CHIRPS (cells only).
+
+## Server-side reports
+
+The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on
+the server, so it can be emailed or sent on a schedule without anyone opening
+a browser (roadmap WP-2.15 Phase B, issue #26; `backend/src/reports/`,
+`023_reports.sql`, the `report_render` job). There is **one implementation of
+the report**: the job opens the same SvelteKit route a person prints from, in
+headless Chromium (playwright-core), and never re-draws a chart.
+
+```mermaid
+sequenceDiagram
+  participant U as Member (browser)
+  participant API
+  participant DB as Postgres (RLS)
+  participant W as Worker (report_render)
+  participant C as Headless Chromium
+  participant S as S3 / MinIO
+  U->>API: POST /projects/:id/reports { runId?, email? }
+  API->>DB: report row + report_render job (as U)
+  W->>DB: claim; as U: render token (committed at once)
+  W->>C: launch (hard timeout, closed in finally)
+  C->>API: POST /auth/render-session { token }
+  API->>DB: consume token (single use, 5 min)
+  API-->>C: render session: this project and run only
+  C->>API: GET the report route's reads (as U, RLS)
+  C-->>W: main[data-report-ready], then page.pdf(A4)
+  W->>S: put reports/<project>/<report>.pdf
+  W->>DB: report done (pages, bytes); email the link to members
+  U->>API: GET /projects/:id/reports/:jobId
+  API-->>U: { status, url: pre-signed, 1 h }
+```
+
+- **The render token** (`render_token`, the `email_token` pattern with
+  purpose `report`): 32 random bytes, stored as SHA-256, single use, 5
+  minutes, for one project and one run, issued by the job as the requester.
+  It is minted in its **own committed transaction**, because the browser
+  presents it on another connection while the job's transaction is still
+  open. `POST /auth/render-session` consumes it and sets a 10-minute session
+  cookie whose JWT carries `scope: { p, r }`; `requireUser` refuses a scoped
+  session anywhere but the report's own reads (`reports/scope.ts`). It is a
+  new trust boundary: [security.md § Render tokens](./security.md#render-tokens).
+- **The render** (`reports/render.ts`): a fresh browser and context (light
+  theme, UTC, 1200 × 1600), the token exchange through the context's own
+  request client (so the cookie lands in its jar), `page.goto`, a wait for
+  `main[data-report-ready="true"]`, or the page's own "can't show this"
+  message (no access, no run: failed at once, no retry), then
+  `page.pdf({ format: 'A4', printBackground: true })`. A hard timeout
+  (`REPORT_RENDER_TIMEOUT_MS`, 90 s locally, 100 s in the Lambda) covers the
+  whole thing, and the browser is closed in `finally`. A timeout or a browser
+  crash is retried (3 attempts); Playwright's own messages (URLs, call logs)
+  never reach the stored error.
+- **Storage** (`reports/storage.ts`, `STORAGE`): one S3 client.
+  `local` (the default) is MinIO from docker-compose on :9002, bucket created
+  on first use; `s3` is the private production bucket (SSE, 7-day
+  lifecycle). The key is **derived from the ids**, never stored or taken from
+  a message, so no row or message can point a download at another project's
+  PDF. Downloads are pre-signed GETs, an hour, signed by the API when a
+  viewer asks for the status.
+- **Email** (`reports/store.ts finishReport`): after a good render, in the
+  job's transaction, to the requester if they asked and to members named at
+  request time **who are still viewers or above**, through the existing mail
+  transport (Mailpit locally, SES in production). The link is to the app's
+  download page (`/projects/:id/reports/:jobId`), which needs the reader
+  signed in and a member: the email grants nothing on its own. A failed send
+  is noted on the report, not a failed job (the PDF is there to download).
+- **Schedules** (`report_schedule` + recipients): weekly or monthly, at an
+  hour in the schedule's own IANA zone (`reports/due.ts`, pure and tested
+  under skewed process zones). Every tick (`jobs/runner.ts`) reads the
+  enabled schedules through `app_report_schedules_to_check`, works out the
+  latest due time, claims it atomically (`app_claim_report_schedule`: later
+  than the last one, after the schedule was saved), and queues a render of
+  the project's **latest run** as the schedule's acting user (the editor who
+  last saved it) with the dedupe key `report_schedule:<id>:<time>`. A time
+  that finds no runs, or an acting user who is no longer an editor, queues
+  nothing and says why on the schedule. A missed week is sent once, late;
+  older misses aren't replayed.
+- **Retention:** PDFs 7 days (the bucket's lifecycle in production); the
+  tick deletes report rows after 8 days (`app_purge_reports`), and locally
+  their MinIO objects too.
+
+Where the render runs (`REPORT_RENDERER`, `jobs/transport.ts`):
+
+- `inline` (the default: local, CI, e2e): in the `report_render` job itself,
+  with the Chromium Playwright installed for e2e (`pnpm test:e2e:install`),
+  against `RENDER_SITE_URL` / `RENDER_API_URL` (the dev site and API; e2e
+  points them at its own). The render holds the job's transaction open for its
+  few seconds, the same trade the inline feed fetch makes; production never
+  does this.
+- `sqs` (production): the worker Lambda (a zip, in the VPC with no internet)
+  can host neither Chromium nor a route to the site. `report_render` sends a
+  versioned `render` message (ids and the token only) to `render-requests`
+  and marks the report `rendering`. The **renderer Lambda**
+  (`lambda-renderer.ts`, a container image from `backend/renderer.Dockerfile`
+  on Playwright's image, 2 GB, 120 s, **outside the VPC**, no database, no
+  secrets) opens the public site through CloudFront, stores the PDF, and
+  answers with the outcome only on `render-results`. The worker finds the
+  report still waiting (`app_report_render_target`) and queues a follow-up
+  `report_render` job carrying the result, as the requester, which records
+  it and sends the mail. A renderer that never answers leaves the report
+  shown as failed after an hour; its DLQ alarms.
+- **Why a container image and not the worker:** Chromium and its libraries
+  don't fit a zip Lambda comfortably, and the worker has no internet (no NAT,
+  by design: [network.tf](../infra/network.tf)). The renderer mirrors the data
+  feeds' fetcher: the one part that needs the internet sits outside the VPC
+  and never touches the database.
+
+## Key choices
 
 ## Key choices
 

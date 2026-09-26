@@ -233,7 +233,7 @@ must build WP-2.15 Phase B.
     now uses it, so a run saved since 020 keeps getting bands after its data
     changes;
   - "cited" is the SQL function `model_run_cited(run)` inside `RUN_KEPT_SQL`;
-    WP-3.2's migration (023) added its first clause, a scenario's base run,
+    WP-2.3's publication (022) added its first clause and WP-3.2 (024) a scenario's base run,
     so trim and the `DELETE` route (`409 this run is cited by scenario "…",
     so it is kept`) keep it. Also built with WP-3.2: the unpin `409`, cited
     runs off the pin ceiling, and `RunMeta.citedBy`.
@@ -323,7 +323,7 @@ must build WP-2.15 Phase B.
 
 - **Status (2026-09-25): engine, backend, data model and API built**
   ([scenarios.md](../scenarios.md), issue #18): `packages/engine/src/scenario/`,
-  migration `023_scenarios.sql`, `backend/src/scenarios/`, the scenario per
+  migration `024_scenarios.sql`, `backend/src/scenarios/`, the scenario per
   side in `/compare/runs`, and the frontend API client. Where the build
   differs from the plan below: the base-run key is `NO ACTION` rather than
   `RESTRICT` (so a project delete still cascades); a scenario stores

@@ -94,13 +94,15 @@ export function sheetsToRead(source: WorkbookSource): string[] {
  * strings. Each sheet is parsed as it inflates, one sheet at a time, so the
  * caller can show which sheet is being read. The Element sheets, the
  * calculation chain, the VBA project, drawings and media are never touched.
+ * Given the picked File (a Blob), it reads just those parts' bytes from it,
+ * a slice at a time; bytes already in memory work too.
  */
-export async function readWorkbook(data: ArrayBuffer | Uint8Array, opts: ReadOptions = {}): Promise<WorkbookSource> {
+export async function readWorkbook(data: Blob | ArrayBuffer | Uint8Array, opts: ReadOptions = {}): Promise<WorkbookSource> {
 	const maxBytes = opts.maxBytes ?? MAX_WORKBOOK_BYTES;
 	const maxSheets = opts.maxSheets ?? MAX_WORKBOOK_SHEETS;
-	if (data.byteLength > maxBytes) throw new WorkbookTooLargeError('bytes', data.byteLength, maxBytes);
-	const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-	const zip = ZipArchive.open(bytes, opts);
+	const size = data instanceof Blob ? data.size : data.byteLength;
+	if (size > maxBytes) throw new WorkbookTooLargeError('bytes', size, maxBytes);
+	const zip = await ZipArchive.open(data instanceof Blob || data instanceof Uint8Array ? data : new Uint8Array(data), opts);
 	const text = async (part: string) => new TextDecoder().decode(await zip.read(part));
 
 	const ctPart = zip.find('[Content_Types].xml');

@@ -973,6 +973,33 @@ the suggested order (the IDs carry the detail):
       without a run, raw values plus quality flags only. Waiting on the
       operator to confirm this is what they want (2026-09-24).
 
+## Farmer view (WP-2.6, #25)
+
+Left out of the first build because the contract or an API doesn't carry it
+yet; each lands with the work package named.
+
+- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
+      `forecast` in `FarmView` (WP-2.12, design E2).
+- [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
+      before the named translator reviews it, and `FarmView` carries one
+      `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
+      translator is named.
+- [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
+      says the WUA can name them; needs an endpoint listing the people with
+      access to a farm.
+- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
+      `FarmIndex`; the pages say "your WUA".
+- [ ] **"Email me when …"** links (the notice / low-dam alert and "Email me
+      when it's ready"): WP-2.13.
+- [ ] **"Not available: the model's data starts on …"** needs the run's
+      first date; `lastSeason` is null without it, so the page says the data
+      doesn't reach back.
+- [ ] **Account volume unit**: the ML/m³ switch is kept in `localStorage`
+      until `app_user.volume_unit` (WP-2.5).
+- [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
+      farm API and the seeded publication (the backend half of #25); run it
+      once both are merged.
+
 ## UI
 
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
@@ -1051,7 +1078,7 @@ role and not before it.
   `executeRun` storing inputs, `loadRunInput` (byte-identical round trip on
   the three examples), the run-input route for uncertainty bands using it.
   Left open:
-  - [x] **Scenarios add the first "cited" clause** (WP-3.2, 023_scenarios,
+  - [x] **Scenarios add the first "cited" clause** (WP-3.2, 024_scenarios,
         2026-09-25): `model_run_cited` is `EXISTS (SELECT 1 FROM scenario s
         WHERE s.base_run_id = p_run)`, with a `NO ACTION` key (checked at the
         end of the statement, so a project delete still cascades); the unpin
@@ -1063,15 +1090,19 @@ role and not before it.
         reproduction" action. (`RunMeta.citedBy` is built, WP-3.2.) `loadRunInput` + `runModelChecked` +
         canonical JSON is the whole server side; the route and UI are what
         remain. Trigger: WP-3.2's compare view, or an assessor asking.
-  - [ ] **WP-2.3's publication-history trim skips cited runs' publications.**
-        Trigger: WP-2.3 landing (no publications exist yet).
+  - [x] **WP-2.3's publication-history trim skips cited runs' publications**
+        (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
+        newest 12, every publication whose run a scenario is based on, so
+        the base keeps its "published" record. (A publication is itself a
+        citation since 022, so "cited" here means cited by something else;
+        evidence packs and assessments add their clause the same way.)
 
 - **Scenarios** (issue #18, WP-3.2, 2026-09-25;
   [scenarios.md](./scenarios.md)). Built: the engine part,
   `packages/engine/src/scenario/` (`applyScenario`, `classifyOp`,
   `classifyScenario`, `validateScenarioOps`), with the invariant and
   no-silent-change fuzz; the backend, data model and API
-  (`023_scenarios.sql`, `backend/src/scenarios/`, `executeScenarioRun`,
+  (`024_scenarios.sql`, `backend/src/scenarios/`, `executeScenarioRun`,
   rebase, the scenario per side in compare) and the frontend API client
   (`api.scenarios`). Left open:
   - [ ] **The Scenarios tab** (stage D): the list and its empty state, the
@@ -1252,12 +1283,72 @@ role and not before it.
         through `GET /projects/:id/import-report` and on the Overview's
         Import record, both lists collapsed at first; not dismissible, since
         it is the audit trail. Not in `export.json` (api.md § Import report).
-  - [ ] **Measured in a real browser** (issue #23). The memory figures above are Node;
-        no one has profiled the client workbook's import in Chrome or Safari,
-        or on a phone (the e2e tests run the streaming reader in Chromium on
-        the synthetic workbook only). Trigger: a user reports the import
-        failing on a phone or low-memory machine, or a workbook with a longer
-        record than the client's.
+  - [x] **Measured in a real browser** (issue #23, 2026-09-26). The client
+        workbook (~87 MB `.xlsm`) imported through the real worker code in
+        desktop Chrome 154, Safari 26.6, iOS Safari (iPhone 17e simulator,
+        iOS 26.4) and Android Chrome 145 (Pixel 10 Pro emulator, 3 GB). A
+        throwaway harness (not committed) timed `parse()` from File to result
+        and sampled the tab's process memory (macOS RSS; Android RSS + swap,
+        since the emulator swaps to zram) from just before the pick to the
+        result; median of 3, growth over the tab's baseline:
+
+        | Browser | Before: growth / peak | After: growth / peak | Time before → after |
+        | --- | --- | --- | --- |
+        | Chrome (desktop) | ~180 / ~310 MB | ~100 / ~230 MB | 0.68 → 0.68 s |
+        | Safari (desktop) | ~605 / ~670 MB | ~140 / ~200 MB | 0.68 → 0.70 s |
+        | iOS Safari (simulator) | ~450 / ~630 MB | ~125 / ~310 MB | 0.73 → 0.76 s |
+        | Android Chrome (emulator) | ~170 / ~385 MB | ~70 / ~285 MB | 0.99 → 0.82 s |
+
+        Two causes, both fixed at the source in `zip.ts`. (1) WebKit's
+        `DecompressionStream` inflates each input chunk into one output
+        chunk, so the 6 MB compressed [Flow data] handed over whole came out
+        as a single 38 MB chunk; compressed bytes now go in 64 KB slices,
+        pulled on demand. (2) The worker loaded the whole File as an
+        `ArrayBuffer` (~87 MB) for the whole read; the zip reader now reads
+        the File itself with `Blob.slice`: the end record and directory,
+        then each needed entry 64 KB at a time. Safari's drop is larger than
+        the ~125 MB of buffers removed; why WebKit held the rest isn't pinned
+        down (it also shrank with the big buffers gone). Guarded by
+        `zip.test.ts` (a spy Blob: reading one part of a 3 MB archive reads
+        < 100 KB of it, and the inflater never gets a slice over 64 KB).
+        Pick to review screen in the real app (Playwright, disk-backed file,
+        after): Chromium ~0.83 s, WebKit ~1.34 s. The result sent back to the
+        page is ~0.4 MB as JSON, so the copy between worker and page doesn't
+        matter. **Not done: a real phone.** None was connected; simulators
+        and emulators don't enforce a phone's per-tab memory limit. At a
+        ~125 MB peak growth the import should fit comfortably, but the first
+        client import from a phone, or any report of a failing import, is
+        the trigger to confirm on a device (the harness notes in issue #23).
+
+- **Publication** (roadmap WP-2.3 phase 1, 2026-09-25; [data-model.md §
+  Publications](./data-model.md#publications-022_publicationsql),
+  [api.md § Publication](./api.md#publication)). Built: `022_publication`,
+  `farmProjection` / `catchmentView` in the engine, the publication routes,
+  the farm-view API routes of WP-2.6 (index, view, CSV), publishing from the
+  Runs tab, the seeded publications. Left open:
+  - [ ] **Share links** (WP-2.3 phase 2): `share_link`, `app_share_view` /
+        `app_share_series`, `POST /share/view` and `/share/series`, the
+        `/share` page and the owner's Share links panel, with their tests
+        (revoked or expired tokens answer nothing, farm keys refused).
+        Trigger: the WUA asks to send the catchment result to someone outside
+        the project, and before the Step 2 release (WP-2.16) at the latest.
+  - [ ] **Audit events** for publishing and for notice changes: today only
+        `published_by` and `updated_at` / `updated_by` record them. Needs
+        WP-2.4's `audit_event`; add the writes in the same change.
+  - [ ] **Roadmap UI still to build around it:** the Overview's "Published
+        baseline" card, opening viewers on the published run by default, and
+        run-comparison's "compare with published". Trigger: the WP-2.6 farm
+        page lands (its preview button needs the same card).
+  - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
+        store which site bound a farm's charge each day, so the projection
+        re-runs the engine's attribution on the stored flows. Exact, except
+        when the transfer rules form a loop (per-rule volumes can't be solved
+        from the farms' net transfer series; the loop is cut and
+        `bindingApproximate` says so). Durable fix: store the per-rule
+        transfer volumes (or the per-day binding site) as run series. Trigger:
+        the next change that bumps `ENGINE_VERSION`.
+  - [ ] **The chart series and per-farm history routes** of WP-2.6
+        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
 
 ## Pipelines
 
@@ -1270,6 +1361,42 @@ role and not before it.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
+
+## Server-side reports (WP-2.15 Phase B, issue #26)
+
+- [ ] **The renderer image has never been built or run on Lambda.** CI and
+      the gates cover the render path with the local Chromium (the worker's
+      inline renderer, MinIO, Mailpit, e2e) and the renderer Lambda's
+      message handling with stubs; `backend/renderer.Dockerfile` (Playwright
+      image + `aws-lambda-ric`) is first built by the first
+      `backend@` release. Before relying on it: build it once locally
+      (`docker build -f backend/renderer.Dockerfile backend` after
+      `infra/scripts/package-lambdas.sh`) and invoke it with the Lambda
+      runtime interface emulator against a local stack; then after the first
+      deploy, render one report in production and check its alarms.
+- [x] **The DB test files ran in parallel**, although
+      `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
+      `db` project and several tests say "a tick here sees only this file's
+      jobs": Vitest 2 ignores that option inside a workspace project
+      (checked 2026-09-25 with two sleeping test files). One file's tick then
+      claimed another's jobs, and with the report tests' queued renders in
+      the mix the job and feed tests failed intermittently. Fixed at the
+      root on main (b92608e): the `db` project pins one fork
+      (`poolOptions.forks.singleFork`), which does serialise the files. The
+      report branch's duplicate `--no-file-parallelism` flag was dropped at
+      merge. Making every tick-based test hermetic would let the files run in
+      parallel again.
+- [ ] **MinIO's upstream image is gone** (the `minio/minio` Docker Hub
+      repository answers "pull access denied"; MinIO stopped publishing
+      community images in 2025). docker-compose pins the community fork's
+      build (`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, github.com/pgsty/minio,
+      ~800k pulls). Re-check it on each bump; the alternative is any other
+      S3-compatible local server, since the app only uses the S3 API.
+- [ ] **playwright-core is pinned in two places**: `backend/package.json`
+      (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
+      plus the image tag in `backend/renderer.Dockerfile`. They must move
+      together (the Chromium build is tied to the version); Dependabot bumps
+      them separately.
 
 ## Housekeeping
 

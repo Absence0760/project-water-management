@@ -81,7 +81,7 @@ describe('farm-scoped RLS', () => {
 		expect((await rowsAs(viewer, 'SELECT name FROM crop WHERE project_id = $1', [projectId])).length).toBe(2);
 	});
 
-	it('hides runs, run series and time series from a farmer entirely', async () => {
+	it('hides runs, run series and time series from a farmer entirely while nothing is published', async () => {
 		for (const table of ['model_run', 'run_series', 'time_series']) {
 			expect(await rowsAs(farmer, `SELECT 1 FROM ${table} WHERE project_id = $1`, [projectId]), table).toEqual([]);
 			expect((await rowsAs(viewer, `SELECT 1 FROM ${table} WHERE project_id = $1`, [projectId])).length, `${table} (viewer)`).toBeGreaterThan(0);
@@ -144,15 +144,46 @@ describe('anonymised farm context and the holder count', () => {
 	});
 });
 
+/** The project routes a farmer may call (WP-2.3 publication read, WP-2.6 farm view); every other one refuses them. */
+const FARMER_ALLOWED = new Set([
+	'GET /projects/:id/publication',
+	'GET /projects/:id/farm',
+	'GET /projects/:id/farm/:nodeId',
+	'GET /projects/:id/farm/:nodeId/export.csv',
+	'GET /projects/:id/farm/:nodeId/access'
+]);
+
 describe('project routes for a farmer', () => {
 	const ZERO = '00000000-0000-4000-8000-000000000000';
-	const projectRoutes = [
+	const allRoutes = [
 		...new Set(
 			app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS' && r.path.startsWith('/projects/:id')).map((r) => `${r.method} ${r.path}`)
 		)
 	];
+	const projectRoutes = allRoutes.filter((r) => !FARMER_ALLOWED.has(r));
 
-	it('finds the project routes', () => expect(projectRoutes.length).toBeGreaterThan(40));
+	it('finds the project routes, the farmer-allowed ones among them', () => {
+		expect(projectRoutes.length).toBeGreaterThan(40);
+		for (const r of FARMER_ALLOWED) expect(allRoutes).toContain(r);
+	});
+
+	// The farmer-allowed routes answer a farmer: the publication list, their
+	// farm index, and 404 (not 403) for a node that isn't theirs, which says
+	// nothing about whether it exists. No publication exists in this project.
+	it('lets a farmer read the publication and their own farm index, and 404s any other node', async () => {
+		expect((await farmer.call('GET', `/projects/${projectId}/publication`)).body).toEqual({ current: null, history: [] });
+		const index = await farmer.call('GET', `/projects/${projectId}/farm`);
+		expect(index.status).toBe(200);
+		expect(index.body).toEqual({ project: { id: projectId, name: 'Farm scope' }, farms: [{ nodeId: farmA.id, name: 'Farm A' }], publication: null });
+		for (const n of [farmB.id, outlet.id, ZERO]) {
+			expect((await farmer.call('GET', `/projects/${projectId}/farm/${n}`)).status, n).toBe(404);
+			expect((await farmer.call('GET', `/projects/${projectId}/farm/${n}/export.csv`)).status, n).toBe(404);
+		}
+		// Their own farm is theirs, but nothing is published yet.
+		expect(await farmer.call('GET', `/projects/${projectId}/farm/${farmA.id}`)).toEqual({ status: 404, body: { error: 'not published yet' } });
+		// Positive control: a viewer's index lists every farm.
+		expect((await viewer.call('GET', `/projects/${projectId}/farm`)).body.farms).toHaveLength(3);
+	});
 
 	// requireRole(…, 'viewer') and above refuse the farmer rank (fail closed). A
 	// request whose body or query fails validation before the role check

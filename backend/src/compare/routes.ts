@@ -47,7 +47,7 @@ interface LoadedRun {
 	notesUpdatedBy: string | null;
 	/** The run's place in its project's evidence history (010_run_nomination); null = never nominated. */
 	evidence: RunEvidence | null;
-	/** The scenario that made the run (023_scenarios); null for a run of the model, or once the scenario is deleted. */
+	/** The scenario that made the run (024_scenarios); null for a run of the model, or once the scenario is deleted. */
 	scenarioId: string | null;
 }
 

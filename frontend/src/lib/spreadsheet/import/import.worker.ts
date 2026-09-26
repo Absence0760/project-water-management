@@ -23,9 +23,11 @@ const state: WorkerState<WorkbookSource> = { workbook: null, fileName: '' };
 self.onmessage = (e: MessageEvent<ToWorker>) =>
 	handle(e.data, state, post, {
 		async read(file, onProgress) {
-			// Refused before the bytes are even loaded.
+			// Refused before any of it is read. The File itself goes to the
+			// reader, which reads only the parts it needs, a slice at a time,
+			// never the whole file into memory (issue #23).
 			if (file.size > MAX_WORKBOOK_BYTES) throw new WorkbookTooLargeError('bytes', file.size, MAX_WORKBOOK_BYTES);
-			return readWorkbook(await file.arrayBuffer(), { onProgress });
+			return readWorkbook(file, { onProgress });
 		},
 		extract: extractProject
 	});

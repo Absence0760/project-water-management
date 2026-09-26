@@ -68,7 +68,7 @@ export function runsKeptPerProject(env: string | undefined = process.env.RUNS_KE
 
 /**
  * Most pinned runs per project (the model_run_pin_limit trigger, 015_run_pinned.sql, enforces the same number).
- * A cited run's pin doesn't count (023_scenarios.sql): it is kept anyway.
+ * A cited run's pin doesn't count (024_scenarios.sql): it is kept anyway.
  */
 export const PINNED_RUNS_PER_PROJECT_MAX = 10;
 
@@ -76,12 +76,15 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * True for a run the storage cap never trims and the DELETE route refuses, as
  * a SQL expression over `model_run r`: one an editor pinned (015_run_pinned),
  * one the evidence history names, now or before (010_run_nomination), or one
- * something **cites** (`model_run_cited`, 021_series_blob.sql). The single
- * exemption path for all three, so they can't drift apart.
+ * something **cites** (`model_run_cited`, 021_series_blob.sql; a
+ * publication in the project's history cites its run, 022_publication.sql,
+ * so a published run is kept until its last publication is trimmed from the
+ * history of 12). The single exemption path for all of them, so they can't
+ * drift apart.
  *
  * A new kind of citation is not added here: its migration adds one EXISTS
  * clause to `model_run_cited` (CREATE OR REPLACE; the pattern is in
- * 021_series_blob.sql), as 023_scenarios.sql did for a scenario's base run,
+ * 021_series_blob.sql), as 024_scenarios.sql did for a scenario's base run,
  * and this expression, trimRuns and the DELETE route pick it up unchanged.
  */
 export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
@@ -89,29 +92,34 @@ export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n
 /**
  * What cites a run, as a SQL expression over `model_run r`: a jsonb list of
  * `{ kind, id, name }`, oldest first, of the citations the caller can see
- * (RLS). Today only scenarios (023_scenarios.sql); evidence packs and
+ * (RLS): publications (022_publication.sql; `name` is the day it was
+ * published, YYYY-MM-DD) and scenarios (024_scenarios.sql). Evidence packs and
  * assessments add their kinds here with their migrations. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */
-export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', 'scenario', 'id', c.id, 'name', c.name) ORDER BY c.created_at, c.id), '[]'::jsonb)
-	FROM scenario c WHERE c.base_run_id = r.id)`;
+export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', c.kind, 'id', c.id, 'name', c.name) ORDER BY c.at, c.id), '[]'::jsonb) FROM (
+		SELECT 'publication' AS kind, p.id, to_char(p.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS name, p.published_at AS at FROM run_publication p WHERE p.run_id = r.id
+		UNION ALL
+		SELECT 'scenario', s.id, s.name, s.created_at FROM scenario s WHERE s.base_run_id = r.id
+	) c)`;
 
-/** One citation of a run (RunMeta.citedBy). */
+/** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, UTC). */
 export interface RunCitation {
-	kind: 'scenario';
+	kind: 'publication' | 'scenario';
 	id: string;
 	name: string;
 }
 
 /**
- * Why a cited run is kept, for a 409: `this run is cited by scenario "A", so
- * it is kept`, or without names when the caller can see none of its citations.
+ * Why a cited run is kept, for a 409: `this run is cited by the publication of
+ * 2026-09-25, scenario "A", so it is kept`, or without names when the caller
+ * can see none of its citations.
  */
 export async function citedMessage(db: Db, projectId: string, runId: string, tail = 'so it is kept'): Promise<string> {
 	const { rows } = await db.query<{ cited: RunCitation[] }>(`SELECT ${CITED_BY_SQL} AS cited FROM model_run r WHERE r.project_id = $1 AND r.id = $2`, [projectId, runId]);
 	const cited = rows[0]?.cited ?? [];
 	if (!cited.length) return `this run is cited, ${tail}`;
-	const names = cited.slice(0, 3).map((c) => `${c.kind} "${c.name}"`);
+	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : `${c.kind} "${c.name}"`));
 	const more = cited.length > 3 ? ` and ${cited.length - 3} more` : '';
 	return `this run is cited by ${names.join(', ')}${more}, ${tail}`;
 }
@@ -127,13 +135,16 @@ export async function lockProjectRuns(db: Db, projectId: string): Promise<void> 
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('model_run_trim:' || $1::text, 0))`, [projectId]);
 }
 
+/** Also over `model_run r`: a publication (current or in the history) holds the run, for the DELETE route's message. */
+export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id)`;
+
 /**
  * Delete the project's oldest runs beyond the cap (run_series cascades).
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
  *
  * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or
- * cited) is never trimmed and doesn't count against the cap: the cap keeps the
+ * cited, published runs included) is never trimmed and doesn't count against the cap: the cap keeps the
  * newest `keep` runs that are neither.
  *
  * One trim at a time per project, held to the end of the caller's

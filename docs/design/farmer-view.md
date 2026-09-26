@@ -3,7 +3,8 @@
 Design spec for [issue #14](https://github.com/Absence0760/project-water-management/issues/14).
 It feeds the build of [WP-2.1](../roadmap/step-2-shared-catchment.md#wp-21-farmer-role-and-farm-scoped-rls)
 (farm-scoped RLS) and [WP-2.6](../roadmap/step-2-shared-catchment.md#wp-26-phone-first-farmer-view)
-(the view). Nothing here is built yet. Where this spec and the roadmap
+(the view). WP-2.1 and WP-2.3 (with the WP-2.6 API routes) are built; the
+view itself is not yet (§12). Where this spec and the roadmap
 disagree, this spec is the newer decision; §12 lists every change it asks of
 the roadmap.
 
@@ -145,7 +146,7 @@ A farm with no dam (`damCapacityM3 = 0`) gets no dam card and no dam screen.
 | "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment" | counts from the network topology (E6) | D1 option (b): counts only, no names, no positions |
 | "The same rules apply to every farm" | fixed text. True by construction: the curtailment and attribution rules are symmetric and order-free (model.md §2.7b, "Order-free") | – |
 | "River at Sandspruit Outlet: below its reserve on all of the last 30 days" | `catchment_view`: days not met over the last 30 days at the outlet | A count, never a flow volume (§10.3) |
-| "Your farm's figures are seen by you, anyone else linked to this farm, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my farm" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5) |
+| "Your farm's figures are seen by you, anyone else linked to this farm, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my farm" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5). Built: `GET …/farm/:nodeId/access` (names and roles, no emails) |
 
 ## 4. Gaps: asks of the engine, the data model and the API
 
@@ -535,6 +536,28 @@ criterion "Need verdict at least Adopt if… with no privacy finding").
   the headline fraction (E7).
 - `run_publication.next_expected_on` (E10).
 - The publish dialog warns about farm dams with no stop level.
+
+*Status (2026-09-25): built, with the WP-2.6 API routes (index, view, CSV;
+`packages/engine/src/views/farmProjection.ts`, `022_publication.sql`,
+`backend/src/publish/`, `backend/src/farms/view.ts`). Where the build
+settled something this spec left open:*
+- *`dataUntil` is the last day of observed rain (catchment gauge or CHIRPS)
+  in the run's input snapshot: a run that goes on on forecast rain is
+  projected only to there, so forecast days never count as water received.*
+- *`catchment_view` holds counts and dates only, per §10.3: the roadmap's
+  mean natural and simulated flow and its farm totals at ≥ k are left out,
+  since every member, farmers included, reads it.*
+- *The binding site (`river.bindingSite`) is recomputed from the run's
+  stored flows with the engine's attribution, since a run doesn't store it
+  (exact unless the transfer rules form a loop; followups.md).*
+- *`FarmView.publication.restriction` gains an optional `noticeLang`, so the
+  page can show "not translated" when the notice falls back to the other
+  language (§7).*
+- *A legacy-runoff-model run can't be published (audit H1).*
+- *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop
+  level); "all when your dam was down to its stop level" reads for dam farms
+  only, as §3 Q1 says.*
+- *Share links are WP-2.3 phase 2, not built (followups.md).*
 
 **WP-2.6** (the view):
 - Card order, band, wording and states as in §5 and §6; the model card's

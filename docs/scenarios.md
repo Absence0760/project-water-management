@@ -9,7 +9,7 @@ in [run comparison](./run-comparison.md). Build plan:
 issue #18.
 
 Status: the **engine part** (`packages/engine/src/scenario/`), the **backend
-and data model** (`backend/src/scenarios/`, migration 023) and the frontend's
+and data model** (`backend/src/scenarios/`, migration 024) and the frontend's
 API client are built. The UI (the Scenarios tab, the override-mode editor and
 the compare page's Scenario overrides section) is not.
 
@@ -214,14 +214,14 @@ bodies), `execute.ts` (`executeScenarioRun`).
   (the applicant role); today any editor may.
 - **The base is cited** (`model_run_cited`), so it can't be deleted,
   trimmed or unpinned while the scenario exists, and its pin doesn't count
-  against the 10-pin ceiling. `RunMeta.citedBy` lists the scenarios based on
+  against the 10-pin ceiling. `RunMeta.citedBy` lists the publications holding it and the scenarios based on
   a run. Deleting the scenario releases it; the scenario's own runs stay, as
   ordinary runs that remember their scenario's name.
 
 ## Data model
 
-Migration `023_scenarios.sql`
-([data-model.md § Scenarios](./data-model.md#scenarios-023_scenariossql)):
+Migration `024_scenarios.sql`
+([data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)):
 
 - `scenario (id, project_id, name, description, base_run_id → model_run,
   ops jsonb, ops_sha256, owned_node_ids uuid[], owner_user_id, status,
@@ -235,8 +235,12 @@ Migration `023_scenarios.sql`
 - RLS: viewer read, editor write; **farmers read nothing** (a scenario's ops
   and base name every farm; the catchment report makes the same call).
   WP-3.3 adds the applicant's own policies.
-- `model_run_cited` gets its first clause (a scenario's base), and the pin
-  ceiling stops counting cited runs.
+- `model_run_cited` gains a clause (a scenario's base) beside 022's
+  publication clause, and the pin ceiling stops counting cited runs.
+- The publication-history cap (newest 12) spares a publication whose run a
+  scenario is based on, so the base keeps its "published" record. Editors
+  may base a scenario on any run of the model, published or not; WP-3.3
+  requires a published base for applicants.
 - `run_series.node_id` stops being a foreign key to the live `node` table: a
   scenario run has nodes the live model doesn't (`node.add`), and the old
   cascade deleted a node's series from every earlier run when the node was

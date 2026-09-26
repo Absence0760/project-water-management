@@ -6,7 +6,7 @@ describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
-			[null, ['res-summary', 'res-notes']],
+			[null, ['res-summary', 'res-notes', 'res-publication']],
 			['River & Reserve', ['res-ewr', 'res-ewr-grid']],
 			['Farms & users', ['res-curtailment', 'res-farm']],
 			['Model quality', ['res-hydrograph', 'res-calibration', 'res-ewr-agreement']],

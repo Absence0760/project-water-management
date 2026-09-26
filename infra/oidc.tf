@@ -103,7 +103,34 @@ data "aws_iam_policy_document" "github_deploy" {
       aws_lambda_function.migrate.arn,
       aws_lambda_function.worker.arn,
       aws_lambda_function.fetcher.arn,
+      # By name: the renderer exists only once renderer_image_tag is set (reports.tf).
+      local.renderer_function_arn,
     ]
+  }
+
+  # The renderer's container image (reports.tf). GetAuthorizationToken has no
+  # resource-level permissions (AWS): it only mints the docker login; what
+  # the login may push is the repository statement below.
+  statement {
+    sid       = "EcrLogin"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "RendererImagePush"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:DescribeRepositories",
+      "ecr:DescribeImages",
+    ]
+    resources = [aws_ecr_repository.renderer.arn]
   }
 
   # The backend deploy runs the migrate Lambda before shipping new API code.

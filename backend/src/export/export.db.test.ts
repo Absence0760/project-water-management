@@ -270,7 +270,7 @@ describe('legacy run CSV comment (audit H1)', () => {
 });
 
 describe('all-farms export after the network changed', () => {
-	it('uses a renamed farm\'s current name and keeps a deleted farm, named as the run knew it (a run keeps its series, 023_scenarios)', async () => {
+	it('uses a renamed farm\'s current name and keeps a deleted farm, named as the run knew it (a run keeps its series, 024_scenarios)', async () => {
 		const { body } = await owner.call('POST', '/projects', { name: 'Changed network' });
 		const pid = body.project.id;
 		const out = node('Outlet', null);

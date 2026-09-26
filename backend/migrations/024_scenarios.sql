@@ -1,7 +1,8 @@
--- 023_scenarios — scenarios within a project: a named, ordered list of
+-- 024_scenarios — scenarios within a project: a named, ordered list of
 -- overrides on a base run, run and compared without copying the project
 -- (roadmap WP-3.2, issue #18; docs/scenarios.md, docs/data-model.md
--- § Scenarios). 022 is reserved for the server-side PDF job (#26).
+-- § Scenarios). 022 is the publication (WP-2.3), 023 the server-side PDF
+-- reports (#26).
 --
 -- A scenario applies to a **run snapshot**: its base run's stored inputs
 -- (021_series_blob, loadRunInput), never the live model, so editing the model
@@ -21,8 +22,12 @@
 --  * A frozen scenario: once submitted, its ops, base and owned nodes can't
 --    change, and it can't be deleted until withdrawn (scenario_guard). The API
 --    answers 409 first.
---  * The first citation: model_run_cited is true for a scenario's base run,
---    so trimRuns and the run DELETE route keep it (RUN_KEPT_SQL, unchanged).
+--  * A citation: model_run_cited is also true for a scenario's base run
+--    (022_publication added the first clause), so trimRuns and the run DELETE
+--    route keep it (RUN_KEPT_SQL, unchanged).
+--  * The publication-history cap (022's run_publication_cap) skips a
+--    publication whose run a scenario is based on, so the base keeps its
+--    "published" provenance.
 --  * The pin ceiling stops counting cited runs (the plan's WP-3.1 follow-up).
 --  * run_series.node_id no longer references the live `node` table: a
 --    scenario run has nodes the live model doesn't (node.add), and a base run
@@ -66,7 +71,7 @@ CREATE INDEX scenario_base_run_idx ON scenario (base_run_id);
 CREATE INDEX scenario_owner_idx ON scenario (owner_user_id);
 
 COMMENT ON TABLE scenario IS
-	'A named, ordered list of overrides (engine ScenarioOp) on a base run, run and compared without copying the project (023_scenarios, WP-3.2). Its base run is cited, so kept (model_run_cited).';
+	'A named, ordered list of overrides (engine ScenarioOp) on a base run, run and compared without copying the project (024_scenarios, WP-3.2). Its base run is cited, so kept (model_run_cited).';
 COMMENT ON COLUMN scenario.owned_node_ids IS 'The proposer''s own nodes: ops on them are proposals, the rest baseline assumptions (engine classifyOp).';
 COMMENT ON COLUMN scenario.status IS 'draft → submitted → withdrawn | decided; withdrawn → draft. Ops, base and owned nodes change only while draft (scenario_guard).';
 
@@ -133,7 +138,7 @@ CREATE FUNCTION scenario_guard() RETURNS trigger
 -- ---------------------------------------------------------------------------
 ALTER TABLE model_run ADD COLUMN scenario_id uuid REFERENCES scenario(id) ON DELETE SET NULL;
 COMMENT ON COLUMN model_run.scenario_id IS
-	'The scenario that produced this run (023_scenarios); NULL for a run of the live model, or once the scenario is deleted (the run''s inputs.scenario still records its ops). Set on insert only.';
+	'The scenario that produced this run (024_scenarios); NULL for a run of the live model, or once the scenario is deleted (the run''s inputs.scenario still records its ops). Set on insert only.';
 -- Covers the foreign key; only scenario runs have one.
 CREATE INDEX model_run_scenario_idx ON model_run (scenario_id) WHERE scenario_id IS NOT NULL;
 
@@ -171,16 +176,41 @@ CREATE POLICY scenario_delete ON scenario FOR DELETE USING (app_has_role(project
 GRANT SELECT, INSERT, UPDATE, DELETE ON scenario TO water_app;
 
 -- ---------------------------------------------------------------------------
--- The first citation (021_series_blob's hook; its latest body was SELECT
--- false). Same signature, SECURITY DEFINER and search_path. A later citing
--- table ORs its own EXISTS onto this body.
+-- A scenario cites its base run (021_series_blob's hook). Latest body:
+-- 022_publication's publication clause, kept as it was. Same signature,
+-- SECURITY DEFINER and search_path. A later citing table ORs its own EXISTS
+-- onto this body.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION model_run_cited(p_run uuid) RETURNS boolean
 	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-	AS $$ SELECT EXISTS (SELECT 1 FROM scenario s WHERE s.base_run_id = p_run) $$;
+	AS $$ SELECT EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = p_run)
+		OR EXISTS (SELECT 1 FROM scenario s WHERE s.base_run_id = p_run) $$;
 
 COMMENT ON FUNCTION model_run_cited(uuid) IS
-	'True for a run a scenario is based on (023_scenarios); evidence packs and assessments add their own EXISTS clause. Part of RUN_KEPT_SQL in backend/src/runs/execute.ts.';
+	'True for a run a publication (022_publication) or a scenario (024_scenarios) cites; evidence packs and assessments add their own EXISTS clause. Part of RUN_KEPT_SQL in backend/src/runs/execute.ts.';
+
+-- ---------------------------------------------------------------------------
+-- The publication-history cap, from its latest body (022_publication), now
+-- also sparing a publication whose run a scenario is based on. The run is
+-- kept by the scenario either way; this keeps the record that it was
+-- published (and when, under which notice), which a scenario's base banner
+-- and WP-3.3's "an applicant's base must be a published run" rest on. So a
+-- project keeps its newest 12 publications plus those of scenario bases.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION run_publication_cap() RETURNS trigger
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	BEGIN
+		DELETE FROM run_publication WHERE id IN (
+			SELECT id FROM run_publication
+			WHERE project_id = NEW.project_id
+			ORDER BY published_at DESC, id DESC
+			OFFSET 12
+		) AND superseded_at IS NOT NULL
+		  AND NOT EXISTS (SELECT 1 FROM scenario s WHERE s.base_run_id = run_publication.run_id);
+		RETURN NULL;
+	END
+	$$;
 
 -- ---------------------------------------------------------------------------
 -- The pin ceiling counts only pins that keep something: a cited run is kept

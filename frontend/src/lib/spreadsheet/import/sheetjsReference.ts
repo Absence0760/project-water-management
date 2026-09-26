@@ -66,7 +66,7 @@ export const SHEETJS_READ_OPTIONS: XLSX.ParsingOptions = {
 
 /** The workbook as SheetJS read it for the import before the streaming reader (same parts, same sheets). */
 export async function readWorkbookWithSheetJS(data: Uint8Array): Promise<{ source: WorkbookSource; book: XLSX.WorkBook }> {
-	const zip = ZipArchive.open(data);
+	const zip = await ZipArchive.open(data);
 	const parts = new Map<string, StoredEntry>();
 	const load = async (name: string): Promise<boolean> => {
 		const exact = zip.find(name);

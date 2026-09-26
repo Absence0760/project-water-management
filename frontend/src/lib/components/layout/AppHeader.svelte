@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
+	import { clearAllSaved } from '$lib/components/farm/savedCopy';
 	import BrandMark from './BrandMark.svelte';
 
 	let signingOut = $state(false);
@@ -64,6 +65,8 @@
 	// /login?next=<this page>); the explicit navigation below then wins, so
 	// the next person to sign in isn't dropped onto this user's page.
 	async function finishSignOut() {
+		// The farmer view's saved copies stay on the phone only while signed in (design §9).
+		clearAllSaved();
 		session.user = null;
 		signingOut = false;
 		await tick();

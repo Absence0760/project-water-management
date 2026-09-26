@@ -22,6 +22,7 @@ import { envInt, runTick, type TickResult } from './runner.js';
 
 const summary = (r: TickResult) =>
 	(r.feeds ? `feeds: ${r.feeds.queued} queued${r.feeds.refused ? `, ${r.feeds.refused} refused` : ''}; ` : '') +
+	(r.reports?.queued || r.reports?.skipped ? `scheduled reports: ${r.reports.queued} queued${r.reports.skipped ? `, ${r.reports.skipped} skipped` : ''}; ` : '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;
 
