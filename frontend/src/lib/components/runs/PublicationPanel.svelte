@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
 	let {
@@ -161,7 +161,7 @@
 			{#if current.restriction.noticeEn}<dt>English</dt><dd class="text">{current.restriction.noticeEn}</dd>{/if}
 			{#if current.restriction.noticeAf}<dt>Afrikaans</dt><dd class="text">{current.restriction.noticeAf}</dd>{/if}
 			<dt>Next update</dt>
-			<dd>{current.nextExpectedOn ? fmtDate(current.nextExpectedOn) : 'Not set'}</dd>
+			<dd>{current.nextExpectedOn ? fmtDay(current.nextExpectedOn) : 'Not set'}</dd>
 			{#if current.updatedAt}<dt>Notice changed</dt><dd>{fmt(current.updatedAt)}{current.updatedBy ? ` by ${current.updatedBy}` : ''}</dd>{/if}
 		</dl>
 	{/if}

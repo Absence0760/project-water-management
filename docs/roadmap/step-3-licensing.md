@@ -232,15 +232,15 @@ must build WP-2.15 Phase B.
     `not_reproducible`. The uncertainty band's `…/runs/:runId/model-input`
     now uses it, so a run saved since 020 keeps getting bands after its data
     changes;
-  - "cited" is the SQL function `model_run_cited(run)` inside `RUN_KEPT_SQL`,
-    `false` until a citing table exists: **WP-3.2's migration adds its one
-    clause there** (the pattern is in 020's header), and trim and the
-    `DELETE` route (`409 this run is cited, so it is kept`) follow.
+  - "cited" is the SQL function `model_run_cited(run)` inside `RUN_KEPT_SQL`;
+    WP-2.3's publication (022) added its first clause and WP-3.2 (024) a scenario's base run,
+    so trim and the `DELETE` route (`409 this run is cited by scenario "…",
+    so it is kept`) keep it. Also built with WP-3.2: the unpin `409`, cited
+    runs off the pin ceiling, and `RunMeta.citedBy`.
   - Not built yet (tracked in [followups.md](../followups.md)): the
-    `…/reproduce` endpoint, `RunMeta.reproducible` / `citedBy`, the Runs tab
-    badge, lock and "Check reproduction" action, the unpin `409` and the
-    publication-trim skip for cited runs (the last two have nothing to act
-    on until WP-3.2 / WP-2.3 land).
+    `…/reproduce` endpoint, `RunMeta.reproducible`, the Runs tab badge, lock
+    and "Check reproduction" action, and the publication-trim skip for cited
+    runs (nothing to act on until WP-2.3 lands).
 - **Goal.** A run can be recomputed exactly years later, and a run that
   evidence cites can never disappear.
 - **What Steps 1–2 already give, and the gap that remains:**
@@ -321,6 +321,19 @@ must build WP-2.15 Phase B.
 
 ### WP-3.2 Scenarios within a project
 
+- **Status (2026-09-25): engine, backend, data model and API built**
+  ([scenarios.md](../scenarios.md), issue #18): `packages/engine/src/scenario/`,
+  migration `024_scenarios.sql`, `backend/src/scenarios/`, the scenario per
+  side in `/compare/runs`, and the frontend API client. Where the build
+  differs from the plan below: the base-run key is `NO ACTION` rather than
+  `RESTRICT` (so a project delete still cascades); a scenario stores
+  `owned_node_ids` (the proposer's nodes, for `classifyOp`) until WP-3.3
+  derives them from an applicant's links; a scenario run records its ops and
+  their classes in its own snapshot, which is what compare shows; and
+  `run_series.node_id` is checked against the run's snapshot instead of a
+  foreign key to the live `node` table. Not built yet: the Scenarios tab,
+  the compare page's Scenario overrides section, e2e and axe
+  ([followups.md](../followups.md)).
 - **Goal.** A scenario is a named, ordered list of **overrides on a base
   run**. It is run and compared without copying the project.
 - **How it relates to today:**

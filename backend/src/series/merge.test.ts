@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeDaily } from './merge.js';
+import { mergeDaily, sameDaily } from './merge.js';
 
 describe('mergeDaily', () => {
 	it('appends the next days', () => {
@@ -35,5 +35,20 @@ describe('mergeDaily', () => {
 	it('handles month and leap-year boundaries by calendar day', () => {
 		const m = mergeDaily({ startDate: '2024-02-28', values: [1] }, { startDate: '2024-03-01', values: [3] });
 		expect(m).toEqual({ startDate: '2024-02-28', values: [1, null, 3] });
+	});
+});
+
+describe('sameDaily (mergeInto skips a merge that changes nothing)', () => {
+	const e = { startDate: '2025-01-01', values: [1, null, 3] };
+	it('is true for a re-sent batch and for gaps that keep what is there', () => {
+		expect(sameDaily(e, mergeDaily(e, { startDate: '2025-01-02', values: [null, 3] }))).toBe(true);
+		expect(sameDaily(e, mergeDaily(e, { startDate: '2025-01-02', values: [0, 3] }))).toBe(false);
+		expect(sameDaily(e, mergeDaily(e, { startDate: '2025-01-01', values: [1, null, null] }, { keepOnNull: true }))).toBe(true);
+	});
+	it('is false for a changed value, a filled gap, a longer series or another start', () => {
+		expect(sameDaily(e, { startDate: '2025-01-01', values: [1, null, 4] })).toBe(false);
+		expect(sameDaily(e, { startDate: '2025-01-01', values: [1, 0, 3] })).toBe(false);
+		expect(sameDaily(e, { startDate: '2025-01-01', values: [1, null, 3, null] })).toBe(false);
+		expect(sameDaily(e, { startDate: '2024-12-31', values: [1, null, 3] })).toBe(false);
 	});
 });

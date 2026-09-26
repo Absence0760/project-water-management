@@ -6,9 +6,12 @@
 // docs/architecture.md § Data feeds): classic little-endian TIFF, one float32
 // band (SampleFormat 3), LZW (Compression 5) with no predictor, one row per
 // strip, the IFD at the END of the file, a 0.05° WGS 84 grid whose tiepoint
-// is (-180, 60), and -9999 over the sea. Anything else (BigTIFF, tiles, a
-// predictor, several bands) is refused with a FeedFormatError rather than
-// guessed at: a format change must fail loudly, never write garbage.
+// is (-180, 60) (GeoKeys: geographic, EPSG:4326, degrees, PixelIsArea), and
+// -9999 over the sea. A big-endian file or several rows
+// per strip are legal TIFF and read as such. Anything else (BigTIFF, tiles, a
+// predictor, several bands, a reversed fill order, a GDAL scale / offset) is
+// refused with a FeedFormatError rather than guessed at: a format change must
+// fail loudly, never write garbage.
 //
 // No dependency: the roadmap's `geotiff` package would pull in a decoder zoo
 // for one codec. The reader is ~200 lines, its LZW is TIFF's own variant
@@ -24,6 +27,7 @@ const TAG = {
 	height: 257,
 	bitsPerSample: 258,
 	compression: 259,
+	fillOrder: 266,
 	stripOffsets: 273,
 	samplesPerPixel: 277,
 	rowsPerStrip: 278,
@@ -34,6 +38,8 @@ const TAG = {
 	sampleFormat: 339,
 	pixelScale: 33550,
 	tiepoint: 33922,
+	geoKeys: 34735,
+	gdalMetadata: 42112,
 	gdalNodata: 42113
 } as const;
 
@@ -52,6 +58,8 @@ export interface GridInfo {
 	height: number;
 	rowsPerStrip: number;
 	compression: 1 | 5;
+	/** The file's byte order, which its samples follow too (TIFF 6.0 § 2). */
+	littleEndian: boolean;
 	/** Longitude / latitude of the top-left corner of pixel (0, 0). */
 	originLon: number;
 	originLat: number;
@@ -164,6 +172,7 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 	if ((await scalar(TAG.samplesPerPixel, 1)) !== 1) throw new FeedFormatError('the grid has more than one band');
 	if ((await scalar(TAG.planarConfig, 1)) !== 1) throw new FeedFormatError('the grid’s planar configuration is not supported');
 	if ((await scalar(TAG.predictor, 1)) !== 1) throw new FeedFormatError('the grid uses a TIFF predictor, which is not supported');
+	if ((await scalar(TAG.fillOrder, 1)) !== 1) throw new FeedFormatError('the grid uses a reversed bit fill order, which is not supported');
 	const compression = await scalar(TAG.compression, 1);
 	if (compression !== 1 && compression !== 5) throw new FeedFormatError(`the grid uses TIFF compression ${compression}, which is not supported`);
 	const rowsPerStrip = Math.min(await scalar(TAG.rowsPerStrip, height), height);
@@ -176,6 +185,30 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 	const [ti, tj, , tx, ty] = await doubles(TAG.tiepoint, 6);
 	if (!(scaleLon! > 0 && scaleLat! > 0) || ![ti, tj, tx, ty].every(Number.isFinite)) throw new FeedFormatError('the grid has no usable georeferencing');
 
+	// The GeoKey directory (GeoTIFF 1.0 § 2.4): SHORTs [version, revision,
+	// minor, key count], then [key, tag location, count, value] per key; a
+	// location of 0 means the value is inline. The scale and tiepoint only
+	// mean degrees on WGS 84 if these keys say so, and whether the tiepoint is
+	// a pixel's corner or its centre is the raster type's call.
+	const gk = entries.get(TAG.geoKeys);
+	if (!gk || gk.type !== 3 || gk.count < 4 || gk.count > 4096) throw new FeedFormatError('the grid does not say its coordinate system');
+	const gv = await bytesOf(gk);
+	const short = (i: number) => gv.getUint16(i * 2, le);
+	const keyCount = short(3);
+	if (4 + keyCount * 4 > gk.count) throw new FeedFormatError('the grid’s GeoKey directory is truncated');
+	const geo = new Map<number, number>();
+	for (let k = 0; k < keyCount; k++) {
+		const at = 4 + k * 4;
+		if (short(at + 1) === 0) geo.set(short(at), short(at + 3));
+	}
+	if (geo.get(1024) !== 2) throw new FeedFormatError('the grid is not in geographic (latitude / longitude) coordinates');
+	if (geo.get(2048) !== 4326) throw new FeedFormatError('the grid’s coordinate system is not WGS 84 (EPSG:4326)');
+	if ((geo.get(2054) ?? 9102) !== 9102) throw new FeedFormatError('the grid’s angles are not in degrees');
+	const rasterType = geo.get(1025) ?? 1;
+	if (rasterType !== 1 && rasterType !== 2) throw new FeedFormatError(`the grid has an unknown raster type ${rasterType}`);
+	// PixelIsPoint (§ 2.5.2.2): the tiepoint is the centre of pixel (ti, tj), so its corner is half a pixel west and north.
+	const half = rasterType === 2 ? 0.5 : 0;
+
 	const offsets = entries.get(TAG.stripOffsets);
 	const counts = entries.get(TAG.stripByteCounts);
 	const strips = Math.ceil(height / rowsPerStrip);
@@ -183,10 +216,26 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 
 	let nodata: number | null = null;
 	const nd = entries.get(TAG.gdalNodata);
-	if (nd && nd.type === 2) {
+	if (nd && nd.type === 2 && nd.count <= 256) {
 		const text = new TextDecoder().decode(await bytesOf(nd)).replace(/\0+$/, '').trim();
 		const v = Number(text);
-		if (text !== '' && Number.isFinite(v)) nodata = v;
+		// The samples are float32: compare with the float32 the writer stored, not the decimal text.
+		if (text !== '' && Number.isFinite(v)) nodata = Math.fround(v);
+	}
+
+	// GDAL keeps a band's scale and offset (value = raw × scale + offset) in its
+	// XML metadata. The CHC files have none; a file that does means something
+	// other than mm in its raw samples, so refuse it rather than read it raw.
+	const md = entries.get(TAG.gdalMetadata);
+	if (md && md.type === 2) {
+		if (md.count > 1024 * 1024) throw new FeedFormatError('the grid’s GDAL metadata is implausibly large');
+		const xml = new TextDecoder().decode(await bytesOf(md));
+		for (const m of xml.matchAll(/<Item\b[^>]*\brole="(scale|offset)"[^>]*>([^<]*)<\/Item>/gi)) {
+			const v = Number(m[2]!.trim());
+			if (m[2]!.trim() === '' || v !== (m[1]!.toLowerCase() === 'scale' ? 1 : 0)) {
+				throw new FeedFormatError('the grid applies a scale or offset to its samples, which is not supported');
+			}
+		}
 	}
 
 	return {
@@ -194,8 +243,9 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 		height,
 		rowsPerStrip,
 		compression: compression as 1 | 5,
-		originLon: tx! - ti! * scaleLon!,
-		originLat: ty! + tj! * scaleLat!,
+		littleEndian: le,
+		originLon: tx! - (ti! + half) * scaleLon!,
+		originLat: ty! + (tj! + half) * scaleLat!,
 		scaleLon: scaleLon!,
 		scaleLat: scaleLat!,
 		nodata,
@@ -210,10 +260,18 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 
 /** The pixel (row, col) holding a point, or null outside the grid. */
 export function pixelOf(g: Pick<GridInfo, 'width' | 'height' | 'originLon' | 'originLat' | 'scaleLon' | 'scaleLat'>, lat: number, lon: number) {
-	// A point on a pixel edge belongs to the pixel east / south of it.
-	const col = Math.floor((lon - g.originLon) / g.scaleLon + 1e-6);
-	const row = Math.floor((g.originLat - lat) / g.scaleLat + 1e-6);
-	if (row < 0 || col < 0 || row >= g.height || col >= g.width) return null;
+	// A point on a pixel edge belongs to the pixel east / south of it, except
+	// on the grid's own east / south edge, where there is no such pixel: the
+	// CHC grid ends at 180° E and 60° S, both of which a feed may name.
+	const EPS = 1e-6;
+	const index = (x: number, n: number) => {
+		const i = Math.floor(x + EPS);
+		return i === n && x - n < EPS ? n - 1 : i;
+	};
+	const col = index((lon - g.originLon) / g.scaleLon, g.width);
+	const row = index((g.originLat - lat) / g.scaleLat, g.height);
+	// Written so NaN (a non-number coordinate) fails too.
+	if (!(row >= 0 && col >= 0 && row < g.height && col < g.width)) return null;
 	return { row, col };
 }
 
@@ -245,7 +303,7 @@ export async function readPoints(read: RangeRead, grid: GridInfo, points: readon
 	}
 	return where.map(({ row, col }) => {
 		const s = Math.floor(row / grid.rowsPerStrip);
-		const v = decoded.get(s)!.getFloat32(((row - s * grid.rowsPerStrip) * grid.width + col) * 4, true);
+		const v = decoded.get(s)!.getFloat32(((row - s * grid.rowsPerStrip) * grid.width + col) * 4, grid.littleEndian);
 		if (Number.isNaN(v) || v <= NODATA_FLOOR || (grid.nodata !== null && v === grid.nodata)) return null;
 		return v;
 	});

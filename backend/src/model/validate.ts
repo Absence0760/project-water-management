@@ -1,4 +1,4 @@
-import { BOREHOLE_RULES, LAND_COVER_CLASSES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_RULES, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -96,67 +96,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 
 /**
  * Structural rules zod can't express. Returns human-readable problems; empty
- * means valid. Shared expectations with the frontend's client-side check.
+ * means valid. The rules live in the engine (`modelRuleProblems`,
+ * packages/engine/src/modelRules.ts), their one home: applyScenario refuses an
+ * op that would break one, so a scenario's model is always one a save here
+ * would accept. Shared expectations with the frontend's client-side check.
  */
-export function modelProblems(m: ProjectModel): string[] {
-	const problems: string[] = [];
-	const nodeIds = new Set(m.nodes.map((n) => n.id));
-	const cropIds = new Set(m.crops.map((c) => c.id));
-	const byId = new Map(m.nodes.map((n) => [n.id, n]));
-
-	const dupes = (xs: string[]) => [...new Set(xs.filter((x, i) => xs.indexOf(x) !== i))];
-	for (const d of dupes(m.nodes.map((n) => n.id))) problems.push(`duplicate node id ${d}`);
-	for (const d of dupes(m.nodes.map((n) => n.name.toLowerCase()))) problems.push(`duplicate node name "${d}"`);
-	for (const d of dupes(m.crops.map((c) => c.id))) problems.push(`duplicate crop id ${d}`);
-	for (const d of dupes(m.crops.map((c) => c.name.toLowerCase()))) problems.push(`duplicate crop name "${d}"`);
-	for (const d of dupes(m.transfers.map((t) => t.id))) problems.push(`duplicate transfer id ${d}`);
-	for (const d of dupes(m.cropAreas.map((a) => `${a.nodeId}/${a.cropId}`))) problems.push(`duplicate crop area ${d}`);
-	for (const d of dupes((m.landCover ?? []).map((p) => p.id))) problems.push(`duplicate land-cover id ${d}`);
-	for (const p of m.landCover ?? []) {
-		const n = byId.get(p.nodeId);
-		if (!n) problems.push(`land cover ${p.id} references an unknown node`);
-		else if (n.kind !== 'farm') problems.push(`land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
-	}
-
-	for (const n of m.nodes) {
-		if (n.downstreamNodeId && !nodeIds.has(n.downstreamNodeId)) problems.push(`"${n.name}" drains into an unknown node`);
-		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.
-		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.kind === 'gauge') problems.push(`gauge "${n.name}" can't have boreholes`);
-		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
-			problems.push(`"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
-		if (n.downstreamNodeId === n.id) problems.push(`"${n.name}" drains into itself`);
-	}
-	for (const a of m.cropAreas) {
-		if (!nodeIds.has(a.nodeId)) problems.push(`crop area references unknown node ${a.nodeId}`);
-		if (byId.get(a.nodeId)?.kind === 'user') problems.push(`crop area on other water user "${byId.get(a.nodeId)!.name}": a user's demand is its monthly demand, not crops`);
-		if (!cropIds.has(a.cropId)) problems.push(`crop area references unknown crop ${a.cropId}`);
-	}
-	for (const t of m.transfers) {
-		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) problems.push(`transfer ${t.id} references an unknown node`);
-		// A user has no dam to send from or fill (WP-1.33).
-		if (byId.get(t.fromNodeId)?.kind === 'user' || byId.get(t.toNodeId)?.kind === 'user') problems.push(`transfer ${t.id} involves an other water user: transfers run between farm dams`);
-		if (t.fromNodeId === t.toNodeId) problems.push(`transfer ${t.id} goes from a node to itself`);
-	}
-
-	if (m.nodes.length) {
-		const outlets = m.nodes.filter((n) => n.downstreamNodeId === null);
-		if (outlets.length !== 1) {
-			problems.push(`the network needs exactly one outflow node (drains into nothing); found ${outlets.length}`);
-		}
-		// Cycle check: follow downstream pointers from each node.
-		const next = new Map(m.nodes.map((n) => [n.id, n.downstreamNodeId]));
-		for (const n of m.nodes) {
-			const seen = new Set<string>();
-			let cur: string | null | undefined = n.id;
-			while (cur) {
-				if (seen.has(cur)) {
-					problems.push(`the network has a loop through "${n.name}"`);
-					break;
-				}
-				seen.add(cur);
-				cur = next.get(cur);
-			}
-		}
-	}
-	return [...new Set(problems)];
-}
+export const modelProblems = (m: ProjectModel): string[] => modelRuleProblems(m);

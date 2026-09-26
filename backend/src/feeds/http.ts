@@ -10,6 +10,8 @@
 // Both implement FeedHttp. Every response is bounded (time and size), and an
 // upstream body is never copied into an error: the messages are ours.
 import { FeedUnavailableError } from './errors.js';
+import { CHC_BASE } from './sources/chirps.js';
+import { DWS_BASE } from './sources/dws.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -41,15 +43,45 @@ const TIMEOUT_MS = 20_000;
 const MAX_BYTES = 4 * 1024 * 1024;
 const USER_AGENT = 'water-management-feeds/1 (+https://github.com/Absence0760/project-water-management)';
 
+/**
+ * The only hosts a live fetch may ask, over HTTPS on the default port: the
+ * sources' own. The URLs are built from constants (a feed's config holds only
+ * grid cells or a regex-checked station code), and the fetcher Lambda has
+ * open internet egress, so this is what keeps a redirect, or a future code
+ * path, from steering it at another host (docs/security.md § Data feeds).
+ */
+export const FEED_HOSTS: readonly string[] = [new URL(CHC_BASE).host, new URL(DWS_BASE).host];
+/** Redirects followed per request, each checked against FEED_HOSTS. */
+const MAX_REDIRECTS = 3;
+
+const allowed = (url: URL) => url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' && FEED_HOSTS.includes(url.hostname);
+
+const transportError = (err: unknown) =>
+	new FeedUnavailableError((err as Error).name === 'TimeoutError' ? 'the request timed out' : 'the request failed');
+
 type Fetch = typeof fetch;
 
 export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 	const get = async (url: string, headers: Record<string, string>): Promise<{ bytes: Uint8Array; whole: boolean } | null> => {
+		let target = new URL(url);
+		if (!allowed(target)) throw new FeedUnavailableError('the request was refused (not a known source host)');
+		// One deadline for the whole exchange: every hop and the body.
+		const signal = AbortSignal.timeout(TIMEOUT_MS);
 		let res: Response;
-		try {
-			res = await fetchFn(url, { headers: { 'user-agent': USER_AGENT, ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS), redirect: 'follow' });
-		} catch (err) {
-			throw new FeedUnavailableError((err as Error).name === 'TimeoutError' ? 'the request timed out' : 'the request failed');
+		for (let hop = 0; ; hop++) {
+			try {
+				// Redirects are followed here, not by fetch, so each target is checked.
+				res = await fetchFn(target.href, { headers: { 'user-agent': USER_AGENT, ...headers }, signal, redirect: 'manual' });
+			} catch (err) {
+				throw transportError(err);
+			}
+			if (res.status < 300 || res.status > 399 || res.status === 304) break;
+			await res.body?.cancel();
+			if (hop === MAX_REDIRECTS) throw new FeedUnavailableError('the source redirected too many times');
+			const location = res.headers.get('location');
+			const next = location ? URL.parse(location, target) : null;
+			if (!next || !allowed(next)) throw new FeedUnavailableError('the source redirected somewhere it may not');
+			target = next;
 		}
 		if (res.status === 404 || res.status === 416) {
 			await res.body?.cancel();
@@ -70,7 +102,14 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 		const parts: Uint8Array[] = [];
 		let total = 0;
 		for (;;) {
-			const { done, value } = await reader.read();
+			let chunk: Awaited<ReturnType<typeof reader.read>>;
+			try {
+				chunk = await reader.read();
+			} catch (err) {
+				// The deadline (or a reset) can land mid-body, too.
+				throw transportError(err);
+			}
+			const { done, value } = chunk;
 			if (done) break;
 			total += value.length;
 			if (total > MAX_BYTES) {

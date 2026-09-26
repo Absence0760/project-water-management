@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { FeedFormatError } from '../errors.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
 import { chirpsFinalUrl, chirpsPrelimUrl, fetchChirps, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
@@ -43,6 +44,11 @@ describe('gridMean', () => {
 		expect(await gridMean(served({ [url]: grid([1 / 3, 0, 0, 0, 0, 0, 0, 0]) }), url, [cell(0, 0)])).toBe(0.33);
 	});
 
+	it('reads a cell on the grid’s south-east corner (the CHC grid’s is 60° S, 180° E, which config accepts)', async () => {
+		const http = served({ [url]: grid([1, 2, 3, 4, 10, 20, 30, 40]) });
+		expect(await gridMean(http, url, [{ lat: -20.1, lon: 25.2, weight: 1 }])).toBe(40);
+	});
+
 	it('is null when the file is not published', async () => {
 		expect(await gridMean(served({}), url, [cell(0, 0)])).toBeNull();
 	});
@@ -69,6 +75,50 @@ describe('fetchChirps', () => {
 		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 2);
 		expect(r).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, null, 5], prelimDays: 2 });
 		expect(http.urls).not.toContain(chirpsPrelimUrl('2026-01-30'));
+	});
+
+	describe('the day → file mapping, under a skewed TZ (the calendar is UTC, never local)', () => {
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		// Each day's file holds its own day-of-month, so a value names the file it came from.
+		const everyDay = (days: string[]) => served(Object.fromEntries(days.map((d) => [chirpsFinalUrl(d), g(Number(d.slice(8)))])));
+		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+			it(`reads 29 February in a leap year, and no such day otherwise (${zone})`, async () => {
+				process.env.TZ = zone;
+				const leap = everyDay(['2024-02-27', '2024-02-28', '2024-02-29', '2024-03-01']);
+				expect((await fetchChirps(leap, [cell(0, 0)], '2024-02-27', '2024-03-01')).values).toEqual([27, 28, 29, 1]);
+				expect(leap.urls).toContain(chirpsFinalUrl('2024-02-29'));
+				const common = everyDay(['2025-02-27', '2025-02-28', '2025-03-01']);
+				expect((await fetchChirps(common, [cell(0, 0)], '2025-02-27', '2025-03-01')).values).toEqual([27, 28, 1]);
+				expect(common.urls.some((u) => u.includes('.02.29.'))).toBe(false);
+				// 2100 is not a leap year (divisible by 100, not by 400); 2000 was.
+				const c2100 = everyDay(['2100-02-28', '2100-03-01']);
+				expect((await fetchChirps(c2100, [cell(0, 0)], '2100-02-28', '2100-03-01')).values).toEqual([28, 1]);
+				const c2000 = everyDay(['2000-02-28', '2000-02-29', '2000-03-01']);
+				expect((await fetchChirps(c2000, [cell(0, 0)], '2000-02-28', '2000-03-01')).values).toEqual([28, 29, 1]);
+			});
+
+			it(`crosses the year, and each file's year directory with it (${zone})`, async () => {
+				process.env.TZ = zone;
+				const http = everyDay(['2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02']);
+				const r = await fetchChirps(http, [cell(0, 0)], '2025-12-30', '2026-01-02');
+				expect(r).toEqual({ startDate: '2025-12-30', values: [30, 31, 1, 2], prelimDays: 0 });
+				expect(chirpsFinalUrl('2026-01-01')).toContain('/final/sat/2026/chirps-v3.0.sat.2026.01.01.tif');
+				expect(chirpsPrelimUrl('2025-12-31')).toContain('/prelim/sat/2025/chirps-v3.0.prelim.2025.12.31.tif');
+			});
+		}
+
+		it('asks for every day of a 31-, 30- and 28-day month exactly once, in order', async () => {
+			const http = served({});
+			await fetchChirps(http, [cell(0, 0)], '2025-01-01', '2025-04-30', 1);
+			const finals = http.urls.filter((u) => u.includes('/final/')).map((u) => u.match(/(\d{4})\.(\d{2})\.(\d{2})\.tif$/)!.slice(1).join('-'));
+			expect(finals).toHaveLength(31 + 28 + 31 + 30);
+			expect(new Set(finals).size).toBe(finals.length);
+			expect(finals.slice(29, 33)).toEqual(['2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02']);
+			expect(finals.at(-1)).toBe('2025-04-30');
+		});
 	});
 
 	it('returns no days when nothing is published', async () => {
@@ -115,9 +165,30 @@ describe('fetchGefs', () => {
 		expect(await fetchGefs(served({}), [cell(0, 0)], '2026-03-10')).toBeNull();
 	});
 
-	it('keeps only the leading days of a partly published issue', async () => {
-		const http = served({ [gefsUrl('2026-03-10', '2026-03-10')]: grid(new Array(8).fill(1)), [gefsUrl('2026-03-10', '2026-03-11')]: grid(new Array(8).fill(2)), [gefsUrl('2026-03-10', '2026-03-13')]: grid(new Array(8).fill(4)) });
-		expect((await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!.values).toEqual([1, 2]);
+	// CHC writes an issue's 16 files one after another over a minute or so
+	// (the 2026-09-20 directory: 08:26 to 08:27 UTC). A fetch in that window
+	// sees the leading days only; merging them would leave the previous
+	// issue's tail in the series, two issues mixed, until the next fetch.
+	const issue = (issued: string, days: number[], value = (i: number) => i) =>
+		Object.fromEntries(days.map((i) => [gefsUrl(issued, fromEpochDay(toEpochDay(issued) + i)), grid(new Array(8).fill(value(i)))]));
+
+	it('skips a partly published issue for yesterday’s complete one', async () => {
+		const http = served({ ...issue('2026-03-10', [0, 1, 2, 3], () => 99), ...issue('2026-03-09', Array.from({ length: 16 }, (_, i) => i)) });
+		const f = (await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!;
+		expect(f).toEqual({ issued: '2026-03-09', startDate: '2026-03-09', values: Array.from({ length: 16 }, (_, i) => i) });
+	});
+
+	it('a day missing inside an issue makes it partial too', async () => {
+		const days = Array.from({ length: 16 }, (_, i) => i).filter((i) => i !== 7);
+		const http = served({ ...issue('2026-03-10', days, () => 99), ...issue('2026-03-09', Array.from({ length: 16 }, (_, i) => i)) });
+		expect((await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!.issued).toBe('2026-03-09');
+	});
+
+	it('fails as unavailable (retried soon) when no complete issue is out, rather than merging a partial one', async () => {
+		const http = served({ ...issue('2026-03-10', [0, 1, 2]), ...issue('2026-03-09', [0, 1, 2, 3, 4]) });
+		const err = await fetchGefs(http, [cell(0, 0)], '2026-03-10').catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(FeedUnavailableError);
+		expect((err as Error).message).toBe('the newest forecast (issued 2026-03-10) is still being published: 3 of its 16 days are out');
 	});
 });
 

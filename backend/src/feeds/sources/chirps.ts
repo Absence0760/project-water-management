@@ -15,7 +15,7 @@
 // preliminary product (the ERA5 "rnl" one lags 5–6 days and has no prelim).
 // Units are mm/day; the sea is -9999.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
-import { FeedFormatError } from '../errors.js';
+import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import type { FeedHttp } from '../http.js';
 import { openGrid, readPoints } from './tiff.js';
 
@@ -108,10 +108,19 @@ export interface Forecast {
 }
 
 /**
- * The newest CHIRPS-GEFS forecast issued on `today` or the day before (the
- * day's issue appears around 08:30 UTC), or null when neither is out.
+ * The newest **complete** CHIRPS-GEFS forecast issued on `today` or the day
+ * before (the day's issue appears around 08:30 UTC), or null when neither is
+ * out at all.
+ *
+ * An issue is used whole or not at all. CHC writes its 16 files one after
+ * another over a minute or so, so a fetch can catch the leading days only;
+ * merging those would leave the older issue's tail in the series (two issues
+ * mixed) until the next fetch, a day later. So a partly published issue gives
+ * way to yesterday's complete one, and when neither is complete the fetch
+ * fails as unavailable, which retries in 15 minutes.
  */
 export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = 6): Promise<Forecast | null> {
+	let partial: { issued: string; days: number } | null = null;
 	for (const back of [0, 1]) {
 		const issued = fromEpochDay(toEpochDay(today) - back);
 		const first = await gridMean(http, gefsUrl(issued, issued), cells);
@@ -121,10 +130,14 @@ export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: s
 			concurrency,
 			(day) => gridMean(http, gefsUrl(issued, day), cells)
 		);
-		// A partly published issue: keep the leading days that are out.
 		const values = [first, ...rest];
-		const cut = values.indexOf(null);
-		return { issued, startDate: issued, values: cut === -1 ? values : values.slice(0, cut) };
+		if (values.every((v) => v !== null)) return { issued, startDate: issued, values };
+		partial ??= { issued, days: values.filter((v) => v !== null).length };
+	}
+	if (partial) {
+		throw new FeedUnavailableError(
+			`the newest forecast (issued ${partial.issued}) is still being published: ${partial.days} of its ${GEFS_DAYS} days are out`
+		);
 	}
 	return null;
 }

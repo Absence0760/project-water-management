@@ -98,6 +98,18 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 	return rows[0] ?? null;
 }
 
+/**
+ * The issue date of the forecast a CHIRPS-GEFS feed last merged
+ * (last_meta.issued), read after taking the feed's ingest lock so two
+ * ingests of one feed see each other: the second waits for the first to
+ * commit, then reads what it recorded.
+ */
+export async function lockFeedIssued(db: Db, feedId: string): Promise<string | null> {
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('feed_ingest:' || $1::text, 0))`, [feedId]);
+	const { rows } = await db.query<{ issued: string | null }>(`SELECT last_meta->>'issued' AS issued FROM data_feed WHERE id = $1`, [feedId]);
+	return rows[0]?.issued ?? null;
+}
+
 export type FeedOutcome =
 	| { ok: true; lastDate: string | null; lastValue: number | null; meta: Record<string, string | number> }
 	| { ok: false; error: string };
