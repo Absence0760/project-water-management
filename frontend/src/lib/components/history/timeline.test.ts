@@ -35,6 +35,22 @@ describe('what an item says', () => {
 		expect(revisionLines(rev({ changes: [] }))[0]).toMatch(/doesn’t describe/);
 	});
 
+	// WP-3.3: an application's events name it only once it is decided (every viewer reads the log).
+	it('writes the application workflow without naming a draft', () => {
+		expect(eventLine(ev('scenario.created', { scenarioId: 's', application: true }))).toBe('An applicant started an application');
+		expect(eventLine(ev('scenario.submitted', { scenarioId: 's', application: true, opsSha256: 'x' }))).toBe('An applicant submitted an application');
+		expect(eventLine(ev('scenario.withdrawn', { scenarioId: 's', application: true }))).toBe('An applicant withdrew an application');
+		expect(eventLine(ev('scenario.reopened', { scenarioId: 's', application: true }))).toBe('An applicant reopened an application as a draft');
+		expect(eventLine(ev('run.created', { runId: 'r', scenarioId: 's', application: true }))).toBe('Ran an application');
+		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Raise the dam', outcome: 'approved_with_conditions' }))).toBe(
+			'Decided the application “Raise the dam”: approved with conditions'
+		);
+		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
+		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
+		// A team scenario keeps its name, as before.
+		expect(eventLine(ev('scenario.submitted', { scenarioId: 's', name: 'Upper dam' }))).toBe('Submitted the scenario “Upper dam”');
+	});
+
 	it('writes each event kind as a sentence', () => {
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer' }))).toBe('Added Ben as viewer');
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer', via: 'invite' }))).toBe('Ben joined as viewer (accepted an invite)');

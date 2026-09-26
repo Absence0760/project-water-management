@@ -234,7 +234,11 @@ rows exist for this.
 - ⬜ **Partial recompute** from the first changed day, reusing stored state
   (the workbook's "New data from" logic) — only needed if full runs get slow
   (currently a fraction of a second of engine time for the full record).
-- ⬜ Forecast days flagged (workbook marks them "F") and shown distinctly in charts.
+- ✅ Forecast days flagged (workbook marks them "F") and shown distinctly in charts
+  (roadmap WP-2.12): forecast mode keeps them out of every other figure
+  (model.md §2.4f), a forecast run has its own panel, a labelled band on
+  every daily chart, an `F` column in the daily CSVs, and the farmer's
+  "Next 14 days" when published.
 
 ---
 

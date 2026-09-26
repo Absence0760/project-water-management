@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
-	import { api, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
+	import { api, ROLE_LABEL, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
 	import { upsertInvite } from '$lib/components/auth-extras/invites';
@@ -70,12 +70,12 @@
 			const r = await api.members.add(projectId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${ROLE_LABEL[r.invite.role as Role] ?? r.invite.role} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				const m = r.member;
 				members = [...members.filter((x) => x.userId !== m.userId), m];
 				invites = invites.filter((x) => x.email.toLowerCase() !== m.email.toLowerCase());
-				added = `${m.displayName} added as ${m.role}.`;
+				added = `${m.displayName} added as ${ROLE_LABEL[m.role] ?? m.role}.`;
 			}
 			email = '';
 		} catch (err) {
@@ -168,10 +168,10 @@
 										disabled={busy === m.userId}
 										onchange={(e) => setRole(m, e.currentTarget.value as Role)}
 									>
-										{#each ROLES as r (r)}<option value={r}>{r}</option>{/each}
+										{#each ROLES as r (r)}<option value={r}>{ROLE_LABEL[r]}</option>{/each}
 									</select>
 								{:else}
-									<span class="badge" class:badge-owner={m.role === 'owner'}>{m.role}</span>
+									<span class="badge" class:badge-owner={m.role === 'owner'}>{ROLE_LABEL[m.role] ?? m.role}</span>
 								{/if}
 							</td>
 							<td class="act">
@@ -203,7 +203,7 @@
 			<div class="field">
 				<label for="mem-role">Role</label>
 				<select id="mem-role" bind:value={role}>
-					{#each ROLES as r (r)}<option value={r}>{r}</option>{/each}
+					{#each ROLES as r (r)}<option value={r}>{ROLE_LABEL[r]}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
@@ -213,7 +213,8 @@
 		<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
 		<p class="muted small add-hint">
 			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
-			run it; owners also manage members.
+			run it; owners also manage members. An applicant sees only the published baseline, their own farms and their own
+			applications (a licence applicant or their consultant).
 		</p>
 		<PendingInvites
 			bind:invites

@@ -29,6 +29,10 @@ describe('checkOps', () => {
 			{ op: 'landCover.remove', patchId: 'p' }
 		]);
 		expect(errors).toEqual(['ops[0].nodeId: must be a UUID', 'ops[1].value: must be a UUID', 'ops[2].cropId: must be a UUID', 'ops[3].patchId: must be a UUID']);
+		// Borehole ops (WP-3.9): the new borehole's id and node, and the one removed.
+		const bh = { id: 'bh', nodeId: a, name: 'BH', capacityM3Day: 1, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 };
+		expect(checkOps([{ op: 'borehole.add', borehole: bh }, { op: 'borehole.remove', boreholeId: 'x' }]).errors).toEqual(['ops[0].borehole.id: must be a UUID', 'ops[1].boreholeId: must be a UUID']);
+		expect(checkOps([{ op: 'borehole.add', borehole: { ...bh, id: b } }]).errors).toEqual([]);
 		// A non-id value of transfer.set is not an id.
 		expect(checkOps([{ op: 'transfer.set', transferId: t, field: 'priority', value: 3 }]).errors).toEqual([]);
 	});

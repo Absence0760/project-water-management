@@ -126,7 +126,8 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 /** Farm summary columns only some runs have (a feature's own), labelled when present (WP-1.34). */
 const OPTIONAL_FARM_LABELS: Record<string, string> = {
 	avgGroundwaterM3Day: 'Average groundwater pumped (m³/day)',
-	avgBaseflowDepletionM3Day: 'Average stream depletion (m³/day)'
+	avgBaseflowDepletionM3Day: 'Average stream depletion (m³/day)',
+	avgGroundwaterToDamM3Day: 'Average groundwater pumped into the dam (m³/day)'
 };
 
 const CATCHMENT_ROWS: Record<string, string> = {
@@ -591,6 +592,31 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
  * the WR2012 check, the column guide, warnings. The run details carry the run notes.
  * Fields the engine adds to the summary later still appear (under their key).
  */
+/**
+ * A forecast run's forecast days (WP-2.12, summary.forecast): kept out of
+ * every other block of the sheet, which covers the days before them.
+ */
+export function* forecastLines(f: NonNullable<RunSummary['forecast']>): Generator<string> {
+	yield csvRow(['Forecast days (modelled on forecast rain, not recorded rain; every other figure in this sheet covers the days before them)']);
+	yield csvRow(['First forecast day', f.from]);
+	yield csvRow(['Last forecast day', f.to]);
+	yield csvRow(['Days', f.days]);
+	yield csvRow(['Last observed rain', f.lastObserved]);
+	yield csvRow(['Forecast rain (mm)', f.rainMm]);
+	yield csvRow(['Outlet EWR days at risk', f.outletEwrDaysAtRisk]);
+	yield csvRow(['Farm', 'Lowest dam level (%)', 'Days short', 'Demand (m³)', 'Supplied (m³)', 'Supplied (% of demand)']);
+	for (const p of f.perFarm) {
+		yield csvRow([
+			p.name,
+			p.minDamPct === null ? null : p.minDamPct * 100,
+			p.deficitDays,
+			p.demandM3,
+			p.suppliedM3,
+			p.suppliedFraction === null ? null : p.suppliedFraction * 100
+		]);
+	}
+}
+
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
 	yield csvRow(['Project', meta.projectName]);
 	yield csvRow(['Run', meta.runLabel]);
@@ -627,10 +653,19 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
 	yield '';
 
+	if (summary.forecast) {
+		yield* forecastLines(summary.forecast);
+		yield '';
+	}
+
 	yield* curtailmentLines(summary.curtailment);
 	if (summary.landCover) {
 		yield '';
 		yield* landCoverLines(summary.landCover);
+	}
+	if (summary.groundwaterAnnualUse?.length) {
+		yield '';
+		yield* groundwaterAnnualLines(summary.groundwaterAnnualUse);
 	}
 	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
 		yield '';
@@ -1040,6 +1075,21 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, r.ewrChargeM3Day, r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, r.uncurtailedChargeM3Day]);
 	}
 	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+}
+
+/**
+ * Groundwater abstraction per farm or user and water year (engine ≥ 0.36.0,
+ * WP-3.9): pumped, into the dam, stream depletion, the boreholes' annual caps
+ * and the GN 538 ceiling for context, then one row per borehole. Only in runs
+ * with boreholes. The app shows modelled use against the caps; it never
+ * decides legality.
+ */
+export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwaterAnnualUse']>): Generator<string> {
+	yield csvRow(['Groundwater abstraction by water year (modelled use against the caps; GN 538 ceiling for context, not a decision on legality)']);
+	yield csvRow(['Farm or user', 'Water year', 'Days', 'Pumped (m³)', 'Into the dam (m³)', 'Stream depletion (m³)', 'Annual caps (m³)', 'GN 538 ceiling (m³/a)']);
+	for (const r of rows) yield csvRow([r.name, r.label, r.days, r.abstractionM3, r.toDamM3, r.streamDepletionM3, r.annualCapM3, r.gaLimitM3]);
+	yield csvRow(['Farm or user', 'Water year', 'Borehole', 'Pumped (m³)', 'Annual cap (m³)', 'Cap reached']);
+	for (const r of rows) for (const b of r.boreholes) yield csvRow([r.name, r.label, b.name, b.abstractionM3, b.annualCapM3, b.annualCapM3 === null ? null : b.capReached ? 'yes' : 'no']);
 }
 
 /**

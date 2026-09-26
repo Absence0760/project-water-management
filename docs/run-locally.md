@@ -90,7 +90,10 @@ analyst owns Sandspruit and shares it with demo as a viewer. Two demo
 to Vaalbank (Sandspruit), `farmer2@example.com` to Rietspruit (Sandspruit) and
 Kareebos (Droëvlei), same password; each reads their farm's published
 figures through `GET /projects/:id/farm/:nodeId` (the farm page is
-WP-2.6's). To try a **share link** (WP-2.3 phase 2), sign in as the owner
+WP-2.6's). A demo **applicant** (WP-3.3), `applicant@example.com`, is a
+contributor on Sandspruit, linked to Klipdrift, with one submitted
+application doubling its dam: sign in as them for the Applicant view, or as
+analyst@ for Sandspruit's **Applications** tab to decide it. To try a **share link** (WP-2.3 phase 2), sign in as the owner
 (analyst@ for Sandspruit, demo@ for the team's catchments), make one on the
 Overview's Share links panel and open it in a private window; none is seeded,
 since the URL is shown only when it is made. Every name and
@@ -247,8 +250,11 @@ run for the local demo user (details in `scripts/wbt-import/README.md`):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install openpyxl
-PYTHON=.venv/bin/python pnpm seed:demo
+pnpm seed:demo
 ```
+
+The seed uses `$PYTHON` if set, else the checkout's `.venv/bin/python`, else
+`python3`.
 
 The seed picks the one b023 workbook in `Original/` that isn't `Blank_*`. If
 there are several, set `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm`. The

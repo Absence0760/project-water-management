@@ -175,4 +175,16 @@ describe('validateModel', () => {
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a farm, not a gauge.']);
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, densityPct: 2 }] }))).toEqual(['Land cover on "A": area can\'t be negative, cover and reductions are 0–100%.']);
 	});
+
+	it('checks individual boreholes as the API does (WP-3.9)', () => {
+		const g = node('g', 'Gauge', null);
+		const b = { id: 'b', nodeId: 'a', name: 'BH1', capacityM3Day: 100, annualCapM3: null, mode: 'supplemental' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0 };
+		const nodes = [g, node('a', 'A', 'g')];
+		expect(messages(model(nodes, { boreholes: [b] }))).toEqual([]);
+		expect(messages(model(nodes, { boreholes: [{ ...b, nodeId: 'g' }] }))).toEqual(['Borehole "BH1" on "Gauge": a gauge can\'t have boreholes.']);
+		expect(messages(model(nodes, { boreholes: [{ ...b, nodeId: 'x' }] }))).toEqual(['A borehole refers to a deleted node.']);
+		expect(messages(model(nodes, { boreholes: [{ ...b, depletionFactor: 2 }] }))).toEqual([
+			'Borehole "BH1" on "A": capacity and annual cap can\'t be negative; the emergency level and depletion are 0–100%.'
+		]);
+	});
 });

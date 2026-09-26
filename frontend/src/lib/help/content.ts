@@ -293,14 +293,14 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'borehole',
 		term: 'Boreholes (groundwater)',
-		short: 'Groundwater a farm or other user pumps, up to a daily capacity, by a rule: supplemental, primary or drought.',
-		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Drought — supplemental, but only while the dam holds less than its trigger share of capacity at the start of the day (a farm with a dam only).\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',
+		short: 'Groundwater a farm or other user pumps, up to a daily capacity and an annual cap, by a mode: supplemental, primary or emergency.',
+		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river. A farm or user can have a combined borehole capacity and any number of individual boreholes, each with its own capacity, annual cap, mode, target and depletion share.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Emergency (drought) — supplemental, but only while the dam holds less than its level at the start of the day (a farm with a dam only).\n• None — kept on record, never pumps.\n\nA borehole can pump straight to the crop or into the farm dam (primary keeps the dam topped up, supplemental adds what the dam lacks for the day, emergency refills it while it is low); water pumped into the dam never makes it spill. An annual cap stops a borehole once it has pumped that much in a water year (October to September); it starts again on 1 October.\n\nThe results show each farm’s use per water year against its caps and, for context, the GN 538 general authorisation’s ceiling of 40 000 m³/a per property (what a property may take under it depends on its size). The app never decides whether a use is lawful.\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',
 		units: 'm³/day',
 		category: 'network',
-		aliases: ['groundwater', 'borehole', 'well', 'aquifer', 'pumping'],
-		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'summary.avgGroundwaterM3Day'],
+		aliases: ['groundwater', 'borehole', 'well', 'aquifer', 'pumping', 'annual cap', 'GN 538', 'general authorisation', 'sustainable yield'],
+		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day'],
 		related: ['stream-depletion', 'element-farm', 'element-user'],
-		source: 'docs/model.md §2.7d; roadmap WP-1.34'
+		source: 'docs/model.md §2.7d; roadmap WP-1.34, WP-3.9; GN 538 (2016)'
 	},
 	{
 		id: 'stream-depletion',

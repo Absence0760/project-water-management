@@ -27,11 +27,19 @@ export class ProjectNoteCounts {
 	}
 }
 
-const byProject = new Map<string, ProjectNoteCounts>();
+// One project's counts at a time: the workspace shows one project, so moving
+// to another drops the last one (coming back loads fresh counts rather than
+// the ones from the first visit), and the cache never grows with the number
+// of projects opened in a session.
+let current: ProjectNoteCounts | null = null;
 
-/** The shared counts for a project (one instance per project for the session). */
+/** The shared counts for a project; asking for another project replaces them. */
 export function noteCounts(projectId: string): ProjectNoteCounts {
-	let c = byProject.get(projectId);
-	if (!c) byProject.set(projectId, (c = new ProjectNoteCounts(projectId)));
-	return c;
+	if (current?.projectId !== projectId) current = new ProjectNoteCounts(projectId);
+	return current;
+}
+
+/** Forget the cached counts (on sign-out, so the next account never sees this one's). */
+export function clearNoteCounts(): void {
+	current = null;
 }

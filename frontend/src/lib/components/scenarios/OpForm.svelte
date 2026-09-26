@@ -5,7 +5,7 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
-	import { LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { BOREHOLE_MODES, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
 	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
@@ -28,6 +28,8 @@
 
 	const nodes = $derived(input.model.nodes);
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
+	// Boreholes (WP-3.9) supply farms and other users.
+	const pumpers = $derived(nodes.filter((n) => n.kind !== 'gauge'));
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
 	const node = $derived(nodes.find((n) => n.id === d.nodeId));
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));
@@ -209,6 +211,22 @@
 					{#each input.model.transfers as t, i (t.id)}<option value={t.id}>{i + 1}: {nodeName(t.fromNodeId)} → {nodeName(t.toNodeId)}</option>{/each}
 				</select>
 			</div>
+		{:else if d.kind === 'borehole.add'}
+			<div class="field">
+				<label for="op-node">Farm or user</label>
+				<select id="op-node" bind:value={d.nodeId}>
+					<option value="" disabled>Pick a farm or user</option>
+					{#each pumpers as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+				</select>
+			</div>
+		{:else if d.kind === 'borehole.remove'}
+			<div class="field">
+				<label for="op-borehole">Borehole</label>
+				<select id="op-borehole" bind:value={d.boreholeId}>
+					<option value="" disabled>Pick a borehole</option>
+					{#each input.model.boreholes ?? [] as b (b.id)}<option value={b.id}>{nodeName(b.nodeId)}: {b.name}</option>{/each}
+				</select>
+			</div>
 		{:else if d.kind === 'landCover.remove'}
 			<div class="field">
 				<label for="op-patch">Land-cover patch</label>
@@ -369,6 +387,44 @@
 			<div class="field">
 				<label for="op-density">Condensed cover (%)</label>
 				<input id="op-density" type="text" inputmode="decimal" bind:value={d.densityPct} />
+			</div>
+		</div>
+	{:else if d.kind === 'borehole.add'}
+		<div class="form-row">
+			<div class="field">
+				<label for="op-bh-name">Borehole name</label>
+				<input id="op-bh-name" type="text" maxlength="200" bind:value={d.bhName} />
+			</div>
+			<div class="field">
+				<label for="op-bh-cap">Capacity (m³/day)</label>
+				<input id="op-bh-cap" type="text" inputmode="decimal" bind:value={d.bhCapacityM3Day} />
+			</div>
+			<div class="field">
+				<label for="op-bh-annual">Annual cap (m³/a)</label>
+				<input id="op-bh-annual" type="text" inputmode="decimal" placeholder="empty for no cap" bind:value={d.bhAnnualCapM3} />
+			</div>
+			<div class="field">
+				<label for="op-bh-mode">Mode</label>
+				<select id="op-bh-mode" bind:value={d.bhMode}>
+					{#each BOREHOLE_MODES as m (m)}<option value={m}>{m}</option>{/each}
+				</select>
+			</div>
+			{#if d.bhMode === 'emergency'}
+				<div class="field">
+					<label for="op-bh-level">Runs below (% of dam)</label>
+					<input id="op-bh-level" type="text" inputmode="decimal" bind:value={d.bhEmergencyPct} />
+				</div>
+			{/if}
+			<div class="field">
+				<label for="op-bh-target">Pumps into</label>
+				<select id="op-bh-target" bind:value={d.bhTarget}>
+					<option value="direct">The crop or user</option>
+					<option value="dam">The farm dam</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="op-bh-dep">Stream depletion (% of pumping)</label>
+				<input id="op-bh-dep" type="text" inputmode="decimal" bind:value={d.bhDepletionPct} />
 			</div>
 		</div>
 	{:else if d.kind === 'series.scale'}

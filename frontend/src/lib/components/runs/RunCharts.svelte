@@ -14,6 +14,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { cachedSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from './flowSeries';
+	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
 
@@ -30,7 +31,8 @@
 		farmsLead,
 		modelTail,
 		record,
-		deeperLead
+		deeperLead,
+		forecastFrom = null
 	}: {
 		projectId: string;
 		runId: string;
@@ -52,7 +54,10 @@
 		record?: Snippet;
 		/** Opening Dig deeper, before the explorer (self-checks). */
 		deeperLead?: Snippet;
+		/** A forecast run's first forecast day (WP-2.12): every daily chart shades the days from it. */
+		forecastFrom?: string | null;
 	} = $props();
+	const band = $derived(forecastBand(forecastFrom));
 
 	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
 	const get = (key: string, nodeId: string | null = null): Promise<DailySeries> =>
@@ -200,6 +205,7 @@
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
+				{band}
 				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
 			/>
 		{/if}
@@ -236,7 +242,7 @@
 				<div class="pair">
 					<div>
 						{#if storageSeries.length}
-							<LineChart title="Dam storage, % of capacity" unit="%" height={240} series={storageSeries} recentDays={RECENT} recentLabel="Last 3 years" />
+							<LineChart title="Dam storage, % of capacity" unit="%" height={240} series={storageSeries} recentDays={RECENT} recentLabel="Last 3 years" {band} />
 						{:else if farmLoading}
 							<div class="chart-ph" style:height="310px" role="status">Loading…</div>
 						{:else}
@@ -245,7 +251,7 @@
 					</div>
 					<div>
 						{#if supplySeries.length}
-							<LineChart title="Supply vs demand" unit="m³/day" height={240} series={supplySeries} recentDays={RECENT} recentLabel="Last 3 years" />
+							<LineChart title="Supply vs demand" unit="m³/day" height={240} series={supplySeries} recentDays={RECENT} recentLabel="Last 3 years" {band} />
 						{:else}
 							<div class="chart-ph" style:height="310px" role="status">{farmLoading ? 'Loading…' : 'No demand series.'}</div>
 						{/if}
@@ -272,6 +278,7 @@
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
+				{band}
 				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
@@ -344,7 +351,7 @@
 
 	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
 		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
-		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} />
+		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} {band} />
 	</section>
 </div>
 

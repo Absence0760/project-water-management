@@ -167,3 +167,35 @@ describe('signoff under RLS', () => {
 		expect(rows).toEqual([]);
 	});
 });
+
+describe('forecast runs (WP-2.12)', () => {
+	it('refuses to sign off a forecast run (409, and GET says why); an ordinary run of the same data is signed', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Sign-off forecast' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id);
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+		const rain = Array.from({ length: 60 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+		const forecast = Array.from({ length: 14 }, (_, i) => (i % 4 === 0 ? 8 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2020-03-01', values: forecast })).status).toBe(200);
+
+		const f = await owner.call('POST', `/projects/${pid}/runs`, { label: 'forecast', forecast: true });
+		expect(f.status).toBe(201);
+		const shown = await owner.call('GET', path(f.body.run.id, pid));
+		expect(shown.body.cannotSign).toMatch(/^a forecast run cannot be signed off/);
+		const refused = await owner.call('POST', path(f.body.run.id, pid), body(shown.body.statementSha256));
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/^a forecast run cannot be signed off/);
+		expect((await owner.call('GET', path(f.body.run.id, pid))).body.signoffs).toEqual([]);
+
+		// Positive control: the ordinary run of the same data is signed.
+		const o = await owner.call('POST', `/projects/${pid}/runs`, { label: 'ordinary' });
+		expect(o.status).toBe(201);
+		const ordinary = await owner.call('GET', path(o.body.run.id, pid));
+		expect(ordinary.body.cannotSign).toBeNull();
+		expect((await owner.call('POST', path(o.body.run.id, pid), body(ordinary.body.statementSha256))).status).toBe(201);
+	});
+});

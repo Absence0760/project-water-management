@@ -249,7 +249,7 @@ sliding back into the page chunk.
    write. `saveModel` (`model/store.ts`) is set-based: one statement clears the
    way (deletes and temporary names), then one upsert per table takes the
    whole row list as a jsonb parameter (`jsonb_populate_recordset` against the
-   table's row type), so a save is at most eight statements whatever the
+   table's row type), so a save is at most nine statements whatever the
    model's size. `loadModel` builds the document in one statement
    (`json_agg` per table), and the history snapshots load settings and model
    together. A whole `PUT` is ~18 round trips, down from ~42 for a 3-node model

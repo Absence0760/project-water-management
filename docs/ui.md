@@ -53,6 +53,7 @@ Tabs follow the modelling workflow:
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
 | Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
+| Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
@@ -62,11 +63,12 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip |
-| farmer, none | Overview only (a farmer is redirected to `/farm/:id` anyway) |
+| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
+| contributor, farmer, none | Overview only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
-inputs), so adding a tab is one line; a tab the table doesn't know counts as
+inputs; `assess`: the assessors' Applications list, owners and editors
+only), so adding a tab is one line; a tab the table doesn't know counts as
 an input, and a tab the page doesn't render is dropped. Overview can never be
 hidden. Whether a viewer starts with the inputs shown is one constant,
 `VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT` (`false`; a client question). The
@@ -307,7 +309,8 @@ turns a project document into a new project through `POST /projects/import`:
    (`import/projectFile.ts`); a file that isn't JSON, isn't a project document
    or is over the 5 MB cap is refused here, before anything is sent.
 2. **Preview** (`ImportPreview.svelte`): the importer's notes first (for
-   example, a file with no time series), then the name (editable, prefilled
+   example, a file with no time series, or an export's notes, which aren't
+   imported and aren't sent), then the name (editable, prefilled
    from the file), *Belongs to* (only when you're a member or admin of a team;
    preselected when the list is filtered to one), what's in the file
    (farms, gauges and other water users, crops and planted areas, transfers,
@@ -566,6 +569,18 @@ does. The intro states the thresholds the API returns.
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
+  one-node form, farms and other users: always the note **Low confidence:
+  Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
+  report.** **+ Add borehole** adds one (supplemental, straight to the crop, no
+  capacity or cap yet); each has a **Name**, **Capacity** (m³/day), **Annual
+  cap** (m³/a, empty = none), **Mode** (supplemental / primary / emergency /
+  none; emergency only with a dam), **Runs below** (% of dam, emergency only),
+  **Pumps into** (the crop or the farm dam; farms only, the dam only with one)
+  and **Stream depletion** (% of pumping). Below them: the caps' total and the
+  GN 538 context (up to 40 000 m³/a per property, depending on its size; the
+  app never decides legality). Read-only for viewers; fields stack on a phone.
+  Removing the node asks about its boreholes too.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -1305,6 +1320,32 @@ run's report to chosen members every week or month.
   list. It is sticky, and a long list scrolls inside its panel (at least
   7.5rem tall) so the rail fits the window without clipping. Narrower, the
   rail stacks above the results.
+- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
+  When the project has a forecast series (`rain_forecast_mm`, uploaded or
+  fed by CHIRPS-GEFS), the run bar has **Run forecast** beside Run model: the
+  record as an ordinary run, then the days after the last recorded rain on
+  forecast rain, shown apart. The project keeps one forecast run (a new one
+  replaces the last unless it is pinned, published or cited). **Run model**
+  itself now stops at the last recorded rain, so an ordinary run never
+  contains forecast days. A forecast run carries a **Forecast** tag in the
+  list and a "Forecast from …" badge in its header linking to its own panel
+  (`forecast/ForecastPanel.svelte`, its own chunk, `#res-forecast`, the menu
+  entry **Forecast** right after Summary): which days, from how much forecast
+  rain after which recorded day; per farm the lowest dam level expected, the
+  days short expected and the share of demand supplied, farms short on a
+  forecast day first; and the outlet's EWR days at risk, counts only. No
+  misleading certainty (the persona rules): every figure is "expected" or
+  "about", in whole percent (`forecast/forecast.ts`, which a test holds to
+  never saying "will"), under a "Modelled on forecast rain, not measured"
+  tag, with a line saying every other figure of the run covers the days
+  before the forecast only. Every daily chart of a forecast run (EWR vs
+  outflow, the hydrograph, dam storage, supply vs demand, the explorer)
+  shades the forecast days with a hatched band and a dashed edge, labelled
+  "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
+  option), so the band never rests on colour alone; the figure carries
+  `data-band-from`. The flow-duration curve has no time axis, so no band.
+  The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
+  flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
@@ -1509,7 +1550,15 @@ run's report to chosen members every week or month.
   over that area (`RunSummaryView.svelte`).
 - **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
   a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes (`RunSummaryView.svelte`).
+  stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
+  (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
+  by water year**: the GN 538 context note (up to 40 000 m³/a per property;
+  modelled use only, the app never decides legality), the low-confidence note,
+  then per farm or user the mean pumped per year (partial years weighted by
+  their days), the most in one year, the annual caps, how many years pumped
+  above the GN 538 ceiling (flagged) and how many reached a cap; and per node
+  a collapsed table of every water year: days, pumped, into the dam, stream
+  depletion and each borehole's volume (of its cap, marked when reached).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run
@@ -1871,6 +1920,51 @@ see it; farmers never reach the workspace.
 - e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
   viewer without names, phone cards, axe).
 
+## Applications (WP-3.3)
+
+A **contributor** (a licence applicant or their consultant; the Members
+panel calls the role "Applicant") never sees the workspace's tabs, which the
+API refuses them. `/projects/:id` shows them the **Applicant view**
+(`lib/components/scenarios/ApplicantView.svelte`, a lazy chunk; the page
+detects the role from the project list after the `403`, as it does for a
+farmer): an "Applicant view" badge, the published baseline (its date, and
+that other farms show only by an anonymous name), links to their own farms'
+farm view if they have links, and the Scenarios tab in applicant mode
+("Your applications"; `?scenario=<id>` selects one):
+
+- **New application**: a name only; it starts on the current publication's
+  run. With nothing published, a note says so and there is no form.
+- **The editor** is the Scenarios editor, with the base from
+  `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
+  values blank, so an op on one isn't described "from" a value). Their own
+  farms are the proposer's nodes, set by the server (no checkbox list); no
+  rebase. **Run scenario** runs it; instead of the comparison, a note says
+  the assessors compare each run with the baseline (an applicant view of
+  results is a follow-up).
+- **The Application panel** (`ApplicationPanel.svelte`) under the changes:
+  where it stands ("Draft: only you and the people you share it with can see
+  it", "Submitted: the assessors can see it, and its changes are frozen", …),
+  the owner's **Submit to the assessors** (confirmed; disabled while a change
+  doesn't apply), **Withdraw** and **Reopen as a draft**, the decision once
+  made (outcome, by whom, when, the reasons), and **Shared with**: the
+  people who read it, the owner's share-by-email form, and Remove / Leave.
+
+The assessors (owners and editors) get an **Applications** tab
+(`?tab=applications`): every submitted, withdrawn or decided application
+(drafts stay with the applicant), as a table of name (a link to it in the
+Scenarios tab), applicant (and how many they shared it with), status
+("Awaiting a decision", or the outcome), submitted date, changes and runs,
+sortable newest first or by status (awaiting a decision first, the
+longest-waiting on top; `applications.ts`), with loading, error ("Retry")
+and empty ("No applications submitted.") states. In the Scenarios tab an
+application shows an "Application" tag and "… application by <name>" in the
+list; only its owner edits it, and an editor who isn't its owner gets the
+**Decide** form (outcome radios, reasons and conditions, **Record the
+decision**; final). Evidence packs (WP-3.14) will be linked from the list.
+
+e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
+the assessor's decision, the empty list, axe in light and dark).
+
 ## History (`?tab=history`)
 
 WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
@@ -1910,7 +2004,9 @@ March") is kept against what it is about.
     each naming and linking to its target, and the project-level notes
     button.
   One `GET /notes/counts` per project feeds every badge
-  (`counts.svelte.ts`), refreshed after any change.
+  (`counts.svelte.ts`), refreshed after any change. Only the open project's
+  counts are kept: opening another project drops them (coming back loads
+  them again), and signing out forgets them.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
   hidden from everyone, kept for the audit trail). On a farm, *Also show to
@@ -2145,7 +2241,16 @@ published.
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
-  CSV download and the disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+  CSV download and the disclaimer. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  wording in `farm/forecastCard.ts`) comes after "Looking back" only when
+  the WUA published a forecast run: a "Forecast" kicker and a dashed edge
+  set it apart from the cards about what happened; "Lowest dam level
+  expected: about 38 % around 20 Jan" (no dam, no line), "You may be short
+  on 3 of the 14 days" (or that the model doesn't expect a short day), and
+  the forecast's own dates with "Forecasts change, and this is worked out
+  by the model, not a promise. Only a notice from your WUA is a
+  restriction." A forecast made more than 3 days ago says how old it is
+  first. The dam page shows the same card under its chart.
 - **Wording.** Every visible string and number rule lives in pure modules
   under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
   `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture

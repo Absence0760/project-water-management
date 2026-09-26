@@ -196,6 +196,14 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// The application workflow (WP-3.3, 045_contributor_scope). An application's
+	// events carry `application: true` and no name until it is decided.
+	| 'scenario.submitted'
+	| 'scenario.withdrawn'
+	| 'scenario.reopened'
+	| 'scenario.decided'
+	| 'scenario.shared'
+	| 'scenario.unshared'
 	| 'restore';
 
 /**
@@ -332,7 +340,7 @@ export async function relinkCandidates(db: Db, projectId: string, farmIds: strin
 			e.subject->>'nodeId' AS "nodeId", n.name AS "nodeName"
 		 FROM audit_event e
 		 JOIN node n ON n.project_id = e.project_id AND n.id::text = e.subject->>'nodeId' AND n.kind = 'farm'
-		 JOIN project_member m ON m.project_id = e.project_id AND m.user_id::text = e.subject->>'userId' AND m.role = 'farmer'
+		 JOIN project_member m ON m.project_id = e.project_id AND m.user_id::text = e.subject->>'userId' AND m.role IN ('farmer', 'contributor')
 		 JOIN app_user u ON u.id = m.user_id
 		 WHERE e.project_id = $1 AND e.kind = 'farmer.unlinked' AND e.subject->>'nodeId' = ANY($2::text[])
 		   AND NOT EXISTS (SELECT 1 FROM farm_link fl WHERE fl.node_id = n.id AND fl.user_id = m.user_id)

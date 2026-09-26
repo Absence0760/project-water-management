@@ -24,12 +24,14 @@ export function linkedNote(count: number): string | null {
  * it. `farmers` is null when the farmer list couldn't be loaded: a farm then
  * always asks, so an owner is never left unwarned.
  */
-export function removeMessage(o: { name: string; isFarm: boolean; areas: number; transfers: number; cover: number; farmers: number | null }): string | null {
+export function removeMessage(o: { name: string; isFarm: boolean; areas: number; transfers: number; cover: number; boreholes?: number; farmers: number | null }): string | null {
 	const unknownFarmers = o.isFarm && o.farmers === null;
 	const farmers = o.farmers ?? 0;
-	if (!o.areas && !o.transfers && !o.cover && !farmers && !unknownFarmers) return null;
+	const boreholes = o.boreholes ?? 0;
+	if (!o.areas && !o.transfers && !o.cover && !boreholes && !farmers && !unknownFarmers) return null;
 	const parts = [`${o.areas} crop area(s)`, `${o.transfers} transfer(s)`];
 	if (o.cover) parts.push(`${o.cover} land-cover patch(es)`);
+	if (boreholes) parts.push(`${boreholes} borehole(s)`);
 	let text = `Remove "${o.name}"? Its ${parts.slice(0, -1).join(', ')} and ${parts.at(-1)} are removed too; nodes draining into it are re-routed downstream.`;
 	if (farmers) text += ` ${n(farmers, 'farmer linked to it loses', 'farmers linked to it lose')} access when you save.`;
 	else if (unknownFarmers) text += ' Any farmers linked to it lose access when you save.';

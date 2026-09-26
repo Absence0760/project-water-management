@@ -34,7 +34,8 @@ function chain(n: number): ProjectModel {
 			enabled: true,
 			priority: i
 		})),
-		landCover: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, coverClass: 'pine', areaKm2: 0.5, densityPct: 0.5, factors: null }))
+		landCover: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, coverClass: 'pine', areaKm2: 0.5, densityPct: 0.5, factors: null })),
+		boreholes: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, name: 'BH', capacityM3Day: 10, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }))
 	} as unknown as ProjectModel;
 }
 
@@ -110,6 +111,11 @@ describe('model store', () => {
 			landCover: [
 				{ id: crypto.randomUUID(), nodeId: farm.id, coverClass: 'pine', areaKm2: 1.5, densityPct: 0.6, factors: null },
 				{ id: crypto.randomUUID(), nodeId: farm.id, coverClass: 'other', areaKm2: 0.2, densityPct: 1, factors: { mar: 0.33, lowFlow: 0.5 } }
+			],
+			// Individual boreholes (WP-3.9), out of name order on purpose.
+			boreholes: [
+				{ id: crypto.randomUUID(), nodeId: town.id, name: 'BH2', capacityM3Day: 12.5, annualCapM3: null, mode: 'primary', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0.25 },
+				{ id: crypto.randomUUID(), nodeId: town.id, name: 'BH1', capacityM3Day: 40, annualCapM3: 9000, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -139,6 +145,7 @@ describe('model store', () => {
 		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0]]);
 		// By node, then cover class: 'other' before 'pine'.
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
+		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});
@@ -149,6 +156,8 @@ describe('model store', () => {
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 		const got = await withUser(u.id, (db) => loadSettingsAndModel(db, projectId));
 		expect(got.model).toEqual({ nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] });
+		// No boreholes key at all when there are none, so older documents read back unchanged.
+		expect('boreholes' in got.model).toBe(false);
 		expect((got.settings as { apanMm: number[] }).apanMm).toEqual(monthly(150));
 		// Another user's project: nothing visible, no settings.
 		const stranger = await signUp('Stranger');
@@ -169,16 +178,17 @@ describe('model store', () => {
 			[big, bigModel]
 		] as const) {
 			counts.push(await countStatements(u.id, (db) => saveModel(db, projectId, m)));
-			const next = { ...m, nodes: m.nodes.slice(0, -1), transfers: m.transfers.slice(0, -1), cropAreas: m.cropAreas.slice(0, -1), landCover: m.landCover!.slice(0, -1) };
+			const next = { ...m, nodes: m.nodes.slice(0, -1), transfers: m.transfers.slice(0, -1), cropAreas: m.cropAreas.slice(0, -1), landCover: m.landCover!.slice(0, -1), boreholes: m.boreholes!.slice(0, -1) };
 			counts.push(await countStatements(u.id, (db) => saveModel(db, projectId, next)));
 		}
-		expect(counts[0]).toBeLessThanOrEqual(8);
+		expect(counts[0]).toBeLessThanOrEqual(9);
 		expect(new Set(counts)).toEqual(new Set([counts[0]]));
 		const got = await withUser(u.id, (db) => loadModel(db, big));
 		expect(got.nodes).toHaveLength(60);
 		expect(got.transfers).toHaveLength(58);
 		expect(got.cropAreas).toHaveLength(59);
 		expect(got.landCover).toHaveLength(59);
+		expect(got.boreholes).toHaveLength(59);
 		expect(got.nodes.filter((n) => n.downstreamNodeId === bigModel.nodes[0]!.id)).toHaveLength(59);
 	});
 

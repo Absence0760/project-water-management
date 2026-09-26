@@ -125,7 +125,7 @@ describe('accepting a farmer invite', () => {
 		// The invite is gone, and the farmer shows as active.
 		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers;
 		expect(listed.filter((f: { email: string }) => f.email === email)).toEqual([
-			{ status: 'active', userId: uid, email, displayName: 'New Farmer', nodeIds: [farmA.id, farmC.id].sort() }
+			{ status: 'active', userId: uid, email, displayName: 'New Farmer', role: 'farmer', nodeIds: [farmA.id, farmC.id].sort() }
 		]);
 		// History: they joined, and each link says it came from the invite.
 		const events = await rowsAs<{ kind: string; subject: Record<string, unknown> }>(

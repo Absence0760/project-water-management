@@ -36,12 +36,22 @@ const MODEL_JSON = `json_build_object(
 		FROM transfer WHERE project_id = $1) r), '[]'),
 	'landCover', coalesce((SELECT json_agg(r ORDER BY r."nodeId", r."coverClass", r.id) FROM (
 		SELECT id, node_id AS "nodeId", cover_class AS "coverClass", area_km2 AS "areaKm2", density_pct AS "densityPct", factors
-		FROM land_cover WHERE project_id = $1) r), '[]')
+		FROM land_cover WHERE project_id = $1) r), '[]'),
+	'boreholes', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
+		SELECT id, node_id AS "nodeId", name, capacity_m3_day AS "capacityM3Day", annual_cap_m3 AS "annualCapM3", mode,
+			emergency_below_pct AS "emergencyBelowPct", target, depletion_factor AS "depletionFactor"
+		FROM borehole WHERE project_id = $1) r)
 )`;
+
+/** Individual boreholes (WP-3.9) are in the document only when there are any, so older documents read back unchanged. */
+function withoutEmptyBoreholes(model: ProjectModel): ProjectModel {
+	if (!model.boreholes) delete model.boreholes;
+	return model;
+}
 
 export async function loadModel(db: Db, projectId: string): Promise<ProjectModel> {
 	const { rows } = await db.query<{ model: ProjectModel }>(`SELECT ${MODEL_JSON} AS model`, [projectId]);
-	return rows[0]!.model;
+	return withoutEmptyBoreholes(rows[0]!.model);
 }
 
 /** The project's stored settings (unmerged; undefined when the project isn't visible) and its model, in one round trip. */
@@ -50,7 +60,7 @@ export async function loadSettingsAndModel(db: Db, projectId: string): Promise<{
 		`SELECT (SELECT settings FROM project WHERE id = $1) AS settings, ${MODEL_JSON} AS model`,
 		[projectId]
 	);
-	return { settings: rows[0]!.settings ?? undefined, model: rows[0]!.model };
+	return { settings: rows[0]!.settings ?? undefined, model: withoutEmptyBoreholes(rows[0]!.model) };
 }
 
 /**
@@ -59,8 +69,8 @@ export async function loadSettingsAndModel(db: Db, projectId: string): Promise<{
  * Upserts only touch rows of *this* project — an id that exists in another
  * project is a conflict, never a hijack.
  *
- * Set-based: at most eight statements whatever the model's size, not one per
- * node, crop, transfer and land-cover patch (a 3-node save was 25 round trips
+ * Set-based: at most nine statements whatever the model's size, not one per
+ * node, crop, transfer, land-cover patch and borehole (a 3-node save was 25 round trips
  * of its own, and every round trip waits its turn on a busy API; issue #41).
  * Each row list goes as one jsonb parameter, read back with
  * jsonb_populate_recordset against the table's own row type, so every column
@@ -82,6 +92,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	await db.query(
 		`WITH t AS (DELETE FROM transfer WHERE project_id = $1 AND NOT (id = ANY($4::uuid[]))),
 			lc AS (DELETE FROM land_cover WHERE project_id = $1),
+			bh AS (DELETE FROM borehole WHERE project_id = $1),
 			ca AS (DELETE FROM crop_area WHERE project_id = $1),
 			cd AS (DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($3::uuid[]))),
 			cr AS (UPDATE crop SET name = '~' || id::text WHERE project_id = $1 AND id = ANY($3::uuid[])),
@@ -229,6 +240,24 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			factors: p.factors
 		})),
 		'land cover'
+	);
+	await upsertAll(
+		`INSERT INTO borehole (id, project_id, node_id, name, capacity_m3_day, annual_cap_m3, mode, emergency_below_pct, target, depletion_factor)
+		 SELECT id, $1, node_id, name, capacity_m3_day, annual_cap_m3, mode, emergency_below_pct, target, depletion_factor
+		 FROM jsonb_populate_recordset(NULL::borehole, $2::jsonb)
+		 ON CONFLICT (id) DO NOTHING`,
+		(m.boreholes ?? []).map((b) => ({
+			id: b.id,
+			node_id: b.nodeId,
+			name: b.name,
+			capacity_m3_day: b.capacityM3Day,
+			annual_cap_m3: b.annualCapM3,
+			mode: b.mode,
+			emergency_below_pct: b.emergencyBelowPct,
+			target: b.target,
+			depletion_factor: b.depletionFactor
+		})),
+		'borehole'
 	);
 	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);
 }

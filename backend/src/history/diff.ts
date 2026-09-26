@@ -2,7 +2,7 @@
 // change touched, and what a series change did day by day. No I/O.
 import { fromEpochDay, toEpochDay, type ProjectModel } from '@water-management/engine';
 
-/** What a node is, as far as a change to it goes: its own row, crop areas, land cover and transfers at either end. */
+/** What a node is, as far as a change to it goes: its own row, crop areas, land cover, boreholes and transfers at either end. */
 function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	const facts = new Map<string, unknown[]>();
 	const add = (id: string, x: unknown) => {
@@ -13,6 +13,7 @@ function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	for (const n of m?.nodes ?? []) add(n.id, ['node', n]);
 	for (const a of m?.cropAreas ?? []) if (a.areaM2 > 0) add(a.nodeId, ['area', a.cropId, a.areaM2]);
 	for (const p of m?.landCover ?? []) add(p.nodeId, ['cover', p]);
+	for (const b of m?.boreholes ?? []) add(b.nodeId, ['borehole', b]);
 	for (const t of m?.transfers ?? []) {
 		add(t.fromNodeId, ['transfer', t]);
 		add(t.toNodeId, ['transfer', t]);

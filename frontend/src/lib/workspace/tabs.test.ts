@@ -10,8 +10,8 @@ import {
 	type TabId
 } from './tabs';
 
-const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'farmer', null, undefined];
-// What the page renders.
+const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'contributor', 'farmer', null, undefined];
+// What the page renders (Applications is added where it's tested).
 const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'allocations', 'history'];
 
 describe('visibleTabs', () => {
@@ -33,12 +33,12 @@ describe('visibleTabs', () => {
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
-		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS);
+		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications'));
 		expect(visibleTabs('viewer', { showModelInputs: true }, PAGE)).toEqual(PAGE);
 	});
 
-	it('shows a farmer or an unknown role Overview only', () => {
-		for (const role of ['farmer', null, undefined] as const) {
+	it('shows a farmer, an applicant or an unknown role Overview only (the workspace shows them their own views)', () => {
+		for (const role of ['farmer', 'contributor', null, undefined] as const) {
 			expect(visibleTabs(role)).toEqual(['overview']);
 			expect(visibleTabs(role, { showModelInputs: true }, PAGE)).toEqual(['overview']);
 		}
@@ -65,7 +65,15 @@ describe('visibleTabs', () => {
 	// Viewers read registered volumes (not names: that is RLS, not the tab strip).
 	it('lists Allocations for owners, editors and viewers, never farmers', () => {
 		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, PAGE)).toContain('allocations');
-		expect(visibleTabs('farmer', {}, PAGE)).not.toContain('allocations');
+		for (const role of ['contributor', 'farmer'] as const) expect(visibleTabs(role, { showModelInputs: true }, PAGE)).not.toContain('allocations');
+	});
+
+	it('lists Applications for owners and editors only (WP-3.3)', () => {
+		const withApplications: TabId[] = [...PAGE, 'applications'];
+		for (const role of ['owner', 'editor'] as const) expect(visibleTabs(role, {}, withApplications)).toContain('applications');
+		for (const role of ['viewer', 'contributor', 'farmer'] as const) {
+			expect(visibleTabs(role, { showModelInputs: true }, withApplications)).not.toContain('applications');
+		}
 	});
 
 	it('treats a tab it doesn’t know as a model input', () => {

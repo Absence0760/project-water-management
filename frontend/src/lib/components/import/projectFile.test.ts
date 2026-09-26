@@ -54,6 +54,15 @@ describe('parseProjectFileText', () => {
 		expect(parseProjectFileText(JSON.stringify({ ...exported, series: undefined })).notes).toHaveLength(1);
 	});
 
+	it("says an export's notes won't be imported", () => {
+		const note = { body: 'Dam raised in 2019', author: 'A', target: 'project', visibility: 'team' };
+		expect(parseProjectFileText(JSON.stringify({ ...exported, notes: [note] })).notes).toEqual([
+			"The file holds 1 note from the project it came from. Notes aren't imported: they stay with the project they were written in."
+		]);
+		expect(parseProjectFileText(JSON.stringify({ ...exported, notes: [note, note] })).notes[0]).toMatch(/^The file holds 2 notes /);
+		expect(parseProjectFileText(JSON.stringify({ ...exported, notes: [] })).notes).toEqual([]);
+	});
+
 	it('refuses what is not a project file, with a readable reason', () => {
 		const bad = (text: string) => {
 			try {
@@ -119,6 +128,16 @@ describe('importBody', () => {
 		expect(bytes).toBeGreaterThan(JSON.stringify(out).length); // ë and — are multi-byte
 		expect(importTooLarge(bytes)).toBeNull();
 		expect(importTooLarge(IMPORT_MAX_BYTES + 1)).toMatch(/^The file is 5\.00 MB; a project file can be at most 5 MB\./);
+	});
+
+	it("leaves an export's notes out of the body (the server ignores them)", () => {
+		const withNotes = { ...exported, notes: [{ body: 'x'.repeat(4000), target: 'project', visibility: 'team' }] };
+		const file = parseProjectFileText(JSON.stringify(withNotes)).file;
+		const { file: out, bytes } = importBody(file, 'Example valley');
+		expect(out).not.toHaveProperty('notes');
+		expect(out.model).toBe(file.model);
+		expect(bytes).toBe(new TextEncoder().encode(JSON.stringify(out)).length);
+		expect(bytes).toBeLessThan(4000);
 	});
 
 	it('counts the import report that rides beside the document', () => {

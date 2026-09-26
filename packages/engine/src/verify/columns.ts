@@ -64,7 +64,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'below_dam_not_diverted', letter: 'S', formula: 'L + N − O' },
 	{ key: 'return_flow', letter: 'T', formula: 'loss return fraction β × (1 − e) × G: the share of the application losses that reaches the river' },
 	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage − seepage lost + release' },
-	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW and Dep only with boreholes)' },
+	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW + GWd) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW, GWd and Dep only with boreholes)' },
 	{ key: 'deficit', letter: 'W', formula: 'D − G' },
 	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
@@ -77,8 +77,21 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			"−(largest over the EWR sites below it of D × MAX(e, 0) ÷ Σ MAX(e, 0)), with D = MIN(site shortfall, Σ MAX(e, 0)) and e = H + I + J − U counting only transfers with both ends upstream of the site (audit Q17)"
 	},
 	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' },
-	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, D − surface G), primary MIN(capacity, D) first, drought as supplemental while Q[t−1] < trigger × dam capacity; part of G (WP-1.34)', optional: true },
-	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + d × GW − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + d × GW), all of it when lag = 0', optional: true },
+	{
+		key: 'groundwater_used',
+		letter: 'GW',
+		formula:
+			'boreholes, each within MIN(capacity, annual cap − pumped since 1 October): primary MIN(room, D) first, then supplemental MIN(room, D − surface G), then emergency (drought) likewise while Q[t−1] < its level × dam capacity; part of G (WP-1.34, WP-3.9)',
+		optional: true
+	},
+	{
+		key: 'groundwater_to_dam',
+		letter: 'GWd',
+		formula:
+			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity; P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
+		optional: true
+	},
+	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + Σ d × pumped), all of it when lag = 0; each borehole its own d', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
 	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },
 	{
@@ -108,7 +121,7 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr_charge', letter: null, formula: 'as a farm’s, with net impact e = H − U = G − T' },
 	{ key: 'senior_requirement', letter: 'Zs', formula: 'senior: MAX(0, Σ upstream Zs − demand); junior: Σ upstream Zs; only with senior users', optional: true },
 	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, demand − river take), primary MIN(capacity, demand) first; part of G (WP-1.34)', optional: true },
-	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + d × GW − due', optional: true },
+	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, H − river take + T); U = H − river take + T − Dep', optional: true },
 	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep', optional: true }
 ];

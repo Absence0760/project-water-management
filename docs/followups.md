@@ -39,7 +39,7 @@ Tick items off (or move them into an issue) as they are done.
       (details under § Features left half-way).
 
 - [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
-      decision D10).** The disclaimer on every report (engine
+      decision D10; issue #47).** The disclaimer on every report (engine
       `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
       and the five sign-off statements (`liability/signoff.ts`,
       `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
@@ -89,6 +89,9 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Hydrologist
 
+Every engine decision marked "pending the hydrologist" in model.md is
+collected as a checklist in issue #46; tick it there as they answer.
+
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
@@ -122,6 +125,17 @@ Tick items off (or move them into an issue) as they are done.
         kernel) and the values; depletion the river can't give is dropped,
         not carried over. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-3.9 individual boreholes (engine 0.36.0): confirm the supply order
+        (primary direct, then dam-target, then the dam and river, then
+        supplemental, then emergency), what a dam-target borehole does in each
+        mode (primary keeps the dam topped up; supplemental adds today's
+        shortfall and first lifts a dam below dead storage; emergency refills
+        a low dam), and that annual caps reset on 1 October. Should a project
+        carry each property's own GN 538 volume (area × the schedule's rate,
+        by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
+        the first licence application with boreholes. Also: one depletion lag
+        per node is shared by its boreholes; per-borehole lags if a
+        geohydrology report gives different response times.
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
         catchment (invasives, plantations, riparian stands) and their
         condensed areas? The class reductions are indicative mature-stand
@@ -1125,8 +1139,8 @@ the suggested order (the IDs carry the detail):
 Left out of the first build because the contract or an API doesn't carry it
 yet; each lands with the work package named.
 
-- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
-      `forecast` in `FarmView` (WP-2.12, design E2).
+- [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
+      with WP-2.12 (`farm.forecast` when the published run is a forecast run).
 - [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
       before the named translator reviews it, and `FarmView` carries one
       `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
@@ -1241,6 +1255,25 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
+      K1, found building WP-2.12, 2026-09-26). The land-cover Q75, EWR rule
+      tables read against the record's flow-duration curve, and GR4J's
+      warm-up on a record shorter than it are record-wide, so days added at
+      the end move values at the start (about 1e-8 relative on long records).
+      Forecast mode works round it with a second run for the history, so the
+      join between history and forecast is continuous only up to that noise.
+      Durable fix: fit those statistics on a fixed window (the calibration
+      window, or the record to the last observed day), then prefix stability
+      holds for `runModel` itself and `runForecastChecked` can splice
+      nothing. An engine behaviour change, so the engine owner's call and an
+      `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
+      or a user asking why a forecast run's first forecast day steps.
+- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
+      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
+      job lands, a GEFS ingest that changes days should also queue a forecast
+      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
+      keeps the newest unkept forecast run), deduped per project like the
+      re-run. Trigger: now (WP-2.11 is merged into this branch).
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
@@ -1768,6 +1801,20 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Notes (WP-2.7)
+
+- [x] **Notes in the project export and copy** (2026-09-26). The export
+      (`export.json`) carries the undeleted notes the exporter can read, as
+      a record the importer ignores; a copy takes none. Why, per path:
+      [data-model.md § Notes](./data-model.md#notes-037_notessql). Tests in
+      `notes/notes.db.test.ts`.
+- [x] **The notes count cache never evicted** (2026-09-26). The module-level
+      map in `notes/counts.svelte.ts` kept one entry per project opened in a
+      session, and a project visited again showed its first visit's counts.
+      Now only the open project's counts are kept (another project replaces
+      them) and sign-out clears them (`clearNoteCounts`, AppHeader and
+      FarmShell). Test: `notes/counts.test.ts`.
+
 ## Portfolio dashboard (WP-2.14)
 
 - [ ] **Traffic-light thresholds per team (D11).** Green < 5 %, amber < 20 %
@@ -1790,22 +1837,25 @@ from the WP:
       `#res-*` fragment once its results render (a Runs-tab change, so
       coordinate with whoever owns `components/runs/`). Trigger: the WUA
       persona or a user reports it, or the next Runs-tab round.
-- [ ] **No perf guard on the portfolio query.** Measured once at a median
-      51 ms for 10 × 60-farm catchments (roadmap WP-2.14 status); the
-      backend `perf` vitest project has no database, so it can't hold a
-      budget on it. Durable fix: a `perf-db` project with the db project's
-      global setup and a `portfolio.perf.test.ts` (10 × 60, budget 500 ms,
-      median of 7). Trigger: the next query that needs a DB timing budget, or
-      the portfolio growing a new join.
+- [x] **No perf guard on the portfolio query** (done 2026-09-26). The
+      backend's `perf-db` vitest project (the db project's global setup) runs
+      `portfolio/portfolio.db.perf.test.ts`: 10 published catchments × 60
+      farms, 10-year runs, budget 500 ms, median of 7 (measured 41 ms).
+      `pnpm test:backend:perf:db`, alone, not in `pnpm test` or CI
+      ([testing.md § Performance budgets](./testing.md#performance-budgets)).
 
 ## Firm yield (WP-3.6)
 
 - [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
       `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
-      they own". The `contributor` role is WP-3.3's and doesn't exist yet,
-      so 040_yield gives editors and viewers only. Trigger: WP-3.3 lands its
-      role; its migration adds those policies from 040's definitions (and
-      023's `job_insert`), with the positive-control DB test (a contributor
+      they own". WP-3.3's first slice (044/045) landed the role without them:
+      a contributor reads no job and no yield result
+      (`scenarios/contributor-tables.db.test.ts`), and 045's
+      `yield_result_select` already hides a yield of an application from
+      anyone who can't read it. Trigger: the applicant's view of results
+      (followups.md § Applicants); a new migration adds those policies from
+      045's `yield_result_select` and 016's `job_insert` (023 for the job
+      kinds), with the positive-control DB test (a contributor
       queues a yield for their own scenario, not another's or a run) and the
       fail-closed test (the job dies once they lose the role).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
@@ -1832,6 +1882,63 @@ from the WP:
       for the enlarged dam (a scenario's dam survey), and the hydrologist to
       confirm uniform scaling meanwhile. Trigger: the hydrologist's review,
       or a licence application for a dam raise.
+
+## Applicants (WP-3.3)
+
+The first slice (migrations 044/045, [scenarios.md § Applications](./scenarios.md#applications-wp-33))
+built the role, its RLS, applications and their workflow, sharing, the
+Applicant view and the Applications tab. Left:
+
+- [ ] **The applicant's view of results.** An applicant runs their
+      application but sees no result: `/compare/runs` refuses a contributor
+      (it returns `inputs`, every farm), and the scenario run answers with
+      metadata only. Durable fix: a contributor projection of a scenario run
+      against its base (the roadmap's D2 default: catchment series, their own
+      nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
+      downstream: supply −4 %"), built from the run and base server-side like
+      `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
+      next WP-3.3 slice, before an applicant uses it for real.
+- [x] **A contributor can `SELECT` their own application runs' rows**, whose
+      `inputs` snapshot holds the whole base (every farm's parameters); the
+      API never returns them (RLS can't hide a column). Done in
+      `046_contributor_runs.sql`: `model_run_select` lost its contributor
+      branch, and what the API reads of their runs goes through `SECURITY
+      DEFINER` `app_scenario_run_meta` (metadata only) and
+      `app_trim_application_runs`. `run_series_select_contributor` no longer
+      hands over other farms' series of their runs (only the application's
+      own nodes and the catchment allowlist under the k rule). Chosen over
+      storing a projection with the run, which would still leave `inputs`
+      on a readable row, or drop the assessors' exact input. The results
+      slice above builds its projection server-side the same way.
+- [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
+      recommended defaults: D2's anonymised baseline and the outcome words
+      (`approved`, `approved_with_conditions`, `refused`) are **pending the
+      client and the licensing authority**. Trigger: the client's answers.
+- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
+      a contributor-or-above member of the project; renaming their own farm
+      to a neighbour's name gets the duplicate-name problem (the name comes
+      back anonymised, but its existence shows). Durable fix: share by a
+      member picker the owner curates (the assessor adds consultants to an
+      application), and check names against the projected base for
+      contributors. Trigger: before applicants from competing parties share a
+      project.
+- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
+      access** (WP-3.15) link from the list and the Application panel.
+      Trigger: those WPs.
+- [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
+      share links' rule, applied conservatively; the hydrologist and the
+      client may prefer catchment flows always visible to applicants (they
+      are gauge data). Pending the hydrologist.
+- [ ] **Performance of `run_series_select`.** Every viewer read of run series
+      now evaluates `app_hidden_scenario_runs()` and the contributor policy's
+      two helpers once per query (hashed subplans; the contributor ones exit
+      after one index probe for a non-contributor). Measured ~6 ms per query
+      on a loaded test database; run `pnpm test:backend:perf` alone on a quiet
+      machine to confirm the budgets hold. Trigger: the next perf run.
+- [ ] **Invite as an applicant with farms.** A contributor's farm links are
+      set by the owner after they join (`/farmers/:userId`); a farmer invite
+      carries farms, a contributor invite doesn't. Trigger: the first client
+      catchment with an irrigator applicant.
 
 ## Housekeeping
 

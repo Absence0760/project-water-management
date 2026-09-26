@@ -155,6 +155,21 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			issues.push({ area: 'network', message: `Land cover on "${n ? nodeName(n.id) : '?'}": area can't be negative, cover and reductions are 0–100%.` });
 	}
 
+	// Individual boreholes (WP-3.9), as the API checks them (engine modelRules).
+	for (const b of model.boreholes ?? []) {
+		const n = nodes.find((x) => x.id === b.nodeId);
+		const label = `Borehole "${b.name || '?'}"${n ? ` on "${nodeName(n.id)}"` : ''}`;
+		if (!n) issues.push({ area: 'network', message: 'A borehole refers to a deleted node.' });
+		else if (n.kind === 'gauge') issues.push({ area: 'network', message: `${label}: a gauge can't have boreholes.` });
+		else if (b.mode !== 'none' && !(n.kind === 'farm' && n.damCapacityM3 > 0)) {
+			if (b.mode === 'emergency') issues.push({ area: 'network', message: `${label}: emergency mode needs a farm dam to trigger on.` });
+			if (b.target === 'dam') issues.push({ area: 'network', message: `${label}: it pumps into a dam, and there is none.` });
+		}
+		if (!b.name.trim()) issues.push({ area: 'network', message: 'Every borehole needs a name.' });
+		if (!inRange(b.capacityM3Day, 0, Infinity) || (b.annualCapM3 !== null && !inRange(b.annualCapM3, 0, Infinity)) || !inRange(b.emergencyBelowPct, 0, 1) || !inRange(b.depletionFactor, 0, 1))
+			issues.push({ area: 'network', message: `${label}: capacity and annual cap can't be negative; the emergency level and depletion are 0–100%.` });
+	}
+
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;
