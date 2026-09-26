@@ -319,7 +319,9 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   `app_finish_job` **in the same transaction**, so the work and its "done"
   commit together. There is no principal that bypasses RLS: only claim,
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
-  functions that never return a payload.
+  functions that never return a payload. Each tick also purges finished jobs
+  after 30 days, report rows after 8, and invites 90 days past their expiry
+  (`app_purge_invites`, 045).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),

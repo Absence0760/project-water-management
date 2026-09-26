@@ -5,7 +5,8 @@
 // see" check has a positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, node, signUp, tokenIn } from '../__tests__/helpers.js';
-import { withUser } from '../db/tx.js';
+import { withoutUser, withUser } from '../db/tx.js';
+import { INVITE_RETENTION_DAYS, purgeInvites } from '../invites/invites.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -111,6 +112,33 @@ describe('invite_node RLS', () => {
 		await expect(
 			withUser(owner.id, (db) => db.query('INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [inviteId, projectId, outlet.id]))
 		).rejects.toThrow(/is not a farm/);
+	});
+});
+
+// Retention (WP-2.16; 045_account_deletion.sql): a lapsed invite holds the
+// address of someone who never signed up, and the farms it would have linked.
+describe('purging lapsed invites', () => {
+	it(`deletes an invite ${INVITE_RETENTION_DAYS} days past its expiry with its farms, and keeps a newer expired one and a live one`, async () => {
+		const [old, recent, live] = [newEmail('old'), newEmail('recent'), newEmail('live')];
+		for (const email of [old, recent, live]) {
+			expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmC.id] })).status).toBe(201);
+		}
+		await asOwner(`UPDATE invite SET expires_at = now() - make_interval(days => $2) - interval '1 hour' WHERE email = $1`, [old, INVITE_RETENTION_DAYS]);
+		await asOwner(`UPDATE invite SET expires_at = now() - make_interval(days => $2) + interval '1 hour' WHERE email = $1`, [recent, INVITE_RETENTION_DAYS]);
+		const oldId = (await asOwner('SELECT id FROM invite WHERE email = $1', [old]))[0].id;
+		expect(await asOwner('SELECT 1 FROM invite_node WHERE invite_id = $1', [oldId])).toHaveLength(1);
+
+		expect(await withoutUser((db) => purgeInvites(db))).toBeGreaterThanOrEqual(1);
+		expect(await asOwner('SELECT 1 FROM invite WHERE email = $1', [old])).toHaveLength(0);
+		expect(await asOwner('SELECT 1 FROM invite_node WHERE invite_id = $1', [oldId])).toHaveLength(0);
+		// Positive controls: an invite expired less long ago is still listed (as expired), a live one too.
+		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers as { email?: string }[];
+		expect(listed.map((f) => f.email)).toEqual(expect.arrayContaining([recent, live]));
+		expect(listed.map((f) => f.email)).not.toContain(old);
+	});
+
+	it('refuses a purge of invites expired less than a day', async () => {
+		await expect(withoutUser((db) => purgeInvites(db, 0))).rejects.toMatchObject({ code: '22023' });
 	});
 });
 

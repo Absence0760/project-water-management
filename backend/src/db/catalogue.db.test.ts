@@ -95,6 +95,59 @@ const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'yield_result']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
+/**
+ * What deleting an account does to every row that points at it (roadmap
+ * WP-2.16, docs/security.md § Personal information (POPIA)). Each foreign key
+ * to app_user is classified here, so a new one can't ship without a decision:
+ *   - cascade: the row is the person's own and goes with them (memberships,
+ *     tokens, their pending jobs, invites they sent);
+ *   - set null: the row is the project's and stays, with who made it cleared
+ *     (the audit log is pseudonymised as well, 045_account_deletion.sql);
+ *   - restrict: the account can't be deleted while the row exists, because
+ *     the row is evidence that names its maker (a run, a nomination, an
+ *     ensemble, a scenario, an imported project, a project or team they
+ *     created). Deleting such an account needs the operator to decide what
+ *     happens to that evidence first (followups.md § POPIA).
+ * account-deletion.db.test.ts checks the outcome end to end.
+ */
+const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
+	'allocation_source.imported_by': 'set null',
+	'api_key.created_by': 'set null',
+	'api_key.revoked_by': 'set null',
+	'audit_event.actor_user_id': 'set null',
+	'data_feed.acting_user_id': 'set null',
+	'data_feed.created_by': 'set null',
+	'email_token.user_id': 'cascade',
+	'farm_link.added_by': 'set null',
+	'invite.invited_by': 'cascade',
+	'job.acting_user_id': 'cascade',
+	'model_revision.created_by': 'set null',
+	'model_run.created_by': 'restrict',
+	'model_run.notes_updated_by': 'set null',
+	'note.author_id': 'set null',
+	'note.deleted_by': 'set null',
+	'project.created_by': 'restrict',
+	'project_import.imported_by': 'restrict',
+	'project_member.user_id': 'cascade',
+	'render_token.user_id': 'cascade',
+	'report.requested_by': 'cascade',
+	'report_schedule.acting_user_id': 'set null',
+	'report_schedule.created_by': 'set null',
+	'report_schedule_recipient.user_id': 'cascade',
+	'run_nomination.nominated_by': 'restrict',
+	'run_publication.published_by': 'set null',
+	'run_publication.updated_by': 'set null',
+	'run_uncertainty.created_by': 'restrict',
+	'scenario.owner_user_id': 'restrict',
+	'series_revision.created_by': 'set null',
+	'share_link.created_by': 'set null',
+	'share_link.revoked_by': 'set null',
+	'signoff.user_id': 'set null',
+	'team.created_by': 'restrict',
+	'team_member.user_id': 'cascade',
+	'yield_result.created_by': 'set null'
+};
+
 let db: pg.Client;
 beforeAll(async () => {
 	db = new pg.Client({ connectionString: OWNER_URL });
@@ -246,6 +299,37 @@ describe('schema catalogue', () => {
 			   AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}')) c WHERE c LIKE 'search_path=%')`
 		);
 		expect(rows.map((r) => r.proname)).toEqual([]);
+	});
+
+	// A project's rows go with it: nothing may keep a deleted project's data
+	// (the project_evidence_guard trigger decides whether it may be deleted at
+	// all, 035_project_evidence_guard.sql).
+	it('cascades every foreign key to project', async () => {
+		const { rows } = await db.query<{ fk: string }>(
+			`SELECT c.conrelid::regclass || '.' || c.conname AS fk FROM pg_constraint c
+			 WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.confrelid = 'project'::regclass AND c.confdeltype <> 'c'`
+		);
+		expect(rows.map((r) => r.fk)).toEqual([]);
+	});
+
+	it('classifies every foreign key to app_user: what an account deletion does to the row (WP-2.16)', async () => {
+		const { rows } = await db.query<{ col: string; action: string }>(
+			`SELECT c.conrelid::regclass || '.' || a.attname AS col,
+				CASE c.confdeltype WHEN 'c' THEN 'cascade' WHEN 'n' THEN 'set null' ELSE 'restrict' END AS action
+			 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+			 WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.confrelid = 'app_user'::regclass
+			 ORDER BY 1`
+		);
+		expect(rows.length).toBeGreaterThan(30);
+		expect(Object.fromEntries(rows.map((r) => [r.col, r.action]))).toEqual(APP_USER_ON_DELETE);
+	});
+
+	// The pseudonymisation that goes with the set-null keys (D12).
+	it('pseudonymises the audit log when an account is deleted (045_account_deletion.sql)', async () => {
+		const { rows } = await db.query<{ tgname: string }>(
+			`SELECT tgname FROM pg_trigger WHERE tgrelid = 'app_user'::regclass AND NOT tgisinternal AND tgenabled <> 'D'`
+		);
+		expect(rows.map((r) => r.tgname)).toContain('app_user_pseudonymise');
 	});
 
 	it('has a covering index for every foreign key', async () => {

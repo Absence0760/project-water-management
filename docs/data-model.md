@@ -467,7 +467,7 @@ the result change?", and put back any earlier version.
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`,
   `note.deleted` (a note hidden by its author or an editor: its target, the
-  author's name and whether it was their own, never the body),
+  author's name and id (045) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
   registration, statement version and hash),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
@@ -476,6 +476,18 @@ the result change?", and put back any earlier version.
   series, lifetime; never the key or its hash), and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
+- **Account deletion (045, decision D12).** Deleting an `app_user` row (an
+  operator act on a POPIA request; there is no self-service path yet)
+  pseudonymises instead of deleting: the `app_user_pseudonymise` trigger
+  (`SECURITY DEFINER`, before the row goes) sets `actor_label` to
+  `Deleted user` on every event they acted in, `displayName` to
+  `Deleted user` in every event whose subject's `userId` is theirs, and
+  `author` in every `note.deleted` about their note; then the foreign key
+  clears `actor_user_id`. The events, kinds and times stay (the project's
+  audit trail). What every other foreign key to `app_user` does is
+  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
+  null, or restrict for evidence that names its maker);
+  `auth/account-deletion.db.test.ts` checks the outcome.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -1230,7 +1242,13 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   invite (`farm_link` from `invite_node`, only where the membership really is
   `farmer`: someone already on the project with another role keeps it and
   gets no link), records `member.added` and `farmer.linked` (cause `invite`),
-  and deletes those invites. Invites cascade away with their project or team.
+  and deletes those invites. Invites cascade away with their project or team,
+  and with the account that sent them (`invited_by` cascade). An invite that
+  lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
+  the job tick deletes it with its `invite_node` rows
+  (`app_purge_invites(age)`, 045, `SECURITY DEFINER`; `invites.ts`
+  `purgeInvites`, `INVITE_RETENTION_DAYS`): it holds the address of someone
+  who never signed up.
 - `invite_node` RLS mirrors `invite`: project owners only, for every
   operation. Farmers never read it (the catalogue's "farmers never read"
   list).
