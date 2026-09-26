@@ -47,10 +47,18 @@ export interface DwsDays {
 	/** Null when the page has no rows. */
 	startDate: string | null;
 	values: (number | null)[];
-	/** Rows by quality code, as DWS gave them (not interpreted). */
+	/** Rows by quality code, as DWS gave them. */
 	quality: Record<string, number>;
 	/** Rows whose value was missing, not a usable number, or coded as missing (DWS_GAP_CODES): kept as gaps. */
 	rejected: number;
+	/** Rows dated outside the window asked for: dropped, not counted above. */
+	outside: number;
+}
+
+/** Inclusive ISO dates. */
+export interface DwsWindow {
+	start: string;
+	end: string;
 }
 
 const decode = (s: string) =>
@@ -110,18 +118,23 @@ function rowFields(raw: string, cols: Columns | null): [string, string | undefin
 	return underQual ? [d!.text, undefined, a.text] : [d!.text, a.text, undefined];
 }
 
-/** Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a gap. */
-export function parseDwsDaily(raw: string): DwsDays {
+/**
+ * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
+ * gap. With a window, rows dated outside it are dropped (and counted): a page
+ * that ignores the dates asked for, or carries a mistyped future date, must
+ * not write days nobody asked for or move the feed's newest day past today.
+ */
+export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	// A comment is not content: one that mentions <pre> must not be taken for the table.
 	const page = raw.replace(/<!--[\s\S]*?-->/g, '');
 	if (SERVER_ERROR.test(page)) throw new FeedFormatError('the DWS site answered with a server error page');
 	const pre = page.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
 	const body = pre ? decode(pre[1]!) : /^\s*DATE\s/m.test(page) && !/<html/i.test(page) ? page : null;
 	if (body === null) {
-		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0 };
+		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
 		throw new FeedFormatError('the DWS page has no data table');
 	}
-	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0 };
+	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
 	// Lines keep their leading spaces: a row's columns are read against the header's.
 	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
 	const h = lines.findIndex((l) => /^\s*DATE(\s|$)/i.test(l));
@@ -132,14 +145,16 @@ export function parseDwsDaily(raw: string): DwsDays {
 		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
 	}
 	const cols = headerColumns(headerLine);
+	const from = window ? toEpochDay(window.start) : -Infinity;
+	const to = window ? toEpochDay(window.end) : Infinity;
 
 	const byDay = new Map<number, number | null>();
 	const quality: Record<string, number> = {};
 	let rejected = 0;
-	for (const raw of lines.slice(h + 1)) {
-		const line = raw.trim();
-		if (!/^\d{8}(\s|$)/.test(line)) continue;
-		const [d, v, q] = rowFields(raw, cols);
+	let outside = 0;
+	for (const text of lines.slice(h + 1)) {
+		if (!/^\d{8}(\s|$)/.test(text.trim())) continue;
+		const [d, v, q] = rowFields(text, cols);
 		const iso = `${d!.slice(0, 4)}-${d!.slice(4, 6)}-${d!.slice(6, 8)}`;
 		let day = NaN;
 		try {
@@ -148,6 +163,10 @@ export function parseDwsDaily(raw: string): DwsDays {
 			// Not a date: refused below.
 		}
 		if (!Number.isFinite(day) || fromEpochDay(day) !== iso) throw new FeedFormatError(`the DWS table has an impossible date ${d}`);
+		if (day < from || day > to) {
+			outside++;
+			continue;
+		}
 		if (byDay.has(day)) throw new FeedFormatError(`the DWS table lists ${iso} twice`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError('the DWS table has more rows than one request can hold');
 		const n = v !== undefined && /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(v) ? Number(v) : NaN;
@@ -159,12 +178,12 @@ export function parseDwsDaily(raw: string): DwsDays {
 		}
 		if (q) quality[q] = (quality[q] ?? 0) + 1;
 	}
-	if (byDay.size === 0) return { startDate: null, values: [], quality, rejected };
+	if (byDay.size === 0) return { startDate: null, values: [], quality, rejected, outside };
 	const days = [...byDay.keys()];
 	const first = Math.min(...days);
 	const last = Math.max(...days);
 	// Rows are few, but their dates come from the page: bound the span before allocating it.
 	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError('the DWS table spans more days than one request can hold');
 	const values = Array.from({ length: last - first + 1 }, (_, i) => byDay.get(first + i) ?? null);
-	return { startDate: fromEpochDay(first), values, quality, rejected };
+	return { startDate: fromEpochDay(first), values, quality, rejected, outside };
 }

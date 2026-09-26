@@ -42,7 +42,7 @@ describe('parseDwsDaily on the fixture page', () => {
 
 describe('parseDwsDaily on other pages', () => {
 	it('reads a "No data for this period" page as no days, not an error', () => {
-		expect(parseDwsDaily(page('No data for this period'))).toEqual({ startDate: null, values: [], quality: {}, rejected: 0 });
+		expect(parseDwsDaily(page('No data for this period'))).toEqual({ startDate: null, values: [], quality: {}, rejected: 0, outside: 0 });
 		expect(parseDwsDaily('<html><body><p>No data for this period</p></body></html>').values).toEqual([]);
 	});
 
@@ -52,6 +52,11 @@ describe('parseDwsDaily on other pages', () => {
 
 	it('decodes entities and <br> line breaks inside the <pre>', () => {
 		expect(parseDwsDaily('<pre>DATE&nbsp;D_AVG_FR QUAL<br>20210101 1.5 1<br/>20210102 2 1</pre>').values).toEqual([1.5, 2]);
+	});
+
+	it('with a window, drops (and counts) rows dated outside it, before any span or duplicate check', () => {
+		const r = parseDwsDaily(page('DATE D_AVG_FR QUAL\n18000101 5 1\n20210101 1.5 1\n20210103 2 60\n20210201 9 1\n20210201 8 1'), { start: '2021-01-01', end: '2021-01-31' });
+		expect(r).toEqual({ startDate: '2021-01-01', values: [1.5, null, 2], quality: { '1': 1, '60': 1 }, rejected: 0, outside: 3 });
 	});
 
 	it('ignores an HTML comment that mentions a <pre>', () => {
