@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
-import { app, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
 
@@ -364,17 +364,16 @@ describe('project document export', () => {
 	it('refuses an export larger than the Lambda response budget with 413', async () => {
 		const u = await signUp('Big');
 		const { body } = await u.call('POST', '/projects', { name: 'Big' });
-		const values = Array.from({ length: 60_000 }, (_, i) => 1.23456789 + i);
-		for (let k = 0; k < 8; k++) {
-			const r = await u.call('PUT', `/projects/${body.project.id}/series`, {
-				kind: 'rain_catchment_mm',
-				name: `gauge ${k}`,
-				unit: 'mm',
-				startDate: '1900-01-01',
-				values
-			});
-			expect(r.status).toBe(200);
-		}
+		// Eight 60 000-day gauges (~7 MB as JSON), built in one statement: the
+		// export's refusal is under test, not the series PUT, and eight 60 000-value
+		// PUTs cost ~0.7 s of API parsing and inserts (the same series the PUT path
+		// would store, which the series routes' own tests cover).
+		await asOwner(
+			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
+			 SELECT $1, 'rain_catchment_mm', 'gauge ' || k, 'mm', '1900-01-01', v.a
+			 FROM generate_series(0, 7) k, (SELECT array_agg(1.23456789 + i ORDER BY i)::float8[] AS a FROM generate_series(0, 59999) i) v`,
+			[body.project.id]
+		);
 		const res = await download(u, `/projects/${body.project.id}/export.json`);
 		expect(res.status).toBe(413);
 		expect(JSON.parse(res.text).error).toMatch(/larger than 5 MB/);

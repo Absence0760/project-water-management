@@ -90,7 +90,9 @@ export async function anon(method: string, path: string, body?: unknown, cookie?
 
 /**
  * Run SQL as the schema owner — ONLY to arrange test state the API can't
- * (backdating a token to test expiry). Never used to assert on data.
+ * (backdating a token to test expiry), or bulk state that isn't under test and
+ * would take seconds through the API (a multi-MB series from generate_series).
+ * Never used to assert on data.
  */
 export async function asOwner(sql: string, params: unknown[] = []) {
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });

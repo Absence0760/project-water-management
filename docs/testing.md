@@ -42,3 +42,11 @@ suites once, before committing. Measured on the 20-core dev laptop
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.
+- **Big or repeated fixtures in db tests**: build state that isn't under
+  test in one SQL statement (`asOwner` + `generate_series`), not through
+  dozens of API calls, and make N of a thing from as few model runs as the
+  assertion needs (a saved run is ~50 ms, mostly writing its ~200 `run_series`
+  rows under RLS). The 413 export test and the 12-publication cap test were
+  close to vitest's 5 s default under load until they did (8 × 60 000-value
+  PUTs → one INSERT; 13 runs → 3 runs published 13 times). Size the fixture,
+  not the timeout.
