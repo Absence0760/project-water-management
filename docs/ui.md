@@ -50,8 +50,23 @@ The menu is keyboard-operable: Escape closes it and returns focus to the
 account button, as does a click outside; a tab or click that leaves the
 menu closes it too.
 
-**The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
-address and whether it is confirmed, a **Display name** form
+**The account page** (`routes/account/+page.svelte`, WP-1.9) opens with a
+header (issue #17): **Account**, then who you are as its summary line, the
+initials avatar, display name, email and a Confirmed / Not confirmed badge
+(a region named by the heading). Below it the cards sit in **two columns**
+once the page itself is 52rem wide (a container query, so the 240 px
+sidebar counts): Profile and Password on the left; Language and units,
+Alert emails and Your data on the right; one column below that. The page is
+capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
+window without scrolling (`account.spec.ts` › layout pins both widths). Form
+fields share one right edge (at most 36rem); Save name sits beside the
+display name; the new and repeated passwords sit side by side once the card
+is 30rem wide; the language switch is its compact joined form
+(`LanguageSwitch segmented`); the m³ / ML radios sit in one row, 32 px
+tall with a mouse and 44 px on touch and phones. Submit buttons are the
+primary style; Choose your alert emails, Download my data and Turn alert
+emails back on are secondary buttons. Sign out and Sign out everywhere stay
+in the account menu only. The cards: a **Display name** form
 (`PATCH /auth/me`; the account menu follows at once), **Language and units** (the
 language switch and the farm view's m³ / ML, [§ Language](#language)), a
 **Your data** panel whose **Download my data** button saves the
@@ -2947,7 +2962,9 @@ digest). The modeller workspace stays English.
   on the current one; "EN | AF" in the phone headers, the full name as the
   accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
-  also sets the farm view's volume unit (m³ or ML).
+  also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
+  the two buttons joined into one control sized like the form fields
+  (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
   this device's choice (`localStorage` `wm.locale`, try/catch), else
   Afrikaans when it is the browser's first language, else English
@@ -3093,9 +3110,11 @@ the catalogue, [§ Language](#language)); both unit-tested.
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
-  panel and from every alert email; translated): per catchment you can open,
-  a group per alert you can get, with *Right away* / *Once a day (06:00)* /
-  *Off* radios (44 px rows). A farmer sees a *Dam running low: <farm>* group
+  panel and from every alert email; translated): a card per catchment you
+  can open, as many across as fit the page's own width (at least 28rem
+  each; two at 1440, stacked on a phone), in the account page's frame
+  (capped at 92rem), each with a group per alert you can get, with *Right away* / *Once a day (06:00)* /
+  *Off* radios (32 px rows with a mouse, 44 px on touch and phones). A farmer sees a *Dam running low: <farm>* group
   per own farm and *Restriction notices from the WUA*, nothing else; a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
