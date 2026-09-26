@@ -63,7 +63,7 @@ describe('extractProject on a small synthetic workbook', () => {
 			apanMm: [150, 190, 230, 240, 200, 170, 120, 90, 70, 75, 95, 120],
 			flowShareMethod: 'area',
 			hiLoSplit: { hi: 0.8, lo: 0.2 },
-			calibration: expect.objectContaining({ a: 0.09, summerMonths: [1, 2, 3, 10, 11, 12], baseFlowInitial: 250, catchmentAreaKm2: 12 }),
+			calibration: { rainThresholdMm: 2, catchmentAreaKm2: 12 },
 			ewrPragmaticM3PerDay: [900, 1200, 1500, 1500, 1400, 1300, 1100, 900, 800, 700, 700, 800],
 			simulationStart: null,
 			simulationEnd: null,

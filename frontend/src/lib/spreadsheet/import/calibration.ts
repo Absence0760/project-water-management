@@ -1,9 +1,8 @@
-// [Flow Calibration Cfg] → settings.calibration, and the calibration window
+// [Flow Calibration Cfg] → settings.calibration (the rain threshold and catchment area), and the calibration window
 // and flow record (scripts/wbt-import/calibration.py).
 import type { CalibrationParams } from '@water-management/engine';
 import { type Cell, XlDateTime, pyFloat, pyRepr, pyStr } from './cells';
 import { InvalidWorkbookError, NotB023WorkbookError } from './errors';
-import { summerExtraMonths, summerMonths } from './months';
 import type { B023Workbook } from './workbook';
 
 /**
@@ -42,44 +41,16 @@ function cell(wb: B023Workbook, name: string): Cell {
 
 const num = (wb: B023Workbook, name: string) => strictNum(cell(wb, name), name);
 
-/** extract_calibration(): CalibrationParams, keys in the Python's order. */
+/**
+ * extract_calibration(): CalibrationParams, keys in the Python's order: the
+ * rain threshold and the catchment area. The rest of [Flow Calibration Cfg]
+ * configured the legacy runoff model, removed in engine 1.0.0 (issue #16),
+ * and is not read.
+ */
 export function extractCalibration(wb: B023Workbook): CalibrationParams {
-	const factors = column(wb, 'rCalibration_RecessionFactors').map((v) => strictNum(v, 'rCalibration_RecessionFactors'));
-	const curve = column(wb, 'rCalibration_Curve').map((v) => strictNum(v, 'rCalibration_Curve'));
-	// Initial base flow sits in the "reserved" row under the Flow data header,
-	// in the "Underlying Base Flow" column (one right of "Use rain").
-	const { sheet, c1, r1 } = wb.ref('zFlowData_HeaderUseRain');
-	if (r1 + 1 > wb.lastRow(sheet)) throw new InvalidWorkbookError('[Flow data] has no row below its header for the initial base flow', sheet);
-	const baseInit = wb.cell(sheet, c1 + 1, r1 + 1);
 	return {
-		a: num(wb, 'rCalibration_PeakCoef_a'),
-		b: num(wb, 'rCalibration_PeakExp_b'),
 		rainThresholdMm: num(wb, 'rCalibration_RainThreshold'),
-		summerFactor: num(wb, 'rCalibration_FactorSummer'),
-		winterFactor: num(wb, 'rCalibration_FactorWinter'),
-		summerMonths: summerMonths(cell(wb, 'rCalibration_SummerMths')),
-		baseFlowInitial: strictNum(baseInit, 'Underlying Base Flow'),
-		catchmentAreaKm2: num(wb, 'rFarmSpec_AreaTotal'),
-		baseResetRatio: num(wb, 'rCalibration_MinFlowRatioToResetBase'),
-		winterTodayRainMm: num(wb, 'rCalibration_WinterTodayThresh'),
-		winterNextDayRainMm: num(wb, 'rCalibration_WinterNextDayThresh'),
-		shiftPeakIndexLo: num(wb, 'rCalibration_ShiftPeakIndexLo'),
-		shiftPeakIndexHi: num(wb, 'rCalibration_ShiftPeakIndexHi'),
-		amplitudeM3Day: num(wb, 'rCalibration_Amplitude'),
-		recessionDaysMax: num(wb, 'rCalibration_DaysMax'),
-		recessionFactors: factors,
-		recessionCurveM3Day: curve
-	};
-}
-
-/** summer_months_note(): the M1 note when the workbook's substring match makes more months summer than it lists. */
-export function summerMonthsNote(wb: B023Workbook): { message: string; raw: Cell } | null {
-	const raw = cell(wb, 'rCalibration_SummerMths');
-	const extra = summerExtraMonths(raw);
-	if (!extra.length) return null;
-	return {
-		message: `summer months ${pyRepr(raw)}: the workbook's substring match also makes months ${pyRepr(extra)} summer; the app uses the listed months only (audit M1)`,
-		raw
+		catchmentAreaKm2: num(wb, 'rFarmSpec_AreaTotal')
 	};
 }
 

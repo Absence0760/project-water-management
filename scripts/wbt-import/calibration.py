@@ -1,13 +1,16 @@
-"""Extract the rain -> natural-flow calibration from a b023 WBT workbook.
+"""Extract the catchment calibration settings from a b023 WBT workbook.
 
 `extract_calibration_window(wb)` returns the top-level settings
 `calibrationStart` / `calibrationEnd` / `calibrationFlowKind` (the window and
 flow record the workbook calibrates against).
 
 `extract_calibration(wb)` returns a dict shaped like the engine's
-`CalibrationParams` (packages/engine/src/project.ts, camelCase keys), read from
-the [Flow Calibration Cfg] sheet via the workbook's named ranges so it keeps
-working when rows move between workbook versions.
+`CalibrationParams` (packages/engine/src/project.ts, camelCase keys): the rain
+threshold and the catchment area, read via the workbook's named ranges so it
+keeps working when rows move between workbook versions. The rest of the
+[Flow Calibration Cfg] sheet (peak-flow coefficients, season factors, summer
+months, recession tables) configured the legacy b023 runoff model, which
+engine 1.0.0 removed (issue #16), so it is not read.
 
 The workbook must be opened with `data_only=True` (cached values); read-only
 mode is fine and recommended for the large client workbooks.
@@ -70,71 +73,10 @@ def _num(v: Any) -> float:
         raise ValueError(f"expected a number, got {v!r}") from exc
 
 
-def _month_text(month_list: Any) -> str:
-    # A cell holding a single number comes back as int/float.
-    if isinstance(month_list, float) and month_list.is_integer():
-        return str(int(month_list))
-    return "" if month_list is None else str(month_list).replace(" ", "")
-
-
-def summer_months(month_list: Any) -> list[int]:
-    """The months a b023 month-list cell ("1,2,11,12") names, in calendar order.
-
-    The workbook's fSorW2 / fIsMthIn test ISNUMBER(FIND(m & ",", list & ",")),
-    a substring search, so "11" also switches on January ("11," contains "1,")
-    and "12" February. That is a workbook bug, not what the author wrote, so the
-    importer keeps the listed months only (docs/engine-audit.md M1);
-    `substring_extra_months` names what the workbook would have added.
-    """
-    return sorted({int(x) for x in re.findall(r"\d+", _month_text(month_list)) if 1 <= int(x) <= 12})
-
-
-def substring_extra_months(month_list: Any) -> list[int]:
-    """Months the workbook's substring FIND matches although the list doesn't name them."""
-    text = _month_text(month_list)
-    matched = {m for m in range(1, 13) if f"{m}," in text + ","}
-    return sorted(matched - set(summer_months(month_list)))
-
-
-def summer_months_note(wb) -> str | None:
-    """A note when the workbook's substring matching makes more months summer than it lists."""
-    raw = _cell(wb, "rCalibration_SummerMths")
-    extra = substring_extra_months(raw)
-    if not extra:
-        return None
-    return (
-        f"summer months {raw!r}: the workbook's substring match also makes months {extra} summer; "
-        "the app uses the listed months only (audit M1)"
-    )
-
-
 def extract_calibration(wb) -> dict[str, Any]:
-    factors = [_num(v) for v in _column(wb, "rCalibration_RecessionFactors")]
-    curve = [_num(v) for v in _column(wb, "rCalibration_Curve")]
-
-    # Initial base flow sits in the "reserved" row under the Flow data header,
-    # in the "Underlying Base Flow" column (one right of "Use rain").
-    sheet, col, row, _, _ = _resolve(wb, "zFlowData_HeaderUseRain")
-    base_init = _block(wb, sheet, col + 1, row + 1, col + 1, row + 1)[0][0]
-
     return {
-        "a": _num(_cell(wb, "rCalibration_PeakCoef_a")),
-        "b": _num(_cell(wb, "rCalibration_PeakExp_b")),
         "rainThresholdMm": _num(_cell(wb, "rCalibration_RainThreshold")),
-        "summerFactor": _num(_cell(wb, "rCalibration_FactorSummer")),
-        "winterFactor": _num(_cell(wb, "rCalibration_FactorWinter")),
-        "summerMonths": summer_months(_cell(wb, "rCalibration_SummerMths")),
-        "baseFlowInitial": _num(base_init),
         "catchmentAreaKm2": _num(_cell(wb, "rFarmSpec_AreaTotal")),
-        "baseResetRatio": _num(_cell(wb, "rCalibration_MinFlowRatioToResetBase")),
-        "winterTodayRainMm": _num(_cell(wb, "rCalibration_WinterTodayThresh")),
-        "winterNextDayRainMm": _num(_cell(wb, "rCalibration_WinterNextDayThresh")),
-        "shiftPeakIndexLo": _num(_cell(wb, "rCalibration_ShiftPeakIndexLo")),
-        "shiftPeakIndexHi": _num(_cell(wb, "rCalibration_ShiftPeakIndexHi")),
-        "amplitudeM3Day": _num(_cell(wb, "rCalibration_Amplitude")),
-        "recessionDaysMax": _num(_cell(wb, "rCalibration_DaysMax")),
-        "recessionFactors": factors,
-        "recessionCurveM3Day": curve,
     }
 
 

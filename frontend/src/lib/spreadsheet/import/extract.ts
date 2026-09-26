@@ -9,7 +9,7 @@
 import type { CalibrationParams, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
 import { clean, num, pyStr } from './cells';
-import { extractCalibration, extractCalibrationWindow, summerMonthsNote } from './calibration';
+import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
@@ -242,12 +242,6 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 
 	step(5);
 	const calibration = extractCalibration(wb);
-	const summer = summerMonthsNote(wb);
-	if (summer) {
-		const sheet = 'Flow Calibration Cfg';
-		report.note('summer-months-substring', summer.message, { sheet });
-		report.unmap({ code: 'summer-months-substring', message: summer.message, sheet, text: pyStr(summer.raw) });
-	}
 
 	const ewrRef = wb.ref('zEWR_Pragmatic');
 	const ewr = wb
