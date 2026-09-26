@@ -1898,13 +1898,18 @@ Applicant view and the Applications tab. Left:
       downstream: supply −4 %"), built from the run and base server-side like
       `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
       next WP-3.3 slice, before an applicant uses it for real.
-- [ ] **A contributor can `SELECT` their own application runs' rows**, whose
+- [x] **A contributor can `SELECT` their own application runs' rows**, whose
       `inputs` snapshot holds the whole base (every farm's parameters); the
-      API never returns them (RLS can't hide a column). Durable fix: store
-      the applicant's projection with the run, or read scenario runs for
-      contributors only through a `SECURITY DEFINER` projection and drop
-      `model_run_select`'s contributor branch. Trigger: the results slice
-      above, which needs the same projection.
+      API never returns them (RLS can't hide a column). Done in
+      `046_contributor_runs.sql`: `model_run_select` lost its contributor
+      branch, and what the API reads of their runs goes through `SECURITY
+      DEFINER` `app_scenario_run_meta` (metadata only) and
+      `app_trim_application_runs`. `run_series_select_contributor` no longer
+      hands over other farms' series of their runs (only the application's
+      own nodes and the catchment allowlist under the k rule). Chosen over
+      storing a projection with the run, which would still leave `inputs`
+      on a readable row, or drop the assessors' exact input. The results
+      slice above builds its projection server-side the same way.
 - [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the

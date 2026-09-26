@@ -181,11 +181,33 @@ describe('an application', () => {
 		// Metadata only: the summary names every farm.
 		expect(res.body.run.summary).toBeUndefined();
 		expect(res.body.run.scenarioId).toBe(sid);
-		// Positive control: A and the consultant read the run and its series.
+		// A and the consultant read the run's metadata (app_scenario_run_meta,
+		// 046) and the application's run count, never its row: its inputs are
+		// the whole base, every farm's parameters. Nor its stored input series.
 		for (const u of [applicantA, consultant]) {
-			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toHaveLength(1);
-			expect((await rowsAs<{ n: number }>(u, 'SELECT count(*)::int AS n FROM run_series WHERE run_id = $1', [draftRun]))[0]!.n, u.email).toBeGreaterThan(0);
+			expect(await rowsAs(u, 'SELECT id, label FROM app_scenario_run_meta($1, $2)', [projectId, sid]), u.email).toEqual([{ id: draftRun, label: 'Raise Rooikloof' }]);
+			expect((await u.call('GET', `${P()}/scenarios/${sid}`)).body.scenario, u.email).toMatchObject({ runCount: 1, lastRun: { id: draftRun, label: 'Raise Rooikloof' } });
+			expect(await rowsAs(u, 'SELECT id, inputs FROM model_run WHERE id = $1', [draftRun]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE scenario_id = $1', [sid]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT kind FROM run_input_series WHERE run_id = $1', [draftRun]), u.email).toEqual([]);
+			// The published-base channel answers a published run of the model only, never a scenario run.
+			expect(await rowsAs(u, 'SELECT inputs FROM app_published_run_input($1, $2)', [projectId, draftRun]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT kind FROM app_published_run_series($1, $2)', [projectId, draftRun]), u.email).toEqual([]);
+			// Its series: the application's own node (Rooikloof, whoever reads it)
+			// and the catchment allowlist; no other farm's, whose demand and
+			// storage carry that farm's area and dam.
+			const series = await rowsAs<{ key: string; node_id: string | null }>(u, 'SELECT key, node_id FROM run_series WHERE run_id = $1', [draftRun]);
+			expect(new Set(series.filter((k) => k.node_id !== null).map((k) => k.node_id)), u.email).toEqual(new Set([rooikloof.id]));
+			const catchment = series.filter((k) => k.node_id === null).map((k) => k.key);
+			expect(catchment.length, u.email).toBeGreaterThan(0);
+			expect(catchment.every((k) => ['natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall'].includes(k)), u.email).toBe(true);
 		}
+		// Positive control: the row, its inputs and every farm's series exist (the schema owner reads them).
+		const [row] = await asOwner('SELECT inputs FROM model_run WHERE id = $1', [draftRun]);
+		expect(JSON.stringify(row.inputs)).toContain('Kliphuis');
+		const allNodes = await asOwner('SELECT DISTINCT node_id FROM run_series WHERE run_id = $1 AND node_id IS NOT NULL', [draftRun]);
+		expect(allNodes.map((r: { node_id: string }) => r.node_id)).toContain(kliphuis.id);
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_input_series WHERE run_id = $1', [draftRun]))[0].n).toBeGreaterThan(0);
 		// The assessors and viewers don't, nor does the other applicant.
 		for (const u of [assessor, viewer, applicantB]) {
 			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toEqual([]);
@@ -253,6 +275,9 @@ describe('an application', () => {
 		expect(list.body.applications.map((a: { id: string; owner: string }) => [a.id, a.owner])).toEqual([[sid, 'Applicanta']]);
 		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
 		expect(await rowsAs(assessor, 'SELECT id FROM model_run WHERE id = $1', [draftRun])).toHaveLength(1);
+		// …in full, every farm's series too (the applicant still reads neither: control for the test above).
+		expect((await rowsAs<{ node_id: string }>(assessor, 'SELECT DISTINCT node_id FROM run_series WHERE run_id = $1', [draftRun])).map((r) => r.node_id)).toContain(kliphuis.id);
+		expect(await rowsAs(applicantA, 'SELECT id FROM model_run WHERE id = $1', [draftRun])).toEqual([]);
 		// Viewers still don't, until it is decided.
 		expect((await viewer.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
 		expect((await viewer.call('GET', `${P()}/applications`)).status).toBe(403);
@@ -316,6 +341,15 @@ describe('withdraw, reopen and delete', () => {
 		const left = await asOwner('SELECT id FROM model_run WHERE scenario_id = $1 ORDER BY created_at DESC, id DESC', [sid]);
 		expect(left).toHaveLength(5);
 		expect(ids.slice(-1)[0]).toBe(left[0].id);
+		// Nobody but the owner trims (app_trim_application_runs, 046): another
+		// contributor, an assessor and the project owner delete nothing.
+		for (const u of [applicantA, assessor, owner]) {
+			expect(await rowsAs(u, 'SELECT app_trim_application_runs($1, $2, 0)', [projectId, sid]), u.email).toEqual([]);
+		}
+		expect(await asOwner('SELECT id FROM model_run WHERE scenario_id = $1', [sid])).toHaveLength(5);
+		// Positive control: the owner can, down to what they ask to keep.
+		expect(await rowsAs(applicantB, 'SELECT app_trim_application_runs($1, $2, 4)', [projectId, sid])).toHaveLength(1);
+		expect(await asOwner('SELECT id FROM model_run WHERE scenario_id = $1', [sid])).toHaveLength(4);
 	});
 });
 

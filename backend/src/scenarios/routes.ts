@@ -274,13 +274,14 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			});
 			if (role === 'contributor') {
 				// The applicant's own cap (they can't trim the project's runs), and
-				// the run's metadata only: its summary names every farm.
+				// the run's metadata only (app_scenario_run_meta, 046: they can't
+				// read the row, whose inputs and summary hold every farm).
 				const removedRunIds = await trimApplicationRuns(db, id, s.id);
 				if (removedRunIds.length) await recordAudit(db, id, 'run.deleted', { runIds: removedRunIds, reason: 'trimmed' });
 				const { rows } = await db.query(
 					`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate", r.end_date AS "endDate",
-						r.created_at AS "createdAt", r.scenario_id AS "scenarioId" FROM model_run r WHERE r.id = $1`,
-					[runId]
+						r.created_at AS "createdAt", r.scenario_id AS "scenarioId" FROM app_scenario_run_meta($1, $2) r WHERE r.id = $3`,
+					[id, s.id, runId]
 				);
 				const { applied, classified } = checkView(check, redactorFor(role, check.base, s));
 				return c.json({ run: rows[0], removedRunIds, applied, classified }, 201);
