@@ -3,3 +3,4 @@
 // backend runs them on the example catchments). Not part of the model API.
 export * from './fuzz';
 export * from './invariants';
+export * from './scenarioFuzz';
