@@ -6,12 +6,18 @@
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
 import { AxeBuilder } from '@axe-core/playwright';
 import type { APIRequestContext } from '@playwright/test';
-import { createProject } from '../support/api.ts';
+import { addMember, createProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// One at a time: runJobsTick runs the whole e2e database's worker tick, and a
+// tick also queues every due feed (a new feed is due at once), so a tick in
+// one test would fetch another test's feed mid-test ("The last 2 fetches
+// failed", a feed no longer Waiting). No other spec ticks the worker.
+test.describe.configure({ mode: 'default' });
+
+const MONTHS =['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** A UTC calendar day n days from now, as the panel writes it ("10 Oct 2026"). */
 const day = (n: number) => {
 	const d = new Date(Date.now() + n * 86_400_000);
@@ -184,4 +190,61 @@ test('the panel works from the keyboard: focus follows the form, a bad field is 
 	await page.keyboard.press('Enter');
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
 	await expect(panel.getByRole('heading', { name: 'Data feeds', level: 2 })).toBeFocused();
+});
+
+test('what each role sees: editors can only run a feed, viewers only read', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feed roles');
+	await attachFeed(page.request, project.id);
+	const editor = await signIn('Feed editor');
+	const viewer = await signIn('Feed viewer');
+	await addMember(page.request, project.id, editor.user.email, 'editor');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+
+	// Editor: Run now (the API lets editors queue a fetch), nothing that changes the feed.
+	await editor.page.goto(`/projects/${project.id}?tab=settings`);
+	let panel = editor.page.getByRole('region', { name: 'Data feeds' });
+	let feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveAttribute('data-state', 'pending');
+	await expect(feed.getByRole('button')).toHaveText(['Run now']);
+	await expect(panel.getByRole('button', { name: 'Attach a feed' })).toHaveCount(0);
+	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+
+	// Viewer: the list and its health, with no buttons on the feed and no form.
+	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
+	panel = viewer.page.getByRole('region', { name: 'Data feeds' });
+	feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveAttribute('data-state', 'pending');
+	await expect(feed.getByText('Waiting for its first fetch.')).toBeVisible();
+	await expect(feed.getByRole('button')).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: 'Attach a feed' })).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: 'Refresh status' })).toBeVisible();
+
+	// With no feeds, a non-owner is told who can attach one.
+	const empty = await createProject(page.request, 'Feed roles empty');
+	await addMember(page.request, empty.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${empty.id}?tab=settings`);
+	await expect(viewer.page.getByRole('region', { name: 'Data feeds' }).getByText('No feeds yet. An owner can attach one.')).toBeVisible();
+});
+
+test('on a phone the panel, its feed card and the open form fit the screen', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feeds phone');
+	await attachFeed(page.request, project.id);
+	await page.setViewportSize({ width: 320, height: 800 });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	await expect(panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem')).toHaveCount(1);
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'CHIRPS-GEFS rainfall forecast' });
+	await expect(panel.getByLabel('Grid cells')).toBeVisible();
+	// The panel sits inside the 320 px screen and nothing in it (card, fields, buttons) pokes out of it.
+	expect(await panel.evaluate((el) => el.getBoundingClientRect().right)).toBeLessThanOrEqual(320);
+	expect(await panel.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+	const poking = await panel.evaluate((el) => {
+		const edge = el.getBoundingClientRect().right;
+		return [...el.querySelectorAll('*')].filter((c) => c.getBoundingClientRect().right > edge + 0.5).map((c) => c.outerHTML.slice(0, 80));
+	});
+	expect(poking).toEqual([]);
 });
