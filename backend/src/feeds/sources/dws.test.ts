@@ -158,6 +158,14 @@ describe('parseDwsDaily: a gap row with only a quality code', () => {
 		expect(parseDwsDaily(recorded([row('20210101', '1.5', '1')], 'Daily avg flow rate in m3/s')).values).toEqual([1.5]);
 	});
 
+	it('places rows by date whatever their order, and reads columns against an indented header', () => {
+		const table = ['DATE     D AVG F/R  QUAL', row('20210103', '3.000', '1'), row('20210101', '1.000', '1'), row('20210102', '', '255')].map((l) => `   ${l}`).join('\n');
+		const r = parseDwsDaily(`<pre>${table}</pre>`);
+		expect(r.startDate).toBe('2021-01-01');
+		expect(r.values).toEqual([1, null, 3]);
+		expect(r.quality).toEqual({ '1': 2, '255': 1 });
+	});
+
 	it('still reads a lone number in the flow column as the flow', () => {
 		const r = parseDwsDaily(page(['DATE       D_AVG_FR  QUAL', row('20210101', '12', ''), row('20210102', '0.5', '')].join('\n')));
 		expect(r.values).toEqual([12, 0.5]);
