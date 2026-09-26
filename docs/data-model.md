@@ -447,7 +447,10 @@ the result change?", and put back any earlier version.
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`,
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
-  registration, statement version and hash), and restores. `api_key.*` is reserved.
+  registration, statement version and hash),
+  `allocation.created/changed/deleted/imported/import_deleted` (037:
+  registration numbers, file name and hash, counts; never a holder's name),
+  and restores. `api_key.*` is reserved.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -479,7 +482,8 @@ the result change?", and put back any earlier version.
   reason. A new write route fails the inventory until it's listed. Exempt
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
-  ensembles, `POST /reports`.
+  ensembles, `POST /reports`, the allocation import preview (writes
+  nothing).
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -685,6 +689,49 @@ appropriate, and that they read its known limitations
   on signing (Step 4), sign-off in the data export (the POPIA export,
   WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
+
+### Allocations (037_allocations.sql)
+
+Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
+water-use volumes per farm or water user.
+
+- **`allocation_source`**: an imported file. `id`, `project_id` (→ `project`,
+  cascade), `kind` (`warms_extract` | `csv`), `file_name` (1–255), `sha256`
+  (hex of the file's UTF-8 text), `reference` (≤ 500), `imported_by` (→
+  `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
+  file is imported once per project (the index also covers the project key).
+  Deleting a source deletes its allocations (undo an import).
+- **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
+  composite key `(source_id, project_id)` → `allocation_source (id,
+  project_id)`, cascade, so a source is always the same project's), `node_id`
+  (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
+  `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
+  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
+  `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
+  `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
+  `reference` (≤ 500), `created_at`, `updated_at`. No names. Indexes cover
+  every key.
+- **`allocation_holder`**: `allocation_id` (primary key; composite key
+  `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
+  `user_display` (1–200). The registered user's name, in its own table so RLS
+  can hide it (decision D3 (b), pending legal advice).
+- **Triggers.** `allocation_same_project` (the node is the project's);
+  `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
+  and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
+  a gauge leaves its allocations unmatched, as a deleted node does).
+- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
+  editor; `allocation_select_farmer` lets a farmer read the allocations on
+  their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
+  policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
+  on their own farm; **viewers read no names**; writes editor. `water_app` has
+  `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **No personal identifiers.** No ID-number, phone or email column exists;
+  the importer refuses files that carry them ([security.md](./security.md)).
+- Guards: `backend/src/allocations/allocations.db.test.ts` (positive
+  controls: an editor reads names, the owner reads the rows a stranger can't,
+  a farmer reads their own farm's), the catalogue tests and the route
+  inventories.
 
 ### Import reports (017_project_import.sql)
 

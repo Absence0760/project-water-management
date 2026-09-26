@@ -1647,6 +1647,41 @@ role and not before it.
       exist (WP-2.9); `audit_event.actor_api_key_id` is there, unused.
       Trigger: WP-2.9.
 
+## Allocations (WP-3.10)
+
+The first slice (2026-09-26: migration 037, engine `compareAllocations`,
+`backend/src/allocations/`, the Allocations tab; [allocations.md](./allocations.md))
+stores registered volumes and compares them with a run's modelled use. Left,
+from the WP:
+
+- [ ] **Engine `allocationMode`** (`cap` | `fullAllocation`, default `none`)
+      with `RunSummary.allocations` and a `checkAllocations` invariant in
+      `runModel`; bumps `ENGINE_VERSION`. `cap`: cumulative supply per water
+      year ≤ the allocation; `fullAllocation`: demand replaced by the
+      allocation over its monthly pattern. Durable fix for "what if every
+      lawful user took their entitlement" (WP-3.11's background run).
+      Trigger: WP-3.11 (cumulative impact) or an assessor asking.
+- [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
+      (default 0.1, pending the hydrologist). Trigger: the first client asking
+      for another band.
+- [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
+      import and a column-mapping step for unknown headings. Until then an
+      unknown heading is listed as "not read". Trigger: the client sends an
+      extract (plan.md questions).
+- [ ] **Licence conditions**: `months`, `maxRateM3s`, a `conditions jsonb`
+      (the WP's `Allocation` shape), shown and later enforced by `cap`.
+- [ ] **Farm view**: a farmer's own registered volume beside their modelled
+      use (RLS already allows it: `allocation_select_farmer`,
+      `allocation_holder_select`); share views per D3 (c) (volumes public,
+      names hidden). Trigger: D3 settled with the client's legal adviser.
+- [ ] **Dam filling vs registered storage** (s21b): the comparison counts
+      supply from the farm's own dam as abstraction and compares storage with
+      the dam capacity only. Pending the hydrologist.
+- [ ] **POPIA**: allocations and holder names in the data-subject export and
+      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **Evidence pack and chart**: the over/under-use chart and the
+      comparison in the licence evidence pack (WP-3.14).
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue

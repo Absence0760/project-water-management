@@ -276,6 +276,41 @@ const WRITE_ROUTES: Entry[] = [
 			return c.owner.call('DELETE', `${at(c)}/scenarios/${r.body.scenario.id}`);
 		}
 	},
+	// --- allocations (WP-3.10) ------------------------------------------------------
+	{
+		route: `POST ${P}/allocations`,
+		records: ['allocation.created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/allocations`, { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 });
+			c.allocationId = r.body.allocation?.id;
+			return r;
+		}
+	},
+	{
+		route: `PATCH ${P}/allocations/:aid`,
+		records: ['allocation.changed'],
+		call: (c) => c.owner.call('PATCH', `${at(c)}/allocations/${c.allocationId}`, { volumeM3PerYear: 2000 })
+	},
+	{
+		route: `DELETE ${P}/allocations/:aid`,
+		records: ['allocation.deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/${c.allocationId}`)
+	},
+	{
+		route: `POST ${P}/allocations/import/commit`,
+		records: ['allocation.imported'],
+		call: async (c) => {
+			const text = 'registration_no,farm,authorisation,water_source,volume_m3_year\nG-1,Farm A,licence,surface,500\n';
+			const r = await c.owner.call('POST', `${at(c)}/allocations/import/commit`, { kind: 'csv', fileName: 'guard.csv', text });
+			c.allocationSourceId = r.body.source?.id;
+			return r;
+		}
+	},
+	{
+		route: `DELETE ${P}/allocations/sources/:sourceId`,
+		records: ['allocation.import_deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
+	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
 		route: `POST ${P}/feeds`,
@@ -322,6 +357,7 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
+	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
 ];
 
