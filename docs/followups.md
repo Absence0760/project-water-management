@@ -559,7 +559,8 @@ conditions come before any client numbers:
         more sensitive after refitting;
       - refits score better at flat 0.70 and the winter preset than at the
         extremes, a mild hint that the true forcing sits mid-range.
-      Still open: the hydrologist picks the monthly values (Q4 below).
+      Still open: the hydrologist picks the monthly values (Q4 below);
+      the PE level itself was decided with #13 (plan.md, 2026-09-26).
 - [x] **The stored GR4J parameters don't fit the logger.** The client
       project never had fitted GR4J parameters (it ran on the defaults).
       **Refitted 2026-09-25 on engine 0.20.0** (after the rain fixes of

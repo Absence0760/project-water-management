@@ -542,8 +542,33 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >    a fixed station set the recent era could be rebuilt rather than
 >    replaced, and the point-to-area factor and the mid-record step pinned
 >    down. Still open; it doesn't reopen #12. (High-flow gaugings at the
->    logger are question 2; the A-pan row and a station ET₀ record stay with
->    [#13](https://github.com/Absence0760/project-water-management/issues/13).)
+>    logger are question 2; the A-pan row and a station ET₀ record are
+>    questions 6 and 7.)
+
+> **Evaporation ([#13](https://github.com/Absence0760/project-water-management/issues/13), closed).**
+>
+> **Decided 2026-09-26: keep the workbook's A-pan row, and set GR4J's PE at
+> the station-scaled ET₀ level.** The operator accepted the research's
+> recommendation on the hydrologist's behalf (their agreement assumed, not
+> yet written down by them); if the hydrologist later disagrees, reopen #13.
+> The A-pan row isn't switched, so irrigation demand and dam evaporation
+> don't move; GR4J's PE is set through its own monthly PE row with its
+> source (#39, engine 0.31.0), not the pan coefficient. It is settled jointly
+> with the rain level above (#12), and PE is carried at three levels (as
+> is, station-scaled ET₀, the template row × 0.70/0.75), refitted at each,
+> with EWR and MAR reported as the band. `PAN_COEFFICIENT_PRESETS` stay as
+> they are ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+> Client figures in the private repo's `Research/evaporation.md`.
+>
+> 6. **A-pan row:** why was the factor in the workbook's A-pan row applied,
+>    and what does it convert to? Where did the template's row come from
+>    (station, years, screened pan or not)? Still open; it doesn't reopen
+>    #13.
+> 7. **Station ET₀:** is there a multi-year station ET₀ record near the
+>    catchment (ARC agro-climatic or provincial agriculture network), or a
+>    daily pan record (usable directly since engine 0.38.0)? It is the most
+>    useful single piece of evidence on the PE level, and on EWR now that
+>    `kgeNp` has taken the rating out of it. Still open.
 
 
 1. **Which model should the app be built on?** b023 is complete and in use. The
