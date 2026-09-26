@@ -141,12 +141,15 @@ export async function recentReportCount(db: Db, projectId: string): Promise<numb
 	return rows[0]?.n ?? 0;
 }
 
-/** Direct members of the project among `userIds` (RLS: viewer), with their addresses. */
+/**
+ * Direct members of the project among `userIds` who can read its report
+ * (viewer or above: never a farmer), with their addresses (RLS: viewer).
+ */
 export async function membersAmong(db: Db, projectId: string, userIds: string[]): Promise<{ id: string; email: string }[]> {
 	if (!userIds.length) return [];
 	const { rows } = await db.query<{ id: string; email: string }>(
 		`SELECT u.id, u.email FROM project_member m JOIN app_user u ON u.id = m.user_id
-		 WHERE m.project_id = $1 AND m.user_id = ANY($2::uuid[]) ORDER BY u.email`,
+		 WHERE m.project_id = $1 AND m.user_id = ANY($2::uuid[]) AND m.role >= 'viewer' ORDER BY u.email`,
 		[projectId, userIds]
 	);
 	return rows;

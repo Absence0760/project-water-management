@@ -100,11 +100,11 @@ async function listSchedules(db: Db, projectId: string, only?: string): Promise<
 	});
 }
 
-/** Recipients must be direct members of the project (the Sharing panel's list). */
+/** Recipients must be direct members of the project (the Sharing panel's list) who can read the report: not farmers. */
 async function checkRecipients(db: Db, projectId: string, ids: string[]): Promise<string[]> {
 	const unique = [...new Set(ids)];
 	const members = await membersAmong(db, projectId, unique);
-	if (members.length !== unique.length) throw new ApiError(400, 'every recipient must be a member of the project');
+	if (members.length !== unique.length) throw new ApiError(400, 'every recipient must be a member of the project who can read its report (a viewer or above)');
 	return unique;
 }
 

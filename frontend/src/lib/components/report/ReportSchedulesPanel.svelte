@@ -44,7 +44,8 @@
 		try {
 			const [s, m] = await Promise.all([reports.schedules(), canEdit ? api.members.list(projectId) : Promise.resolve([] as Member[])]);
 			schedules = s;
-			members = m;
+			// Only members who can read the report: never a farmer (the API refuses one too).
+			members = m.filter((x) => x.role !== 'farmer');
 		} catch (e) {
 			loadError = msg(e);
 		}

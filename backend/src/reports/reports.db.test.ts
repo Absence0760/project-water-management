@@ -33,7 +33,7 @@ async function withRun(u: User, name = 'Report run') {
 	expect((await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
 	const run = await u.call('POST', `/projects/${projectId}/runs`, {});
 	expect(run.status).toBe(201);
-	return { projectId, runId: run.body.run.id as string };
+	return { projectId, runId: run.body.run.id as string, farmId: farm.id };
 }
 
 async function member(owner: User, projectId: string, u: User, role: 'viewer' | 'editor' | 'owner') {
@@ -213,7 +213,7 @@ describe('POST / GET /projects/:id/reports', () => {
 
 		const toOutsider = await owner.call('POST', `/projects/${projectId}/reports`, { email: [outsider.id] });
 		expect(toOutsider.status).toBe(400);
-		expect(toOutsider.body.error).toBe('every recipient must be a member of the project');
+		expect(toOutsider.body.error).toBe('every recipient must be a member of the project who can read its report (a viewer or above)');
 		const ok = await owner.call('POST', `/projects/${projectId}/reports`, { runId, email: [viewer.id, owner.id] });
 		expect(ok.status).toBe(202);
 		const [row] = await asOwner('SELECT email_to, run_id FROM report WHERE job_id = $1', [ok.body.jobId]);
@@ -261,6 +261,39 @@ describe('POST / GET /projects/:id/reports', () => {
 		expect(ok.body.url).toContain('X-Amz-Expires=3600');
 		expect(ok.body.url).toContain('response-content-disposition=attachment');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+});
+
+describe('farmers (019_farmer_role) never get the catchment report', () => {
+	it('a farmer can’t queue one, read one, issue a render token, or be a recipient; a viewer can (positive control)', async () => {
+		const owner = await signUp('FarmRepOwner');
+		const farmer = await signUp('FarmRepFarmer');
+		const viewer = await signUp('FarmRepViewer');
+		const { projectId, runId, farmId } = await withRun(owner);
+		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farmId] })).status).toBe(201);
+		await member(owner, projectId, viewer, 'viewer');
+		const { jobId } = (await owner.call('POST', `/projects/${projectId}/reports`, {})).body;
+
+		expect((await farmer.call('POST', `/projects/${projectId}/reports`, {})).status).toBe(403);
+		expect((await farmer.call('GET', `/projects/${projectId}/reports/${jobId}`)).status).toBe(403);
+		expect((await farmer.call('GET', `/projects/${projectId}/report-schedules`)).status).toBe(403);
+		expect((await viewer.call('GET', `/projects/${projectId}/reports/${jobId}`)).status).toBe(200);
+		await expect(withUser(farmer.id, (db) => issueRenderToken(db, projectId, runId))).rejects.toMatchObject({ code: '42501' });
+		expect((await withUser(farmer.id, (db) => db.query('SELECT id FROM report WHERE project_id = $1', [projectId]))).rows).toEqual([]);
+		await expect(withUser(farmer.id, (db) => db.query(`INSERT INTO job (project_id, kind) VALUES ($1, 'report_render')`, [projectId]))).rejects.toMatchObject({
+			code: '42501'
+		});
+
+		// Emailing it, or scheduling it, to a farmer is refused; to the viewer it isn't.
+		expect((await owner.call('POST', `/projects/${projectId}/reports`, { email: [farmer.id] })).status).toBe(400);
+		expect((await owner.call('POST', `/projects/${projectId}/report-schedules`, { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [farmer.id] })).status).toBe(400);
+		const ok = await owner.call('POST', `/projects/${projectId}/report-schedules`, { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [viewer.id] });
+		expect(ok.status).toBe(201);
+		await expect(
+			withUser(owner.id, (db) => db.query('INSERT INTO report_schedule_recipient (schedule_id, user_id) VALUES ($1, $2)', [ok.body.schedule.id, farmer.id]))
+		).rejects.toMatchObject({ code: '23514' });
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+		await asOwner('DELETE FROM report_schedule WHERE project_id = $1', [projectId]);
 	});
 });
 
@@ -322,7 +355,7 @@ describe('report schedules', () => {
 
 		const bad = await editor.call('POST', `/projects/${projectId}/report-schedules`, weekly([stranger.id]));
 		expect(bad.status).toBe(400);
-		expect(bad.body.error).toBe('every recipient must be a member of the project');
+		expect(bad.body.error).toBe('every recipient must be a member of the project who can read its report (a viewer or above)');
 		expect((await editor.call('POST', `/projects/${projectId}/report-schedules`, { ...weekly([owner.id]), timezone: 'Mars/Olympus' })).status).toBe(400);
 		expect((await editor.call('POST', `/projects/${projectId}/report-schedules`, { ...weekly([owner.id]), weekday: null })).status).toBe(400);
 		expect((await editor.call('POST', `/projects/${projectId}/report-schedules`, { frequency: 'monthly', monthDay: 29, hour: 7, timezone: 'UTC', recipients: [owner.id] })).status).toBe(400);

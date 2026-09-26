@@ -23,7 +23,8 @@
 --                  each schedule whose time has come, as the schedule's
 --                  acting user.
 --
--- Who can do what:
+-- Who can do what (a farmer, 019_farmer_role, ranks below viewer and so can
+-- do none of it: the catchment report is not theirs to read):
 --   * Ask for a report (INSERT report, and its report_render job): any viewer
 --     of the project, as themselves. The report route already shows a viewer
 --     everything the PDF contains. The job table's insert policy is widened
@@ -230,18 +231,19 @@ CREATE INDEX report_schedule_recipient_user_idx ON report_schedule_recipient (us
 COMMENT ON TABLE report_schedule_recipient IS
 	'Who a scheduled report is emailed to: members of the schedule''s project only (019_reports). Filtered to current members again at send time.';
 
--- A recipient must be a member of the schedule's project (a direct member,
--- the list the Sharing panel shows): a schedule can't mail project data to
--- an arbitrary account.
+-- A recipient must be a member of the schedule's project who can read the
+-- report (a direct member, the list the Sharing panel shows, viewer or
+-- above: a farmer (019_farmer_role) never gets the catchment report): a
+-- schedule can't mail project data to an arbitrary account.
 CREATE FUNCTION report_schedule_recipient_check() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
 	BEGIN
 		IF NOT EXISTS (
 			SELECT 1 FROM report_schedule s JOIN project_member m ON m.project_id = s.project_id
-			WHERE s.id = NEW.schedule_id AND m.user_id = NEW.user_id
+			WHERE s.id = NEW.schedule_id AND m.user_id = NEW.user_id AND m.role >= 'viewer'
 		) THEN
-			RAISE EXCEPTION 'a report recipient must be a member of the project' USING ERRCODE = 'check_violation';
+			RAISE EXCEPTION 'a report recipient must be a member of the project who can read its report' USING ERRCODE = 'check_violation';
 		END IF;
 		RETURN NEW;
 	END
