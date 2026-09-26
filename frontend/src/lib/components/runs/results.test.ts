@@ -1,7 +1,7 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunSeriesRef } from '$lib/api/types';
-import { m3DayToMm3a, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
+import { m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
 	nodeId,
@@ -80,5 +80,22 @@ describe('supplyBarFraction', () => {
 		expect(supplyBarFraction(1.2)).toBe(1);
 		expect(supplyBarFraction(-0.1)).toBe(0);
 		expect(supplyBarFraction(Number.NaN)).toBe(0);
+	});
+});
+
+describe('runDamCapacity', () => {
+	const live = [{ id: 'a', damCapacityM3: 50_000 }, { id: 'new', damCapacityM3: 9 }];
+	it('takes each dam as the run had it, so a dam halved since then does not chart the old run at 200 %', () => {
+		const cap = runDamCapacity({ nodes: [{ id: 'a', damCapacityM3: 100_000 }, { id: 'g' }] }, live);
+		expect(cap.get('a')).toBe(100_000);
+		expect(storagePct([100_000], cap.get('a')!)).toEqual([100]);
+		// A node the run had without a dam; a node added since the run is not in it.
+		expect(cap.get('g')).toBe(0);
+		expect(cap.has('new')).toBe(false);
+	});
+
+	it('falls back to the live model for a run without a model snapshot', () => {
+		expect(runDamCapacity(undefined, live).get('a')).toBe(50_000);
+		expect(runDamCapacity({ nodes: [] }, live).get('a')).toBe(50_000);
 	});
 });

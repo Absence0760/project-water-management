@@ -80,6 +80,21 @@ export function toDisplayUnit(values: readonly (number | null)[], unit: string, 
 	return { unit: 'm³/s', values: values.map((v) => (v == null || !Number.isFinite(v) ? null : v / SEC_PER_DAY)) };
 }
 
+/**
+ * Each node's dam capacity (m³) as the shown run had it: from the run's own
+ * model snapshot, so a dam resized since the run doesn't rescale the run's
+ * storage (halving a dam charted an old run at 200 %). A run from an API
+ * without the snapshot falls back to the live model.
+ */
+export function runDamCapacity(
+	runModel: { nodes?: readonly { id: string; damCapacityM3?: unknown }[] } | undefined,
+	liveNodes: readonly { id: string; damCapacityM3: number }[]
+): Map<string, number> {
+	const snap = runModel?.nodes;
+	if (snap?.length) return new Map(snap.map((n) => [n.id, typeof n.damCapacityM3 === 'number' ? n.damCapacityM3 : 0]));
+	return new Map(liveNodes.map((n) => [n.id, n.damCapacityM3]));
+}
+
 /** Dam storage (m³) as % of capacity; null when there is no dam. */
 export function storagePct(values: readonly (number | null)[], capacityM3: number): (number | null)[] | null {
 	if (!(capacityM3 >= 1)) return null;

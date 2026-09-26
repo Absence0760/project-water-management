@@ -1269,7 +1269,8 @@ run's report to chosen members every week or month.
   note when it used another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
   Q70 / Q90 / Q95 table. Farm detail (dam
-  storage as % of capacity, supply against demand), and an explorer for any
+  storage as % of the capacity the run had, from its model snapshot, not
+  today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
