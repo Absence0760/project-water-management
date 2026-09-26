@@ -11,13 +11,14 @@
 process.env.TZ = 'Pacific/Kiritimati';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
-import { withUser } from '../db/tx.js';
+import { withoutUser, withUser } from '../db/tx.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { utcToday } from '../feeds/fetch.js';
 import { ingestResult } from '../feeds/ingest.js';
 import { feedForJob } from '../feeds/store.js';
 import { runTick } from '../jobs/runner.js';
-import { AUTO_RUN_MAX_WAIT_MINUTES, enqueueRerun, onNewData } from './autoRun.js';
+import { onSeriesDaysChanged } from '../series/newData.js';
+import { AUTO_RUN_MAX_WAIT_MINUTES, enqueueRerun, resolveAutoRun } from './autoRun.js';
 import { executeRun, trimRuns } from './execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -202,11 +203,13 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		expect((await owner.call('POST', `/projects/${pid}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
 		await expect(withUser(viewer.id, (db) => enqueueRerun(db, pid, 'series'))).rejects.toMatchObject({ code: '42501' });
 		await expect(withUser(stranger.id, (db) => enqueueRerun(db, pid, 'series'))).rejects.toMatchObject({ code: '42501' });
-		// And through a direct call with bad arguments.
-		await expect(withUser(owner.id, (db) => db.query(`SELECT * FROM app_enqueue_rerun($1, interval '2 days', interval '2 days', 'series')`, [pid]))).rejects.toMatchObject({
-			code: '22023'
-		});
+		// No user and no API key: nobody to run it as.
+		await expect(withoutUser((db) => enqueueRerun(db, pid, 'ingest'))).rejects.toMatchObject({ code: '42501' });
 		await expect(withUser(owner.id, (db) => enqueueRerun(db, pid, 'bogus' as 'series'))).rejects.toMatchObject({ code: '22023' });
+		// A plain insert with no user is still refused (job_enqueue, as in 016).
+		await expect(withoutUser((db) => db.query(`INSERT INTO job (project_id, kind, acting_user_id) VALUES ($1, 'rerun', $2)`, [pid, owner.id]))).rejects.toMatchObject({
+			code: '42501'
+		});
 		expect(await rerunJobs(pid)).toHaveLength(0);
 		// Positive control.
 		const q = await withUser(owner.id, (db) => enqueueRerun(db, pid, 'series'));
@@ -259,11 +262,87 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 
-	it('the hook returns null (and queues nothing) when off, called as any source would', async () => {
+	it('the hook returns null when off or when no day changed, and the due time when on', async () => {
 		const u = await signUp('AutoHook');
 		const pid = await runnable(u);
-		expect(await withUser(u.id, (db) => onNewData(db, pid, 'ingest'))).toBeNull();
+		const change = { seriesId: crypto.randomUUID(), kind: 'rain_catchment_mm', name: '', daysChanged: 3, via: 'api_key' as const };
+		expect(await withUser(u.id, (db) => onSeriesDaysChanged(db, pid, change))).toBeNull();
 		expect(await rerunJobs(pid)).toHaveLength(0);
+		await u.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true } } });
+		expect(await withUser(u.id, (db) => onSeriesDaysChanged(db, pid, { ...change, daysChanged: 0 }))).toBeNull();
+		expect(await rerunJobs(pid)).toHaveLength(0);
+		// Positive control: on, with days changed.
+		const due = await withUser(u.id, (db) => onSeriesDaysChanged(db, pid, change));
+		const [job] = await rerunJobs(pid);
+		expect(due).toBe(job!.run_after.toISOString());
+		expect(job!.payload).toMatchObject({ trigger: 'auto', cause: 'ingest' });
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('the enqueue reads the setting with the same defaults as resolveAutoRun', async () => {
+		const u = await signUp('AutoDefaults');
+		const pid = await runnable(u);
+		// Stored shapes the API would refuse, written straight in: each field falls back on its own, in SQL as in TS.
+		for (const [stored, queued] of [
+			[{ enabled: true }, true],
+			[{ enabled: true, debounceMinutes: 500 }, true],
+			[{ enabled: true, debounceMinutes: 7.5 }, true],
+			[{ enabled: true, debounceMinutes: 'soon' }, true],
+			[{ enabled: true, debounceMinutes: 42 }, true],
+			[{ enabled: 'true' }, false],
+			[{ debounceMinutes: 5 }, false],
+			['on', false]
+		] as const) {
+			await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{autoRun}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify(stored)]);
+			const resolved = resolveAutoRun({ autoRun: stored });
+			const q = await withUser(u.id, (db) => enqueueRerun(db, pid, 'series'));
+			expect(!!q, JSON.stringify(stored)).toBe(queued);
+			expect(resolved.enabled, JSON.stringify(stored)).toBe(queued);
+			if (q) {
+				const wait = Date.parse(q.runAfter) - Date.now();
+				expect(wait, JSON.stringify(stored)).toBeGreaterThan((resolved.debounceMinutes - 1) * MIN);
+				expect(wait, JSON.stringify(stored)).toBeLessThanOrEqual(resolved.debounceMinutes * MIN);
+			}
+			await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		}
+	});
+
+	it('the API-key seam: a transaction with no user queues as whoever app_rerun_acting_user names, and only then', async () => {
+		// WP-2.9's merge replaces app_rerun_acting_user to answer a live key's
+		// creator. Stand in for it here: answer the owner when the (test-only)
+		// setting names the project, as a key context would, then put the
+		// function back. DB test files run one at a time, so nothing else sees it.
+		const owner = await signUp('AutoKey');
+		const pid = await runnable(owner, { enabled: true });
+		const [{ def }] = await asOwner(`SELECT pg_get_functiondef('app_rerun_acting_user(uuid)'::regprocedure) AS def`);
+		await asOwner(
+			`CREATE OR REPLACE FUNCTION app_rerun_acting_user(p_project uuid) RETURNS uuid LANGUAGE sql STABLE SET search_path = public AS $f$
+				SELECT CASE WHEN app_current_user_id() IS NOT NULL AND app_has_role(p_project, 'editor') THEN app_current_user_id()
+					WHEN current_setting('app.test_key_project', true) = p_project::text THEN '${owner.id}'::uuid END
+			$f$`
+		);
+		try {
+			const keyed = (project: string) =>
+				withoutUser(async (db) => {
+					await db.query(`SELECT set_config('app.test_key_project', $1, true)`, [project]);
+					return enqueueRerun(db, pid, 'ingest');
+				});
+			// Another project's "key": still nobody to run it as.
+			await expect(keyed(crypto.randomUUID())).rejects.toMatchObject({ code: '42501' });
+			// Its own: queued, as the key's creator (the stand-in's answer), not refused for want of a user.
+			const q = await keyed(pid);
+			expect(q).toMatchObject({ created: true });
+			const [job] = await rerunJobs(pid);
+			expect(job).toMatchObject({ id: q!.jobId, acting_user_id: owner.id, payload: { trigger: 'auto', cause: 'ingest' } });
+			// And it runs as that person, under RLS, like any job.
+			await makeDue(pid);
+			await runTick();
+			expect(await runs(pid)).toEqual([expect.objectContaining({ trigger: 'auto' })]);
+		} finally {
+			await asOwner(def as string);
+		}
+		const [{ now }] = await asOwner(`SELECT pg_get_functiondef('app_rerun_acting_user(uuid)'::regprocedure) AS now`);
+		expect(now).toBe(def);
 	});
 });
 

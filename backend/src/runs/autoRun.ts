@@ -1,37 +1,12 @@
 // Automatic re-runs after new data (roadmap WP-2.11; docs/architecture.md
-// § Background work, 037_auto_rerun.sql).
+// § Background work, 037_auto_rerun.sql): the project setting, the enqueue
+// behind the new-data hook (series/newData.ts onSeriesDaysChanged, which
+// every source of new days calls), and the auto run's label.
 //
-// THE NEW-DATA HOOK: `onNewData(db, projectId, cause)`.
-//
-//   Every source of new series days calls it once, inside the transaction that
-//   wrote the days, after the write and only when days actually changed (an
-//   idempotent re-send that changes nothing must not queue a run):
-//     - POST /projects/:id/series/merge and PUT /projects/:id/series (a
-//       person's upload), cause 'series';
-//     - a data feed's merge or confirmed replacement (feeds/ingest.ts), cause
-//       'feed';
-//     - the API-key ingest (WP-2.9, /ingest/v1/series/merge), cause 'ingest'.
-//   Contract:
-//     - `db` is a transaction whose app.current_user_id is an editor of the
-//       project (withUser; a job runs as its acting user). That user becomes
-//       the re-run's acting user. A request with no user (WP-2.9's key context
-//       sets app.current_api_key_id only) must resolve one first, e.g. the
-//       key's creator re-checked as editor, or app_enqueue_rerun refuses it
-//       (42501) and the caller's whole transaction rolls back.
-//     - It does nothing (and returns null) unless the project has turned
-//       automatic runs on (settings.autoRun.enabled, off by default).
-//     - Otherwise it queues or pushes back the project's one pending `rerun`
-//       job (app_enqueue_rerun: due `debounceMinutes` from now, never later
-//       than AUTO_RUN_MAX_WAIT_MINUTES after the first new data) and returns
-//       when it is due, as an ISO timestamp: the `rerunQueuedFor` the merge
-//       routes answer with.
-//     - It never wakes the worker (that must happen after commit). A caller
-//       on the API path wakes it after its transaction commits when the
-//       re-run is due at once (series/routes.ts `wakeForRerun`); a caller
-//       inside a job needs nothing (the job table's insert trigger NOTIFYs
-//       the local worker, and the production tick finds due jobs every 5
-//       minutes). Kept out of this module: jobs/wake.ts pulls the memory
-//       transport's runner into any bundle that imports it.
+// The setting's defaults live here (resolveAutoRun) and, for the enqueue,
+// in app_enqueue_rerun, which reads settings.autoRun itself so that an API
+// key's transaction (no user, no project visible under RLS) can queue too.
+// autoRun.db.test.ts holds the two together.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { ModelInput } from '@water-management/engine';
 import { z } from 'zod';
@@ -102,31 +77,20 @@ export interface QueuedRerun {
 }
 
 /**
- * Queue or push back the project's automatic re-run, whatever the project's
- * setting says (onNewData checks it). As the transaction's user, who must be
- * an editor (app_enqueue_rerun re-checks).
+ * Queue or push back the project's automatic re-run (app_enqueue_rerun), or
+ * nothing when the project hasn't turned automatic runs on (null). As the
+ * transaction's user, who must be an editor, or, once WP-2.9's seam is in
+ * (app_rerun_acting_user), as a live API key of the project, whose re-run
+ * then runs as the key's creator. Anyone else: 42501, and the caller's
+ * transaction rolls back.
  */
-export async function enqueueRerun(
-	db: Db,
-	projectId: string,
-	cause: NewDataCause,
-	{ debounceMinutes = AUTO_RUN_DEFAULTS.debounceMinutes, maxWaitMinutes = AUTO_RUN_MAX_WAIT_MINUTES }: { debounceMinutes?: number; maxWaitMinutes?: number } = {}
-): Promise<QueuedRerun> {
-	const { rows } = await db.query<{ job_id: string; due_at: Date; created: boolean }>(
-		'SELECT job_id, due_at, created FROM app_enqueue_rerun($1, make_interval(mins => $2), make_interval(mins => $3), $4)',
-		[projectId, debounceMinutes, Math.max(maxWaitMinutes, debounceMinutes), cause]
-	);
+export async function enqueueRerun(db: Db, projectId: string, cause: NewDataCause): Promise<QueuedRerun | null> {
+	const { rows } = await db.query<{ job_id: string; due_at: Date; created: boolean }>('SELECT job_id, due_at, created FROM app_enqueue_rerun($1, $2)', [
+		projectId,
+		cause
+	]);
 	const r = rows[0];
-	if (!r) throw new Error('app_enqueue_rerun returned no job');
-	return { jobId: r.job_id, runAfter: r.due_at.toISOString(), created: r.created };
-}
-
-/** The new-data hook (see the header for the contract). */
-export async function onNewData(db: Db, projectId: string, cause: NewDataCause): Promise<QueuedRerun | null> {
-	const { rows } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
-	const auto = resolveAutoRun(rows[0]?.settings);
-	if (!auto.enabled) return null;
-	return enqueueRerun(db, projectId, cause, { debounceMinutes: auto.debounceMinutes });
+	return r ? { jobId: r.job_id, runAfter: r.due_at.toISOString(), created: r.created } : null;
 }
 
 /**

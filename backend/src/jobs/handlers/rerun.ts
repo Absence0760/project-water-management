@@ -3,7 +3,7 @@
 // request path. Two ways in:
 //   - `manual`: POST /projects/:id/jobs (WP-2.8), labelled as asked;
 //   - `auto`: the debounced re-run after new data (WP-2.11,
-//     runs/autoRun.ts onNewData → app_enqueue_rerun). Labelled
+//     series/newData.ts onSeriesDaysChanged → app_enqueue_rerun). Labelled
 //     `Auto · data to <day>`, stored with trigger 'auto', so the storage cap
 //     keeps only the newest unkept auto run (runs/execute.ts trimRuns), and
 //     then published if the project opted in (publish/autoPublish.ts).

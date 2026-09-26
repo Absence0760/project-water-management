@@ -41,7 +41,7 @@
 // the new version.
 //
 // Days that changed in the live series (a merge, or the swap) go through the
-// new-data hook (runs/autoRun.ts onNewData), which queues the project's
+// new-data hook (series/newData.ts onSeriesDaysChanged), which queues the project's
 // debounced automatic re-run when it has them on (WP-2.11). Staged days don't:
 // a run can't see them yet.
 import { provenanceKey, provenanceLabel, type SeriesProvenance } from '@water-management/engine';
@@ -50,7 +50,7 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
 import { hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
-import { onNewData } from '../runs/autoRun.js';
+import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/routes.js';
 import { type FeedSource, feedProvenance, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
@@ -171,8 +171,9 @@ async function stageReplacement(
 		}
 		await db.query('DELETE FROM feed_stage WHERE feed_id = $1', [feed.id]);
 		await feedReplaceDone(db, feed.id);
-		// The whole new record went in: the new-data hook (runs/autoRun.ts).
-		if (replaced.changed) await onNewData(db, feed.projectId, 'feed');
+		// The whole new record went in: the new-data hook (series/newData.ts).
+		const m = replaced.meta;
+		await onSeriesDaysChanged(db, feed.projectId, { seriesId: m.id, kind: m.kind, name: m.name, daysChanged: replaced.daysChanged, via: 'feed' });
 		meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
 	} else {
 		meta = { ...result.meta, merged, staged: stage?.values.length ?? 0, through: window.end };
@@ -262,8 +263,8 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
 				if (subject.daysChanged) {
 					await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
-					// The new-data hook (runs/autoRun.ts): the project's automatic re-run, if it has them on.
-					await onNewData(db, feed.projectId, 'feed');
+					// The new-data hook (series/newData.ts): the project's automatic re-run, if it has them on.
+					await onSeriesDaysChanged(db, feed.projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: subject.daysChanged as number, via: 'feed' });
 				}
 			} catch (err) {
 				// The merge refuses before writing (e.g. the series would pass 60 000 days).
