@@ -27,8 +27,9 @@ import { LOCALES, type Locale } from '../mail/templates.js';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 
-/** A farmer can hold several farms; 50 is far above any real catchment. */
-const NodeIds = z.array(z.string().uuid()).min(1).max(50);
+/** A farmer can hold several farms; 50 per request is far above any real catchment. */
+export const MAX_FARMS_PER_FARMER = 50;
+const NodeIds = z.array(z.string().uuid()).min(1).max(MAX_FARMS_PER_FARMER);
 const Email = z.string().trim().toLowerCase().email().max(254);
 const AddBody = z.object({ email: Email, nodeIds: NodeIds, locale: z.enum(LOCALES).default('en') });
 const LinksBody = z.object({ nodeIds: NodeIds });
@@ -286,6 +287,11 @@ export const farmerRoutes = new Hono<AuthEnv>()
 				const mark = (status: BulkStatus, error?: string) => {
 					for (const r of rows) Object.assign(results[r.row]!, { status, ...(error ? { error } : {}) });
 				};
+				// The same per-request cap as adding one farmer.
+				if (nodeIds.length > MAX_FARMS_PER_FARMER) {
+					mark('error', `${nodeIds.length} farms for one address: at most ${MAX_FARMS_PER_FARMER} at a time`);
+					continue;
+				}
 				if (user?.verified) {
 					const role = roleOf.get(user.id);
 					if (role && role !== 'farmer') {

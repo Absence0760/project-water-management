@@ -260,6 +260,28 @@ describe('POST /farmers/bulk', () => {
 		expect(res.body.results.every((r: { status: string }) => r.status === 'invited')).toBe(true);
 	});
 
+	it('caps one address at 50 farms per request, like adding one farmer', async () => {
+		const out = node('Outlet', null);
+		const farms = Array.from({ length: 51 }, (_, i) => node(`Plot ${i + 1}`, out.id));
+		const pid = (await owner.call('POST', '/projects', { name: 'Many plots' })).body.project.id;
+		const model = { nodes: [out, ...farms], crops: [], cropAreas: [], transfers: [], landCover: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		const over = newEmail('over');
+		const under = newEmail('under');
+		const rows = [
+			...farms.map((f) => ({ email: over, farm: f.name })),
+			...farms.slice(0, 50).map((f) => ({ email: under, farm: f.name }))
+		];
+		const res = await owner.call('POST', `/projects/${pid}/farmers/bulk`, { rows });
+		expect(res.status).toBe(200);
+		const byEmail = (e: string) => res.body.results.filter((r: { email: string }) => r.email === e);
+		expect(byEmail(over).every((r: { status: string; error?: string }) => r.status === 'error' && r.error === '51 farms for one address: at most 50 at a time')).toBe(true);
+		// Positive control: 50 farms for another address in the same request go through.
+		expect(byEmail(under).every((r: { status: string }) => r.status === 'invited')).toBe(true);
+		expect(await asOwner('SELECT 1 FROM invite WHERE email = $1', [over])).toEqual([]);
+		expect(mailCount(under)).toBe(1);
+	});
+
 	it('is owner-only, and caps a request at 200 rows', async () => {
 		const row = { email: newEmail('cap'), farm: 'Hoek' };
 		expect((await bulk(viewer, [row])).status).toBe(403);

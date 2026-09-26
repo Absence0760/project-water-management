@@ -439,7 +439,8 @@ the invite will link; revoke a pending one with
   `error`. Rows are then grouped by address: a verified account is added (or,
   already a farmer, gains the farms; the rows never take one away), anyone
   else is invited with the farms of all their rows (added to any the invite
-  already names), and a member with another role is an `error`. One email
+  already names), and a member with another role is an `error`, as is an
+  address given more than 50 farms in one request (the single-add cap). One email
   per address at most, after commit, with the usual re-send cooldown; the
   first row's language wins. `row` is the index into `rows`.
 - `dryRun: true` works out every row's outcome and rolls the lot back:
