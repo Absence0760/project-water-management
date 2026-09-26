@@ -1,6 +1,19 @@
 import { assessSite, type EwrAssuranceSite, type EwrRuleTable } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { conditionText, describeMethod, fdcText, fewYears, fmtFlow, headlineSite, monthLabel, shareOfRequired, verdict } from './ewrAssurance';
+import {
+	conditionText,
+	describeMethod,
+	fdcText,
+	fewYears,
+	fmtFlow,
+	headlineSite,
+	highFlowVerdict,
+	monthLabel,
+	reserveCellText,
+	reserveGrid,
+	shareOfRequired,
+	verdict
+} from './ewrAssurance';
 import { resultSections } from './sections';
 
 // Synthetic: two water years of 1.5 Mm³ natural flow a month (70 % on the table's curve, 0.75 Mm³ required).
@@ -86,5 +99,50 @@ describe('resultSections', () => {
 		expect(resultSections(base).map((s) => s.id)).not.toContain('res-reserve');
 		const ids = resultSections({ ...base, ewrAssurance: [site(() => 1)] }).map((s) => s.id);
 		expect(ids.slice(ids.indexOf('res-reserve'), ids.indexOf('res-reserve') + 3)).toEqual(['res-reserve', 'res-ewr', 'res-ewr-grid']);
+	});
+});
+
+describe('the Reserve heat map (engine ≥ 0.32.0)', () => {
+	// 1.5 Mm³ natural sits at 70 %: 0.75 Mm³ total and 0.4 Mm³ low flow required. B lets 40 % through Jan–Mar (0.6 Mm³ in Jan).
+	const lowTable: EwrRuleTable = { ...table, lowFlow: Array.from({ length: 12 }, () => [1, 0.6, 0.2]) };
+	const d0 = Date.UTC(2000, 9, 1) / 86_400_000;
+	const dry = (t: number) => ([1, 2, 3].includes(new Date((d0 + t) * 86_400_000).getUTCMonth() + 1) ? 0.4 : 1);
+	const withLow = (share: (t: number) => number) => {
+		const days = 366 + 365;
+		const natural = new Float64Array(days).fill(1.5e6 / 31);
+		return assessSite('2000-10-01', days, { table: lowTable, nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural.map((v, t) => v * share(t)) }).report;
+	};
+
+	it('lays the months out as water-year rows × Oct … Sep, and names the part that failed', () => {
+		const g = reserveGrid(withLow(dry));
+		expect(g.waterYears).toEqual([2000, 2001]);
+		expect(g.cells[0]!.map((c) => c!.state)).toEqual(['met', 'met', 'met', 'high', 'high', 'high', 'met', 'met', 'met', 'met', 'met', 'met']);
+		const jan = g.cells[0]![3]!;
+		expect(jan.share).toBeCloseTo(0.6 / 0.75, 9);
+		expect(reserveCellText(jan)).toBe('Jan 2001: low flows met, high flows not met, 80% of the requirement');
+		// Without a low-flow grid, a month that failed is just not met.
+		const plain = reserveGrid(site(dry));
+		expect(plain.cells[0]![3]!.state).toBe('low');
+		expect(reserveCellText(plain.cells[0]![3]!)).toBe('Jan 2001: not met, 80% of the requirement');
+		// Far below: the low flows fail too.
+		const worse = reserveGrid(withLow((t) => dry(t) * 0.3));
+		expect(reserveCellText(worse.cells[0]![3]!)).toBe('Jan 2001: low flows not met, 24% of the requirement');
+	});
+
+	it('leaves the months a part-year run lacks empty', () => {
+		const days = 200;
+		const natural = new Float64Array(days).fill(1.5e6 / 31);
+		const r = assessSite('2000-10-15', days, { table, nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural }).report;
+		const g = reserveGrid(r);
+		expect(g.cells[0]![0]).toBeNull();
+		expect(g.cells[0]![1]!.state).toBe('met');
+	});
+
+	it('says how a high-flow component did', () => {
+		const h = (years: number, required: number, met: number) => ({ overall: { years, required, met, rate: required ? met / required : null } });
+		expect(highFlowVerdict(h(0, 0, 0))).toBe('Not assessed: the run has no complete water year.');
+		expect(highFlowVerdict(h(5, 0, 0))).toBe('Not required in any of the 5 water years: natural flow never reached it.');
+		expect(highFlowVerdict(h(9, 4, 3))).toBe('Met in 3 of the 4 water years whose natural flow had it (75%).');
+		expect(highFlowVerdict(h(9, 1, 1))).toBe('Met in 1 of the 1 water year whose natural flow had it (100%).');
 	});
 });

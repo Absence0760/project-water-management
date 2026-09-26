@@ -1,6 +1,6 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
-import type { EwrAssuranceMonth, EwrAssuranceSite, RunSummary } from '@water-management/engine';
+import type { EwrAssuranceMonth, EwrAssuranceSite, EwrHighFlowReport, RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { monthName } from '$lib/format/months';
 
@@ -56,6 +56,47 @@ export const shareOfRequired = (m: Pick<EwrAssuranceMonth, 'required' | 'actual'
 export function fdcText(fdc: readonly { met: boolean | null }[]): string {
 	const judged = fdc.filter((f) => f.met !== null);
 	return judged.length ? `${judged.filter((f) => f.met).length} of ${judged.length}` : '–';
+}
+
+/**
+ * A month in the Reserve heat map: 'met'; 'high' (the low flows were met but
+ * not the total: the high flows are the part that failed; only with a
+ * low-flow grid); 'low' (the low flows failed, or, without a low-flow grid,
+ * the month failed).
+ */
+export type ReserveCellState = 'met' | 'high' | 'low';
+
+export interface ReserveCell {
+	state: ReserveCellState;
+	/** Simulated ÷ required (null when nothing was required). */
+	share: number | null;
+	month: EwrAssuranceMonth;
+}
+
+/** The monthly results as water-year rows × Oct … Sep columns (null where the run has no complete month). */
+export function reserveGrid(s: Pick<EwrAssuranceSite, 'months'>): { waterYears: number[]; cells: (ReserveCell | null)[][] } {
+	const years = [...new Set(s.months.map((m) => m.waterYear))].sort((a, b) => a - b);
+	const cells = years.map(() => Array.from({ length: 12 }, () => null as ReserveCell | null));
+	for (const m of s.months) {
+		const state: ReserveCellState = m.met ? 'met' : m.lowFlowMet ? 'high' : 'low';
+		cells[years.indexOf(m.waterYear)]![(m.month + 2) % 12] = { state, share: m.required > 0 ? m.actual / m.required : null, month: m };
+	}
+	return { waterYears: years, cells };
+}
+
+/** A heat-map cell in words, for its title and the screen-reader text. */
+export function reserveCellText(c: ReserveCell): string {
+	const what = c.state === 'met' ? 'met' : c.state === 'high' ? 'low flows met, high flows not met' : c.month.lowFlowMet === false ? 'low flows not met' : 'not met';
+	const share = c.share === null ? '' : `, ${fmtPct(c.share, 0)} of the requirement`;
+	return `${monthLabel(c.month)}: ${what}${share}`;
+}
+
+/** A high-flow component's result in words: "Met in 7 of 9 years that had it naturally". */
+export function highFlowVerdict(h: Pick<EwrHighFlowReport, 'overall'>): string {
+	const o = h.overall;
+	if (!o.years) return 'Not assessed: the run has no complete water year.';
+	if (!o.required) return `Not required in any of the ${fmtNum(o.years)} water years: natural flow never reached it.`;
+	return `Met in ${fmtNum(o.met)} of the ${fmtNum(o.required)} water year${o.required === 1 ? '' : 's'} whose natural flow had it (${fmtPct(o.met / o.required, 0)}).`;
 }
 
 /** The shortest record of any assessed calendar month, when it is under the engine's threshold (for a caution line). */

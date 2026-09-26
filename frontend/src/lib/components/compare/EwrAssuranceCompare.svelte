@@ -18,8 +18,12 @@
 		{ label: 'Complete months assessed', m: s.months, spec: { format: 'count', better: 'neutral' } },
 		{ label: 'Deficit (Mm³)', m: mm3(s.deficitM3), spec: { format: 'ratio', better: 'lower', digits: 3 } },
 		{ label: 'Longest run not met (months)', m: s.longestNotMetRun, spec: { format: 'count', better: 'lower' } },
-		{ label: 'FDC check: points met', m: s.fdcRate, spec: { format: 'fraction', better: 'higher', digits: 0 } }
+		{ label: 'FDC check: points met', m: s.fdcRate, spec: { format: 'fraction', better: 'higher', digits: 0 } },
+		// Engine ≥ 0.32.0, shown only when either run has them.
+		...(present(s.lowFlowRate) ? [{ label: 'Low flows: months met', m: s.lowFlowRate!, spec: { format: 'fraction', better: 'higher' } as MetricSpec }] : []),
+		...(present(s.highFlowRate) ? [{ label: 'High flows: years met', m: s.highFlowRate!, spec: { format: 'fraction', better: 'higher', digits: 0 } as MetricSpec }] : [])
 	];
+	const present = (m: MetricDelta | undefined) => !!m && (m.a !== null || m.b !== null);
 	const monthSpec: MetricSpec = { format: 'fraction', better: 'higher', digits: 0 };
 	const siteName = (s: EwrAssuranceDelta) => (s.isOutlet ? `Outlet (${s.name})` : s.name);
 </script>
