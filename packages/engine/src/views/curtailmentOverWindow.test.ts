@@ -19,6 +19,10 @@ function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): Curtail
 		endDate: out.endDate,
 		nodes: input.model.nodes,
 		transfers: input.model.transfers,
+		// Crops under their own irrigation efficiency (engine 0.41.0) set a farm's consumptive share.
+		crops: input.model.crops,
+		cropAreas: input.model.cropAreas,
+		apanMm: input.settings?.apanMm,
 		series: (nodeId, key) => {
 			read?.add(`${nodeId ?? ''}|${key}`);
 			return byKey.get(`${nodeId ?? ''}|${key}`);

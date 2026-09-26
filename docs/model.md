@@ -184,6 +184,67 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    measured against it, so "100 % supplied" means the crop got its whole
    requirement (crop use = e × G = F). The workbook has no such step (e = 1).
 
+6. **Irrigation efficiency per crop (engine ≥ 0.41.0, issue #54 item 1).**
+   A crop may carry its own `irrigationEfficiency` (0 < e ≤ 1), for the
+   system it is under (drip, micro-sprinkler, pivot …; the AI workbook v004
+   keeps one per crop, §4). A crop without one uses the farm's own `e[f]`;
+   the crop's value **overrides** the farm's, never multiplies it. The farm
+   then runs on its crops' efficiencies combined, the harmonic mean weighted
+   by each crop's annual gross requirement at the monthly A-pan
+   (`farmIrrigationEfficiency` in `packages/engine/src/demand.ts`):
+
+   ```
+   w[c]  = area[f][c] × Σm MAX(0, cropFactor[c][m]) × MAX(0, apanMm[m])
+   e*[f] = Σc w[c] ÷ Σc (w[c] ÷ e[c])        e[c] = the crop's own, else e[f]
+   D     = F ÷ e*[f]
+   ```
+
+   The harmonic mean is the one that keeps both halves of the balance exact
+   when F is shared among the crops by their gross: the abstraction is
+   Σ F[c] ÷ e[c], and the application losses (1 − e*)·G are each crop's
+   (1 − e[c])·G[c] summed, so the return flow β(1 − e*)G and the consumptive
+   use are right too. e* always lies between the smallest and largest
+   efficiency it combines, and lowering any crop's efficiency never lowers
+   the farm's demand (both tested). With no A-pan in any month the weights are
+   area × Σ crop factor; a farm with no requirement at all keeps `e[f]`. A
+   value outside (0, 1] (a hand-edited document) is ignored with a warning and
+   the farm's is used.
+
+   *What it leaves out.* e* is one number per farm, not per month: the network
+   step (`network/simulate.ts`), the EWR attribution and the curtailment
+   report all keep one efficiency per farm. A farm with a winter crop on one
+   system and a summer crop on another abstracts, in each month, the annual
+   blend rather than that month's; over the year the weighting by requirement
+   keeps the totals close. A per-month e* would need the network step to take
+   a daily efficiency (a larger change, for the hydrologist to ask for if the
+   farms warrant it). The crop factors themselves are unchanged: which crop
+   set a catchment uses awaits the hydrologist (issue #54, Q9/Q10).
+
+   A farm none of whose cropped crops sets one returns `e[f]` untouched, so a
+   model without crop efficiencies runs **bit for bit** as before (tested on
+   the example catchments). Readers of a saved run that recompute with the
+   efficiency (the run checks in `verify/checks.ts`, the farmer projection and
+   the reporting-window curtailment, `views/farmProjection.ts`) derive e* the
+   same way from the run's own model snapshot and `apanMm`.
+
+7. **Monthly effective-rain fraction (engine ≥ 0.41.0, issue #54 item 1).**
+   `settings.effectiveRainFractionMonthly` (12 values, 0–1, water-year order
+   Oct–Sep) replaces `effRain` month by month in step 3–4: day *t* uses the
+   fraction of its own month, `Pe = croppedArea × effRainMonthly[month(t)] ÷
+   1000 × rainUsed[t]`. Everything else stays: the rain threshold, and the
+   soil-water store, which still carries the effective rain over (so a month's
+   rain can cover the next month's first days). null / absent = the one
+   `effectiveRainFraction` in every month; the annual fraction written out 12
+   times gives the identical run (tested).
+
+   It is **never defaulted to 0**. The AI workbook's "monthly rainfall for net
+   demand" row is all zeros, so rain never reduces its irrigation demand
+   (issue #54); the engine's effective rain and soil-water store are the better
+   hydrology (CLAUDE.md rule 10) and stay. A modeller may still enter a row of
+   zeros, and the run then warns that rain never reduces irrigation demand. A
+   row that isn't 12 numbers in 0–1 is ignored with a warning (the annual
+   fraction is used).
+
 ### 2.3a Daily A-pan evaporation (engine ≥ 0.38.0, issue #45)
 
 `settings.apanMm` holds 12 monthly means (WR90 / WR2012). A hydrologist often

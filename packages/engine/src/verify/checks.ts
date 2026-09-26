@@ -12,7 +12,8 @@ import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreh
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
-import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
+import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
+import { modelFarmEfficiency } from '../demand';
 
 const SEC_PER_DAY = 86_400;
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -38,6 +39,17 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
 // month at either end of the run is not assessed against the Reserve rules.
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
+
+/**
+ * The irrigation efficiency runModel used for farm `n` (run.ts irrigation):
+ * its own, 1 when that is outside (0, 1], combined with its crops' own
+ * efficiencies (engine ≥ 0.41.0, ../demand.ts farmIrrigationEfficiency).
+ */
+function runEfficiency(input: ModelInput, n: NetworkNode): number {
+	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+	const apan = input.settings?.apanMm;
+	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan : []);
+}
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
@@ -87,7 +99,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		let qPrev = n.damInitialPct * cap;
 		totIn += qPrev;
 		// Return flow: the share β of the application losses (1 − e)·G (audit N1).
-		const returnPerSupplied = n.lossReturnFraction * (1 - n.irrigationEfficiency);
+		const returnPerSupplied = n.lossReturnFraction * (1 - runEfficiency(input, n));
 		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.16.0 have neither.
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
@@ -712,7 +724,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const Zc = g('ewr_cumulative')!;
 		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
 		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
-		const e = n.irrigationEfficiency;
+		const e = runEfficiency(input, n);
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
@@ -970,7 +982,12 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 	const get = seriesMap(out);
 	const d = defaultProjectSettings();
 	const s = input.settings ?? {};
-	const fraction = typeof s.effectiveRainFraction === 'number' ? s.effectiveRainFraction : d.effectiveRainFraction;
+	const one = typeof s.effectiveRainFraction === 'number' ? s.effectiveRainFraction : d.effectiveRainFraction;
+	// Monthly fractions (engine ≥ 0.41.0, issue #54): used only when all twelve are in [0, 1], as runModel does.
+	const fm = s.effectiveRainFractionMonthly;
+	const monthlyFraction = Array.isArray(fm) && fm.length === 12 && fm.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1) ? fm : null;
+	const day0 = toEpochDay(out.startDate);
+	const fraction = (t: number) => (monthlyFraction ? monthlyFraction[(monthOfEpochDay(day0 + t) + 2) % 12]! : one);
 	const size = s.effectiveRainStoreMm;
 	// runModel falls back to the default for a size that isn't one (and warns).
 	const sizeMm = typeof size === 'number' && Number.isFinite(size) && size >= 0 ? size : d.effectiveRainStoreMm;
@@ -999,7 +1016,7 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 			const where = `${n.id} day ${t}`;
 			const w = W[t]!;
 			const u = used[t]!;
-			const pe = area * (fraction / 1000) * rain[t]!;
+			const pe = area * (fraction(t) / 1000) * rain[t]!;
 			const available = prev + pe;
 			const scale = Math.max(available, Math.abs(gross[t]!), sizeM3);
 			if (w < -tol(sizeMm) || w > sizeMm + tol(sizeMm)) return `${where}: soil-water store ${w} mm outside 0 … ${sizeMm} mm`;
@@ -1078,7 +1095,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		farms.map((f) => {
 			const user = f.kind === 'user';
 			const G = col(f.id, 'supplied');
-			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - f.lossReturnFraction * (1 - f.irrigationEfficiency);
+			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - f.lossReturnFraction * (1 - runEfficiency(input, f));
 			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).
 			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k }];
 		})

@@ -271,6 +271,17 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 			s.lakeEvapFactorMonthly = null;
 		}
 	}
+	// Monthly effective-rain fractions (engine ≥ 0.41.0, issue #54): 12 numbers in [0, 1], or none.
+	if (s.effectiveRainFractionMonthly != null) {
+		const f = s.effectiveRainFractionMonthly;
+		if (!Array.isArray(f) || f.length !== 12 || !f.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1)) {
+			warnings.push(`monthly effective rain fractions should be 12 numbers from 0 to 1; using ${s.effectiveRainFraction} in every month`);
+			s.effectiveRainFractionMonthly = null;
+		} else if (f.every((x) => x === 0)) {
+			// Allowed (it is the modeller's call), but never quietly: the AI workbook's all-zero row is this (issue #54).
+			warnings.push('the monthly effective rain fraction is 0 in every month, so rain never reduces irrigation demand');
+		}
+	}
 	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
 		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);
 		s.effectiveRainStoreMm = d.effectiveRainStoreMm;

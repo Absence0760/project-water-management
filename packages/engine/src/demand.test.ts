@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
-import { farmDailyDemand, grossCropMm, grossFarmDemandM3PerDay, netDailyDemandM3, rainOffsetM3 } from './demand';
+import { farmDailyDemand, farmIrrigationEfficiency, grossCropMm, grossFarmDemandM3PerDay, modelFarmEfficiency, netDailyDemandM3, rainOffsetM3 } from './demand';
 import { Rng } from './random';
 
 const flat = (v: number) => new Array(12).fill(v) as unknown as Monthly;
@@ -126,5 +126,169 @@ describe('farmDailyDemand: effective rain carried over through the soil-water st
 		// 50 m³ in, 10 m³ a day out: 40 used, 10 m³ = 1 mm left at the end.
 		expect(Array.from(f.used)).toEqual([10, 10, 10, 10]);
 		expect(f.storeMm[3]).toBeCloseTo(1, 12);
+	});
+});
+
+describe('farmIrrigationEfficiency: crops under their own irrigation system (engine 0.41.0, issue #54)', () => {
+	const areas = new Map([
+		['a', 10_000],
+		['b', 30_000]
+	]);
+
+	it('returns the farm efficiency untouched, bit for bit, when no cropped crop has its own', () => {
+		const crops = [
+			{ id: 'a', cropFactor: flat(0.5) },
+			{ id: 'b', cropFactor: flat(1), irrigationEfficiency: null },
+			// Its own efficiency but no area on this farm: it doesn't count.
+			{ id: 'c', cropFactor: flat(1), irrigationEfficiency: 0.9 }
+		];
+		for (const e of [0.8, 0.7123456789, 1]) expect(farmIrrigationEfficiency(e, crops, areas, flat(100))).toBe(e);
+	});
+
+	it('weights each crop by its annual gross requirement: e = Σ w ÷ Σ (w ÷ e_c) (hand-computed)', () => {
+		// a: 10 000 m² × 0.5 × 100 mm × 12 = 6e6 (drip, 0.9); b: 30 000 m² × 1 × 100 × 12 = 3.6e7 (the farm's 0.75).
+		const crops = [
+			{ id: 'a', cropFactor: flat(0.5), irrigationEfficiency: 0.9 },
+			{ id: 'b', cropFactor: flat(1) }
+		];
+		const e = farmIrrigationEfficiency(0.75, crops, areas, flat(100));
+		expect(e).toBeCloseTo((6e6 + 3.6e7) / (6e6 / 0.9 + 3.6e7 / 0.75), 12);
+		expect(e).toBeCloseTo(63 / 82, 12); // 42 ÷ (20/3 + 48)
+		// So a requirement F split by gross share (6 : 36) is abstracted as Σ F_c ÷ e_c.
+		const F = 420;
+		expect(F / e).toBeCloseTo(60 / 0.9 + 360 / 0.75, 9);
+	});
+
+	it('weights a month by its A-pan: a crop factor in the high-evaporation months counts for more', () => {
+		// A-pan 200 mm Oct–Mar, 50 mm Apr–Sep; crop a grows Oct–Mar only, crop b Apr–Sep only, same area.
+		const apan = [200, 200, 200, 200, 200, 200, 50, 50, 50, 50, 50, 50];
+		const crops = [
+			{ id: 'a', cropFactor: [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], irrigationEfficiency: 0.9 },
+			{ id: 'b', cropFactor: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1], irrigationEfficiency: 0.6 }
+		];
+		const same = new Map([
+			['a', 1000],
+			['b', 1000]
+		]);
+		// w_a = 1000 × 1200 = 1.2e6, w_b = 1000 × 300 = 3e5.
+		expect(farmIrrigationEfficiency(0.8, crops, same, apan)).toBeCloseTo(1.5e6 / (1.2e6 / 0.9 + 3e5 / 0.6), 12);
+	});
+
+	it('falls back to area × crop factor with no A-pan, and to the farm with no requirement at all', () => {
+		const crops = [
+			{ id: 'a', cropFactor: flat(0.5), irrigationEfficiency: 0.9 },
+			{ id: 'b', cropFactor: flat(1) }
+		];
+		// k_a = 10 000 × 6 = 6e4, k_b = 30 000 × 12 = 3.6e5.
+		expect(farmIrrigationEfficiency(0.75, crops, areas, flat(0))).toBeCloseTo(4.2e5 / (6e4 / 0.9 + 3.6e5 / 0.75), 12);
+		expect(farmIrrigationEfficiency(0.75, crops.map((c) => ({ ...c, cropFactor: flat(0) })), areas, flat(100))).toBe(0.75);
+	});
+
+	it('ignores an efficiency outside (0, 1] and negative crop factors', () => {
+		const bad = [
+			{ id: 'a', cropFactor: flat(1), irrigationEfficiency: 0 },
+			{ id: 'b', cropFactor: flat(1), irrigationEfficiency: 1.2 }
+		];
+		expect(farmIrrigationEfficiency(0.8, bad, areas, flat(100))).toBe(0.8);
+		const neg = [
+			{ id: 'a', cropFactor: flat(-1), irrigationEfficiency: 0.5 },
+			{ id: 'b', cropFactor: flat(1), irrigationEfficiency: 0.9 }
+		];
+		expect(farmIrrigationEfficiency(0.8, neg, areas, flat(100))).toBeCloseTo(0.9, 12);
+	});
+
+	it('stays between the efficiencies it combines, and lowering any one never raises it (invariant)', () => {
+		const rng = new Rng(54);
+		for (let i = 0; i < 500; i++) {
+			const n = rng.int(1, 5);
+			const crops = Array.from({ length: n }, (_, c) => ({
+				id: `c${c}`,
+				cropFactor: Array.from({ length: 12 }, () => rng.float(0, 1.3)),
+				...(rng.bool(0.6) ? { irrigationEfficiency: rng.float(0.05, 1) } : {})
+			}));
+			const a = new Map(crops.map((c) => [c.id, rng.float(1, 1e6)] as [string, number]));
+			const apan = Array.from({ length: 12 }, () => rng.float(0, 300));
+			const farm = rng.float(0.05, 1);
+			const e = farmIrrigationEfficiency(farm, crops, a, apan);
+			const all = crops.map((c) => c.irrigationEfficiency ?? farm);
+			expect(e).toBeGreaterThanOrEqual(Math.min(...all) * (1 - 1e-12));
+			expect(e).toBeLessThanOrEqual(Math.max(...all) * (1 + 1e-12));
+			// So the abstraction F ÷ e never falls when a crop's system gets worse.
+			const k = rng.int(0, n - 1);
+			const lower = crops.map((c, j) => (j === k ? { ...c, irrigationEfficiency: (c.irrigationEfficiency ?? farm) * 0.9 } : c));
+			expect(farmIrrigationEfficiency(farm, lower, a, apan)).toBeLessThanOrEqual(e * (1 + 1e-12));
+		}
+	});
+
+	it('gives the same bits in any crop order (summed in id order)', () => {
+		const crops = [
+			{ id: 'b', cropFactor: flat(0.37), irrigationEfficiency: 0.71 },
+			{ id: 'a', cropFactor: flat(0.93), irrigationEfficiency: 0.87 },
+			{ id: 'c', cropFactor: flat(0.11) }
+		];
+		const a = new Map([
+			['a', 12_345.678],
+			['b', 98_765.4321],
+			['c', 555.5]
+		]);
+		const e = farmIrrigationEfficiency(0.66, crops, a, flat(123.4));
+		expect(farmIrrigationEfficiency(0.66, [...crops].reverse(), a, flat(123.4))).toBe(e);
+		expect(farmIrrigationEfficiency(0.66, [crops[1]!, crops[2]!, crops[0]!], a, flat(123.4))).toBe(e);
+	});
+
+	it('modelFarmEfficiency reads the same from a model document: the farm’s rows, known crops only, split rows summed', () => {
+		const crops = [
+			{ id: 'a', cropFactor: flat(0.5), irrigationEfficiency: 0.9 },
+			{ id: 'b', cropFactor: flat(1) }
+		];
+		const rows = [
+			{ nodeId: 'F', cropId: 'b', areaM2: 20_000 },
+			{ nodeId: 'F', cropId: 'a', areaM2: 10_000 },
+			{ nodeId: 'F', cropId: 'b', areaM2: 10_000 },
+			{ nodeId: 'G', cropId: 'a', areaM2: 1e9 },
+			{ nodeId: 'F', cropId: 'unknown', areaM2: 1e9 }
+		];
+		expect(modelFarmEfficiency(0.75, 'F', crops, rows, flat(100))).toBe(farmIrrigationEfficiency(0.75, crops, areas, flat(100)));
+		expect(modelFarmEfficiency(0.75, 'H', crops, rows, flat(100))).toBe(0.75);
+	});
+});
+
+describe('farmDailyDemand: a fraction per day (monthly effective rain, engine 0.41.0, issue #54)', () => {
+	it('uses each day its own fraction (hand-computed, no store)', () => {
+		// 1000 m², 10 mm of rain a day, gross 20 m³/day. Fractions 0.5, 0 and 1: Pe = 5, 0 and 10 m³.
+		const f = farmDailyDemand([20, 20, 20], 1000, [10, 10, 10], [0.5, 0, 1], 0);
+		expect(Array.from(f.used)).toEqual([5, 0, 10]);
+		expect(Array.from(f.net)).toEqual([15, 20, 10]);
+	});
+
+	it('the same fraction every day is the one-number call, bit for bit, store included', () => {
+		const rng = new Rng(7);
+		const days = 400;
+		const gross = Array.from({ length: days }, () => rng.float(0, 50));
+		const rain = Array.from({ length: days }, () => (rng.bool(0.3) ? rng.float(0, 80) : 0));
+		const one = farmDailyDemand(gross, 12_345, rain, 0.65, 25);
+		const per = farmDailyDemand(gross, 12_345, rain, new Float64Array(days).fill(0.65), 25);
+		expect(Array.from(per.net)).toEqual(Array.from(one.net));
+		expect(Array.from(per.used)).toEqual(Array.from(one.used));
+		expect(Array.from(per.storeMm)).toEqual(Array.from(one.storeMm));
+	});
+
+	it('a higher fraction on any day never raises net demand on any day, with or without the store (invariant)', () => {
+		const rng = new Rng(11);
+		for (let i = 0; i < 50; i++) {
+			const days = 120;
+			const gross = Array.from({ length: days }, () => rng.float(0, 50));
+			const rain = Array.from({ length: days }, () => (rng.bool(0.4) ? rng.float(0, 60) : 0));
+			const lo = Array.from({ length: days }, () => rng.float(0, 1));
+			const hi = lo.map((x) => Math.min(1, x + rng.float(0, 0.5)));
+			const store = rng.pick([0, 25, 200]);
+			const a = farmDailyDemand(gross, 5000, rain, lo, store);
+			const b = farmDailyDemand(gross, 5000, rain, hi, store);
+			for (let t = 0; t < days; t++) {
+				expect(b.net[t]!).toBeLessThanOrEqual(a.net[t]! + 1e-9);
+				expect(a.net[t]!).toBeGreaterThanOrEqual(0);
+				expect(a.net[t]!).toBeLessThanOrEqual(gross[t]!);
+			}
+		}
 	});
 });

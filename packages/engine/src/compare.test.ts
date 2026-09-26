@@ -571,6 +571,22 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual(['Crop "Citrus" removed from Rooikloof (was 20 ha)']);
 	});
 
+	it('describes a crop’s own irrigation efficiency and the monthly effective-rain fraction (engine 0.41.0)', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.model.crops[0]!.irrigationEfficiency = 0.9;
+		b.settings = { ...b.settings, effectiveRainFractionMonthly: [0.5, 0.5, 0.6, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.5] as never };
+		expect(texts(a, b)).toEqual([
+			'Crop "Citrus" irrigation efficiency: the farm\'s → 90%',
+			'Monthly effective rain fractions: the one fraction → 0.5, 0.5, 0.6, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.5 (Oct–Sep)'
+		]);
+		// null is the same as never set: no change reported.
+		const c = structuredClone(a);
+		c.model.crops[0]!.irrigationEfficiency = null;
+		c.settings = { ...c.settings, effectiveRainFractionMonthly: null };
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('follows a crop area through a farm rename in the same project', () => {
 		const a = snapshot();
 		const b = structuredClone(a);

@@ -325,7 +325,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'Share of the water abstracted for irrigation that reaches the crop. The farm abstracts crop requirement ÷ efficiency.',
 		units: 'fraction 0–1 (shown as %), above 0',
 		category: 'farm',
-		fields: ['node.irrigationEfficiency']
+		fields: ['node.irrigationEfficiency', 'crop.irrigationEfficiency']
 	},
 	{
 		id: 'return-flow',
@@ -410,7 +410,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'Share of rain on cropped land that counts towards the crop’s need and so reduces irrigation (b023 default 0.65).',
 		units: 'fraction 0–1',
 		category: 'crops',
-		fields: ['settings.effectiveRainFraction']
+		fields: ['settings.effectiveRainFraction', 'settings.effectiveRainFractionMonthly']
 	},
 	{
 		id: 'soil-water-store',
