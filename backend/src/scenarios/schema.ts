@@ -10,7 +10,7 @@ import { z } from 'zod';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Where each op keeps an id, as paths into the op (`transfer.set`'s `value` is an id only when it sets a transfer end). */
-function opIds(op: ScenarioOp): [string, unknown][] {
+export function opIds(op: ScenarioOp): [string, unknown][] {
 	switch (op.op) {
 		case 'node.set':
 		case 'node.remove':

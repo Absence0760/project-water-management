@@ -72,6 +72,15 @@ setups) rather than finishing sooner: at Playwright's default of half the cores
 it passed in 167 s. CI is unaffected: 2 workers per shard, each shard with its
 own API.
 
+That API hashes passwords at bcrypt's minimum cost (`PASSWORD_HASH_COST=4` in
+the config's server env; `backend/src/auth/password.ts`, refused on Lambda).
+Every test registers at least one user, and at the production cost of 12 each
+hash holds the shared event loop for ~250 ms: in a 16-spec parallel run that
+was over a third of the server's time, and model saves (then ~40 round trips
+each), member lists and the login error queued past their 5 s waits behind it
+(issue #41). Anything that blocks this one event loop slows every worker, so
+look there first when a spec only times out in a parallel run.
+
 ### CI: 14 shards
 
 `ci.yml` runs the suite as 14 parallel jobs, `E2E (Playwright) 1/14 … 14/14`

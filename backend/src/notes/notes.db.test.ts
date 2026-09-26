@@ -209,7 +209,7 @@ describe('editing and deleting', () => {
 		const [kept] = await rowsAs(editor, 'SELECT body, deleted_by FROM note WHERE id = $1', [noteId]);
 		expect(kept).toEqual({ body: 'Gauge re-rated in 2018', deleted_by: editor.id });
 		const [event] = await asOwner(`SELECT actor_user_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'note.deleted' AND subject->>'noteId' = $2`, [projectId, noteId]);
-		expect(event).toMatchObject({ actor_user_id: editor.id, subject: { target: 'node', nodeName: 'Outlet', author: 'Nviewer', own: false } });
+		expect(event).toMatchObject({ actor_user_id: editor.id, subject: { target: 'node', nodeName: 'Outlet', author: 'Nviewer', authorId: viewer.id, own: false } });
 		expect(JSON.stringify(event.subject)).not.toContain('Gauge re-rated');
 		// A deleted note stays deleted: not found for another delete or an edit.
 		expect((await editor.call('DELETE', notesUrl(`/${noteId}`))).status).toBe(404);

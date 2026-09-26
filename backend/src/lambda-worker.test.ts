@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TickResult } from './jobs/runner.js';
 
-const tick: TickResult = { purged: 1, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 } };
+const tick: TickResult = { purged: 1, invitesPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 } };
 const runTick = vi.fn(async (_o?: unknown) => tick);
 vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
 const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);

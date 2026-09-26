@@ -834,8 +834,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   periods. A forecast run is reproduced by `runForecastChecked(loadRunInput(run))`;
   it can't be a scenario's base, nominated as evidence or signed off (each
   `409`: all three are judged on the record), and its uncertainty bands run on
-  its input without the tail. The worker doesn't schedule forecast runs:
-  they are made on request (WP-2.11's re-run job makes ordinary runs).
+  its input without the tail. Made on request, and, when the project has
+  automatic runs on (`settings.autoRun.enabled`), after each forecast feed
+  (CHIRPS-GEFS) ingest that changes days: a `rerun` job with `trigger:
+  'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
+  `Forecast · from <day>`, never published automatically
+  ([architecture.md § Background work](./architecture.md)).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
   `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
@@ -1157,12 +1161,17 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
 - `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
-  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, ownerUserId, owner,
-  status, createdAt, updatedAt, runCount, lastRun: { id, label, createdAt } |
-  null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785 canonical JSON
-  (engine `canonicalJson`); a run of the scenario records the same hash.
-  `owner` is a display name. `ownedNodeIds` are the proposer's own nodes: ops
-  on them are proposals, everything else a baseline assumption.
+  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, opNames, ownerUserId,
+  owner, status, createdAt, updatedAt, runCount, lastRun: { id, label,
+  createdAt } | null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785
+  canonical JSON (engine `canonicalJson`); a run of the scenario records the
+  same hash. `owner` is a display name. `ownedNodeIds` are the proposer's own
+  nodes: ops on them are proposals, everything else a baseline assumption.
+  `opNames: { id, name }[]` (sorted by id; 044) names every node and crop the
+  ops name, as the base run's snapshot named it when the ops (or the base)
+  were written: the server keeps a name a later base no longer has while an
+  op still names that id, and the current base's name wins. Display only;
+  it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
   | 'baseline')[] }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`
@@ -1446,7 +1455,7 @@ CORS (gateways aren't browsers), JSON bodies only.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
-| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null }`, `Cache-Control: no-store` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist, only the days sent
@@ -1462,6 +1471,16 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
+  when days this push carried look wrong by the engine's data-quality rules
+  (a negative rain or flow; a value above the outlier limit of the series
+  it lands in, taken without this push's days, once that series has 100
+  or more non-zero days), else
+  `null`. The days are merged all the same, `series.held` is recorded as
+  the key (with the counts, up to 5 examples and the `source` label), no
+  re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
+  waits, doing nothing, until a person runs the model
+  ([security.md § API keys](./security.md#api-keys)).
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in

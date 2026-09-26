@@ -1853,6 +1853,29 @@ them scenarios).
   it applies to the base is the server's check, shown once it is saved.
   Every edit is a `PATCH` of the whole op list, answered with the check.
   **Undo** steps back through this visit's edits; each op also has a ✕.
+- **Edit in the model tables** (override mode, drafts only, for whoever may
+  change the scenario: an editor on a team scenario, only its owner on an
+  application; an applicant edits the applicant projection, with a note that
+  other farms' values are blank;
+  `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
+  Transfers tables, switched with a **Network / Crops / Transfers** control,
+  on the scenario's model (its base run with its changes applied), under a
+  banner in the warning colour: "Editing the scenario *X*, not the
+  catchment", saying the catchment's own model isn't touched, with **Close
+  override mode**. Notes, farmer links, the yield panel and "Colour farms
+  by" are left out (they belong to the live model). **Edits to record**
+  (sticky at the foot on wide screens) lists each edit as the change it will
+  be, in the same words as the Changes list; **Record N changes** appends
+  them (one Undo takes them back), **Discard edits** reverts. An edit no
+  change can express (a crop's factors, a node's kind or what it drains
+  into…) is listed there and disables Record until it is undone; the
+  tables' own problems ("Fix before saving") block it too. While there are
+  unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
+  Delete wait, and leaving the page asks first. The status moves (an
+  application's Submit, Withdraw, Reopen and decision included) also wait
+  while a run is in flight: the run re-reads the scenario when it ends, and
+  that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
+  override mode is open.
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
@@ -1865,8 +1888,9 @@ them scenarios).
 - **Rebase onto another run** (drafts): pick a newer run of the model,
   **Check** (a dry run listing any change that no longer applies, for
   example a node removed since), then **Rebase onto this run**. A change on
-  a node the new base lacks is still named, from the bases loaded in this
-  visit; otherwise it reads "a node the base run doesn't have".
+  a node the new base lacks is still named, after a reload too: the server
+  keeps the names each change needed with the scenario (`opNames`, 047).
+  Only a node no base ever named reads "a node the base run doesn't have".
 - **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
   the scenario against the base run *that run* was made on (so an older run
   of a rebased scenario is still compared with its own base), through

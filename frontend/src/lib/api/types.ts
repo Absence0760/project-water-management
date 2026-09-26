@@ -626,6 +626,12 @@ export interface Scenario {
 	opsSha256: string;
 	/** The proposer's own nodes: ops on them are proposals, the rest baseline assumptions. */
 	ownedNodeIds: string[];
+	/**
+	 * Names of the nodes and crops the ops name, kept by the server from the
+	 * base run's snapshot when the ops were written, so an op on a node a
+	 * rebase dropped still reads by name. Sorted by id.
+	 */
+	opNames: { id: string; name: string }[];
 	ownerUserId: string;
 	/** The owner's display name. */
 	owner: string | null;

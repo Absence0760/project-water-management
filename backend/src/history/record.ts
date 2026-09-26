@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { diffInputs, seriesDigest, type InputChange, type ProjectModel, type RunInputsSnapshot } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
-import { loadModel } from '../model/store.js';
+import { loadSettingsAndModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
 import { seriesChange, stableJson, touchedNodeIds } from './diff.js';
 
@@ -65,13 +65,10 @@ export async function lockHistory(db: Db, projectId: string): Promise<void> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('history:' || $1::text, 0))`, [projectId]);
 }
 
-/** The project's { settings, model } now (settings merged over the defaults, as a run records them). */
+/** The project's { settings, model } now (settings merged over the defaults, as a run records them), in one round trip. */
 export async function inputsSnapshot(db: Db, projectId: string): Promise<InputsSnapshot> {
-	const { rows } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
-	return {
-		settings: mergeSettings(rows[0]?.settings) as unknown as InputsSnapshot['settings'],
-		model: await loadModel(db, projectId)
-	};
+	const { settings, model } = await loadSettingsAndModel(db, projectId);
+	return { settings: mergeSettings(settings) as unknown as InputsSnapshot['settings'], model };
 }
 
 /** Before a settings change: take the lock and the state to diff against. */
@@ -183,6 +180,7 @@ export type AuditKind =
 	| 'series.merged'
 	| 'series.deleted'
 	| 'series.labelled'
+	| 'series.held'
 	| 'run.created'
 	| 'run.changed'
 	| 'run.deleted'

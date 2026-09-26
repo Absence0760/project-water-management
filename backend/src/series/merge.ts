@@ -6,6 +6,7 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
+import { anomalousPushedDays, type HeldDays } from './hold.js';
 import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
 
 export { MAX_SERIES_VALUES, SeriesStartDate };
@@ -412,6 +413,8 @@ export interface MergeIntoResult {
 	rerunQueuedFor: string | null;
 	/** The re-run the merge queued or pushed back (null: none), for the route to wake the worker after commit. */
 	rerun: QueuedRerun | null;
+	/** An API key's pushed days the data-quality rules flag: no re-run was queued, and `series.held` records why (series/hold.ts). */
+	held: HeldDays | null;
 }
 
 /**
@@ -448,7 +451,10 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			: undefined;
 		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
 	}
+	// A key's push whose days look wrong holds the automatic re-run for a person to review (series/hold.ts).
+	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.before, body) : null;
+	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
-	const rerun = await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
-	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun };
+	const rerun = flagged ? null : await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
+	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun, held: flagged };
 }
