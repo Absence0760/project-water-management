@@ -14,6 +14,7 @@ import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
+import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { runRoutes } from './runs/routes.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
@@ -76,6 +77,8 @@ export function createApp() {
 
 	app.route('/auth', authRoutes);
 	app.route('/auth', emailAuthRoutes);
+	// The headless report renderer's sign-in: the render token is the credential.
+	app.route('/auth', renderSessionRoutes);
 
 	const projects = new Hono<AuthEnv>();
 	projects.use('*', requireUser);
@@ -89,6 +92,7 @@ export function createApp() {
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
 	projects.route('/', feedRoutes);
+	projects.route('/', reportRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();

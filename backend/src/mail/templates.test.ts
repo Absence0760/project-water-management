@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, inviteMail, resetPasswordMail, siteLink, verifyEmailMail } from './templates.js';
+import { escapeHtml, inviteMail, reportReadyMail, resetPasswordMail, siteLink, sitePage, verifyEmailMail } from './templates.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
 
@@ -83,5 +83,28 @@ describe('email templates', () => {
 
 	it('escapeHtml covers the five HTML metacharacters', () => {
 		expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe('&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+	});
+});
+
+describe('reportReadyMail', () => {
+	const url = 'https://water.example.com/projects/p/reports/j';
+	it('links to the sign-in-gated download page, names the run and pages, and escapes user text', () => {
+		const m = reportReadyMail('ann@example.com', url, { projectName: 'Upper <Twee>', runName: 'Baseline & wet', pages: 9, requestedBy: 'Bob', scheduled: false });
+		expect(m.subject).toBe('Catchment report: Upper <Twee> — Water Management');
+		expect(m.text).toContain('Bob made a PDF of the report for the run Baseline & wet (9 pages).');
+		expect(m.text).toContain(`Download the report: ${url}`);
+		expect(m.text).toContain('The PDF is kept for 7 days.');
+		expect(m.html).toContain('Upper &lt;Twee&gt;');
+		expect(m.html).toContain('Baseline &amp; wet');
+		expect(m.html).not.toContain('<Twee>');
+	});
+	it('says a scheduled one is the latest run, and who set it up; one page is singular', () => {
+		const m = reportReadyMail('ann@example.com', url, { projectName: 'P', runName: 'R', pages: 1, requestedBy: 'Cy', scheduled: true });
+		expect(m.text).toContain('This is the scheduled report of the latest run, R (1 page), set up by Cy.');
+	});
+	it('sitePage joins SITE_URL and a path', () => {
+		vi.stubEnv('SITE_URL', 'https://water.example.com/');
+		expect(sitePage('/projects/p/reports/j')).toBe(url);
+		vi.unstubAllEnvs();
 	});
 });

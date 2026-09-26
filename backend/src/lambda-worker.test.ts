@@ -6,6 +6,8 @@ const runTick = vi.fn(async (_o?: unknown) => tick);
 vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
 const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
 vi.mock('./feeds/schedule.js', () => ({ acceptIngestResult: (m: unknown) => acceptIngestResult(m) }));
+const acceptRenderResult = vi.fn(async (_m: unknown) => 'queued' as string);
+vi.mock('./reports/schedule.js', () => ({ acceptRenderResult: (m: unknown) => acceptRenderResult(m) }));
 
 const { handler, metricLine, METRIC_NAMESPACE } = await import('./lambda-worker.js');
 
@@ -65,6 +67,19 @@ describe('handler', () => {
 		expect(runTick).toHaveBeenCalledTimes(1);
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'feed_result_dropped', messageId: 'm2', reason: 'unknown_fetch' }));
 		acceptIngestResult.mockClear();
+	});
+
+	it('queues each render-results message as a report_render job before the tick, and logs one it drops', async () => {
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const msg = { v: 1, type: 'rendered', reportId: '00000000-0000-4000-8000-000000000004', result: { ok: true, pages: 9, bytes: 1000, ms: 4000 } };
+		acceptRenderResult.mockResolvedValueOnce('queued').mockResolvedValueOnce('unknown_report');
+		await handler({ Records: [{ messageId: 'm1', body: JSON.stringify(msg) }, { messageId: 'm2', body: JSON.stringify(msg) }] } as never);
+		expect(acceptRenderResult).toHaveBeenCalledTimes(2);
+		expect(acceptRenderResult).toHaveBeenCalledWith(msg);
+		expect(runTick).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'render_result_dropped', messageId: 'm2', reason: 'unknown_report' }));
+		acceptRenderResult.mockClear();
 	});
 
 	it('fails the batch when an ingest result can’t be queued (database down), so SQS retries it', async () => {

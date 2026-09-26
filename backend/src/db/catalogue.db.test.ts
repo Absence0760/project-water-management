@@ -14,7 +14,9 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
-	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary']
+	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
+	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (022_reports.sql).
+	report: ['bytes', 'error', 'finished_at', 'pages', 'status']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -22,8 +24,10 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * (010_run_nomination.sql). A job's row changes only through the queue's
  * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql). An import
  * report is the record of what the importer flagged (017_project_import.sql).
+ * A render token is issued, then consumed or purged only through
+ * app_consume_render_token (022_reports.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'render_token']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
