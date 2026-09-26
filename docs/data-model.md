@@ -45,6 +45,9 @@ erDiagram
   app_user |o--o{ data_feed : "acts as (nullable)"
   project_member ||--o{ farm_link : "farmer's farms"
   node     ||--o{ farm_link : "linked farmers"
+  project  ||--o{ note : "notes"
+  node     |o--o{ note : "about (nullable)"
+  model_run |o--o{ note : "about (nullable)"
 ```
 
 ## Tables and their workbook origin
@@ -54,7 +57,7 @@ erDiagram
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
+| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
@@ -330,10 +333,26 @@ B on … because …". A run can be nominated again later (A, B, A).
   `NO ACTION`, so deleting the run fails (`DELETE …/runs/:runId` answers `409`
   first); `trimRuns` skips it, and it does not count against
   `RUNS_KEPT_PER_PROJECT` (the cap keeps the newest 20 runs that are neither
-  nominated nor pinned). `NO ACTION` rather than `RESTRICT` is checked at the end of the
-  statement, so deleting the whole project (owner only) still cascades to
-  both tables. The 50-nomination limit bounds how many runs can be kept this
-  way.
+  nominated nor pinned). The 50-nomination limit bounds how many runs can be
+  kept this way. (`NO ACTION` rather than `RESTRICT`, checked at the end of
+  the statement, is what would let a project delete cascade to both tables;
+  the guard below refuses that delete first.)
+- **A project with a nomination is kept for good** (issue #43,
+  035_project_evidence_guard.sql). The `project_evidence_guard` BEFORE DELETE
+  trigger on `project` (`SECURITY DEFINER`, `search_path` pinned) raises
+  `restrict_violation` when the project has **any** `run_nomination` row,
+  whoever deletes and however (the route, direct SQL as `water_app`, the
+  schema owner, a cascade). `DELETE /projects/:id` answers `409` first,
+  naming the current evidence run. **Current or past:** the conservative
+  reading, and the only one the data model allows: the history is
+  append-only, so a project that has nominated always has a current
+  nomination (its newest row), and "any row" also stays right if a
+  withdrawal is ever added, since a withdrawn nomination is still history.
+  There is no un-nominate; a nomination can only be replaced. Cascades into
+  `project`: none. `project.team_id` is `ON DELETE SET NULL` (deleting a team
+  keeps its projects) and `project.created_by` is `NO ACTION` (there is no
+  account deletion). The operator's out-of-band removal is in
+  [security.md](./security.md) § Authorization, "Tamper evidence".
 - No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
   is no account deletion yet. When there is, it must keep the history (for
   example a tombstone user), not cascade it away.
@@ -424,9 +443,10 @@ the result change?", and put back any earlier version.
   `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
   values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with
-  `actor_user_id` (must be the caller), `actor_label` (the display name then),
-  `kind`, `subject jsonb`, `change_set`, and `actor_api_key_id` (reserved,
-  unused until API keys exist). Kinds recorded: `member.added/removed/role`
+  `actor_user_id` (must be the caller), `actor_label` (the display name then,
+  or `API key “<name>”`), `kind`, `subject jsonb`, `change_set`, and
+  `actor_api_key_id` (→ `api_key` SET NULL, 039: the key that acted, with
+  `actor_user_id` NULL; see [§ API keys](#api-keys-039_api_keyssql)). Kinds recorded: `member.added/removed/role`
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
@@ -438,8 +458,17 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
-  `report_schedule.configured`, `scenario.created/changed/deleted`, and
-  restores. `api_key.*` is reserved.
+  `report_schedule.configured`, `scenario.created/changed/deleted`,
+  `note.deleted` (a note hidden by its author or an editor: its target, the
+  author's name and whether it was their own, never the body),
+  `signoff.created` (036: the sign-off's id, run, signer's typed name and
+  registration, statement version and hash),
+  `allocation.created/changed/deleted/imported/import_deleted` (038:
+  registration numbers, file name and hash, counts; never a holder's name),
+  `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
+  series, lifetime; never the key or its hash), and restores. A key's ingest
+  records `series.created/merged` as the key, with its optional `source`
+  label in the subject, and no series revision (like a data feed).
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -471,7 +500,8 @@ the result change?", and put back any earlier version.
   reason. A new write route fails the inventory until it's listed. Exempt
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
-  ensembles, `POST /reports`.
+  ensembles, `POST /reports`, the allocation import preview (writes
+  nothing).
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -516,6 +546,18 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   snapshot's start, length or SHA-256; never expected, and the run is then
   not presented as reproduced). No backfill: older runs keep hash-only
   snapshots.
+- **Checking a reproduction** (`GET …/runs/:runId/reproduce`,
+  `backend/src/runs/reproduce.ts`, [api.md](./api.md#runs)): the server
+  re-runs `runModelChecked(loadRunInput(run))` with its current engine and
+  compares the summary (path by path, as RFC 8785 canonical JSON after the
+  same JSON normalisation storage applies) and every `run_series` array
+  (value for value, non-finite as `null`), answering `identical`, `differs`
+  (with the list: summary paths, series with their differing days, first
+  date and largest difference), `not_reproducible`, `inconsistent` or
+  `failed`. Read-only; nothing is stored. `RunMeta.reproducible` is the same
+  test `loadRunInput` makes (the run has stored references, or no input
+  series at all), so the Runs tab can tag a run from before 021 without a
+  request.
 - **Garbage collection and retention.** A reference goes with its run
   (cascade: trimmed by the cap, deleted by an editor, or the whole project).
   The statement-level `run_input_series_gc` trigger (`series_blob_gc`,
@@ -556,8 +598,8 @@ clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest body
 (024's) plus `OR EXISTS (SELECT 1 FROM <table> WHERE <run column> = p_run)`,
 same signature, `SECURITY DEFINER` and `search_path`, alongside a `NO ACTION`
 foreign key to `model_run`, and adds its kind to `CITED_BY_SQL`
-(`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication` and
-`scenario` today). `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
+(`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication`,
+`scenario` and `signoff` (036) today). The latest body is 036_signoff's. `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
 `SECURITY DEFINER` so a citation the caller can't see still keeps the run. A
 cited run's pin doesn't count against the 10-pin ceiling, and unpinning one
 is `409`. **The publication-history cap (keep the newest 12) skips a
@@ -627,6 +669,87 @@ run's stored input (above), never the live model.
 - Guards: `backend/src/scenarios/scenarios.db.test.ts` (with positive
   controls), the catalogue tests (RLS, grants, covering indexes,
   `search_path`) and the route inventories (auth and farmer `403`).
+
+### Sign-offs (036_signoff.sql)
+
+Roadmap WP-3.13. A registered professional's signature on one run: that its
+calibration, EWR tables, network (or scenario) and assurance levels are
+appropriate, and that they read its known limitations
+([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
+
+- **`signoff`**: `id`, `project_id` (→ `project`, cascade), `run_id` (→
+  `model_run`, `NO ACTION`: a project delete still cascades, any other delete
+  of a signed run fails), `user_id` (→ `app_user`, `SET NULL` so an account
+  deletion keeps the professional record), `full_name` (1–200),
+  `registration_body` (1–100, e.g. SACNASP), `registration_no` (1–50,
+  self-declared, never checked against the register), `scope` (1–1 000: what
+  the signature covers, in the signer's words), `statement_version`
+  (`signoff-1`), `statement_sha256` (hex: the SHA-256 of the engine
+  statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
+  `signed_at`. Indexes cover the project, the run and the user.
+  `signoff_same_project` (`assert_same_project('run_id')`): the run is one of
+  the project's.
+- **Immutable.** `water_app` has `SELECT, INSERT` only and no policy allows
+  `UPDATE` or `DELETE` (catalogue `APPEND_ONLY`). A correction is a second
+  sign-off.
+- **Bound to the words shown.** The route rebuilds the statement for the run
+  (engine version, scenario or not, the generated limitations, the
+  disclaimer version) and refuses a hash that isn't that statement's, so a
+  signature can't be carried over to wording the signer never saw.
+- **Cites its run**: `model_run_cited` (latest body here) is true for a
+  signed run, so `trimRuns` and the run `DELETE` route keep it, and
+  `citedBy` lists `{ kind: 'signoff', name: <signer> }`.
+- **RLS**: `SELECT` viewer; `INSERT` editor, with `user_id =
+  app_current_user_id()` (no one signs as someone else). Farmers read
+  nothing. Each sign-off writes `audit_event` `signoff.created` in the same
+  transaction.
+- **Not yet**: the WP's `target = 'pack'` (WP-3.14 adds it with packs), MFA
+  on signing (Step 4), sign-off in the data export (the POPIA export,
+  WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
+  controls), the catalogue tests and the route inventory.
+
+### Allocations (038_allocations.sql)
+
+Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
+water-use volumes per farm or water user.
+
+- **`allocation_source`**: an imported file. `id`, `project_id` (→ `project`,
+  cascade), `kind` (`warms_extract` | `csv`), `file_name` (1–255), `sha256`
+  (hex of the file's UTF-8 text), `reference` (≤ 500), `imported_by` (→
+  `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
+  file is imported once per project (the index also covers the project key).
+  Deleting a source deletes its allocations (undo an import).
+- **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
+  composite key `(source_id, project_id)` → `allocation_source (id,
+  project_id)`, cascade, so a source is always the same project's), `node_id`
+  (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
+  `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
+  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
+  `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
+  `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
+  `reference` (≤ 500), `created_at`, `updated_at`. No names. Indexes cover
+  every key.
+- **`allocation_holder`**: `allocation_id` (primary key; composite key
+  `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
+  `user_display` (1–200). The registered user's name, in its own table so RLS
+  can hide it (decision D3 (b), pending legal advice).
+- **Triggers.** `allocation_same_project` (the node is the project's);
+  `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
+  and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
+  a gauge leaves its allocations unmatched, as a deleted node does).
+- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
+  editor; `allocation_select_farmer` lets a farmer read the allocations on
+  their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
+  policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
+  on their own farm; **viewers read no names**; writes editor. `water_app` has
+  `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **No personal identifiers.** No ID-number, phone or email column exists;
+  the importer refuses files that carry them ([security.md](./security.md)).
+- Guards: `backend/src/allocations/allocations.db.test.ts` (positive
+  controls: an editor reads names, the owner reads the rows a stranger can't,
+  a farmer reads their own farm's), the catalogue tests and the route
+  inventories.
 
 ### Import reports (017_project_import.sql)
 
@@ -862,6 +985,97 @@ Read-only links to the current publication for people outside the project
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
 
+### Notes (037_notes.sql)
+
+Plain-text notes and comments kept against what they are about (WP-2.7;
+[api.md § Notes](./api.md#notes), [ui.md § Notes](./ui.md#notes)).
+
+- `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
+  created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
+  text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
+  setting_key text, visibility 'team' | 'farm')`.
+  - **The target** is a nullable typed foreign key, not a polymorphic id, so
+    the foreign keys and the same-project trigger (`assert_same_project
+    ('node_id', 'run_id')`) work. `note_one_target` allows at most one of
+    `node_id`, `run_id`, `setting_key`; none is a project-level note.
+    `setting_key` is a settings group (`flow`, `ewr`, …) or path
+    (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
+  - **A note goes with its target**: a deleted node or run, or a trimmed
+    run, takes its notes (cascade). Saving the model upserts nodes by id, so
+    a save keeps them.
+  - **`visibility`**: `team` (viewers and above) or `farm` (also the farmers
+    linked to the note's node). `note_farm_on_node` requires a node for
+    `farm`; the API also requires the node to be a farm.
+  - Indexed on `(project_id, created_at DESC)` and each foreign key.
+- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
+  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
+  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
+  trigger lets only the author change the body, stamps `edited_at` and
+  `deleted_by` itself, and refuses to touch a deleted note.
+- **RLS.**
+  - SELECT: viewers and above see every note that isn't deleted; editors, and
+    a note's author, also see deleted ones (Postgres checks an updated row
+    against the SELECT policies, so an author who isn't an editor couldn't
+    otherwise delete their own note). A farmer sees `farm` notes on their
+    linked nodes (`app_farm_nodes`), never a `team` note, a run, settings or
+    project note, or another farm's.
+  - INSERT, as yourself (`author_id = app_current_user_id()`), never already
+    edited or deleted: a viewer and above anywhere; a farmer only on a linked
+    node and only with `visibility = 'farm'`.
+  - UPDATE: a visible, undeleted note, by its author or an editor. Editors
+    moderate: they soft-delete, they can't rewrite (`note_guard`).
+  - No DELETE policy.
+- The API lists no deleted note to anyone. Deleting records `note.deleted`
+  in the audit log; adding and editing don't (the row carries its author,
+  `created_at` and `edited_at`).
+
+### API keys (039_api_keys.sql)
+
+Per-project keys for the ingest endpoint: a logger gateway or a script
+merges daily readings without a session (WP-2.9;
+[api.md § Ingest](./api.md#ingest), [security.md § API keys](./security.md#api-keys)).
+
+- `api_key (id, project_id → project CASCADE, name 1–100, prefix (generated:
+  the first 8 characters of id, UNIQUE), key_hash bytea UNIQUE (SHA-256 of
+  the whole key, CHECK 32 bytes), scopes text[] (CHECK ⊆ {series:write},
+  non-empty; default {series:write}), allowed_series jsonb NULL (NULL: any
+  series; else an array of 1–50 { kind, name }), created_by → app_user SET
+  NULL, created_at, last_used_at, expires_at NULL (≤ 3650 days after
+  created_at, CHECK), revoked_at, revoked_by → app_user SET NULL)`. Indexed on
+  `(project_id, created_at DESC)`, `created_by` and `revoked_by`. The
+  `api_key_issue` trigger stamps `created_by` / `created_at` and clears the
+  revocation and use stamps on insert.
+- The key is `wm_<prefix>_<43-char base64url secret>`: the prefix finds the
+  row, the secret is 32 random bytes. Only the hash is stored.
+- **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
+  `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
+  catalogue test's column-only and keep-forever lists): a key is revoked,
+  never removed, so the audit events that name it keep their link.
+- `api_key_throttle (key_id PK → api_key CASCADE, tokens, refilled_at)`: a
+  token bucket per key, the `login_throttle` pattern (deny-all policy,
+  reached only through `app_api_key_take`).
+- **Key context.** `withApiKey` (`db/tx.ts`) sets `app.current_api_key_id`
+  (transaction-local) and no user. `app_current_api_key_id()` reads it;
+  `app_api_key_project(p_scope)` (`SECURITY DEFINER`) is the key's project
+  while the key is live (not revoked, not expired) and holds the scope (NULL:
+  any), and NULL in a transaction that also has a user;
+  `app_api_key_allows(kind, name)` checks `allowed_series`;
+  `app_api_key_label()` is the audit actor label.
+- **Key policies** (permissive, beside the role policies):
+  `time_series_api_key_select/insert/update` (`project_id =
+  app_api_key_project('series:write') AND app_api_key_allows(kind, name)`;
+  no delete), and `audit_event_api_key_insert` (`actor_user_id IS NULL`,
+  `actor_api_key_id` the transaction's key, the key's project). Every other
+  table's policies need a user, so a key sees nothing else.
+- `app_api_key_lookup(p_prefix)` (`SECURITY DEFINER`): the row for a prefix
+  (id, project id and name, hash, name, scopes, allowed series, live) for
+  the backend's constant-time hash comparison.
+- `app_api_key_take(p_key, p_capacity, p_per_minute)` (`SECURITY DEFINER`):
+  takes one request from the key's bucket under a row lock (0: go ahead, and
+  `last_used_at` is bumped at most once a minute; > 0: seconds to wait; -1:
+  the key is dead).
+
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
 Users and groups work across many catchments. A **team** (e.g. a consultancy
@@ -952,6 +1166,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Share links (025): `share_link` read, created and revoked by owners only,
   never deleted; the public reads only through `app_share_view` /
   `app_share_series` (see § Share links above).
+- API keys (039): `api_key` read, created and revoked by owners only, never
+  deleted. A key request (no user) writes its own project's allowed series
+  and adds audit events naming itself, nothing else (see § API keys above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

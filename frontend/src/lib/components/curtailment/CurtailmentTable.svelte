@@ -6,20 +6,27 @@
 	benchmark, never an allocation (audit Q11): no label says "gain".
 -->
 <script lang="ts">
-	import { EQUITABLE_SHARE_FOOTNOTE, type RunSummary } from '@water-management/engine';
+	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtSigned, fmtVol } from './curtailment';
 
 	let {
 		summary,
-		farmNames = {}
+		farmNames = {},
+		curtailment,
+		period
 	}: {
 		summary: RunSummary;
 		/** Current farm names by node id, for farms renamed since the run. */
 		farmNames?: Record<string, string>;
+		/** The table over another window (runs/windowedCurtailment.ts, issue #44); absent = the run's own. */
+		curtailment?: CurtailmentSummary | null;
+		/** The name of the period shown ("Last 7 days"), put before its dates. */
+		period?: string;
 	} = $props();
 
-	const c = $derived(summary.curtailment ?? null);
+	const c = $derived(curtailment === undefined ? (summary.curtailment ?? null) : curtailment);
+	const range = $derived(c ? `${c.reportStart} – ${c.reportEnd}` : '');
 	const rows = $derived(c ? curtailmentRows(c, farmNames) : []);
 	const cuts = $derived(c ? cutCount(c) : 0);
 	const sites = $derived(c ? ewrSiteRows(c, farmNames) : []);
@@ -37,7 +44,7 @@
 		<p class="muted">This run has no farms, so there is nothing to curtail.</p>
 	{:else}
 		<p class="muted small">
-			Daily averages over {c.reportStart} – {c.reportEnd} ({fmtNum(c.days)} day{c.days === 1 ? '' : 's'}).
+			<span data-testid="curtailment-period">{#if period}<strong>{period}</strong>: daily averages{:else}Daily averages{/if} over {range} ({fmtNum(c.days)} day{c.days === 1 ? '' : 's'}).</span>
 			{#if c.equitableFraction === null}
 				No farm had irrigation demand in this window, so there is no supply to share.
 			{:else}
@@ -61,7 +68,7 @@
 		<div class="table-wrap">
 			<table class="data">
 				<caption class="visually-hidden">
-					Curtailment targets per farm, {c.reportStart} to {c.reportEnd}. Negative values are
+					Curtailment targets per farm, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative values are
 					reductions, positive values are below the equitable share.
 				</caption>
 				<thead>
@@ -175,7 +182,7 @@
 			<p class="muted small">
 				Towns, industry and unlisted users are outside the irrigation equitable share. They are charged for the EWR by
 				their net impact (taken − returned) like farms. A <strong>junior</strong> user is curtailed for its charge; a
-				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the farms).
+				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the farms). Daily averages over {range}.
 			</p>
 			<div class="table-wrap">
 				<table class="data" aria-labelledby="other-users-heading">
@@ -210,6 +217,7 @@
 		{/if}
 		{#if sites.length}
 			<h4 id="ewr-sites-heading">EWR sites</h4>
+			<p class="muted small">Days not met and daily averages over {range}.</p>
 			{#if sites.length === 1}
 				<p class="muted small">
 					EWR assessed at 1 site (outlet). Add gauges at the Reserve determination's EWR sites to protect upstream

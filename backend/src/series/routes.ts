@@ -10,11 +10,12 @@ import { z } from 'zod';
 import {
 	bodyProvenance,
 	checkProvenance,
-	mergeSeries,
+	mergeInto,
 	ProvenanceFields,
 	rowProvenance,
 	SERIES_META as META,
 	SeriesBody as PutBody,
+	setDayBoundary,
 	type SeriesMetaRow
 } from './merge.js';
 import { readJson } from '../http/body.js';
@@ -22,9 +23,10 @@ import { wakeWorker } from '../jobs/wake.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
 import { queueRerunFor } from './newData.js';
 
-// Moved to merge.ts beside mergeSeries (shared with the data feeds);
-// re-exported for the project document (projects/document.ts).
-export { MAX_SERIES_VALUES, SeriesStartDate } from './merge.js';
+// Moved to merge.ts beside mergeSeries (shared with the data feeds and the
+// ingest); re-exported for the project document (projects/document.ts) and
+// the history's restore (history/routes.ts).
+export { MAX_SERIES_VALUES, SeriesStartDate, setDayBoundary } from './merge.js';
 
 const sameValues = (a: SeriesRow, unit: string, startDate: string, values: readonly (number | null)[]) =>
 	a.unit === unit && a.startDate === startDate && valuesSha256(a.values) === valuesSha256(values);
@@ -90,26 +92,9 @@ export async function replaceSeries(
  * once (a debounce of 0) is worth waking the worker for; a debounced one is
  * found by the worker's next poll or tick when it falls due.
  */
-async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
+export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
 	if (queued?.created && Date.parse(queued.runAfter) <= Date.now()) await wakeWorker(queued.jobId);
 }
-
-/**
- * Record how a written series' days were built from sub-daily readings
- * (033_series_day_boundary.sql): `boundary` null = daily values. Returns the
- * meta as it now stands.
- */
-export async function setDayBoundary(db: Db, projectId: string, meta: SeriesMetaRow, boundary: string | null): Promise<SeriesMetaRow> {
-	if ((meta.dayBoundary ?? null) === boundary) return meta;
-	const { rows } = await db.query<SeriesMetaRow>(`UPDATE time_series SET day_boundary = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [
-		projectId,
-		meta.id,
-		boundary
-	]);
-	return rows[0]!;
-}
-
-const boundaryText = (b: string | null) => (b ? `${b}–${b} days` : 'daily values');
 
 /** PATCH …/series/:seriesId: say what an existing series holds, without touching its values. */
 const LabelBody = z
@@ -188,36 +173,16 @@ export const seriesRoutes = new Hono<AuthEnv>()
 	// Append / merge new days into a series (daily or batch updates). Creates the
 	// series if it doesn't exist. Only the days sent are touched. A person's
 	// merge keeps the previous values as a series revision; a data feed's
-	// (feeds/ingest.ts) doesn't.
+	// (feeds/ingest.ts) and an API key's (ingest/routes.ts) don't. The whole
+	// sequence is mergeInto, shared with the ingest.
 	.post('/:id/series/merge', async (c) => {
 		const body = PutBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			// The day-boundary guard (033): days added up in one window never go into a series of the other, like 032's version guard.
-			const { rows: held } = await db.query<{ dayBoundary: string | null; filled: boolean }>(
-				`SELECT day_boundary AS "dayBoundary", EXISTS (SELECT 1 FROM unnest("values") v WHERE v IS NOT NULL) AS filled
-				 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
-				[id, body.kind, body.name]
-			);
-			const was = held[0];
-			if (body.dayBoundary !== undefined && was?.filled && (was.dayBoundary ?? null) !== body.dayBoundary) {
-				throw new ApiError(
-					409,
-					`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
-				);
-			}
-			const r0 = await mergeSeries(db, id, body, { provenance: bodyProvenance(body) });
-			const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, id, r0.meta, body.dayBoundary) } : r0;
-			const subject = seriesSubject(r.meta, r.before, r.after);
-			if (!r.before) await recordAudit(db, id, 'series.created', subject);
-			else if (subject.daysChanged || r.before.unit !== r.meta.unit) {
-				const revisionId = await recordSeriesRevision(db, id, { ...r.before, kind: r.meta.kind, name: r.meta.name, dayBoundary: was?.dayBoundary ?? null }, 'manual_merge');
-				await recordAudit(db, id, 'series.merged', { ...subject, revisionId });
-			}
-			// New days (or new values for old ones): the new-data hook (series/newData.ts). A re-send that changes nothing queues nothing.
-			const queued = await queueRerunFor(db, id, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: subject.daysChanged as number, via: 'user' });
-			return { meta: r.meta, queued };
+			// mergeInto runs the new-data hook (series/newData.ts): a re-send that changes nothing queues nothing.
+			const r = await mergeInto(db, id, body, { keepRevision: true, via: 'user' });
+			return { meta: r.meta, queued: r.rerun };
 		});
 		await wakeForRerun(queued);
 		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });

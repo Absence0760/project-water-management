@@ -116,7 +116,8 @@ export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n
  * What cites a run, as a SQL expression over `model_run r`: a jsonb list of
  * `{ kind, id, name }`, oldest first, of the citations the caller can see
  * (RLS): publications (022_publication.sql; `name` is the day it was
- * published, YYYY-MM-DD) and scenarios (024_scenarios.sql). Evidence packs and
+ * published, YYYY-MM-DD), scenarios (024_scenarios.sql) and sign-offs
+ * (035_signoff.sql; `name` is the signer's full name). Evidence packs and
  * assessments add their kinds here with their migrations. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */
@@ -124,11 +125,13 @@ export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind
 		SELECT 'publication' AS kind, p.id, to_char(p.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS name, p.published_at AS at FROM run_publication p WHERE p.run_id = r.id
 		UNION ALL
 		SELECT 'scenario', s.id, s.name, s.created_at FROM scenario s WHERE s.base_run_id = r.id
+		UNION ALL
+		SELECT 'signoff', so.id, so.full_name, so.signed_at FROM signoff so WHERE so.run_id = r.id
 	) c)`;
 
 /** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, UTC). */
 export interface RunCitation {
-	kind: 'publication' | 'scenario';
+	kind: 'publication' | 'scenario' | 'signoff';
 	id: string;
 	name: string;
 }
@@ -142,7 +145,7 @@ export async function citedMessage(db: Db, projectId: string, runId: string, tai
 	const { rows } = await db.query<{ cited: RunCitation[] }>(`SELECT ${CITED_BY_SQL} AS cited FROM model_run r WHERE r.project_id = $1 AND r.id = $2`, [projectId, runId]);
 	const cited = rows[0]?.cited ?? [];
 	if (!cited.length) return `this run is cited, ${tail}`;
-	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : `${c.kind} "${c.name}"`));
+	const names = cited.slice(0, 3).map((c) => (c.kind === 'publication' ? `the publication of ${c.name}` : c.kind === 'signoff' ? `the sign-off by ${c.name}` : `${c.kind} "${c.name}"`));
 	const more = cited.length > 3 ? ` and ${cited.length - 3} more` : '';
 	return `this run is cited by ${names.join(', ')}${more}, ${tail}`;
 }

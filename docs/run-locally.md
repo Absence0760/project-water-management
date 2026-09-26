@@ -189,6 +189,30 @@ gitignored `backend/.env.development.local` and use real coordinates. CHIRPS
 and the forecast are public; the DWS site may refuse requests from outside
 South Africa (HTTP 403), which the feed shows as failing.
 
+## Ingest
+
+A logger gateway or a script pushes readings to `POST
+/ingest/v1/series/merge` with a per-project API key
+([api.md § Ingest](./api.md#ingest)). Locally, the push script stands in for
+the gateway:
+
+1. Sign in as a project's owner, open Settings → **API keys**, make a key
+   and copy it (it is shown once).
+2. Put it in a gitignored `.env.development.local` at the repo root:
+   `WM_INGEST_KEY=wm_…` (or export it). `WM_API_URL` picks another API
+   (default `http://localhost:3001`).
+3. Push the synthetic logger CSV (`scripts/ingest/fixture.csv`, re-dated so
+   its last day is yesterday):
+
+```bash
+pnpm dev:ingest:push                                   # into flow_logger_m3s “Logger”
+pnpm dev:ingest:push --kind rain_catchment_mm --name Weir --unit mm --file my.csv --keep-dates
+```
+
+The series appears on the Data tab, and History shows the merge by
+`API key “<name>”`. Nothing sensitive is committed: the key lives only in
+your gitignored file.
+
 ## Reports
 
 The report page's **Generate PDF / Email me the PDF** and Settings →

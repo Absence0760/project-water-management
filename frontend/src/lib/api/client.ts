@@ -2,6 +2,7 @@
 // session cookie (credentials: 'include') and turns a non-2xx response into an
 // ApiError carrying the HTTP status and the server's message.
 import type {
+	AllocationComparison,
 	DailySeries,
 	DayBoundary,
 	InputChange,
@@ -18,6 +19,14 @@ import type {
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	Allocation,
+	AllocationImportRequest,
+	AllocationInput,
+	AllocationList,
+	AllocationPreview,
+	AllocationSource,
+	ApiKey,
+	ApiKeyCreate,
 	Ensemble,
 	ImportReport,
 	ImportResult,
@@ -36,8 +45,16 @@ import type {
 	HistoryRevision,
 	RestoreResult,
 	SeriesRevisionMeta,
+	Signoff,
+	SignoffList,
+	SignoffRequest,
 	Member,
 	Nomination,
+	Reproduction,
+	Note,
+	NoteCounts,
+	NoteCreate,
+	NotesQuery,
 	Project,
 	ProjectFile,
 	ProjectSummary,
@@ -403,8 +420,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
 			nominate: (id: string, runId: string, reason: string) =>
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
+			/** Re-run a run from its stored inputs with today's engine and compare (WP-3.1). */
+			reproduce: (id: string, runId: string) => request<Reproduction>('GET', `${p(id)}/runs/${enc(runId)}/reproduce`),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
+		},
+		signoffs: {
+			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
+			list: (id: string, runId: string) => request<SignoffList>('GET', `${p(id)}/runs/${enc(runId)}/signoffs`),
+			/** Sign a run off (editor): 409 when the statement changed since it was shown. */
+			create: (id: string, runId: string, body: SignoffRequest) =>
+				request<{ signoff: Signoff }>('POST', `${p(id)}/runs/${enc(runId)}/signoffs`, body).then((r) => r.signoff)
 		},
 		publication: {
 			/** The current publication (null when nothing is published) and the history, newest first (at most 12). */
@@ -423,6 +449,30 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
 			/** Withdraw a link (owner): it stops working at once. */
 			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
+		},
+		/** Notes and comments (WP-2.7): farmers and above; RLS scopes what each caller sees. */
+		notes: {
+			/** Newest first; deleted notes are never listed. */
+			list: (id: string, q: NotesQuery = {}) => {
+				const params = new URLSearchParams();
+				for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
+				return request<{ notes: Note[] }>('GET', `${p(id)}/notes${params.size ? `?${params}` : ''}`).then((r) => r.notes);
+			},
+			counts: (id: string) => request<NoteCounts>('GET', `${p(id)}/notes/counts`),
+			create: (id: string, body: NoteCreate) => request<{ note: Note }>('POST', `${p(id)}/notes`, body).then((r) => r.note),
+			/** The author only: replaces the body. */
+			edit: (id: string, noteId: string, body: string) =>
+				request<{ note: Note }>('PATCH', `${p(id)}/notes/${enc(noteId)}`, { body }).then((r) => r.note),
+			/** Soft delete (the author or an editor): hidden, kept for the audit trail. */
+			remove: (id: string, noteId: string) => request<void>('DELETE', `${p(id)}/notes/${enc(noteId)}`)
+		},
+		apiKeys: {
+			/** The project's API keys, newest first, revoked and expired ones included (owner). */
+			list: (id: string) => request<{ keys: ApiKey[] }>('GET', `${p(id)}/api-keys`).then((r) => r.keys),
+			/** Make a key (owner). `secret` is the key itself: this is the only time it is shown. */
+			create: (id: string, body: ApiKeyCreate) => request<{ key: ApiKey; secret: string }>('POST', `${p(id)}/api-keys`, body),
+			/** Revoke a key (owner): the next request with it is refused. */
+			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */
@@ -471,6 +521,34 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
 			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
 				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun })
+		},
+		/**
+		 * Registered and licensed volumes per farm or water user, and a run's
+		 * modelled use against them (docs/api.md § Allocations). Modelled, not
+		 * metered; the app never decides whether a use is lawful.
+		 */
+		allocations: {
+			list: (id: string) => request<AllocationList>('GET', `${p(id)}/allocations`),
+			create: (id: string, body: AllocationInput) =>
+				request<{ allocation: Allocation }>('POST', `${p(id)}/allocations`, body).then((r) => r.allocation),
+			update: (id: string, aid: string, body: Partial<AllocationInput>) =>
+				request<{ allocation: Allocation }>('PATCH', `${p(id)}/allocations/${enc(aid)}`, body).then((r) => r.allocation),
+			remove: (id: string, aid: string) => request<void>('DELETE', `${p(id)}/allocations/${enc(aid)}`),
+			/** Parse and match a file; nothing is written. 422 = the file can't be read (the message says why), 409 = already imported. */
+			preview: (id: string, body: AllocationImportRequest) => request<AllocationPreview>('POST', `${p(id)}/allocations/import`, body),
+			/** Import the file's valid rows; `matches` are the preview's manual choices by file line (null = leave unmatched). */
+			commit: (id: string, body: AllocationImportRequest & { matches: Record<string, string | null> }) =>
+				request<{ source: AllocationSource; imported: number; skipped: number; unmatched: number }>('POST', `${p(id)}/allocations/import/commit`, body),
+			/** Undo an import: the file's record and every allocation it brought. */
+			removeSource: (id: string, sourceId: string) => request<void>('DELETE', `${p(id)}/allocations/sources/${enc(sourceId)}`),
+			/** The allocations as CSV (a plain link: the cookie goes with it). */
+			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
+			/** A run's modelled use against the registered volumes, per water year. */
+			compare: (id: string, runId: string, tolerance?: number) =>
+				request<{ run: { id: string; label: string; startDate: string; endDate: string }; comparison: AllocationComparison }>(
+					'GET',
+					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
+				)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

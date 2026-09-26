@@ -24,6 +24,8 @@ export const TAB_GROUP = {
 	runs: 'core',
 	// Viewers can read scenarios (and compare them with the base run).
 	scenarios: 'core',
+	// Registered volumes vs modelled use (WP-3.10): viewers read volumes, not names.
+	allocations: 'core',
 	// The change log of the inputs, with restore actions a viewer can't use.
 	history: 'inputs'
 } as const satisfies Record<string, TabGroup>;

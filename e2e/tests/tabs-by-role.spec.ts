@@ -11,8 +11,8 @@ const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sect
 const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catchment' });
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
-const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'History'];
-const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios'];
+const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations', 'History'];
+const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios', 'Allocations'];
 
 /** The strip's tab names, in order. */
 async function tabNames(page: Page) {
@@ -69,7 +69,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Network', 'Data', 'Runs & results', 'Scenarios']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Network', 'Data', 'Runs & results', 'Scenarios', 'Allocations']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Overview' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -86,7 +86,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body.
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Data', 'Settings & calibration', 'Runs & results']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();

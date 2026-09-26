@@ -38,6 +38,18 @@ Tick items off (or move them into an issue) as they are done.
       against the live page); CHIRPS-GEFS's licence before client use
       (details under § Features left half-way).
 
+- [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
+      decision D10).** The disclaimer on every report (engine
+      `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
+      and the five sign-off statements (`liability/signoff.ts`,
+      `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
+      not agreed wording. The report prints *Draft wording, pending the
+      client's legal review* until `DISCLAIMER.status` is `agreed`. Have the
+      client's legal adviser review both (and an Afrikaans version if the
+      farmer view shows it); then set the agreed text, bump both versions and
+      flip the status. Sign-offs made before that record the draft versions
+      they were shown.
+
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and
       logger volumes (commit 4f931bb onward). The tree no longer has them,
@@ -637,6 +649,28 @@ the reports):
       - [x] **Uncertainty on compliance.** Phase 9's bands include the
             monthly Reserve compliance rate per site beside days not met
             (engine 0.26.0).
+      - [x] **Low flows and high flows (WP-3.7, engine 0.33.0).** The DRM
+            low-flow table beside a total table and freshet / flood
+            components per site, entered by paste or CSV, with a heat map
+            per site ([model.md §2.9d](./model.md)). Method choices pending
+            the hydrologist (plan.md question 17).
+      - [ ] **Low flows on base flow.** Engine 0.33.0 judges the low-flow
+            requirement on the month's total volume, so a flood month can
+            pass its low flows while its base flow was short. The durable
+            fix is a base-flow measure of the month (a recursive baseflow
+            filter, or the mean of the month's lowest daily flows) compared
+            with the low-flow requirement, behind a new engine version.
+            Trigger: the hydrologist's answer on which measure a Reserve
+            monitoring report uses.
+      - [ ] **Site source and confidence labels (WP-3.7 UI).** Each rule
+            table has a free-text source; the WP asks for a typed source
+            (`gazetted` | `desktop` | `other`) with a confidence line
+            ("Desktop estimate, low confidence" / "Gazetted Reserve, GN …")
+            and, in scenarios and evidence packs, a changed table shown in
+            red as a baseline assumption. Durable fix: an optional
+            `sourceKind` on `EwrRuleTable` (engine, schema, editor,
+            the panel and packs). Trigger: WP-3.5 packs quoting the
+            Reserve, or the assessor persona asking.
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -871,6 +905,34 @@ the suggested order (the IDs carry the detail):
       in the guard's change log: sharing the engine with the calibration
       worker (−13 KB total but +23 KB on a catchment's cold open) and
       `experimentalMinChunkSize` (1–4 KB, cold loads grow).
+- [x] **Engine code followed phantom imports into pages** (issue #9 second
+      pass, 2026-09-26): Rollup treated every engine module as possibly having
+      side effects, so a page that reached a module through the
+      `@water-management/engine` barrel depended on it without calling it.
+      `frontend/vite.config.ts` now marks the engine side-effect free
+      (`frontend/src/lib/engineSideEffects.test.ts` fails on any top-level
+      statement in `packages/engine/src`). First loads: farm pages −13 KB,
+      share −13, home −9, a catchment −8 (that code now loads with the Data,
+      Settings and Runs tabs, +6 each). The total stays 815 KB.
+- [ ] **Stop shipping the engine twice** (issue #9, measured 2026-09-26; the
+      numbers are in the bundle guard's change log). The calibration worker
+      bundles its own engine copy (57 KB gzip), ~130 KB raw of which the pages
+      ship too. Emitting the worker as a chunk of the page build (a Vite
+      plugin: `this.emitFile({ type: 'chunk' })` for `autocal.worker.ts`, the
+      page reading its URL from a virtual module) takes the total 815 → 794 KB,
+      but a chunk holds whole modules, and pages import small things from
+      modules that also hold the fit and run code: `ENGINE_VERSION`,
+      `prepareRun` and `mergeSettings` from `run.ts`; `CALIBRATION_PARAMS`,
+      `CALIBRATION_BOUNDS`, `MAX_STARTS` and `DEFAULT_STARTS` from
+      `calibrate/calibrate.ts`; the param tables from `runoff/gr4j.ts` and
+      `runoff/legacy.ts`; the check helpers in `reference/wr2012.ts`; the labels in
+      `calibrate/objective.ts`. So the Runs tab grows 27 KB and compare 32 KB.
+      **Durable fix:** move those page-side exports to modules of their own
+      (a throwaway split of the first two files alone gave 798 KB with compare
+      −9 KB and Runs −2, but a catchment +4 and Data +6 until the rest move too),
+      then land the worker plugin. **Trigger:** when no engine branch is open
+      (it moves `prepareRun` and `mergeSettings`, which most engine changes
+      edit), and before the next ceiling raise.
 - [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
       gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
       `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
@@ -1101,6 +1163,20 @@ yet; each lands with the work package named.
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its
       `aria-label` says so.
+- [ ] **Reporting window picker: move the re-windowing into the engine**
+      (issue #44, [ui.md § Reporting window](./ui.md#report-window)). The
+      Runs tab re-windows the curtailment table in the browser with
+      `computeCurtailment`, but mirrors two things the engine doesn't export
+      (`otherUserCurtailment` and the consumptive share k) and can't give the
+      EWR site setting each farm's charge over another window, since the
+      per-day binding site isn't stored. Durable fix: generalise
+      `analyseSeason` (`views/farmProjection.ts`, which already recomputes
+      the binding site from the stored flows) into a
+      `curtailmentOverWindow(run, window)` the frontend and the farmer
+      projection share, and drop the mirrors in
+      `runs/windowedCurtailment.ts`. Trigger: the next engine change to
+      curtailment or the farmer projection, or when the binding-site column
+      is asked for over a picked window.
 
 ## Roles and what each member sees
 
@@ -1174,6 +1250,33 @@ role and not before it.
       forecast-rain change.
 
 
+- **Assurance of supply, stress classes and the water account** (roadmap
+  WP-3.4, engine 0.32.0, 2026-09-26; [model.md §2.11a–b](./model.md)).
+  Built: `network/reliability.ts` → `RunSummary.supplyAssurance`, the Runs
+  tab's two panels, the three summary-CSV blocks,
+  `settings.assuranceAnnualThreshold`, `checkReliability` and
+  `checkWaterAccount` in the soak. Left open:
+  - [ ] **The hydrologist signs off the definitions** (pending, decided from
+        the persona review): demand days, not all days, for the time-based
+        measure; part water years counting for the annual one; the v004
+        stress thresholds as they stand; seepage as a memo rather than an out
+        term. Trigger: the hydrologist's first review of a licensing run.
+  - [ ] **Dam releases in the water account** once WP-3.5 lands: a release
+        that leaves the network is an out term; one that stays is already in
+        the outflow. Owner: WP-3.5.
+  - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
+        WP-3.7's Desktop tables: the account uses the pragmatic EWR at each
+        site today. Owner: WP-3.7.
+  - [ ] **Where else the metrics show**: the printable report
+        (`report/`), the farm view (a farmer's own reliability and stress
+        months) and the scenario compare view (Δ reliability per farm).
+        Trigger: WP-3.10's evidence pack, which needs them in the report.
+  - [ ] **Bundle budget**: the build is 829 KB against the 821 KB ceiling
+        (both panels are lazy; the growth is the engine module in every
+        runModel chunk, the help entries and the Settings field). The
+        coordinator raises the ceiling at merge or trims elsewhere.
+
+
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
   scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
@@ -1187,14 +1290,28 @@ role and not before it.
         end of the statement, so a project delete still cascades); the unpin
         and delete routes answer `409 this run is cited by scenario "…"`;
         cited runs don't count against `PINNED_RUNS_PER_PROJECT_MAX`.
-  - [ ] **`GET …/runs/:runId/reproduce`** (`{ identical, engineVersionThen,
-        engineVersionNow, differences }`), `RunMeta.reproducible`, and the
-        Runs tab's "Reproducible" badge, "Cited" lock and "Check
-        reproduction" action. (`RunMeta.citedBy` is built, WP-3.2, and the
-        Runs tab already tags a scenario's base **Scenario base** without a
-        ✕; a published run is tagged **Published**.) `loadRunInput` + `runModelChecked` +
-        canonical JSON is the whole server side; the route and UI are what
-        remain. Trigger: WP-3.2's compare view, or an assessor asking.
+  - [x] **`GET …/runs/:runId/reproduce`**, `RunMeta.reproducible` and the
+        Runs tab's **Check reproduction** action (2026-09-26,
+        `backend/src/runs/reproduce.ts`, `runs/ReproducePanel.svelte`; api.md
+        § Runs, ui.md). The answer is `identical`, `differs` (up to 50
+        differences: summary paths, series with days, first date and largest
+        difference), `not_reproducible`, `inconsistent` or `failed`. The list
+        tags the exception, **Inputs not stored**, rather than badging every
+        run "Reproducible"; the "Cited" lock is the existing **Published** /
+        **Scenario base** tags without a ✕ (pending the hydrologist).
+  - [ ] **Withdrawing a nomination (un-nominate)**, considered and not built
+        (2026-09-26). Under #43's rule (035_project_evidence_guard: any
+        nomination row keeps the project for good) a withdrawal would not
+        make a project deletable, so its only value is honesty in the record:
+        today an applicant who drops an application can only *replace* the
+        nomination, so the history keeps claiming some run is "the evidence".
+        The durable fix, if an assessor or applicant asks for it: an
+        append-only history row with no run and a required reason (run_id,
+        runoff_model and engine_version NULL together), stamped by
+        `run_nomination_stamp`, shown as "Withdrawn on … by …" in the Runs
+        tab, compare and the summary CSV; the guard stays unchanged. Trigger:
+        a real licence application withdrawn, or an assessor asking what a
+        project stands behind after an application lapses.
   - [x] **WP-2.3's publication-history trim skips cited runs' publications**
         (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
         newest 12, every publication whose run a scenario is based on, so
@@ -1263,8 +1380,7 @@ role and not before it.
   - [ ] **Sections waiting on other work**, added to `report/sections.ts`
         when their data exists (no placeholders until then): the cover's
         published-by line and restriction notice (WP-2.3), changes since the
-        previous publication (WP-2.4), the disclaimer (D10, text still to be
-        agreed), and the licensing evidence pack's sections and uncertainty
+        previous publication (WP-2.4), and the licensing evidence pack's sections and uncertainty
         display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
         built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
         run against the mock-up in that spec's §11). WP-2.3 also adds the Overview published card's Report
@@ -1576,9 +1692,52 @@ role and not before it.
       question in two clicks. Trigger: a hydrologist or WUA user asks for it
       on the field itself, or the History tab's parameter filter is the
       most-used one.
-- [ ] **`api_key.*` audit kinds are reserved** until per-project API keys
-      exist (WP-2.9); `audit_event.actor_api_key_id` is there, unused.
-      Trigger: WP-2.9.
+- [x] **`api_key.*` audit kinds are recorded** now that per-project API
+      keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
+      and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
+- [ ] **Auto re-run after an ingest or a feed merge** (WP-2.11). `mergeInto`
+      calls the no-op `series/newData.ts` `onSeriesDaysChanged` on every
+      merge that changed days, and the ingest returns `rerunQueuedFor: null`.
+      Durable fix: WP-2.11 enqueues the debounced `rerun` there, and calls
+      the same hook from the data feeds' ingest (`feeds/ingest.ts`). A key's
+      transaction has no user, so the enqueue needs an acting user (e.g. the
+      key's creator) or a `SECURITY DEFINER` enqueue, plus a job policy for
+      keys. Trigger: WP-2.11.
+
+## Allocations (WP-3.10)
+
+The first slice (2026-09-26: migration 038, engine `compareAllocations`,
+`backend/src/allocations/`, the Allocations tab; [allocations.md](./allocations.md))
+stores registered volumes and compares them with a run's modelled use. Left,
+from the WP:
+
+- [ ] **Engine `allocationMode`** (`cap` | `fullAllocation`, default `none`)
+      with `RunSummary.allocations` and a `checkAllocations` invariant in
+      `runModel`; bumps `ENGINE_VERSION`. `cap`: cumulative supply per water
+      year ≤ the allocation; `fullAllocation`: demand replaced by the
+      allocation over its monthly pattern. Durable fix for "what if every
+      lawful user took their entitlement" (WP-3.11's background run).
+      Trigger: WP-3.11 (cumulative impact) or an assessor asking.
+- [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
+      (default 0.1, pending the hydrologist). Trigger: the first client asking
+      for another band.
+- [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
+      import and a column-mapping step for unknown headings. Until then an
+      unknown heading is listed as "not read". Trigger: the client sends an
+      extract (plan.md questions).
+- [ ] **Licence conditions**: `months`, `maxRateM3s`, a `conditions jsonb`
+      (the WP's `Allocation` shape), shown and later enforced by `cap`.
+- [ ] **Farm view**: a farmer's own registered volume beside their modelled
+      use (RLS already allows it: `allocation_select_farmer`,
+      `allocation_holder_select`); share views per D3 (c) (volumes public,
+      names hidden). Trigger: D3 settled with the client's legal adviser.
+- [ ] **Dam filling vs registered storage** (s21b): the comparison counts
+      supply from the farm's own dam as abstraction and compares storage with
+      the dam capacity only. Pending the hydrologist.
+- [ ] **POPIA**: allocations and holder names in the data-subject export and
+      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **Evidence pack and chart**: the over/under-use chart and the
+      comparison in the licence evidence pack (WP-3.14).
 
 ## Housekeeping
 
@@ -1598,3 +1757,43 @@ role and not before it.
   catchment if the workbook is present.
 - The domain personas (`/persona hydrologist,environmentalist,…`) are ready to
   run against the merged app. See `.claude/personas/README.md`.
+
+## Liability and sign-off (WP-3.13)
+
+Built 2026-09-26: the draft disclaimer, the validation statement with the
+known limitations generated from engine-audit.md, and the immutable
+professional sign-off on a run, all on the report route
+([ui.md § Report](./ui.md#report), [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313),
+[data-model.md § Sign-offs](./data-model.md#sign-offs-035_signoffsql)).
+Left, each with its trigger:
+
+- [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an
+      `EngineBuild` (version, git SHA, invariants passed, soak cases) and the
+      report says *Not recorded for this build* without one. Durable fix: the
+      web release workflow runs the invariant suite and a soak, writes the
+      record, and the frontend build injects it (a Vite `define`) for the
+      report to pass in. Trigger: before the first evidence pack (WP-3.14),
+      which must state it.
+- [ ] **Methodology statement and engine errata** (`docs/methodology/`,
+      versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
+      per engine version). Only the limitations list is generated so far.
+      Trigger: WP-3.14, the pack that records their version and hash.
+- [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
+      'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
+      `pack_id` column with a check that exactly one target is set. A
+      scenario is signed through its run (`model_run.scenario_id`), and the
+      works statement words itself for a scenario.
+- [ ] **Validation statement panel on the run and the scenario** (WP-3.13
+      UI). It is printed on the report only; the Runs tab and the scenario
+      view link to the report. Trigger: the first hydrologist or assessor
+      review that asks for it on screen.
+- [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
+      sign-off is as strong as the signer's password.
+- [ ] **Sign-offs in the POPIA data export** (WP-1.13): a sign-off holds the
+      signer's typed name and registration; the export and account deletion
+      must list them (deletion keeps the row with `user_id` nulled, as the
+      professional record, and the privacy notice must say so).
+- [ ] **Flagged years are capped** at the data-quality check's example limit
+      (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
+      years lists only the first ones. Trigger: a catchment that hits it;
+      the fix is a full list on the check or in the statement.

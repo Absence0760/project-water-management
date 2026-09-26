@@ -148,7 +148,23 @@ bundle guard gives workers their own ceiling). It was measured sharing the page'
 instead (issue #9): that only works if engine code sits in chunks of its own,
 and then a catchment’s cold open grows by about 23 KB, because a shared
 chunk carries the code of all its importers. A one-off download when a fit
-starts costs less than that on every open.
+starts costs less than that on every open. A second try (2026-09-26) emitted
+the worker as an entry of the page build, so Rollup groups engine code by
+exactly who needs it: the total drops 21 KB, but a chunk holds whole modules,
+and the pages' small imports from `run.ts` and `calibrate/calibrate.ts`
+(`prepareRun`, `ENGINE_VERSION`, the calibration constants) then bring the fit
+and run code into the Runs tab (+27 KB) and compare (+32 KB). It becomes a win
+once those exports live in modules of their own ([followups.md](./followups.md),
+"Stop shipping the engine twice").
+
+Rollup treats the engine as side-effect free (`treeshake.moduleSideEffects`
+in `frontend/vite.config.ts`). Otherwise every engine module a page reaches
+through the `@water-management/engine` barrel counts as a dependency of that
+page even when the page calls nothing in it, and engine code lands in chunks
+by those phantom edges (the farm and share pages carried ~13 KB of it). The
+engine has no module that does anything when it loads, and
+`frontend/src/lib/engineSideEffects.test.ts` keeps it that way: it fails on
+any top-level statement in `packages/engine/src` other than a declaration.
 
 The `.xlsx` run export has a worker of its own
 (`lib/spreadsheet/export/export.worker.ts`, 87 KB gzip), because it carries
@@ -220,7 +236,11 @@ sliding back into the page chunk.
    emailed-link `/auth/*` routes), `requireUser` verifies the `wm_session`
    JWT (HS256, jose), checks it was issued after the user's
    `sessions_revoked_at` watermark (one `app_user` lookup by primary key), and
-   sets `userId`. Otherwise `401`.
+   sets `userId`. Otherwise `401`. The ingest routes (`/ingest/v1/*`, WP-2.9)
+   take a per-project API key instead (`requireApiKey`, `ingest/auth.ts`):
+   the key is checked in constant time and rate-limited per key, and the work
+   runs in `withApiKey`, which sets `app.current_api_key_id` and no user
+   ([security.md § API keys](./security.md#api-keys)).
 4. Project routes open **one transaction** on a pooled `pg` connection as
    `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).

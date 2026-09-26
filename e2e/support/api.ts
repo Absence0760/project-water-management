@@ -90,6 +90,12 @@ export async function createRun(request: APIRequestContext, projectId: string, l
 	return (await json<{ run: { id: string } }>(res, 201)).run.id;
 }
 
+/** Nominates a run as the project's evidence (POST /projects/:id/evidence). */
+export async function nominateRun(request: APIRequestContext, projectId: string, runId: string, reason: string): Promise<void> {
+	const res = await request.post(`${API_URL}/projects/${projectId}/evidence`, { data: { runId, reason } });
+	await json(res, 201);
+}
+
 /** Copies a project (model, settings, series); returns the copy's id. */
 export async function copyProject(request: APIRequestContext, projectId: string, name: string): Promise<string> {
 	const res = await request.post(`${API_URL}/projects/${projectId}/copy`, { data: { name } });

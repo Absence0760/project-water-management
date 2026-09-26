@@ -1822,7 +1822,8 @@ share (§2.11) and the curtailment supply cut count it too.
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
-| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table | `RunSummary.ewrAssurance` + the Reserve compliance panel, headline and CSV block (§2.9c, engine ≥ 0.21.0) |
+| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table; from engine 0.33.0 also its low flows (maintenance to drought) and freshet / flood components | `RunSummary.ewrAssurance` + the Reserve compliance panel (with a per-site heat map), headline and CSV block (§2.9c, §2.9d) |
+| (none: the node-based model's stress classes, §4) | Reliability per farm, stress class per month, the water account | `RunSummary.supplyAssurance` + the Runs tab's Assurance of supply and Water account panels and three CSV blocks (§2.11a–b, engine ≥ 0.32.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -2074,6 +2075,110 @@ drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
 and monthly compliance; interpolating a requirement between points) ·
 Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
 months, seasonality, magnitude, contiguity).
+
+### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.33.0, roadmap WP-3.7)
+
+§2.9c judges each EWR site against one rule table. The Desktop Reserve Model
+(Desktop Version 2, Hughes & Hannart 2003; Hughes et al. 2014) gives two
+assurance tables per site: the **total flow** (low flows plus high flows)
+and the **low flows** alone, each per month at the 10 % … 99 % points; the
+low flows fall from the maintenance low flow at the wetter points to the
+drought low flow at 99 %. Reserve studies above desktop level also specify
+**high-flow events**: freshets and floods of a given peak and duration, a
+number of times a year, in given months. Engine 0.33.0 adds both to a rule
+table, at every EWR site (the outlet and each gauge, §2.7b), with nothing
+else changed: a table without them reports exactly as before (key for key,
+tested), so the existing rule tables, runs and exports are unchanged.
+
+**Low flows** (`EwrRuleTable.lowFlow`, optional). On a `total` table, a
+second 12 × points grid in the same unit, read at the **same natural
+percentile** as the total (the same natural curve and interpolation weight,
+§2.9c; below the driest point it scales with the flow as the total does):
+
+```
+R_low   = the low-flow grid read at p           (table unit)
+lowMet  = A ≥ R_low                              (relative tolerance 1e-9, as §2.9c)
+R_high  = MAX(R − R_low, 0)                      the month's high-flow part
+```
+
+A month then reads three ways: met (A ≥ R), **only the high flows short**
+(R_low ≤ A < R), or **the low flows short** (A < R_low). The site report adds
+`lowFlow { months, met, rate, deficitM3, longestNotMetRun }`, each month
+`requiredLowFlow`, `lowFlowMet`, `requiredHighFlow`, and each month of the
+year `lowFlowRate`. A `lowFlow` table (component `lowFlow`) can't carry a
+second low-flow grid (validation refuses it: its own grid is the low flows).
+Plausibility notes (run warnings, not blocking): a low-flow row that rises
+with the % point, and low flows above the total at a point (the high-flow
+part there counts as 0).
+
+Both requirements are judged on the month's **total** flow volume A, as
+§2.9c does. A flood month can therefore pass its low flows on volume while
+its base flow was short; separating base flow from the month's flow (e.g. a
+baseflow filter or the month's lowest daily flows) is the durable measure
+and is pending the hydrologist (docs/followups.md, "Low flows on base
+flow").
+
+**High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
+component: a label, the calendar months an event may start in, a peak
+(m³/s, daily mean; × the table's scale), a duration (1–90 days) and the
+events required per water year (1–12; `duration × per year ≤ 366`).
+Per **complete water year** (1 Oct … 30 Sep inside the run; a part year at
+either end is not assessed):
+
+```
+event     = a maximal run of days with daily flow ≥ peak (relative tolerance 1e-9),
+            at least `duration` days long, whose first day falls in one of the months;
+            a run is cut at the water year's ends, a missing day breaks it
+n_nat     = events in the site's natural flow (Σ runoff of the farms upstream, §2.9c)
+n_sim     = events in the simulated flow at the site (outlet: outflow; gauge: its flow)
+required  = MIN(perYear, n_nat)
+met       = n_sim ≥ required
+```
+
+A year is never asked for a flood its natural flow didn't have: a dry year is
+not failed for it, but a dam that holds back a flood the river would have had
+is. That is the same principle as the monthly rules (the requirement follows
+natural conditions, §2.9c) applied to events. The report per component:
+each year's natural, simulated and required count, and `overall { years,
+required, met, rate }`, where `rate = met ÷ years with required > 0` (null
+when none).
+
+**Several sites.** Every site with a table is assessed on its own natural
+and simulated flow, so a dam upstream of one gauge changes that gauge and
+every site below it (the outlet), but not a site on another branch (tested:
+two branches, a gauge on each, a dam on one, `lowHighFlows.test.ts`). Farm
+attribution is unchanged: the daily charge still follows the pragmatic EWR at
+each site (§2.7b); a charge driven by the rule tables is the open
+follow-up "Daily charge from the rule table".
+
+**Invariants (tested, `reserve/lowHighFlows.test.ts`).**
+- A table with neither addition reports exactly as before (no new keys).
+- Natural flow meets its own low flows whenever the low-flow grid is at most
+  the natural curve, and its own high flows always (n_sim = n_nat ≥ required).
+- With low flows ≤ the total at every point, a month that meets the total
+  meets its low flows.
+- Less flow never meets more low-flow months (R_low depends only on natural
+  flow); a site with no event fails every year that required one.
+- The months of the year add up to the site's low-flow totals.
+- The fuzz generator adds low-flow grids (now and then above the total) and
+  high-flow components to its random rule tables from their own random
+  stream, so order invariance and finiteness cover them.
+
+**Entry** (Settings → Reserve rule tables): a *total* table's "Also enter the
+low flows" adds the grid; every grid (EWR, low flows, natural flows) fills
+from a paste or a CSV file (the layout of a DRM table: month rows, % point
+columns, an optional heading row; synthetic example files to download), and
+the high-flow components from a pasted or loaded CSV (name, months, peak,
+days, per year). The API (the settings schema, `backend/src/projects/settings.ts`, runs the engine's
+`ewrRuleTableIssues`) refuses a malformed grid or component, so a missing
+table is a validation error, never "0 required".
+
+**Pending the hydrologist.** Whether the low flows should be judged on base
+flow rather than the month's volume; whether a freshet's "per year" should be
+capped by natural events (as here) or required outright in maintenance years
+only; whether events should be counted per month rather than per water year;
+the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
+this is signed off.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
@@ -2921,6 +3026,46 @@ it never changes a run's results.
   coefficient's ±0.1, and whether 300 members suffice, are defaults to
   confirm, not findings.
 
+### 2.10f Validation statement and known limitations (engine ≥ 0.31.2, roadmap WP-3.13)
+
+`validationStatement({ summary, engineVersion, legacy }, build?)`
+(`packages/engine/src/liability/validation.ts`) says how far one saved run
+can be trusted, from its stored summary alone (no re-run, so any run has
+one). It changes no run output; 0.31.2 only adds it to the engine's surface.
+
+- **Calibration statistics with ratings.** NSE and PBIAS carry the Moriasi
+  et al. (2007) streamflow ratings (NSE > 0.75 very good, > 0.65 good,
+  > 0.50 satisfactory; |PBIAS| < 10 % very good, < 15 % good, < 25 %
+  satisfactory; otherwise unsatisfactory). KGE and log-flow NSE are shown
+  without a rating, since the paper gives none. The statement always carries
+  the caveat that those thresholds were set for **monthly** flows and a daily
+  fit scores lower for the same skill (calibration research CR-6): a guide,
+  not a pass mark.
+- **Flagged data-quality years**: the water years whose catchment rain reads
+  far below CHIRPS (`lowvschirps`, §2.10a; up to the check's example cap),
+  and the one-line text of every other data-quality check that fired.
+- **Runoff coefficient (audit W1)**: natural flow ÷ rain on the catchment,
+  marked implausible above 1.
+- **Engine version, and the build's test results** (`EngineBuild`: version,
+  git SHA, invariant suite passed, soak cases). CI does not inject the build
+  record yet ([followups.md](./followups.md#liability-and-sign-off-wp-313)),
+  so the statement says the results were not recorded; a record is only
+  ever shown for the version it was made for.
+- **Self-checks**: the run's own verification (`summary.verification`).
+- **Known limitations**, generated from [engine-audit.md](./engine-audit.md):
+  every finding or workbook quirk whose decision is still open (it says
+  *pending* the hydrologist or assessor, *Needs hydrologist*, or it is only
+  *Warned* or *Built* off by default). `pnpm gen:limitations` rewrites
+  `liability/limitations.generated.ts` from the doc, and
+  `limitations.test.ts` parses the doc again and fails when the two differ,
+  so an audit item's status can't change without the list following it.
+
+The same module holds the draft disclaimer (`DISCLAIMER`, versioned, marked
+draft until the client's legal review, Step 2 D10) and the sign-off
+statement (`signoffStatement(run)`): the five confirmations of WP-3.13, the
+limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
+sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
@@ -3028,6 +3173,109 @@ values into `computeCurtailment` and checks every column against the cell
 formulas written out unrounded, and the saved window's averages against the
 sheet within its rounding (½ m³/day).
 
+### 2.11a Assurance of supply and stress classes (engine ≥ 0.32.0, roadmap WP-3.4)
+
+New outputs only: every figure is read off the run's own daily `demand` and
+`supplied` series, so no result the engine had before changes.
+`packages/engine/src/network/reliability.ts` → `RunSummary.supplyAssurance`
+(its own sub-object, with the water account of §2.11b).
+
+**Reliability** per farm and per other water user (§2.7c), over the
+**reporting window** of §2.11 (`settings.reportStart … reportEnd`):
+
+| Measure | Definition |
+| --- | --- |
+| Time-based | days whose demand D > 0 was fully met ÷ days with D > 0. "Fully met": D − G ≤ 10⁻⁹ D (float noise). Days without demand are neither met nor failed, so a winter without irrigation doesn't inflate it. |
+| Volumetric | Σ G ÷ Σ D. Equals the curtailment table's I ÷ H for the same farm (an invariant). |
+| Annual | water years (touching the window, part years included) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ water years with demand. Default 0.9, a project setting, not a standard. |
+| Resilience | a failure is a run of consecutive demand days not fully met (a day without demand ends it); the mean and the longest length in days. Hashimoto et al. (1982) define resilience as the probability of recovering, 1 ÷ the mean length. |
+| Vulnerability | Σ (D − G) over each failure run: the mean and the largest, m³ (Hashimoto's "severity"). |
+
+Each measure is null without demand; the time-based and volumetric ones are
+also given per water-year month (Oct … Sep), pooled over the window's years.
+Reliability is 1 exactly when no demand day fell short.
+
+**Stress classes** from the node-based model (§4), per farm, per user and
+for the whole system (every farm and user summed, in node-id order), per
+water-year month over the **whole run** (the EWR grid's layout, §2.9): the
+month's supply ratio Σ G ÷ Σ D is **Low** ≥ 95 %, **Moderate** ≥ 85 %,
+**High** ≥ 70 %, **Severe** ≥ 50 %, otherwise **Critical**; a month without
+demand has no class.
+
+Decisions pending the hydrologist: demand days rather than all days for the
+time-based measure; part water years at the ends of the window counting for
+the annual measure; the v004 thresholds as they stand.
+
+### 2.11b Water account (engine ≥ 0.32.0, roadmap WP-3.4)
+
+`RunSummary.supplyAssurance.waterAccount`: one row per water year and one for
+the run, volumes in m³, summed over every node per day in node-id order.
+
+- **In:** natural flow, rain on the dams (§2.7a), groundwater pumped (§2.7d),
+  net transfers (0 up to float noise).
+- **Out:** runoff removed by land cover (§2.5a); natural flow not allocated to
+  any farm (natural − Σ farm runoff − land cover, non-zero only when the flow
+  shares don't sum to 1); **consumptive irrigation** G − T = G(1 − β(1 − e))
+  (§2.7, audit N1: the crop's e·G plus the losses that don't return); other
+  users' take − return; dam evaporation; stream depletion; outflow at the
+  outlet.
+- **Δ storage:** Σ farm dam storage at the end − at the start.
+- **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
+  terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤
+  10⁻¹⁰ × scale in every year. Rows sum each day's totals rather than
+  differencing prefix sums, which would carry the whole run's rounding into a
+  small dry year (fuzz seed 1486).
+- **Memos**, not in the closure: rain on the catchment (rain_final × area)
+  and rain − natural flow; irrigation supplied; dam seepage (it joins the
+  farm's outflow and can be caught again by a dam downstream, so it is not a
+  loss from the network).
+- **EWR required vs met** at each EWR site (outlet, then gauges by id):
+  Σ requirement, Σ MIN(flow, requirement), and the days short.
+
+Dam releases (WP-3.5) are not modelled yet; when they land they join the out
+side only if they leave the network, otherwise they stay inside the outflow.
+
+### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
+
+Not part of the workbook, and not part of `runModel`: `compareAllocations`
+(`packages/engine/src/allocations/compare.ts`) reads a stored run's series and
+the project's registered volumes and returns a comparison. A run's output
+doesn't change, so `ENGINE_VERSION` doesn't move. The data, the import and the
+wording rules are in [allocations.md](./allocations.md).
+
+For each farm or water user *n*, water source *s* and water year *y*
+(October–September, labelled by the year it starts in; `waterYearOf`), over
+the days *D(y)* of *y* inside the run:
+
+- modelled use *M(n,s,y)* = Σ over *D(y)* of `groundwater_used` for
+  *s* = groundwater, and of `supplied` − `groundwater_used` for *s* = surface
+  (0 for a node without boreholes, §2.7d). `supplied` includes what the farm
+  draws from its own dam.
+- registered volume *R(n,s,y)* = Σ over the node's allocations *a* of source
+  *s*: *V(a)* × |*D(y)* ∩ [validFrom(a), validTo(a)]| ÷ *L(y)*, with *L(y)*
+  = 365 or 366, the days of the whole water year. A whole year in force gives
+  exactly *V(a)*; a run that covers part of the year, or a validity window
+  that starts or ends in it, gives the prorated volume.
+- ratio = *M* ÷ *R* (none when *R* = 0), and a status with tolerance *τ*
+  (default 0.1, pending the hydrologist): **over** *M* > *R*(1 + *τ*),
+  **under** *M* < *R*(1 − *τ*), **within** otherwise; with *R* = 0,
+  **unregistered** if *M* > 0, else **none**. Quantities below 10⁻⁶ m³ count
+  as 0.
+- partial = |*D(y)*| < *L(y)*; the per-node summary (`yearsOver`,
+  `meanModelledM3PerYear`, `meanRegisteredM3PerYear`) counts whole years
+  only.
+- storage: Σ `storageM3` of the node's allocations (none when no allocation
+  states one) beside the run's `damCapacityM3` for a farm.
+
+Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
+of *M(n,s,y)* equals Σ of the node's `supplied` series, and every run day falls
+in exactly one water year; the result is the same at UTC+14 and UTC−11.
+
+Not built yet: the engine settings `allocationMode` = `cap` (supply limited
+so cumulative supply within a water year ≤ the allocation) and
+`fullAllocation` (demand replaced by the allocation), which will change
+`runModel` and bump `ENGINE_VERSION` (followups.md § Allocations).
+
 ---
 
 ## 3. Workbook quirks and suspected bugs
@@ -3089,6 +3337,8 @@ general enough to hold these nodes.
   groundwater (none / supplemental / primary / emergency; direct or to-dam).
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, reported per farm and per month.
+  **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
+  whole system, per water-year month.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
@@ -3209,6 +3459,8 @@ text:
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
+| `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
+| `checkWaterAccount` | Engine ≥ 0.32.0 (§2.11b): the account closes to 10⁻¹⁰ of Σ\|terms\| in every water year and over the run, the years add up to the run, each year opens with the last year's closing storage, and 0 ≤ EWR met ≤ required. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
 **The ordering rule (engine ≥ 0.26.1).** Floating-point addition is not
@@ -3379,6 +3631,9 @@ step when a definition changes.
 | **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. by ecological category and regional hydrological type). |
 | **Pragmatic EWR** | b023's simplification: one fixed m³/day per month instead of a flow-dependent requirement, so farmers can plan for it. |
 | **Ecological category** | A–F class of river condition that the EWR aims to maintain. |
+| **Maintenance / drought low flows** | The low-flow part of a Reserve: the base flow a river needs in normal years (maintenance, the wetter % points of the DRM low-flow table) down to the least it needs in a drought (its 99 % point) (§2.9d). |
+| **Freshet / flood (high flows)** | A Reserve high-flow event: a peak held for some days, a number of times a water year, in given months; checked per water year against the events natural flow had (§2.9d). |
+| **Percentile (natural condition)** | Where a month's natural flow sits on that month's natural flow duration curve, as % exceedance: low = wet, high = dry; it picks the row of a Reserve rule table (§2.9c). |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
 | **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with 0 or blank on the unread days and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d). |
@@ -3402,4 +3657,6 @@ step when a definition changes.
 | **Water year** label | The app labels a water year by the year its October falls in: 2010 = Oct 2010 – Sep 2011, shown as 2010/11. |
 | **RMSE** | Root-mean-square error. |
 | **Hydrological unit (HU)** | A sub-catchment with its own area, MAP and rain gauge (runoff module). |
-| **Stress class** | Low / Moderate / High / Severe / Critical, from the supply ratio (node-based model). |
+| **Stress class** | Low / Moderate / High / Severe / Critical, from the supply ratio (node-based model; engine ≥ 0.32.0, §2.11a). |
+| **Assurance of supply** | Reliability of a farm's supply: time-based, volumetric and annual, with resilience and vulnerability (§2.11a). |
+| **Water account** | In − out − Δ storage per water year, closing to float noise (§2.11b). |

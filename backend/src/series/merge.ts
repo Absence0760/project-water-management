@@ -3,7 +3,10 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
+import type { QueuedRerun } from '../runs/autoRun.js';
+import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
 
 export { MAX_SERIES_VALUES, SeriesStartDate };
 
@@ -370,3 +373,82 @@ export async function mergeSeries(
 /** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
 const feedDaysSql = (starts: number, ends: number) =>
 	`(SELECT range_agg(daterange(DATE '1970-01-01' + s, DATE '1970-01-01' + e)) FROM unnest(\$${starts}::int[], \$${ends}::int[]) AS t(s, e))`;
+
+/**
+ * Record how a written series' days were built from sub-daily readings
+ * (033_series_day_boundary.sql): `boundary` null = daily values. Returns the
+ * meta as it now stands.
+ */
+export async function setDayBoundary(db: Db, projectId: string, meta: SeriesMetaRow, boundary: string | null): Promise<SeriesMetaRow> {
+	if ((meta.dayBoundary ?? null) === boundary) return meta;
+	const { rows } = await db.query<SeriesMetaRow>(`UPDATE time_series SET day_boundary = $3 WHERE project_id = $1 AND id = $2 RETURNING ${SERIES_META}`, [
+		projectId,
+		meta.id,
+		boundary
+	]);
+	return rows[0]!;
+}
+
+const boundaryText = (b: string | null) => (b ? `${b}–${b} days` : 'daily values');
+
+export interface MergeIntoOptions {
+	/**
+	 * Keep the previous values as a series revision (a person's merge, from
+	 * the UI). An API key's ingest doesn't: like a data feed's merges, a
+	 * logger's are append-mostly and would push a person's restore points out.
+	 */
+	keepRevision: boolean;
+	/** Who wrote the days, for the new-data hook (series/newData.ts): a person, or an API key's ingest. */
+	via: Extract<SeriesDaysChanged['via'], 'user' | 'api_key'>;
+	/** Extra fields for the audit subject (the ingest's `source` label). */
+	audit?: Record<string, unknown>;
+}
+
+export interface MergeIntoResult {
+	meta: SeriesMetaRow;
+	/** Days whose value changed (a new series: its days with a value). */
+	daysChanged: number;
+	/** When a re-run is queued for (series/newData.ts), or null. */
+	rerunQueuedFor: string | null;
+	/** The re-run the merge queued or pushed back (null: none), for the route to wake the worker after commit. */
+	rerun: QueuedRerun | null;
+}
+
+/**
+ * Merge a body's days into a project's series and record it: the day-boundary
+ * guard, the merge itself (mergeSeries), the history (series.created, or
+ * series.merged when days or the unit changed) and the new-data hook. The one
+ * sequence POST /projects/:id/series/merge and POST /ingest/v1/series/merge
+ * share, so the lock and merge order can't drift between them (WP-2.9). The
+ * caller has checked access: a role for a person, the key and its allowed
+ * series for the ingest (RLS enforces both again).
+ */
+export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opts: MergeIntoOptions): Promise<MergeIntoResult> {
+	// The day-boundary guard (033): days added up in one window never go into a series of the other, like 032's version guard.
+	const { rows: held } = await db.query<{ dayBoundary: string | null; filled: boolean }>(
+		`SELECT day_boundary AS "dayBoundary", EXISTS (SELECT 1 FROM unnest("values") v WHERE v IS NOT NULL) AS filled
+		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+		[projectId, body.kind, body.name]
+	);
+	const was = held[0];
+	if (body.dayBoundary !== undefined && was?.filled && (was.dayBoundary ?? null) !== body.dayBoundary) {
+		throw new ApiError(
+			409,
+			`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
+		);
+	}
+	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body) });
+	const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, projectId, r0.meta, body.dayBoundary) } : r0;
+	const subject = seriesSubject(r.meta, r.before, r.after, opts.audit);
+	const daysChanged = subject.daysChanged as number;
+	if (!r.before) await recordAudit(db, projectId, 'series.created', subject);
+	else if (daysChanged || r.before.unit !== r.meta.unit) {
+		const revisionId = opts.keepRevision
+			? await recordSeriesRevision(db, projectId, { ...r.before, kind: r.meta.kind, name: r.meta.name, dayBoundary: was?.dayBoundary ?? null }, 'manual_merge')
+			: undefined;
+		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
+	}
+	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
+	const rerun = await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
+	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun };
+}

@@ -148,7 +148,7 @@ shorter than the cap looks as before.
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
 the published baseline, a "Needs attention" list, eight headline facts, project details, the import
-record (an imported project only), team and members.
+record (an imported project only), recent notes ([§ Notes](#notes)), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -285,6 +285,17 @@ Ctrl/Cmd-click or a middle click opens a new tab, and the keyboard and screen
 readers still meet one named link per row. The row's Team link, its Add data,
 Copy and Delete buttons, and the freshness and last-run badges (whose tooltips
 explain them) sit above the stretch and keep doing their own thing.
+
+**Delete** asks for confirmation, then deletes. A project that has nominated
+an evidence run is kept for good (issue #43, [data-model.md](./data-model.md)
+§ Evidence nomination), so the server answers `409`; instead of the raw error
+the page opens a **This project can't be deleted** dialog
+(`lib/components/projects/deleteRefusal.ts` reads the answer). It names the
+evidence run, says the nomination history is kept so the evidence can still
+be read and reproduced, and that a nomination can be replaced but not
+withdrawn; it links to the run (**Open the evidence run**, the Runs tab) and
+offers **Copy project**, which opens the copy dialog for a fresh start
+without the runs and their nominations.
 
 ### Import a project file
 
@@ -1007,8 +1018,11 @@ which checks every catchment tab).
   to the WR2012 group.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
-  months get the full width) a bar chart and the annual volume, and the
-  curtailment reporting window.
+  months get the full width) a bar chart and the annual volume, the
+  curtailment reporting window (also the assurance of supply's window), and
+  the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
+  default 90 %: a water year counts as met at that supply ratio; engine ≥
+  0.32.0).
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -1037,6 +1051,19 @@ which checks every catchment tab).
   natural flow) show under the table without blocking Save; a missing source,
   a bad point list or a blank cell, and two tables for one site, block Save
   and the save bar links here. **Remove the rule table at …** deletes one.
+  From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
+  **Also enter the low flows (maintenance and drought)**, which adds a blank
+  **Low flows (maintenance to drought)** grid (blank cells block Save; switching
+  the table to *Low flows only* drops it) and a **Fill the low flows** button;
+  **Load a CSV file** reads a file into the paste box, and two links download
+  synthetic example layouts (a total-flow and a low-flow table, DRM style).
+  Under each table, **High flows: freshets and floods**
+  (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
+  months it may start in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, days
+  at peak, events per year) with **Add a high flow** and Remove, a **Paste high
+  flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
+  example CSV. The two status lines are named *Paste result* and *High-flow
+  paste result*.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
@@ -1137,9 +1164,34 @@ its own chunk loaded with the tab; WP-2.10,
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
 
+### API keys
+
+Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
+`lib/components/apiKeys/ApiKeysPanel.svelte`, its own chunk loaded with the
+tab; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
+or a script uses to push daily readings into the project's series.
+
+- **Make an API key**: a name, how long it works (until revoked, 90 days, 1
+  or 2 years) and what it may write: any series of the project, or only the
+  ticked ones (the project's current series).
+- **The new key** is shown once, in a highlighted box with **Copy** and the
+  warning that it won't be shown again, above a copyable `curl` example that
+  pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
+- **The list**: each key's name, its `wm_<prefix>_…` (never the secret), its
+  state (**Live**, **Expired**, **Revoked**), what it writes, who made it
+  and when, when it ends (or "Revoked … by …"), and when it was last used.
+  **Revoke** asks first; the key is refused from its next request, and the
+  row stays.
+- Editors and viewers don't see the panel (the API answers them `403`).
+  What a key writes shows in History by `API key “<name>”`.
+- Tested by `e2e/tests/api-keys.spec.ts` (make a key, push the fixture with
+  `scripts/ingest/push-fixture.mjs`, the series on the Data tab and the key
+  in History, a revoked key refused, axe on the panel, no panel for an
+  editor) and `apiKeys/apiKeys.test.ts`.
+
 ### Scheduled reports
 
-Below Data feeds, **Scheduled reports** (`#set-report-schedules`;
+Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
 `lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
 the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
@@ -1216,7 +1268,9 @@ run's report to chosen members every week or month.
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
-  (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
+  (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
+  base, **Inputs not stored** for a run from before stored inputs, which
+  can't be re-run from them, Workbook comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -1285,6 +1339,46 @@ run's report to chosen members every week or month.
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
   green at or above 95 %, amber below; themed tokens, so it follows dark mode, and
   solid `CanvasText` under forced colours); the number stays the content.
+  The farm table and the **Irrigation supplied** card are means over the
+  **whole record**, and say so ("Daily averages over the whole record,
+  <first day> to <last day> (N days); the curtailment targets cover the
+  reporting window", "over the whole record"), so they can't be mistaken for
+  the curtailment table's figures, which cover the reporting window.
+- <a id="report-window"></a>**Reporting window** (issue #44;
+  `runs/ReportWindowPanel.svelte`, pure helpers in `runs/reportWindow.ts` and
+  `runs/windowedCurtailment.ts`). A picker at the top of the curtailment panel
+  (`#res-curtailment`) chooses the days the curtailment, other water users and
+  EWR sites tables average over: **Project window** (the window the run
+  reported over, from the project setting, with its dates in the option; the
+  default), **Last 7 / 14 / 30 days** (ending on the run's last day), **Whole
+  record**, or **Custom range** (From / To date fields, starting from the days
+  shown, cut to the run with a note; a backwards range or one outside the run
+  says so and shows the project window). Any window other than the run's own is
+  worked out **in the browser** from the run's stored daily series (per farm
+  and other user: demand, supplied, EWR charge and its irrigation part or the
+  return flow; per EWR site: shortfall, charged and natural), fetched once per
+  run the first time another window is picked, with the engine's
+  `computeCurtailment`. Nothing is re-run and nothing is saved: the project
+  setting, the stored run, the downloads and the printable report keep the
+  project window, and the status line under the picker says so. A viewer can use
+  it (it only reads the run). The choice is `?window=` in the URL (`last7`,
+  `last14`, `last30`, `all`, or `YYYY-MM-DD..YYYY-MM-DD`; absent = the project
+  window), a history entry of its own, so back / forward step through the
+  windows looked at and a reload or a shared link keeps it; it stays as you move
+  between runs. Every period is labelled: the curtailment table leads with the
+  window's name and dates ("Last 7 days: daily averages over 2022-01-22 –
+  2022-01-28 (7 days)", also in its caption), and the other water users and
+  EWR sites tables repeat the dates. The status line adds how many of the days
+  fall in the forecast period (`RunSummary.forecastRain`). Two limits: the **EWR
+  site setting each farm's charge** can't be recomputed (the engine doesn't
+  store the per-day binding site), so over another window that column is blank
+  and the status line says it is shown for the project window only; and a run
+  saved before engine 0.17.0 (no EWR charge series) disables the picker and
+  asks for a new run. `windowedCurtailment.test.ts` checks the browser's table
+  against `runModel` run with the same window as the project setting, on
+  seeded synthetic runs; `e2e/tests/report-window.spec.ts` checks the same
+  against a second run in the app, the URL, back / forward, and axe in both
+  themes and on a phone.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)). It has three
@@ -1352,10 +1446,10 @@ run's report to chosen members every week or month.
   "junior (curtailed)" or "senior (not curtailed)"; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
-  charged to farms and the natural part over the reporting window; with the
+  charged to farms and the natural part over the reporting window (all three
+  tables follow the [reporting window picker](#report-window)); with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
-  at the Reserve determination's EWR sites to protect upstream reaches.* The
-  hydrograph (observed flow as a line
+  at the Reserve determination's EWR sites to protect upstream reaches.* The hydrograph (observed flow as a line
   under simulated outflow, broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
@@ -1462,7 +1556,16 @@ run's report to chosen members every week or month.
   **different runoff model** ("1 run made after the nominated evidence run “A”
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
-  miss a later model switch. The
+  miss a later model switch.
+  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
+  chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
+  inputs, **Check reproduction** (viewers too) re-runs it on the server from
+  them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
+  version), **Differs in N places** (each listed: a summary value, or a
+  node's series with its differing days, first date and largest difference;
+  an error when the engine is the same version, a warning when it changed),
+  **Not reproducible**, or why a stored input can't be used. A run from
+  before stored inputs says so instead of offering the check. The
   flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
@@ -1482,7 +1585,18 @@ run's report to chosen members every week or month.
   FDC points met), and, collapsed, **Month by month**: every complete month's
   natural flow, its condition (% exceedance, or wetter / drier than the table),
   the requirement, the simulated flow, the share of the requirement and met or
-  not met (rows not met shaded). The daily requirement is the series
+  not met (rows not met shaded). From engine 0.33.0 ([model.md §2.9d](./model.md)),
+  a **heat map** of the chosen site: water-year rows × Oct … Sep, each month
+  blank when met, light blue with ◐ when only the high flows were short (the
+  low flows met; only with a low-flow grid), dark blue with ● when the low
+  flows (or, without a low-flow grid, the month) were short, the number the
+  simulated flow as % of the requirement, each cell's full reading in its
+  title and for screen readers, and a key; with a low-flow grid, a **Low flows
+  met** figure, a column in the by-month table and two in Month by month; and
+  with high-flow components, a **High flows** table (each component, its
+  months, peak, days, per year and "Met in 3 of the 4 water years whose
+  natural flow had it") and, collapsed, **High flows year by year** (natural,
+  simulated and required events). The daily requirement is the series
   `ewr_rule` in the explorer and the daily CSV. Then the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the
   site picker), the **EWR test
@@ -1522,6 +1636,28 @@ run's report to chosen members every week or month.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
+- **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
+  curtailment table; `reliability/AssurancePanel.svelte`, helpers in
+  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  [model.md §2.11a](./model.md)): per farm and other water user over the
+  reporting window, the % of demand days fully met, the % of demand
+  supplied, water years met against the annual threshold (Settings), the
+  failures and their mean and longest length, and the mean and largest
+  deficit per failure. Below it the **stress classes by month**: a heat map
+  in the EWR grid's pattern (water-year rows × Oct … Sep, arrow keys move
+  between cells), for all farms and users together or one of them (a *Show*
+  picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
+  colour is never the only cue, with a legend of the ranges and a count of
+  months per class.
+- **Water account** (`#res-water-account`, last under *River & Reserve*;
+  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  two bars for the chosen period (*Period*: the whole run or a water year),
+  what came in and where it went or was stored, each with a labelled key;
+  then a table of every term per water year and the whole run (terms a
+  network doesn't have are left out), the change in dam storage and the
+  residual (to two significant figures, float noise), and the EWR required
+  vs met at each site. Runs before engine 0.32.0 show *Not computed by
+  engine x.y* in both panels.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
@@ -1606,6 +1742,45 @@ them scenarios).
   recorded them, with their classes and the callout (`ScenarioOverrides.svelte`,
   its own chunk).
 
+## Allocations (`?tab=allocations`)
+
+WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
+[allocations.md](./allocations.md)). A core tab: owners, editors and viewers
+see it; farmers never reach the workspace.
+
+- **Modelled use vs registered volume** (`AllocationCompare.svelte`), on top:
+  a run picker (the published run by default, else the latest), a sentence
+  saying modelled use is *modelled, not metered* and a difference is
+  something to look into, not a finding; a warning listing the farms and
+  sources whose modelled use was above the registered volume, with how many
+  whole water years; notes for allocations not matched to a farm, or matched
+  to a farm the run doesn't have. The table has one row per farm, source and
+  water year: registered m³, modelled use m³ ("modelled, not metered" under
+  the heading), modelled ÷ registered, and a status badge (*Above
+  registered*, *Within band*, *Below registered*, *No registered volume*, *No
+  use, none registered*; the full sentence in its title). A part year is
+  marked "part (N d)". A source with neither use nor a volume is left out.
+  On a phone each row is a card of label–value lines.
+- **Registered volumes**: the list (farm, registration, the registered user
+  for editors only, authorisation, purpose, source, volume, storage, validity,
+  and where it came from: the file name and the first 12 hex digits of its
+  SHA-256, or "Entered by hand"). Unmatched rows are highlighted. **Download
+  CSV** (the export, names for editors only). Editors: **Add a volume**, and
+  **Change** / **Delete** per row (the form's farm picker is how a row is
+  matched by hand). Viewers see "Names of registered users are shown to
+  editors only." Below the list, **Imported files**: each with its full hash,
+  reference, row count, who and when, and **Remove this import**.
+- **Import registered volumes** (`AllocationImport.svelte`, editors): what
+  the file is (WARMS extract or CSV template), a reference, the file, and a
+  **Download the CSV template** link. The preview says how many rows matched,
+  didn't, or have problems; the table lists rows with problems first (the
+  problem in red), then unmatched rows, each with a farm picker ("by farm
+  name", "chosen by you"). **Import N rows** stores the valid ones; the
+  message says how many were imported, left out and still unmatched. Errors
+  (a refused file, a file already imported) show in an alert.
+- e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
+  viewer without names, phone cards, axe).
+
 ## History (`?tab=history`)
 
 WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
@@ -1623,6 +1798,41 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   inputs** (not for a scenario run).
 - A small "history" affordance on individual fields is not built
   (followups.md).
+
+## Notes
+
+WP-2.7 (`lib/components/notes/`; [api.md § Notes](./api.md#notes)). Knowledge
+that lives in people's heads ("dam raised in 2019 per owner", "logger moved in
+March") is kept against what it is about.
+
+- **Where.** A notes button with a count badge opens a dialog of the notes on
+  one target (`NotesDrawer.svelte` around `NotesList.svelte`):
+  - on each **Network** node row, beside its name (icon and number; only on a
+    node the server has, not one added since the last save:
+    `ModelEditor.savedNodeIds`);
+  - in a run's **Record** group, under the run's own written explanation
+    (the run notes stay the modeller's one explanation; these are comments
+    from anyone on the team);
+  - in the head of each **Settings** group (Demand, Flow calibration, Rain
+    gaps, Calibration record, Flow share, EWR, Simulation period, Data
+    quality), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
+  - on the **Overview**: *Recent notes*, the newest 8 across the project,
+    each naming and linking to its target, and the project-level notes
+    button.
+  One `GET /notes/counts` per project feeds every badge
+  (`counts.svelte.ts`), refreshed after any change.
+- **Writing.** Every member can add a note; the author edits theirs (marked
+  *edited*); the author or an editor deletes (a confirm, then a soft delete:
+  hidden from everyone, kept for the audit trail). On a farm, *Also show to
+  this farm's farmers* makes a note farm-visible, marked *Shown to the farm*;
+  everything else is read by the project team only.
+- **Farmer view.** *Notes about your farm* (`farm/FarmNotes.svelte`) lists
+  the farmer's own notes and the WUA's farm-visible ones on that farm, and
+  adds a note, always shown to the farm. The WUA previewing the page sees the
+  same farm-visible notes, read only.
+- **Plain text only.** The body is rendered with Svelte's escaping, never
+  `{@html}` or markdown; line breaks are kept with `white-space: pre-line`
+  (the e2e test pins markup showing as typed).
 
 ## Report
 
@@ -1655,9 +1865,45 @@ exists, says so with a link to Runs & results.
   summary: warnings, headline cards, the farm table; the self-checks and the
   water balance by water year, without Trace a day) and **Notes** (the run's
   notes, when it has any). A section appears only when the run has its data;
-  nothing is printed as a placeholder. Not yet: the published-by line and
-  restriction notice (WP-2.3), changes since the previous publication (WP-2.4),
-  the disclaimer (D10).
+  nothing is printed as a placeholder. Every report then closes with three
+  sections (WP-3.13, `components/liability/`):
+  - **Validation statement** (`ValidationStatement.svelte`, the engine's
+    `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
+    engine version, the build's invariant and soak results (*Not recorded
+    for this build* until CI injects them), the run's self-checks, the
+    runoff coefficient (flagged above 1, audit W1), a legacy-model warning,
+    NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
+    caveat, the flagged data-quality years and checks, and the **known
+    limitations** table (ID, limitation, where it stands) generated from
+    engine-audit.md.
+  - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
+    (signer, self-declared registration, date, scope, the statement version
+    and a 12-digit prefix of its SHA-256 with the full hash as the title,
+    the disclaimer version), or **Not signed off.** in bold; then the five
+    statements a signer confirms. An editor or owner gets **Sign off this
+    run…** (screen only); a legacy run says why it can't be signed; a viewer
+    sees neither. Loaded with the report (`GET …/signoffs`), so
+    `data-report-ready` waits for it and the server-side PDF prints it.
+  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): the draft
+    wording with a bold *Draft wording, pending the client's legal review
+    (decision D10)* line and its version, until the wording is agreed.
+
+  Not yet: the published-by line and restriction notice (WP-2.3), changes
+  since the previous publication (WP-2.4).
+- **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
+  opened): the five statements, each ticked on its own; the known
+  limitations in a focusable scroll box (keyboard-scrollable, a labelled
+  region) that must be scrolled to its end (a list too short to scroll counts
+  as read), with a polite live line saying whether the end was reached; the
+  notes (registration self-declared, dam safety classification by others,
+  this run only); full name, registration body (SACNASP by default),
+  registration number and what the sign-off covers. **Sign off** stays
+  disabled, described by the list of what's missing, until everything is
+  done (`signoffForm.ts` `signoffBlockers`). It sends back the statement's
+  hash; a `409` (the statement changed) shows the error and reloads the
+  statement, which clears the ticks and the read state. The Runs tab tags a
+  signed run **Signed off**, and the History tab reads "Signed off a run as
+  … (SACNASP …)".
 - **Components reused, in print modes.** `LineChart`'s `print` prop draws a
   fixed `printWidth` × `height` box at 2 device pixels per CSS pixel
   (`printScale`: uPlot has no pixel-ratio option, so on a 1× screen the plot
@@ -1808,8 +2054,8 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); the CSV download and the
-  disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+  alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
+  CSV download and the disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
 - **Wording.** Every visible string and number rule lives in pure modules
   under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
   `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture
