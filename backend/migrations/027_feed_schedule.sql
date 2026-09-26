@@ -1,4 +1,4 @@
--- 026_feed_schedule — the feed scheduler claims and queues each feed in one
+-- 027_feed_schedule — the feed scheduler claims and queues each feed in one
 -- transaction, CHIRPS-GEFS feeds wait for the day's issue, and a dropped
 -- older forecast issue still counts as a check (issues #32, #33;
 -- docs/architecture.md § Data feeds, docs/data-model.md § Data feeds).
@@ -126,4 +126,4 @@ REVOKE ALL ON FUNCTION app_feed_is_due(text, text, integer, timestamptz, timesta
 GRANT EXECUTE ON FUNCTION app_due_feeds(integer, boolean), app_claim_feed(uuid, boolean), app_record_feed_checked(uuid) TO water_app;
 
 COMMENT ON TABLE data_feed IS
-	'Scheduled data feeds (018_feeds, WP-2.10; 026_feed_schedule). water_app: SELECT (viewer), INSERT/UPDATE/DELETE (owner); health columns only through the SECURITY DEFINER app_record_feed_result / app_record_feed_checked / app_feed_schedule_failed; the scheduler lists through app_due_feeds and claims through app_claim_feed.';
+	'Scheduled data feeds (018_feeds, WP-2.10; 027_feed_schedule). water_app: SELECT (viewer), INSERT/UPDATE/DELETE (owner); health columns only through the SECURITY DEFINER app_record_feed_result / app_record_feed_checked / app_feed_schedule_failed; the scheduler lists through app_due_feeds and claims through app_claim_feed.';

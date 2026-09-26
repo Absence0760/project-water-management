@@ -761,7 +761,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `app_project_role()` (direct `project_member` row or team membership).
 - Every `SECURITY DEFINER` function in `public` is executable by `water_app`
   only (trigger functions by nobody but the owner): `PUBLIC` is revoked, and
-  the owner's default privileges (027_definer_grants) grant a new function to
+  the owner's default privileges (028_definer_grants) grant a new function to
   `water_app`, never `PUBLIC`. A migration that adds one should still write its
   own `REVOKE ALL … FROM PUBLIC` / `GRANT EXECUTE … TO water_app`; the
   catalogue guard fails if one is left open to `PUBLIC`.
@@ -887,7 +887,7 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Data feeds (018_feeds.sql, 026_feed_schedule.sql, 028_feed_fetch.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
@@ -901,7 +901,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29) |
-| `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (028, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
+| `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
   acting user equal to the signed-in user. The `data_feed_stamp` trigger runs
@@ -911,23 +911,23 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   config or target clears the health and the fetch columns; switching a feed
   back on makes it due at once.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
-  - `app_due_feeds(limit, all)` (026): the scheduler, no user context. Lists
+  - `app_due_feeds(limit, all)` (027): the scheduler, no user context. Lists
     enabled feeds with an acting user that are due, longest-waiting first,
     stamping nothing; `all` lists every enabled feed (`pnpm dev:feeds:run`).
     Returns id, project and acting user only.
-  - `app_claim_feed(feed, all)` (026): claims one feed for the transaction's
+  - `app_claim_feed(feed, all)` (027): claims one feed for the transaction's
     user, who must be its acting user: still enabled and due, `FOR UPDATE
     SKIP LOCKED`, stamping `last_scheduled_at`. The scheduler queues the
     fetch in the same transaction, so a rollback releases the claim (#32).
     Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
     from the enqueues.
-  - Due (`app_feed_is_due`, 026, a plain function only the two above call):
+  - Due (`app_feed_is_due`, 027, a plain function only the two above call):
     never scheduled; or not scheduled within a day (or an hour, for hourly),
     with a minute's slack; or, for a **daily `chirps_gefs`** feed, scheduled
     before the latest 08:45 UTC (after CHC publishes the day's issue, #33);
     or, while failing, after 15 min × 2^(failures − 1), capped at the
     interval. UTC whatever the session time zone.
-  - `app_record_feed_checked(feed)` (026): a fetch whose forecast issue was
+  - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.
   - `app_record_feed_result(feed, ok, last_date, last_value, error, meta)`:
@@ -939,11 +939,11 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.
-  - `app_begin_feed_fetch(feed, job, start, end)` (028): a `feed_fetch` job
+  - `app_begin_feed_fetch(feed, job, start, end)` (029): a `feed_fetch` job
     about to send its request records itself and its window. The caller must
     be an editor running that job (a `running` `feed_fetch` of this feed, as
     the caller).
-  - `app_take_feed_fetch(feed, job)` (028): the `feed_ingest` job claims the
+  - `app_take_feed_fetch(feed, job)` (029): the `feed_ingest` job claims the
     window of the fetch it answers and clears the columns in one statement
     (`FOR UPDATE`, so a second ingest of the same answer waits, then gets
     nothing). No row: not the feed's newest fetch, or already applied, so the

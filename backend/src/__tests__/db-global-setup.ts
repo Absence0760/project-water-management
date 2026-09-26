@@ -27,8 +27,8 @@ export default async function setup() {
 	}
 	await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT USAGE ON SCHEMA public TO water_app;');
 	// Default privileges live on the database, not the schema, so they outlive
-	// the DROP above: after one run, 027's ALTER DEFAULT PRIVILEGES would close
-	// 001–026's functions as they're created, and the catalogue guard could
+	// the DROP above: after one run, 028's ALTER DEFAULT PRIVILEGES would close
+	// 001–027's functions as they're created, and the catalogue guard could
 	// never see a migration that forgot its REVOKE … FROM PUBLIC. Put back
 	// Postgres's defaults so every rebuild migrates like a fresh database.
 	await client.query('ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO PUBLIC; ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM water_app;');

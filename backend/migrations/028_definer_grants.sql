@@ -1,15 +1,15 @@
--- 027_definer_grants — close the older SECURITY DEFINER functions to PUBLIC
+-- 028_definer_grants — close the older SECURITY DEFINER functions to PUBLIC
 -- (issue #37; docs/security.md § Authorization, docs/data-model.md
 -- § Row-level security).
 --
 -- A SECURITY DEFINER function runs with its owner's (`water`) rights, and
 -- Postgres grants EXECUTE on every new function to PUBLIC. 016, 018 and 023
--- revoked that for their functions; the others, from 001–025, kept it, so
+-- revoked that for their functions; the others, from 001–026, kept it, so
 -- any role that can connect could call them as the owner. This migration:
 --
 --   1. revokes EXECUTE from PUBLIC on every SECURITY DEFINER function in the
 --      schema. It walks pg_proc rather than naming them, so it also closes the
---      ones from a migration numbered below 027 that ran first on a fresh
+--      ones from a migration numbered below 028 that ran first on a fresh
 --      database (025's app_share_view / app_share_series did: step 3's
 --      default privileges only cover functions created after it);
 --   2. grants EXECUTE to water_app on the non-trigger ones. water_app calls

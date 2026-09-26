@@ -1,11 +1,11 @@
 // The feed side of the job queue, both run with no user context and both
 // crossing projects only through SECURITY DEFINER functions (018_feeds.sql,
-// 026_feed_schedule.sql):
+// 027_feed_schedule.sql):
 //
 //   scheduleDueFeeds   every tick (jobs/runner.ts): list the feeds that are
 //                      due, then for each one claim it and queue its
 //                      `feed_fetch` job in one transaction as the feed's
-//                      acting user, under RLS (026_feed_schedule.sql).
+//                      acting user, under RLS (027_feed_schedule.sql).
 //   acceptIngestResult the production worker, for each `ingest-results`
 //                      message (lambda-worker.ts): find the fetch job it
 //                      answers and queue a `feed_ingest` job as that job's

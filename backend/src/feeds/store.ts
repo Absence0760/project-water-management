@@ -117,7 +117,7 @@ export async function lockFeedIssued(db: Db, feedId: string): Promise<string | n
 
 /**
  * Record the fetch a feed_fetch job is about to send and the days it asks for
- * (app_begin_feed_fetch, 028): the answer that comes back is checked against
+ * (app_begin_feed_fetch, 029): the answer that comes back is checked against
  * this window, and any older fetch's answer is dropped from now on.
  */
 export async function beginFeedFetch(db: Db, feedId: string, jobId: string, window: FetchWindow): Promise<void> {
@@ -125,7 +125,7 @@ export async function beginFeedFetch(db: Db, feedId: string, jobId: string, wind
 }
 
 /**
- * Claim the window of the fetch an answer is for (app_take_feed_fetch, 028).
+ * Claim the window of the fetch an answer is for (app_take_feed_fetch, 029).
  * Null when that fetch isn't the feed's newest or its answer was already
  * applied: the answer must be dropped.
  */

@@ -8,7 +8,7 @@
 //     request to the fetcher Lambda through the `fetch-requests` queue. Its
 //     answer comes back on `ingest-results` and becomes a `feed_ingest` job.
 //     First the job records itself and its window on the feed
-//     (app_begin_feed_fetch, 028), in this transaction, so the answer is
+//     (app_begin_feed_fetch, 029), in this transaction, so the answer is
 //     checked against what was asked for and a late answer to an older fetch
 //     is dropped (feed-ingest.ts, issue #31).
 import { z } from 'zod';

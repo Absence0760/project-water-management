@@ -252,7 +252,7 @@ In short:
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
 - **`SECURITY DEFINER` functions are executable by `water_app` only**
-  (027_definer_grants, issue #37). They run as the owner, so Postgres's default
+  (028_definer_grants, issue #37). They run as the owner, so Postgres's default
   `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
   connect. Every one has `PUBLIC` revoked; the non-trigger ones are granted to
   `water_app` (routes and RLS policy expressions call them as it); trigger
@@ -555,7 +555,7 @@ In short:
     that feed, and drops one for a feed changed since, before anything merges
     as the feed's acting user. It applies only the answer to the feed's newest
     fetch, once, and refuses one with a day outside the window that fetch
-    recorded on the feed (`028_feed_fetch`; the window comes from the worker,
+    recorded on the feed (`029_feed_fetch`; the window comes from the worker,
     never the answer). A compromised fetcher could at worst send wrong
     numbers for the days feeds asked it for, into the series those feeds
     already target.

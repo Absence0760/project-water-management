@@ -219,7 +219,7 @@ describe('schema catalogue', () => {
 		expect(rows.map((r) => r.fk)).toEqual([]);
 	});
 
-	it('lets no role but the owner and water_app execute a SECURITY DEFINER function (027_definer_grants)', async () => {
+	it('lets no role but the owner and water_app execute a SECURITY DEFINER function (028_definer_grants)', async () => {
 		// A SECURITY DEFINER function runs as its owner, so a PUBLIC EXECUTE grant
 		// (Postgres's default) hands the owner's rights to any role that can log in.
 		const { rows } = await db.query<{ fn: string; grantee: string }>(
@@ -288,7 +288,7 @@ describe('schema catalogue', () => {
 			{ proname: 'app_take_feed_fetch', pinned: true, secdef: true },
 			{ proname: 'data_feed_stamp', pinned: true, secdef: false }
 		]);
-		// And only water_app may call the SECURITY DEFINER ones (018, 026 and 028 revoke PUBLIC).
+		// And only water_app may call the SECURITY DEFINER ones (018, 027 and 029 revoke PUBLIC).
 		for (const f of fns.filter((f) => f.secdef)) {
 			const { rows } = await db.query<{ pub: boolean; app: boolean }>(
 				`SELECT has_function_privilege('public', p.oid, 'EXECUTE') AS pub, has_function_privilege('water_app', p.oid, 'EXECUTE') AS app

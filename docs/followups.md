@@ -1225,7 +1225,7 @@ role and not before it.
         once per tick and share it between feeds, or keep a per-day
         preliminary/final marker so final days aren't re-read.
   - [x] ~~**Ingest doesn't check a result's dates against the window asked
-        for.**~~ **Fixed (#31, `028_feed_fetch`):** the `feed_fetch` job
+        for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
         records its window on the feed before sending, and the ingest
         refuses an answer with a day outside it, and drops any answer but
         the newest fetch's (late or redelivered). A DWS backfill through an
@@ -1467,13 +1467,13 @@ role and not before it.
 
 ## Housekeeping
 
-- `SECURITY DEFINER` grants (issue #37, 027_definer_grants): the catalogue
+- `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other
   than the owner and `water_app`. The in-flight `025_share_links.sql` branch
   may add such functions; when it merges, run `pnpm test:backend:db` and make
   sure its functions revoke `PUBLIC` (the owner's default privileges already
-  close them if 027 has applied first, but a database migrated in file order
-  applies 025 before 027's default-privilege change, so 025 needs its own
+  close them if 028 has applied first, but a database migrated in file order
+  applies 025 before 028's default-privilege change, so 025 needs its own
   `REVOKE`).
 
 - During early development, work is pushed straight to `main`, without PRs, at

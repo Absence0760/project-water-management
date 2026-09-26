@@ -1,4 +1,4 @@
--- 028_feed_fetch — the fetch a data feed is waiting on (issues #29 and #31;
+-- 029_feed_fetch — the fetch a data feed is waiting on (issues #29 and #31;
 -- docs/architecture.md § Data feeds, docs/data-model.md § Data feeds).
 --
 -- In production a feed_fetch job hands its request to the fetcher Lambda and
@@ -37,7 +37,7 @@ ALTER TABLE data_feed
 		OR (fetch_job_id IS NOT NULL AND fetch_start IS NOT NULL AND fetch_end IS NOT NULL)
 	);
 
-COMMENT ON COLUMN data_feed.fetch_job_id IS 'The newest feed_fetch job sent to the fetcher whose answer is not yet applied (028). Only app_begin_feed_fetch / app_take_feed_fetch write it.';
+COMMENT ON COLUMN data_feed.fetch_job_id IS 'The newest feed_fetch job sent to the fetcher whose answer is not yet applied (029). Only app_begin_feed_fetch / app_take_feed_fetch write it.';
 COMMENT ON COLUMN data_feed.fetch_start IS 'First day that fetch asked for (inclusive); the ingest refuses an answer with a day before it.';
 COMMENT ON COLUMN data_feed.fetch_end IS 'Last day that fetch asked for (inclusive); the ingest refuses an answer with a day after it. Before fetch_start for an empty window (a startDate in the future): any day is refused.';
 

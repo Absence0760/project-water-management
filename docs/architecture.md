@@ -423,7 +423,7 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   merging. A result for a feed saved with new settings since the fetch is
   dropped. The queue can redeliver and reorder, so before sending, the
   `feed_fetch` job records itself and its window on the feed
-  (`app_begin_feed_fetch`, `028_feed_fetch.sql`), and the `feed_ingest` job
+  (`app_begin_feed_fetch`, `029_feed_fetch.sql`), and the `feed_ingest` job
   claims and clears that record (`app_take_feed_fetch`): only the newest
   fetch's answer applies, once, and an older fetch's late answer or a
   redelivery is dropped with the series and health untouched (#31). Every
