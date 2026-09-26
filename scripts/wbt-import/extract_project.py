@@ -217,10 +217,23 @@ RUN_OF_RIVER_POOL_MAX_M3 = 1.0
 SECONDS_PER_DAY = 86400
 
 
+def no_dam_note(name: str) -> str:
+    """The WARNING for a farm with no dam that takes 100 % of the upstream inflow (same text in the browser importer)."""
+    return (
+        f"WARNING: farm {name}: probable run-of-river, for the modeller to confirm: it has no dam but takes 100 % of the "
+        "upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. "
+        "Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)"
+    )
+
+
 def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: float, pct_runoff: float) -> str | None:
     """A WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d)."""
-    if pct_upstream < RUN_OF_RIVER_PCT_UPSTREAM or capacity <= 0:
+    if pct_upstream < RUN_OF_RIVER_PCT_UPSTREAM:
         return None
+    # No dam at all: the engine lets a dam-less farm irrigate from the river routed to it, with no limit
+    # (docs/model.md §2.7e); the second configuration's hydrology check found two (issue #54).
+    if capacity <= 0:
+        return no_dam_note(name)
     if capacity < RUN_OF_RIVER_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert:
         why = f"is a pool of {capacity:g} m³"
         if divert > 0:

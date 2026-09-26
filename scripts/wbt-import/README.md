@@ -74,7 +74,11 @@ rows and columns don't break it.
   still imported as it is: its storage, spill and level results mean nothing
   until run-of-river supply with a pump capacity lands (#54, 2c). A real
   on-channel dam holds days to months of its diversion and catches its own
-  farm's runoff, so it doesn't trip either test.
+  farm's runoff, so it doesn't trip either test. A farm with **no dam** that
+  takes 100 % of the upstream inflow gets the same flag with its own text: the
+  engine lets a dam-less farm irrigate from the river routed to it with no
+  limit, where b023's formula gave it nothing (issue #54, two found in a client
+  workbook). The run warns about it too (docs/model.md §2.7e).
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted. The app computes demand from
   crop areas only, so the importer checks the sheet's gross demand
@@ -237,6 +241,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | Min dam % on Bravo, Echo and Golf | note per farm, `damMinPct` 0 (Q5) |
 | Irrigation return flow 0.1–0.3 on most farms, 0 on Charlie and Foxtrot | `irrigationEfficiency` 1 − r with `lossReturnFraction` 1, or 1 and 0 (N1) |
 | 7 farms with a dam, Charlie without one (blank cells) | note "7 dam(s) have no surface area" (N2); blank capacity reads as 0 |
+| Delta Farm: missing from [Farm spec], so no dam but 100 % of the upstream inflow | `WARNING:` "probable run-of-river … it has no dam" (the no-dam case) |
 | India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow, diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
 | Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |

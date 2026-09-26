@@ -26,10 +26,11 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 	it('prints the same notes, in the same order', () => {
 		const { notes } = extractProject(wb, { fileName: 'synthetic_b023.xlsx' });
 		expect(notes.map((n) => n.message)).toEqual(projectNotes(lines('synthetic_b023.notes.txt')));
-		// Foxtrot's transfer to Golf has a =0 draw formula; India Farm's dam is a pool on the river (issue #54, 2d);
-		// Charlie Farm's gross demand is typed over the formula (issue #54).
+		// Foxtrot's transfer to Golf has a =0 draw formula; Delta Farm has no dam but all the upstream inflow, and
+		// India Farm's dam is a pool on the river (issue #54, 2d); Charlie Farm's gross demand is typed over the formula (issue #54).
 		expect(notes.filter((n) => n.severity === 'warning').map((n) => `${n.code}:${n.element}`)).toEqual([
 			'transfer-switched-off:Foxtrot Farm',
+			'probable-run-of-river:Delta Farm',
 			'probable-run-of-river:India Farm',
 			'farm-demand-gross-mismatch:Charlie Farm'
 		]);
@@ -42,7 +43,7 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 		});
 		expect(jsonDiff(project, JSON.parse(read('synthetic_b023.gauge-reference.project.json').toString('utf8')))).toBeNull();
 		expect(notes.map((n) => n.message)).toEqual(projectNotes(lines('synthetic_b023.gauge-reference.notes.txt')));
-		expect(notes.filter((n) => n.severity === 'warning').map((n) => n.code)).toEqual(['transfer-switched-off', 'probable-run-of-river', 'farm-demand-gross-mismatch', 'gauge-as-reference-calibration-unset']);
+		expect(notes.filter((n) => n.severity === 'warning').map((n) => n.code)).toEqual(['transfer-switched-off', 'probable-run-of-river', 'probable-run-of-river', 'farm-demand-gross-mismatch', 'gauge-as-reference-calibration-unset']);
 	});
 
 	it('lists what it could not map', () => {

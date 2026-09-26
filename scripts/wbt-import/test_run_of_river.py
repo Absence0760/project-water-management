@@ -51,10 +51,18 @@ class RunOfRiverNote(unittest.TestCase):
         self.assertIsNotNone(run_of_river_note("Pool", 1.0, 129.5, 12960, 0.25))
         self.assertIsNone(run_of_river_note("Pond", 1.0, 129.7, 12960, 0.25))
 
-    def test_less_than_100_percent_upstream_inflow_or_no_dam_is_not_flagged(self):
+    def test_less_than_100_percent_upstream_inflow_is_not_flagged(self):
         self.assertIsNone(run_of_river_note("Off-channel", 0.99, 0.4, 12960, 0.25))
         self.assertIsNone(run_of_river_note("Off-channel", 0, 691200, 0, 0))
-        self.assertIsNone(run_of_river_note("No dam", 1.0, 0, 12960, 0))
+        self.assertIsNone(run_of_river_note("No dam", 0.5, 0, 12960, 0))
+
+    def test_no_dam_with_all_the_upstream_inflow_is_flagged(self):
+        # The engine lets a dam-less farm irrigate from the river routed to it, with no limit (issue #54).
+        self.assertEqual(
+            run_of_river_note("No dam", 1.0, 0, 12960, 0),
+            "WARNING: farm No dam: probable run-of-river, for the modeller to confirm: it has no dam but takes 100 % of the "
+            "upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)",
+        )
 
 
 if __name__ == "__main__":
