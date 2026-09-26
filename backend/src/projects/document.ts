@@ -19,6 +19,7 @@ import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
 import { checkProvenance, ProvenanceFields, toCanonicalUnit } from '../series/merge.js';
 import { targetOf } from '../notes/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
+import { DEFAULT_TIME_ZONE, TimeZone } from './timeZone.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
 export const PROJECT_DOCUMENT_FORMAT = 'water-management/project';
@@ -27,6 +28,8 @@ export const PROJECT_DOCUMENT_VERSION = 1;
 export const ProjectFile = z.object({
 	name: z.string().min(1).max(200),
 	description: z.string().max(5000).default(''),
+	/** The project's time zone (058_project_time_zone); absent in a file from before it = the default. */
+	timeZone: TimeZone.default(DEFAULT_TIME_ZONE),
 	settings: SettingsPatch.default({}),
 	model: ModelBody,
 	series: z
@@ -61,6 +64,8 @@ export interface ProjectDocument {
 	engineVersion: string;
 	name: string;
 	description: string;
+	/** IANA zone (058_project_time_zone): dates the project's downloads. */
+	timeZone: string;
 	/** Stored settings merged over the defaults, so the file is self-contained. */
 	settings: Record<string, unknown>;
 	model: ProjectModel;
@@ -138,8 +143,8 @@ export async function loadDocumentNotes(db: Db, projectId: string): Promise<Proj
 
 /** Read a project as a portable document (caller has already checked access). */
 export async function loadProjectDocument(db: Db, projectId: string, now = new Date()): Promise<ProjectDocument | null> {
-	const { rows } = await db.query<{ name: string; description: string; settings: unknown }>(
-		'SELECT name, description, settings FROM project WHERE id = $1',
+	const { rows } = await db.query<{ name: string; description: string; timeZone: string; settings: unknown }>(
+		'SELECT name, description, time_zone AS "timeZone", settings FROM project WHERE id = $1',
 		[projectId]
 	);
 	const p = rows[0];
@@ -164,6 +169,7 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 		engineVersion: ENGINE_VERSION,
 		name: p.name,
 		description: p.description,
+		timeZone: p.timeZone,
 		settings: mergeSettings(p.settings) as unknown as Record<string, unknown>,
 		model,
 		series,

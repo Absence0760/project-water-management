@@ -97,6 +97,8 @@ export interface AutoRunSettings {
 }
 
 export interface Project extends ProjectSummary {
+	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
+	timeZone?: string;
 	settings: ProjectSettings & { autoRun?: AutoRunSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
@@ -114,6 +116,8 @@ export type SeriesWriteResult = SeriesMeta & { rerunQueuedFor?: string | null };
 export interface ProjectFile {
 	name: string;
 	description?: string;
+	/** IANA zone; absent = Africa/Johannesburg. */
+	timeZone?: string;
 	settings?: Partial<ProjectSettings> & Record<string, unknown>;
 	model: ProjectModel;
 	series?: ProjectFileSeries[];

@@ -271,6 +271,13 @@ put the results first. Top to bottom:
   kept." Every member sees it, viewers included, so a reviewer or assessor
   can check what the importer interpreted long after the import. All the text
   came from the file and renders as text only.
+- **Time zone** (Project details, under Description; issue #45): the
+  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
+  from the browser's list of zones, saved with **Save details** (editors;
+  read-only for viewers). Every download of the project (CSV, JSON, the
+  .xlsx workbook, the server report PDF) is dated by the calendar day there,
+  so an export made just after local midnight carries today's date, not
+  UTC's yesterday. A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then

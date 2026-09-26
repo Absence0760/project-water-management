@@ -57,10 +57,11 @@ function csvResponse(c: Context, body: string, filename: string) {
 	});
 }
 
-async function projectName(db: import('../db/tx.js').Db, id: string): Promise<string> {
-	const { rows } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
+/** The project's name and time zone (the date in a download's file name is the project's, 058_project_time_zone). */
+async function projectInfo(db: import('../db/tx.js').Db, id: string): Promise<{ name: string; timeZone: string }> {
+	const { rows } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
-	return rows[0].name;
+	return rows[0];
 }
 
 interface RunRow {
@@ -100,7 +101,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
-			const name = await projectName(db, id);
+			const { name, timeZone } = await projectInfo(db, id);
 			const daily = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
 			if (!daily) throw new ApiError(404, 'not found');
 			const scope = daily.name;
@@ -113,7 +114,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];
-			return csvResponse(c, body, exportFilename(name, parts, 'csv'));
+			return csvResponse(c, body, exportFilename(name, parts, 'csv', timeZone));
 		});
 	})
 	// One farm series for every farm side by side (date + a column per farm, in
@@ -125,7 +126,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
-			const name = await projectName(db, id);
+			const { name, timeZone } = await projectInfo(db, id);
 			const { rows } = await db.query<{ nodeId: string; nodeName: string | null; unit: string | null; values: (number | null)[] }>(
 				`SELECT s.node_id AS "nodeId", n.name AS "nodeName", s.meta->>'unit' AS unit, s."values"
 				 FROM run_series s LEFT JOIN node n ON n.id = s.node_id
@@ -147,7 +148,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 
 			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
-			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv'));
+			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv', timeZone));
 		});
 	})
 	// Per-farm summary table + catchment + calibration, as one sheet.
@@ -156,7 +157,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
-			const name = await projectName(db, id);
+			const { name, timeZone } = await projectInfo(db, id);
 			const lines = summaryCsvLines(
 				{
 					projectName: name,
@@ -175,7 +176,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			);
 			const body = collectCsv(withLegacyComment(run.legacy, lines));
 			if (body === null) throw tooLarge('the run summary is unexpectedly large');
-			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv'));
+			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv', timeZone));
 		});
 	})
 	// One input series (rain, flow …) as date,value.
@@ -191,13 +192,13 @@ export const exportRoutes = new Hono<AuthEnv>()
 			);
 			const s = rows[0];
 			if (!s) throw new ApiError(404, 'not found');
-			const name = await projectName(db, id);
+			const { name, timeZone } = await projectInfo(db, id);
 			const label = s.name ? `${s.kind} – ${s.name}` : s.kind;
 			const range = dayRange(s.startDate, s.values.length, q.from, q.to);
 			if (!range) throw new ApiError(400, 'the window is outside the series');
 			const body = collectCsv(dailyCsvLines(s.startDate, [{ header: seriesHeader(label, s.unit), values: s.values }], range));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
-			return csvResponse(c, body, exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv'));
+			return csvResponse(c, body, exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone));
 		});
 	})
 	// The whole project as a document `pnpm import:project` accepts.
@@ -213,7 +214,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			}
 			return c.body(body, 200, {
 				'Content-Type': 'application/json; charset=utf-8',
-				'Content-Disposition': attachment(exportFilename(doc.name, ['project'], 'json')),
+				'Content-Disposition': attachment(exportFilename(doc.name, ['project'], 'json', doc.timeZone)),
 				'Cache-Control': 'no-store'
 			});
 		});

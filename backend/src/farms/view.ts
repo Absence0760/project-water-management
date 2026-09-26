@@ -192,10 +192,10 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			if (!range) throw new ApiError(400, `the window is outside the published figures (${start} … ${cur.view.dataUntil})`);
 			const body = collectCsv(dailyCsvLines(start, columns, range));
 			if (body === null) throw new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
-			const { rows: p } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
+			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			return c.body(body, 200, {
 				'Content-Type': 'text/csv; charset=utf-8',
-				'Content-Disposition': attachment(exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv')),
+				'Content-Disposition': attachment(exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv', p[0]!.timeZone)),
 				'Cache-Control': 'no-store'
 			});
 		});

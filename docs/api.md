@@ -196,12 +196,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects` | – | `{ projects: ProjectSummary[] }` (most recently updated first) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says a nomination can be replaced but not withdrawn; `evidenceRun` is `null` only when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
+- `project` (`GET`/`PATCH /projects/:id`, create, import, copy) is a
+  `ProjectSummary` plus `settings`, `rerunQueuedFor` and `timeZone`: an
+  IANA zone name (058_project_time_zone, `Africa/Johannesburg` by default)
+  that dates the project's downloads (§ Export). A change is audited
+  (`project.changed` with `fields: ['time_zone']` and `timeZone: { from, to }`);
+  a copy keeps it, and the project document (`export.json`, `POST
+  /projects/import`) carries it as `timeZone` (absent = the default).
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
   `startDate + length − 1`), or `null` with none. A forecast or a flow series
@@ -2042,7 +2049,13 @@ File downloads for checking numbers in Excel and for moving a project between
 installations. All are `GET`, **viewer** role, and behave like the other project
 routes (`401` signed out, `404` not a member). Responses carry
 `Content-Disposition: attachment; filename="<project-slug>_<parts>_<YYYY-MM-DD>.<ext>"`
-(ASCII slug, UTC date) and `Cache-Control: no-store`; CORS exposes
+(ASCII slug; the date is the calendar day in the **project's time zone**,
+`project.timeZone`, `Africa/Johannesburg` unless changed, so an export made
+at 00:30 in South Africa carries that day and not UTC's day before, issue
+#45; the .xlsx workbook takes its name from the summary CSV's, and the
+server report PDF, `GET …/reports/:jobId`'s `url`, is dated the same way;
+the account's `my-data_<date>.json`, which belongs to no project, is dated in
+`Africa/Johannesburg`) and `Cache-Control: no-store`; CORS exposes
 `Content-Disposition` so the SPA can read the name when it downloads with
 `fetch`. `daily.csv` and `summary.csv` for a **legacy-runoff-model run** (audit
 H1) start with a leading comment line,

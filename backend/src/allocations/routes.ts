@@ -15,6 +15,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { attachment, collectCsv, csvRow, exportFilename } from '../export/csv.js';
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
@@ -417,7 +418,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'viewer');
 			const withNames = rank[role] >= rank.editor;
 			// One client, one query at a time.
-			const { rows: proj } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
+			const { rows: proj } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			const list = await loadAllocations(db, id);
 			const { rows: sources } = await db.query<{ id: string; fileName: string; sha256: string }>(
 				'SELECT id, file_name AS "fileName", sha256 FROM allocation_source WHERE project_id = $1',
@@ -449,7 +450,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			];
 			const body = collectCsv(lines);
 			if (body === null) throw new ApiError(413, 'the allocations export is too large');
-			return csvResponse(c, body, exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv'));
+			return csvResponse(c, body, exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE));
 		});
 	})
 	// A run's modelled use against the registered volumes, per farm or water

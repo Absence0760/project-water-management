@@ -248,6 +248,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				patch: {
 					name?: string;
 					description?: string;
+					/** An IANA zone name (issue #45): the date in the project's download file names. */
+					timeZone?: string;
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;

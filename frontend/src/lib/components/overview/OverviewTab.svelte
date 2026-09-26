@@ -56,11 +56,23 @@
 	// Form fields start from the loaded project and are reset after each save.
 	let name = $state(untrack(() => project.name));
 	let description = $state(untrack(() => project.description ?? ''));
+	// The project's time zone dates its downloads (issue #45); an older API sends none.
+	const DEFAULT_TIME_ZONE = 'Africa/Johannesburg';
+	let timeZone = $state(untrack(() => project.timeZone ?? DEFAULT_TIME_ZONE));
+	const zones = (() => {
+		try {
+			return Intl.supportedValuesOf('timeZone');
+		} catch {
+			return [DEFAULT_TIME_ZONE];
+		}
+	})();
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let savedAt = $state<number | null>(null);
 
-	const detailsDirty = $derived(name.trim() !== project.name || description.trim() !== (project.description ?? ''));
+	const detailsDirty = $derived(
+		name.trim() !== project.name || description.trim() !== (project.description ?? '') || timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE)
+	);
 
 	// The series and runs lists come from the page, which loads them before any
 	// tab renders and refreshes them after an upload or a run, so the counts and
@@ -181,10 +193,16 @@
 		saving = true;
 		error = null;
 		try {
-			const p = await api.projects.update(project.id, { name: name.trim(), description: description.trim() });
+			const zoneChanged = timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE);
+			const p = await api.projects.update(project.id, {
+				name: name.trim(),
+				description: description.trim(),
+				...(zoneChanged ? { timeZone: timeZone.trim() } : {})
+			});
 			onProjectChange(p);
 			name = p.name;
 			description = p.description ?? '';
+			timeZone = p.timeZone ?? DEFAULT_TIME_ZONE;
 			savedAt = Date.now();
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -261,9 +279,15 @@
 					<label for="pd-desc">Description</label>
 					<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={description}></textarea>
 				</div>
+				<div class="field">
+					<label for="pd-tz">Time zone</label>
+					<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={timeZone} aria-describedby="pd-tz-h" />
+					<datalist id="pd-tz-list">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
+					<span class="hint" id="pd-tz-h">An IANA name, like Africa/Johannesburg. Downloads are dated by the day here.</span>
+				</div>
 				{#if canEdit}
 					<div class="form-row">
-						<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim()}>
+						<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim() || !timeZone.trim()}>
 							{saving ? 'Saving…' : 'Save details'}
 						</button>
 						{#if savedAt && !detailsDirty}<span class="muted" role="status">Saved.</span>{/if}

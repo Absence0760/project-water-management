@@ -1258,6 +1258,26 @@ No Afrikaans wording ships yet: none is reviewed.
       `POST /auth/change-password` (docs/api.md § Auth).
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
+- [x] **Small flows read 0.000; the FDC table was in no export; download
+      names used the UTC date** (issue #45, done 2026-09-26): `fmtQty`
+      (two significant figures below what the fixed decimals show), the
+      engine's `fdcPercentileTable` in the summary CSV, the workbook and the
+      report, and `project.time_zone` (058) dating every download.
+- [ ] **Other server-side "today"s are still UTC's** (found with issue #45).
+      Download names now use the project's time zone (`project.time_zone`,
+      `projects/timeZone.ts` `localDate`), but a few server dates still count
+      from UTC's calendar day: the alert evaluator's `today`
+      (`alerts/evaluate.ts`), the feeds' `utcToday` (`feeds/fetch.ts`, which
+      is right for CHIRPS's UTC days but not for a data age shown to a
+      person), the portfolio's `today` (api.md § Portfolio) and the farm
+      view's `madeOn`. Between 22:00 and 24:00 UTC they are a day behind a
+      South African reader. **Durable fix:** date each by
+      `localDate(now, project.time_zone)` where a person reads it, keeping
+      UTC only where the source's own days are UTC (CHIRPS). **Trigger:** the
+      next change to any of them, or a persona finding of an off-by-one day.
+      The account's `my-data_<date>.json` belongs to no project, so it is
+      dated in the default zone (`DEFAULT_TIME_ZONE`) by design until users
+      have a zone of their own.
 - [x] **FarmDay help diagram is behind the engine** (fixed 2026-09-25):
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its

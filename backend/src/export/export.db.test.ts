@@ -3,6 +3,7 @@ import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
 import { flowDurationTable } from './fdc.js';
+import { localDate } from '../projects/timeZone.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -230,6 +231,24 @@ describe('run summary export', () => {
 		const naturalM3Day = daily.slice(1).map((r) => (r.split(',')[1] === '' ? null : Number(r.split(',')[1])));
 		const expected = flowDurationTable([{ key: 'natural_flow', values: naturalM3Day }]).wholeRun[0]!;
 		expect(fdc[0]!.split(',').slice(2).map(Number)).toEqual([expected.q10, expected.q50, expected.q90, expected.q95, expected.n]);
+	});
+
+	it('dates the file name by the project’s time zone, not UTC (issue #45)', async () => {
+		// Two zones 25 hours apart are never on the same calendar day, so the name shows which one was used.
+		const dated = async (zone: string) => {
+			expect((await owner.call('PATCH', `/projects/${projectId}`, { timeZone: zone })).status).toBe(200);
+			const before = new Date();
+			const res = await download(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
+			const after = new Date();
+			const date = /_(\d{4}-\d{2}-\d{2})\.csv"$/.exec(res.headers.get('content-disposition') ?? '')?.[1];
+			expect([localDate(before, zone), localDate(after, zone)]).toContain(date);
+			return date;
+		};
+		try {
+			expect(await dated('Pacific/Kiritimati')).not.toBe(await dated('Pacific/Pago_Pago'));
+		} finally {
+			expect((await owner.call('PATCH', `/projects/${projectId}`, { timeZone: 'Africa/Johannesburg' })).status).toBe(200);
+		}
 	});
 
 	it('404s for a run of another project', async () => {

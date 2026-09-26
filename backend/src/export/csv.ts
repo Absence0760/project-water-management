@@ -1,6 +1,7 @@
 // Pure helpers for the CSV / JSON download endpoints (export/routes.ts).
 // No I/O: everything here is unit-tested in csv.test.ts.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { localDate } from '../projects/timeZone.js';
 
 /**
  * Largest export body we build. Lambda's buffered (non-streaming) responses
@@ -127,9 +128,14 @@ export function slugify(s: string, fallback = 'export'): string {
 	return slug || fallback;
 }
 
-/** `<project>_<part>_…_<YYYY-MM-DD>.<ext>`, date in UTC so it doesn't depend on the server's TZ. */
-export function exportFilename(projectName: string, parts: string[], ext: 'csv' | 'json', now = new Date()): string {
-	const date = now.toISOString().slice(0, 10);
+/**
+ * `<project>_<part>_…_<YYYY-MM-DD>.<ext>`, dated by the calendar day in the
+ * project's time zone (058_project_time_zone.sql), never UTC's or the
+ * server's: a South African export at 00:30 SAST is named for that day, not
+ * the one before (issue #45).
+ */
+export function exportFilename(projectName: string, parts: string[], ext: 'csv' | 'json', timeZone: string, now = new Date()): string {
+	const date = localDate(now, timeZone);
 	return [slugify(projectName, 'project'), ...parts.map((p) => slugify(p)), date].join('_') + `.${ext}`;
 }
 

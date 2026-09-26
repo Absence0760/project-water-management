@@ -20,6 +20,7 @@ import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isValidTimeZone, nextFireAt } from './due.js';
 import { downloadUrl, reportFileName } from './storage.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { createReport, membersAmong, recentReportCount, reportByJob, REPORTS_PER_HOUR } from './store.js';
 import { consumeRenderToken } from './tokens.js';
 
@@ -165,15 +166,15 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const jobId = c.req.param('jobId');
 		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
-		const { view, name } = await withUser(c.get('userId'), async (db) => {
+		const { view, name, timeZone } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const v = await reportByJob(db, id, jobId);
 			if (!v) throw new ApiError(404, 'not found');
-			const { rows } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
-			return { view: v, name: rows[0]?.name ?? '' };
+			const { rows } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
+			return { view: v, name: rows[0]?.name ?? '', timeZone: rows[0]?.timeZone ?? DEFAULT_TIME_ZONE };
 		});
 		const { key, ...report } = view;
-		const url = report.status === 'done' ? await downloadUrl(key, reportFileName(name, new Date(report.finishedAt ?? Date.now()).toISOString().slice(0, 10))) : undefined;
+		const url = report.status === 'done' ? await downloadUrl(key, reportFileName(name, localDate(new Date(report.finishedAt ?? Date.now()), timeZone))) : undefined;
 		return c.json({ report, ...(url ? { url } : {}) });
 	})
 	.get('/:id/report-schedules', async (c) => {
