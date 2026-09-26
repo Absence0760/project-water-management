@@ -607,7 +607,7 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 	});
 });
 
-describe('per-feed staleness levels (056 feed_id)', () => {
+describe('per-feed staleness levels (057 feed_id)', () => {
 	/** A feed whose newest day is `ago` days old (as the schema owner: the feed's health is not what's under test). */
 	const feed = async (pid: string, source: 'dws' | 'chirps', name: string, ago: number, enabled = true) =>
 		(

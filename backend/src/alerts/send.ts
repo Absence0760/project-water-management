@@ -111,7 +111,7 @@ interface Context {
 	project: { id: string; name: string };
 }
 
-/** Why a delivery goes unsent when SES has suppressed its address (056_alert_followups). */
+/** Why a delivery goes unsent when SES has suppressed its address (057_alert_followups). */
 export const SUPPRESSED = 'the address is suppressed (a bounce or complaint)';
 
 /**

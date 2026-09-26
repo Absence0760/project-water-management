@@ -2197,7 +2197,7 @@ Left, each with its trigger:
 ## Alerts (WP-2.13)
 
 - [x] **SES suppression turns a person's alerts off, with a banner.**
-      Built (056_alert_followups, `mail/suppression.ts`, `infra/ses.tf`):
+      Built (057_alert_followups, `mail/suppression.ts`, `infra/ses.tf`):
       the configuration set publishes bounces and complaints to SNS
       `ses-events` → SQS `mail-events` → the worker, which flags the
       address (`app_user.mail_suppressed_at`) and pauses the person's alert
@@ -2228,13 +2228,15 @@ Left, each with its trigger:
       `af` entry to `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` (the
       AFRIKAANS HOOK), so the Mailpit e2e checks the Afrikaans mail too.
       Trigger: § Afrikaans.
-- [x] **Per-feed staleness levels.** Built (056 `alert_rule.feed_id`):
+- [x] **Per-feed staleness levels.** Built (057 `alert_rule.feed_id`):
       one `data_stale` rule per feed, each at its own level past that
       feed's usual delay, with a default per source (CHIRPS 3 days,
       CHIRPS-GEFS 2, DWS 30: `SOURCES[source].staleAlertDays`); the rule
       editor lists them under **Data feeds behind**, and a feed added once
       they are on gets its rule at its source's default. 051's
-      catchment-wide rules became one per feed at the same level.
+      catchment-wide rules became one per feed at the same level, in place
+      (history kept); a catchment with no feed keeps its choice until its
+      first feed adopts it.
 - [ ] **Open rates and farmer feedback** (the roadmap's recommendation
       before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
       click tracking on the configuration set (POPIA: say so in the privacy

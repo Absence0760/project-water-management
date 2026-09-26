@@ -87,7 +87,7 @@ describe('GET /auth/me/export', () => {
 		const { doc } = await download(farmer);
 		expect(doc.account).toMatchObject({ id: farmer.id, email: farmer.email, displayName: 'XFarmer' });
 		expect(doc.account.dataExportedAt).toEqual(expect.any(String));
-		// Whether SES suppressed the address (056): nothing here, so all null.
+		// Whether SES suppressed the address (057): nothing here, so all null.
 		expect(doc.account).toMatchObject({ mailSuppressedAt: null, mailSuppressedReason: null, mailResumedAt: null });
 		expect(doc.projectMemberships).toEqual([expect.objectContaining({ projectId, projectName: 'Export catchment', role: 'farmer' })]);
 		expect(doc.farms).toHaveLength(1);

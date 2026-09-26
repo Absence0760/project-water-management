@@ -32,7 +32,7 @@ export const APP_USER_EXPORTED = [
 	'locale',
 	'volume_unit',
 	'data_exported_at',
-	// SES reported a bounce or complaint for the address (056): alert emails paused.
+	// SES reported a bounce or complaint for the address (057): alert emails paused.
 	'mail_suppressed_at',
 	'mail_suppressed_reason',
 	'mail_resumed_at'

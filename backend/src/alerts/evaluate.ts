@@ -17,7 +17,7 @@
 //                          its forecast days haven't all passed. Not while an
 //                          API key's anomalous push is held (series/hold.ts):
 //                          that forecast may rest on the held days.
-//   data_stale             one rule per data feed (056 feed_id): days that
+//   data_stale             one rule per data feed (057 feed_id): days that
 //                          feed is past its usual delay (feeds/health.ts
 //                          staleAfterDays); a disabled feed, or one with no
 //                          data yet, has no value (a firing rule clears).
@@ -85,8 +85,23 @@ export async function ensureFarmRules(db: Db, projectId: string): Promise<void> 
  * Once data_stale is on for any feed, a feed added later gets its own rule,
  * on, at its source's default level (SOURCES[source].staleAlertDays); a feed
  * whose rule an editor switched off keeps it off (the rule exists).
+ *
+ * A catchment that had 051's catchment-wide rule but no feed when 057 ran
+ * keeps it as a feed-less rule: its pending choice. The first feed added
+ * adopts it (its level and switch, and any history), and the rest follow the
+ * rule above, so an "on" made before there were feeds is honoured.
  */
 export async function ensureFeedRules(db: Db, projectId: string): Promise<void> {
+	await db.query(
+		`UPDATE alert_rule r SET feed_id = (
+			SELECT f.id FROM data_feed f
+			WHERE f.project_id = $1 AND NOT EXISTS (SELECT 1 FROM alert_rule x WHERE x.feed_id = f.id)
+			ORDER BY f.source, f.target_kind, f.target_name, f.id LIMIT 1
+		 )
+		 WHERE r.project_id = $1 AND r.kind = 'data_stale' AND r.feed_id IS NULL
+		   AND EXISTS (SELECT 1 FROM data_feed f WHERE f.project_id = $1 AND NOT EXISTS (SELECT 1 FROM alert_rule x WHERE x.feed_id = f.id))`,
+		[projectId]
+	);
 	const { rows } = await db.query<{ id: string; source: FeedSource }>(
 		`SELECT f.id, f.source FROM data_feed f
 		 WHERE f.project_id = $1

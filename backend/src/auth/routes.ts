@@ -79,7 +79,7 @@ const toUser = (r: UserRow) => ({
 	emailVerified: r.email_verified_at !== null,
 	locale: r.locale,
 	volumeUnit: r.volume_unit,
-	// SES reported a bounce or complaint for the address (056): alert emails are paused (the banner, POST /me/alerts/resume).
+	// SES reported a bounce or complaint for the address (057): alert emails are paused (the banner, POST /me/alerts/resume).
 	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null
 });
 const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason';

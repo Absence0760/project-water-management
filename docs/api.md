@@ -70,7 +70,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
   the farm view shows volumes. `mailSuppressed` is `null`, or
   `{ reason: 'bounce' | 'complaint', at }` once SES reported a permanent
-  bounce or a spam complaint for the address (056): alert emails are paused
+  bounce or a spam complaint for the address (057): alert emails are paused
   until the person turns them back on (`POST /me/alerts/resume`,
   [§ Alerts](#alerts)).
 - **`GET /auth/me/export`** ("download my data", POPIA access;
@@ -679,7 +679,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | GET | `/me/alerts` | – | `{ projects: ProjectAlerts[] }`: every catchment you can open (never an applicant's), by name | signed in |
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
 | POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
-| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, and a `data_stale` per data feed (056); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's) | editor |
+| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, and a `data_stale` per data feed (057); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's) | editor |
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |

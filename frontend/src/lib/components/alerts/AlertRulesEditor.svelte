@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The catchment's alert rules (WP-2.13; editors): which kinds send email,
 	// and at what level: catchment-wide kinds, a dam level per farm, and a
-	// staleness level per data feed (each past that feed's usual delay, 056).
+	// staleness level per data feed (each past that feed's usual delay, 057).
 	// Loaded on demand by AlertsPanel. Saving evaluates the
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
