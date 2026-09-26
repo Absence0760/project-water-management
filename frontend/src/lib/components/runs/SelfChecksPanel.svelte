@@ -18,7 +18,8 @@
 		runId,
 		startDate,
 		endDate,
-		nodes
+		nodes,
+		trace: showTrace = true
 	}: {
 		summary: RunSummary;
 		projectId: string;
@@ -27,6 +28,8 @@
 		endDate: string;
 		/** Nodes that can be traced, in network order. */
 		nodes: { id: string; name: string; kind: 'farm' | 'gauge' | 'user' }[];
+		/** Show Trace a day (the printable report leaves the interactive trace out). */
+		trace?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -142,6 +145,7 @@
 	{/if}
 </section>
 
+{#if showTrace}
 <section aria-labelledby="{uid}-tr">
 	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
@@ -212,6 +216,7 @@
 		{/if}
 	{/if}
 </section>
+{/if}
 
 <style>
 	section + section {

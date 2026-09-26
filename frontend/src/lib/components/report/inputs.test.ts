@@ -1,0 +1,100 @@
+import { describe, expect, it } from 'vitest';
+import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/engine';
+import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from './inputs';
+
+const node = (id: string, name: string, over: Partial<NetworkNode> = {}) =>
+	({ id, name, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 1, damCapacityM3: 0, irrigationEfficiency: 0.8, ...over }) as NetworkNode;
+
+const model: Partial<ProjectModel> = {
+	nodes: [
+		node('g', 'Outlet gauge', { kind: 'gauge', sortOrder: 2, areaKm2: 5 }),
+		node('a', 'Upper farm', { sortOrder: 0, downstreamNodeId: 'b', damCapacityM3: 150_000 }),
+		node('b', 'Lower farm', { sortOrder: 1, downstreamNodeId: 'g' })
+	],
+	crops: [
+		{ id: 'c1', name: 'Citrus', cropFactor: [] },
+		{ id: 'c2', name: 'Lucerne', cropFactor: [] }
+	],
+	cropAreas: [
+		{ nodeId: 'b', cropId: 'c1', areaM2: 250_000 },
+		{ nodeId: 'a', cropId: 'c2', areaM2: 100_000 },
+		{ nodeId: 'a', cropId: 'c1', areaM2: 50_000 },
+		{ nodeId: 'a', cropId: 'c2', areaM2: 0 }
+	],
+	transfers: [
+		{ id: 't', fromNodeId: 'b', toNodeId: 'a', months: [10, 11, 12], maxRateM3s: 0.05, dailyCapM3: null, minStoragePct: 0, enabled: false, priority: 1 }
+	]
+};
+
+describe('effectiveSettings', () => {
+	it('fills what the run did not store from the defaults, GR4J one level deep', () => {
+		const s = effectiveSettings({ runoffModel: 'gr4j', gr4j: { x1: 500 } as never });
+		expect(s.gr4j.x1).toBe(500);
+		expect(s.gr4j.x4).toBe(1.7);
+		expect(s.panCoefficient).toHaveLength(12);
+	});
+});
+
+describe('settingsRows', () => {
+	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const gr4j = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run));
+		expect(gr4j['Simulated period']).toBe('2000-10-01 – 2010-09-30');
+		expect(gr4j['Runoff model']).toBe('GR4J');
+		expect(gr4j['GR4J parameters']).toMatch(/^X1 350 mm/);
+		expect(gr4j['Calibration window']).toBe('whole record');
+		const legacy = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'legacy', calibrationStart: '2003-10-01' }), run));
+		expect(legacy['Runoff model']).toMatch(/^Legacy/);
+		expect(legacy['GR4J parameters']).toBeUndefined();
+		expect(legacy['Calibration window']).toBe('from 2003-10-01');
+	});
+});
+
+describe('monthlyRows', () => {
+	it('gives twelve values per row, in water-year order', () => {
+		const s = effectiveSettings({ apanMm: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as never });
+		const rows = monthlyRows(s);
+		expect(rows.map((r) => r.label)).toEqual(['A-pan evaporation (mm)', 'Pan coefficient', 'Pragmatic EWR (m³/day)']);
+		expect(rows[0]!.values[0]).toBe('1');
+		expect(rows[0]!.values).toHaveLength(12);
+	});
+});
+
+describe('nodeRows', () => {
+	it('lists nodes in network order with what each drains into', () => {
+		expect(nodeRows(model)).toEqual([
+			['Upper farm', 'Farm', 'Lower farm', '1.00', '150,000', '80%'],
+			['Lower farm', 'Farm', 'Outlet gauge', '1.00', '–', '80%'],
+			['Outlet gauge', 'Gauge', 'outlet', '5.00', '–', '–']
+		]);
+	});
+});
+
+describe('cropAreaRows', () => {
+	it('lists planted areas in hectares by farm then crop, leaving out empty ones', () => {
+		expect(cropAreaRows(model)).toEqual([
+			['Upper farm', 'Citrus', '5.00'],
+			['Upper farm', 'Lucerne', '10.00'],
+			['Lower farm', 'Citrus', '25.00']
+		]);
+	});
+});
+
+describe('transferRows', () => {
+	it('names both ends and the months, and says when a transfer was off', () => {
+		expect(transferRows(model)).toEqual([['Lower farm', 'Upper farm', 'Oct–Dec', '0.05', 'none', 'off']]);
+	});
+});
+
+describe('coverageRows', () => {
+	it('counts the days of each series inside the run', () => {
+		const series: SeriesMeta[] = [
+			{ id: '1', kind: 'rain_catchment_mm', name: '', unit: 'mm', startDate: '1999-10-01', length: 800 },
+			{ id: '2', kind: 'flow_observed_m3s', name: 'Weir', unit: 'm³/s', startDate: '2001-01-01', length: 10 }
+		];
+		expect(coverageRows(series, { startDate: '2000-01-01', endDate: '2000-12-31' })).toEqual([
+			['Flow — observed gauge · Weir', '2001-01-01', '2001-01-10', '10', '0'],
+			['Rainfall — catchment', '1999-10-01', '2001-12-08', '800', '366']
+		]);
+	});
+});

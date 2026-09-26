@@ -79,3 +79,18 @@ export function panWindow(min: number, max: number, delta: number, lo: number, h
 	const start = Math.min(Math.max(min + delta, lo), hi - width);
 	return { min: start, max: start + width };
 }
+
+/** Device pixels per CSS pixel a printed chart is drawn at. */
+export const PRINT_PIXEL_RATIO = 2;
+
+/**
+ * How much larger than its box a print-mode chart is laid out, so its canvas
+ * holds PRINT_PIXEL_RATIO device pixels per CSS pixel. uPlot sizes its canvas
+ * by the screen's devicePixelRatio and has no option to override it, so the
+ * chart is built this many times larger (fonts, strokes and axes too) and
+ * scaled back down into its box. 1 on a screen already that sharp.
+ */
+export function printScale(devicePixelRatio: number): number {
+	const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+	return dpr >= PRINT_PIXEL_RATIO ? 1 : PRINT_PIXEL_RATIO / dpr;
+}

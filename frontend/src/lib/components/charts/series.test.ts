@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { alignDaily, fmtCompact, isolatedIndices, panWindow } from './series';
+import { alignDaily, fmtCompact, isolatedIndices, panWindow, printScale } from './series';
+
+describe('printScale', () => {
+	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
+		expect(printScale(1)).toBe(2);
+		expect(printScale(1.25)).toBeCloseTo(1.6);
+	});
+
+	it('leaves a chart as it is on a screen already at 2× or sharper', () => {
+		expect(printScale(2)).toBe(1);
+		expect(printScale(3)).toBe(1);
+	});
+
+	it('treats a missing or nonsense ratio as 1×', () => {
+		expect(printScale(0)).toBe(2);
+		expect(printScale(Number.NaN)).toBe(2);
+	});
+});
 
 describe('alignDaily', () => {
 	it('aligns series with different start dates onto a shared axis', () => {

@@ -3,32 +3,12 @@
 // axe finds a subset of problems (keyboard and screen-reader checks still
 // need a person), but anything it does flag must stay fixed: fix it at the
 // source, never by disabling a rule here.
-import { AxeBuilder } from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail, updateSettings } from '../support/api.ts';
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
-
-/**
- * Scans the whole page from the top. axe's target-size rule counts a control
- * scrolled under the sticky app header as obscured, so a scan made wherever
- * the last click left the page depends on the scroll position rather than on
- * the controls (focused controls clear the header through scroll-padding-top).
- */
-async function expectNoViolations(page: Page) {
-	await page.evaluate(() => window.scrollTo(0, 0));
-	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-	const report = violations.map((v) => ({
-		id: v.id,
-		impact: v.impact,
-		help: v.help,
-		nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5)
-	}));
-	expect(report).toEqual([]);
-}
 
 const DEAD_TOKEN = 'q'.repeat(43);
 

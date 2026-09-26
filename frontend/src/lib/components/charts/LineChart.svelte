@@ -8,7 +8,8 @@
 	import uPlot from 'uplot';
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum, fmtReading } from '$lib/format/number';
-	import { alignDaily, fmtCompact, isolatedIndices, panWindow, type ChartSeries } from './series';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
+	import { alignDaily, fmtCompact, isolatedIndices, panWindow, printScale, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -25,7 +26,10 @@
 		toolbar,
 		caption,
 		shade = [],
-		pannable = true
+		pannable = true,
+		print = false,
+		printWidth = 680,
+		ready = $bindable(false)
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -52,6 +56,16 @@
 		 * as on every chart. On by default; `false` opts a daily chart out.
 		 */
 		pannable?: boolean;
+		/**
+		 * The printable report's static chart: a fixed printWidth × height box
+		 * drawn at 2 device pixels per CSS pixel (printScale), no cursor, zoom
+		 * or controls, the whole period, a plain legend, and redrawn in the
+		 * light theme (synchronously) when the page prints.
+		 */
+		print?: boolean;
+		printWidth?: number;
+		/** True once the chart has drawn (or has nothing to draw); also the figure's data-ready. */
+		ready?: boolean;
 	} = $props();
 
 	let host: HTMLDivElement | undefined = $state();
@@ -74,7 +88,9 @@
 	const canWindow = $derived(!!recentDays && spanDays > recentDays * 1.2);
 	const dataLo = $derived(aligned.x[0] ?? 0);
 	const dataHi = $derived(aligned.x[aligned.x.length - 1] ?? 0);
-	const canPan = $derived(isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
+	const canPan = $derived(!print && isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
+	// Print mode lays the plot out k times larger and scales it back into its box.
+	const k = $derived(print ? printScale(devicePixelRatio) : 1);
 
 	function token(name: string, fallback: string): string {
 		if (!host) return fallback;
@@ -100,20 +116,20 @@
 		const base: uPlot.Series = {
 			label: unit ? `${s.label} (${unit})` : s.label,
 			stroke,
-			width: s.width ?? 1.5,
-			show: shownByLabel.get(s.label) ?? !s.hidden,
+			width: (s.width ?? 1.5) * k,
+			show: print || (shownByLabel.get(s.label) ?? !s.hidden),
 			spanGaps: false,
 			// Gaps stay gaps; a lone reading between two gets a dot so it isn't lost.
-			points: { show: false, filter: isolatedIndices(plotted[i] ?? []), size: 4, width: 0, fill: stroke },
+			points: { show: false, filter: isolatedIndices(plotted[i] ?? []), size: 4 * k, width: 0, fill: stroke },
 			value: (_u: uPlot, v: number | null) => fmtReading(v)
 		};
 		if (s.style === 'points') {
-			return { ...base, width: 0, paths: () => null, points: { show: true, size: 3, width: 0, fill: stroke, stroke } };
+			return { ...base, width: 0, paths: () => null, points: { show: true, size: 3 * k, width: 0, fill: stroke, stroke } };
 		}
 		if (s.style === 'step' || s.style === 'dashed') {
 			return {
 				...base,
-				dash: [6, 4],
+				dash: [6 * k, 4 * k],
 				paths: s.style === 'step' ? uPlot.paths.stepped!({ align: 1 }) : undefined
 			};
 		}
@@ -123,17 +139,22 @@
 	function build() {
 		plot?.destroy();
 		plot = null;
-		if (!host || width <= 0 || !hasData) return;
+		const w = print ? printWidth : width;
+		// Nothing to draw is a finished state too (the figure says "No data to plot").
+		ready = !!host && !hasData;
+		if (!host || w <= 0 || !hasData) return;
 		const axisColor = token('--chart-axis', '#6c706c');
 		const gridColor = token('--chart-grid', '#e4e6e3');
-		const font = `12px ${token('--font-sans', 'system-ui')}`;
-		const narrow = width < 520;
+		const font = `${12 * k}px ${token('--font-sans', 'system-ui')}`;
+		const narrow = w < 520;
 		const opts: uPlot.Options = {
-			width,
-			height,
+			width: w * k,
+			height: height * k,
 			tzDate: utc,
-			cursor: { drag: { x: true, y: false }, points: { size: 7 } },
+			cursor: print ? { show: false } : { drag: { x: true, y: false }, points: { size: 7 } },
+			...(print ? { select: { show: false, left: 0, top: 0, width: 0, height: 0 } } : {}),
 			hooks: {
+				draw: [() => (ready = true)],
 				...(isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {}),
 				setScale: [
 					(u: uPlot, key: string) => {
@@ -152,7 +173,7 @@
 				x: isTime ? { time: true } : { time: false },
 				y: log ? { distr: 3, log: 10 } : {}
 			},
-			legend: { live: true },
+			legend: { show: !print, live: true },
 			series: [
 				isTime
 					? { label: 'Date', value: (_u, v) => (v == null ? '–' : isoDay(v)) }
@@ -163,37 +184,49 @@
 				{
 					stroke: axisColor,
 					font,
-					grid: { stroke: gridColor, width: 1 },
-					ticks: { stroke: gridColor },
+					grid: { stroke: gridColor, width: k },
+					ticks: { stroke: gridColor, size: 10 * k, width: 2 * k },
+					gap: 5 * k,
 					// Daily data: never tick more often than once a day (no "12am / 12pm").
 					...(isTime
-						? { space: Math.max(50, Math.ceil(width / Math.max(spanDays, 1))) }
-						: { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))) }),
+						? { space: Math.max(50, Math.ceil(w / Math.max(spanDays, 1))) * k, size: 50 * k }
+						: { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))), space: 50 * k, size: 50 * k }),
 					label: isTime ? undefined : xLabel,
 					labelFont: font,
-					labelSize: isTime ? undefined : 20
+					labelSize: isTime ? undefined : 20 * k
 				},
 				{
 					stroke: axisColor,
 					font,
 					// Compact ticks (30 M, 250 k) keep the axis narrow, so the unit
 					// label never collides with the numbers.
-					size: narrow ? 44 : 52,
-					gap: 4,
-					grid: { stroke: gridColor, width: 1 },
-					ticks: { stroke: gridColor, size: 4 },
+					size: (narrow ? 44 : 52) * k,
+					gap: 4 * k,
+					space: 30 * k,
+					grid: { stroke: gridColor, width: k },
+					ticks: { stroke: gridColor, size: 4 * k, width: 2 * k },
 					// On a log scale keep only the decades, so the grid stays readable.
 					filter: log ? (_u, splits) => splits.map((v) => (isDecade(v) ? v : null)) : undefined,
 					values: (_u, vals) => vals.map((v) => (v == null ? '' : fmtCompact(v))),
 					label: unit || undefined,
 					labelFont: font,
-					labelSize: 18,
-					labelGap: 2
+					labelSize: 18 * k,
+					labelGap: 2 * k
 				}
 			]
 		};
 		const prev = view;
-		plot = new uPlot(opts, [aligned.x, ...plotted] as uPlot.AlignedData, host);
+		const data = [aligned.x, ...plotted] as uPlot.AlignedData;
+		// Print mode draws at once (batch commits synchronously), so a redraw
+		// in the light theme from a beforeprint listener lands before the page
+		// is laid out for printing; uPlot otherwise draws in a microtask.
+		plot = print
+			? new uPlot(opts, data, (u, init) => {
+					host!.appendChild(u.root);
+					u.batch(() => init());
+				})
+			: new uPlot(opts, data, host);
+		if (print) return;
 		// A rebuild (log scale, units, theme) keeps the window the user was
 		// looking at; a first build, or a window the new data doesn't cover,
 		// opens on the recent period as before.
@@ -267,10 +300,23 @@
 		// An explicit theme switch sets data-theme on <html>.
 		const mo = new MutationObserver(onTheme);
 		mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+		// Print mode prints light whatever the screen shows: switch the theme
+		// and redraw synchronously before the browser lays the page out.
+		const after = () => restoreThemeAfterPrint();
+		const beforePrint = () => {
+			forceLightForPrint();
+			untrack(build);
+		};
+		if (print) {
+			addEventListener('beforeprint', beforePrint);
+			addEventListener('afterprint', after);
+		}
 		return () => {
 			ro.disconnect();
 			mq.removeEventListener('change', onTheme);
 			mo.disconnect();
+			removeEventListener('beforeprint', beforePrint);
+			removeEventListener('afterprint', after);
 		};
 	});
 
@@ -283,6 +329,11 @@
 	$effect(() => {
 		const w = width;
 		untrack(() => {
+			// A print-mode chart has a fixed box, whatever its container's width.
+			if (print) {
+				if (!plot) build();
+				return;
+			}
 			if (plot) plot.setSize({ width: w, height });
 			else build();
 		});
@@ -296,9 +347,16 @@
 	data-shaded={shade.length || undefined}
 	data-view-start={isTime && view ? isoDay(view.min) : undefined}
 	data-view-end={isTime && view ? isoDay(view.max) : undefined}
+	data-ready={ready}
 >
 	<figcaption class="head">
 		<span class="ttl">{title}</span>
+		{#if print}
+			<!-- A plain legend: the report has no cursor to read values from. -->
+			<span class="key">
+				{#each series as s (s.label)}<span><i class:dash={s.style === 'dashed' || s.style === 'step'} style:border-color="var({s.color ?? '--series-1'})"></i>{s.label}</span>{/each}
+			</span>
+		{:else}
 		<span class="tools">
 			{#if toolbar}{@render toolbar()}{/if}
 			{#if isTime && pannable && hasData && (canWindow || canPan)}
@@ -319,14 +377,34 @@
 				</button>
 			{/if}
 		</span>
+		{/if}
 	</figcaption>
 	{#if !hasData}
 		<p class="nodata">{log ? 'No positive values to plot on a log scale.' : 'No data to plot.'}</p>
 	{/if}
-	<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
-	<p class="hint">
-		{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom, then Shift+drag (or Earlier / Later) to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
-	</p>
+	{#if print && hasData}
+		<!-- Fixed box: the plot is laid out k× larger and scaled back into it (printScale). -->
+		<div class="print-box" data-scroll-region data-scroll-label={title}>
+			<div
+				class="plot print"
+				bind:this={host}
+				style:width="{printWidth}px"
+				style:height="{height}px"
+				style:--k={1 / k}
+				role="img"
+				aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"
+			></div>
+		</div>
+	{:else}
+		<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
+	{/if}
+	{#if print}
+		{#if caption}<p class="hint">{caption}</p>{/if}
+	{:else}
+		<p class="hint">
+			{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom, then Shift+drag (or Earlier / Later) to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
+		</p>
+	{/if}
 </figure>
 
 <style>
@@ -394,6 +472,40 @@
 	.plot {
 		width: 100%;
 		min-height: 20px;
+	}
+	/* Print mode: a fixed box (scrolls sideways on a phone), the plot scaled into it. */
+	.print-box {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+	.plot.print {
+		overflow: hidden;
+	}
+	.plot.print :global(.uplot) {
+		transform: scale(var(--k));
+		transform-origin: 0 0;
+	}
+	.key {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.2rem 0.9rem;
+		font-size: 0.8rem;
+		color: var(--text-2);
+	}
+	.key i {
+		display: inline-block;
+		width: 1.2em;
+		margin-right: 0.35em;
+		vertical-align: middle;
+		border-top: 3px solid;
+	}
+	.key i.dash {
+		border-top-style: dashed;
+	}
+	@media print {
+		.print-box {
+			overflow: visible;
+		}
 	}
 	.nodata {
 		color: var(--text-muted);

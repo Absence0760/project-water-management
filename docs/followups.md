@@ -1044,6 +1044,30 @@ role and not before it.
 
 ## Features left half-way
 
+- **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
+  [ui.md § Report](./ui.md#report)). Built: the print route
+  `/projects/:id/report?run=`, the Runs tab's **Report** button, A4 print
+  CSS, charts at 2 device pixels per CSS pixel, the `data-report-ready`
+  signal, e2e (`e2e/tests/report.spec.ts`) including `page.pdf()`. Left open:
+  - [ ] **Phase B, server-side PDFs** (a `report_render` job in headless
+        Chromium, S3 / MinIO, a single-use render token). Trigger: decision
+        D9, when someone asks for emailed or scheduled reports. The job queue
+        (WP-2.8) is in place; the route and `data-report-ready` are what it
+        would open and wait on.
+  - [ ] **Sections waiting on other work**, added to `report/sections.ts`
+        when their data exists (no placeholders until then): the cover's
+        published-by line and restriction notice (WP-2.3), changes since the
+        previous publication (WP-2.4), the disclaimer (D10, text still to be
+        agreed), and the licensing evidence pack's sections and uncertainty
+        display (#15). WP-2.3 also adds the Overview published card's Report
+        entry point.
+  - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
+        Chromium and Firefox; e2e runs Chromium only, so print the largest
+        example from Firefox by hand before calling Phase A accepted.
+  - [ ] **Farmer access test** (a farmer gets 403): waits for WP-2.1's farmer
+        role. Today the test is a non-member, with a viewer as the positive
+        control.
+
 - **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
   CHIRPS, CHIRPS-GEFS and DWS parsers on synthetic fixtures, `018_feeds`,
