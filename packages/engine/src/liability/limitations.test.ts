@@ -22,10 +22,10 @@ describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
 
 	it('lists every open item of both tables, and no closed one', () => {
 		const ids = KNOWN_LIMITATIONS.map((l) => l.id);
-		// Open today: H1 (legacy runoff, pending the hydrologist), a decided-but-pending finding, a warned one, a pending quirk.
-		for (const id of ['H1', 'N1', 'B3', 'Q17']) expect(ids).toContain(id);
-		// Fixed or removed: never a limitation.
-		for (const id of ['E1', 'E2', 'R1', 'G1', 'P1', 'T1', 'Q1', 'Q7', 'Q14']) expect(ids).not.toContain(id);
+		// Open today: a decided-but-pending finding, a warned one, a pending quirk.
+		for (const id of ['N1', 'B3', 'Q17']) expect(ids).toContain(id);
+		// Fixed or removed: never a limitation (H1: the legacy runoff model, removed in engine 1.0.0).
+		for (const id of ['H1', 'E1', 'E2', 'R1', 'G1', 'P1', 'T1', 'Q1', 'Q7', 'Q14']) expect(ids).not.toContain(id);
 		for (const l of KNOWN_LIMITATIONS) {
 			expect(l.title.length, l.id).toBeGreaterThan(5);
 			expect(l.status.length, l.id).toBeGreaterThan(5);
@@ -34,11 +34,11 @@ describe('KNOWN_LIMITATIONS (generated from docs/engine-audit.md)', () => {
 	});
 
 	it('drops an item whose decision becomes Fixed, and adds one that becomes pending', () => {
-		const h1Row = doc.split('\n').find((l) => l.startsWith('| **H1** |'))!;
-		const cells = h1Row.split(' | ');
-		cells[cells.length - 1] = '**Fixed.** Volume-conserving event response, engine 1.0.0. |';
-		const fixedH1 = doc.replace(h1Row, cells.join(' | '));
-		expect(parseAuditLimitations(fixedH1).map((l) => l.id)).not.toContain('H1');
+		const n1Row = doc.split('\n').find((l) => l.startsWith('| **N1** |'))!;
+		const cells = n1Row.split(' | ');
+		cells[cells.length - 1] = '**Fixed.** Confirmed by the hydrologist. |';
+		const fixedN1 = doc.replace(n1Row, cells.join(' | '));
+		expect(parseAuditLimitations(fixedN1).map((l) => l.id)).not.toContain('N1');
 
 		const e2Row = doc.split('\n').find((l) => l.startsWith('| **E2** |'))!;
 		const e2 = e2Row.split(' | ');
