@@ -4,7 +4,8 @@
 // assumptions changed" callout goes), undoes an edit, runs it and compares it
 // with its base (headline deltas, the per-node overlay, the compare page's
 // Scenario overrides); a rebase onto a run without the farm reports the
-// change that no longer applies; a viewer reads it all but changes nothing.
+// change that no longer applies; a licence what-if puts a farm on river first
+// with a 1,200 m³/day pump (WP-3.8); a viewer reads it all but changes nothing.
 // Axe-scanned in both themes and on a phone.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -181,6 +182,54 @@ test('a rebase onto a run without the farm reports the change that no longer app
 	await changes(page).getByRole('button', { name: /^Remove change 1: / }).click();
 	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
 	await expect(changes(page)).toHaveCount(0);
+});
+
+test('a licence what-if: the proposer\'s farm pumps from the river first at 1,200 m³/day (WP-3.8)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario river pump');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	const name = 'Upper river pump';
+	await page.getByLabel('Name', { exact: true }).fill(name);
+	await page.getByRole('button', { name: 'Create scenario' }).click();
+	await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+	const list = page.getByRole('list', { name: `Changes in ${name}` });
+
+	// The supply rule, in run comparison's words, with the value it replaces.
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: dam only');
+	await form.getByLabel('Supply rule').selectOption({ label: 'river first' });
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(list.getByRole('listitem')).toHaveCount(1);
+	await expect(list.getByRole('listitem')).toContainText('Upper farm: Supply rule dam only → river first');
+
+	// The pump, in m³/day; blank would be no limit.
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'River pump capacity' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: no limit');
+	await expect(form.getByLabel('River pump capacity (m³/day)')).toHaveAttribute('placeholder', 'empty for no limit');
+	await form.getByLabel('River pump capacity (m³/day)').fill('1200');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(list.getByRole('listitem')).toHaveCount(2);
+	await expect(list.getByRole('listitem').nth(1)).toContainText('Upper farm: River pump capacity no limit → 1,200 m³/day');
+
+	// On the proposer's own farm, how it takes water is the proposal.
+	await page.getByRole('group', { name: "The proposer's nodes" }).getByLabel('Upper farm').check();
+	await expect(list.getByRole('listitem').nth(0)).toContainText('Proposal');
+	await expect(list.getByRole('listitem').nth(1)).toContainText('Proposal');
+	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
+
+	// Run it; the full comparison lists both changes and the input diff names them.
+	await page.getByRole('button', { name: 'Run scenario' }).click();
+	await expect(page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Headline results' })).toBeVisible();
+	await page.getByRole('link', { name: 'Open the full comparison' }).click();
+	const recorded = page.getByRole('region', { name: 'Scenario overrides' }).getByRole('list', { name: `Changes in scenario ${name} (run B)` }).getByRole('listitem');
+	await expect(recorded).toHaveCount(2);
+	const changed = page.getByRole('region', { name: 'What changed' });
+	await expect(changed).toContainText('Upper farm: supply rule dam only → river first');
+	await expect(changed).toContainText('Upper farm: river pump capacity no limit → 1,200 m³/day');
 });
 
 test('override mode records edits in the Network, Crops and Transfers tables as changes, never touching the catchment', async ({ page, owner }) => {
