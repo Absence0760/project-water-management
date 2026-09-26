@@ -56,6 +56,16 @@ describe('lowFlowCurves', () => {
 		expect(lowFlowWarning(low)).toMatch(/4\.0× lower/);
 	});
 
+	it('writes a small Q90 to two significant figures, never as 0.000 (issue #45)', () => {
+		// The gauge reads 1 … 100 L/s (observed Q90 0.0101 m³/s); the model 3 % of it (Q90 0.000303 m³/s, once written "0.000").
+		const n = 100;
+		const obs = Array.from({ length: n }, (_, t) => (t + 1) / 1000);
+		const lf = lowFlowCurves(input(n, 1, { observed: { flow_observed_m3s: obs }, simulatedM3Day: obs.map((v) => v * 0.03 * 86_400) }))!;
+		const text = lowFlowWarning(lf)!;
+		expect(text).toMatch(/Q90 is 0\.0003 m³\/s against 0\.010 m³\/s observed/);
+		expect(text).not.toMatch(/0\.000 m³\/s/);
+	});
+
 	it('uses only dry-season days, leaves excluded days out of the observed and paired curves', () => {
 		const n = 200;
 		const x = input(n, 1);

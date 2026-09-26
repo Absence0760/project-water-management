@@ -29,7 +29,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { annualMm3 } from '$lib/components/crops/demand';
 	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import {
@@ -863,7 +863,7 @@
 			<div class="ewr-side">
 				<MonthlyBars values={s.ewrPragmaticM3PerDay} unit="m³/day" label="Pragmatic EWR" />
 				<p class="muted small">
-					{fmtNum(ewrAnnual, 3)} Mm³/a in total · mean {fmtNum((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
+					{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
 				</p>
 			</div>
 		</div>

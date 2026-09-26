@@ -3216,6 +3216,12 @@ Low flows are where a gauge is least certain (a weir's rating near its crest,
 silt and weed), and low-flow discharge uncertainty runs to ±50–100 %
 (McMillan, Krueger & Freer 2012), so a factor of 2 is outside what gauging
 error explains (CR-16's low-flow FDC bias).
+The warning writes each Q90 to 2 decimals from 1 m³/s and 3 below, but a
+smaller non-zero flow to two significant figures (0.0003 m³/s, never 0.000;
+`plausibility/format.ts`, issue #45), and the naturalised-flow warning its
+volumes the same way. That changed only the warnings' wording, not a number
+the run computes or stores, so `ENGINE_VERSION` stayed where it was (as for
+earlier wording fixes): a run saved before it keeps its old text.
 
 Checks 1, 3 and the Q90 comparison use the calibration record only, by
 design: the other record may be a different river (§2.10a). **Not yet**

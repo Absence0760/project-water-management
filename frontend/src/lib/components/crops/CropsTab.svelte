@@ -5,7 +5,7 @@
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { moveTo, reorderSubset } from '$lib/model/order';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
@@ -277,7 +277,7 @@
 								<td class="num">{fmtNum(d.areaHa, 1)}</td>
 								{#each d.monthlyM3Day as v, m (m)}<td class="num heat" style={shade(v)}>{fmtNum(v)}</td>{/each}
 								<td class="num">{fmtNum(d.meanM3Day)}</td>
-								<td class="num strong">{fmtNum(d.annualMm3, 3)}</td>
+								<td class="num strong">{fmtQty(d.annualMm3, 3)}</td>
 							</tr>
 						{/if}
 					{/each}
@@ -288,14 +288,14 @@
 						<td class="num">{ha(grandTotal)}</td>
 						{#each demandTotal.monthly as v, m (m)}<td class="num">{fmtNum(v)}</td>{/each}
 						<td class="num">{fmtNum(demandTotal.mean)}</td>
-						<td class="num">{fmtNum(demandTotal.annual, 3)}</td>
+						<td class="num">{fmtQty(demandTotal.annual, 3)}</td>
 					</tr>
 				</tfoot>
 			</table>
 		</div>
 		<p class="muted small after">
 			1 Mm³ = 1 million m³. Darker cells are months of higher demand. Annual catchment demand is
-			{fmtNum(demandTotal.annual, 3)} Mm³/a ({fmtNum((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average).
+			{fmtQty(demandTotal.annual, 3)} Mm³/a ({fmtQty((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average).
 		</p>
 	{/if}
 </section>

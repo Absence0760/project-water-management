@@ -7,7 +7,7 @@
 <script lang="ts">
 	import type { Wr2012Report } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
 	import { describeScaling, FLAG_LABEL, monthsText, ratioText, waterYear, yearsText } from './wr2012';
 
@@ -24,8 +24,8 @@
 		({waterYear(report.referencePeriod.start)} – {waterYear(report.referencePeriod.end)}) · Source: {report.source}
 	</p>
 	<p class="small">
-		<span class="lbl">Scaled to the modelled catchment:</span> {describeScaling(report)}. WR2012 MAR {fmtNum(report.referenceMarMm3, 3)} Mm³/a →
-		<strong>{fmtNum(report.scaledMarMm3, 3)} Mm³/a</strong>.
+		<span class="lbl">Scaled to the modelled catchment:</span> {describeScaling(report)}. WR2012 MAR {fmtQty(report.referenceMarMm3, 3)} Mm³/a →
+		<strong>{fmtQty(report.scaledMarMm3, 3)} Mm³/a</strong>.
 	</p>
 
 	<p class="flag {flagClass}" role="status">
@@ -48,8 +48,8 @@
 				<tr>
 					<th scope="row">Overlapping years{#if report.overlap}: {yearsText(report.overlap.years)}{/if}</th>
 					{#if report.overlap}
-						<td class="num">{fmtNum(report.overlap.simulatedMarMm3, 3)}</td>
-						<td class="num">{fmtNum(report.scaledMarMm3, 3)}</td>
+						<td class="num">{fmtQty(report.overlap.simulatedMarMm3, 3)}</td>
+						<td class="num">{fmtQty(report.scaledMarMm3, 3)}</td>
 						<td class="num">{ratioText(report.overlap.ratio)}</td>
 					{:else}
 						<td class="num muted" colspan="3">no complete water year inside the reference period</td>
@@ -57,8 +57,8 @@
 				</tr>
 				<tr>
 					<th scope="row">Whole run ({fmtNum(report.whole.days)} days)</th>
-					<td class="num">{fmtNum(report.whole.simulatedMarMm3, 3)}</td>
-					<td class="num">{fmtNum(report.scaledMarMm3, 3)}</td>
+					<td class="num">{fmtQty(report.whole.simulatedMarMm3, 3)}</td>
+					<td class="num">{fmtQty(report.scaledMarMm3, 3)}</td>
 					<td class="num">{ratioText(report.whole.ratio)}</td>
 				</tr>
 			</tbody>
@@ -81,11 +81,11 @@
 			<tbody>
 				<tr>
 					<th scope="row">Simulated</th>
-					{#each report.months as m (m.month)}<td class="num" class:dry={m.lowFlow}>{fmtNum(m.simulatedMm3, 3)}</td>{/each}
+					{#each report.months as m (m.month)}<td class="num" class:dry={m.lowFlow}>{fmtQty(m.simulatedMm3, 3)}</td>{/each}
 				</tr>
 				<tr>
 					<th scope="row">WR2012 (scaled)</th>
-					{#each report.months as m (m.month)}<td class="num" class:dry={m.lowFlow}>{fmtNum(m.referenceMm3, 3)}</td>{/each}
+					{#each report.months as m (m.month)}<td class="num" class:dry={m.lowFlow}>{fmtQty(m.referenceMm3, 3)}</td>{/each}
 				</tr>
 				<tr>
 					<th scope="row">Ratio</th>

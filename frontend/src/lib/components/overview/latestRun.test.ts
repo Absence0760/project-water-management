@@ -136,6 +136,12 @@ describe('headlines', () => {
 		expect(hs.every((h) => h.delta === null)).toBe(true);
 	});
 
+	it('shows a small mean outflow to two significant figures, not 0.000 (issue #45)', () => {
+		const s = summary();
+		const hs = headlines({ ...s, catchment: { ...s.catchment, meanSimulatedOutflowM3Day: 36.288 } }, 120, null);
+		expect(card(hs, 'outflow')).toMatchObject({ value: '0.00042', unit: 'm³/s' });
+	});
+
 	it('headlines the Reserve rule table when the run has one, as the Runs tab does', () => {
 		const hs = headlines(summary({ ewrAssurance: [site('g2', 3, 4), site(null, 18, 24, 3)] }), 120, null);
 		expect(hs.map((h) => h.id)).toEqual(['reserve', 'supply', 'nse', 'outflow']);

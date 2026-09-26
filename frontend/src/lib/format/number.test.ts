@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtNum, fmtPct, fmtReading, localIsoDate, parseNum } from './number';
+import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, localIsoDate, parseNum } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -13,6 +13,35 @@ describe('fmtNum', () => {
 		expect(fmtNum(null)).toBe('–');
 		expect(fmtNum(NaN)).toBe('–');
 		expect(fmtNum(Infinity)).toBe('–');
+	});
+});
+
+describe('fmtQty', () => {
+	it('shows a small non-zero flow to two significant figures instead of 0.000 (issue #45)', () => {
+		expect(fmtQty(0.00042, 3)).toBe('0.00042');
+		expect(fmtQty(0.0042, 3, true)).toBe('0.0042');
+		expect(fmtQty(0.004, 3)).toBe('0.004');
+		expect(fmtQty(0.4, 0)).toBe('0.4');
+		expect(fmtQty(0.04, 1, true)).toBe('0.04');
+		expect(fmtQty(0.12, 1)).toBe('0.12');
+	});
+	it('keeps zero as 0 and negatives signed', () => {
+		expect(fmtQty(0, 3)).toBe('0.000');
+		expect(fmtQty(0, 3, true)).toBe('0');
+		expect(fmtQty(-0, 3, true)).toBe('0');
+		expect(fmtQty(-0.00042, 3)).toBe('-0.00042');
+		expect(fmtQty(-1234.5678, 3)).toBe('-1,234.568');
+	});
+	it('is exactly fmtNum once the fixed decimals already show enough figures', () => {
+		for (const [v, d] of [[0.0123, 3], [0.5, 3], [1, 3], [12.345, 2], [1234567.8, 0], [5.3, 0], [0.25, 2], [1.2, 1]] as const) {
+			expect(fmtQty(v, d)).toBe(fmtNum(v, d));
+			expect(fmtQty(v, d, true)).toBe(fmtNum(v, d, true));
+		}
+	});
+	it('writes float noise in exponent form and missing values as a dash', () => {
+		expect(fmtQty(2.3e-9, 3)).toBe('2.3e-9');
+		expect(fmtQty(-2e-9, 3)).toBe('-2e-9');
+		expect([null, undefined, NaN, Infinity].map((v) => fmtQty(v, 3))).toEqual(['–', '–', '–', '–']);
 	});
 });
 

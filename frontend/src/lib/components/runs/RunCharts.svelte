@@ -11,7 +11,7 @@
 	import { finiteCount, flowDurationCurves, onDaysOf, percentileFlows } from '$lib/components/charts/fdc';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
@@ -327,10 +327,10 @@
 						{#each fdc.q as q (q.label)}
 							<tr>
 								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
-								<td class="num">{fmtNum(q.q10, 3)}</td>
-								<td class="num">{fmtNum(q.q50, 3)}</td>
-								<td class="num">{fmtNum(q.q90, 3)}</td>
-								<td class="num">{fmtNum(q.q95, 3)}</td>
+								<td class="num">{fmtQty(q.q10, 3)}</td>
+								<td class="num">{fmtQty(q.q50, 3)}</td>
+								<td class="num">{fmtQty(q.q90, 3)}</td>
+								<td class="num">{fmtQty(q.q95, 3)}</td>
 							</tr>
 						{/each}
 					</tbody>

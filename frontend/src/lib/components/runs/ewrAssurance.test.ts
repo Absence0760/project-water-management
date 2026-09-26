@@ -6,6 +6,7 @@ import {
 	fdcText,
 	fewYears,
 	fmtFlow,
+	fmtMm3,
 	headlineSite,
 	highFlowVerdict,
 	monthLabel,
@@ -73,6 +74,11 @@ describe('formatting', () => {
 		expect(fmtFlow(0.01234)).toBe('0.0123');
 		expect(fmtFlow(0)).toBe('0');
 		expect(fmtFlow(null)).toBe('–');
+	});
+	it('shows a small monthly volume in Mm³ to two significant figures, never 0.000 (issue #45)', () => {
+		expect(fmtMm3(1_234_567)).toBe('1.235');
+		expect(fmtMm3(420)).toBe('0.00042');
+		expect(fmtMm3(0)).toBe('0.000');
 	});
 	it('labels months, conditions, shares and FDC checks', () => {
 		const s = site((t) => (t < 31 ? 0.4 : 1));
