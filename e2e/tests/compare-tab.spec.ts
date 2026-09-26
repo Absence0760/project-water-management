@@ -5,8 +5,8 @@ import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
-const runPicker = (page: Page, side: 'A — baseline' | 'B — changed') =>
-	page.getByRole('group', { name: `Run ${side}` }).getByRole('combobox', { name: 'Run' });
+const runPicker = (page: Page, side: 'Baseline' | 'What-if 1') =>
+	page.getByRole('group', { name: side, exact: true }).getByRole('combobox', { name: 'Run' });
 
 test('Compare runs opens on the latest run against the one before, and keeps its pair in the workspace URL', async ({ page, owner }) => {
 	void owner;
@@ -20,16 +20,16 @@ test('Compare runs opens on the latest run against the one before, and keeps its
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=compare&a=${project.id}%3A${first}&b=${project.id}%3A${second}$`));
 	await expect(nav(page).getByRole('link', { name: 'Compare runs' })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByRole('heading', { level: 1, name: 'Compare tab' })).toBeVisible();
-	await expect(runPicker(page, 'A — baseline')).toHaveValue(first);
-	await expect(runPicker(page, 'B — changed')).toHaveValue(second);
+	await expect(runPicker(page, 'Baseline')).toHaveValue(first);
+	await expect(runPicker(page, 'What-if 1')).toHaveValue(second);
 	await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
 
 	// Swapping a side stays in the tab.
-	await runPicker(page, 'B — changed').selectOption(first);
+	await runPicker(page, 'What-if 1').selectOption(first);
 	await expect(page).toHaveURL(new RegExp(`\\?tab=compare&a=${project.id}%3A${first}&b=${project.id}%3A${first}$`));
 	await expect(page.getByText('Both sides are the same run, so nothing has changed.')).toBeVisible();
 
 	// Back returns to the previous pair.
 	await page.goBack();
-	await expect(runPicker(page, 'B — changed')).toHaveValue(second);
+	await expect(runPicker(page, 'What-if 1')).toHaveValue(second);
 });

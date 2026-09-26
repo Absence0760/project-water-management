@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
-import { compareSearch, compareTabHref, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
+import { compareSearch, compareTabHref, defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
 
 const run = (id: string, label = ''): RunMeta => ({
 	id,
@@ -27,6 +27,18 @@ describe('run refs', () => {
 		expect(compareSearch(a, null, 'p')).toBe('?a=p%3Ar1');
 		expect(compareSearch(null, null, 'p')).toBe('?project=p');
 		expect(compareSearch(null, null)).toBe('');
+	});
+
+	it('adds the second what-if as c, after a and b, and round-trips it', () => {
+		const a = { projectId: 'p', runId: 'r1' };
+		const b = { projectId: 'p', runId: 'r2' };
+		const c = { projectId: 'q', runId: 'r3' };
+		const s = compareSearch(a, b, 'p', c);
+		expect(s).toBe('?a=p%3Ar1&b=p%3Ar2&c=q%3Ar3');
+		const q = new URLSearchParams(s);
+		expect([q.get('a'), q.get('b'), q.get('c')].map(parseRef)).toEqual([a, b, c]);
+		// An old two-run link is unchanged.
+		expect(compareSearch(a, b, 'p', null)).toBe('?a=p%3Ar1&b=p%3Ar2');
 	});
 });
 
@@ -65,6 +77,16 @@ describe('picker defaults', () => {
 		expect(defaultRunFor(runs, null, 'p')).toBe('r3');
 		expect(defaultRunFor([run('r1')], { projectId: 'p', runId: 'r1' }, 'p')).toBe('r1');
 		expect(defaultRunFor([], null, 'p')).toBeNull();
+	});
+
+	it('adds as what-if 2 the newest run that is neither the baseline nor what-if 1', () => {
+		const runs = [run('r4'), run('r3'), run('r2'), run('r1')];
+		const p = (runId: string) => ({ projectId: 'p', runId });
+		expect(defaultWhatIf(runs, [p('r1'), p('r4')], 'p')).toBe('r3');
+		expect(defaultWhatIf(runs, [p('r3'), p('r4')], 'p')).toBe('r2');
+		// A run of another project isn't taken here.
+		expect(defaultWhatIf(runs, [{ projectId: 'q', runId: 'r4' }, null], 'p')).toBe('r4');
+		expect(defaultWhatIf([run('r2'), run('r1')], [p('r1'), p('r2')], 'p')).toBeNull();
 	});
 
 	it('labels runs, falling back to "Untitled run"', () => {
@@ -109,5 +131,6 @@ describe('compareTabHref', () => {
 		expect(compareTabHref(a, b)).toBe('?tab=compare&a=p%3Ar1&b=q%3Ar2');
 		expect(compareTabHref(null, b)).toBe('?tab=compare&b=q%3Ar2');
 		expect(compareTabHref(null, null)).toBe('?tab=compare');
+		expect(compareTabHref(a, b, { projectId: 'p', runId: 'r3' })).toBe('?tab=compare&a=p%3Ar1&b=q%3Ar2&c=p%3Ar3');
 	});
 });

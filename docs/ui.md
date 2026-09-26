@@ -133,7 +133,7 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 | --- | --- | --- | --- |
 | Summary | (none) | `summary` | `lib/components/overview/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
-| Compare runs | `compare` (`&a=<projectId>:<runId>&b=…`) | | `lib/components/compare/CompareView.svelte` ([run-comparison.md](./run-comparison.md)) |
+| Compare runs | `compare` (`&a=<projectId>:<runId>&b=…[&c=…]`: baseline, what-if 1, optional what-if 2) | | `lib/components/compare/CompareView.svelte` ([run-comparison.md](./run-comparison.md), § Compare runs below) |
 | Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
 | Allocations | `allocations` | | `lib/components/allocations/` |
 | Network | `network` | | `lib/components/network/` |
@@ -2620,6 +2620,42 @@ without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
 `e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
 matrix against the stored series; a gauge's matrix against its stored
 Reserve months, the viewer, the fallback).
+
+## Compare runs (`?tab=compare`)
+
+Board A4 of issue #17: a baseline and up to two what-ifs on one page
+(`compare/CompareView.svelte`; also the standalone `/compare` page, which
+gives it an `h1` and **Back to runs**). The full reference is
+[run-comparison.md](./run-comparison.md); the layout, top to bottom:
+
+- **Header:** *Compare runs* and a context line ("Baseline “…” against 2
+  what-ifs · same period, 2021–2024 · engine 0.45.0").
+- **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
+  What-if 2, each a fieldset (legend = its name) with a coloured top edge
+  (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
+  `--series-1`, the same colours in the table keys and the chart), the run's
+  label, one line (the baseline's years, when it ran and its tags; a
+  what-if's lead input change, `summary.ts` `leadChange`, with **all N
+  changes**) and its project and run pickers, each label beside its select.
+  With no second what-if the third column is a dashed **+ Add a second
+  what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
+  select on add, and back to the add button on remove.
+- **What changes** (left, ~55 %): the outcomes table (reserve met, days
+  below the reserve per average year, irrigation supplied, farms below 95 %,
+  up to two most-changed farms, mean outflow, calibration NSE when there is
+  one), each what-if cell its value over its `Delta`, the unit on its own
+  line under the outcome; then the takeaways box (the first worse, else
+  better, takeaway in bold, the rest listed; red, green or grey by that
+  lead's tone, whose words also say the direction).
+- **Days below the reserve, each year** (right): grouped bars per water year
+  (`ReserveYearsChart.svelte`, its own chunk; part years faded), a legend,
+  a note and **Show as a table**. It fills the height of its row.
+- **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
+  a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,
+  then every panel of the two-run comparison, unchanged.
+
+At 1440×960 the header, cards, table and chart fit above the fold; below
+1100 px the table and chart stack, below 900 px the cards.
 
 ## Scenarios (`?tab=scenarios`)
 

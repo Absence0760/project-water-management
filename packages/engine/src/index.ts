@@ -66,6 +66,7 @@ export * from './views/farmProjection';
 export * from './views/fdc';
 export * from './views/yearClasses';
 export * from './views/outcomeMatrix';
+export * from './views/reserveYears';
 export * from './outlook';
 export * from './outlook/triggers';
 export * from './units';

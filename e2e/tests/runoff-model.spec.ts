@@ -3,6 +3,7 @@
 // balance, and compare it with the legacy run of the same catchment.
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { whatChanged } from '../support/compare.ts';
 
 test('GR4J is the default; its parameters save, and a run reports the runoff balance', async ({ page, owner }) => {
 	void owner;
@@ -77,8 +78,8 @@ test('run comparison shows legacy against GR4J on a copy of the project', async 
 
 	await page.goto(`/compare?a=${project.id}:${legacyRun}&b=${copy}:${gr4jRun}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(page.getByText('Runoff model: legacy (b023 recession) → GR4J')).toBeVisible();
-	await expect(page.getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
+	await expect(whatChanged(page).getByText('Runoff model: legacy (b023 recession) → GR4J')).toBeVisible();
+	await expect(whatChanged(page).getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
 	// Neither run's parameters were fitted, so neither side is called in-sample (issue #45).

@@ -621,8 +621,9 @@
 							<CompareView
 								a={page.url.searchParams.get('a')}
 								b={page.url.searchParams.get('b')}
+								c={page.url.searchParams.get('c')}
 								project={projectId}
-								hrefFor={(a, b) => `${page.url.pathname}${compareTabHref(a, b)}`}
+								hrefFor={(a, b, c) => `${page.url.pathname}${compareTabHref(a, b, c)}`}
 							/>
 						{/snippet}
 					</Lazy>

@@ -6,6 +6,7 @@ import { copyProject, createRun, putModel, seedRunnableProject, type Model } fro
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { whatChanged } from '../support/compare.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -49,5 +50,5 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	const clearedRun = await createRun(page.request, copy, 'Cleared');
 	await page.goto(`/compare?a=${project.id}:${invadedRun}&b=${copy}:${clearedRun}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(page.getByText('Land cover "invasive" removed from Upper farm (was 1.5 km² condensed)')).toBeVisible();
+	await expect(whatChanged(page).getByText('Land cover "invasive" removed from Upper farm (was 1.5 km² condensed)')).toBeVisible();
 });
