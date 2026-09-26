@@ -358,7 +358,12 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
-kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
+kept through a rebase and a re-read; a `demand.scale` on one farm in one
+month classed baseline, then proposal once the farm is owned, stored with its
+`demandFactor` and run, the stored daily demand the base's × the factor on
+exactly those days and the other farm's untouched; one with no `nodeIds`
+baseline even with every farm owned, the same scale naming them a
+proposal), `schema.test.ts` and `names.test.ts`.
 
 ## UI
 
