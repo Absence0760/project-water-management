@@ -143,7 +143,10 @@ export interface WaterAccountEwr {
  *   in  = natural flow + rain on the dams + groundwater pumped + net transfers
  *   out = land-cover reduction + natural flow not allocated to a farm
  *       + consumptive irrigation + other users' consumptive use
- *       + dam evaporation + stream depletion + outflow at the outlet
+ *       + dam evaporation + dam seepage lost from the catchment (WP-3.5)
+ *       + stream depletion + outflow at the outlet
+ * A dam release (WP-3.5) joins the river below the dam, so it is already in
+ * the outflow (or taken again downstream): a memo, not a term.
  */
 export interface WaterAccountRow {
 	/** Start year of the water year; null for the whole-run row. */
@@ -168,13 +171,25 @@ export interface WaterAccountRow {
 	/** Other water users: taken − returned. */
 	otherUseM3: number;
 	damEvaporationM3: number;
+	/**
+	 * Dam seepage that leaves the catchment instead of returning below the dam
+	 * (engine ≥ 0.35.0, WP-3.5). Absent on runs before 0.35.0, where all of it
+	 * returned.
+	 */
+	damSeepageLostM3?: number;
 	/** Taken from the river by the boreholes' lagged stream depletion. */
 	streamDepletionM3: number;
 	/** Simulated outflow at the outlet. */
 	outflowM3: number;
 	outM3: number;
-	/** Memo, not a separate outflow: dam seepage, which rejoins the river below each dam. */
+	/**
+	 * Memo, not a separate outflow: dam seepage that rejoins the river below
+	 * each dam (all of it before engine 0.35.0; from 0.35.0 the lost share is
+	 * `damSeepageLostM3` instead).
+	 */
 	damSeepageM3: number;
+	/** Memo (engine ≥ 0.35.0, WP-3.5): released below the dams; it joins the river, so it is not an out term. */
+	damReleaseM3?: number;
 	/** Memo: irrigation supplied (consumptive + return flow). */
 	irrigationSuppliedM3: number;
 	openingStorageM3: number;
@@ -229,7 +244,12 @@ export interface AccountNodeInput {
 	returned: ArrayLike<number>;
 	rainOnDam?: ArrayLike<number>;
 	evaporation?: ArrayLike<number>;
+	/** All the dam's seepage (returned + lost). */
 	seepage?: ArrayLike<number>;
+	/** The part of the seepage lost from the catchment (WP-3.5); missing = none. */
+	seepageLost?: ArrayLike<number>;
+	/** Released below the dam (WP-3.5); missing = none. */
+	release?: ArrayLike<number>;
 	groundwater: ArrayLike<number>;
 	depletion: ArrayLike<number>;
 	/** End-of-day storage. */
@@ -405,13 +425,14 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const consumptive = irrSupplied - s(cum.farmReturned);
 	const otherUse = s(cum.userSupplied) - s(cum.userReturned);
 	const evap = s(cum.evaporation);
+	const seepageLost = s(cum.seepageLost);
 	const depletion = s(cum.depletion);
 	const outflow = s(cum.outflow);
 	const opening = from === 0 ? cum.initialStorage : cum.storage[from - 1]!;
 	const closing = to < from ? opening : cum.storage[to]!;
 	const inM3 = natural + rainOnDams + groundwater + transfers;
-	const outM3 = landCover + unallocated + consumptive + otherUse + evap + depletion + outflow;
-	const terms = [natural, rainOnDams, groundwater, transfers, landCover, unallocated, consumptive, otherUse, evap, depletion, outflow, opening, closing];
+	const outM3 = landCover + unallocated + consumptive + otherUse + evap + seepageLost + depletion + outflow;
+	const terms = [natural, rainOnDams, groundwater, transfers, landCover, unallocated, consumptive, otherUse, evap, seepageLost, depletion, outflow, opening, closing];
 	let rainM3: number | null = null;
 	if (x.rainMm && x.areaKm2 && x.areaKm2 > 0) {
 		let mm = 0;
@@ -441,10 +462,12 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		consumptiveIrrigationM3: nz(consumptive),
 		otherUseM3: nz(otherUse),
 		damEvaporationM3: nz(evap),
+		damSeepageLostM3: nz(seepageLost),
 		streamDepletionM3: nz(depletion),
 		outflowM3: nz(outflow),
 		outM3: nz(outM3),
-		damSeepageM3: nz(s(cum.seepage)),
+		damSeepageM3: nz(s(cum.seepage) - seepageLost),
+		damReleaseM3: nz(s(cum.release)),
 		irrigationSuppliedM3: nz(irrSupplied),
 		openingStorageM3: nz(opening),
 		closingStorageM3: nz(closing),
@@ -485,6 +508,8 @@ interface DailyTotals {
 	rainOnDam: Float64Array;
 	evaporation: Float64Array;
 	seepage: Float64Array;
+	seepageLost: Float64Array;
+	release: Float64Array;
 	groundwater: Float64Array;
 	depletion: Float64Array;
 	outflow: Float64Array;
@@ -495,7 +520,7 @@ interface DailyTotals {
 
 function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 	const { days } = x;
-	const keys = ['natural', 'runoff', 'landCover', 'transfer', 'farmSupplied', 'farmReturned', 'userSupplied', 'userReturned', 'rainOnDam', 'evaporation', 'seepage', 'groundwater', 'depletion', 'outflow'] as const;
+	const keys = ['natural', 'runoff', 'landCover', 'transfer', 'farmSupplied', 'farmReturned', 'userSupplied', 'userReturned', 'rainOnDam', 'evaporation', 'seepage', 'seepageLost', 'release', 'groundwater', 'depletion', 'outflow'] as const;
 	const c = Object.fromEntries(keys.map((k) => [k, new Float64Array(days)])) as unknown as DailyTotals;
 	c.storage = new Float64Array(days);
 	c.initialStorage = x.accountNodes.reduce((a, n) => a + n.initialStorageM3, 0);
@@ -519,6 +544,8 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 			day.rainOnDam += n.rainOnDam?.[t] ?? 0;
 			day.evaporation += n.evaporation?.[t] ?? 0;
 			day.seepage += n.seepage?.[t] ?? 0;
+			day.seepageLost += n.seepageLost?.[t] ?? 0;
+			day.release += n.release?.[t] ?? 0;
 			day.groundwater += n.groundwater[t]!;
 			day.depletion += n.depletion[t]!;
 			storage += n.storage[t]!;

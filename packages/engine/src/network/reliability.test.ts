@@ -229,6 +229,25 @@ describe('the water account (hand-worked)', () => {
 		expect(a).toMatchObject({ timeReliability: 0.75, volumetricReliability: 7000 / 8000 });
 	});
 
+	it('a release and seepage lost from the catchment (WP-3.5): the lost share is an out term, the release a memo', () => {
+		// A full 5000 m³ dam seeping 10 %/day, 40 % of it returning below the wall, releasing 300 m³/day first.
+		const dam = { damCapacityM3: 5000, damInitialPct: 1, damSeepagePerDay: 0.1, damSeepageReturnPct: 0.4, damReleaseRule: 'fixed' as const, damReleaseM3Day: flat(300) };
+		const o = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', dam)]));
+		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+		const t = o.summary.supplyAssurance!.waterAccount.total;
+		expect(t.damSeepageLostM3!).toBeGreaterThan(0);
+		// damSeepageM3 is the returning part: lost ÷ returned = 0.6 ÷ 0.4.
+		expect(t.damSeepageLostM3! / t.damSeepageM3).toBeCloseTo(1.5, 9);
+		expect(t.damReleaseM3!).toBeGreaterThan(0);
+		expect(t.outM3).toBeCloseTo(t.landCoverM3 + t.unallocatedM3 + t.consumptiveIrrigationM3 + t.otherUseM3 + t.damEvaporationM3 + t.damSeepageLostM3! + t.streamDepletionM3 + t.outflowM3, 6);
+		expect(Math.abs(t.residualM3)).toBeLessThanOrEqual(1e-10 * t.scaleM3);
+		expect(checkWaterAccount(o)).toBeNull();
+		// With every drop of seepage returning, nothing is lost and the account still closes.
+		const back = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { ...dam, damSeepageReturnPct: 1 })])).summary.supplyAssurance!.waterAccount.total;
+		expect(back.damSeepageLostM3).toBe(0);
+		expect(Math.abs(back.residualM3)).toBeLessThanOrEqual(1e-10 * back.scaleM3);
+	});
+
 	it('settings.assuranceAnnualThreshold sets the annual test; a bad value warns and falls back to 0.9', () => {
 		const nodes = [node('G', 'gauge', null), node('A', 'farm', 'G', { damCapacityM3: 5000 })];
 		// Volumetric 0.875: met at 0.85, not at the default 0.9.

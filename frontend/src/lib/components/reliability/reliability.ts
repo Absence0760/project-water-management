@@ -67,11 +67,13 @@ export const ACCOUNT_LINES: AccountLine[] = [
 	{ key: 'consumptiveIrrigationM3', label: 'Consumptive irrigation', side: 'out' },
 	{ key: 'otherUseM3', label: 'Other users (taken − returned)', side: 'out', optional: true },
 	{ key: 'damEvaporationM3', label: 'Dam evaporation', side: 'out', optional: true },
+	{ key: 'damSeepageLostM3', label: 'Dam seepage lost from the catchment', side: 'out', optional: true },
 	{ key: 'streamDepletionM3', label: 'Stream depletion (boreholes)', side: 'out', optional: true },
 	{ key: 'outflowM3', label: 'Outflow at the outlet', side: 'out' },
 	{ key: 'storageChangeM3', label: 'Change in dam storage', side: 'storage' },
 	{ key: 'residualM3', label: 'Residual (in − out − change in storage)', side: 'check' },
 	{ key: 'damSeepageM3', label: 'Memo: dam seepage (rejoins the river)', side: 'memo', optional: true },
+	{ key: 'damReleaseM3', label: 'Memo: released below the dams', side: 'memo', optional: true },
 	{ key: 'rainM3', label: 'Memo: rain on the catchment', side: 'memo', optional: true }
 ];
 

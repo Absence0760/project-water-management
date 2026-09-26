@@ -147,6 +147,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addUsers(new Rng(seed ^ 0x510e527f), nodes);
 	// Boreholes and stream depletion (WP-1.34), likewise from their own stream.
 	addBoreholes(new Rng(seed ^ 0x9b05688c), nodes);
+	// Dam survey curves, releases and the seepage destination (WP-3.5), likewise.
+	addDamStorage(new Rng(seed ^ 0x1b873593), nodes);
 	const farmIds = nodes.filter((x) => x.kind === 'farm').map((x) => x.id);
 
 	// --- crops -------------------------------------------------------------------
@@ -269,6 +271,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
 	// Dam evaporation (N2): the default, none, anything up to well above an open-water factor.
 	settings.lakeEvapFactor = dl.pick([0.75, 0.75, 0, dl.float(0, 2)]);
+	// Monthly lake factors (WP-3.5) in 20 % of seeds, from their own stream.
+	const lk = new Rng(seed ^ 0xcc9e2d51);
+	if (lk.bool(0.2)) settings.lakeEvapFactorMonthly = monthly(() => (lk.bool(0.1) ? 0 : lk.float(0.4, 1.3)));
 	// Calibration exclusions: date ranges and water years, in or around the run,
 	// overlapping or not. Their own stream too.
 	const cx = new Rng(seed ^ 0x1f83d9ab);
@@ -376,6 +381,41 @@ function addBoreholes(g: Rng, nodes: NetworkNode[]): void {
 		n.boreholeTriggerPct = g.frac(0.1, 0.1);
 		n.streamDepletionFrac = g.frac(0.25, 0.25);
 		n.streamDepletionLagDays = g.pick([0, 0, g.float(0.1, 5), g.logFloat(1, 5000)]);
+	}
+}
+
+/**
+ * Dam storage (WP-3.5) in 30 % of seeds, on each farm dam half the time: a
+ * survey curve (2–8 rows, from a flat pan to a steep gorge, its top row near
+ * or off the capacity, sometimes starting above empty; now and then one the
+ * run rejects), a release rule (pass inflow up to the EWR or a monthly amount,
+ * or a fixed monthly release, from nothing to more than the dam holds) with or
+ * without an outlet limit, and a seepage return share with the edges
+ * over-weighted.
+ */
+function addDamStorage(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !(n.damCapacityM3 > 0) || !g.bool(0.5)) continue;
+		if (g.bool(0.6)) {
+			const rows = g.int(2, 8);
+			const top = n.damCapacityM3 * g.pick([1, 1, g.float(0.9, 1.1)]);
+			const depth = g.logFloat(0.5, 30);
+			const shape = g.float(0.3, 1.5);
+			const start = g.bool(0.3) ? g.float(0, 0.3) : 0;
+			n.damCurve = Array.from({ length: rows }, (_, k) => {
+				const f = start + ((1 - start) * k) / (rows - 1);
+				// Area ∝ volume^shape, scaled so the mean depth at the top is `depth`.
+				return { levelM: 100 + depth * f, areaM2: (top / depth) * Math.pow(f, shape), volumeM3: top * f };
+			});
+			if (g.bool(0.05)) n.damCurve = n.damCurve.slice(0, 1);
+		}
+		const rule = g.pick(['none', 'passInflow', 'passInflow', 'fixed'] as const);
+		n.damReleaseRule = rule;
+		const scale = g.pick([0, 10, 1e3, n.damCapacityM3 / 30, n.damCapacityM3 * 2]);
+		n.damReleaseM3Day = rule === 'passInflow' && g.bool(0.5) ? null : Array.from({ length: 12 }, () => (g.bool(0.2) ? 0 : g.float(0, scale)));
+		n.damOutletCapacityM3Day = g.bool(0.5) ? null : g.pick([0, g.logFloat(1, 1e6)]);
+		n.damSeepageReturnPct = g.frac(0.25, 0.25);
 	}
 }
 

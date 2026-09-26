@@ -517,6 +517,17 @@
 //             panel (885); the merge measured 886 KB. No page's first load
 //             grew; no new dependency; the largest page chunk stays 40 KB.
 //             Headroom ~6 KB. #9's engine split is still the way back down.
+// 2026-09-26  total 892 → 900 KB (measured 898), largest chunk 41 → 43 KB
+//             (measured 42); calibration worker stays 61 (measured 60).
+//             WP-3.5's dam storage: the survey-curve paste and chart, the
+//             release rule, seepage share and monthly lake factors in the
+//             Network editor, the engine's network/dam.ts (in every run, so
+//             in the calibration worker too), and the water account's two
+//             new lines. The largest chunk is lib/help/content.ts, the whole
+//             help text in one module, grown by the dam entries; the way back
+//             is one module per help category (docs/followups.md §
+//             Housekeeping), and #9's engine split for the total. No new
+//             dependency.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -527,8 +538,8 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 892,
-	largestChunkKb: 41,
+	totalCodeKb: 900,
+	largestChunkKb: 43,
 	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,

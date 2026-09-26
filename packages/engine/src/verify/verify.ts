@@ -131,6 +131,10 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			depOut[t]! += d[t] ?? 0;
 		}
 	}
+	// Dam seepage lost from the catchment and dam releases (WP-3.5): only on dams that have them.
+	const seepLostNodes = farms.filter((n) => series.has(`${n.id}|dam_seepage_lost`));
+	const releaseNodes = farms.filter((n) => series.has(`${n.id}|dam_release`));
+	const [fSeepLost, fRelease] = ['dam_seepage_lost', 'dam_release'].map(totals) as Float64Array[];
 	// Land cover (WP-1.35): natural flow removed before it reached the farms.
 	const coverRed = cat('landcover_reduction');
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
@@ -140,7 +144,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0 };
+		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -160,6 +164,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.gw += gwIn[t]!;
 			r.dep += depOut[t]!;
 			r.cover += coverRed?.[t] ?? 0;
+			r.seepLost += fSeepLost![t]!;
+			r.release += fRelease![t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -195,10 +201,12 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
 			...(gwNodes.length ? { groundwaterM3: r.gw, streamDepletionM3: r.dep } : {}),
 			...(coverRed ? { landCoverReductionM3: r.cover } : {}),
+			...(seepLostNodes.length ? { damSeepageLostM3: r.seepLost } : {}),
+			...(releaseNodes.length ? { damReleaseM3: r.release } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: opening + r.runoff + r.transfer + r.rainOnDams + r.gw - consumptive - r.evap - r.otherUse - r.dep - r.outflow - closing
+			residualM3: opening + r.runoff + r.transfer + r.rainOnDams + r.gw - consumptive - r.evap - r.otherUse - r.dep - r.seepLost - r.outflow - closing
 		};
 	};
 

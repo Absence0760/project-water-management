@@ -151,6 +151,23 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks a dam’s survey curve, release and seepage share as the API does (WP-3.5)', () => {
+		const g = node('g', 'Gauge', null);
+		const curve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 3, areaM2: 9000, volumeM3: 20_000 }
+		];
+		const a = { ...node('a', 'A', 'g'), damCapacityM3: 20_000 };
+		expect(messages(model([g, { ...a, damCurve: curve, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(5), damSeepageReturnPct: 0.5 }]))).toEqual([]);
+		expect(messages(model([g, { ...a, damCurve: [curve[1]!] }]))).toEqual(['"A": dam survey curve: a survey curve needs at least two rows.']);
+		expect(messages(model([{ ...g, damCurve: curve }, a]))).toEqual(['"Gauge": dam survey curve: only a farm has a dam.']);
+		expect(messages(model([g, { ...a, damSeepageReturnPct: 1.5, damOutletCapacityM3Day: -1, damReleaseM3Day: [1] }]))).toEqual([
+			'"A": the share of seepage returning must be between 0% and 100%.',
+			'"A": the dam outlet capacity can\'t be negative.',
+			'"A": the dam release needs 12 monthly values, none negative.'
+		]);
+	});
+
 	it('checks land cover as the API does (WP-1.35)', () => {
 		const g = node('g', 'Gauge', null);
 		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
