@@ -775,7 +775,15 @@
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.
-// Run:   pnpm build:frontend && pnpm check:bundle
+// 2026-09-26  total 918 → 925 KB (measured 920, from 913 on main @ b4d1923d).
+//             Issue #17's Teams pages: the teams list's cards (numbers and
+//             traffic lights from each team's portfolio), the team page's
+//             projects-first layout with its settings sheet
+//             (teams/TeamSettings), the window-fitting portfolio with its
+//             summary tiles, and the shared StatusPill / StatusBar and
+//             portfolio totals. Route chunks only; no new dependency.
+//             Headroom ~5 KB.
+// Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
@@ -785,7 +793,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 918,
+	totalCodeKb: 925,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

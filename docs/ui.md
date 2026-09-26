@@ -582,17 +582,56 @@ a reopened dialog.
 
 ## Teams
 
-`/teams` lists your teams with your role; `/teams/:id` shows members, pending
-invites and the team's projects. Admins pick each member's role from
+Laid out for the app frame (issue #17): the layouts answer to the page's own
+width through container queries, not the window's, since the sidebar takes
+240 px.
+
+**`/teams`** shows each team as a card: its name (opens the team) and your
+role, then **Projects**, **Members**, **Farms short this week** (added up
+over the projects whose count is known, "2 of 14 farms"; "–" when none is)
+and **Last run**, a stacked **EWR, last 30 days** bar with the counts in
+words ("1 red, 4 green"), and the projects worst first with their status
+pills (five, ten when it's your only team; the rest are "N more projects on
+the portfolio"). *Open team* and *Portfolio* sit at the card's foot. The
+numbers come from each team's portfolio (`GET /teams/:id/portfolio`, one
+request per team after the list loads; no new endpoint), so a card shows
+its project and member counts at once and fills in the rest; if a
+portfolio fails the card says so and keeps its counts. The card grid
+auto-fills; a single team gets the full width with its projects beside the
+numbers. A **How teams work** panel beside the cards explains the three
+roles. *New team* stays in the header, and the empty state explains teams.
+
+**`/teams/:id`** leads with outcomes. The header has the team's name and
+your role, a summary line ("5 projects (1 red, 4 green) · 4 members ·
+created 26 Sep 2026") and the actions: **Portfolio**, **Team settings**,
+**Add member** (admins; focuses the add form) and **New project** (members
+and admins; opens the New project dialog with the team preselected). The
+main column is **Projects**: four tiles (EWR bar, farms short this week,
+alerts firing, last run), then each project worst first with its source
+("Published run"…), EWR pill, figures age and *Stale* flag, farms short
+(linking to the run's curtailment, as on the portfolio), lowest dam and
+alerts; a footnote states the traffic-light rule with a link to the
+settings. **Members** is the side column (below on a narrow page): name
+with the email under it, role, Remove; the add-by-email form, pending
+invites and the roles list. Admins pick each member's role from
 **viewer / member / admin** (the sole admin's viewer and member options are
 disabled), and the page explains each role in a short list under the table:
 viewers read every team project, members edit them, admins own them and
-manage the team. A team viewer doesn't get "New project in this team"; the
+manage the team. A team viewer doesn't get "New project"; the
 New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
-**Portfolio traffic lights** (a panel beside the projects, decision D11):
+**Team settings** (`?settings=1`, a side sheet,
+`lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
+reading path: **Team name** (admins; *Rename*), **Portfolio traffic lights**
+(below), and **Leave or delete** (*Leave team* for everyone, the only admin
+told to hand over first; *Delete team* for admins, which closes the sheet
+and asks in a confirmation dialog). The URL opens it (the portfolio's
+"Change them on the team page" links there), and closing it drops the
+parameter in place, so Back closes it.
+
+**Portfolio traffic lights** (in the settings sheet, decision D11):
 every member reads the rule the portfolio judges by, "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
 *These are the team's own thresholds* or *These are the default thresholds,
@@ -644,8 +683,26 @@ members and admins), and not-found for a team you aren't in. A farmer who
 opens the address is sent to their farm view (`/farm`), as the project list
 does. The intro states the thresholds the statuses were judged by (the API's
 `thresholds`, the team's or the defaults) and whose they are; an admin gets
-a link to change them on the team page (§ Teams), anyone else is told a team
-admin can.
+a link to change them in the team page's settings sheet (§ Teams,
+`?settings=1`), anyone else is told a team admin can.
+
+A dashboard (issue #17). The header carries *Team page* and, for members
+and admins, *New project in this team*; under it five tiles: **EWR, last 30
+days** (the "5 catchments: 1 red, 4 green" line, a live status, over the
+stacked bar), **Farms short this week** (added up), **Alerts firing**,
+**Stale figures** ("4 of 5") and **Last run** (the totals come from
+`portfolioTotals` in `portfolio.ts`; the pill and bar are
+`portfolio/StatusPill.svelte` and `StatusBar.svelte`, shared with the teams
+list and the team page). On a wide screen the page fits the window like the
+Network map: the table's box is the height left below the tiles, measured
+(its top and what sits below it on the page, re-measured by a
+`ResizeObserver` on `body`), never a fixed viewport height; the table
+scrolls inside it with its header row stuck, and the page keeps a 1 rem
+bottom margin and doesn't scroll. On a phone it's the cards, and the page
+scrolls. (The cards used to show under the table on a wide screen too: a
+plain `.cards { display: grid }` beat `.phone-only { display: none }`; the
+wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
+1440×960 and 1280×800.
 
 ## Network
 

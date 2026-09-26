@@ -215,6 +215,34 @@ test('the demo team shows its two examples, not the analyst’s own catchment', 
 	await expect(page.getByRole('rowheader', { name: SANDSPRUIT })).toHaveCount(0);
 });
 
+// A dashboard (issue #17): on a wide screen the table takes the height left in
+// the window and scrolls inside, header row stuck; the page itself doesn't scroll.
+for (const viewport of [
+	{ width: 1440, height: 960 },
+	{ width: 1280, height: 800 }
+]) {
+	test.describe(`${viewport.width}×${viewport.height}`, () => {
+		test.use({ viewport });
+
+		test('the portfolio fits the window: no page scroll, the table reaching its bottom', async ({ page, owner }) => {
+			void owner;
+			const a = await arrange(page.request, `fit ${viewport.width}`);
+			await page.goto(`/teams/${a.team.id}/portfolio`);
+			await expect(page.getByRole('table').getByRole('rowheader')).toHaveCount(3);
+			await expect(page.getByText(/^3 catchments: /)).toBeVisible();
+			const wrap = page.locator('.fill .table-wrap');
+			// Measured after layout settles: the box ends within the page's 1rem bottom margin.
+			await expect.poll(async () => viewport.height - (await wrap.boundingBox())!.y - (await wrap.boundingBox())!.height).toBeLessThanOrEqual(20);
+			const [scrollH, innerH] = await page.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight]);
+			expect(scrollH).toBeLessThanOrEqual(innerH);
+			expect(await wrap.evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto');
+			expect(await page.locator('table.portfolio thead').evaluate((el) => getComputedStyle(el).position)).toBe('sticky');
+			// The phone cards stay out on a wide screen.
+			await expect(page.getByRole('list', { name: /^Catchments of/ })).toBeHidden();
+		});
+	});
+}
+
 // axe on the portfolio in both themes, at desktop (the table) and phone width (the cards).
 for (const colorScheme of ['light', 'dark'] as const) {
 	for (const [sizeName, viewport] of [
