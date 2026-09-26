@@ -53,6 +53,8 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await page.getByRole('link', { name: SANDSPRUIT }).click();
 	await expect(page.getByRole('heading', { level: 1, name: SANDSPRUIT })).toBeVisible();
 
+	// A viewer's model inputs sit behind "Show model inputs" (issue #6).
+	await page.getByLabel('Show model inputs').check();
 	await page.getByRole('link', { name: 'Network' }).click();
 	await expect(page.getByText('You have view-only access to this project.')).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
@@ -70,7 +72,9 @@ test('the owner sees the seeded farmers with their farms, and a farmer sees only
 	await page.getByRole('link', { name: SANDSPRUIT, exact: true }).click();
 	await expect(page.getByRole('heading', { level: 1, name: SANDSPRUIT })).toBeVisible();
 	const farmers = page.getByRole('region', { name: /^Farmers/ });
-	await expect(farmers.getByRole('heading', { name: 'Farmers (2)' })).toBeVisible();
+	// The two farmers, and the demo applicant (WP-3.3), who keeps a farm link too.
+	await expect(farmers.getByRole('heading', { name: 'Farmers (3)' })).toBeVisible();
+	await expect(farmers.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^Demo Applicant/ }) })).toContainText('Klipdrift');
 	await expect(farmers.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^Demo Farmer\b(?! Two)/ }) })).toContainText('Vaalbank');
 	await expect(farmers.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^Demo Farmer Two/ }) })).toContainText('Rietspruit');
 	// Farmers aren't listed as members.

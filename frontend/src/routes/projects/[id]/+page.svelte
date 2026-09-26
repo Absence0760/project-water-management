@@ -12,9 +12,12 @@
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
+		applications: () => import('$lib/components/scenarios/ApplicationsTab.svelte'),
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
+	const loadApplicantView = () => import('$lib/components/scenarios/ApplicantView.svelte');
 </script>
 
 <script lang="ts">
@@ -24,7 +27,7 @@
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { chirpsSourceOf } from '$lib/series/provenance';
-	import { api, ApiError, hasRole, type Project, type RunMeta } from '$lib/api';
+	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -50,6 +53,7 @@
 		{ id: 'settings', label: 'Settings & calibration' },
 		{ id: 'runs', label: 'Runs & results' },
 		{ id: 'scenarios', label: 'Scenarios' },
+		{ id: 'applications', label: 'Applications' },
 		{ id: 'history', label: 'History' }
 	] as const;
 	type TabId = (typeof TABS)[number]['id'];
@@ -73,6 +77,8 @@
 	});
 
 	let project = $state<Project | null>(null);
+	/** Set when the caller is an applicant here (the contributor role): the page is the Applicant view. */
+	let applicantProject = $state<ProjectSummary | null>(null);
 	// Which tabs each role is shown (presentation only; a hidden tab still
 	// opens from a deep link, and then shows in the strip while it's open).
 	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
@@ -186,6 +192,7 @@
 		loading = true;
 		error = null;
 		notFound = false;
+		applicantProject = null;
 		try {
 			// Everything a tab's first render needs, behind one loading gate, so no
 			// tab (or the Overview checklist) flashes an empty state. The lists are
@@ -202,10 +209,18 @@
 			runs = rl;
 		} catch (e) {
 			// A farmer gets 403 from the workspace's routes: their view of this
-			// project is the farm page (WP-2.6).
-			if (e instanceof ApiError && e.status === 403 && (await isFarmerHere())) {
-				await goto(`${base}/farm/${encodeURIComponent(projectId)}`, { replaceState: true });
-				return;
+			// project is the farm page (WP-2.6). An applicant's is the Applicant
+			// view (WP-3.3).
+			if (e instanceof ApiError && e.status === 403) {
+				const here = await summaryHere();
+				if (here?.role === 'farmer') {
+					await goto(`${base}/farm/${encodeURIComponent(projectId)}`, { replaceState: true });
+					return;
+				}
+				if (here?.role === 'contributor') {
+					applicantProject = here;
+					return;
+				}
 			}
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else error = e instanceof Error ? e.message : String(e);
@@ -213,11 +228,12 @@
 			loading = false;
 		}
 	}
-	async function isFarmerHere(): Promise<boolean> {
+	/** This project as the project list shows it to the caller (their role), or null. */
+	async function summaryHere(): Promise<ProjectSummary | null> {
 		try {
-			return (await api.projects.list()).some((p) => p.id === projectId && p.role === 'farmer');
+			return (await api.projects.list()).find((p) => p.id === projectId) ?? null;
 		} catch {
-			return false;
+			return null;
 		}
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */
@@ -313,7 +329,11 @@
 	ondrop={onDrop}
 >
 	<LoadState {loading} error={notFound ? null : error} retry={load}>
-		{#if notFound || !project}
+		{#if applicantProject}
+			<Lazy load={loadApplicantView}>
+				{#snippet children(ApplicantView)}<ApplicantView project={applicantProject!} />{/snippet}
+			</Lazy>
+		{:else if notFound || !project}
 			<div class="alert alert-error" role="alert">
 				This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
 			</div>
@@ -490,6 +510,10 @@
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
 						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={(l) => (runs = l)} />{/snippet}
+					</Lazy>
+				{:else if tab === 'applications'}
+					<Lazy load={LOAD.applications}>
+						{#snippet children(ApplicationsTab)}<ApplicationsTab {projectId} />{/snippet}
 					</Lazy>
 				{:else if tab === 'history'}
 					<Lazy load={LOAD.history}>

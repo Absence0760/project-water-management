@@ -171,6 +171,8 @@
 							<tr>
 								<th scope="row">
 									{f.displayName}
+									<!-- An applicant (WP-3.3) keeps their farm links; they are a member through the Members panel. -->
+									{#if f.role === 'contributor'}<span class="badge">applicant</span>{/if}
 									<span class="sub-email"><EmailText email={f.email} /></span>
 								</th>
 								<td>
@@ -199,7 +201,9 @@
 											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => (editing = null)}>Cancel</button>
 										{:else}
 											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => edit(f)}>Change farms</button>
-											<button type="button" class="btn btn-sm btn-danger" disabled={busy === f.userId} onclick={() => remove(f)}>Remove</button>
+											{#if f.role !== 'contributor'}
+												<button type="button" class="btn btn-sm btn-danger" disabled={busy === f.userId} onclick={() => remove(f)}>Remove</button>
+											{/if}
 										{/if}
 									{/if}
 								</td>

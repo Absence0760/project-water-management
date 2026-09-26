@@ -10,7 +10,7 @@ import {
 	type TabId
 } from './tabs';
 
-const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'farmer', null, undefined];
+const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'contributor', 'farmer', null, undefined];
 // What the page rendered before the Scenarios tab existed.
 const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'history'];
 
@@ -32,12 +32,12 @@ describe('visibleTabs', () => {
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
-		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS);
+		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications'));
 		expect(visibleTabs('viewer', { showModelInputs: true }, PAGE)).toEqual(PAGE);
 	});
 
-	it('shows a farmer or an unknown role Overview only', () => {
-		for (const role of ['farmer', null, undefined] as const) {
+	it('shows a farmer, an applicant or an unknown role Overview only (the workspace shows them their own views)', () => {
+		for (const role of ['farmer', 'contributor', null, undefined] as const) {
 			expect(visibleTabs(role)).toEqual(['overview']);
 			expect(visibleTabs(role, { showModelInputs: true }, PAGE)).toEqual(['overview']);
 		}
@@ -59,6 +59,14 @@ describe('visibleTabs', () => {
 		const withScenarios = PAGE;
 		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, withScenarios)).toContain('scenarios');
 		expect(visibleTabs('farmer', {}, withScenarios)).not.toContain('scenarios');
+	});
+
+	it('lists Applications for owners and editors only (WP-3.3)', () => {
+		const withApplications: TabId[] = [...PAGE, 'applications'];
+		for (const role of ['owner', 'editor'] as const) expect(visibleTabs(role, {}, withApplications)).toContain('applications');
+		for (const role of ['viewer', 'contributor', 'farmer'] as const) {
+			expect(visibleTabs(role, { showModelInputs: true }, withApplications)).not.toContain('applications');
+		}
 	});
 
 	it('treats a tab it doesn’t know as a model input', () => {

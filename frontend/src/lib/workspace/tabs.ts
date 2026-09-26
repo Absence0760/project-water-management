@@ -11,8 +11,10 @@ import type { Role } from '$lib/api/types';
  * - `core`: every member sees it (Overview, results, data).
  * - `inputs`: the model inputs. Editors and owners see them; a viewer sees
  *   them behind "Show model inputs".
+ * - `assess`: the assessors' work (the Applications list, WP-3.3). Editors
+ *   and owners only; the API refuses a viewer anyway.
  */
-export type TabGroup = 'core' | 'inputs';
+export type TabGroup = 'core' | 'inputs' | 'assess';
 
 export const TAB_GROUP = {
 	overview: 'core',
@@ -24,6 +26,8 @@ export const TAB_GROUP = {
 	runs: 'core',
 	// Viewers can read scenarios (and compare them with the base run).
 	scenarios: 'core',
+	// Submitted applications, for the assessors to decide (WP-3.3).
+	applications: 'assess',
 	// The change log of the inputs, with restore actions a viewer can't use.
 	history: 'inputs'
 } as const satisfies Record<string, TabGroup>;
@@ -64,8 +68,9 @@ function groupOf(id: string): TabGroup {
  * The tabs to show, in the order of `rendered` (the tabs the page renders,
  * all known tabs by default). Owners and editors see every tab. A viewer sees
  * the core tabs, plus the model inputs when `prefs.showModelInputs` is on.
- * Anyone else (a farmer, whom the workspace redirects to the farm view, or no
- * role yet) sees Overview only. Overview is always included when rendered.
+ * Anyone else (a farmer, whom the workspace redirects to the farm view, an
+ * applicant, whom it shows the Applicant view, or no role yet) sees Overview
+ * only. Overview is always included when rendered.
  */
 export function visibleTabs<T extends string = TabId>(
 	role: Role | null | undefined,
@@ -77,10 +82,11 @@ export function visibleTabs<T extends string = TabId>(
 		role === 'editor' ||
 		(role === 'viewer' && (prefs.showModelInputs ?? VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT));
 	const seesCore = role === 'owner' || role === 'editor' || role === 'viewer';
+	const assesses = role === 'owner' || role === 'editor';
 	return rendered.filter((id) => {
 		if (id === ALWAYS_SHOWN) return true;
 		const g = groupOf(id);
-		return g === 'inputs' ? seesInputs : seesCore;
+		return g === 'inputs' ? seesInputs : g === 'assess' ? assesses : seesCore;
 	});
 }
 

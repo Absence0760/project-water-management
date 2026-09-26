@@ -11,7 +11,9 @@ const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sect
 const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catchment' });
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
-const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'History'];
+// Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
+const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Applications', 'History'];
+const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios'];
 
 /** The strip's tab names, in order. */
@@ -58,7 +60,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 	await expectNoViolations(v);
 
 	await toggle(v).check();
-	await expect.poll(() => tabNames(v)).toEqual(EVERY_TAB);
+	await expect.poll(() => tabNames(v)).toEqual(VIEWER_ALL);
 	await expect(steps.getByRole('link')).toHaveCount(5);
 
 	// A model tab opens read-only from the strip.
@@ -86,7 +88,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body.
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Data', 'Settings & calibration', 'Runs & results']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();

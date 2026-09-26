@@ -54,6 +54,8 @@ import type {
 	RunSeriesRef,
 	Scenario,
 	ScenarioCheck,
+	ScenarioBase,
+	ScenarioOutcome,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -469,7 +471,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				).then((r) => ({ ...r, removedRunIds: r.removedRunIds ?? [] })),
 			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
 			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
-				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun })
+				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun }),
+			/** The base's model and settings as you may see them (an applicant's is anonymised past their own farms). */
+			base: (id: string, sid: string) => request<ScenarioBase>('GET', `${p(id)}/scenarios/${enc(sid)}/base`),
+			/** The application workflow (WP-3.3): submit freezes the ops; a submit whose ops don't all apply answers 422 with `problems`. */
+			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
+			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
+			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
+			/** The assessor's decision: an editor who didn't make the application. */
+			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
+				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
+			/** Share an application with another applicant-or-above member of the project (its owner only). */
+			share: (id: string, sid: string, email: string) =>
+				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { email }).then((r) => r.members),
+			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
+			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
+			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

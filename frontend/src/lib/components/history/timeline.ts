@@ -138,7 +138,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'restore':
 			return s.target === 'series' ? `Restored earlier values of ${seriesName(s)}${range(s)}` : 'Restored an earlier version';
 		case 'run.created':
-			return `${s.scenarioId ? 'Ran a scenario' : 'Ran the model'}${str(s.label) ? ` (“${str(s.label)}”)` : ''}`;
+			return `${s.application ? 'Ran an application' : s.scenarioId ? 'Ran a scenario' : 'Ran the model'}${str(s.label) ? ` (“${str(s.label)}”)` : ''}`;
 		case 'run.changed':
 			if (s.pinned === true) return 'Pinned a run';
 			if (s.pinned === false) return 'Unpinned a run';
@@ -163,12 +163,26 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			if (s.action === 'removed') return `Removed ${what} schedule`;
 			return `Changed ${what} schedule`;
 		}
+		// An application's events (WP-3.3) carry no name until it is decided: `application: true`.
 		case 'scenario.created':
-			return `Created the scenario “${str(s.name)}”`;
+			return s.application ? 'An applicant started an application' : `Created the scenario “${str(s.name)}”`;
 		case 'scenario.changed':
+			if (s.application) return 'An applicant changed their application';
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
-			return `Deleted the scenario “${str(s.name)}”`;
+			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
+		case 'scenario.submitted':
+			return s.application ? 'An applicant submitted an application' : `Submitted the scenario “${str(s.name)}”`;
+		case 'scenario.withdrawn':
+			return s.application ? 'An applicant withdrew an application' : `Withdrew the scenario “${str(s.name)}”`;
+		case 'scenario.reopened':
+			return s.application ? 'An applicant reopened an application as a draft' : `Reopened the scenario “${str(s.name)}” as a draft`;
+		case 'scenario.decided':
+			return `Decided ${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”: ${str(s.outcome).replaceAll('_', ' ')}`;
+		case 'scenario.shared':
+			return 'Shared an application with another applicant';
+		case 'scenario.unshared':
+			return s.self ? 'Stopped reading a shared application' : 'Stopped sharing an application';
 		case 'share_link.created':
 			return 'Created a share link';
 		case 'share_link.revoked':

@@ -15,7 +15,8 @@ export interface TestUser {
 	password: string;
 }
 
-export type Role = 'viewer' | 'editor' | 'owner';
+/** 'contributor': a licence applicant (WP-3.3). */
+export type Role = 'contributor' | 'viewer' | 'editor' | 'owner';
 
 async function json<T>(res: Awaited<ReturnType<APIRequestContext['get']>>, status: number): Promise<T> {
 	expect(res.status(), `${res.url()} → ${await res.text()}`).toBe(status);
