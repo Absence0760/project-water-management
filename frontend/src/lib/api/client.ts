@@ -188,19 +188,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			login: (email: string, password: string) =>
 				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
 			/** `inviteToken` from a `/register?invite=…` link: a live invite for the same address starts the account verified and joined. */
-			register: (email: string, password: string, displayName: string, inviteToken?: string | null) =>
+			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: 'en' | 'af' | null) =>
 				request<{ user: User }>('POST', '/auth/register', {
 					email,
 					password,
 					displayName,
-					...(inviteToken ? { inviteToken } : {})
+					...(inviteToken ? { inviteToken } : {}),
+					...(locale ? { locale } : {})
 				}).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
 			/** Renames the account (1–100 characters, trimmed by the server). */
-			updateMe: (displayName: string) =>
-				request<{ user: User }>('PATCH', '/auth/me', { displayName }).then((r) => r.user),
+			/** Changes only the fields sent. `locale: null` goes back to following the browser. */
+			updateMe: (patch: { displayName?: string; locale?: 'en' | 'af' | null; volumeUnit?: 'm3' | 'ML' }) =>
+				request<{ user: User }>('PATCH', '/auth/me', patch).then((r) => r.user),
 			/**
 			 * Changes the password: every other session is signed out and this
 			 * browser gets a fresh cookie. ApiError 403 = wrong current password,

@@ -3,8 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FarmProjection } from '@water-management/engine';
 import { vaalbankFixture } from './fixture';
-import { plainText, type Rich } from './rich';
-import { K_HIDDEN, shareComparison, step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from './why';
+import { plainText, type Rich } from '$lib/i18n/rich';
+import { kHidden, shareComparison, step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from './why';
 
 const sp = (s: string | null | undefined) => s?.replace(/ /g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);
@@ -39,8 +39,8 @@ describe('step 1: was water shared fairly?', () => {
 	});
 
 	it('is hidden below k other holders, with the reason', () => {
-		expect(step1(farm((f) => ((f.river.equitableFraction = null), (f.river.aboveBelowShareM3Day = null))))).toEqual({ shown: false, text: K_HIDDEN });
-		expect(K_HIDDEN).toBe('Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures.');
+		expect(step1(farm((f) => ((f.river.equitableFraction = null), (f.river.aboveBelowShareM3Day = null))))).toEqual({ shown: false, text: kHidden() });
+		expect(kHidden()).toBe('Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures.');
 	});
 
 	it('never words the share as water to take', () => {

@@ -3,8 +3,9 @@
 // dam's month-end line. Drawn as inline SVG at the rendered width, so the
 // 13 px labels are never scaled down. The charts are decorative
 // (aria-hidden); the summary sentence and the "Show the numbers" table carry
-// the content, and both come from here too.
+// the content, and both come from here too, in the active language ($lib/i18n).
 import type { MonthTotals } from '@water-management/engine';
+import { t, tn } from '$lib/i18n/locale.svelte';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd } from './format';
 
 export const CHART_HEIGHT = 152;
@@ -34,7 +35,7 @@ export function monthLabels(monthly: readonly MonthTotals[], dataUntil: string):
 			month: m.month,
 			letter: short.charAt(0) + (partial ? '*' : ''),
 			partial,
-			row: partial ? `1–${Number(dataUntil.slice(8, 10))} ${fmtMonthYear(m.month)}` : fmtMonthYear(m.month)
+			row: partial ? t('farm.chart.partialRow', { day: Number(dataUntil.slice(8, 10)), month: fmtMonthYear(m.month) }) : fmtMonthYear(m.month)
 		};
 	});
 }
@@ -47,8 +48,8 @@ export function rangeCaption(monthly: readonly MonthTotals[], dataUntil: string)
 	const labels = monthLabels(monthly, dataUntil);
 	const partial = labels[labels.length - 1]!.partial;
 	const day = Number(dataUntil.slice(8, 10));
-	const th = day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
-	return `${first} to ${fmtMonthYear(lastMonth)}.${partial ? ` * ${fmtMonthLong(lastMonth)} to the ${day}${th}.` : ''}`;
+	const range = t('farm.chart.range', { from: first, to: fmtMonthYear(lastMonth) });
+	return partial ? `${range} ${t('farm.chart.partialNote', { month: fmtMonthLong(lastMonth), day: tn('farm.ordinal', day, {}, true) })}` : range;
 }
 
 /** A round top for the axis whose half is round too: 116.5 → 120, 45 → 50, 7 → 8. */
@@ -103,13 +104,13 @@ const wasShort = (m: MonthTotals) => m.demandM3 - m.suppliedM3 > Math.max(1, m.d
 
 /** The chart's visually hidden summary sentence. */
 export function supplySummary(monthly: readonly MonthTotals[], dataUntil: string): string {
-	if (!monthly.length) return 'No monthly figures yet.';
+	if (!monthly.length) return t('farm.chart.noMonths');
 	const labels = monthLabels(monthly, dataUntil);
 	const last = labels[labels.length - 1]!;
 	const end = last.partial ? `${Number(dataUntil.slice(8, 10))} ${fmtMonthLongYear(last.month)}` : fmtMonthLongYear(last.month);
 	const short = monthly.filter(wasShort).map((m) => fmtMonthLong(m.month));
-	const shortText = short.length ? `You were short in ${joinAnd(short)}.` : 'You received all you needed every month.';
-	return `Water you needed and received each month, ${fmtMonthLongYear(monthly[0]!.month)} to ${end}. ${shortText} The numbers are in the table below.`;
+	const shortText = short.length ? t('farm.chart.shortIn', { months: joinAnd(short) }) : t('farm.chart.neverShort');
+	return t('farm.chart.supplySummary', { from: fmtMonthLongYear(monthly[0]!.month), to: end, short: shortText });
 }
 
 /** The "Show the numbers" rows: every month with its year, in ML. */
@@ -158,18 +159,22 @@ export function damChart(monthly: readonly MonthTotals[], dataUntil: string, wid
 /** The dam chart's visually hidden summary: lowest, highest and latest month-end levels. */
 export function damSummary(monthly: readonly MonthTotals[], dataUntil: string): string {
 	const withDam = monthly.filter((m) => m.damPctEnd != null) as (MonthTotals & { damPctEnd: number })[];
-	if (!withDam.length) return 'No dam levels yet.';
+	if (!withDam.length) return t('farm.chart.noDam');
 	const labels = monthLabels(monthly, dataUntil);
 	const last = labels[labels.length - 1]!;
 	const end = last.partial ? `${Number(dataUntil.slice(8, 10))} ${fmtMonthLongYear(last.month)}` : fmtMonthLongYear(last.month);
 	const low = withDam.reduce((a, b) => (b.damPctEnd < a.damPctEnd ? b : a));
 	const high = withDam.reduce((a, b) => (b.damPctEnd > a.damPctEnd ? b : a));
 	const latest = withDam[withDam.length - 1]!;
-	return (
-		`Dam level at the end of each month, ${fmtMonthLongYear(monthly[0]!.month)} to ${end}. ` +
-		`Lowest ${fmtPct(low.damPctEnd)} at the end of ${fmtMonthLongYear(low.month)}, highest ${fmtPct(high.damPctEnd)} at the end of ${fmtMonthLongYear(high.month)}, ` +
-		`and ${fmtPct(latest.damPctEnd)} on ${end}. The numbers are in the table below.`
-	);
+	return t('farm.chart.damSummary', {
+		from: fmtMonthLongYear(monthly[0]!.month),
+		to: end,
+		low: fmtPct(low.damPctEnd),
+		lowMonth: fmtMonthLongYear(low.month),
+		high: fmtPct(high.damPctEnd),
+		highMonth: fmtMonthLongYear(high.month),
+		latest: fmtPct(latest.damPctEnd)
+	});
 }
 
 /** The dam table's rows: every month with its year. */

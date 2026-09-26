@@ -2,6 +2,7 @@
 // § Auth, § Members, § Teams). Kept beside client.ts rather than inside it so
 // it can land without touching the shared client; it goes through the same
 // `request`, so errors are the usual ApiError.
+import { t } from '$lib/i18n/locale.svelte';
 import type { Api } from './client';
 import type { AddMemberResult, Invite, InviteInfo, Member, Role, TeamMember, TeamRole } from './types';
 
@@ -57,8 +58,8 @@ export function linkToken(url: URL, param: 'token' | 'invite' = 'token'): string
 
 /** Password rule shared with the server (8–200 characters). */
 export function passwordProblem(password: string, confirm: string): string | null {
-	if (password.length < 8) return 'Use at least 8 characters.';
-	if (password.length > 200) return 'Use at most 200 characters.';
-	if (password !== confirm) return 'The two passwords don’t match.';
+	if (password.length < 8) return t('password.tooShort');
+	if (password.length > 200) return t('password.tooLong');
+	if (password !== confirm) return t('password.mismatch');
 	return null;
 }

@@ -41,6 +41,10 @@ export interface User {
 	displayName: string;
 	/** False until the address is confirmed via the emailed link (VerifyEmailBanner). */
 	emailVerified?: boolean;
+	/** The farmer-facing pages' and emails' language (app_user.locale, WP-2.5); null = not chosen, follow the browser. */
+	locale?: 'en' | 'af' | null;
+	/** How the farm view shows volumes (app_user.volume_unit, WP-2.5). */
+	volumeUnit?: 'm3' | 'ML';
 }
 
 /**

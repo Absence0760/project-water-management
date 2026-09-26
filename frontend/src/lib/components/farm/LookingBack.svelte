@@ -4,8 +4,8 @@
 	// `restricted` notice it collapses to one link line, so only the WUA's
 	// percentage competes for attention.
 	import type { FarmProjection } from '@water-management/engine';
-	import { lookingBack, LOOKING_BACK_SHORT, NOT_OFFICIAL } from './cards';
-	import Rich from './Rich.svelte';
+	import { lookingBack, lookingBackShort, notOfficial } from './cards';
+	import Rich from '$lib/i18n/Rich.svelte';
 
 	let { farm, href, collapsed }: { farm: FarmProjection; href: string; collapsed: boolean } = $props();
 	const vm = $derived(lookingBack(farm));
@@ -13,7 +13,7 @@
 
 {#if collapsed}
 	<a class="collapsed" {href}>
-		<span>{LOOKING_BACK_SHORT}</span>
+		<span>{lookingBackShort()}</span>
 		<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5 L16 12 L9 19" /></svg>
 	</a>
 {:else}
@@ -28,7 +28,7 @@
 			{/if}
 		</div>
 		<p><Rich text={vm.text} /></p>
-		<p class="fine official">{NOT_OFFICIAL}</p>
+		<p class="fine official">{notOfficial()}</p>
 		<a class="link" {href}>{vm.link}<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5 L16 12 L9 19" /></svg></a>
 	</section>
 {/if}

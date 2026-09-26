@@ -8,15 +8,20 @@
 // - Rates in "m³ a day"; l/s in brackets only from 1 l/s, judged on the
 //   unrounded value (§8, §11 F9, F17).
 // - Percentages whole, with "<1 %" and ">99 %" instead of rounding to 0 or 100.
-// - Dates as "12 Jan 2024" (Intl en-ZA, dateStyle medium), never ISO. Calendar
-//   days are formatted in UTC so no time zone can move them; timestamps (when
-//   something was published or saved) in the viewer's own zone.
+// - Dates as "12 Jan 2024" (Intl en-ZA, dateStyle medium; af-ZA once the
+//   Afrikaans words are in, WP-2.5), never ISO. Calendar days are formatted in
+//   UTC so no time zone can move them; timestamps (when something was
+//   published or saved) in the viewer's own zone.
 //
 // The thousands separator and the gap before a unit are no-break spaces
 // (U+00A0), so "324 247 m³" never wraps across two lines on a phone. The
-// decimal is a point, as in the design's boards; D8 (locale-driven separators,
-// af-ZA's decimal comma) comes with the Afrikaans build.
+// decimal follows the chosen language (D8, WP-2.5): a point in English, as in
+// the design's boards, and a comma in Afrikaans ("84,9 ML"), as af-ZA writes
+// it. Written by hand rather than through Intl so the result doesn't depend
+// on the browser's ICU data. Dates follow the language the words are in
+// (wordsLang), so an English sentence never carries Afrikaans month names.
 import { M3_PER_DAY_PER_LS } from '@water-management/engine';
+import { i18n, joinAnd as joinWords, t, tn, wordsLang, type PluralStem } from '$lib/i18n/locale.svelte';
 
 /** No-break space: between digit groups and between a figure and its unit. */
 export const NBSP = ' ';
@@ -28,13 +33,16 @@ function grouped(intPart: string): string {
 	return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
 }
 
+/** The decimal mark in the chosen language: a comma in Afrikaans, else a point. */
+export const decimalMark = () => (i18n.locale === 'af' ? ',' : '.');
+
 /** A number with `digits` decimals (trimmed when `trim`), grouped. */
 export function fmtNumber(n: number, digits = 0, trim = false): string {
 	if (!Number.isFinite(n)) return '–';
 	let s = Math.abs(n).toFixed(digits);
 	if (trim && s.includes('.')) s = s.replace(/\.?0+$/, '');
 	const [i, d] = s.split('.');
-	const out = grouped(i!) + (d ? `.${d}` : '');
+	const out = grouped(i!) + (d ? `${decimalMark()}${d}` : '');
 	return n < 0 && /[1-9]/.test(out) ? `−${out}` : out;
 }
 
@@ -46,7 +54,7 @@ export function fmtVolume(m3: number, unit: VolumeUnit): string {
 
 /** "121 m³ a day" (whole m³). */
 export function fmtM3Day(m3Day: number): string {
-	return `${fmtNumber(Math.round(m3Day))}${NBSP}m³ a day`;
+	return t('farm.perDay', { amount: `${fmtNumber(Math.round(m3Day))}${NBSP}m³` });
 }
 
 /**
@@ -80,17 +88,28 @@ export function fmtPct(fraction: number): string {
 	return `${p}${NBSP}%`;
 }
 
-/** A whole-number count with its noun: plural(1, 'day') → "1 day", plural(3, 'farm') → "3 farms". */
-export function plural(n: number, one: string, many = `${one}s`): string {
-	return `${n}${NBSP}${n === 1 ? one : many}`;
+/** A whole-number count with its noun (farm.n.* in the catalogue): count('farm.n.day', 1) → "1 day", count('farm.n.farm', 3) → "3 farms". */
+export function count(stem: PluralStem, n: number): string {
+	return `${n}${NBSP}${tn(stem, n)}`;
 }
 
-const MEDIUM_UTC = new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium', timeZone: 'UTC' });
-const DAY_MONTH_UTC = new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const MONTH_SHORT_UTC = new Intl.DateTimeFormat('en-ZA', { month: 'short', timeZone: 'UTC' });
-const MONTH_LONG_UTC = new Intl.DateTimeFormat('en-ZA', { month: 'long', timeZone: 'UTC' });
-const MONTH_YEAR_UTC = new Intl.DateTimeFormat('en-ZA', { month: 'short', year: 'numeric', timeZone: 'UTC' });
-const MONTH_LONG_YEAR_UTC = new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+/** The Intl locale for dates: the words' language, as South Africa writes it. */
+const dateLocale = () => (wordsLang() === 'af' ? 'af-ZA' : 'en-ZA');
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+/** A cached UTC formatter for the current date locale. */
+function utcFormat(name: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+	const key = `${dateLocale()}:${name}`;
+	let f = formatters.get(key);
+	if (!f) formatters.set(key, (f = new Intl.DateTimeFormat(dateLocale(), { ...options, timeZone: 'UTC' })));
+	return f;
+}
+const MEDIUM_UTC = () => utcFormat('medium', { dateStyle: 'medium' });
+const DAY_MONTH_UTC = () => utcFormat('dayMonth', { day: 'numeric', month: 'short' });
+const MONTH_SHORT_UTC = () => utcFormat('monthShort', { month: 'short' });
+const MONTH_LONG_UTC = () => utcFormat('monthLong', { month: 'long' });
+const MONTH_YEAR_UTC = () => utcFormat('monthYear', { month: 'short', year: 'numeric' });
+const MONTH_LONG_YEAR_UTC = () => utcFormat('monthLongYear', { month: 'long', year: 'numeric' });
 
 /** 'YYYY-MM-DD' or 'YYYY-MM' → a UTC Date (midnight of that day, or of the 1st). */
 function utc(isoDay: string): Date | null {
@@ -107,9 +126,9 @@ function fmt(f: Intl.DateTimeFormat, d: Date): string {
 		.join('');
 }
 
-const via = (f: Intl.DateTimeFormat, iso: string) => {
+const via = (f: () => Intl.DateTimeFormat, iso: string) => {
 	const d = utc(iso);
-	return d ? fmt(f, d) : iso;
+	return d ? fmt(f(), d) : iso;
 };
 
 /** A calendar day → "12 Jan 2024". */
@@ -129,22 +148,19 @@ export const fmtMonthLongYear = (isoMonth: string) => via(MONTH_LONG_YEAR_UTC, i
 export function fmtStampDay(ts: string | number | Date): string {
 	const d = new Date(ts);
 	if (Number.isNaN(d.getTime())) return String(ts);
-	return fmt(new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium' }), d);
+	return fmt(new Intl.DateTimeFormat(dateLocale(), { dateStyle: 'medium' }), d);
 }
 
 /** A timestamp → "07:42 on 19 Jan 2024", where the viewer is. */
 export function fmtStampTime(ts: string | number | Date): string {
 	const d = new Date(ts);
 	if (Number.isNaN(d.getTime())) return String(ts);
-	const time = new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
-	return `${time} on ${fmtStampDay(d)}`;
+	const time = new Intl.DateTimeFormat(dateLocale(), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+	return t('farm.stampTime', { time, date: fmtStampDay(d) });
 }
 
 /** "Nov", "Nov and Dec", "Oct, Nov and Dec". */
-export function joinAnd(items: readonly string[]): string {
-	if (items.length <= 1) return items[0] ?? '';
-	return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
+export const joinAnd = joinWords;
 
 /** Whole days from calendar day `a` to `b` (b − a). */
 export function daysBetween(a: string, b: string): number {

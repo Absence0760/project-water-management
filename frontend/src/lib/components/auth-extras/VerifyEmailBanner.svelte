@@ -7,6 +7,7 @@
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -21,7 +22,7 @@
 		message = null;
 		try {
 			await emailAuth.resendVerification();
-			message = 'Sent — check your inbox (and spam folder).';
+			message = t('banner.sent');
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409 && session.user) {
 				// Verified in another tab meanwhile.
@@ -36,15 +37,15 @@
 </script>
 
 {#if show && session.user}
-	<section class="verify-banner" aria-label="Email confirmation">
+	<section class="verify-banner" aria-label={t('banner.label')}>
 		<p>
-			Please confirm your email address. We sent a link to <strong><EmailText email={session.user.email} /></strong>.
+			{t('banner.text')} <strong><EmailText email={session.user.email} /></strong>.
 		</p>
 		<div class="actions">
 			<button type="button" class="btn btn-sm" onclick={resend} disabled={busy}>
-				{busy ? 'Sending…' : 'Resend email'}
+				{busy ? t('common.sending') : t('banner.resend')}
 			</button>
-			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (dismissed = true)}>Dismiss</button>
+			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (dismissed = true)}>{t('banner.dismiss')}</button>
 		</div>
 		<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	</section>

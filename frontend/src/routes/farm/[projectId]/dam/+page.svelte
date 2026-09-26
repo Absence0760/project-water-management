@@ -9,37 +9,39 @@
 	import DamChart from '$lib/components/farm/DamChart.svelte';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
-	import Rich from '$lib/components/farm/Rich.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
 	import { datesLine } from '$lib/components/farm/cards';
-	import { DAM_SOURCE, damPage } from '$lib/components/farm/dam';
+	import { damPage, damSource } from '$lib/components/farm/dam';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
 	import { readUnit } from '$lib/components/farm/savedCopy';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
 	const farm = new FarmState(api, () => session.user?.id ?? null);
-	const unit = readUnit();
+	// The account's unit (app_user.volume_unit), else this phone's.
+	const unit = $derived(session.user?.volumeUnit ?? readUnit());
 	const today = localIsoDate();
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>Your dam · My farm</title></svelte:head>
+<svelte:head><title>{t('farm.pageTitle', { page: t('farm.dam.title') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: 'My farm' }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('farm.myFarm') }}>
 	{#snippet children(view)}
 		{@const d = damPage(view.farm, unit)}
 		<div>
-			<h1>Your dam</h1>
+			<h1>{t('farm.dam.title')}</h1>
 			<p class="sub">{view.farm.name}</p>
 			<DatesLine line={datesLine(view, today)} />
 		</div>
 		{#if !d}
-			<p>{view.farm.name} has no dam in the model.</p>
-			<a class="link" href={main}>Back to my farm</a>
+			<p>{t('farm.damPage.noDam', { farm: view.farm.name })}</p>
+			<a class="link" href={main}>{t('farm.damPage.back')}</a>
 		{:else}
 			<section class="card" aria-labelledby="now-h">
-				<h2 id="now-h" class="visually-hidden">How full it is</h2>
+				<h2 id="now-h" class="visually-hidden">{t('farm.damPage.howFull')}</h2>
 				<p class="big"><span>{d.pct}</span><span class="sub">{d.asOf}</span></p>
 				<div class="gauge" class:with-stop={d.stopPct != null} aria-hidden="true">
 					<div class="track"><span style:width="{d.barPct}%"></span></div>
@@ -63,9 +65,9 @@
 			<!-- "Next 14 days" stays out until forecast mode exists (WP-2.12). -->
 
 			<section class="card" aria-labelledby="about-h">
-				<h2 id="about-h">Where these figures come from</h2>
-				{#each DAM_SOURCE as p (p)}<p>{p}</p>{/each}
-				<a class="link" href="{base}/farm/words#farm-modelled">What is “modelled”?</a>
+				<h2 id="about-h">{t('farm.damPage.sourceTitle')}</h2>
+				{#each damSource() as p (p)}<p>{p}</p>{/each}
+				<a class="link" href="{base}/farm/words#farm-modelled">{t('farm.damPage.whatModelled')}</a>
 			</section>
 		{/if}
 	{/snippet}

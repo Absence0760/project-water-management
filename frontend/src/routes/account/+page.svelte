@@ -1,12 +1,15 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
-	// confirmed, and changing the password while signed in. The header's
-	// account menu links here. docs/ui.md § App header and account menu.
+	// confirmed, language and volume unit (WP-2.5), and changing the password
+	// while signed in. The header's account menu links here. docs/ui.md § App
+	// header and account menu, § Language. Its words come from $lib/i18n.
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
+	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -22,23 +25,37 @@
 		nameSaved = false;
 		const name = displayName.trim();
 		if (!name) {
-			nameError = 'Enter a display name.';
+			nameError = t('account.nameEmpty');
 			return;
 		}
 		if (name.length > 100) {
-			nameError = 'Use at most 100 characters.';
+			nameError = t('account.nameTooLong');
 			return;
 		}
 		nameError = null;
 		savingName = true;
 		try {
-			session.user = await api.auth.updateMe(name);
+			session.user = await api.auth.updateMe({ displayName: name });
 			displayName = session.user.displayName;
 			nameSaved = true;
 		} catch (err) {
 			nameError = msg(err);
 		} finally {
 			savingName = false;
+		}
+	}
+
+	// ---- Volume unit (the farm view's) ----
+	let unitSaved = $state(false);
+	let unitError = $state<string | null>(null);
+	async function chooseUnit(volumeUnit: 'm3' | 'ML') {
+		unitSaved = false;
+		unitError = null;
+		try {
+			session.user = await api.auth.updateMe({ volumeUnit });
+			unitSaved = true;
+		} catch (err) {
+			unitError = msg(err);
 		}
 	}
 
@@ -56,7 +73,7 @@
 		e.preventDefault();
 		passwordChanged = false;
 		if (!current) {
-			passwordError = 'Enter your current password.';
+			passwordError = t('account.currentEmpty');
 			passwordErrorField = 'current';
 			return;
 		}
@@ -76,7 +93,7 @@
 			passwordChanged = true;
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 403) {
-				passwordError = 'Your current password is wrong.';
+				passwordError = t('account.currentWrong');
 				passwordErrorField = 'current';
 			} else {
 				// 429 (the sign-in lockout) and anything else: the server's message says what to do.
@@ -89,27 +106,27 @@
 	}
 </script>
 
-<svelte:head><title>Account · Water Management</title></svelte:head>
+<svelte:head><title>{t('common.pageTitle', { page: t('account.title') })}</title></svelte:head>
 
 <main class="page account">
-	<h1>Account</h1>
+	<h1>{t('account.title')}</h1>
 
 	{#if session.user}
 		<section class="panel" aria-labelledby="profile-h">
-			<h2 id="profile-h">Profile</h2>
+			<h2 id="profile-h">{t('account.profile')}</h2>
 			<dl class="facts">
 				<div>
-					<dt>Email</dt>
+					<dt>{t('common.email')}</dt>
 					<dd><EmailText email={session.user.email} /></dd>
 				</div>
 				<div>
-					<dt>Status</dt>
+					<dt>{t('account.status')}</dt>
 					<dd>
 						{#if session.user.emailVerified}
-							<span class="badge badge-owner">Confirmed</span>
+							<span class="badge badge-owner">{t('account.confirmed')}</span>
 						{:else}
-							<span class="badge badge-warn">Not confirmed</span>
-							<span class="muted note">Use the link we emailed you. The banner above can send it again.</span>
+							<span class="badge badge-warn">{t('account.notConfirmed')}</span>
+							<span class="muted note">{t('account.notConfirmedHelp')}</span>
 						{/if}
 					</dd>
 				</div>
@@ -117,7 +134,7 @@
 			<form onsubmit={saveName} novalidate>
 				{#if nameError}<div class="alert alert-error" role="alert" id="name-error">{nameError}</div>{/if}
 				<div class="field">
-					<label for="display-name">Display name</label>
+					<label for="display-name">{t('common.displayName')}</label>
 					<input
 						id="display-name"
 						autocomplete="name"
@@ -127,26 +144,46 @@
 						bind:value={displayName}
 						oninput={() => (nameSaved = false)}
 					/>
-					<span class="hint" id="name-hint">Shown to people you share projects and teams with.</span>
+					<span class="hint" id="name-hint">{t('account.nameHint')}</span>
 				</div>
 				<div class="actions">
 					<button class="btn btn-primary" type="submit" disabled={savingName || !nameChanged}>
-						{savingName ? 'Saving…' : 'Save name'}
+						{savingName ? t('common.saving') : t('account.saveName')}
 					</button>
-					<p class="status" role="status" aria-live="polite">{nameSaved ? 'Name saved.' : ''}</p>
+					<p class="status" role="status" aria-live="polite">{nameSaved ? t('account.nameSaved') : ''}</p>
 				</div>
 			</form>
 		</section>
 
+		<section class="panel" aria-labelledby="prefs-h">
+			<h2 id="prefs-h">{t('account.preferences')}</h2>
+			<div class="pref">
+				<p class="pref-label">{t('common.language')}</p>
+				<LanguageSwitch />
+				<p class="hint">{t('account.languageHint')}</p>
+			</div>
+			<fieldset class="pref">
+				<legend class="pref-label">{t('account.unit')}</legend>
+				{#if unitError}<div class="alert alert-error" role="alert">{unitError}</div>{/if}
+				<label class="radio">
+					<input type="radio" name="volume-unit" value="m3" checked={(session.user.volumeUnit ?? 'm3') === 'm3'} onchange={() => chooseUnit('m3')} />
+					{t('account.unitM3')}
+				</label>
+				<label class="radio">
+					<input type="radio" name="volume-unit" value="ML" checked={session.user.volumeUnit === 'ML'} onchange={() => chooseUnit('ML')} />
+					{t('account.unitML')}
+				</label>
+				<p class="status" role="status" aria-live="polite">{unitSaved ? t('account.unitSaved') : ''}</p>
+			</fieldset>
+		</section>
+
 		<section class="panel" aria-labelledby="password-h">
-			<h2 id="password-h">Password</h2>
-			<p class="muted intro">
-				Changing your password signs you out on every other device. This browser stays signed in.
-			</p>
+			<h2 id="password-h">{t('account.password')}</h2>
+			<p class="muted intro">{t('account.passwordIntro')}</p>
 			<form onsubmit={changePassword} novalidate>
 				{#if passwordError}<div class="alert alert-error" role="alert" id="password-error">{passwordError}</div>{/if}
 				<div class="field">
-					<label for="current-password">Current password</label>
+					<label for="current-password">{t('account.currentPassword')}</label>
 					<PasswordInput
 						id="current-password"
 						autocomplete="current-password"
@@ -157,7 +194,7 @@
 					/>
 				</div>
 				<div class="field">
-					<label for="new-password">New password</label>
+					<label for="new-password">{t('common.newPassword')}</label>
 					<PasswordInput
 						id="new-password"
 						autocomplete="new-password"
@@ -166,10 +203,10 @@
 						aria-describedby={passwordErrorField === 'next' ? 'password-error new-password-hint' : 'new-password-hint'}
 						bind:value={next}
 					/>
-					<span class="hint" id="new-password-hint">At least 8 characters.</span>
+					<span class="hint" id="new-password-hint">{t('account.passwordHint')}</span>
 				</div>
 				<div class="field">
-					<label for="repeat-password">Repeat new password</label>
+					<label for="repeat-password">{t('common.repeatNewPassword')}</label>
 					<PasswordInput
 						id="repeat-password"
 						autocomplete="new-password"
@@ -181,11 +218,9 @@
 				</div>
 				<div class="actions">
 					<button class="btn btn-primary" type="submit" disabled={changing}>
-						{changing ? 'Changing…' : 'Change password'}
+						{changing ? t('account.changing') : t('account.change')}
 					</button>
-					<p class="status" role="status" aria-live="polite">
-						{passwordChanged ? 'Password changed. Every other device has been signed out.' : ''}
-					</p>
+					<p class="status" role="status" aria-live="polite">{passwordChanged ? t('account.changed') : ''}</p>
 				</div>
 			</form>
 		</section>
@@ -238,6 +273,27 @@
 	}
 	.field {
 		max-width: 24rem;
+	}
+	.pref {
+		margin: 0 0 1rem;
+		padding: 0;
+		border: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.35rem;
+	}
+	.pref-label {
+		margin: 0;
+		padding: 0;
+		font-weight: 500;
+		font-size: 0.9rem;
+	}
+	.radio {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 2.75rem;
 	}
 	.actions {
 		display: flex;

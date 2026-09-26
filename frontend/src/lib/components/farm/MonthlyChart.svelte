@@ -5,6 +5,7 @@
 	// sentence sums it up and "Show the numbers" is a real table of all 12
 	// months with their years.
 	import type { FarmProjection } from '@water-management/engine';
+	import { t } from '$lib/i18n/locale.svelte';
 	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyRows, supplySummary } from './chart';
 
 	let { farm }: { farm: FarmProjection } = $props();
@@ -14,11 +15,11 @@
 </script>
 
 <section class="card" aria-labelledby="chart-h">
-	<h2 id="chart-h">Last 12 months, in ML</h2>
+	<h2 id="chart-h">{t('farm.chart.title')}</h2>
 	<p class="visually-hidden">{supplySummary(farm.monthly, farm.dataUntil)}</p>
 	<div class="legend" aria-hidden="true">
-		<span><span class="key need"></span>Needed</span>
-		<span><span class="key got"></span>Received</span>
+		<span><span class="key need"></span>{t('farm.chart.needed')}</span>
+		<span><span class="key got"></span>{t('farm.chart.received')}</span>
 	</div>
 	<div class="plot" bind:clientWidth={width}>
 		{#if chart}
@@ -37,10 +38,10 @@
 	</div>
 	<p class="fine">{rangeCaption(farm.monthly, farm.dataUntil)}</p>
 	<details>
-		<summary>Show the numbers</summary>
+		<summary>{t('farm.chart.showNumbers')}</summary>
 		<table class="numbers">
-			<caption class="visually-hidden">Water you needed and received each month</caption>
-			<thead><tr><th scope="col">Month</th><th scope="col">Needed</th><th scope="col">Received</th></tr></thead>
+			<caption class="visually-hidden">{t('farm.chart.supplyCaption')}</caption>
+			<thead><tr><th scope="col">{t('farm.chart.month')}</th><th scope="col">{t('farm.chart.needed')}</th><th scope="col">{t('farm.chart.received')}</th></tr></thead>
 			<tbody>
 				{#each rows as r (r.label)}
 					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}</td></tr>

@@ -4,17 +4,21 @@
 	// staff, the status strip over a saved copy, and one centred 560 px column
 	// at a 16 px base. The workspace's AppHeader isn't shown on /farm
 	// (routes/+layout.svelte). The card styles every farm page shares live here.
+	// The language switch (EN | AF, WP-2.5) sits in the header, as the design's
+	// board 1 has it.
 	import { tick, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
+	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
 	import { clearAllSaved, keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
-		title = 'My farm',
+		title = null,
 		back = null,
 		preview = null,
 		strip = null,
@@ -22,7 +26,8 @@
 		busy = false,
 		children
 	}: {
-		title?: string;
+		/** The header's title; "My farm" when not given. */
+		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
 		back?: { href: string; label: string } | null;
 		/** Viewer+ previewing a farm: the banner text and the way back to the workspace. */
@@ -43,7 +48,7 @@
 	function toggleKeep() {
 		keep = !keep;
 		setKeepsCopy(keep);
-		note = keep ? 'Your figures will be kept on this phone.' : 'Nothing is kept on this phone now.';
+		note = keep ? t('farm.keepOn') : t('farm.keepOff');
 	}
 
 	async function signOut() {
@@ -88,20 +93,22 @@
 				{back.label}
 			</a>
 		{:else}
-			<span class="brand"><BrandMark size={26} /><span class="title">{title}</span></span>
+			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('farm.myFarm')}</span></span>
 		{/if}
+		<span class="spacer"></span>
+		<LanguageSwitch compact />
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="menu-root" bind:this={menuRoot} onkeydown={onKeydown} onfocusout={onFocusOut}>
 			<button type="button" class="menu-btn" bind:this={trigger} aria-expanded={menuOpen} aria-controls="farm-menu" onclick={() => (menuOpen = !menuOpen)}>
-				Menu
+				{t('farm.menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm">Your farms</a></li>
-				<li><a href="{base}/farm/words">What do these words mean?</a></li>
+				<li><a href="{base}/farm">{t('farm.yourFarms')}</a></li>
+				<li><a href="{base}/farm/words">{t('farm.words')}</a></li>
 				<li>
-					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>Don’t keep a copy on this phone</button>
+					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('farm.noCopy')}</button>
 				</li>
-				<li><button type="button" onclick={signOut}>Sign out</button></li>
+				<li><button type="button" onclick={signOut}>{t('common.signOut')}</button></li>
 			</ul>
 			<p class="visually-hidden" role="status">{note}</p>
 		</div>
@@ -110,7 +117,7 @@
 	{#if preview}
 		<div class="preview" role="note">
 			<span>{preview.text}.</span>
-			<a href={preview.href}>Back to the workspace</a>
+			<a href={preview.href}>{t('farm.backToWorkspace')}</a>
 		</div>
 	{/if}
 
@@ -124,7 +131,7 @@
 				{/if}
 			</svg>
 			<span>{strip.text}</span>
-			{#if onretry}<button type="button" onclick={onretry}>Try again</button>{/if}
+			{#if onretry}<button type="button" onclick={onretry}>{t('common.tryAgain')}</button>{/if}
 		</div>
 	{/if}
 
@@ -152,6 +159,9 @@
 		gap: 8px;
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
+	}
+	.spacer {
+		flex: 1;
 	}
 	.brand {
 		display: flex;

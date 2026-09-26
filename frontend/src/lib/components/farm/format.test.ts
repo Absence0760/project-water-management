@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '$lib/i18n/locale.svelte';
 import {
+	count,
 	daysBetween,
 	fmtDay,
 	fmtDayMonth,
@@ -13,7 +15,6 @@ import {
 	joinAnd,
 	litresPerSecond,
 	monthEnd,
-	plural,
 	roundAbout
 } from './format';
 
@@ -85,10 +86,11 @@ describe('percentages (§8)', () => {
 });
 
 describe('words', () => {
-	it('pluralises', () => {
-		expect(sp(plural(1, 'day'))).toBe('1 day');
-		expect(sp(plural(16, 'day'))).toBe('16 days');
-		expect(sp(plural(0, 'farm'))).toBe('0 farms');
+	it('pluralises through the catalogue (Intl.PluralRules)', () => {
+		expect(sp(count('farm.n.day', 1))).toBe('1 day');
+		expect(sp(count('farm.n.day', 16))).toBe('16 days');
+		expect(sp(count('farm.n.farm', 0))).toBe('0 farms');
+		expect(count('farm.n.week', 2)).toBe('2\u00a0weeks');
 	});
 
 	it('joins with "and"', () => {
@@ -96,6 +98,37 @@ describe('words', () => {
 		expect(joinAnd(['Nov'])).toBe('Nov');
 		expect(joinAnd(['Nov', 'Dec'])).toBe('Nov and Dec');
 		expect(joinAnd(['Oct', 'Nov', 'Dec'])).toBe('Oct, Nov and Dec');
+	});
+});
+
+describe('in Afrikaans (WP-2.5, D8)', () => {
+	afterEach(() => setLocale('en'));
+
+	it('writes a decimal comma and keeps the no-break-space thousands', async () => {
+		await setLocale('af', {});
+		expect(sp(fmtVolume(84_912.4, 'ML'))).toBe('84,9 ML');
+		expect(sp(fmtVolume(1_234_567, 'm3'))).toBe('1 234 567 m³');
+		expect(sp(fmtNumber(-1234.56, 2))).toBe('−1 234,56');
+		expect(litresPerSecond(200)).toBe('2,3\u00a0l/s');
+		expect(sp(fmtPct(0.86))).toBe('86 %');
+	});
+
+	it('keeps English dates while the Afrikaans words are incomplete (no Afrikaans month names in an English sentence)', async () => {
+		await setLocale('af', {});
+		expect(fmtDay('2024-01-10')).toBe('10 Jan 2024');
+	});
+
+	it('writes af-ZA dates once the Afrikaans catalogue is complete', async () => {
+		const { en } = await import('$lib/i18n/messages/en');
+		// A stand-in catalogue (every key filled with its English); only the date locale is under test.
+		await setLocale('af', { ...en });
+		const want = new Intl.DateTimeFormat('af-ZA', { dateStyle: 'medium', timeZone: 'UTC' })
+			.formatToParts(new Date(Date.UTC(2024, 0, 10)))
+			.map((p) => (p.type === 'day' ? String(Number(p.value)) : p.value))
+			.join('');
+		expect(fmtDay('2024-01-10')).toBe(want);
+		// The day is written without a leading zero and the year is kept, whatever the ICU data says.
+		expect(fmtDay('2024-01-01')).toMatch(/^1\D.*2024$/);
 	});
 });
 

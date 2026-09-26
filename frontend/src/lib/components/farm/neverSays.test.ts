@@ -31,9 +31,9 @@ function everything(v: FarmView): string[] {
 		cards.compareCard(f),
 		cards.positionLine(v),
 		cards.outletLine(v),
-		cards.WHO_CAN_SEE,
-		cards.PRIVACY,
-		cards.DISCLAIMER,
+		cards.whoCanSee(),
+		cards.privacy(),
+		cards.disclaimer(),
 		cards.farmSummaryLine(f),
 		why.whyTitle(f),
 		why.whyIntro(f),
@@ -42,7 +42,7 @@ function everything(v: FarmView): string[] {
 		why.step3(f),
 		why.wuaDecided(v),
 		dam.damPage(f, 'ML'),
-		dam.DAM_SOURCE,
+		dam.damSource(),
 		chart.supplySummary(f.monthly, f.dataUntil),
 		chart.damSummary(f.monthly, f.dataUntil)
 	]);

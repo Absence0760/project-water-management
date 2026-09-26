@@ -2,14 +2,23 @@
 	// "What do these words mean?" for farmers (docs/design/farmer-view.md §5.1):
 	// the glossary's farmer entries ($lib/help/content, category 'farmer') in the
 	// farm pages' frame, each with an anchor the pages link to. The same entries
-	// appear in the workspace's /help glossary.
+	// appear in the workspace's /help glossary. In Afrikaans an entry shows its
+	// reviewed translation ($lib/help/content.af) when it has one, else the
+	// English, marked with its own `lang` (WP-2.5).
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
 	import { HELP } from '$lib/help/content';
+	import { HELP_AF } from '$lib/help/content.af';
+	import { i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
 
-	const entries = HELP.filter((e) => e.category === 'farmer');
+	const entries = $derived(
+		HELP.filter((e) => e.category === 'farmer').map((e) => {
+			const af = i18n.locale === 'af' ? HELP_AF[e.id] : undefined;
+			return af ? { id: e.id, term: af.term, short: af.short, long: af.long, lang: 'af' } : { id: e.id, term: e.term, short: e.short, long: e.long, lang: 'en' };
+		})
+	);
 	const paragraphs = (s: string) => s.split(/\n{2,}/);
 
 	// The SPA renders after navigation, so jump to #id once the list exists.
@@ -20,21 +29,15 @@
 	});
 </script>
 
-<svelte:head><title>What do these words mean? · My farm</title></svelte:head>
+<svelte:head><title>{t('farm.pageTitle', { page: t('farm.words') })}</title></svelte:head>
 
-<FarmShell back={{ href: `${base}/farm`, label: 'My farm' }}>
-	<h1>What do these words mean?</h1>
+<FarmShell back={{ href: `${base}/farm`, label: t('farm.myFarm') }}>
+	<h1>{t('farm.words')}</h1>
 	{#each entries as e (e.id)}
-		<section class="card" id={e.id} aria-labelledby="{e.id}-h">
+		<section class="card" id={e.id} aria-labelledby="{e.id}-h" lang={e.lang !== wordsLang() ? e.lang : undefined}>
 			<h2 id="{e.id}-h">{e.term}</h2>
 			<p><strong>{e.short}</strong></p>
 			{#each paragraphs(e.long) as para, i (i)}<p>{para}</p>{/each}
 		</section>
 	{/each}
 </FarmShell>
-
-<style>
-	section {
-		scroll-margin-top: 72px;
-	}
-</style>

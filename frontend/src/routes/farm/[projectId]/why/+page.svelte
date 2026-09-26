@@ -9,11 +9,12 @@
 	import { localIsoDate } from '$lib/format/number';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
-	import Rich from '$lib/components/farm/Rich.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
 	import { datesLine } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
 	import { step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from '$lib/components/farm/why';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
@@ -22,9 +23,9 @@
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>{farm.view ? whyTitle(farm.view.farm) : 'Why?'} · My farm</title></svelte:head>
+<svelte:head><title>{t('farm.pageTitle', { page: farm.view ? whyTitle(farm.view.farm) : t('farm.why.pageTitle') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: 'My farm' }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('farm.myFarm') }}>
 	{#snippet children(view)}
 		{@const s1 = step1(view.farm)}
 		{@const s2 = step2(view.farm)}
@@ -36,7 +37,7 @@
 		</div>
 
 		<section class="card" aria-labelledby="s1-h">
-			<h2 id="s1-h">1. Was water shared fairly?</h2>
+			<h2 id="s1-h">{t('farm.why.step1')}</h2>
 			{#if s1.shown}
 				<p><Rich text={s1.catchment} /></p>
 				<div class="share" aria-hidden="true">
@@ -52,7 +53,7 @@
 		</section>
 
 		<section class="card" aria-labelledby="s2-h">
-			<h2 id="s2-h">2. Did the river keep flowing?</h2>
+			<h2 id="s2-h">{t('farm.why.step2')}</h2>
 			<p><Rich text={s2.intro} /></p>
 			<p><Rich text={s2.sites} />{#if s2.reason}{' '}{s2.reason}{/if}</p>
 			{#if s2.rule}<p>{s2.rule}</p>{/if}
@@ -91,17 +92,17 @@
 		{/if}
 
 		<section class="card" aria-labelledby="s4-h">
-			<h2 id="s4-h">What the WUA decided</h2>
+			<h2 id="s4-h">{t('farm.why.decidedTitle')}</h2>
 			<p><Rich text={wuaDecided(view)} /></p>
-			<a class="link" href="{main}#notice">Read the notice</a>
+			<a class="link" href="{main}#notice">{t('farm.why.readNotice')}</a>
 		</section>
 
 		<section class="card" aria-labelledby="s5-h">
-			<h2 id="s5-h">What this is not</h2>
+			<h2 id="s5-h">{t('farm.why.notTitle')}</h2>
 			<ul class="not">
 				{#each whatThisIsNot(view.farm) as line (line)}<li>{line}</li>{/each}
 			</ul>
-			<a class="link" href="{base}/farm/words#farm-reserve">What is the river’s reserve?</a>
+			<a class="link" href="{base}/farm/words#farm-reserve">{t('farm.why.whatReserve')}</a>
 		</section>
 	{/snippet}
 </FarmPage>

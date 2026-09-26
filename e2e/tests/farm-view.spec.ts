@@ -76,11 +76,16 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(who).toContainText('Demo Analyst · WUA, manages who has access');
 	await expect(who).not.toContainText('@example.com');
 
-	// The unit switch rewrites the volumes and is remembered on the phone.
+	// The unit switch rewrites the volumes and is saved to the account (WP-2.5), so it survives a reload.
 	await supply.getByRole('button', { name: 'ML' }).click();
 	await expect(supply).toContainText(/\d[\d.]*\sML\sof\s[\d.]+\sML\ssince 1 Oct/);
+	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('ML');
 	await page.reload();
-	await expect(page.getByRole('region', { name: 'Water you received this season' }).getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
+	const supplyAgain = page.getByRole('region', { name: 'Water you received this season' });
+	await expect(supplyAgain.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
+	// Back to m³, the seeded farmer's default, for the other specs.
+	await supplyAgain.getByRole('button', { name: 'm³' }).click();
+	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
 
 	// Why? and the dam page, and back.
 	await page.getByRole('link', { name: /^Why .*What can I do\?$/ }).click();

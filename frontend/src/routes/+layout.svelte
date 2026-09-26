@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -9,6 +9,7 @@
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import VerifyEmailBanner from '$lib/components/auth-extras/VerifyEmailBanner.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
+	import { readStoredLocale, resolveLocale, setLocale, wordsLang } from '$lib/i18n/locale.svelte';
 
 	import '../app.css';
 
@@ -53,6 +54,23 @@
 	// The farmer view (/farm/…) has its own header and Menu (FarmShell): a farmer
 	// has no projects, teams or workspace to navigate to.
 	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
+
+	// Language (WP-2.5, docs/ui.md § Language): the account's choice when
+	// signed in, else this device's, else the browser's. Re-resolved when the
+	// user signs in or out, or changes it (the switch updates session.user).
+	const accountLocale = $derived(session.user?.locale ?? null);
+	$effect(() => {
+		const chosen = accountLocale;
+		if (!session.checked) return;
+		untrack(() => setLocale(resolveLocale(chosen, readStoredLocale())));
+	});
+	// <html lang> names the language the page's words are in: only the
+	// translated surfaces (sign-in pages, the farm view, the account page)
+	// follow the chosen language; the modeller workspace and /share are English.
+	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account)(\/|$)/.test(page.url.pathname.slice(base.length)));
+	$effect(() => {
+		document.documentElement.lang = translated ? wordsLang() : 'en';
+	});
 </script>
 
 {#if !authScreen}
