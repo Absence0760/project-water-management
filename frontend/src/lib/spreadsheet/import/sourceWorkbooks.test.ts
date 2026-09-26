@@ -4,8 +4,9 @@
 // it runs scripts/wbt-import/extract_project.py into a temp directory outside
 // the repo and asserts the TypeScript importer gives the same project.json
 // and notes, and that the streaming reader reads every cell of the sheets it
-// parses as the SheetJS reader did (./sheetjsReference.ts; the failure names a
-// cell address, never a value). It skips when the workbooks or Python with openpyxl are absent,
+// parses as the SheetJS reader did, apart from text it decodes as openpyxl
+// does (./sheetjsReference.ts explainedByDecoding; the failure names a cell
+// address, never a value). It skips when the workbooks or Python with openpyxl are absent,
 // so it never runs in CI. Client data stays out of the repo: nothing is
 // written under it, and tests are named by position, not by file name.
 //
@@ -127,8 +128,9 @@ describe.skipIf(!available)('parity with extract_project.py on the source workbo
 		it.concurrent(`${label}: the streaming reader reads every cell as SheetJS did`, { timeout: 180_000 }, async ({ expect }) => {
 			const bytes = new Uint8Array(readFileSync(path));
 			const reference = await readWorkbookWithSheetJS(bytes);
-			// The difference names a sheet and cell address only, never a value.
-			expect(readerDifference(reference.source, await readWorkbook(bytes))).toBeNull();
+			// The difference names a sheet and cell address only, never a value. Text decoded as
+			// openpyxl does, where SheetJS decoded it differently, is the one allowed difference (issue #22).
+			expect(readerDifference(reference.source, await readWorkbook(bytes), { allowDecodingDifferences: true })).toBeNull();
 		});
 		for (const [variant, args, opts] of variants) {
 			it.concurrent(`${label}, ${variant}`, { timeout: 180_000 }, async ({ expect }) => {

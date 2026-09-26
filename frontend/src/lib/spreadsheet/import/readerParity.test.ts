@@ -4,6 +4,13 @@
 // on hand-written packages full of the cell kinds and XML shapes a real file
 // can hold. The local source-workbook suite runs the same comparison on the
 // client workbooks (./sourceWorkbooks.test.ts).
+//
+// Cell text is decoded as openpyxl decodes it, not as SheetJS did (issue #22):
+// _xHHHH_ escapes, a formula's cached text, CRs written as references, lone
+// literal CRs, references beyond U+FFFF and "x005F_" in shared strings read
+// differently. The strings here avoid those; ./stringDecoding.test.ts pins
+// each one to openpyxl's committed output and lists exactly which cells differ
+// from SheetJS.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { XlDateTime, XlDuration } from './cells';
@@ -25,9 +32,9 @@ const SST = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="${MAIN_NS}" count="13" uniqueCount="13">
 <si><t>b022</t></si>
 <si><t xml:space="preserve">  two  spaces </t></si>
-<si><t>a &amp; b &lt;c&gt; &quot;q&quot; &apos;s&apos; &#65;&#x42; _x0041_ &#128512;</t></si>
-<si><t>line1&#13;&#10;line2
-line3</t></si>
+<si><t>a &amp; b &lt;c&gt; &quot;q&quot; &apos;s&apos; &#65;&#x42; &#233;</t></si>
+<si><t>line1&#10;line2\r\nline3
+line4</t></si>
 <si><r><rPr><b/><sz val="11"/></rPr><t>Bold</t></r><r><t xml:space="preserve"> and plain</t></r></si>
 <si><r><t>Ru</t></r><rPh sb="0" eb="1"><t>phonetic</t></rPh><phoneticPr fontId="1"/></si>
 <si><t>Plain</t><rPh sb="0" eb="1"><t>ph</t></rPh></si>
@@ -64,13 +71,13 @@ const EDGE = worksheet(
 		].join('')}</row>`,
 		`<row r="3">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13'].map((v, i) => c(`${'ABCDEFGHIJKL'[i]}3`, ' t="s"', `<v>${v}</v>`)).join('')}</row>`,
 		`<row r="4">${[
-			c('A4', ' t="str"', '<f>X</f><v>a&amp;amp;b_x0041_ &amp;lt;</v>'),
+			c('A4', ' t="str"', '<f>X</f><v>a &gt; b</v>'),
 			c('B4', ' t="str"', '<f>Y</f>'),
 			c('C4', ' t="inlineStr"', '<is><t>inline &amp; text</t></is>'),
 			c('D4', ' t="inlineStr"', '<is><r><t>in</t></r><r><rPr><i/></rPr><t>line</t></r></is>'),
 			c('E4', ' t="inlineStr"', '<is/>'),
 			c('F4', ' t="inlineStr"', ''),
-			c('G4', ' t="str"', '<v>line1&#13;&#10;line2</v>')
+			c('G4', ' t="str"', '<v>line1&#10;line2\r\nline3</v>')
 		].join('')}</row>`,
 		`<row r="5">${[c('A5', ' t="b"', '<v>1</v>'), c('B5', ' t="b"', '<v>0</v>'), c('C5', ' t="b"', '<v>true</v>'), c('D5', ' t="b"', '<v>TRUE</v>'), c('E5', ' t="b"', '')].join('')}</row>`,
 		`<row r="6">${['#N/A', '#DIV/0!', '#REF!', '#NAME?', '#NUM!', '#NULL!', '#VALUE!', '#GETTING_DATA', '#WTF?', '#SPILL!']
@@ -143,7 +150,9 @@ describe('streaming reader parity with SheetJS', () => {
 		const { difference, streamed } = await compare(edgePackage());
 		expect(difference).toBeNull();
 		// Spot checks that the comparison covered what it claims to.
-		expect(streamed.cell('Edge', 1, 4)).toBe('a&bA <'); // t="str": decoded twice, as SheetJS did
+		expect(streamed.cell('Edge', 1, 4)).toBe('a > b');
+		expect(streamed.cell('Edge', 7, 4)).toBe('line1\nline2\nline3');
+		expect(streamed.cell('Edge', 3, 3)).toBe('line1\nline2\nline3\nline4');
 		expect(streamed.cell('Edge', 1, 3)).toBe('  two  spaces ');
 		expect(streamed.cell('Edge', 5, 3)).toBe('Ru');
 		expect(streamed.cell('Edge', 12, 3)).toBe('');
