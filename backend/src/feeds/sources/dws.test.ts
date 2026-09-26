@@ -151,6 +151,13 @@ describe('parseDwsDaily: a gap row with only a quality code', () => {
 		expect(r.rejected).toBe(0);
 	});
 
+	it('refuses a page whose format block puts the flow in another unit, or the column to another quantity', () => {
+		for (const unit of ['Daily avg flow rate in megalitres/day 99999.999', 'Daily avg flow volume in cubic metres 99999.999', 'Daily avg water level in metres 99999.999']) {
+			expect(() => parseDwsDaily(recorded([row('20210101', '1.5', '1')], unit))).toThrow(/not a daily mean flow in m³\/s/);
+		}
+		expect(parseDwsDaily(recorded([row('20210101', '1.5', '1')], 'Daily avg flow rate in m3/s')).values).toEqual([1.5]);
+	});
+
 	it('still reads a lone number in the flow column as the flow', () => {
 		const r = parseDwsDaily(page(['DATE       D_AVG_FR  QUAL', row('20210101', '12', ''), row('20210102', '0.5', '')].join('\n')));
 		expect(r.values).toEqual([12, 0.5]);

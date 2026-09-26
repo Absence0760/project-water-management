@@ -25,7 +25,8 @@
 //     At most 20 years per request. The site can answer HTTP 200 with a
 //     Kisters "ScriptServer" error page instead of data.
 //
-// Parsed defensively: no <pre>, a different header, or a server error page
+// Parsed defensively: no <pre>, a different header, a format block giving the
+// flow in another unit, or a server error page
 // fails the fetch (FeedFormatError) and writes nothing. A row whose value
 // isn't a non-negative number is a gap (null), counted in the result. A gap
 // row can leave the flow column blank and still carry a quality code
@@ -88,7 +89,8 @@ const MAX_ROWS = 20 * 366 + 10;
  * (an archived page, 2024); the open-source clients call the column D_AVG_FR,
  * so that spelling is accepted too.
  */
-const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
+const M3S = /cubic met(re|er)s?\s*(\/|per)\s*s(ec(ond)?)?\b|\bm(3|³)\s*\/\s*s\b|\bcumecs\b/i;
+const DAILY_HEADER =/^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 
 interface Columns {
 	/** Where the flow column's label ends and the QUAL label ends (exclusive), in the header line. */
@@ -145,6 +147,13 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
 	}
 	const cols = headerColumns(headerLine);
+	// The page states the flow column's unit in its format block ("POS. 10-18 =
+	// Daily avg flow rate in cubic metres/sec"). The feed writes m³/s series, so
+	// a page that says otherwise is refused rather than merged in the wrong unit.
+	const valueSpec = lines.slice(0, h).find((l) => /^\s*POS\.\s*10\s*-\s*18\s*=/i.test(l));
+	if (valueSpec !== undefined && !(/flow rate/i.test(valueSpec) && M3S.test(valueSpec))) {
+		throw new FeedFormatError(`the DWS table’s values are not a daily mean flow in m³/s (${valueSpec.replace(/^\s*POS\.\s*10\s*-\s*18\s*=\s*/i, '').slice(0, 60)})`);
+	}
 	const from = window ? toEpochDay(window.start) : -Infinity;
 	const to = window ? toEpochDay(window.end) : Infinity;
 
