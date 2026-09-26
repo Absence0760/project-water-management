@@ -644,6 +644,31 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 14. **Forecast and live data.** Should forecast rain or logger data be pulled in
     automatically, or will they be uploaded?
 
+### Decision-support outputs (2026-09-26)
+
+From the client's four sketched outputs; research and recommendations in
+[design/planning-outputs.md](./design/planning-outputs.md), build in
+[#53](https://github.com/Absence0760/project-water-management/issues/53).
+
+- **O1. Risk cut-offs.** In the outcome matrix, what share of Reserve months
+  met (or % of days below the EWR) counts as high risk, increasing risk,
+  lower risk? *Planned: project settings with defaults marked pending the
+  hydrologist.*
+- **O2. Year classes.** Split water years by the run's own natural-flow
+  terciles (dry / normal / wet), or by fixed percentile years (25th, median,
+  75th)? *Planned: terciles, quintiles once the record has 25 years.*
+- **O3. Decision and review dates.** On what date does the WUA set the
+  season's irrigation level, and when does it review? *Planned: a project
+  setting, default the start of the irrigation season.*
+- **O4. Restrictions per category.** Should the share-the-pain view cut
+  domestic, industrial and irrigation users by different percentages (as DWS
+  gazettes restrictions), and are the town's uses domestic or irrigation?
+- **O5. Audience.** Is the seasonal outlook for the WUA only, or also for
+  farmers on their phones (so in Afrikaans too)?
+- **O6. Planning share.** The outlook reports the highest demand level that
+  meets the EWR in a set share of past years. What share: 80 %? The app
+  reports the trade-off; the WUA publishes the decision (disclaimer, D10).
+
 ### Data, legal, hosting
 
 15. **Cloud storage and POPIA.** May client data (farm names, dam sizes, crop
