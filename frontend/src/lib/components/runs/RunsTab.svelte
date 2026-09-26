@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -30,6 +30,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { resultGroups } from './sections';
+	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
@@ -203,6 +204,34 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		untrack(() => {
 			if (id && id !== detailFor) loadDetail(id);
 		});
+	});
+
+	// A link to a results panel (#res-curtailment from the portfolio's "farms
+	// short this week"): the panels render only once the run's details are in,
+	// after the browser's own jump, so scroll there then and hold it while the
+	// panels above load (holdAnchor), with focus on the panel's heading so Tab
+	// carries on from there. Once: later jumps (the section menu) find their
+	// panel on the page and are the browser's.
+	let fragmentShown = false;
+	let releaseFragment = () => {};
+	let destroyed = false;
+	$effect(() => {
+		if (!detail || fragmentShown) return;
+		fragmentShown = true;
+		const hash = untrack(() => page.url.hash.slice(1));
+		if (!hash.startsWith('res-')) return;
+		tick().then(() => {
+			const el = destroyed ? null : document.getElementById(hash);
+			if (!el) return;
+			releaseFragment = holdAnchor(el);
+			const heading = el.querySelector<HTMLElement>('h2, h3, h4') ?? el;
+			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+			heading.focus({ preventScroll: true });
+		});
+	});
+	onDestroy(() => {
+		destroyed = true;
+		releaseFragment();
 	});
 
 	// Once the list is known and the URL names no run: the newest run, or for a

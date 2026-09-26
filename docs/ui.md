@@ -482,7 +482,9 @@ Portfolio](./api.md#portfolio)):
   run it again" (dashed outline). Under it, how old the figures are
   ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
 - **Farms short**: "2 of 12 farms short this week" (a link to the Runs tab's
-  Curtailment section of that run) and the count over 30 days; "Unknown
+  Curtailment section of that run, over the last 7 days; the tab scrolls
+  there once the run's results render and moves focus to the table's
+  heading) and the count over 30 days; "Unknown
   until a run is published" without a publication.
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
   recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
