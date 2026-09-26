@@ -452,3 +452,56 @@ export interface PublicationPatch {
 	restriction?: PublicationRestriction;
 	nextExpectedOn?: string | null;
 }
+
+/** Longest share-link label and lifetime (backend share/links.ts, 024_share_links.sql). */
+export const SHARE_LABEL_MAX = 100;
+export const SHARE_DAYS_MAX = 365;
+
+/** A read-only share link as its owner sees it (docs/api.md § Share). Never the token. */
+export interface ShareLink {
+	id: string;
+	label: string;
+	createdAt: string;
+	/** Display names; null once that account is gone. */
+	createdBy: string | null;
+	expiresAt: string;
+	revokedAt: string | null;
+	revokedBy: string | null;
+	/** Bumped at most once an hour when the link is opened. */
+	lastUsedAt: string | null;
+}
+
+/** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
+export interface SharedCatchmentView {
+	runStart: string;
+	dataUntil: string;
+	season: { from: string; to: string; days: number };
+	last30: { from: string; to: string; days: number };
+	runDays: number;
+	farmCount: number;
+	sites: { name: string | null; isOutlet: boolean; daysNotMet: { run: number; season: number; last30: number } }[];
+}
+
+/** POST /share/view (public). */
+export interface ShareView {
+	project: { name: string };
+	publication: {
+		publishedAt: string;
+		publishedBy: string | null;
+		catchmentView: SharedCatchmentView;
+		restriction: PublicationRestriction;
+		nextExpectedOn: string | null;
+	};
+}
+
+/** The catchment series a share link may read (app_share_series). */
+export type ShareSeriesKey = 'natural_flow' | 'simulated_outflow' | 'observed_flow' | 'ewr' | 'ewr_shortfall';
+
+/** POST /share/series (public): monthly means (m³/day) from `monthly.startMonth`, the last 365 days from `recent.startDate`. */
+export interface ShareSeries {
+	key: ShareSeriesKey;
+	label: string;
+	unit: string;
+	monthly: { startMonth: string; values: (number | null)[] };
+	recent: { startDate: string; values: (number | null)[] };
+}

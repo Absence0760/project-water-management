@@ -49,4 +49,11 @@ describe('routeAccess', () => {
 		expect(routeAccess('/reset-password', '', true)).toBe('show');
 		expect(routeAccess('/app/verify-email', '/app', true)).toBe('show');
 	});
+
+	it('opens a share link signed in or out, on its own screen', () => {
+		expect(routeAccess('/share', '', false)).toBe('show');
+		expect(routeAccess('/share', '', true)).toBe('show');
+		expect(isPublicPath('/app/share', '/app')).toBe(true);
+		expect(routeAccess('/shares', '', false)).toBe('login');
+	});
 });

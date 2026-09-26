@@ -94,6 +94,27 @@ describe('createApi', () => {
 		expect(JSON.parse(pinit.body as string)).toEqual({ nextExpectedOn: null });
 	});
 
+	it('lists, makes and withdraws share links, and reads a share by token in the body, never the URL', async () => {
+		const link = { id: 'l1', label: 'Forum', url: 'http://x/share#t=abc' };
+		const list = mockFetch(200, { links: [link] });
+		await expect(createApi('', list).shareLinks.list('p/1')).resolves.toEqual([link]);
+		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/share-links');
+		const post = mockFetch(201, { link });
+		await expect(createApi('', post).shareLinks.create('p1', 'Forum', 30)).resolves.toEqual(link);
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/share-links', 'POST', { label: 'Forum', expiresInDays: 30 }]);
+		const del = mockFetch(204);
+		await expect(createApi('', del).shareLinks.revoke('p1', 'l/1')).resolves.toBeUndefined();
+		expect((del.mock.calls[0] as unknown as [string, RequestInit])[0]).toBe('/projects/p1/share-links/l%2F1');
+		const view = mockFetch(200, { project: { name: 'X' } });
+		await createApi('', view).share.view('tok');
+		const [vurl, vinit] = view.mock.calls[0] as unknown as [string, RequestInit];
+		expect([vurl, vinit.method, JSON.parse(vinit.body as string)]).toEqual(['/share/view', 'POST', { token: 'tok' }]);
+		const series = mockFetch(404, { error: 'not found' });
+		await expect(createApi('', series).share.series('tok', 'ewr')).rejects.toMatchObject({ status: 404 });
+		expect(JSON.parse((series.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ token: 'tok', key: 'ewr' });
+	});
+
 	it('returns undefined for 204', async () => {
 		const api = createApi('', mockFetch(204));
 		await expect(api.projects.remove('p1')).resolves.toBeUndefined();

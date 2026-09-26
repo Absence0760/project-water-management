@@ -150,13 +150,25 @@ record (an imported project only), team and members.
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then
   **Farmers**. Below 900 px it is one column in the order details, import
-  record, team, members, farmers.
+  record, team, members, farmers, share links.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners add an existing, verified account by
   email with a tick box per farm, change a farmer's farms, and remove one.
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this tab: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".
+- **Share links** (WP-2.3 phase 2, `overview/ShareLinksPanel.svelte`, rules
+  in `overview/shareLinks.ts`), owners only, under Farmers: read-only links
+  to the published baseline for people outside the project. *Make link*
+  takes who it's for (up to 100 characters) and how long it works (1 week,
+  30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
+  field with **Copy** (it falls back to selecting the field when the
+  clipboard is refused), because the token isn't kept. The list shows each
+  link's label and state (Live, Expired, Withdrawn), who made it and when,
+  when it ends or who withdrew it, and when it was last opened (to the
+  hour), live links first. **Withdraw** asks first, then the link shows the
+  dead-link state to whoever holds it. With nothing published, a note says
+  a link opens only once a run is published.
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
@@ -1422,6 +1434,39 @@ published.
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.
+
+## Share page (`/share`)
+
+What a read-only share link opens (WP-2.3 phase 2; [api.md §
+Share](./api.md#share), [security.md § Share links](./security.md#share-links)),
+signed in or out, for someone outside the project, on a phone first.
+
+- **The token** is in the fragment (`/share#t=…`). The page reads it once,
+  strips it from the address bar (`replaceState`, as the reset pages strip
+  `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
+  (only the fragment changes) is picked up the same way. The page sets
+  `noindex, nofollow` and `no-referrer`, and has its own header ("Water
+  Management · Shared view"), not the app's; it is a route chunk of its own,
+  loaded only when opened.
+- **Top to bottom:** the catchment's name; "Published by *name* on *date*.
+  Data up to *date*." (and the next expected update); the WUA's notice
+  (the farmer view's `NoticeCard`: warning or danger fill, or "No
+  restriction from the WUA"), in English, or in Afrikaans when the browser
+  prefers it and the WUA wrote one (marked `lang="af"`); **The river's
+  ecological reserve**: the outlet (unnamed, it may be a farm) and each
+  gauge, with a check or warning icon, the last 30 days and the season in
+  words; the **monthly flow chart** (mean flow at the outlet, solid, against
+  the reserve, dashed, over the last 24 months; inline SVG at the rendered
+  width, a summary sentence and a table behind "Show the numbers"), only
+  when the series come back, otherwise a line saying that with so few farms
+  the flows could reveal a farm's use; and **About this page** with the
+  farm count and the model disclaimer.
+- **States:** loading; a dead link ("This link has expired or was
+  withdrawn. Ask whoever sent it for a new one.") for every `404`; a link
+  without its token ("This page needs the whole link…"); and an error with
+  Try again. Every string is in `lib/components/share/share.ts`, the chart
+  in `share/chart.ts`, the loading rules in `share/load.ts`, all
+  unit-tested.
 
 ## Viewers
 
