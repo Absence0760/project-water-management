@@ -1031,9 +1031,12 @@ running. SheetJS loads only then, in a worker, never with the page.
   Each problem is also shown next to its field.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
-coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
-sideways scrolling: each month cell is at least 78px, room for a six-digit
-value such as 250000.
+coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
+workspace sidebar without sideways scrolling: a month cell is as narrow as a
+six-digit value such as 250000 allows (sized in the input's own digits, no
+spin buttons, as in the Network table; arrow keys still step), spare width is
+shared out between the months and the row label, and the label wraps before
+the row scrolls.
 At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
 selects and period lists shrink to the screen, and only the section menu and
 the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
