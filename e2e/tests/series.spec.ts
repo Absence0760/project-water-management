@@ -234,6 +234,31 @@ test('a flow uploaded in l/s is converted to m³/s, the unit the model reads', a
 	expect(values[0]).toBeCloseTo(first / 1000, 9);
 });
 
+test('merging an l/s file into an m³/s series compares like with like and keeps the days the file leaves blank', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series l/s merge');
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: [1.2, 0.8, 0.6] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
+	await form.getByLabel('Unit').selectOption('l/s');
+	// 10-01 repeats the stored 1.2 m³/s, 10-02 is blank, 10-03 is corrected, 10-04 is new.
+	await form
+		.getByLabel('CSV file')
+		.setInputFiles({ name: 'flow.csv', mimeType: 'text/csv', buffer: Buffer.from('date,value\n2021-10-01,1200\n2021-10-02,\n2021-10-03,650\n2021-10-04,500\n') });
+	const summary = form.getByRole('definition');
+	await expect(summary.nth(4)).toHaveText('1'); // new days
+	await expect(summary.nth(5)).toHaveText('1'); // changed
+	await expect(summary.nth(6)).toHaveText('1'); // unchanged
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(form.getByRole('status')).toContainText('1 new day, 1 changed');
+
+	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
+	const values = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()).values as number[];
+	// 10-02 keeps its stored 0.8 m³/s (it came back 0.0008 when the merge was sent in l/s).
+	expect(values.map((v) => Math.round(v * 1e6) / 1e6)).toEqual([1.2, 0.8, 0.65, 0.5]);
+});
+
 // Issue #40 part c: a CHIRPS series says which product and version it holds.
 test('a CHIRPS upload is asked its product and version, and the series row shows and changes it', async ({ page, owner }) => {
 	void owner;

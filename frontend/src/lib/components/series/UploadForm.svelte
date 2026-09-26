@@ -15,7 +15,7 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { mergePreview, type Daily } from './coverage';
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
-	import type { UploadResult } from './upload';
+	import { inStoredUnit, type UploadResult } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { valuesCache } from './valuesCache';
 
@@ -94,9 +94,11 @@
 	);
 	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
+	// The file in the stored unit: what a merge compares, fills and sends.
+	const stored = $derived(parsed ? inStoredUnit(kind, unit.trim(), parsed.values) : null);
 	const preview = $derived(
-		parsed && target && mode === 'merge' && targetValues
-			? mergePreview(targetValues, { startDate: parsed.startDate, values: parsed.values })
+		parsed && stored && target && mode === 'merge' && targetValues
+			? mergePreview(targetValues, { startDate: parsed.startDate, values: stored.values })
 			: null
 	);
 	// Series are stored in their kind's canonical unit (m³/s, mm); the server converts
@@ -186,7 +188,7 @@
 
 	async function upload(e: SubmitEvent) {
 		e.preventDefault();
-		if (!parsed) return;
+		if (!parsed || !stored) return;
 		uploading = true;
 		error = null;
 		const label = name.trim() || kindLabel(kind);
@@ -195,12 +197,13 @@
 			if (target && mode === 'merge') {
 				// Send the file's span with its blank days filled from what is
 				// stored, so a partial file adds and corrects but never erases.
-				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: parsed.values });
+				// Both are in the stored unit, so the server scales nothing.
+				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: stored.values });
 				const off = toEpochDay(parsed.startDate) - toEpochDay(p.result.startDate);
 				const meta = await api.request<SeriesWriteResult>('POST', `/projects/${encodeURIComponent(projectId)}/series/merge`, {
 					kind,
 					name: name.trim(),
-					unit: unit.trim(),
+					unit: stored.unit,
 					startDate: parsed.startDate,
 					values: p.result.values.slice(off, off + parsed.values.length),
 					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.

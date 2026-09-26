@@ -173,7 +173,11 @@ shorter than the cap looks as before.
   **Unit** is a list of the units the kind accepts (`unitOptions`: m³/s, l/s,
   m³/day, m³/h, ML/day for flow; mm, cm, in for rain), the kind's own first;
   any other says "Values in l/s are converted to m³/s when saved", and the
-  server stores the converted values (api.md § Units).
+  server stores the converted values (api.md § Units). A merge converts the
+  file to the stored unit first (`series/upload.ts` `inStoredUnit`), then
+  compares, fills the file's blank days from stored values, and sends it in
+  that unit. So an l/s file that repeats stored days counts them as unchanged,
+  and a blank day keeps its stored value unscaled.
 - After an upload a banner offers **Re-run model**. Every tab notes new data
   since the last run: a rainfall series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
