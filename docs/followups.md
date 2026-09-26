@@ -1769,7 +1769,6 @@ role and not before it.
 - [x] Dependabot's `pip` entry watched the repo root, which has no Python
       manifest; since 2026-09-25 it watches `brand/` and `scripts/wbt-import/`
       (the openpyxl pin the importer CI job installs).
-<<<<<<< HEAD
 - [x] **`help.spec.ts:289` flake under heavy load** (fixed 2026-09-26): "an
       old /help#term link goes on to the glossary entry" once found the
       article scrolled out of view at 10 workers. The glossary scrolled to
@@ -1782,22 +1781,6 @@ role and not before it.
       /farm/words had the same one-shot scroll and uses it too. Tests:
       `anchor.test.ts`; help.spec.ts's hash tests passed 45/45 at
       `--repeat-each=15 --workers=8`.
-- [ ] **`POST /projects/:id/runs` holds a DB connection for the whole engine
-      run** (found by #41): the engine runs inside the request's
-      transaction, so a long run pins a pooled connection and its slot on the
-      one Node thread. Durable fix: load inputs, run the engine outside the
-      transaction, then write results in a second one (session B's
-      `runs/`). Trigger: connection waits in production, or a Lambda serving
-      concurrent requests.
-=======
-- [ ] **`help.spec.ts:289` flake under heavy load** ("an old /help#term
-      link goes on to the glossary entry"): seen once at 10 workers on a
-      loaded machine after #41's fixes; the article existed but was scrolled
-      out of view. Likely a client-side scroll race after the redirect (the
-      heading font landing late and shifting layout). Durable fix: scroll
-      only once the target has rendered and fonts are ready
-      (`document.fonts.ready`), or re-scroll on the article's resize, never a
-      longer wait. Trigger: it recurs, in CI or locally.
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
@@ -1815,7 +1798,6 @@ role and not before it.
       concurrent requests per process (it doesn't on Lambda).
       [architecture.md § A model run](./architecture.md#a-model-run),
       `runs/connection.db.test.ts`.
->>>>>>> origin/main
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
