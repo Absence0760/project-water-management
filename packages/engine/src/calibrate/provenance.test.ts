@@ -191,7 +191,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -206,7 +206,7 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: true, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: true, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
@@ -256,5 +256,29 @@ describe('fit record', () => {
 		const old = { ...rec, forcing: undefined };
 		const zeros = mono([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 		expect(fitRecordStatus({ panCoefficient: zeros, apanMm: zeros }, old).forcingChanged).toBe(false);
+	});
+
+	it('flags a fit made on another CHIRPS version (issue #40 part c), only when both sides know the version', () => {
+		const s = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const };
+		const v2 = { product: 'CHIRPS', version: '2.0' };
+		const v3 = { product: 'CHIRPS', version: '3.0' };
+		const rec = fitRecordFromReport(report(), { ...ctx, chirpsSource: v2 });
+		expect(rec.forcing!.chirpsSource).toEqual(v2);
+		expect(fitRecordStatus(s, rec, { chirpsSource: { ...v2 } })).toMatchObject({ forcingChanged: false, chirpsSourceChanged: false });
+		const changed = fitRecordStatus(s, rec, { chirpsSource: v3 });
+		expect(changed).toMatchObject({ forcingChanged: true, chirpsSourceChanged: true });
+		const caveats = fitRecordCaveats(changed);
+		expect(caveats.filter((c) => /CHIRPS series holds another product version than the fit ran on/.test(c))).toHaveLength(1);
+		// Said once, not again as the generic forcing caveat.
+		expect(caveats.some((c) => /pan coefficient, A-pan evaporation/.test(c))).toBe(false);
+		// Unrecorded is a version of its own: a fit on v2.0 against a series whose version is no longer recorded is flagged.
+		expect(fitRecordStatus(s, rec, { chirpsSource: null }).chirpsSourceChanged).toBe(true);
+		// The caller doesn't know the version now, or the record predates it: nothing to compare.
+		expect(fitRecordStatus(s, rec).chirpsSourceChanged).toBe(false);
+		const before = fitRecordFromReport(report(), ctx);
+		expect(before.forcing).not.toHaveProperty('chirpsSource');
+		expect(fitRecordStatus(s, before, { chirpsSource: v3 })).toMatchObject({ forcingChanged: false, chirpsSourceChanged: false });
+		// A fit on a series with no recorded version records null.
+		expect(fitRecordFromReport(report(), { ...ctx, chirpsSource: null }).forcing!.chirpsSource).toBeNull();
 	});
 });

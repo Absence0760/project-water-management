@@ -10,6 +10,7 @@ import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
+import type { SeriesProvenance } from './seriesProvenance';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
@@ -688,6 +689,13 @@ export interface LandCoverPatch {
 export interface DailySeries {
 	startDate: string;
 	values: (number | null)[];
+	/**
+	 * The product and version the values come from (time_series.product /
+	 * product_version, 031_series_provenance.sql); null = not recorded, absent
+	 * = not known here. The model never reads it: a run records it in its input
+	 * snapshot, for the run comparison and the fit record's forcing.
+	 */
+	provenance?: SeriesProvenance | null;
 }
 
 export interface SeriesMeta {
