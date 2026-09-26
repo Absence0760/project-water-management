@@ -251,15 +251,9 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.lead {
 		max-width: 80ch;
 		margin: 0 0 0.75rem;
-	}
-	.u {
-		font-weight: 400;
 	}
 	.start {
 		display: flex;

@@ -7,7 +7,8 @@
 // sweep's stored series, re-counted here by hand from the API (days below
 // the EWR per class of year, the classes from the base run's natural flow),
 // so the whole pipeline is pinned without copying model numbers into the
-// spec. A viewer reads the same matrix, with no run button.
+// spec. The project's own cut-offs then recolour the same sweep, and the
+// pending badge goes. A viewer reads the same matrix, with no run button.
 //
 // Synthetic catchment (support/api.ts sampleModel): nine complete water
 // years of made-up rain, each year scaled differently so the years differ.
@@ -52,7 +53,7 @@ type Series = { key: string; nodeId: string | null; values: (number | null)[] };
 type SweepBody = { sweep: { id: string; status: string; members: { name: string; status: string; startDate: string; series: Series[] }[] } };
 
 /** What the matrix should say, counted from the API: classes by the base run's annual natural flow, days below the EWR per member. */
-function expectedMatrix(natural: (number | null)[], members: SweepBody['sweep']['members']) {
+function expectedMatrix(natural: (number | null)[], members: SweepBody['sweep']['members'], cutoffs = { lower: 0.05, increasing: 0.2 }) {
 	const totals = new Map<number, number>();
 	natural.forEach((v, t) => totals.set(waterYearOf(t), (totals.get(waterYearOf(t)) ?? 0) + (v ?? Number.NaN)));
 	const ranked = [...totals.entries()].sort((a, b) => a[1] - b[1]).map(([wy]) => wy);
@@ -76,7 +77,7 @@ function expectedMatrix(natural: (number | null)[], members: SweepBody['sweep'][
 			const share = ys.reduce((s, y) => s + y.below, 0) / ys.reduce((s, y) => s + y.days, 0);
 			const met = ys.filter((y) => y.below === 0).length;
 			// The defaults, pending the hydrologist: ≤ 5 % lower risk, ≤ 20 % increasing, else high.
-			const risk = share <= 0.05 ? 'lower' : share <= 0.2 ? 'increasing' : 'high';
+			const risk = share <= cutoffs.lower ? 'lower' : share <= cutoffs.increasing ? 'increasing' : 'high';
 			const label = { lower: 'Lower risk', increasing: 'Increasing risk', high: 'High risk' }[risk];
 			return { risk, text: `${label} EWR met on every day in ${met} of 3 ${c.label.toLowerCase()} years (below it on ${Math.round(share * 100)} % of days).` };
 		});
@@ -162,6 +163,28 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await expect(panel.getByText(/recommend/i)).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="outcome-matrix"]' });
 
+	// The project's own cut-offs for days below the EWR: the same sweep re-read, no new run, and no pending badge.
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const days = section.getByRole('group', { name: /^Days below the pragmatic EWR/ });
+	await days.getByRole('checkbox', { name: 'Use the default cut-offs (5 % and 20 %)' }).uncheck();
+	await expect(section.getByTestId('cutoffs-pending-daysBelowEwr')).toHaveCount(0);
+	await section.getByLabel('Lower risk up to (%)').fill('15');
+	await section.getByLabel('Increasing risk up to (%)').fill('40');
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByText('Settings saved.')).toBeVisible();
+	const custom = await getJson<{ project: { settings: { outcomes: unknown } } }>(page.request, `/projects/${project.id}`);
+	expect(custom.project.settings.outcomes).toEqual({ yearClassMethod: 'terciles', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: { lower: 0.15, increasing: 0.4 } } });
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await expect(panel).toHaveAttribute('data-state', 'complete');
+	await expect(panel.getByTestId('cutoffs-pending')).toHaveCount(0);
+	const recoloured = expectedMatrix(natural.values, sweep.members, { lower: 0.15, increasing: 0.4 });
+	for (const [i, row] of recoloured.rows.entries()) {
+		const cells = table.locator('tbody tr').nth(i).locator('td');
+		await expect(cells).toHaveText(row.map((c) => c.text));
+		for (const [j, c] of row.entries()) await expect(cells.nth(j)).toHaveAttribute('data-risk', c.risk);
+	}
+	await expect(panel.getByText(/^Lower risk: below the EWR on at most 15 % of days\. Increasing risk: at most 40 %\./)).toBeVisible();
+
 	// A viewer: the same matrix, no run button.
 	const viewer = await signIn('Outcome viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
@@ -169,6 +192,6 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	const theirs = viewer.page.getByTestId('outcome-matrix');
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
 	await expect(theirs.getByTestId('outcome-table').locator('tbody th')).toHaveText(['100 %', '85 %', '70 %']);
-	await expect(theirs.getByTestId('outcome-table').locator('tbody tr').first().locator('td')).toHaveText(want.rows[0]!.map((c) => c.text));
+	await expect(theirs.getByTestId('outcome-table').locator('tbody tr').first().locator('td')).toHaveText(recoloured.rows[0]!.map((c) => c.text));
 	await expect(theirs.getByRole('button', { name: /demand sweep/ })).toHaveCount(0);
 });

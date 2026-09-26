@@ -94,12 +94,6 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-	}
 	.metric {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
