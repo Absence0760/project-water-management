@@ -44,6 +44,10 @@ import type {
 	ScenarioCheck,
 	ScenarioStatus,
 	ScenarioWithCheck,
+	ShareLink,
+	ShareSeries,
+	ShareSeriesKey,
+	ShareView,
 	Team,
 	TeamMember,
 	TeamRole,
@@ -340,6 +344,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Change the current publication's notice, note or next date without re-publishing (editor). */
 			update: (id: string, pubId: string, body: PublicationPatch) =>
 				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication)
+		},
+		shareLinks: {
+			/** The project's share links, newest first, revoked and expired ones included (owner). */
+			list: (id: string) => request<{ links: ShareLink[] }>('GET', `${p(id)}/share-links`).then((r) => r.links),
+			/** Make a link (owner). `url` carries the token: this is the only time it is shown. */
+			create: (id: string, label: string, expiresInDays: number) =>
+				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
+			/** Withdraw a link (owner): it stops working at once. */
+			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
+		},
+		share: {
+			/** What a share link shows, signed out; 404 for any dead link. */
+			view: (token: string) => request<ShareView>('POST', '/share/view', { token }),
+			/** One catchment series of the published run; 404 when there is none to show (including a small catchment). */
+			series: (token: string, key: ShareSeriesKey) => request<ShareSeries>('POST', '/share/series', { token, key })
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */

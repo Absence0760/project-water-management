@@ -17,6 +17,7 @@
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
+	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 
 	let {
@@ -251,6 +252,8 @@
 		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
 		<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
 		<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
+		<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
+		{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
 	</div>
 </div>
 

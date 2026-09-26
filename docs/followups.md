@@ -1385,12 +1385,20 @@ role and not before it.
   `farmProjection` / `catchmentView` in the engine, the publication routes,
   the farm-view API routes of WP-2.6 (index, view, CSV), publishing from the
   Runs tab, the seeded publications. Left open:
-  - [ ] **Share links** (WP-2.3 phase 2): `share_link`, `app_share_view` /
-        `app_share_series`, `POST /share/view` and `/share/series`, the
-        `/share` page and the owner's Share links panel, with their tests
-        (revoked or expired tokens answer nothing, farm keys refused).
-        Trigger: the WUA asks to send the catchment result to someone outside
-        the project, and before the Step 2 release (WP-2.16) at the latest.
+  - [x] **Share links** (WP-2.3 phase 2, 2026-09-25): `025_share_links`
+        (`share_link`, `app_share_view`, `app_share_series`), the owner
+        routes and the public `POST /share/view` / `/share/series`, the
+        `/share` page and the Overview's Share links panel
+        ([api.md § Share](./api.md#share),
+        [security.md § Share links](./security.md#share-links)). The flow
+        series answer only at `FARMER_K` farm holders (design §10.3), which
+        is stricter than the roadmap's D2 note "always show outflow".
+  - [ ] **Audit events for share links** (`share_link.created` /
+        `share_link.revoked`): today the row records `created_by` /
+        `created_at` and `revoked_by` / `revoked_at`, and a link is never
+        deleted so that record stays. Needs WP-2.4's `audit_event` (issue
+        #28); add the two writes to `backend/src/share/routes.ts` in the
+        same change, and then decide whether revoked links may be purged.
   - [ ] **Audit events** for publishing and for notice changes: today only
         `published_by` and `updated_at` / `updated_by` record them. Needs
         WP-2.4's `audit_event`; add the writes in the same change.

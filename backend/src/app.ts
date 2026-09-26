@@ -23,6 +23,7 @@ import { runRoutes } from './runs/routes.js';
 import { scenarioRoutes } from './scenarios/routes.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
 import { seriesRoutes } from './series/routes.js';
+import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
 import { teamRoutes } from './teams/routes.js';
 
 export function createApp() {
@@ -101,7 +102,11 @@ export function createApp() {
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);
 	projects.route('/', publicationRoutes);
+	projects.route('/', shareLinkRoutes);
 	app.route('/projects', projects);
+
+	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.
+	app.route('/share', sharePublicRoutes);
 
 	const teams = new Hono<AuthEnv>();
 	teams.use('*', requireUser);
