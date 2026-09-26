@@ -36,6 +36,27 @@ describe('modelRuleIssues', () => {
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['bhDam:d', 'bhEmergency:e', 'bhGauge:x', 'bhNode:y', 'dup:borehole id:ok']);
 	});
 
+	it('supply rules (WP-3.8): a farm’s; trigger needs a dam; run of river has none; stop ≥ trigger', () => {
+		const n = (id: string, kind: string, damCapacityM3: number, over: object = {}) => ({ id, name: id, kind, damCapacityM3, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
+		const m = {
+			nodes: [
+				n('g', 'gauge', 0),
+				n('ok1', 'farm', 100, { supplyRule: 'trigger', supplyTriggerPct: 0.3, supplyStopPct: 0.3 }),
+				n('ok2', 'farm', 0, { supplyRule: 'runOfRiver', pumpCapacityM3Day: 10 }),
+				n('ok3', 'farm', 100, { supplyRule: 'riverFirst', pumpCapacityM3Day: null }),
+				n('ok4', 'user', 0, { supplyRule: 'damFirst', pumpCapacityM3Day: null }),
+				n('u', 'user', 0, { pumpCapacityM3Day: 5 }),
+				n('t', 'farm', 0, { supplyRule: 'trigger' }),
+				n('r', 'farm', 100, { supplyRule: 'runOfRiver' }),
+				n('s', 'farm', 100, { supplyRule: 'trigger', supplyTriggerPct: 0.5, supplyStopPct: 0.4 })
+			],
+			crops: [],
+			cropAreas: [],
+			transfers: []
+		} as unknown as ProjectModel;
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
+	});
+
 	it('a scenario applied to a valid model leaves a model the backend would save', () => {
 		let checked = 0;
 		for (let seed = 1; checked < CASES && seed < CASES * 4; seed++) {

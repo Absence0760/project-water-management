@@ -24,7 +24,9 @@ const MODEL_JSON = `json_build_object(
 			borehole_trigger_pct AS "boreholeTriggerPct", stream_depletion_frac AS "streamDepletionFrac",
 			stream_depletion_lag_days AS "streamDepletionLagDays",
 			dam_curve AS "damCurve", dam_release_rule AS "damReleaseRule", dam_release_m3_day AS "damReleaseM3Day",
-			dam_outlet_capacity_m3_day AS "damOutletCapacityM3Day", dam_seepage_return_pct AS "damSeepageReturnPct"
+			dam_outlet_capacity_m3_day AS "damOutletCapacityM3Day", dam_seepage_return_pct AS "damSeepageReturnPct",
+			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
+			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct"
 		FROM node WHERE project_id = $1) r), '[]'),
 	'crops', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name) FROM (
 		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor" FROM crop WHERE project_id = $1) r), '[]'),
@@ -117,13 +119,15 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
-			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct)
+			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
+			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
-			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct
+			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
+			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 			area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
@@ -139,7 +143,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			stream_depletion_frac = EXCLUDED.stream_depletion_frac, stream_depletion_lag_days = EXCLUDED.stream_depletion_lag_days,
 			dam_curve = EXCLUDED.dam_curve, dam_release_rule = EXCLUDED.dam_release_rule,
 			dam_release_m3_day = EXCLUDED.dam_release_m3_day, dam_outlet_capacity_m3_day = EXCLUDED.dam_outlet_capacity_m3_day,
-			dam_seepage_return_pct = EXCLUDED.dam_seepage_return_pct
+			dam_seepage_return_pct = EXCLUDED.dam_seepage_return_pct, supply_rule = EXCLUDED.supply_rule,
+			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
+			supply_stop_pct = EXCLUDED.supply_stop_pct
 		 WHERE node.project_id = EXCLUDED.project_id`,
 		m.nodes.map((n) => ({
 			id: n.id,
@@ -173,7 +179,11 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_release_rule: n.damReleaseRule ?? 'none',
 			dam_release_m3_day: n.damReleaseM3Day ?? null,
 			dam_outlet_capacity_m3_day: n.damOutletCapacityM3Day ?? null,
-			dam_seepage_return_pct: n.damSeepageReturnPct ?? 1
+			dam_seepage_return_pct: n.damSeepageReturnPct ?? 1,
+			supply_rule: n.supplyRule ?? 'damFirst',
+			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
+			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
+			supply_stop_pct: n.supplyStopPct ?? 0.6
 		})),
 		'node'
 	);

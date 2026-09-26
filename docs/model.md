@@ -1537,7 +1537,7 @@ storage to whole m³; the engine doesn't (R1).
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
 | A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
-| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1) |
+| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1). A farm with a supply rule other than `damFirst` also pumps from the river below the dam (§2.7e) |
 | P | Interim storage | `store[t−1] + Pd − E − Sp + M + O + K + J − G` |
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
@@ -2217,6 +2217,102 @@ cover them.
 
 **Low confidence.** The form and the results always say so: depletion is a
 fixed fraction, not an aquifer model; attach the geohydrology report.
+
+### 2.7e Supply rules and the river pump (engine ≥ 0.42.0, roadmap WP-3.8, issue #54 item 2c)
+
+**Why.** b023 irrigates from the farm dam only; its one m³/day limit is the
+diversion back into the dam (O). A farm that pumps straight from the river
+has to be faked as a small "dam" taking all its inflow, with no pump limit
+(issue #54 item 2d: the importer copies that, so such a unit's storage,
+spills and dam level mean nothing). The node-based AI workbook (v004, §4)
+has a pump capacity per node and four pump scenarios. This ports the
+scenarios and the capacity. **Off by default**: a farm without the fields
+(every stored project) runs to the bit as before; a test asserts it on
+random networks, and the example catchments and the client catchment
+regression suite are unchanged.
+
+**Fields** (farms only; migration 060):
+
+| Field | Meaning |
+| --- | --- |
+| `supplyRule` | `damFirst` (default): the dam only, as before, never the river. `riverFirst`: pump from the river below the dam up to the pump capacity, the dam covers the rest. `trigger`: the dam only until it held less than `supplyTriggerPct` × capacity at the start of a day, then river first until it held at least `supplyStopPct` × capacity (needs a dam). `runOfRiver`: no dam (capacity 0); the pump takes the river up to its capacity, the rest is a deficit |
+| `pumpCapacityM3Day` | the river pump's capacity, m³/day (in the form: pumps × m³/h per pump × 24); null = no limit (the run warns); 0 = no pump; inert under `damFirst` |
+| `supplyTriggerPct` | `trigger` only: the switch-to-river level, 0–1 of dam capacity (default 0.4) |
+| `supplyStopPct` | `trigger` only: the switch-back level, ≥ the trigger (default 0.6); the defaults are v004's "switch at 40–60 %" |
+
+The capacity is stored in m³/day, not as pumps and m³/h: the engine, v004 and
+licence conditions all state it per day, and one stored number can't
+disagree with itself. The pumps × m³/h × 24 calculator belongs in the form,
+like the irrigation-system efficiency helper.
+
+**Each day** (§2.7's columns; S = L + N − O is the flow below the dam, Zs the
+senior users' requirement passing the farm, §2.7c):
+
+```
+on the river:  riverFirst, runOfRiver: always
+               trigger: river[t] = river[t−1] ? Q[t−1] < stop × cap : Q[t−1] < trigger × cap   (river[−1] = false)
+keep  = MAX(Zs, the pass-inflow release's target (its month's amount, or Z), else 0)
+room  = on the river ? MAX(0, MIN(pump capacity, S − keep)) : 0
+river first (riverFirst, trigger):   Gr = MIN(room, D − GWp);   G_dam = MIN(MAX(avail − dead, 0), D − GWp − Gr)
+run of river (K = M = O = 0, cap 0): G_dam = MIN(MAX(J, 0), D − GWp);   Gr = MIN(room, D − GWp − G_dam)
+G  = G_dam + Gr + GW                   (GWp primary groundwater, GW all groundwater to the crop, §2.7d)
+P  = avail + GWd − G_dam               (the dam gives only G_dam)
+U  = R + (S − Gr) + T + returned seepage + release − Dep
+```
+
+`river_abstraction` (Gr, m³/day) is part of `supplied`; the balance keeps its
+form, since G carries Gr in and U carries it out. Supplemental boreholes fill
+what the river and the dam leave; a supplemental dam-target borehole fills the
+dam only for the demand the river leaves.
+
+**Decisions, pending the hydrologist** (roadmap WP-3.8; the conservative
+reading of this document where it didn't settle them):
+
+- *The pump draws only on the flow below the dam, S*, as the roadmap says,
+  never on the dam's inflow (that is K, M and the diversion O).
+- *What must pass comes first.* The pump leaves the senior users'
+  requirement (farms are junior to them, like a junior user, §2.7c) and a
+  pass-inflow release's target in the river: a release exists to keep that
+  flow below the dam, and a pump taking S while the dam released to top it
+  up would move dam water to the pump. A fixed release doesn't interact.
+  The EWR is **not** protected by the pump (as it isn't by the dam, §2.7b);
+  a hands-off flow is the rest of WP-3.8, not built yet.
+- *Run of river takes a transfer in first.* A transfer into a farm is sized
+  to its demand (§2.6), so a run-of-river farm uses it before the river and
+  it never becomes a "spill". The dam split fields (`pctUpstreamToDam`,
+  `pctRunoffToDam`, `divertCapacityM3Day`) are ignored: everything passes
+  below the absent dam.
+- *Trigger on the dam runs as dam first* (no river); on the river as river
+  first (the dam still covers what the pump can't). The switch reads the
+  start-of-day storage, like the drought borehole rule, so it doesn't depend
+  on the order nodes are listed in.
+- *Invalid combinations run and warn; the API refuses them on save*
+  (`modelRuleIssues`): a supply rule or pump on a gauge or other user
+  (ignored), `trigger` without a dam and `runOfRiver` with one (both run as
+  river first), a stop level below the trigger (clamped up to it).
+- *Other water users* keep taking MIN(what reaches them, demand) with no pump
+  limit (§2.7c); a pump capacity on them is a later step (issue #54 item 2b).
+
+**Outputs** (only on a farm with a rule other than `damFirst`): the series
+`river_abstraction` and `FarmSummary.avgRiverAbstractionM3Day`.
+
+**Checks.** `checkWorkings` replays the switch, the room and the split from
+the published columns (independently of the engine's code) and checks
+0 ≤ Gr ≤ pump capacity, Gr ≤ MAX(0, S − keep), K = M = O = 0 on run of river,
+the dam's part G − GW − Gr against the dam, and U with Gr taken out;
+`checkBalance` keeps a run-of-river farm's storage at 0 (its capacity). The
+fuzz generator gives 25 % of networks supply rules on half their farms (every
+rule, pump capacities from none to more than any flow, stop levels now and
+then below the trigger, trigger on dam-less farms, run of river that keeps
+its dam); `droughtBoreholesAsSupplemental` also runs `trigger` as
+`riverFirst` for the doubled-crop-area law, since more demand empties the dam
+sooner and switches to the river earlier. The run comparison's input diff
+lists the four fields. Hand examples: `network/supply.test.ts`.
+
+**Not changed:** no imported project is switched to run of river. Unit 9 of
+the client catchment and v004's other run-of-river units move once the
+hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md and
+the regression suite's deviation list.
 
 ### 2.8 Outputs
 
@@ -4015,7 +4111,12 @@ general enough to hold these nodes.
   river-first, no river pumping, drought-saving, opportunistic pumping, and
   groundwater (none / supplemental / primary / emergency; direct or to-dam).
   The groundwater modes and targets are ported (engine ≥ 0.36.0, §2.7d
-  "Individual boreholes"), with annual caps per water year added.
+  "Individual boreholes"), with annual caps per water year added. The four
+  scenarios and the pump capacity are ported (engine ≥ 0.42.0, §2.7e) as
+  `damFirst` (the default, and b023's dam only: v004's "then the river" part
+  of Dam-first is `trigger`), `riverFirst`, `trigger` and `runOfRiver`; the
+  river-abstraction fraction is not (the pump takes the flow below the dam
+  that need not pass, up to its capacity).
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, reported per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the

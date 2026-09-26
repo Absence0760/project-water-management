@@ -884,6 +884,18 @@ every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `"supplemental"`, 0.3, 0 and 0. `PUT` refuses boreholes on a gauge and the
 drought rule on a node without a farm dam.
 
+Supply rules and the river pump (engine ≥ 0.42.0, migration 060, WP-3.8,
+[model.md §2.7e](./model.md)): every node carries `supplyRule`
+(`"damFirst"` | `"riverFirst"` | `"trigger"` | `"runOfRiver"`),
+`pumpCapacityM3Day` (≥ 0 or `null` = no limit), `supplyTriggerPct` (0–1) and
+`supplyStopPct` (0–1). A body without them gets `"damFirst"`, `null`, 0.4
+and 0.6 (no change to any run). `PUT` refuses a rule other than
+`"damFirst"` or a pump capacity on a gauge or other user, `"trigger"` on a
+farm without a dam, `"runOfRiver"` on a farm with a dam capacity above 0, and
+a stop level below the trigger. Runs of a farm with a rule other than
+`"damFirst"` store the series `river_abstraction` (m³/day, part of
+`supplied`) and its summary gains `avgRiverAbstractionM3Day`.
+
 Validation on `PUT`: ids unique, node and crop names unique (ignoring case),
 one crop area per node + crop; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a

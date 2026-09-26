@@ -139,6 +139,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['stream-depletion', 'element-farm', 'element-user'],
 		source: 'docs/model.md §2.7d; roadmap WP-1.34, WP-3.9; GN 538 (2016)'
 	},
+	'supply-rule': {
+		long: 'Dam only (the default) is what the model always did: irrigation draws on the farm dam alone. River first pumps from the river below the dam, up to the pump’s capacity, and the dam covers the rest. Trigger uses the dam until it holds less than the trigger level at the start of a day, then pumps from the river first until the dam is back at the stop level. Run of river has no dam: the pump takes what the river gives, up to its capacity, and the rest is a deficit.\n\nThe pump only takes the flow below the dam that the farm need not pass: the senior water users’ demand below it, and a pass-inflow release’s target, stay in the river. The capacity is m³/day: pumps × m³/h per pump × 24. With no capacity set, only the river’s flow limits the pumping, and the run says so.',
+		aliases: ['pump capacity', 'river abstraction', 'pump scenario', 'river first', 'run of river', 'dam first'],
+		related: ['element-farm', 'borehole'],
+		source: 'docs/model.md §2.7e; roadmap WP-3.8; issue #54 item 2c'
+	},
 	'stream-depletion': {
 		long: 'Pumping near a river lowers the dry-season base flow the EWR depends on. The model takes a share d of each day’s pumping from the flow leaving the node, delayed through a single linear store with time constant k days, so the river keeps losing water for a while after the pumps stop and, over a long run, loses d × the pumped volume in all.\n\nThe river never goes below 0: depletion due on a day with nothing left to take is reported as unmet (drawn from aquifer storage instead). A first estimate of k is the stream depletion factor, distance² × storativity ÷ transmissivity (Jenkins 1968).\n\nA gauge or logger record measured while the boreholes pumped already carries their depletion: keep them in the model when calibrating, so the fitted natural flow isn’t reduced twice.',
 		aliases: ['base flow reduction', 'baseflow depletion', 'Glover', 'Jenkins', 'SDF'],
