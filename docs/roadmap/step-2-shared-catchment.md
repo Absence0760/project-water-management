@@ -454,6 +454,17 @@ first if needed).
 
 ### WP-2.3 Published baseline, restriction notice and share links
 
+> **Status (2026-09-25).** Phase 1 (publications, the farm projection and
+> the publish flow) and phase 2 (share links: `024_share_links.sql`,
+> `backend/src/share/`, the `/share` page and the Overview's Share links
+> panel) are built. Phase 2 departs from this plan in three places, each
+> stricter: `app_share_series` answers only with at least `FARMER_K` = 5
+> farm holders (design [farmer-view.md §10.3](../design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)
+> overrides D2's "always show outflow" for flow volumes); the shared
+> `catchment_view` is cut to an allowlist of keys with the outlet unnamed
+> (the outflow node may be a farm); and a link is revoked, never deleted,
+> until audit events exist (WP-2.4, [followups.md](../followups.md)).
+
 **Goal.** Each project has one **published** run: the result stakeholders see
 by default, approved by a named person. The WUA can attach a restriction
 notice. Outsiders get a read-only link to the catchment-level result.
