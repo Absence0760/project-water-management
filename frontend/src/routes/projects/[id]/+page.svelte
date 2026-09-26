@@ -303,7 +303,11 @@
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
 	// goes to where the drawer was opened from rather than reopening it.
-	const drawerFarm = $derived(page.url.searchParams.get('farm'));
+	// Never over the Scenarios tab, even when the URL names one: the drawer
+	// and the grid modal edit and save the catchment's model, and override
+	// mode there (scenarios/OverrideEditor.svelte) edits the scenario's.
+	const modelOverlays = $derived(tab !== 'scenarios');
+	const drawerFarm = $derived(modelOverlays ? page.url.searchParams.get('farm') : null);
 	let drawerOpen = $state(false);
 	$effect(() => {
 		drawerOpen = !!drawerFarm;
@@ -314,7 +318,7 @@
 
 	// --- the grid modal: open while the URL names a grid, closed the same way --
 	// Not over the grid's own tab, where the grid is already on the page.
-	const gridParam = $derived(page.url.searchParams.get('grid'));
+	const gridParam = $derived(modelOverlays ? page.url.searchParams.get('grid') : null);
 	const openGrid = $derived(isGridId(gridParam) && GRID_TAB[gridParam] !== tab ? gridParam : null);
 	let gridOpen = $state(false);
 	$effect(() => {

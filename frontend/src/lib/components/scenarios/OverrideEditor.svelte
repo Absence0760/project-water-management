@@ -20,6 +20,7 @@
 	// block recording; nothing is dropped silently.
 	import { untrack } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
@@ -97,8 +98,15 @@
 		if (editor.dirty && !confirm(LEAVE)) return;
 		onclose();
 	}
+	// A navigation that stays on this scenario (only other URL parameters
+	// change) keeps override mode and its edits: only leaving the scenario
+	// (another tab, scenario or page, or the browser) asks.
+	const leaves = (to: URL | undefined) =>
+		!to ||
+		to.pathname !== page.url.pathname ||
+		['tab', 'scenario'].some((k) => to.searchParams.get(k) !== page.url.searchParams.get(k));
 	beforeNavigate((nav) => {
-		if (editor.dirty && !confirm(LEAVE)) nav.cancel();
+		if (editor.dirty && leaves(nav.to?.url) && !confirm(LEAVE)) nav.cancel();
 	});
 </script>
 
