@@ -13,7 +13,7 @@ import {
 	noticeCard,
 	outletLine,
 	positionLine,
-	PRIVACY,
+	privacy,
 	previewBanner,
 	savedStrip,
 	shortLine,
@@ -22,7 +22,7 @@ import {
 	supplyCard,
 	systemName, accessLine } from './cards';
 import { vaalbankFixture } from './fixture';
-import { plainText, type Rich } from './rich';
+import { plainText, type Rich } from '$lib/i18n/rich';
 
 const sp = (s: string | null | undefined) => s?.replace(/ /g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);
@@ -239,7 +239,7 @@ describe('Your farm on the river', () => {
 		const v = vaalbankFixture();
 		expect(sp(positionLine(v))).toBe('1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment. The same rules apply to every farm.');
 		expect(txt(outletLine(v))).toBe('River at Sandspruit Outlet: below its reserve on all of the last 30 days.');
-		expect(PRIVACY).toBe(
+		expect(privacy()).toBe(
 			'Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.'
 		);
 	});

@@ -1141,10 +1141,10 @@ yet; each lands with the work package named.
 
 - [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
       with WP-2.12 (`farm.forecast` when the published run is a forecast run).
-- [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
-      before the named translator reviews it, and `FarmView` carries one
-      `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
-      translator is named.
+- [ ] **Afrikaans notice on the farm page**: `FarmView` carries one
+      `notice`, not `notice_en` / `notice_af` (design §7); the /share page
+      already picks between them. Trigger: the translation turnaround in
+      § Afrikaans (WP-2.5).
 - [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
       says the WUA can name them; needs an endpoint listing the people with
       access to a farm.
@@ -1155,11 +1155,53 @@ yet; each lands with the work package named.
 - [ ] **"Not available: the model's data starts on …"** needs the run's
       first date; `lastSeason` is null without it, so the page says the data
       doesn't reach back.
-- [ ] **Account volume unit**: the ML/m³ switch is kept in `localStorage`
-      until `app_user.volume_unit` (WP-2.5).
 - [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
       farm API and the seeded publication (the backend half of #25); run it
       once both are merged.
+
+## Afrikaans (WP-2.5)
+
+The plumbing is built (catalogues, switch, `app_user.locale` /
+`volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
+No Afrikaans wording ships yet: none is reviewed.
+
+- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (432
+      strings: site, emails, farmer glossary) goes to the client's named
+      translator (roadmap Step 2, prerequisite 6). When it comes back: copy
+      each line into `frontend/src/lib/i18n/messages/af.ts`,
+      `backend/src/mail/i18n/af.ts` or `frontend/src/lib/help/content.af.ts`
+      (with the `sourceHash` from the sheet), run `pnpm gen:i18n:sheet`, and
+      add an e2e that the farm view, the login page and an invite email are
+      Afrikaans with `<html lang="af">` (the plan's WP-2.5 e2e; today it
+      can only check that the page stays `lang="en"`). Trigger: the
+      translator is named and returns the sheet.
+- [ ] **Afrikaans boards** at 360 px (strings run 20–30 % longer) and an axe
+      pass on every translated page in Afrikaans. Trigger: the first
+      reviewed batch lands.
+- [ ] **Not yet in the catalogue**, still English for everyone: the
+      `/share` page (`share/share.ts`), the notes list inside "Notes about
+      your farm" (`notes/NotesList.svelte`, shared with the workspace), and
+      API error messages shown as-is on the sign-in and account pages (only
+      the login's `401` is worded client-side). Trigger: the translation
+      turnaround above, so the new keys join the same sheet.
+- [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
+      the total (the English catalogue is ~7 KB; each key also appears at its
+      call site). The catalogue now loads only on the translated routes (the
+      workspace and `/share` never download its ~8 KB chunk), but the guard
+      counts lazy chunks too, so the split costs ~2 KB of total: 932 KB
+      before, 934 KB after, against main's 929 KB ceiling (largest chunk
+      43 KB, at its ceiling). Fitting under 929 without a raise needs weight
+      removed, not moved: the durable option is English-as-key messages
+      (gettext style: the English sits at the call site and `af.ts` maps it,
+      so no separate English catalogue ships, ~5–7 KB), which reworks the
+      catalogue, the sheet and the tests; build-time key shortening saves
+      ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
+      raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
+      this branch merges to main.
+- [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
+      `check:i18n` listing of stale entries): today `content.af.test.ts`
+      fails on a stale `sourceHash` and the sheet names the new hash.
+      Trigger: the first translated glossary entry.
 
 ## UI
 

@@ -22,7 +22,9 @@ header closes it too.
 
 **The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
 address and whether it is confirmed, a **Display name** form
-(`PATCH /auth/me`; the header follows at once) and a **Password** form
+(`PATCH /auth/me`; the header follows at once), **Language and units** (the
+language switch and the farm view's m³ / ML, [§ Language](#language)) and a
+**Password** form
 (current, new, repeat; `POST /auth/change-password`). Changing the password
 signs out every other device while this browser stays signed in. Errors show
 in an alert above the form, with the field it's about marked
@@ -2259,15 +2261,16 @@ published.
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
-- **Frame.** The farm pages have their own header ("My farm", Menu: your
-  farms, the words, "Don't keep a copy on this phone", sign out); the app
-  header isn't shown. One 560 px column, a 16 px base, 44 px targets,
+- **Frame.** The farm pages have their own header ("My farm", the EN | AF
+  language switch, Menu: your farms, the words, "Don't keep a copy on this
+  phone", sign out); the app header isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
   nothing under 13 px, existing tokens only, light and dark.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA"; water received this season with the ML/m³
-  switch (kept on the phone until the account preference exists); the dam
+  switch (saved to the account, `app_user.volume_unit`, and kept on the
+  phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level
   wording; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
@@ -2287,10 +2290,12 @@ published.
   by the model, not a promise. Only a notice from your WUA is a
   restriction." A forecast made more than 3 days ago says how old it is
   first. The dam page shows the same card under its chart.
-- **Wording.** Every visible string and number rule lives in pure modules
-  under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
-  `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture
-  (`fixture.ts`); a test keeps the design's "never says" words out.
+- **Wording.** Every visible string comes from the message catalogue
+  ([§ Language](#language)); the number rules and the sentences built from
+  them live in pure modules under `lib/components/farm/` (`format.ts`,
+  `cards.ts`, `why.ts`, `dam.ts`, `chart.ts`, `forecastCard.ts`), pinned to
+  the prototype with a Vaalbank fixture (`fixture.ts`); a test keeps the
+  design's "never says" words out.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
@@ -2305,6 +2310,77 @@ published.
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.
+
+## Language
+
+English and Afrikaans for everything a farmer touches (WP-2.5): the farm
+view (`/farm/**`), the sign-in pages (`/login`, `/register`,
+`/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
+email" banner, the account page, and the emails a farmer receives (confirm
+address, reset password, the farmer invite). The modeller workspace and the
+`/share` page stay English.
+
+- **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
+  name in its own language, the button marked with that `lang`, `aria-pressed`
+  on the current one; "EN | AF" in the phone headers, the full name as the
+  accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
+  pages' header, and under **Language and units** on the account page, which
+  also sets the farm view's volume unit (m³ or ML).
+- **Which language.** The account's `locale` when signed in and chosen, else
+  this device's choice (`localStorage` `wm.locale`, try/catch), else
+  Afrikaans when it is the browser's first language, else English
+  (`resolveLocale`, run by the root layout whenever the session changes).
+  Choosing applies at once, is kept on the device and, signed in, saved with
+  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
+  sends the page's language as the account's; an account created from an
+  invite takes the invite's (`invite.locale`, 049).
+- **Catalogue.** `lib/i18n/messages/en.ts` is every string, flat keys
+  (`farm.supply.title`), with a section note per key group and per-key notes
+  for the translator. `messages/af.ts` holds only **reviewed** Afrikaans,
+  typed `Partial<Record<MessageKey, string>>` (an unknown key fails
+  `pnpm check`); it is loaded lazily, the first time someone picks
+  Afrikaans. A key without Afrikaans shows in English.
+- **Loading.** Only the translated routes load the catalogue: they import
+  it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
+  dynamic `import()` on the first translated route, then renders the route
+  once the language is set (a readiness flag, with Try again if the chunk
+  fails), so no route shows one language and then another. The workspace
+  and `/share` never download it: the number, date, notice and chart-size
+  rules they share with the farm view live in catalogue-free modules
+  (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
+  `farm/chartGeometry.ts`), `passwordProblem` returns a key, and the
+  "confirm your email" banner is imported only for an unconfirmed address.
+  `lib/i18n/boundary.test.ts` guards it.
+- **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
+  `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
+  `.two` / `.few`) form through `Intl.PluralRules`; `tRich(key, vars)`
+  returns a `Rich` sentence where `**…**` and `{ b }` values are bold
+  (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
+  `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
+  They read runes, so a template that calls them re-renders on a switch.
+  The backend's emails have their own catalogue, `backend/src/mail/i18n/`
+  (`mailT(locale)` → `{ t, lang }`), same pattern; alert emails (WP-2.13)
+  should add their keys there.
+- **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
+  `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
+  a page of mostly English words never claims to be Afrikaans. An email is
+  `lang="af"` only when every word in it came from the Afrikaans catalogue.
+  A glossary entry on `/farm/words` shown in the other language carries its
+  own `lang`.
+- **Numbers and dates** (D8). The farm view writes a decimal comma in
+  Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
+  both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
+  the Afrikaans words are in), so an English sentence never carries Afrikaans
+  month names.
+- **Translation.** Nothing is invented: the wording goes to real farmers.
+  `docs/i18n/af-translation-sheet.md` (generated by `pnpm gen:i18n:sheet`)
+  lists every untranslated string with its English, context and placeholders,
+  and an empty Afrikaans column for the client's translator; the farmer
+  glossary entries are on it too (`lib/help/content.af.ts`, stamped with a
+  `sourceHash` of the English so a later English edit makes the translation
+  stale). `catalogue.test.ts` (frontend and backend) and
+  `content.af.test.ts` fail when an untranslated key is missing from the
+  sheet; `pnpm check:i18n` fails when the sheet is out of date.
 
 ## Share page (`/share`)
 

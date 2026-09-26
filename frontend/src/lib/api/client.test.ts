@@ -35,11 +35,19 @@ describe('createApi', () => {
 	it('PATCHes /auth/me with the display name and returns the user', async () => {
 		const user = { id: '1', email: 'a@b.c', displayName: 'New name', emailVerified: true };
 		const f = mockFetch(200, { user });
-		await expect(createApi('http://x', f).auth.updateMe('New name')).resolves.toEqual(user);
+		await expect(createApi('http://x', f).auth.updateMe({ displayName: 'New name' })).resolves.toEqual(user);
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('http://x/auth/me');
 		expect(init.method).toBe('PATCH');
 		expect(JSON.parse(init.body as string)).toEqual({ displayName: 'New name' });
+	});
+
+	it('PATCHes /auth/me with only the preferences sent (locale may be null)', async () => {
+		const user = { id: '1', email: 'a@b.c', displayName: 'A', locale: null, volumeUnit: 'ML' };
+		const f = mockFetch(200, { user });
+		await expect(createApi('http://x', f).auth.updateMe({ locale: null, volumeUnit: 'ML' })).resolves.toEqual(user);
+		const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toEqual({ locale: null, volumeUnit: 'ML' });
 	});
 
 	it('posts both passwords to /auth/change-password and surfaces a wrong current password as ApiError 403', async () => {
