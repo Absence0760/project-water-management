@@ -15,7 +15,10 @@ const config = {
 		adapter: adapter({ pages: process.env.BUILD_DIR || 'build', fallback: 'index.html' }),
 		outDir: process.env.SVELTE_KIT_DIR || '.svelte-kit',
 		paths: {
-			base: process.env.BASE_PATH || '',
+			// Kit rejects a base without a leading '/' at startup; the cast only
+			// tells the type checker (this file is type-checked, since
+			// tsSyntax.test.ts imports it).
+			base: /** @type {'' | `/${string}`} */ (process.env.BASE_PATH || ''),
 		},
 		// Emit a <meta> CSP pinning scripts to 'self' plus the hash of the one
 		// inline bootstrap script. It narrows CloudFront's header policy

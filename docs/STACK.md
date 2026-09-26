@@ -242,6 +242,14 @@ Prefer reading these over guessing. Update them when behaviour changes.
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
+- **`pnpm check` doesn't compile components.** svelte-check type-checks the
+  TypeScript in `<script lang="ts">`; the Svelte compiler strips it at build
+  time, and a stripping bug fails every `vite build` (production and the e2e
+  site alike) while `check` stays green. Svelte 5.56.0–5.56.3 left `?` on
+  optional parameters (sveltejs/svelte#18455). The guard is
+  `frontend/src/lib/components/__fixtures__/tsSyntax.test.ts`: it compiles a
+  fixture through `svelte.config.js`'s preprocess and Rollup's parser. Add a
+  case to its fixture when a new TS form breaks a build.
 - **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
   (native) are taken.
 - **Terraform:** `plan` is fine; never `apply` without the operator's go-ahead.
