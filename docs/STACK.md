@@ -201,7 +201,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/testing.md`: which test command when, and how long each takes
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
-- `docs/design/`: design specs written before a build (the farmer view, issue #14), each with its prototype
+- `docs/design/`: design specs written before a build (the farmer view, issue #14; the licensing evidence report, issue #15), each with its prototype
 - `docs/roadmap/`: the four-step growth plan (hydrologist tool → shared catchment → licensing → platform), one build plan per step
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
 - `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`

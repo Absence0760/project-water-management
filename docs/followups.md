@@ -1214,7 +1214,9 @@ role and not before it.
         published-by line and restriction notice (WP-2.3), changes since the
         previous publication (WP-2.4), the disclaimer (D10, text still to be
         agreed), and the licensing evidence pack's sections and uncertainty
-        display (#15). WP-2.3 also adds the Overview published card's Report
+        display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
+        built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
+        run against the mock-up in that spec's §11). WP-2.3 also adds the Overview published card's Report
         entry point.
   - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
         Chromium and Firefox; e2e runs Chromium only, so print the largest

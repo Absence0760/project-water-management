@@ -1773,7 +1773,9 @@ for alert counts.
 > pre-signed URL (which lasts an hour); `POST /reports` also takes `email`,
 > and viewers may ask for a PDF (the job table's insert policy is widened for
 > `report_render` only); farmers get `403` on all of it (WP-2.1 landed
-> first). Not deployed: plan only.
+> first). Not deployed: plan only. **Phase C, evidence mode: designed, not
+> built** ([design/evidence-report.md](../design/evidence-report.md), issue
+> #15; plan below).
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
 consultant copy-pasting from Excel.
@@ -1822,9 +1824,35 @@ consultant copy-pasting from Excel.
     a PDF library. That's two chart implementations to keep in step, against
     the "one implementation" principle behind the engine.
 
+- **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).**
+  The licensing evidence report on the same route:
+  `/projects/:id/report?run=<applicationRun>&evidence`, built only from
+  the project's current nominated evidence run and a scenario run on it
+  (or the nominated run alone, for baseline evidence), refused otherwise.
+  Layout, checklist, uncertainty display and anti-gaming rules:
+  [design/evidence-report.md](../design/evidence-report.md), whose §12 is
+  this phase's build plan:
+  1. engine: paired worse-shares for the Reserve rate and paired bands on
+     each farm's supply (ER4);
+  2. settings: a declared uncertainty rule set (ER3) and Reserve site
+     metadata, REC and gazette reference (ER9), both baseline assumptions;
+  3. frontend: the evidence section list in `report/sections.ts`, the
+     refusal, page 1 with its flags and paired change table, the heat-map
+     pair, the paired by-month plot, the FDC chart, "Not assessed" rows
+     (evidence mode only: the catchment report keeps "no placeholders"),
+     page x of y footers, validation scores (ER7);
+  4. backend: the render scope takes the runs a job names, not one (ER1);
+     `POST …/reports` takes `evidence: true`.
+
+  It prints "Draft · not issued" on every page: signing, issuing, hashing
+  and `/verify` stay with WP-3.13 and WP-3.14, whose pack route renders the
+  Phase C layout from its frozen manifest.
+
 **API.** Phase A: none (it uses existing routes).
 Phase B: `POST /projects/:id/reports { runId? }` → `202 { jobId }`, and
 `GET /projects/:id/reports/:jobId` → `{ status, url? }` (viewer).
+Phase C: `POST /projects/:id/reports { runId, evidence: true }`, refused
+with `409` and the failed checks when the run isn't evidence.
 
 **UI**
 - A "Report" button in the Runs tab and on the Overview published card.
@@ -1842,6 +1870,13 @@ Phase B: `POST /projects/:id/reports { runId? }` → `202 { jobId }`, and
 - axe: the report page on screen.
 - Phase B, DB: the render token is single-use and scoped (positive control:
   a valid token renders).
+- Phase C: the evidence report reaches `data-report-ready` and prints; a
+  scenario run on another base is refused; a baseline-assumption preview
+  carries the red banner and can't be issued; page-1 numbers equal the
+  compare page's; a two-run render scope refuses a third run (positive
+  control: both named runs read). Persona run (licensing authority,
+  applicant, environmentalist) against the mock-up before the build, and
+  against the build after ([design/evidence-report.md §11](../design/evidence-report.md#11-testing)).
 
 **Docs to update.** ui.md (§ Report), api.md (Phase B), deployment.md and
 infra/README.md (Phase B: S3, the container Lambda), run-locally.md (MinIO,
@@ -1851,6 +1886,9 @@ if Phase B).
 - A full report for the largest example prints to a clean A4 PDF from
   Chromium and Firefox, with no clipped tables or blank charts.
 - Phase B renders in under 60 s.
+- Phase C: an evidence report for the seeded example application prints
+  every checklist item of the design (each either a value or "Not
+  assessed" with its reason) on clean A4 pages.
 
 **Size.** Phase A M; Phase B M. **Depends on.** WP-2.3, WP-2.4 (changes
 section), WP-2.7 (notes). D9, D10.
