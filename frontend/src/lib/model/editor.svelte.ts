@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type Borehole, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -78,7 +78,9 @@ export class ModelEditor {
 			cropAreas: m.cropAreas ?? [],
 			transfers: m.transfers ?? [],
 			// Land cover (WP-1.35); an older API or document has none.
-			landCover: m.landCover ?? []
+			landCover: m.landCover ?? [],
+			// Individual boreholes (WP-3.9): in the document only when there are any, as the API returns it.
+			...(m.boreholes?.length ? { boreholes: m.boreholes } : {})
 		};
 		this.model = clone(normalised);
 		this.#saved = JSON.stringify(this.model);
@@ -135,6 +137,33 @@ export class ModelEditor {
 		m.cropAreas = m.cropAreas.filter((a) => a.nodeId !== id);
 		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
 		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
+		if (m.boreholes) m.boreholes = m.boreholes.filter((b) => b.nodeId !== id);
+	}
+
+	// --- individual boreholes (WP-3.9) -------------------------------------
+	/** A new borehole on a farm or user: supplemental, straight to the crop, no capacity or cap yet. */
+	addBorehole(nodeId: string): Borehole {
+		const count = (this.model.boreholes ?? []).filter((b) => b.nodeId === nodeId).length;
+		const b: Borehole = {
+			id: crypto.randomUUID(),
+			nodeId,
+			name: `Borehole ${count + 1}`,
+			capacityM3Day: 0,
+			annualCapM3: null,
+			mode: 'supplemental',
+			emergencyBelowPct: 0.3,
+			target: 'direct',
+			depletionFactor: 0
+		};
+		// Not `(this.model.boreholes ??= []).push(b)`: the assignment's value is the plain
+		// array, not the state proxy, so the first borehole would never render.
+		this.model.boreholes ??= [];
+		this.model.boreholes.push(b);
+		return b;
+	}
+
+	removeBorehole(id: string) {
+		this.model.boreholes = (this.model.boreholes ?? []).filter((b) => b.id !== id);
 	}
 
 	// --- land cover (WP-1.35) --------------------------------------------

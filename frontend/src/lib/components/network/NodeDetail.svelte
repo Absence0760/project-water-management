@@ -1,13 +1,14 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type Borehole, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
 	import { damHints, GROUPS, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
+	import BoreholeFields from './BoreholeFields.svelte';
 
 	let {
 		node,
@@ -22,6 +23,9 @@
 		landCover = [],
 		onaddcover,
 		onremovecover,
+		boreholes = [],
+		onaddborehole,
+		onremoveborehole,
 		farmersNote = null,
 		previewHref = null
 	}: {
@@ -39,6 +43,10 @@
 		landCover?: LandCoverPatch[];
 		onaddcover?: () => void;
 		onremovecover?: (id: string) => void;
+		/** This node's individual boreholes (WP-3.9; farms and other users). */
+		boreholes?: Borehole[];
+		onaddborehole?: () => void;
+		onremoveborehole?: (id: string) => void;
 		/** "N farmers are linked…" for a farm with linked farmers (WP-2.1); null otherwise. */
 		farmersNote?: string | null;
 		/** A farm's page as its farmer sees it (WP-2.6); null for other nodes. */
@@ -184,6 +192,13 @@
 			</div>
 		</fieldset>
 	{/each}
+
+	{#if node.kind !== 'gauge'}
+		<fieldset>
+			<legend>Individual boreholes</legend>
+			<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
+		</fieldset>
+	{/if}
 
 	{#if node.kind === 'farm'}
 		<fieldset>

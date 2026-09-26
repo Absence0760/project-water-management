@@ -35,7 +35,7 @@ const TRANSFER: Record<keyof Transfer, true> = {
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
-	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, flowShare: true
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -65,6 +65,8 @@ const RUN_KEYS = [
 	'senior_requirement', 'passed_for_senior',
 	// Boreholes (engine 0.23.0, WP-1.34)
 	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store',
+	// Boreholes that pump into the dam (engine 0.32.0, WP-3.9)
+	'groundwater_to_dam',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',
 	// GR4J (packages/engine/src/runoff/simulate.ts)

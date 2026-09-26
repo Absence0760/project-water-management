@@ -109,4 +109,22 @@ describe('ModelEditor', () => {
 		ed.removeNode(farm.id);
 		expect(ed.model.landCover).toEqual([]);
 	});
+
+	it('adds and removes individual boreholes, the first one included, and removing the node removes them (WP-3.9)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		// An older document, or one without boreholes, has none and doesn't grow the key on load.
+		expect(ed.model.boreholes).toBeUndefined();
+		ed.addNode();
+		const farm = ed.addNode();
+		const b = ed.addBorehole(farm.id);
+		// The very first borehole lands in the state (a `??=` on the state would drop it).
+		expect(ed.model.boreholes).toHaveLength(1);
+		expect(ed.model.boreholes![0]).toMatchObject({ nodeId: farm.id, name: 'Borehole 1', mode: 'supplemental', target: 'direct', annualCapM3: null });
+		expect(ed.addBorehole(farm.id).name).toBe('Borehole 2');
+		ed.removeBorehole(b.id);
+		expect(ed.model.boreholes).toHaveLength(1);
+		ed.removeNode(farm.id);
+		expect(ed.model.boreholes).toEqual([]);
+	});
 });
