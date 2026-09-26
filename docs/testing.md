@@ -47,11 +47,14 @@ so it catches a change in the query's shape, not machine noise.
 
 ## Why the slow ones are shaped the way they are
 
-- **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds ×
-  2 runoff models, about four model runs per case. One vitest file runs in one
-  worker, so it is split into 4 shard files per model (`fuzz/shard.ts`); the
-  pinned regression seeds stay in `run.invariants.test.ts`. Soak with
-  `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`. The
+- **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds
+  with GR4J runoff (the only model since engine 1.0.0, which dropped the
+  legacy shards), about four model runs per case. One vitest file runs in one
+  worker, so it is split into 4 shard files (`fuzz/gr4j.1–4.test.ts`, through
+  `fuzz/shard.ts`); the pinned regression seeds stay in
+  `run.invariants.test.ts`. Soak with
+  `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
+  (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`). The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
