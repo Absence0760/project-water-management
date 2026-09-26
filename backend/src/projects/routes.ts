@@ -18,6 +18,7 @@ import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { resolveAutoRun } from '../runs/autoRun.js';
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
@@ -38,6 +39,8 @@ type ProjectRow = {
 	last_run_at: Date | null;
 	/** When the current publication was published (022_publication), or null. */
 	published_at: Date | null;
+	/** When the project's pending re-run is due, or null (041_auto_rerun). */
+	rerun_queued_for: Date | null;
 };
 
 const summary = (r: ProjectRow) => ({
@@ -52,7 +55,13 @@ const summary = (r: ProjectRow) => ({
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
-const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.settings) });
+// settings.autoRun isn't in the engine's defaults (it's no model input), so it is resolved here: clients see every field.
+// rerunQueuedFor: when the pending re-run is due (the header's "Re-run queued for 14:05"), or null.
+const full = (r: ProjectRow) => ({
+	...summary(r),
+	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings) },
+	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null
+});
 
 // RLS already limits rows to projects the user can see (directly or via a
 // team); app_project_role gives the effective role. The team name is only
@@ -71,7 +80,11 @@ const SELECT_PROJECT = `
 		-- The current publication's date (022_publication; its partial unique
 		-- index answers it). Every member reads run_publication, farmers too.
 		(SELECT pub.published_at FROM run_publication pub
-			WHERE pub.project_id = p.id AND pub.superseded_at IS NULL) AS published_at
+			WHERE pub.project_id = p.id AND pub.superseded_at IS NULL) AS published_at,
+		-- When the pending re-run (manual or automatic, 041_auto_rerun) is due;
+		-- job_dedupe_idx answers it. Viewers read job rows (016_jobs).
+		(SELECT j.run_after FROM job j
+			WHERE j.project_id = p.id AND j.dedupe_key = 'rerun' AND j.status IN ('queued', 'failed')) AS rerun_queued_for
 	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 
 const name = z.string().trim().min(1).max(200);
@@ -116,6 +129,30 @@ async function getProject(db: import('../db/tx.js').Db, id: string) {
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return rows[0];
 }
+
+/** JSON with object keys sorted, so two equal settings objects compare equal whatever order their keys were written in. */
+const stableJson = (v: unknown): string =>
+	JSON.stringify(v, (_k, x: unknown) =>
+		x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x
+	);
+const withoutAutoRun = (settings: unknown) => {
+	const { autoRun: _autoRun, ...rest } = settings as Record<string, unknown>;
+	return rest;
+};
+
+/**
+ * A patch that changes nothing but settings.autoRun (when the project re-runs
+ * itself, not how) leaves updated_at alone: updated_at is "the inputs changed
+ * since the latest run" to the Runs tab, and turning automatic runs on
+ * changes no input. The Settings form sends every setting, so this compares
+ * the settings as they'd be saved, not the keys sent.
+ */
+const onlyAutoRun = (body: z.infer<typeof PatchBody>, stored: unknown, next: unknown) =>
+	body.name === undefined &&
+	body.description === undefined &&
+	body.teamId === undefined &&
+	next !== undefined &&
+	stableJson(withoutAutoRun(next)) === stableJson(withoutAutoRun(mergeSettings(stored)));
 
 export const projectRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
@@ -214,10 +251,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 					description = COALESCE($3, description),
 					settings = COALESCE($4::jsonb, settings),
 					team_id = CASE WHEN $5 THEN $6::uuid ELSE team_id END,
-					updated_at = now()
+					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END
 				 WHERE id = $1`,
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
-					body.teamId !== undefined, body.teamId ?? null]
+					body.teamId !== undefined, body.teamId ?? null, onlyAutoRun(body, current.settings, settings)]
 			);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
 			const fields = [

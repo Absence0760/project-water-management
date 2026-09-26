@@ -21,6 +21,7 @@ import type {
 	SignoffStatement,
 	RunSummary,
 	ScenarioOp,
+	SeriesMeta,
 	YieldPoint
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
@@ -68,9 +69,27 @@ export interface ProjectSummary {
 	publishedAt: string | null;
 }
 
-export interface Project extends ProjectSummary {
-	settings: ProjectSettings;
+/**
+ * settings.autoRun (WP-2.11, backend runs/autoRun.ts): whether the project
+ * re-runs itself after new data. Not a model input, so not in the engine's
+ * ProjectSettings; the API always sends every field.
+ */
+export interface AutoRunSettings {
+	enabled: boolean;
+	/** Minutes the re-run waits after the latest new data (0 to 120). */
+	debounceMinutes: number;
+	/** 'never' (the default): publication stays a person's act. Never "always". */
+	publish: 'never' | 'if_no_new_warnings';
 }
+
+export interface Project extends ProjectSummary {
+	settings: ProjectSettings & { autoRun?: AutoRunSettings };
+	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
+	rerunQueuedFor?: string | null;
+}
+
+/** What a series merge or replace answers: the series, and when the automatic re-run it queued is due (null: none queued). */
+export type SeriesWriteResult = SeriesMeta & { rerunQueuedFor?: string | null };
 
 /**
  * A portable project document: the body of POST /projects/import, as
@@ -349,7 +368,15 @@ export interface RunMeta {
 	 * re-run it; false for a run from before stored inputs. Absent from an older API.
 	 */
 	reproducible?: boolean;
+	/**
+	 * What made the run (041_auto_rerun): 'manual' (a person), 'auto' (the
+	 * debounced re-run after new data, WP-2.11), 'forecast' (WP-2.12). Absent
+	 * from an older API (= manual).
+	 */
+	trigger?: RunTrigger;
 }
+
+export type RunTrigger = 'manual' | 'auto' | 'forecast';
 
 /** GET …/runs/:runId/reproduce (WP-3.1): the run re-run from its stored inputs with today's engine. */
 export interface Reproduction {

@@ -1357,7 +1357,7 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 > - **Merging** adds `keepOnNull` to the shared merge: a day the source has no
 >   value for never erases an existing one.
 > - **Not built**: the `series.merged` audit event (WP-2.4 isn't built), the
->   debounced re-run (WP-2.11), the Data tab's "from CHIRPS feed" marker.
+>   debounced re-run (built since, WP-2.11), the Data tab's "from CHIRPS feed" marker.
 > - **Infra**: the fetcher has a 120 s timeout (60 s in the design), because
 >   a CHIRPS catch-up reads up to 120 days.
 
@@ -1455,6 +1455,56 @@ on.** WP-2.8, WP-2.9 (`mergeInto`), WP-2.4. D6, D7.
 ---
 
 ### WP-2.11 Auto re-run after new data
+
+> **Status: built** (`041_auto_rerun.sql`, `backend/src/series/newData.ts`,
+> `backend/src/runs/autoRun.ts`, `backend/src/publish/autoPublish.ts`,
+> `jobs/handlers/rerun.ts`; [architecture.md § Automatic runs](../architecture.md#automatic-runs)).
+> Where the build departs from the design below, and why:
+> - **One hook for every source of new days**, `series/newData.ts`
+>   `onSeriesDaysChanged(db, projectId, { seriesId, kind, name, daysChanged,
+>   via })`, the name and signature WP-2.9's shared merge (`mergeInto`)
+>   already calls. A person's merge **and** whole-series replace (PUT), a data
+>   feed's merge and its confirmed replacement swapping in, and the API-key
+>   ingest all go through it. A restore doesn't (it isn't new data).
+> - **The enqueue is a `SECURITY DEFINER` function**, `app_enqueue_rerun`:
+>   pushing `run_after` back is an UPDATE of a job row, which `water_app` has
+>   no grant for, and an API key's transaction has no user and can't read the
+>   project's settings. It reads `settings.autoRun` itself (defaults as
+>   `resolveAutoRun`, held together by a DB test) and asks
+>   `app_rerun_acting_user` who the re-run runs as.
+> - **API keys: the key's creator is the acting user.**
+>   `app_rerun_acting_user` answers `api_key.created_by` for a live key of the
+>   project, and `job_enqueue` lets a definer caller with no user name the
+>   acting user. The job then fails closed if that person is no longer an
+>   editor. A key whose creator was deleted skips the re-run (no job) and
+>   never rolls the ingest back.
+> - **Dedupe key** `rerun`, shared with `POST /projects/:id/jobs` (the dedupe
+>   index is already per project, so it is `rerun:<project>` in effect). A
+>   pending manual re-run is left alone (it reads the new data when it
+>   runs), never pushed back; a running one doesn't count, so data that
+>   arrives mid-run gets its own run.
+> - **Maximum wait** fixed at 2 h (not a setting); `debounceMinutes` is 0–120.
+> - **`executeRun(db, id, label | (input) => label, trigger)`**: the label
+>   is `Auto · data to <last observed day>`, computed from the run's own
+>   input (the forecast series doesn't count).
+> - **Trim**: every trigger is capped apart (manual 20; auto and, later,
+>   forecast 1 unkept run each), so an auto run never pushes a manual run
+>   out. Pinned, nominated and cited (published, scenario base) runs stay
+>   exempt.
+> - **`if_no_new_warnings`**: never makes the first publication; also held
+>   back by a failed self-check; "the same warning" ignores numbers and dates
+>   in its sentence; the WUA's notice and next-update date carry over, and
+>   the note and audit event say it was automatic.
+> - **API**: `PUT` returns `rerunQueuedFor` too, and `GET /projects/:id` has
+>   `rerunQueuedFor` (the header's time). `POST /jobs` accepts only a label
+>   (a client can't queue an auto re-run).
+> - **UI**: the "New auto run: publish?" offer is on the Overview's published
+>   baseline, with a link to compare and one to the Runs tab's Publication
+>   panel (the Runs tab itself gains only the Auto tag).
+> - **Not built**: `alert_eval` after an auto run (it has no handler until
+>   WP-2.13, which adds the enqueue in `rerun.ts`); the acceptance soak (a
+>   60-farm synthetic catchment over 30 simulated days) is WP-2.16's load
+>   test, and the storage bound it checks is the trim's DB test.
 
 **Goal.** New data leads to a fresh run without anyone pressing Run. It
 doesn't flood storage, and it doesn't evict the modeller's runs.
