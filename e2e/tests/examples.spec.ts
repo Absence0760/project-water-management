@@ -105,3 +105,21 @@ test('the owner sees the seeded farmers with their farms, and a farmer sees only
 	await expect(farmer.getByRole('rowheader', { name: DROEVLEI, exact: true })).toHaveCount(0);
 	await context.close();
 });
+
+// WP-2.3: every example's seeded run is published by its owner, Sandspruit with an
+// advisory notice, so the seeded farmer has figures (the farm page itself is WP-2.6's).
+test('the seeded farmer reads their published farm and the advisory notice', async ({ page }) => {
+	await signInAs(page, FARMER1);
+	const projects = (await (await page.request.get(`${API_URL}/projects`)).json()).projects as { id: string; name: string }[];
+	const sandspruit = projects.find((p) => p.name === SANDSPRUIT)!;
+	const index = await (await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm`)).json();
+	expect(index.farms.map((f: { name: string }) => f.name)).toEqual(['Vaalbank']);
+	expect(index.publication.restriction.level).toBe('advisory');
+	const view = await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm/${index.farms[0].nodeId}?lang=af`);
+	expect(view.status()).toBe(200);
+	const body = await view.json();
+	expect(body.farm.name).toBe('Vaalbank');
+	expect(body.publication.restriction).toMatchObject({ level: 'advisory', noticeLang: 'af' });
+	expect(body.publication.restriction.notice).toMatch(/^Die rivier is laag/);
+	expect(body.farm.monthly).toHaveLength(12);
+});
