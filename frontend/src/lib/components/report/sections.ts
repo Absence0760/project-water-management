@@ -4,10 +4,12 @@
 // route with sections of its own. A section appears only when the run has its
 // data: the report never prints a placeholder for something that doesn't
 // exist yet (the published-by line and restriction notice wait for WP-2.3,
-// changes since the last publication for WP-2.4, the disclaimer for D10).
+// changes since the last publication for WP-2.4). Three sections close every
+// report (WP-3.13): the validation statement, the professional sign-off
+// (saying plainly when there is none) and the disclaimer (D10, draft).
 import type { Run } from '$lib/api/types';
 
-export type ReportSectionId = 'cover' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes';
+export type ReportSectionId = 'cover' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
 
 export interface ReportSection {
 	id: ReportSectionId;
@@ -29,6 +31,9 @@ export function reportSections(run: ReportRun): ReportSection[] {
 	out.push({ id: 'ewr', title: 'EWR compliance' });
 	out.push({ id: 'farms', title: 'Farms, warnings and checks' });
 	if (run.notes?.trim()) out.push({ id: 'notes', title: 'Notes' });
+	out.push({ id: 'validation', title: 'Validation statement' });
+	out.push({ id: 'signoff', title: 'Professional sign-off' });
+	out.push({ id: 'disclaimer', title: 'Disclaimer' });
 	return out;
 }
 

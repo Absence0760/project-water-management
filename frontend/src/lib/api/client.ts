@@ -35,6 +35,9 @@ import type {
 	HistoryRevision,
 	RestoreResult,
 	SeriesRevisionMeta,
+	Signoff,
+	SignoffList,
+	SignoffRequest,
 	Member,
 	Nomination,
 	Project,
@@ -404,6 +407,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
+		},
+		signoffs: {
+			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
+			list: (id: string, runId: string) => request<SignoffList>('GET', `${p(id)}/runs/${enc(runId)}/signoffs`),
+			/** Sign a run off (editor): 409 when the statement changed since it was shown. */
+			create: (id: string, runId: string, body: SignoffRequest) =>
+				request<{ signoff: Signoff }>('POST', `${p(id)}/runs/${enc(runId)}/signoffs`, body).then((r) => r.signoff)
 		},
 		publication: {
 			/** The current publication (null when nothing is published) and the history, newest first (at most 12). */

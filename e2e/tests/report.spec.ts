@@ -11,7 +11,20 @@ import { expect, test } from '../support/fixtures.ts';
 
 // The seeded catchment has a network, farms (so curtailment) and, with the
 // notes below, every section the report has without a Reserve rule table.
-const SECTIONS = ['1. Network', '2. Inputs', '3. Calibration', '4. Shortfalls and curtailment', '5. EWR compliance', '6. Farms, warnings and checks', '7. Notes'];
+// Every report closes with the validation statement, the sign-off and the
+// disclaimer (WP-3.13; signoff.spec.ts covers them).
+const SECTIONS = [
+	'1. Network',
+	'2. Inputs',
+	'3. Calibration',
+	'4. Shortfalls and curtailment',
+	'5. EWR compliance',
+	'6. Farms, warnings and checks',
+	'7. Notes',
+	'8. Validation statement',
+	'9. Professional sign-off',
+	'10. Disclaimer'
+];
 
 async function seedRun(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
