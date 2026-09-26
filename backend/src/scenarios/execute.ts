@@ -173,8 +173,10 @@ interface ScenarioRunPlan {
 export async function prepareScenarioRun(db: Db, projectId: string, scenario: ScenarioRow, label: string | undefined, role: Role): Promise<ScenarioRunPlan> {
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
 	const check = checkScenario(base, scenario);
+	// Ops, not problem lines: an edit group that breaks a rule is one line for all its ops.
+	const skipped = scenario.ops.length - check.applied.length;
 	if (check.problems.length)
-		throw new ApiError(422, check.problems.length === 1 ? "an op of this scenario doesn't apply to its base run" : `${check.problems.length} ops of this scenario don't apply to its base run`, {
+		throw new ApiError(422, skipped === 1 ? "an op of this scenario doesn't apply to its base run" : `${skipped} ops of this scenario don't apply to its base run`, {
 			problems: check.problems
 		});
 	const run: RunPlan = {

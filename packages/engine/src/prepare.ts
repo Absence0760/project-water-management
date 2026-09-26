@@ -99,6 +99,9 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	const series = input.series ?? {};
 
 	// --- run window ---------------------------------------------------------
+	// First the span of every rain series that can drive the run (catchment,
+	// CHIRPS, forecast, a rain-source period's series inside its period), as
+	// before engine 0.45.0; an explicit simulationStart / End replaces its end.
 	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
 	let first = Infinity;
 	let last = -Infinity;
@@ -120,12 +123,102 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		first = Math.min(first, a);
 		last = Math.max(last, b);
 	}
-	const start = settings.simulationStart ? toEpochDay(settings.simulationStart) : first;
-	const end = settings.simulationEnd ? toEpochDay(settings.simulationEnd) : last;
+	let start = settings.simulationStart ? toEpochDay(settings.simulationStart) : first;
+	let end = settings.simulationEnd ? toEpochDay(settings.simulationEnd) : last;
 	if (!Number.isFinite(start) || !Number.isFinite(end)) {
 		throw new Error('no rainfall series: cannot work out the simulation period');
 	}
 	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
+	let prep = alignToWindow(settings, series, start, end);
+	// Then (engine ≥ 0.45.0, issue #54) an end left unset moves in to the
+	// first / last day whose final rain (catchment, a rain-source period's
+	// series, bias-corrected CHIRPS or the forecast, after the zero-run and
+	// accumulation handling) has a value: a rain series padded with blanks to
+	// a longer flow record would otherwise run decades of 0 mm. Without any
+	// rain value the window stays as it was. The second pass only runs when
+	// the window moved, so a project whose rain fills its span runs as before.
+	if (!settings.simulationStart || !settings.simulationEnd) {
+		const [a, b] = rainedDays(prep);
+		const s = a >= 0 && !settings.simulationStart ? start + a : start;
+		const e = b >= 0 && !settings.simulationEnd ? start + b : end;
+		if (s !== start || e !== end) {
+			start = s;
+			end = e;
+			prep = alignToWindow(settings, series, start, end);
+		}
+		const note = defaultWindowWarning(series, settings, start, end);
+		if (note) warnings.push(note);
+	}
+	warnings.push(...prep.warnings);
+	return { ...prep, warnings, settings, series };
+}
+
+/**
+ * The first and last run day (indexes) with rain; −1 when none has any. A day
+ * has rain when its final rain has a value, or when it is a recorded
+ * catchment reading the zero-run handling set aside and nothing filled (it
+ * runs as 0 mm, with its own warning): a recorded zero run at the end of the
+ * record is suspect data, not a blank, so it doesn't move the window.
+ */
+function rainedDays(prep: Pick<PreparedRun, 'aligned' | 'days' | 'zeroRain'>): [number, number] {
+	const c = prep.aligned('rain_catchment_mm');
+	const ch = prep.aligned('rain_chirps_mm');
+	const f = prep.aligned('rain_forecast_mm');
+	const setAside = prep.zeroRain?.mask;
+	const has = (t: number) => (c[t] ?? ch[t] ?? f[t] ?? null) !== null || !!setAside?.[t];
+	let a = 0;
+	while (a < prep.days && !has(a)) a++;
+	if (a === prep.days) return [-1, -1];
+	let b = prep.days - 1;
+	while (!has(b)) b--;
+	return [a, b];
+}
+
+/** The series a run reads besides rain, as the default-window warning names them. */
+const OTHER_SERIES_LABEL: [SeriesKind, string][] = [
+	['flow_observed_m3s', 'observed flow'],
+	['flow_logger_m3s', 'logger flow'],
+	['flow_reference_m3s', 'reference flow'],
+	['evap_apan_mm', 'daily A-pan evaporation']
+];
+
+/**
+ * The warning when the default window (an end left unset) leaves out days on
+ * which a flow or evaporation series has values, so it is never silent that
+ * the run follows the rain rather than, say, a longer gauge record. Null when
+ * nothing is left out.
+ */
+export function defaultWindowWarning(series: ModelInput['series'], settings: Pick<ProjectSettings, 'simulationStart' | 'simulationEnd'>, start: number, end: number): string | null {
+	const before: string[] = [];
+	const after: string[] = [];
+	for (const [kind, label] of OTHER_SERIES_LABEL) {
+		const s = series[kind];
+		if (!s) continue;
+		const d0 = toEpochDay(s.startDate);
+		let nBefore = 0;
+		let nAfter = 0;
+		for (let i = 0; i < s.values.length; i++) {
+			const v = s.values[i];
+			if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+			const day = d0 + i;
+			if (day < start) nBefore++;
+			else if (day > end) nAfter++;
+		}
+		if (nBefore && !settings.simulationStart) before.push(`${nBefore} ${nBefore === 1 ? 'day' : 'days'} of ${label}`);
+		if (nAfter && !settings.simulationEnd) after.push(`${nAfter} ${nAfter === 1 ? 'day' : 'days'} of ${label}`);
+	}
+	if (!before.length && !after.length) return null;
+	const left = [before.length ? `${before.join(', ')} before it` : '', after.length ? `${after.join(', ')} after it` : ''].filter(Boolean);
+	const which = before.length && after.length ? 'start and end' : before.length ? 'start' : 'end';
+	return (
+		`the run covers the rain record, ${fromEpochDay(start)} to ${fromEpochDay(end)}, and leaves out ${left.join(', and ')} ` +
+		`(no rain there): set Settings → simulation ${which} to include them`
+	);
+}
+
+/** Everything prepareRun does once the window is fixed: align the series to it and apply the rain handling. */
+function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], start: number, end: number): Omit<PreparedRun, 'settings' | 'series'> {
+	const warnings: string[] = [];
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);
 	const month = new Uint8Array(days);
@@ -205,8 +298,6 @@ export function prepareRun(input: ModelInput): PreparedRun {
 
 	return {
 		warnings,
-		settings,
-		series,
 		start,
 		end,
 		days,
@@ -301,6 +392,14 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		} else if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
 			warnings.push(`${key} "${String(v)}" is not an ISO date (YYYY-MM-DD); ignored`);
 			s[key] = null;
+		}
+	}
+	// The seasonal outlook's demand-factor start (engine ≥ 0.44.0, issue #53 R5).
+	if (s.demandFactorFrom !== null && s.demandFactorFrom !== undefined) {
+		const v = s.demandFactorFrom;
+		if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+			warnings.push(`demandFactorFrom "${String(v)}" is not an ISO date (YYYY-MM-DD); demand factors apply on every day`);
+			s.demandFactorFrom = null;
 		}
 	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {

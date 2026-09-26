@@ -642,7 +642,7 @@ describe('diffInputs', () => {
 		(b.settings as Record<string, unknown>).futureKnob = 3;
 		expect(texts(a, b)).toEqual([
 			'Effective rain fraction: 0.65 → 0.7',
-			'Simulation start: start of data → 2005-10-01',
+			'Simulation start: first day with rain → 2005-10-01',
 			'A-pan evaporation: changed in 12 months',
 			'Pragmatic EWR: Oct 0 → 100 m³/day',
 			'Hi/lo MAP split: 0.81/0.19 → 0.7/0.3',

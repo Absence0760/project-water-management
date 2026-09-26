@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { NetworkNode, ProjectModel } from '@water-management/engine';
-import { validateModel } from './validate';
+import { modelRuleIssues, SUPPLY_RULES, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { supplyIssues, validateModel } from './validate';
 
 function node(id: string, name: string, down: string | null): NetworkNode {
 	return {
@@ -186,5 +186,37 @@ describe('validateModel', () => {
 		expect(messages(model(nodes, { boreholes: [{ ...b, depletionFactor: 2 }] }))).toEqual([
 			'Borehole "BH1" on "A": capacity and annual cap can\'t be negative; the emergency level and depletion are 0–100%.'
 		]);
+	});
+
+	it('checks the supply rule and river pump as the API does (WP-3.8)', () => {
+		const g = node('g', 'Gauge', null);
+		const farm = (over: Partial<NetworkNode>) => ({ ...node('a', 'A', 'g'), ...over });
+		expect(messages(model([g, farm({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 })]))).toEqual([]);
+		expect(messages(model([g, farm({ supplyRule: 'runOfRiver', damCapacityM3: 50_000 })]))).toEqual([
+			'"A": run of river has no dam; set the dam capacity to 0 or pick another supply rule.'
+		]);
+		expect(messages(model([g, farm({ supplyRule: 'trigger' })]))).toEqual([
+			'"A": the “dam, river when low” supply rule needs a farm dam to switch on; enter a dam capacity or pick another supply rule.'
+		]);
+		expect(messages(model([g, farm({ supplyRule: 'trigger', damCapacityM3: 50_000, supplyTriggerPct: 0.6, supplyStopPct: 0.4 })]))).toEqual([
+			'"A": the switch-back level must be at least the switch-to-river level.'
+		]);
+		expect(messages(model([g, farm({ pumpCapacityM3Day: -1 })]))).toEqual(['"A": the river pump capacity can\'t be negative.']);
+		expect(messages(model([{ ...g, supplyRule: 'riverFirst' }, farm({})]))).toEqual([
+			'"Gauge": only a farm has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
+		]);
+	});
+
+	it('refuses exactly the supply combinations the backend refuses (engine modelRules)', () => {
+		const g = node('g', 'Gauge', null);
+		for (const kind of ['farm', 'user', 'gauge'] as const)
+			for (const supplyRule of SUPPLY_RULES)
+				for (const damCapacityM3 of [0, 50_000])
+					for (const [supplyTriggerPct, supplyStopPct] of [[0.4, 0.6], [0.6, 0.4]] as const)
+						for (const pumpCapacityM3Day of [null, 1200]) {
+							const n: NetworkNode = { ...node('a', 'A', 'g'), kind, supplyRule, damCapacityM3, supplyTriggerPct, supplyStopPct, pumpCapacityM3Day };
+							const backend = [...modelRuleIssues(model([g, n])).keys()].some((k) => k.startsWith('supply'));
+							expect(supplyIssues(n).length > 0, JSON.stringify({ kind, supplyRule, damCapacityM3, supplyTriggerPct, pumpCapacityM3Day })).toBe(backend);
+						}
 	});
 });

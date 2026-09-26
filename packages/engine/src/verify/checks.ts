@@ -9,7 +9,7 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { demandFactorOf, modelFarmEfficiency } from '../demand';
+import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -755,6 +755,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const e = runEfficiency(input, n);
 		// The demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales F after the soil-water store.
 		const factor = demandFactorOf(n, []);
+		// From settings.demandFactorFrom on (engine ≥ 0.44.0), as runModel resolves it (an invalid date: every day).
+		const dff = input.settings?.demandFactorFrom;
+		const factorFrom = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, out.days) : 0;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
@@ -764,7 +767,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			const df = factor ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
+			const df = factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${factor ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor ? ')' : ''}`;
 			if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;

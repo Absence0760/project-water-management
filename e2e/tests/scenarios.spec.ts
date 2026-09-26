@@ -5,13 +5,15 @@
 // with its base (headline deltas, the per-node overlay, the compare page's
 // Scenario overrides); a rebase onto a run without the farm reports the
 // change that no longer applies; a licence what-if puts a farm on river first
-// with a 1,200 m³/day pump (WP-3.8); a viewer reads it all but changes nothing.
+// with a 1,200 m³/day pump (WP-3.8), its pumping compared with the base's
+// none as 0 (issue #54); a trigger farm goes straight to run of river one
+// change at a time (an edit group: the half-made edit says why, the finished
+// one applies); a viewer reads it all but changes nothing.
 // Axe-scanned in both themes and on a phone.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
-import { closeModal, openNodeTable } from '../support/network.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const NAME = 'Upper dam +20 %';
@@ -224,7 +226,22 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 
 	// Run it; the full comparison lists both changes and the input diff names them.
 	await page.getByRole('button', { name: 'Run scenario' }).click();
-	await expect(page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Headline results' })).toBeVisible();
+	const compare = page.getByRole('region', { name: 'Scenario against its base' });
+	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
+
+	// The base (dam first) has no river pump, so its pumping reads as 0 rather than being left out (issue #54):
+	// the farm row shows the scenario's mean pumped against the base's none…
+	const farmRow = compare.getByRole('region', { name: 'Farms' }).getByRole('row', { name: /^Upper farm/ });
+	await expect(farmRow.getByTestId('farm-feature-avgRiverAbstractionM3Day')).toContainText('A: none (0)');
+	await expect(compare.getByTestId('farm-feature-note')).toHaveText('Pumped from the river: a run with no river pump at a farm reads as 0 there (“none”).');
+	// …and the daily overlay offers the farm's river pumping, the base drawn as zeros and said so.
+	const overlay = compare.getByRole('region', { name: 'Daily series' });
+	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	const series = overlay.getByLabel('Series');
+	await expect(series.locator('option[value="river_abstraction"]')).toHaveText('Pumped from the river below the dam (part of supplied) (m³/day) · run B only');
+	await series.selectOption('river_abstraction');
+	await expect(overlay.getByTestId('overlay-zero-note')).toContainText('Not in run A: shown as 0. Run A has no such feature at Upper farm');
+	await expect(overlay.getByTestId('overlay-summary')).toHaveText(/^Over the [\d,]+ days both runs have: mean A 0, mean B /);
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	const recorded = page.getByRole('region', { name: 'Scenario overrides' }).getByRole('list', { name: `Changes in scenario ${name} (run B)` }).getByRole('listitem');
 	await expect(recorded).toHaveCount(2);
@@ -233,75 +250,101 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await expect(changed).toContainText('Upper farm: river pump capacity no limit → 1,200 m³/day');
 });
 
+test('a trigger farm goes straight to run of river, one change at a time: the half-made edit says why, the finished one applies (docs/scenarios.md § Edit groups)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario edit group');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const name = 'Upper to run of river';
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'supplyRule', value: 'trigger' }], ownedNodeIds: [upper] }
+	});
+	expect(res.status()).toBe(201);
+	const { scenario } = (await res.json()) as { scenario: { id: string } };
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenario.id}`);
+	const items = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
+	await expect(items).toHaveCount(1);
+	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
+
+	// The rule alone: run of river has no dam, and Upper farm still has one. It follows the trigger change on the
+	// same farm, so the two are one edit, skipped whole until it fits: both say why.
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
+	await form.getByLabel('Supply rule').selectOption({ label: 'run of river' });
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(items).toHaveCount(2);
+	await expect(items.nth(1)).toContainText('Upper farm: Supply rule dam, river when low → run of river');
+	for (const i of [0, 1]) await expect(items.nth(i)).toContainText("Doesn't apply: \"Upper farm\": run of river has no dam");
+	await expect(page.getByTestId('scenario-problems')).toContainText("2 changes don't apply");
+	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeDisabled();
+
+	// The form builds on the half-made edit (the farm reads as run of river); emptying the dam next completes it.
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: run of river');
+	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await form.getByLabel('Dam capacity (m³)').fill('0');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(items).toHaveCount(3);
+	await expect(items.nth(2)).toContainText('Upper farm: Dam capacity 150,000 m³ → 0 m³');
+	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
+	for (const i of [0, 1, 2]) await expect(items.nth(i)).not.toContainText("Doesn't apply");
+	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeEnabled();
+});
+
 test('override mode records edits in the Network, Crops and Transfers tables as changes, never touching the catchment', async ({ page, owner }) => {
 	void owner;
 	const { project, scenarioId } = await seedScenario(page, 'Scenario override mode');
-	// The catchment's own model, as saved: every check below compares it whole.
+	// The catchment's own model, as saved: compared whole before and after recording.
 	const liveModel = async () => (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as unknown;
 	const before = await liveModel();
-	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	// A stray overlay parameter on the Scenarios tab never opens the page's grid or farm drawer (the catchment's model, with its save).
+	const lower = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Lower farm')!.id;
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}&grid=nodes&farm=${lower}`);
 	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
 
 	// It says plainly that this is the scenario, not the catchment, and starts from the scenario's model (the raise applied).
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
+	// Override mode shows the node table inline, on the scenario's model: not the map, whose Grids menu and
+	// farm links open the page's overlays on the catchment's model (issue #17).
+	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
+	await expect(page.locator('details.grids-menu')).toHaveCount(0);
+	await expect(page.getByTestId('node-card')).toHaveCount(0);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
 	const record = page.getByTestId('override-record');
 	await expect(record).toContainText('No edits yet.');
 
-	// The Network is a map (issue #17); the node fields are in its node table (Grids → Node table), here on the
-	// scenario's model, not the catchment's (150,000 m³). It has no save: Done leaves the edit to record.
-	let grid = await openNodeTable(page);
-	await expect(page).toHaveURL(/[?&]tab=scenarios&scenario=.+&grid=nodes/);
-	await expect(grid.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
-	await expect(grid.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
-	await grid.getByLabel('Dam capacity of Lower farm, m³').fill('100000');
-	await expectNoViolations(page);
-	await closeModal(page);
-	await expect(page).not.toHaveURL(/[?&]grid=/);
-
-	// One edit in each of the other tables.
+	// One edit in each table.
+	await page.getByLabel('Dam capacity of Lower farm, m³').fill('100000');
 	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
 	await page.getByLabel('Orchard on Lower farm, ha').fill('15');
 	await mode.getByRole('button', { name: 'Transfers', exact: true }).click();
 	await page.getByLabel('transfer 1 enabled').uncheck();
-
-	// The map's farm link opens the farm drawer on the same edited model (15 ha; the catchment has 12), again without a save.
-	await mode.getByRole('button', { name: 'Network', exact: true }).click();
-	await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: /^Lower farm/ }).click();
-	await page.getByTestId('node-card').getByRole('link', { name: /^15\.00 ha, 1 crop/ }).click();
-	const drawer = page.getByRole('dialog', { name: 'Lower farm: planted areas' });
-	await expect(drawer.getByLabel('Orchard on Lower farm, ha')).toHaveValue('15');
-	await expect(drawer.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
-	await drawer.getByLabel('Orchard on Lower farm, ha').fill('16');
-	await drawer.getByLabel('Orchard on Lower farm, ha').press('Tab');
-	await closeModal(page);
-	await expect(page).not.toHaveURL(/[?&]farm=/);
-
 	const pending = record.getByRole('list', { name: `Edits to record in ${NAME}` }).getByRole('listitem');
 	await expect(pending).toHaveCount(3);
 	await expect(pending.nth(0)).toContainText('Lower farm: Dam capacity 90,000 m³ → 100,000 m³');
-	await expect(pending.nth(1)).toContainText('Lower farm: Orchard 12 ha → 16 ha');
+	await expect(pending.nth(1)).toContainText('Lower farm: Orchard 12 ha → 15 ha');
 	await expect(pending.nth(2)).toContainText('The transfer Upper farm → Lower farm:');
 	expect(await liveModel()).toEqual(before);
 
 	// An edit no change can express is named, and holds the rest back until it is undone.
-	grid = await openNodeTable(page);
-	await grid.getByLabel('Kind of Lower farm').selectOption('user');
+	await mode.getByRole('button', { name: 'Network', exact: true }).click();
+	await page.getByLabel('Kind of Lower farm').selectOption('user');
 	await expect(record.getByRole('status').first()).toContainText("Changing “Lower farm” from a farm to a user: a scenario can't change a node's kind.");
 	await expect(record.getByRole('button', { name: /^Record/ })).toBeDisabled();
-	await grid.getByLabel('Kind of Lower farm').selectOption('farm');
-	await closeModal(page);
+	await page.getByLabel('Kind of Lower farm').selectOption('farm');
 
 	await record.getByRole('button', { name: 'Record 3 changes' }).click();
 	await expect(changes(page).getByRole('listitem')).toHaveCount(4);
 	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Lower farm: Dam capacity 90,000 m³ → 100,000 m³');
 	// The tables reload from the scenario as it now is: nothing left to record.
 	await expect(record).toContainText('No edits yet.');
-	grid = await openNodeTable(page);
-	await expect(grid.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('100000');
-	await closeModal(page);
+	await expect(page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('100000');
 
 	// The catchment's own model is untouched, and no edit is waiting for the page's save bar.
 	expect(await liveModel()).toEqual(before);

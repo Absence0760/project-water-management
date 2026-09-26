@@ -803,6 +803,29 @@ note's link on the Summary, `notes.ts` `noteHref`).
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Supply** (engine ≥ 0.42.0, WP-3.8, issue #54 item 2c, [model.md §2.7e](./model.md)),
+  one-node form, farms (`SupplyFields.svelte`, `supply.ts`): **Supply rule**
+  in run comparison's and the scenario form's words (dam only / river first /
+  dam, river when low / run of river, engine `SUPPLY_RULE_LABEL`) with a line
+  on what the chosen rule does. Every rule but dam only shows the river pump:
+  **Number of pumps** × **m³/h per pump**, which fills **River pump capacity**
+  (m³/day, pumps × m³/h × 24, with the sum shown under it), and the capacity
+  itself, which can be typed straight in (typing it clears the calculator).
+  Only the m³/day is stored, so a saved capacity reloads into the m³/day field
+  with the calculator empty, whatever the pumps were; that way a capacity that
+  isn't a whole pumps × rate product (an imported or licensed figure) shows as
+  it is. Blank is no limit, and the note says the run warns. **Switch to river
+  below** and **Back to the dam at** (% of dam) show for dam, river when low
+  only. The save rules show under the fields as alerts and block Save, as the
+  API refuses them (`supplyIssues` in `lib/model/validate.ts`, a test holds it
+  to the engine's `modelRuleIssues`): dam, river when low needs a dam; run of
+  river with a dam says to set the dam capacity to 0 or pick another rule; the
+  switch-back level must be at least the switch-to-river level. A farm with no
+  dam on dam only that has anything routed to its dam gets the run's hint: it
+  irrigates straight from the river with no limit; pick run of river with a
+  pump capacity. A farm turned into a gauge or other user keeps the section
+  while it still has supply settings, so they can be reset. Read-only for
+  viewers (no calculator).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
@@ -904,10 +927,10 @@ context. It opens while the workspace URL has `farm=<nodeId>`
 (`farmDrawerHref(tab, nodeId)`: `?tab=network&farm=…`, or `?farm=…` over the
 Summary), so it can be linked and Back works; Done, Esc or the ✕ drop `farm`
 from the URL in place (`withoutFarm`), so Back then goes to where it was
-opened from. It is its own chunk, fetched when a URL names a farm. The
-workspace page never opens it over the Scenarios tab: there, override mode
-opens its own on the scenario's model, with no save ([§ Scenarios](#scenarios-tabscenarios),
-override mode).
+opened from. It is its own chunk, fetched when a URL names a farm. It never
+opens over the Scenarios tab, even when the URL names a farm: it edits and
+saves the catchment's model, and override mode there edits the scenario's
+([§ Scenarios](#scenarios-tabscenarios)).
 
 - **From:** the Summary's Needs attention (a farm below the supply target, a
   single farm with nothing planted) and the Network: on the Map, a farm's
@@ -945,9 +968,9 @@ sections, through its `sections` prop) and `transfers` (the Transfers tab). Done
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
 The node table has no such tab (`GRID_TAB.nodes` is null), so it opens anywhere
-but the Scenarios tab: the workspace page never opens a grid there, since
-override mode opens its own, on the scenario's model and with no save
-([§ Scenarios](#scenarios-tabscenarios), override mode).
+but the Scenarios tab, where no grid opens even when the URL names one: the
+modal edits and saves the catchment's model, and override mode there edits
+the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 
 - **From:** the Network's **Grids** menu. More screens will link to
   it as they simplify (the #17 checklist).
@@ -1511,7 +1534,7 @@ which checks every catchment tab).
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow
   paste result*.
-- **Simulation period**.
+- **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
   thirds), 150 %, 90 days). Out-of-range
@@ -1525,6 +1548,24 @@ which checks every catchment tab).
   wait and publishing are disabled while it is off; a wait outside 0–120
   whole minutes blocks Save. Saving only this group doesn't mark the runs as
   out of date (it changes no input).
+- **Outcome matrix** (`#set-outcomes`, issue #53 R4, `settings.outcomes`;
+  `outcomes/OutcomeSettingsSection.svelte`, a lazy chunk inside the form,
+  since the Settings chunk is at its bundle ceiling): how the Runs tab's
+  [outcome matrix](#outcome-matrix) reads a demand sweep. **Water-year
+  classes**: *Automatic* (terciles, quintiles once the record has 25
+  complete years; the default), *Terciles* or *Quintiles*. **Risk
+  cut-offs**, one group per measure, each with **Use the default
+  cut-offs** ticked by default and a **Defaults pending the hydrologist**
+  badge while it is: *Reserve months met* (lower risk from 90 %,
+  increasing risk from 75 % of months met) and *Days below the pragmatic
+  EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
+  the two cut-offs are editable in %, starting from the defaults; cut-offs
+  out of order or outside 0–100 % block Save (the engine's
+  `validateOutcomeCutoffs`, as the API checks them). The defaults are
+  placeholders until the client answers O1 and O2 (plan.md §
+  Decision-support outputs). Viewers see the group read-only. Like
+  automatic runs it changes no input: saving only this group doesn't mark
+  the runs as out of date.
 
 ### Data feeds
 
@@ -1716,8 +1757,9 @@ run's report to chosen members every week or month.
      self-checks, the plausibility findings, the WR2012 flag and the calibration
      fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
-     EWR vs outflow, EWR by month, and the **Uncertainty bands** (their own
-     panel and menu entry, beside the findings they qualify).
+     EWR vs outflow, EWR by month, the **Uncertainty bands** (their own
+     panel and menu entry, beside the findings they qualify), the **Outcome
+     matrix** ([§ Outcome matrix](#outcome-matrix)) and the water account.
   3. **Farms & users**: curtailment (led by the share-the-pain board, with
      the other water users and the EWR sites tables), farm detail.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
@@ -2206,6 +2248,10 @@ run's report to chosen members every week or month.
   picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
   colour is never the only cue, with a legend of the ranges and a count of
   months per class.
+- **Outcome matrix** (`#res-outcomes`, under *River & Reserve* after the
+  uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, its own chunk):
+  the run's inputs at a few demand levels by class of water year, described
+  in [§ Outcome matrix](#outcome-matrix) below.
 - **Water account** (`#res-water-account`, last under *River & Reserve*;
   `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
@@ -2233,6 +2279,58 @@ run's report to chosen members every week or month.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 - **Report**, beside the Download menu in the run header, opens the shown
   run's printable report (§ Report below).
+
+### Outcome matrix
+
+Issue #53 R4 ([planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m),
+[model.md §2.14](./model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
+A panel under *River & Reserve* on the Runs tab (`#res-outcomes`, menu
+entry **Outcome matrix**; `outcomes/OutcomeMatrixPanel.svelte`, its own
+chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
+
+- **Starting a sweep** (editors): **Demand levels** (% of today's farm
+  demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
+  and **Run demand sweep** queue a [sweep](./scenarios.md#sweeps) of the
+  shown run: one member per level, each a single `demand.scale` op on every
+  farm, named "85 %". Only on an ordinary run of the model (a scenario or
+  forecast run says it can't), and only when the run stores its natural
+  flow. Viewers see the newest sweep, with no button.
+- **Pending and complete** follow the sweep's own status and its job's
+  (`GET /projects/:id/sweeps/:sweepId`, polled every 1.5 s while pending):
+  *Queued: waiting for the background worker*, *Running the demand
+  levels…* with a progress bar, a retry, or, for a sweep whose job died,
+  why it couldn't run. The panel shows the base run's **newest demand
+  sweep** (a sweep whose every member is one plain `demand.scale`; other
+  sweeps, such as R5's, are skipped) and carries `data-state` (`loading`,
+  `empty`, `pending`, `stuck`, `complete`).
+- **The matrix**: rows are the demand levels in the sweep's order,
+  columns the water-year classes of the **base run's** natural flow at the
+  outlet, by the project's method (Settings → Outcome matrix), each headed
+  with its bounds in m³ of annual natural flow and its **n years**. Each cell
+  is coloured by risk (green, amber, red, plus a coloured edge) **and**
+  names it (*Lower risk*, *Increasing risk*, *High risk*), with the
+  engine's sentence counting years (`describeOutcomeCell`: "EWR met on
+  every day in 2 of 3 dry years (below it on 4 % of days)"); a class with
+  fewer than 3 years reads *Not enough years*, uncoloured. A member whose
+  ops didn't apply, or that the engine refused, is a row saying so, with the
+  reason. The classes and colours are worked out in the browser from the
+  stored sweep, so changing the settings re-reads a sweep without running
+  it again.
+- **Around it**: badges for the **measure** (Reserve months met at the
+  outlet when every level has a rule table there, else days below the
+  pragmatic EWR at the outlet), the method and number of complete years,
+  and **Risk cut-offs pending the hydrologist** while the measure in use has
+  the default cut-offs; the cut-offs in words; the water years not classed
+  (part years, or a missing day); and the engine's warnings (e.g. only some
+  levels have a rule table, or too few years for every class to judge).
+- **No recommendation.** The panel reports how past years went at each
+  level ("Historical, not a forecast; the choice of level is the WUA's") and
+  never picks one (a unit test holds the view model to that).
+
+Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
+enough years, default vs custom cut-offs, problem members) and
+`e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
+matrix against the stored series).
 
 ## Scenarios (`?tab=scenarios`)
 
@@ -2294,15 +2392,11 @@ them scenarios).
   catchment", saying the catchment's own model isn't touched, with **Close
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
-  Network is its map, as on its own tab: the node fields are in **Grids →
-  Node table**, a node's full form in its card's Edit sheet, and a farm's
-  planted areas in the farm drawer from its card. Override mode opens those
-  overlays itself (the same `grid=` / `farm=` / `edit=` URL parameters) on
-  the scenario's editor, and none has a save: **Done** leaves the edit in
-  Edits to record. The workspace page doesn't open its own grid modal or
-  farm drawer over the Scenarios tab, so nothing there can reach the
-  catchment's model or its save. Opening or closing one of them doesn't ask
-  about unrecorded edits; only leaving the scenario does. **Edits to record**
+  Network is its node table inline (`NetworkTab only="table"`), not the map:
+  the map's Grids menu and farm links open the page's grid modal and farm
+  drawer, which edit and save the catchment's model, and neither opens over
+  the Scenarios tab. A navigation that stays on the scenario doesn't ask
+  about unrecorded edits; leaving it does. **Edits to record**
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
@@ -2335,7 +2429,10 @@ them scenarios).
   of a rebased scenario is still compared with its own base), through
   `GET /compare/runs`: headline results, the farms table and the per-node
   daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
-  #8), with **Open the full comparison** (the Compare runs tab; for an
+  #8). A feature the scenario adds or removes shows against 0 in the run
+  without it: a river-first farm's *Pumped from the river* series (the base
+  drawn as zeros, "run B only") and farm column ("A: none (0)"), under
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab; for an
   applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
   edited since that run.
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is

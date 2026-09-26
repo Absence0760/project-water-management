@@ -53,8 +53,8 @@ export interface OutcomeRiskCutoffs {
 /**
  * PLACEHOLDER DEFAULTS, PENDING THE HYDROLOGIST (client question O1). Days
  * below the EWR use the portfolio traffic lights' 5 % / 20 % (roadmap D11,
- * also unconfirmed); months met 90 % / 75 % are a judgement. A project
- * setting will override these once the UI half lands.
+ * also unconfirmed); months met 90 % / 75 % are a judgement. The project
+ * setting `settings.outcomes.riskCutoffs` overrides them per metric.
  */
 export const DEFAULT_OUTCOME_RISK_CUTOFFS: Readonly<OutcomeRiskCutoffs> = Object.freeze({
 	reserveMonthsMet: Object.freeze({ lower: 0.9, increasing: 0.75 }),

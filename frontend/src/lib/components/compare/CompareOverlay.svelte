@@ -5,6 +5,8 @@
 	// as its own chunk by the compare page. Series lists come from
 	// GET …/runs/:runId and values from GET …/runs/:runId/series, one pair at a
 	// time; the node matching and the delta are the pure helpers in overlay.ts.
+	// A feature series only one run stored (a river pump the scenario added)
+	// is drawn against zeros for the other run, under overlay.ts zeroFillable.
 	import { untrack } from 'svelte';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunCompareResponse, type RunSeriesRef } from '$lib/api';
@@ -13,7 +15,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { toDisplayUnit } from '$lib/components/runs/results';
-	import { CATCHMENT_GROUP, deltaStats, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText } from './overlay';
+	import { CATCHMENT_GROUP, deltaStats, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText, zeroSeries } from './overlay';
 
 	let { data }: { data: RunCompareResponse } = $props();
 
@@ -98,10 +100,14 @@
 		}
 		loading = true;
 		error = null;
-		const get = (s: Side, nodeId: string | null) =>
-			cachedSeries(s.run.id, k, nodeId, () => api.runs.series(s.project.id, s.run.id, k, nodeId));
+		const only = option?.onlyIn;
+		// The run without this series had no such feature there: zeros over its own period, nothing to fetch.
+		const get = (s: Side, nodeId: string | null, none: boolean) =>
+			none
+				? Promise.resolve(zeroSeries(s.run.startDate, s.run.endDate))
+				: cachedSeries(s.run.id, k, nodeId, () => api.runs.series(s.project.id, s.run.id, k, nodeId));
 		try {
-			const [a, b] = await Promise.all([get(data.a, g.nodeIdA), get(data.b, g.nodeIdB)]);
+			const [a, b] = await Promise.all([get(data.a, g.nodeIdA, only === 'B'), get(data.b, g.nodeIdB, only === 'A')]);
 			if (my === requestNo) loaded = { id, a, b };
 		} catch (e) {
 			if (my === requestNo) error = e instanceof Error ? e.message : String(e);
@@ -118,8 +124,11 @@
 	const sideName = (s: 'A' | 'B') => {
 		const side = s === 'A' ? data.a : data.b;
 		const same = data.a.project.id === data.b.project.id;
-		return `${s} · ${side.run.label || 'Untitled run'}${same ? '' : ` (${side.project.name})`}`;
+		const none = option?.onlyIn && option.onlyIn !== s ? ': none (0)' : '';
+		return `${s} · ${side.run.label || 'Untitled run'}${same ? '' : ` (${side.project.name})`}${none}`;
 	};
+	/** The run that didn't store the picked series, when one didn't (it is drawn as 0). */
+	const missingSide = $derived(option?.onlyIn === 'A' ? 'B' : option?.onlyIn === 'B' ? 'A' : null);
 	const conv = (d: DailySeries) => (option ? toDisplayUnit(d.values, option.unit, flow ? flowUnit : 'm³/day').values : []);
 	const overlaySeries = $derived.by<ChartSeries[]>(() => {
 		const p = pair;
@@ -163,7 +172,7 @@
 				<div class="field">
 					<label for="ov-key">Series</label>
 					<select id="ov-key" value={option?.key ?? ''} onchange={(e) => (key = e.currentTarget.value)}>
-						{#each group?.options ?? [] as o (o.key)}<option value={o.key}>{o.label} ({o.unit})</option>{/each}
+						{#each group?.options ?? [] as o (o.key)}<option value={o.key}>{o.label} ({o.unit}){o.onlyIn ? ` · run ${o.onlyIn} only` : ''}</option>{/each}
 					</select>
 				</div>
 			</div>
@@ -178,6 +187,12 @@
 					recentLabel="Last 3 years"
 					toolbar={flow ? unitToggle : undefined}
 				/>
+				{#if missingSide && pair}
+					<p class="summary" data-testid="overlay-zero-note">
+						Not in run {missingSide}: shown as 0. Run {missingSide} has no such feature at {where} (no river pump, borehole,
+						release rule, land cover or senior user there), so its value is 0 on every day it modelled.
+					</p>
+				{/if}
 				{#if stats}
 					<p class="summary" data-testid="overlay-summary" aria-live="polite">{summaryText(stats, unit, scale)}</p>
 				{/if}

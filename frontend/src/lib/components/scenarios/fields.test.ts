@@ -135,7 +135,7 @@ describe('formatValue', () => {
 		expect(formatValue(NODE_FIELD_SPECS.irrigationEfficiency.spec, 0.8)).toBe('80 %');
 		expect(formatValue(NODE_FIELD_SPECS.damAreaFullM2.spec, null)).toBe('estimated (capacity ÷ 3 m)');
 		expect(formatValue(SETTINGS_SPECS.flowShareMethod.spec, 'hiLo')).toBe('High/low MAP');
-		expect(formatValue(SETTINGS_SPECS.simulationStart.spec, null)).toBe('start of data');
+		expect(formatValue(SETTINGS_SPECS.simulationStart.spec, null)).toBe('first day with rain');
 		expect(formatValue(SETTINGS_SPECS.apanMm.spec, new Array(12).fill(100))).toBe('100 mm every month');
 		expect(formatValue(TRANSFER_FIELD_SPECS.enabled.spec, false)).toBe('no');
 		expect(formatValue(TRANSFER_FIELD_SPECS.toNodeId.spec, 'n1', (id) => (id === 'n1' ? 'Lower farm' : id))).toBe('Lower farm');

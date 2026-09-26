@@ -301,10 +301,9 @@
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
 	// goes to where the drawer was opened from rather than reopening it.
-	// Never over the Scenarios tab: the live model isn't shown there, and
-	// override mode (scenarios/OverrideEditor.svelte) opens its own farm drawer
-	// and grid modal on the scenario's model, which record edits as changes.
-	// Opened here, they would edit and save the catchment's model instead.
+	// Never over the Scenarios tab, even when the URL names one: the drawer
+	// and the grid modal edit and save the catchment's model, and override
+	// mode there (scenarios/OverrideEditor.svelte) edits the scenario's.
 	const modelOverlays = $derived(tab !== 'scenarios');
 	const drawerFarm = $derived(modelOverlays ? page.url.searchParams.get('farm') : null);
 	let drawerOpen = $state(false);
