@@ -11,6 +11,7 @@
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		dams: () => import('$lib/components/dams/DamsTab.svelte'),
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
 		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
@@ -614,6 +615,10 @@
 								{onProjectChange}
 							/>
 						{/snippet}
+					</Lazy>
+				{:else if tab === 'dams'}
+					<Lazy load={LOAD.dams}>
+						{#snippet children(DamsTab)}<DamsTab {projectId} {editor} {runs} readonly={!canEdit} />{/snippet}
 					</Lazy>
 				{:else if tab === 'compare'}
 					<Lazy load={LOAD.compare}>

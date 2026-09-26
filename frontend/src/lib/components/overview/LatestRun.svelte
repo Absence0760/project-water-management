@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Summary → the newest run's KPI row (issue #17 A1): the Reserve, irrigation
 	// supplied, Dams today and the calibration NSE, each with its change from
-	// the run before (Dams: over the run's last 30 days); overview/latestRun.ts
-	// has the rules. The mean simulated outflow is the line under the cards.
+	// the run before (Dams: over the run's last 30 days, and the card opens the
+	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow is the line under the cards.
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once.
 	import type { Run, RunMeta } from '$lib/api';
@@ -80,8 +80,8 @@
 	<LoadState loading={loading && !run} error={run ? null : error} {retry}>
 		<dl class="stats">
 			{#each cards as h (h.id)}
-				<div class="stat" class:flagged={h.flagged} data-headline={h.id}>
-					<dt>{h.term}{#if h.help} <HelpTip key={h.help} />{/if}</dt>
+				<div class="stat" class:flagged={h.flagged} class:linked={!!h.href} data-headline={h.id}>
+					<dt>{#if h.href}<a href={h.href}>{h.term}</a>{:else}{h.term}{/if}{#if h.help} <HelpTip key={h.help} />{/if}</dt>
 					<dd class="value" class:none={h.value === '–' || h.value === '…'}>{h.value}{#if h.unit}<small>{h.unit}</small>{/if}</dd>
 					{#each h.sub as line, i (i)}<dd class="sub">{line}</dd>{/each}
 					{#if h.delta}<dd class="sub change"><Delta m={h.delta} spec={h.spec} /> {h.deltaLabel ?? 'vs previous run'}</dd>{/if}
@@ -163,6 +163,32 @@
 	}
 	.stat dd.none {
 		color: var(--text-muted);
+	}
+	/* A card with a page behind it (Dams today → Dams): the term's link is stretched over the card, as the model facts'. */
+	.stat.linked {
+		position: relative;
+	}
+	.stat.linked:hover {
+		border-color: var(--accent);
+	}
+	.stat.linked:has(dt a:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.stat dt a {
+		color: inherit;
+		text-decoration: underline;
+		text-decoration-color: var(--border-strong);
+		text-underline-offset: 3px;
+	}
+	.stat dt a:focus-visible {
+		outline: none;
+	}
+	.stat dt a::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: var(--radius);
 	}
 	.stat.flagged {
 		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));

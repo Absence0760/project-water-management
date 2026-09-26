@@ -804,6 +804,15 @@
 //             Crops chunk; the largest chunk is unchanged (41.7 KB, the
 //             workspace page). No new dependency. Headroom ~4 KB; the i18n
 //             catalogue trim is still the next saving.
+// 2026-09-26  total 949 → 956 KB; largest chunk unchanged (42 KB ceiling;
+//             the workspace page measures 41.4 KB). The Dams page (issue #17,
+//             option A · Outcomes): dam cards with sparklines, the picked
+//             dam's storage chart and the Dam levels table, moved from the
+//             Summary (dams/DamsTab, DamLevels, dams.ts). A lazy chunk of
+//             7.4 KB gzipped, including the table, which left the Summary's
+//             own lazy chunk; LineChart and uPlot are shared chunks already. Measured 952 KB against the 949 ceiling (the Crops entry
+//             left ~4 KB of headroom), so +4 KB of headroom again. No new
+//             dependency. The i18n catalogue trim is still the next saving.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -814,7 +823,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 949,
+	totalCodeKb: 956,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

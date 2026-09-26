@@ -95,7 +95,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, Runs & results, Compare runs, Scenarios, Allocations),
+first): **Outcomes** (Summary, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -295,9 +295,10 @@ put the results first; its first screen follows board A1 of the redesign
    side column's cards scroll inside themselves, and the page doesn't need
    scrolling to see any of it. Narrower, the columns stack and the chart is
    240 px tall; on a phone the KPIs are 2 × 2.
-3. **Below the first screen**, until the planned Dams and Project pages
-   exist: the active alerts ([§ Alerts](#alerts)), the published baseline,
-   **Dam levels**, the setup checklist (usually the one-line "Setup
+3. **Below the first screen**, until the planned Project page exists: the
+   active alerts ([§ Alerts](#alerts)), the published baseline, a one-line
+   link **Dam levels for each dam → Dams** (once the latest run has dams; the
+   table moved to the [Dams](#dams) page), the setup checklist (usually the one-line "Setup
    complete"), then **The model**: eight headline facts, project details,
    the import record (an imported project only), recent notes
    ([§ Notes](#notes)), team, members, farmers and share links.
@@ -327,26 +328,10 @@ put the results first; its first screen follows board A1 of the redesign
   and goes last). A farm's name opens its [farm drawer](#farm-drawer)
   (`farmDrawerHref`), unless it has left the model since the run. Its own
   chunk (it waits for the run's record anyway).
-- **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
-  below the first screen once the latest run's record is in: every dam in the
-  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series,
-  `damsInRun`), emptiest first. Each row has the dam's capacity, its storage at the end of the run as
-  a bar and a % of capacity (a tick marks its minimum operating level, and
-  "below 30%" or "at its minimum level" is written beside the %, so colour is
-  never the only cue), the lowest it reached in the run's last 365 days with
-  the first day of that low, and the days in that year at or below the
-  minimum. Capacity and minimum come from the run's own model
-  (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them. The model keeps the minimum as a fraction of capacity (`damMinPct`
-  0.1 = 10 %) and only a farm's dam has one, so `damsInRun` turns it into a
-  % and gives any other node's dam none (until 2026-09-26 it passed the
-  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The run summary has no dam figures, so `OverviewTab` fetches each
-  dam's daily series through the Runs tab's `cachedSeries`, four at a time
-  (`loadDamLevels`), for this table and the **Dams today** card, with
-  "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
-  **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
-  dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
-  and is open work ([followups.md](./followups.md)).
+- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
+  the Summary keeps only the **Dams today** card (which links there) and the
+  one-line link below the first screen. `OverviewTab` still fetches each
+  dam's series for the card (`loadDamLevels`).
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -370,9 +355,12 @@ put the results first; its first screen follows board A1 of the redesign
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
-  days"; none when the run is shorter), flagged below 30 %; it reads the dam
-  series fetched for Dam levels, so it says "loading dam levels" until they
-  are in, and "no dams in the run" without any. *Mean simulated outflow*
+  days"; none when the run is shorter), flagged below 30 %; it reads each
+  dam's `dam_storage` series (fetched for it through the Runs cache), so it
+  says "loading dam levels" until they are in, and "no dams in the run"
+  without any. The card links to the [Dams](#dams) page: its term is a link
+  (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
+  facts' tiles are. *Mean simulated outflow*
   (m³/s, % of natural, its change) is the line under the cards, with the
   run the changes are against. Each
   card shows its change from the previous run (the one before it by
@@ -495,6 +483,77 @@ Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
+
+## Dams
+
+`?tab=dams` (`dams/DamsTab.svelte`, rules in `dams/dams.ts` and
+`overview/damLevels.ts`), under **Outcomes** after Runs & results (issue #17,
+option A · Outcomes; no board of its own, so it takes A1's cards and the
+Summary's window-fitting layout). Every member who sees the Summary sees it
+(`TAB_GROUP.dams = 'core'`); an applicant sees the Applicant view instead, as
+for every workspace tab. Its own chunk.
+
+- **Header**: "Dams" and a line: "8 dams · 2.73 million m³ capacity · latest
+  run “Baseline”, ran today" (`damsSummary`, `fmtVolume`), with **Open in
+  Runs** once there is a run. (A plain header like Crops & demand's, to swap
+  for the shared section header when that lands.)
+- **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
+  a farm has a dam in the engine; a capacity on a gauge or another water user
+  is inert (no storage, no `dam_storage` series), so it is not listed, and
+  the Summary's *Dam capacity* fact counts farms' dams only too. The levels are
+  those of the latest run (`pickRuns`, the Summary's newest-by-date rule):
+  the dams the run stored storage for (`damsInRun`, capacity and minimum
+  level from the run's own model), each dam's daily series fetched through
+  the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
+  and the chart.
+- **Cards** (`damCards`), emptiest first (the levels' order), then any dam
+  without a level in node order: the name, capacity, % full at the end of the
+  run, "below 30%" / "at its minimum level" in words, the change over the
+  run's last 30 days in words with ▲/▼ ("down 11 pp in 30 days",
+  `changeWords`), a sparkline of the last 365 days as % of capacity
+  (`storageSpark`: at most 60 points, each the mean of its days), and links
+  **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
+  and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
+  this page). A coloured edge repeats the band (accent, amber below 30 %, red
+  at the minimum; grey without a level). Above them, **All dams together**
+  (`damsToday`, capacity-weighted: the Summary's Dams today figure).
+- **Picking a dam**: the name is a link (`dam=<nodeId>`, `withParam`) stretched
+  over the card, so a click anywhere on it picks the dam, the URL can be
+  shared, and Back returns to the one before. Without `dam=` (or with one
+  that has no card) the first, emptiest, card is charted. When the layout is
+  stacked the chart scrolls into view after a pick.
+- **Storage chart** of the picked dam: its storage, a dashed capacity line
+  and (a farm with one) its dashed minimum operating level
+  (`storageChartSeries`), as **% full** (default) or **m³**, with the
+  Summary's **30 days / 1 year / All** switch (`FLOW_WINDOWS`, opens on a
+  year). A line above it: % full and the volume on the last day, the lowest
+  in the last year and the days at the minimum level.
+- **Layout**: the cards column sits beside the chart once the page is 56rem
+  wide (a container query on the page, not the viewport). When it is also at
+  least 620 px tall, the block is the height left in the window below its top
+  (measured with a `ResizeObserver` on `body`, less the save bar; at least
+  480 px): the chart fills its panel (the plot takes what the chart's head,
+  legend and caption leave) and the cards scroll inside their column.
+  Narrower, the cards are two to a row on a phone, then the chart.
+- **Dam levels** (`dams/DamLevels.svelte`, moved here unchanged from the
+  Summary) below: every dam in the run, emptiest first, with its capacity,
+  its storage at the end of the run as a bar and a % (a tick marks its
+  minimum operating level, and "below 30%" or "at its minimum level" is
+  written beside the %, so colour is never the only cue), the lowest it
+  reached in the run's last 365 days with the first day of that low, and the
+  days in that year at or below the minimum. The model keeps the minimum as a
+  fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
+  one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
+  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
+  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The
+  per-dam fetches' durable fix, dam figures in the run summary, needs an
+  engine change and is open work ([followups.md](./followups.md), #55).
+- **Empty states**: no dams in the model says how to add one, with **Open the
+  Network** and **Node table** (the grid modal over this page, where a node's
+  dam capacity is set or a node added; a new dam shows as a card at once).
+  No run yet: the cards show each dam's capacity only, under a note linking
+  to Runs & results to run the model (a viewer is told an editor has to run
+  it), with no chart or table.
 
 ## Project list
 
@@ -870,8 +929,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Dam level, end of latest run** (offered with a run and a dam): each
     dam's storage on the run's last day, from its `dam_storage` series,
     fetched only while this mode is picked, four at a time
-    (`overview/damLevels.ts` `loadDamLevels`, shared with the Summary's Dam
-    levels; "Loading dam levels (N of M)…", Retry on failure). Bands on the
+    (`overview/damLevels.ts` `loadDamLevels`, shared with the Dams page and
+    the Summary's Dams today; "Loading dam levels (N of M)…", Retry on failure). Bands on the
     same three colours: **60 % full or more** (`DAM_FULL_PCT`), **30–60 %**,
     **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
     the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and

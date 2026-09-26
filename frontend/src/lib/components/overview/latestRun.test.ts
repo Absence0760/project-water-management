@@ -223,5 +223,7 @@ describe('damsHeadline', () => {
 		expect(damsHeadline({ state: 'loading' })).toMatchObject({ value: '…', sub: ['loading dam levels'], delta: null });
 		expect(damsHeadline({ state: 'error' })).toMatchObject({ value: '–', sub: ['dam levels couldn’t be loaded'] });
 		expect(damsHeadline({ state: 'none' })).toMatchObject({ value: '–', sub: ['no dams in the run'], flagged: false });
+		// In every state the card leads to the Dams page.
+		for (const d of [{ state: 'loading' }, { state: 'none' }, today(64, -11)] as const) expect(damsHeadline(d).href).toBe('?tab=dams');
 	});
 });

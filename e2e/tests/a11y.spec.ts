@@ -34,6 +34,14 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
 	},
+	// The two farm dams' cards, the picked one's storage chart drawn, and the Dam levels table.
+	{
+		id: 'dams',
+		ready: async (p) => {
+			await expect(p.getByRole('region', { name: /^Storage: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Dam levels' }).getByRole('rowheader')).toHaveCount(2);
+		}
+	},
 	// One seeded run, so the tab says there is nothing to compare yet.
 	{ id: 'compare', ready: (p) => expect(p.getByRole('heading', { name: 'Only one run so far' })).toBeVisible() },
 	// Nothing made yet on these three: their empty states, once their lists have loaded.
