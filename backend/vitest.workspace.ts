@@ -28,8 +28,20 @@ export default defineWorkspace([
 			setupFiles: ['./src/__tests__/setup.ts'],
 			globalSetup: ['./src/__tests__/db-global-setup.ts'],
 			include: ['src/**/*.db.test.ts'],
-			// Tests share one database; run files serially.
-			fileParallelism: false
+			// Tests share one database; run files serially: the job/feed queue
+			// (feeds.db.test.ts, jobs.db.test.ts) uses claim/tick functions that are
+			// deliberately global, not scoped per project or test file, so two of
+			// these files running at once can claim, finish, retry-count or purge
+			// each other's rows (the flake this fixed: 1 run in 2 failed, always in
+			// those two files). `fileParallelism: false` alone does NOT do this in a
+			// multi-project vitest workspace (vitest@2.1.9): pool sizing is resolved
+			// such that files still get dispatched to separate concurrent forks even
+			// with `--project db` selected. `poolOptions.forks.singleFork` pins this
+			// project to one fork, which does serialize it (verified: file-level
+			// start/end timestamps no longer overlap across processes, and 5/5
+			// `vitest run --project db` runs pass with matching serial wall-clock time).
+			fileParallelism: false,
+			poolOptions: { forks: { singleFork: true } }
 		}
 	},
 	{
