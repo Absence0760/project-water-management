@@ -26,7 +26,7 @@ export const SeriesStartDate = z
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a calendar date');
 
 /**
- * A series' product and version as a body carries them (031_series_provenance.sql):
+ * A series' product and version as a body carries them (032_series_provenance.sql):
  * both strings, both null (not recorded), or both absent (not said: a merge
  * keeps what the series has). Checked with the engine's rules, the same as
  * the database CHECKs.
@@ -87,7 +87,7 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
 // "new data since the last run" even for corrections inside the run period.
-// product / productVersion: what the values are (031_series_provenance.sql), null = not recorded.
+// product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",

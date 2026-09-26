@@ -33,7 +33,7 @@ export const ProjectFile = z.object({
 				unit: z.string().trim().min(1).max(20),
 				startDate: SeriesStartDate,
 				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES),
-				// What the values are (031_series_provenance.sql), e.g. CHIRPS 2.0; absent = not recorded.
+				// What the values are (032_series_provenance.sql), e.g. CHIRPS 2.0; absent = not recorded.
 				...ProvenanceFields
 			})
 			.superRefine(checkProvenance)
@@ -54,7 +54,7 @@ export interface ProjectDocument {
 	/** Stored settings merged over the defaults, so the file is self-contained. */
 	settings: Record<string, unknown>;
 	model: ProjectModel;
-	/** product / productVersion only on a series that records them (031_series_provenance.sql). */
+	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
 	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string }[];
 }
 

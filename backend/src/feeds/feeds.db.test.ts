@@ -915,7 +915,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 
 // Issue #40 part c: a CHIRPS feed writes one product and version (CHIRPS sat
 // v3.0 by default), and never splices it onto a series holding another.
-describe('the CHIRPS version guard (031_series_provenance)', () => {
+describe('the CHIRPS version guard (032_series_provenance)', () => {
 	const V2 = { product: 'CHIRPS', productVersion: '2.0' };
 	/** A project whose CHIRPS series holds three days of v2.0, as a b023 import leaves it. */
 	async function withV2(name: string) {

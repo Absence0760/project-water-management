@@ -224,7 +224,7 @@ export interface SeriesRow {
 	unit: string;
 	startDate: string;
 	values: (number | null)[];
-	/** The product and version (031_series_provenance.sql); both null = not recorded. Absent = null. */
+	/** The product and version (032_series_provenance.sql); both null = not recorded. Absent = null. */
 	product?: string | null;
 	productVersion?: string | null;
 }
@@ -249,7 +249,7 @@ export async function recordSeriesRevision(
 	s: SeriesRow,
 	reason: 'replace' | 'delete' | 'manual_merge' | 'feed_replace'
 ): Promise<string> {
-	// The product and version go with the values, so a restore puts the label back too (031_series_provenance.sql).
+	// The product and version go with the values, so a restore puts the label back too (032_series_provenance.sql).
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11) RETURNING id`,

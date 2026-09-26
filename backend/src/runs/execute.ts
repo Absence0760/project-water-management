@@ -35,7 +35,7 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	);
 	const series: Partial<Record<SeriesKind, DailySeries>> = {};
 	for (const r of s) {
-		// The product and version (031_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
+		// The product and version (032_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
 	}
@@ -185,7 +185,7 @@ interface SnapshotSeries {
 	length: number;
 	/** SHA-256 of seriesDigest(values); absent on runs saved before the hash existed. */
 	valuesSha256?: string;
-	/** The series' product and version (031_series_provenance.sql), null = not recorded; absent on runs saved before it. */
+	/** The series' product and version (032_series_provenance.sql), null = not recorded; absent on runs saved before it. */
 	provenance?: SeriesProvenance | null;
 }
 
@@ -252,7 +252,7 @@ export async function runAndStore(
 					startDate: v.startDate,
 					length: v.values.length,
 					valuesSha256: hashes[k]!,
-					// Absent when the input didn't know it (a scenario rerun of a run from before 031).
+					// Absent when the input didn't know it (a scenario rerun of a run from before 032).
 					...(v.provenance !== undefined ? { provenance: v.provenance } : {})
 				} satisfies SnapshotSeries
 			])

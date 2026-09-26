@@ -24,7 +24,7 @@
 // feed records only that it was checked (last_attempt_at).
 //
 // A CHIRPS feed writes one product and version (feeds/config.ts
-// feedProvenance) and the series records it (031_series_provenance.sql). A
+// feedProvenance) and the series records it (032_series_provenance.sql). A
 // target that holds values of another product or version, or an unrecorded
 // one, is never merged into: the fetch is recorded as failed, saying so,
 // unless an owner confirmed replacing the series (data_feed.replace_series_from

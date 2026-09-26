@@ -132,7 +132,7 @@ Trade-offs we accept: updating one day rewrites the whole array (fine, since
 inputs are uploaded in bulk), and SQL date-range aggregates need `unnest … WITH
 ORDINALITY` (fine for occasional reports).
 
-### Series provenance (031_series_provenance.sql)
+### Series provenance (032_series_provenance.sql)
 
 `time_series.product` and `product_version` say what the values are, e.g.
 `CHIRPS` `2.0` (a b023 workbook's CHIRPS column), `CHIRPS sat` `3.0` or
@@ -378,9 +378,9 @@ the result change?", and put back any earlier version.
   plain uuid, not a foreign key, so a deleted series can still be restored by
   its old id; `unit` is kept with it. **Retention**: the newest 5 per
   (project, kind, name) and nothing older than 180 days, trimmed by a
-  `SECURITY DEFINER` trigger on insert. `product` / `product_version` (031)
+  `SECURITY DEFINER` trigger on insert. `product` / `product_version` (032)
   keep the series' label with its values, so a restore puts it back.
-  `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (031: the
+  `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
   values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with
   `actor_user_id` (must be the caller), `actor_label` (the display name then),
@@ -392,7 +392,7 @@ the result change?", and put back any earlier version.
   `publication.published/notice_changed`, `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
-  `provenance: { from, to }`), `series.labelled` (031: a label changed by
+  `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`, and
@@ -994,7 +994,7 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 031_series_provenance.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
@@ -1008,7 +1008,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29) |
-| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (031): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -1044,11 +1044,11 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   - `app_feed_schedule_failed(feed)`: the scheduler couldn't queue a fetch as
     the acting user (RLS refused: no longer an editor); records a fixed
     message.
-  - `app_feed_replace_done(feed)` (031): the ingest replaced the target
+  - `app_feed_replace_done(feed)` (032): the ingest replaced the target
     series under the owner's confirmation; clears `replace_series_from`, as
     the job's user, who must be an editor (an editor can't write `data_feed`
     directly).
-  - **`feed_stage`** (031): one row per feed with a confirmed replacement
+  - **`feed_stage`** (032): one row per feed with a confirmed replacement
     being backfilled: `start_date` + `values` (≤ 60 000, the new record so
     far), the `product` / `product_version` it will be labelled, the
     `replace_from` it was confirmed against, `updated_at` (when it last grew:
@@ -1057,7 +1057,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     feed of the same project (the ingest writes it as the feed's acting user;
     an owner's save of the feed discards it through `data_feed_stamp`).
     Nothing reads it for a run: runs read `time_series` only.
-  - `app_feed_fetch_now(feed)` (031): "Run now" while the feed's fetch is
+  - `app_feed_fetch_now(feed)` (032): "Run now" while the feed's fetch is
     pending but waiting (a backfill's next window, a retry): makes that job
     due now, as an editor, and says whether it moved one (`water_app` can't
     UPDATE `job`).

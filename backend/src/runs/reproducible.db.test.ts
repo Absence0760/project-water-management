@@ -56,7 +56,7 @@ describe('runModel(loadRunInput(run)) reproduces the stored run', () => {
 		// The rebuilt input's series are the example's, value for value.
 		const original = inputOf(ex);
 		expect(Object.keys(input.series).sort()).toEqual(Object.keys(original.series).sort());
-		// Each carries the product/version the run recorded (031; the examples record none).
+		// Each carries the product/version the run recorded (032; the examples record none).
 		for (const [kind, s] of Object.entries(original.series)) expect(input.series[kind as SeriesKind]).toEqual({ ...s, provenance: null });
 
 		const again = runModelChecked(input);

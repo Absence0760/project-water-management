@@ -363,7 +363,7 @@ export const historyRoutes = new Hono<AuthEnv>()
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			// The values it replaces are kept as a revision in turn, so a restore can be undone.
-			// The label comes back with the values (031_series_provenance): they are what it describes.
+			// The label comes back with the values (032_series_provenance): they are what it describes.
 			return c.json(await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev }));
 		});
 	});

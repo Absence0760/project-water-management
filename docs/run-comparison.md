@@ -255,7 +255,7 @@ is said rather than implied. Runs stored before the hash existed show
 nothing for an in-place edit. If the results changed and the list shows
 nothing, that is the likely reason.
 Each series' **product and version** is in the snapshot too
-(`provenance`, 031_series_provenance; null = not recorded). When both runs
+(`provenance`, 032_series_provenance; null = not recorded). When both runs
 recorded it and it differs, the diff says so on its own line, whatever the
 dates and values do: *Rainfall (CHIRPS) is now CHIRPS sat v3.0 (was CHIRPS
 v2.0): the monthly CHIRPS factors are fitted on the new values, and a

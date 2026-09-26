@@ -1,4 +1,4 @@
-// A series says which product and version it holds (031_series_provenance.sql,
+// A series says which product and version it holds (032_series_provenance.sql,
 // issue #40 part c): set by an upload, an import or PATCH …/series/:id, kept
 // by a merge, refused when a merge would splice two versions into one record,
 // and carried by a project's copy and its exported document.

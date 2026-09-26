@@ -91,7 +91,7 @@ export interface ProjectFileSeries {
 	unit: string;
 	startDate: string;
 	values: (number | null)[];
-	/** What the values are (031_series_provenance.sql), e.g. CHIRPS / 2.0; absent or null = not recorded. */
+	/** What the values are (032_series_provenance.sql), e.g. CHIRPS / 2.0; absent or null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;
 }
@@ -348,7 +348,7 @@ export interface Run extends RunMeta {
 	/**
 	 * Each input series kind's start, length, hash and product/version as the
 	 * run recorded them (GET …/runs/:runId only; `provenance` absent on a run
-	 * saved before 031). The fit record compares the CHIRPS one.
+	 * saved before 032). The fit record compares the CHIRPS one.
 	 */
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
 }

@@ -1,4 +1,4 @@
--- 031_series_provenance — which product and version a series holds, and the
+-- 032_series_provenance — which product and version a series holds, and the
 -- CHIRPS feed's version guard (issue #40 part c; docs/data-model.md § Series
 -- provenance, docs/architecture.md § Data feeds).
 --
@@ -56,8 +56,8 @@ ALTER TABLE time_series
 	ADD COLUMN product_version text CHECK (product_version ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$'),
 	ADD CONSTRAINT time_series_provenance CHECK ((product IS NULL) = (product_version IS NULL));
 
-COMMENT ON COLUMN time_series.product IS 'The product the values come from, e.g. CHIRPS (031). NULL with product_version = not recorded.';
-COMMENT ON COLUMN time_series.product_version IS 'The product version, e.g. 2.0 or 3.0 for CHIRPS (031). A data feed refuses to write another version into the series without an owner''s confirmation.';
+COMMENT ON COLUMN time_series.product IS 'The product the values come from, e.g. CHIRPS (032). NULL with product_version = not recorded.';
+COMMENT ON COLUMN time_series.product_version IS 'The product version, e.g. 2.0 or 3.0 for CHIRPS (032). A data feed refuses to write another version into the series without an owner''s confirmation.';
 
 ALTER TABLE series_revision
 	ADD COLUMN product         text,
@@ -69,7 +69,7 @@ ALTER TABLE data_feed
 	ADD COLUMN replace_series_from text CHECK (char_length(replace_series_from) <= 64);
 
 COMMENT ON COLUMN data_feed.replace_series_from IS
-	'An owner confirmed this feed may replace its target series while the series holds this product/version (031; '''' = not recorded). Cleared by app_feed_replace_done once replaced, and by re-targeting.';
+	'An owner confirmed this feed may replace its target series while the series holds this product/version (032; '''' = not recorded). Cleared by app_feed_replace_done once replaced, and by re-targeting.';
 
 CREATE TABLE feed_stage (
 	feed_id         uuid PRIMARY KEY REFERENCES data_feed(id) ON DELETE CASCADE,
@@ -88,7 +88,7 @@ CREATE TABLE feed_stage (
 CREATE INDEX feed_stage_project_idx ON feed_stage (project_id);
 
 COMMENT ON TABLE feed_stage IS
-	'A confirmed series replacement being backfilled by its data feed (031): swapped into time_series whole when caught up, so runs never see a partial record. water_app: SELECT (viewer), INSERT/UPDATE/DELETE (editor, for a feed of the same project).';
+	'A confirmed series replacement being backfilled by its data feed (032): swapped into time_series whole when caught up, so runs never see a partial record. water_app: SELECT (viewer), INSERT/UPDATE/DELETE (editor, for a feed of the same project).';
 
 ALTER TABLE feed_stage ENABLE ROW LEVEL SECURITY;
 CREATE POLICY feed_stage_select ON feed_stage FOR SELECT USING (app_has_role(project_id, 'viewer'));

@@ -290,7 +290,7 @@ workbook part is `WorkbookReview.svelte`.
      which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
      b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The
      series goes in labelled with the answer
-     ([data-model.md § Series provenance](./data-model.md#series-provenance-031_series_provenancesql)),
+     ([data-model.md § Series provenance](./data-model.md#series-provenance-032_series_provenancesql)),
      which is what later stops the CHIRPS feed (v3.0) splicing onto it. The
      Python importer (`pnpm import:project`, `seed:demo`) leaves it
      unrecorded; say it on the Data tab.

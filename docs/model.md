@@ -652,7 +652,7 @@ factor, and v3.0's two daily products, `sat` (from 1998) and `rnl` (from
 splices one onto another has a break the double-mass check (§2.10a) then
 blames on the catchment, and one set of factors fitted across it. So each
 series records its product and version
-([data-model.md § Series provenance](./data-model.md#series-provenance-031_series_provenancesql)):
+([data-model.md § Series provenance](./data-model.md#series-provenance-032_series_provenancesql)):
 a b023 import asks which version the workbook's CHIRPS column is (v2.0 by
 default, what the workbooks were built on), an upload can say, and the feed
 labels what it writes. The feed refuses to write into a series holding

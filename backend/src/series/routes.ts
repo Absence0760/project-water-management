@@ -35,7 +35,7 @@ const provenanceChange = (before: SeriesProvenance | null, after: SeriesProvenan
  * first (the history's restore point), so a replace, and a restore too, can
  * be undone. Unchanged values and label record nothing. `restoredFrom`: this
  * puts a series revision back (POST …/revisions/:revId/restore), logged as
- * `restore`. `provenance` is what the new values are (031_series_provenance;
+ * `restore`. `provenance` is what the new values are (032_series_provenance;
  * null or absent = not recorded: a replace says what it holds or clears it).
  * `revisionReason` / `audit`: a data feed's confirmed replacement
  * (feeds/ingest.ts) keeps the old values as `feed_replace` and adds its feed.

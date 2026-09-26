@@ -113,7 +113,7 @@ export type DwsConfig = z.output<typeof DwsConfig>;
 export type FeedConfig = GridConfig | DwsConfig;
 
 /**
- * What a feed writes, as the series records it (031_series_provenance.sql),
+ * What a feed writes, as the series records it (032_series_provenance.sql),
  * or null for a source whose series carry no product version (the forecast
  * and DWS). The feed refuses to write into a series that holds another one
  * without an owner's confirmation (feeds/ingest.ts).

@@ -382,7 +382,7 @@ merges into:
   would otherwise pin the feed's newest date, which only moves forward, in
   the future.
 - **One product and version per series** (issue #40 part c,
-  `031_series_provenance.sql`). A series records which product and version
+  `032_series_provenance.sql`). A series records which product and version
   it holds (`time_series.product` / `product_version`, [data-model.md §
   Series provenance](./data-model.md#series-provenance)). CHIRPS v2.0 and
   v3.0 differ by an era-dependent factor, and v3.0's `sat` and `rnl` daily
@@ -410,7 +410,7 @@ merges into:
     value (filled in when the owner gave no start date; a later one is a
     409), and a series reaching before 1998 can only be replaced by `rnl`
     (409 for `sat`).
-  - **The replacement is staged** (`feed_stage`, 031). The backfill's windows
+  - **The replacement is staged** (`feed_stage`, 032). The backfill's windows
     build the new record in the feed's stage while the live series keeps its
     old values and label, so a run in the meantime (hours: a window a
     minute, 70 new days each) uses the whole old record, never a partial new
@@ -444,7 +444,7 @@ merges into:
   schedule, so a long backfill (a replacement, or an early start date) goes a
   window at a time rather than a window a day. Each CHIRPS window re-reads
   the last 50 days, so it moves on 70. "Run now" while that fetch waits makes
-  it due now (`app_feed_fetch_now`, 031).
+  it due now (`app_feed_fetch_now`, 032).
 - **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
   `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
   A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has

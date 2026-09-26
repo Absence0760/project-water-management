@@ -42,7 +42,7 @@ export interface FeedMeta {
 	/** An owner confirmed the feed may replace the target while it holds this (`CHIRPS/2.0`, '' = unrecorded); the next fetch does it. */
 	replaceFrom: string | null;
 	/**
-	 * A confirmed replacement being backfilled (feed_stage, 031): the new
+	 * A confirmed replacement being backfilled (feed_stage, 032): the new
 	 * record's first and last day so far and when it last grew. The live
 	 * series keeps its old values until the backfill is caught up. Null when
 	 * none is staged.
@@ -64,7 +64,7 @@ export interface FeedRow {
 	readThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
-	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 031): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
+	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
 	replaceFrom: string | null;
 }
 
@@ -144,7 +144,7 @@ export const replaceKey = (series: { provenance: SeriesProvenance | null }): str
 
 /**
  * Insert as the signed-in owner (RLS), who becomes the acting user.
- * `replaceFrom`: the owner confirmed replacing the target, which holds this (031).
+ * `replaceFrom`: the owner confirmed replacing the target, which holds this (032).
  */
 export async function createFeed(db: Db, projectId: string, input: FeedInput, replaceFrom: string | null = null): Promise<string> {
 	const { rows } = await db.query<{ id: string }>(
@@ -270,7 +270,7 @@ export async function claimFeed(db: Db, feedId: string, all = false): Promise<bo
 	return rows[0]?.claimed === true;
 }
 
-/** The confirmed replacement is made: clear it (app_feed_replace_done, 031), as the acting user. */
+/** The confirmed replacement is made: clear it (app_feed_replace_done, 032), as the acting user. */
 export async function feedReplaceDone(db: Db, feedId: string): Promise<void> {
 	await db.query('SELECT app_feed_replace_done($1)', [feedId]);
 }

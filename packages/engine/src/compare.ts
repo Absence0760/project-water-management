@@ -47,7 +47,7 @@ export interface RunSeriesSnapshot {
 	/** Hash of the values (backend: SHA-256 hex of their JSON). Absent on runs stored before it existed. */
 	valuesSha256?: string;
 	/**
-	 * The product and version the series held (031_series_provenance.sql):
+	 * The product and version the series held (032_series_provenance.sql):
 	 * null = not recorded, absent on runs stored before it was recorded.
 	 */
 	provenance?: SeriesProvenance | null;

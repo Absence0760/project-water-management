@@ -35,7 +35,7 @@ export const B023_CHIRPS_DEFAULT: SeriesProvenance = CHIRPS_V2;
 const PRODUCT = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$/;
 
-/** Why a provenance is invalid, or null (the same rules as the time_series CHECKs, 031_series_provenance.sql). */
+/** Why a provenance is invalid, or null (the same rules as the time_series CHECKs, 032_series_provenance.sql). */
 export function provenanceError(p: unknown): string | null {
 	if (typeof p !== 'object' || p === null) return 'not a product and version';
 	const o = p as Record<string, unknown>;

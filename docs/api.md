@@ -518,7 +518,7 @@ series (its values stay as they are until the swap);
 tell there is new data since the last run.
 
 **Product and version** (issue #40 part c, [data-model.md § Series
-provenance](./data-model.md#series-provenance-031_series_provenancesql)):
+provenance](./data-model.md#series-provenance-032_series_provenancesql)):
 what the values are, e.g. `CHIRPS` `2.0`, `CHIRPS sat` `3.0`, `CHIRPS rnl`
 `3.0`; `null` = not recorded. Sent together or not at all (`400` otherwise);
 the product is 1–40 letters, digits, spaces, dots, dashes or underscores, the

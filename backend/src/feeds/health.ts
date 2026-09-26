@@ -11,7 +11,7 @@
 //             keeps finding nothing new
 //   pending   not fetched yet, or not since a new place or series was saved
 //             (018_feeds.sql clears the data, success and failures then), or
-//             a confirmed replacement still backfilling (feed_stage, 031)
+//             a confirmed replacement still backfilling (feed_stage, 032)
 //   ok        otherwise
 //
 // `stale` is also reported on its own, so a failing feed that is out of date

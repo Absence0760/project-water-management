@@ -69,7 +69,7 @@ function range(s: Record<string, unknown>): string {
 	return from && to ? ` (${fmtDay(from)} to ${fmtDay(to)})` : '';
 }
 
-/** "; now CHIRPS sat v3.0, was CHIRPS v2.0" when a replace changed the series' product or version (031), else ''. */
+/** "; now CHIRPS sat v3.0, was CHIRPS v2.0" when a replace changed the series' product or version (032), else ''. */
 function versionChange(s: Record<string, unknown>): string {
 	const p = s.provenance as Record<string, unknown> | undefined;
 	return p && typeof p === 'object' ? `; now ${str(p.to)}, was ${str(p.from)}` : '';
