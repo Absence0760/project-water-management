@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
 
 async function projectWithModel(owner: Awaited<ReturnType<typeof signUp>>, name = 'Catchment A') {
 	const { body } = await owner.call('POST', '/projects', { name });
@@ -379,5 +380,98 @@ describe('display order', () => {
 		reordered.crops = reordered.crops.map((c: { sortOrder: number }, i: number) => ({ ...c, sortOrder: 2 - i }));
 		const again = await u.call('PUT', `/projects/${projectId}/model`, reordered);
 		expect(again.body.crops.map((c: { name: string }) => c.name)).toEqual(['Citrus', 'Apples', 'Zucchini']);
+	});
+});
+
+// Issue #43: a project that has nominated an evidence run keeps it, and its
+// nomination history, for good. Refused by the route (409 naming the run) and
+// by the project_evidence_guard trigger (040), whoever deletes.
+describe('a project with a nominated evidence run', () => {
+	type User = Awaited<ReturnType<typeof signUp>>;
+
+	/** A project with one GR4J run; nominated as evidence unless `nominate` is false. */
+	async function withEvidence(owner: User, name: string, nominate = true) {
+		const { projectId } = await projectWithModel(owner, name);
+		const rain = Array.from({ length: 30 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Calibrated GR4J' });
+		expect(run.status).toBe(201);
+		const runId = run.body.run.id as string;
+		if (nominate) expect((await owner.call('POST', `/projects/${projectId}/evidence`, { runId, reason: 'the calibrated run' })).status).toBe(201);
+		return { projectId, runId };
+	}
+	const sql = (u: User, text: string, params: unknown[] = []) => withUser(u.id, (db) => db.query(text, params));
+
+	it('refuses DELETE /projects/:id with a 409 that names the run, and keeps everything', async () => {
+		const owner = await signUp('EvKeep');
+		const { projectId, runId } = await withEvidence(owner, 'Evidence kept');
+		const res = await owner.call('DELETE', `/projects/${projectId}`);
+		expect(res.status).toBe(409);
+		expect(res.body.error).toBe(
+			'this project can\'t be deleted: "Calibrated GR4J" is its nominated evidence run, and a project keeps its evidence run and nomination history for good. ' +
+				'A nomination can be replaced but not withdrawn; copy the project to start again without it.'
+		);
+		expect(res.body.details).toEqual({ evidenceRun: { id: runId, label: 'Calibrated GR4J' }, nominations: 1 });
+		expect((await owner.call('GET', `/projects/${projectId}`)).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${projectId}/evidence`)).body.nominations.map((n: { runId: string }) => n.runId)).toEqual([runId]);
+	});
+
+	it('still refuses once the nomination is replaced: the past one is history too', async () => {
+		const owner = await signUp('EvReplace');
+		const { projectId, runId } = await withEvidence(owner, 'Evidence replaced');
+		const second = (await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Second' })).body.run.id as string;
+		expect((await owner.call('POST', `/projects/${projectId}/evidence`, { runId: second, reason: 'replaces the first' })).status).toBe(201);
+		const res = await owner.call('DELETE', `/projects/${projectId}`);
+		expect(res.status).toBe(409);
+		expect(res.body.details).toEqual({ evidenceRun: { id: second, label: 'Second' }, nominations: 2 });
+		expect((await owner.call('GET', `/projects/${projectId}/evidence`)).body.nominations.map((n: { runId: string }) => n.runId)).toEqual([runId, second]);
+	});
+
+	it('refuses a direct DELETE as water_app, and as the schema owner, with restrict_violation', async () => {
+		const owner = await signUp('EvSql');
+		const { projectId } = await withEvidence(owner, 'Evidence SQL');
+		await expect(sql(owner, 'DELETE FROM project WHERE id = $1', [projectId])).rejects.toMatchObject({ code: '23001' });
+		await expect(asOwner('DELETE FROM project WHERE id = $1', [projectId])).rejects.toMatchObject({ code: '23001' });
+		expect((await sql(owner, 'SELECT 1 FROM run_nomination WHERE project_id = $1', [projectId])).rowCount).toBe(1);
+	});
+
+	it('positive control: the same project without a nomination deletes, runs, pin and all, through the route and in SQL', async () => {
+		const owner = await signUp('EvNone');
+		const viaRoute = await withEvidence(owner, 'No evidence (route)', false);
+		expect((await owner.call('PATCH', `/projects/${viaRoute.projectId}/runs/${viaRoute.runId}`, { pinned: true })).status).toBe(200);
+		expect((await owner.call('DELETE', `/projects/${viaRoute.projectId}`)).status).toBe(204);
+		expect((await owner.call('GET', `/projects/${viaRoute.projectId}`)).status).toBe(404);
+		const viaSql = await withEvidence(owner, 'No evidence (SQL)', false);
+		expect((await sql(owner, 'DELETE FROM project WHERE id = $1', [viaSql.projectId])).rowCount).toBe(1);
+	});
+
+	it('deleting its team leaves the project, and its evidence, in place (team_id → NULL, no cascade)', async () => {
+		const owner = await signUp('EvTeam');
+		const team = (await owner.call('POST', '/teams', { name: 'Evidence team' })).body.team.id as string;
+		const { projectId, runId } = await withEvidence(owner, 'Team evidence');
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { teamId: team })).status).toBe(200);
+		expect((await owner.call('DELETE', `/teams/${team}`)).status).toBe(204);
+		const after = await owner.call('GET', `/projects/${projectId}`);
+		expect(after.status).toBe(200);
+		expect(after.body.project.team).toBeNull();
+		expect((await owner.call('GET', `/projects/${projectId}/evidence`)).body.nominations.map((n: { runId: string }) => n.runId)).toEqual([runId]);
+	});
+
+	it('deleting the account is refused while it created the project (no cascade into project); there is no account-deletion route', async () => {
+		const owner = await signUp('EvUser');
+		const { projectId } = await withEvidence(owner, 'User evidence');
+		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [owner.id])).rejects.toMatchObject({ code: '23503' });
+		expect((await owner.call('GET', `/projects/${projectId}`)).status).toBe(200);
+	});
+
+	it('the operator can still remove one out of band, as the schema owner, by disabling the guard for one transaction', async () => {
+		const owner = await signUp('EvOperator');
+		const { projectId } = await withEvidence(owner, 'Operator removal');
+		expect(projectId).toMatch(/^[0-9a-f-]{36}$/);
+		await asOwner(
+			`BEGIN; ALTER TABLE project DISABLE TRIGGER project_evidence_guard; DELETE FROM project WHERE id = '${projectId}'; ALTER TABLE project ENABLE TRIGGER project_evidence_guard; COMMIT;`
+		);
+		expect(await asOwner('SELECT 1 FROM project WHERE id = $1', [projectId])).toEqual([]);
+		expect(await asOwner(`SELECT tgenabled FROM pg_trigger WHERE tgname = 'project_evidence_guard'`)).toEqual([{ tgenabled: 'O' }]);
 	});
 });

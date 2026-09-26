@@ -262,12 +262,12 @@ describe('a nominated run is kept', () => {
 		}
 	});
 
-	it('still lets the owner delete the whole project, history and all', async () => {
-		const pid = await runnableProject(owner, 'Doomed');
+	it('keeps the whole project too: deleting it is refused, history and all (issue #43; projects.db.test.ts)', async () => {
+		const pid = await runnableProject(owner, 'Kept');
 		const r = await newRun(owner, pid, 'Only');
 		expect((await nominate(owner, r, 'why not', pid)).status).toBe(201);
-		expect((await owner.call('DELETE', `/projects/${pid}`)).status).toBe(204);
-		expect((await sql(owner, 'SELECT 1 FROM run_nomination WHERE project_id = $1', [pid])).rowCount).toBe(0);
+		expect((await owner.call('DELETE', `/projects/${pid}`)).status).toBe(409);
+		expect((await sql(owner, 'SELECT 1 FROM run_nomination WHERE project_id = $1', [pid])).rowCount).toBe(1);
 	});
 });
 
