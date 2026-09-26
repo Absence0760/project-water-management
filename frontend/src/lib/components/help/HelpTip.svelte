@@ -1,14 +1,17 @@
 <script module lang="ts">
-	// The help text (~26 KB gzip, every entry's long form too) is its own chunk,
-	// fetched when the first HelpTip module loads instead of bundled into every
-	// page with a tooltip, so it never delays a page's first render. Shared by
-	// every HelpTip; a failed fetch is forgotten so the next mount retries.
-	import type { HelpEntry } from '$lib/help/content';
+	// The tips' text ($lib/help/tips: term, short text, units, field keys) is
+	// its own chunk, fetched when the first HelpTip module loads instead of
+	// bundled into every page with a tooltip, so it never delays a page's first
+	// render. Only the tips: the glossary's long text ($lib/help/articles) is
+	// for the /help pages (lib/help/content.test.ts keeps it out of here).
+	// Shared by every HelpTip; a failed fetch is forgotten so the next mount
+	// retries.
+	import type { HelpTipText } from '$lib/help/types';
 
-	let help: Promise<(key: string) => HelpEntry | undefined> | undefined;
+	let help: Promise<(key: string) => HelpTipText | undefined> | undefined;
 	function loadHelp() {
-		help ??= import('$lib/help/content').then(
-			(m) => m.helpFor,
+		help ??= import('$lib/help/tips').then(
+			(m) => m.tipFor,
 			(err: unknown) => {
 				help = undefined;
 				throw err;
@@ -21,7 +24,7 @@
 
 <script lang="ts">
 	// ⓘ toggletip for a field or term: <HelpTip key="node.damCapacityM3" />.
-	// Keys are field keys or glossary ids from $lib/help/content (the full list
+	// Keys are field keys or glossary ids from $lib/help/tips (the full list
 	// is helpFieldKeys()); the text loads on demand (see the module script).
 	// A button, not a hover tooltip, so it works with the keyboard and on touch:
 	// click/Enter/Space toggles, Escape closes and keeps focus on the button,
@@ -40,12 +43,12 @@
 	let { key, label }: { key: string; label?: string } = $props();
 
 	// Until the help text arrives the tip renders nothing, as for an unknown key.
-	let helpFor = $state<((key: string) => HelpEntry | undefined) | null>(null);
+	let tipFor = $state<((key: string) => HelpTipText | undefined) | null>(null);
 	loadHelp().then(
-		(fn) => (helpFor = fn),
+		(fn) => (tipFor = fn),
 		() => {}
 	);
-	const entry = $derived(helpFor?.(key));
+	const entry = $derived(tipFor?.(key));
 	// A close-up of that part of the help illustration, for terms that have
 	// one, with a ring on the term's own feature. Decorative (alt=""): the
 	// bubble is a live region, and its text already says what the picture shows.

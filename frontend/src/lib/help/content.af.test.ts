@@ -5,11 +5,16 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
+import { FARMER_HELP } from './farmer';
 import { HELP_AF } from './content.af';
 
 const SHEET = readFileSync(new URL('../../../../docs/i18n/af-translation-sheet.md', import.meta.url), 'utf8');
 const hash = (e: { term: string; short: string; long: string }) => createHash('sha256').update(`${e.term}\n${e.short}\n${e.long}`).digest('hex');
 const farmer = HELP.filter((e) => e.category === 'farmer');
+
+it('reads the farmer entries from farmer.ts, the module /farm/words and the translation sheet load', () => {
+	expect(FARMER_HELP).toEqual(farmer);
+});
 
 describe('the Afrikaans farmer glossary', () => {
 	it('translates only farmer entries', () => {

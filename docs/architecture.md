@@ -130,11 +130,19 @@ that needs them.
   the loading state.
 
 Help tooltips (`components/help/HelpTip.svelte`) don't import the help text
-either. It is a 26 KB (gzip) chunk that the first HelpTip starts fetching when
-its module loads, off the page's critical path, and every HelpTip shares it.
-Until it arrives a tip renders nothing, as it does for an unknown key. Without
-this, every tab with a tooltip carried the whole glossary: the Network tab adds
-25 KB on top of the page instead of 51 KB.
+either. The text is three modules, each its own chunk: `lib/help/tips.ts`
+(each entry's term, short text, units and field keys: 10 KB gzip),
+`lib/help/articles.ts` (the fuller text, other names, related ids and source,
+by id: 32 KB with `content.ts`, which joins them for the /help pages) and
+`lib/help/farmer.ts` (the farm view's words, whole: 2 KB). The first HelpTip
+starts fetching the tips when its module loads, off the page's critical path,
+and every HelpTip shares them; until they arrive a tip renders nothing, as it
+does for an unknown key. A tip never loads the long text (it was one 42 KB
+chunk, the largest page chunk, until 2026-09-26), and /farm/words loads only
+`farmer.ts`; only the /help pages load everything. `lib/help/content.test.ts`
+keeps HelpTip off `content.ts` and `articles.ts` and the text modules free of
+run-time imports. Splitting costs ~3 KB of total (smaller chunks compress
+worse), the price of a tip fetching 10 KB instead of 42.
 
 The build targets ES2022 (`frontend/vite.config.ts`). Vite's default target
 down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 KB
