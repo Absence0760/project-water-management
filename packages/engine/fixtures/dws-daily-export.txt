@@ -1,0 +1,21 @@
+Data are continuously updated and reviewed.
+The format of this file is as follows:
+POS.  1-8   = Date of daily flow  CCYYMMDD
+POS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999
+POS. 20-24  = Quality code
+
+X0H000 (SYNTHETIC WEIR)
+Synthetic test data: invented station and values.
+
+DATE     D AVG F/R  QUAL
+20210101     0.412     1
+20210102     0.398     1
+20210103     1.897     1
+20210104             170
+20210105     0.000   255
+20210106  -999.000     1
+20210107    12.500    60
+20210108     0.371     1
+20210110     0.355     2
+20210111     0.349     1
+ZZZZZZZZZZZZ

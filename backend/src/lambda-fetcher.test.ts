@@ -123,7 +123,7 @@ describe('the fetcher bundle', () => {
 	// the output, so it doesn't lean on tree-shaking: jobs/transport.ts once
 	// reached the runner through wakeWorker's memory transport (now jobs/wake.ts),
 	// and esbuild only dropped it because nothing called wakeWorker.
-	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar and series provenance', async () => {
+	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar, series provenance and DWS table reader', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({
 			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
@@ -145,7 +145,9 @@ describe('the fetcher bundle', () => {
 		// of tree-shaken stubs), so nothing the fetcher reaches may import it.
 		// feeds/config.ts names the CHIRPS product it writes through the
 		// `/provenance` subpath (seriesProvenance.ts: constants, no imports).
-		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts'];
+		// feeds/sources/dws.ts reads rows through the `/dws` subpath (dws.ts:
+		// the row parser it shares with the manual import; imports only calendar.ts).
+		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts'];
 		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
 	});
 });
