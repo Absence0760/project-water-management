@@ -472,6 +472,16 @@
 //               +3.5 to +8 KB. At 1500: −2 KB total, +2 KB on every page.
 //             - Svelte css: 'injected' (80 CSS files, 65 of them under 1 KB,
 //               cost ~23 KB of gzip overhead): total +6 KB, largest chunk 42.
+// 2026-09-26  total 821 → 835 KB; other ceilings unchanged. Notes and
+//             comments (WP-2.7): the notes drawer and its count badges on
+//             network rows, the run Record group and the settings groups,
+//             Recent notes on the Overview, and the farmer's notes card.
+//             Merged on main after #44's reporting-window picker, which had
+//             already taken the total to 821; the merge measured 829 KB. The
+//             drawer is small and mounted from several tabs, so most of it
+//             sits in shared chunks. No new dependency; the largest page
+//             chunk stays 40 KB. Headroom ~6 KB. #9's engine split (~20 KB,
+//             docs/followups.md) is the way back down.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -482,7 +492,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 821,
+	totalCodeKb: 835,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,
