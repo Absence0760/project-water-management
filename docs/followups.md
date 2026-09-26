@@ -1013,24 +1013,44 @@ the suggested order (the IDs carry the detail):
       `.small` (53 copies), `.u` (22) and the `.seg` segmented control (5)
       now live once at the end of `app.css` (architecture.md § Shared CSS),
       pinned first by `e2e/tests/shared-css.spec.ts` (light/dark,
-      phone/desktop, the report in print). Total 889.4 → 888.4 KB gzip
-      (910 738 → 909 682 bytes), not the 2–3 KB estimated: most copies sat
-      in shared chunks where gzip already folded them. Runs, Network, Data
-      and the report load 0.1–0.2 KB less; pages that use none of them
-      (home, sign-in, /farm, /share) ~0.06 KB more. A computed-style crawl of
-      15 screens × 2 themes × 2 widths (1 328 elements) matched before and
-      after except two intended changes: the Network tab's three-button
-      layout switch now squares its middle button (it rounded all four
-      corners), and four components that wrote `class="muted small"` with
+      phone/desktop, the report in print, the override editor's
+      three-button switch). Total −1.0 KB gzip (over origin/main @ 1a8d058:
+      891.7 → 890.7 KB, 913 069 → 912 108 bytes), not the 2–3 KB estimated:
+      most copies sat in shared chunks where gzip already folded them. Runs
+      and the report load 0.2 KB less, Network, Data and Settings 0.1; pages
+      that use none of them (home, sign-in, /farm, /share) ~0.06 KB more. A
+      computed-style crawl of 15 screens × 2 themes × 2 widths (1 328
+      elements) matched before and after except two intended changes: the
+      Network tab's three-button layout switch (since replaced by the map,
+      issue #17) squared its middle button, which had all four corners
+      rounded, and four components that wrote `class="muted small"` with
       no `.small` rule (History, the Runs tab's run-inputs panel, Yield,
       Forecast) now render it small. Measured and not moved: the spinner
       (−0.3 KB total, +0.1 KB on /farm, /share and sign-in), `.stat dd.sub`
       (−0.07 KB; would leak into three components that style it their own
       way), the Settings sections' repeats (one lazy chunk already).
-- [ ] **Bundle weight still on the table** (issue #9; measured estimates,
-      none started). The home page loads the import dialog (~7.5 KB gzip)
-      on first paint; loading it on demand would cut home's first load, not
-      the total. Trigger: the next ceiling raise.
+- [x] **The home page loads the import dialog on demand** (issue #9,
+      2026-09-26). It was estimated at ~7.5 KB; with the engine's series
+      provenance and kinds code only it used, home's first load fell 81.5 →
+      65.5 KB gzip. The total rose 889.4 → 891.5 KB (extra chunks; no
+      ceiling moved). Warmed on hover or focus of the import buttons;
+      `project-import.spec.ts` pins the keyboard path (Enter opens, focus
+      moves in, Escape closes and returns focus) and a failed download;
+      `components/import/homeSplit.test.ts` keeps the page off the import
+      code. Pinning the keyboard path found that `Dialog` couldn't be
+      reopened straight after Escape (its `close` event is queued, so the
+      bound `open` lagged); it now follows `cancel` too.
+- [ ] **A failed chunk download can't be retried without a reload.**
+      `common/lazy.ts` forgets a failed import and `Lazy.svelte` offers
+      "Try again", but browsers keep a module that failed to fetch in the
+      page's module map (HTML spec; checked in Chromium with the home
+      page's import dialog), so the same `import()` fails again at once and
+      "Try again" never recovers. The home import dialog offers a reload
+      instead. Durable fix for the workspace: have `Lazy.svelte`'s retry
+      reload the page when nothing is unsaved, or tell the user to save and
+      reload when something is (the save bar knows), and correct the
+      comment in `lazy.ts`. Trigger: the next change to `Lazy.svelte`, or
+      a report of a stuck "Try again".
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

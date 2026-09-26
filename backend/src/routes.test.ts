@@ -120,6 +120,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Scenario sweeps (issue #53 R2, 062_scenario_sweeps): auth-gated like every project route.
+	it('inventories the sweep routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/sweeps', 'GET /projects/:id/sweeps', 'GET /projects/:id/sweeps/:sweepId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Applications (WP-3.3, 045_contributor_scope): auth-gated like every project
 	// route; which a contributor may call is scenarios/applications.db.test.ts.
 	it('inventories the application routes as auth-gated', () => {

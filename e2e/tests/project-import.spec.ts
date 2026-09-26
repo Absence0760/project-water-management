@@ -110,6 +110,55 @@ test('an imported project exports back to the same file', async ({ page, owner }
 	expect(exported.model.nodes).toHaveLength(example.model.nodes.length);
 });
 
+// Both import buttons from the keyboard: Enter opens the dialog with focus
+// inside it, Escape closes it and puts focus back on the button that opened
+// it. The dialog is code-split (docs/architecture.md § Code splitting), so
+// this also pins that the first press opens it, before or after its chunk.
+test('the import dialogs open and close from the keyboard, focus returning to the button', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	for (const [button, title, picker] of [
+		['Import b023 workbook', 'Import b023 workbook', 'b023 workbook (.xlsm or .xlsx)'],
+		['Import project file (.json)', 'Import project file', 'Project file (.json)']
+	] as const) {
+		const trigger = page.getByRole('button', { name: button, exact: true });
+		await trigger.focus();
+		await page.keyboard.press('Enter');
+		const dialog = page.getByRole('dialog', { name: title });
+		await expect(dialog.getByLabel(picker)).toBeVisible();
+		await expect(dialog.locator(':focus')).toHaveCount(1);
+		await page.keyboard.press('Escape');
+		await expect(dialog).toBeHidden();
+		await expect(trigger).toBeFocused();
+	}
+});
+
+// The dialog's chunk failing to download (a network blip, or a deploy that
+// removed it) says so on the page and offers a reload: the browser keeps a
+// failed module fetch for the life of the page, so only a reload retries it.
+test('an import dialog that fails to download says so, and a reload recovers', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	// Every code chunk the page asks for from here on is the dialog's.
+	const blocked = '**/_app/immutable/**/*.js';
+	await page.route(blocked, (r) => r.abort());
+	const trigger = page.getByRole('button', { name: 'Import project file (.json)', exact: true });
+	await trigger.click();
+	const alert = page.getByRole('alert');
+	await expect(alert).toHaveText('The import could not be loaded. Check your connection, then reload the page. Reload');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+
+	await page.unroute(blocked);
+	await alert.getByRole('button', { name: 'Reload' }).click();
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	await trigger.click();
+	const dialog = page.getByRole('dialog', { name: 'Import project file' });
+	await expect(dialog.getByLabel('Project file (.json)')).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a broken file is refused and nothing is created', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/');

@@ -1,15 +1,14 @@
 // The Network's Map layout and the grid modal (issue #17, option A's
 // simplicity with nothing lost): the schematic beside the picked node and a
 // list of every node, the existing grids one click away in a full-screen
-// modal, and the Table and One node layouts kept.
+// modal (the node table included), and a node's full form in a sheet from its card.
 import type { Page } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeTable } from '../support/network.ts';
 
-const layout = (page: Page, name: 'Map' | 'Table' | 'One node') =>
-	page.getByRole('group', { name: 'Layout' }).getByRole('button', { name, exact: true });
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
 /** Opens the header's Grids menu (a disclosure) and returns one of its links. */
@@ -32,7 +31,6 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=network`);
 
-	await expect(layout(page, 'Map')).toHaveAttribute('aria-pressed', 'true');
 	// A page of its own: a title, one line on what the network is, and its actions.
 	await expect(page.getByRole('heading', { level: 2, name: 'Network' })).toBeVisible();
 	await expect(page.getByTestId('network-summary')).toHaveText('2 farms · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²');
@@ -79,19 +77,35 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c).toContainText('Selected · outflow gauge');
 	await expect(c).not.toContainText('Supplied');
 
-	// Edit opens the full form on the One node layout, for that node.
+	// Edit opens the node's full form in a sheet over the map; ‹ › and the picker move it to another node.
 	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).click();
 	await c.getByRole('button', { name: 'Edit Lower farm' }).click();
-	await expect(page).toHaveURL(/[?&]view=node/);
-	await expect(layout(page, 'One node')).toHaveAttribute('aria-pressed', 'true');
-	await expect(page.getByLabel('Node to edit')).toHaveValue(String(project.model.nodes[2]!.id));
+	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
+	const sheet = page.getByRole('dialog', { name: 'Edit Lower farm' });
+	await expect(sheet.getByLabel('Node to edit')).toHaveValue(String(project.model.nodes[2]!.id));
+	await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Lower farm');
+	await expectNoViolations(page);
+	await sheet.getByRole('button', { name: 'Previous node' }).click();
+	await expect(page.getByRole('dialog', { name: 'Edit Upper farm' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).not.toHaveURL(/edit=/);
 
-	// The other layouts are kept, and linkable.
-	await layout(page, 'Table').click();
-	await expect(page).toHaveURL(/[?&]view=table/);
-	await expect(page.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
-	await layout(page, 'Map').click();
-	await expect(page).not.toHaveURL(/view=/);
+	// The node table is a grid (Grids → Node table), every column as before.
+	const table = await openNodeTable(page);
+	await expect(page).toHaveURL(/[?&]grid=nodes/);
+	await expect(table.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
+	await expect(table.getByRole('button', { name: 'Sort by flow path' })).toBeVisible();
+	await table.getByRole('button', { name: 'Done' }).click();
+
+	// There are no layouts to switch any more; old links still land somewhere sensible.
+	await expect(page.getByRole('group', { name: 'Layout' })).toHaveCount(0);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await expect(page.getByRole('dialog', { name: 'Node table' })).toBeVisible();
+	await expect(page).toHaveURL(/\?tab=network&grid=nodes$/);
+	await page.goto(`/projects/${project.id}?tab=network&view=node`);
+	await expect(page.getByRole('dialog', { name: /^Edit / })).toBeVisible();
+	await expect(page).toHaveURL(/[?&]edit=/);
 });
 
 test('a note’s link opens the map with its node picked', async ({ page, owner }) => {

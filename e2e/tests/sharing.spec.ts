@@ -3,6 +3,7 @@ import { addMember, createProject, PASSWORD, putModel, register, sampleModel, un
 import { plantEmailToken, plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
 	void owner;
@@ -38,7 +39,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	// The model inputs sit behind a toggle for a viewer (tabs-by-role.spec.ts).
 	await v.getByLabel('Show model inputs').check();
 	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
-	await v.getByRole('button', { name: 'Table', exact: true }).click();
+	await openNodeTable(v);
 	await expect(v.getByText('You have view-only access to this project.')).toBeVisible();
 	const names = v.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
@@ -48,6 +49,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	await expect(v.getByLabel('Kind of Upper farm')).toBeDisabled();
 	await expect(v.getByRole('button', { name: '+ Add node' })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: /^Remove/ })).toHaveCount(0);
+	await closeModal(v);
 
 	await v.getByRole('link', { name: 'Crops' }).click();
 	await expect(v.getByLabel('Orchard crop factor, Oct')).not.toBeEditable();
@@ -93,9 +95,9 @@ test('an editor can change the shared model but cannot manage members', async ({
 	await expect(e.getByLabel('Name', { exact: true })).toBeEditable();
 
 	await e.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
-	await e.getByRole('button', { name: 'Table', exact: true }).click();
-	await expect(e.getByLabel('Area of Upper farm, km²', { exact: true })).toBeEditable();
-	await expect(e.getByRole('button', { name: '+ Add node' })).toBeVisible();
+	const grid = await openNodeTable(e);
+	await expect(grid.getByLabel('Area of Upper farm, km²', { exact: true })).toBeEditable();
+	await expect(grid.getByRole('button', { name: '+ Add node' })).toBeVisible();
 });
 
 test('an owner invites an address with no account, sees it pending, and revokes it', async ({ page, owner }) => {

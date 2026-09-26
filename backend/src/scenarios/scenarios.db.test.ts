@@ -5,6 +5,9 @@
 //  - editing the live model afterwards (even deleting a node) doesn't change
 //    a re-run of the scenario, and a scenario can add a node the live model
 //    never had;
+//  - a demand.scale (issue #53 R1) is classified by who owns the farms it
+//    names (none named: baseline), and its run's stored demand is the base's
+//    × the factor on exactly the months it names;
 //  - rebasing reports an op that no longer applies, and such a scenario
 //    refuses to run (422);
 //  - compare shows each side's scenario;
@@ -189,6 +192,77 @@ describe('scenario ops', () => {
 		expect(body.run.summary.farms.map((f: { name: string }) => f.name)).toContain('New dam');
 		const n = await rowsAs<{ n: number }>(u, 'SELECT count(*)::int AS n FROM run_series WHERE run_id = $1 AND node_id = $2', [body.run.id, added.id]);
 		expect(n[0]!.n).toBeGreaterThan(0);
+	});
+
+	it('scales one farm’s demand in one month (demand.scale): classified by who owns the named farm, stored and run on exactly those days', async () => {
+		const u = await signUp('Scaler');
+		const c = await catchment(u);
+		const base = await run(u, c.projectId, 'Baseline');
+		// Rooikloof at 50 % in January (the record runs 2020-01-01 to 2020-03-30).
+		const halve: ScenarioOp = { op: 'demand.scale', factor: 0.5, nodeIds: [c.farm.id], months: [1] };
+		const sid = await create(u, c.projectId, { name: 'Rooikloof takes half in January', baseRunId: base, ops: [halve] });
+
+		// A named farm that isn't the author's is another party's: baseline, until it is theirs.
+		const checked = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
+		expect(checked.body.check).toEqual({ applied: [{ index: 0, op: halve, notes: [] }], problems: [], classified: ['baseline'], renamed: [], reIds: [] });
+		expect(checked.body.scenario.opNames).toEqual([{ id: c.farm.id, name: 'Rooikloof' }]);
+		const owned = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
+		expect(owned.status).toBe(200);
+		expect(owned.body.check.classified).toEqual(['proposal']);
+
+		const body = await runScenario(u, c.projectId, sid);
+		expect(body.classified).toEqual(['proposal']);
+		const runId = body.run.id as string;
+
+		// Stored: the op, its class, and the model it ran on, with the farm's demand factor (Oct-first rows: January is index 3).
+		const stored = await rowsAs<{ inputs: { scenario: Record<string, unknown>; model: { nodes: { id: string; demandFactor?: number[] }[] } } }>(u, 'SELECT inputs FROM model_run WHERE id = $1', [runId]);
+		expect(stored[0]!.inputs.scenario).toMatchObject({ id: sid, baseRunId: base, ops: [halve], ownedNodeIds: [c.farm.id], classified: ['proposal'] });
+		const ranNodes = stored[0]!.inputs.model.nodes;
+		expect(ranNodes.find((n) => n.id === c.farm.id)!.demandFactor).toEqual([1, 1, 1, 0.5, 1, 1, 1, 1, 1, 1, 1, 1]);
+		expect(ranNodes.find((n) => n.id === c.other.id)!.demandFactor).toBeUndefined();
+
+		// The summary is the engine's on the scaled input.
+		const expected = await withUser(u.id, async (db) => runModelChecked(applyScenario(await loadRunInput(db, base), [halve]).input));
+		expect(canon(body.run.summary)).toBe(canon(expected.summary));
+
+		// The stored daily demand: Rooikloof's is the base's × 0.5 on the 31 January days and the base's after; Kliphuis's is the base's.
+		const series = async (r: string, nodeId: string) => {
+			const res = await u.call('GET', `/projects/${c.projectId}/runs/${r}/series?key=demand&nodeId=${nodeId}`);
+			expect(res.status).toBe(200);
+			expect(res.body.startDate).toBe('2020-01-01');
+			return res.body.values as number[];
+		};
+		const [baseFarm, scFarm, baseOther, scOther] = await Promise.all([series(base, c.farm.id), series(runId, c.farm.id), series(base, c.other.id), series(runId, c.other.id)]);
+		expect(scFarm).toHaveLength(90);
+		expect(baseFarm.slice(0, 31).some((v) => v > 1)).toBe(true);
+		baseFarm.forEach((v, i) => expect(scFarm[i], `day ${i}`).toBeCloseTo(i < 31 ? v * 0.5 : v, 9));
+		expect(scOther).toEqual(baseOther);
+
+		// And the summaries say so: Rooikloof's mean demand is its stored series' mean, lower than the base's; Kliphuis's unchanged.
+		const baseSummary = (await u.call('GET', `/projects/${c.projectId}/runs/${base}`)).body.run.summary;
+		const avg = (s: { farms: { nodeId: string; avgDemandM3Day: number }[] }, id: string) => s.farms.find((f) => f.nodeId === id)!.avgDemandM3Day;
+		const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+		expect(avg(body.run.summary, c.farm.id)).toBeCloseTo(mean(scFarm), 6);
+		expect(avg(body.run.summary, c.farm.id)).toBeLessThan(avg(baseSummary, c.farm.id));
+		expect(avg(body.run.summary, c.other.id)).toBe(avg(baseSummary, c.other.id));
+	});
+
+	it('classes a demand.scale with no nodeIds as baseline even when every farm is owned: it scales the whole catchment', async () => {
+		const u = await signUp('ScalerAll');
+		const c = await catchment(u);
+		const base = await run(u, c.projectId, 'Baseline');
+		const everyone: ScenarioOp = { op: 'demand.scale', factor: 0.85 };
+		const sid = await create(u, c.projectId, { name: 'Everyone at 85 %', baseRunId: base, ops: [everyone], ownedNodeIds: [c.farm.id, c.other.id] });
+		const res = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: everyone, notes: ['2 farm(s) scaled'] }], problems: [], classified: ['baseline'], renamed: [], reIds: [] });
+		// Positive control: the same scale naming both owned farms is a proposal.
+		const named: ScenarioOp = { op: 'demand.scale', factor: 0.85, nodeIds: [c.farm.id, c.other.id] };
+		const sid2 = await create(u, c.projectId, { name: 'Both named at 85 %', baseRunId: base, ops: [named], ownedNodeIds: [c.farm.id, c.other.id] });
+		expect((await u.call('GET', `/projects/${c.projectId}/scenarios/${sid2}`)).body.check.classified).toEqual(['proposal']);
+		const body = await runScenario(u, c.projectId, sid);
+		expect(body.classified).toEqual(['baseline']);
+		const stored = await rowsAs<{ inputs: { model: { nodes: { id: string; demandFactor?: number[] }[] } } }>(u, 'SELECT inputs FROM model_run WHERE id = $1', [body.run.id]);
+		for (const id of [c.farm.id, c.other.id]) expect(stored[0]!.inputs.model.nodes.find((n) => n.id === id)!.demandFactor).toEqual(new Array(12).fill(0.85));
 	});
 
 	it("refuses a run series naming a node outside the run's own model", async () => {

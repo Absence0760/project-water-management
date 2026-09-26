@@ -129,6 +129,19 @@ that needs them.
   tab link warms its chunk on hover or focus, so switching tabs rarely shows
   the loading state.
 
+The project list (`routes/+page.svelte`) loads its import dialog
+(`components/import/ImportProjectDialog.svelte`, with the preview, the
+workbook review and the engine's series provenance and kinds code they use:
+18 KB gzip) the same way, without `Lazy`: hovering or focusing either import
+button warms the chunk, and a press opens the dialog as soon as it is there,
+with no loading state (the button keeps focus, so Escape returns to it). If
+the download fails the page says so and offers a reload, because a browser
+keeps a module that failed to fetch for the life of the page. Home's first
+load fell 81.5 → 65.5 KB gzip (2026-09-26); the total rose 2 KB (889.4 →
+891.5), the cost of the extra chunks. `components/import/homeSplit.test.ts`
+fails if the page, or anything it imports statically, reaches the import
+components or the spreadsheet code again.
+
 Help tooltips (`components/help/HelpTip.svelte`) don't import the help text
 either. The text is three modules, each its own chunk: `lib/help/tips.ts`
 (each entry's term, short text, units and field keys: 10 KB gzip),
@@ -298,20 +311,21 @@ and ships in that component's chunk.
 The shared utilities at the end of `app.css` (issue #9) were scoped copies
 until then: `.small` (secondary text, 0.8rem; 53 copies), `.u` (a unit in a
 label or table head; 22) and `.seg`, the segmented control (a row of `.btn`
-joined into one; 5). Use them rather than copying the rule into a
-component. A component that needs a different value keeps its own rule,
-which wins because its selector carries the hash class (a few have
-`.small { font-size: 0.85rem }`, and the Settings sections a `.u` with its
-own size). They come after the other shared rules so they win the same
+joined into one, any number of buttons; 5). Use them rather than copying
+the rule into a component. A component that needs a different value keeps
+its own rule, which wins because its selector carries the hash class (a
+few have `.small { font-size: 0.85rem }`, and the Settings sections a `.u`
+with its own size). They come after the other shared rules so they win the same
 ties the scoped copies did. `e2e/tests/shared-css.spec.ts` pins their
-computed styles (light, dark, phone, desktop, the report in print).
+computed styles (light, dark, phone, desktop, the report in print, the
+override editor's three-button switch).
 
 A rule moves into `app.css` only when it is identical in three or more
 components *and* the move lowers the total: global CSS is on every page's
 first load, so a rule only a lazy tab uses costs every other page for
-nothing. Moving these three saved 1.0 KB gzip in total and 0.1–0.2 KB on the
-Runs, Network and Data tabs and the report, for ~0.06 KB more on pages that
-use none of them (home, sign-in, /farm, /share). Measured and left scoped:
+nothing. Moving these three saved 1.0 KB gzip in total and 0.1–0.2 KB on
+the Runs, Network, Data and Settings tabs and the report, for ~0.06 KB more
+on pages that use none of them (home, sign-in, /farm, /share). Measured and left scoped:
 the loading spinner (−0.3 KB total but +0.1 KB on /farm, /share and sign-in,
 which never show it), `.stat dd.sub` (−0.07 KB, and three components style
 their `dd.sub` differently, so a global rule would leak into them), and the
@@ -435,8 +449,8 @@ stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
 
-**Jobs keep the engine inside their transaction.** The `rerun` and `yield`
-handlers run in the job's `withUser` transaction (`executeRun`, one
+**Jobs keep the engine inside their transaction.** The `rerun`, `yield` and
+`sweep` handlers run in the job's `withUser` transaction (`executeRun`, one
 transaction). A job's writes must commit together with its `done` (see
 [Background work](#background-work)), which is what makes a retry after a
 crash or a lost lease store nothing twice. The worker's pool serves one job
@@ -453,7 +467,8 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 [§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield` (below); step 2's alerts plug in as a further kind.
+dam yield's `yield` and the scenario sweep's `sweep` (below); step 2's
+alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
@@ -524,6 +539,16 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   its transaction for the whole search (seconds for a firm yield, under a
   minute for a curve, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
   well inside the 360 s lease. At most 2 pending per user.
+- **`sweep`** (issue #53 R2, `jobs/handlers/sweep.ts`, [api.md § Sweeps](./api.md#sweeps),
+  [scenarios.md § Sweeps](./scenarios.md#sweeps)): a base run × up to 12
+  named op sets, as the editor who asked. The base run's stored input is
+  rebuilt once; each member's ops are applied (`checkScenario`) and the
+  engine runs, and the member stores its run summary, or its problems when
+  its ops don't apply (the sweep carries on). `progress` after each member;
+  no cancel (at most 12 runs, each well under a second on an example
+  catchment). The sweep row and its members are written by the request in
+  the same transaction as the job, and completed by the job. At most 2
+  pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one
   with its key is running. That departs from the roadmap's index over

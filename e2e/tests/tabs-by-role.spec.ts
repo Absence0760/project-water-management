@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catchment' });
@@ -72,8 +73,9 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 	await strip(v).getByRole('link', { name: 'Network' }).click();
 	await expect(v).toHaveURL(/\?tab=network$/);
 	await expect(v.getByText('You have view-only access to this project.')).toBeVisible();
-	await v.getByRole('button', { name: 'Table', exact: true }).click();
+	await openNodeTable(v);
 	await expect(v.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
+	await closeModal(v);
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();

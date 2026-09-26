@@ -8,7 +8,9 @@
 // copies, and they must stay so.
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeTable } from '../support/network.ts';
 
 const COMBOS = [
 	{ colorScheme: 'light', width: 1280, height: 900 },
@@ -59,29 +61,41 @@ const FIRST = radius(4, 0, 0, 4, 0);
 const MIDDLE = radius(0, 0, 0, 0, -1);
 const LAST = radius(0, 4, 4, 0, -1);
 
-test('Network tab: the layout switch, a small hint and the table’s units', async ({ page, owner }) => {
+test('Network tab: a small hint, and the node table’s units', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Shared CSS network');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	const layout = page.getByRole('group', { name: 'Layout' });
-	await expect(layout).toBeVisible();
 	const hint = page.getByText('Select a node on the map or in the list to see it here.');
 	await expect(hint).toBeVisible();
-
 	await eachCombo(page, async (at) => {
-		const muted = await token(page, '--text-muted');
-		expect(await styleOf(layout.getByRole('button', { name: 'Map' }), SEG), at).toEqual(FIRST);
-		expect(await styleOf(layout.getByRole('button', { name: 'Table' }), SEG), at).toEqual(MIDDLE);
-		expect(await styleOf(layout.getByRole('button', { name: 'One node' }), SEG), at).toEqual(LAST);
-		expect(await styleOf(hint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: muted });
+		expect(await styleOf(hint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 
-	await layout.getByRole('button', { name: 'Table' }).click();
-	const unit = page.locator('th .u').filter({ hasText: /^km²$/ }).first();
+	const table = await openNodeTable(page);
+	const unit = table.locator('th .u').filter({ hasText: /^km²$/ }).first();
 	await expect(unit).toBeVisible();
 	await eachCombo(page, async (at) => {
-		const muted = await token(page, '--text-muted');
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: muted });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+	});
+});
+
+test('scenario override mode: the three-button “Part of the model” switch', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Shared CSS override');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'Pins', baseRunId: runId, ops: [] } });
+	expect(res.status()).toBe(201);
+	const { scenario } = (await res.json()) as { scenario: { id: string } };
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenario.id}`);
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+	const part = page.getByRole('group', { name: 'Part of the model' });
+	await expect(part).toBeVisible();
+
+	await eachCombo(page, async (at) => {
+		expect(await styleOf(part, ['display']), at).toEqual({ display: 'inline-flex' });
+		expect(await styleOf(part.getByRole('button', { name: 'Network', exact: true }), SEG), at).toEqual(FIRST);
+		expect(await styleOf(part.getByRole('button', { name: 'Crops', exact: true }), SEG), at).toEqual(MIDDLE);
+		expect(await styleOf(part.getByRole('button', { name: 'Transfers', exact: true }), SEG), at).toEqual(LAST);
 	});
 });
 

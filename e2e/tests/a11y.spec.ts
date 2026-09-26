@@ -9,6 +9,7 @@ import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail, 
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeForm } from '../support/network.ts';
 
 const DEAD_TOKEN = 'q'.repeat(43);
 
@@ -137,9 +138,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			test('the model save bar and validation messages have no violations', async ({ page, owner }) => {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y save bar');
-				await page.goto(`/projects/${project.id}?tab=network&view=table`);
+				await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 				await page.getByLabel('Lower farm drains into').selectOption({ label: '— Outlet (none) —' });
-				await expect(page.getByText('Fix before saving:')).toBeVisible();
+				await expect(page.getByRole('dialog', { name: 'Node table' }).getByText('Fix before saving:')).toBeVisible();
 				await expectNoViolations(page);
 			});
 
@@ -147,10 +148,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y one node');
 				await page.goto(`/projects/${project.id}?tab=network`);
-				await page.getByRole('button', { name: 'One node' }).click();
+				await openNodeForm(page);
 				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 				await expect(page.getByLabel('Capacity (m³)')).toHaveValue('150,000');
 				await expectNoViolations(page);
+				await closeModal(page);
 
 				await page.getByRole('button', { name: 'Add data' }).click();
 				await expect(page.getByRole('dialog', { name: 'Add data' })).toBeVisible();

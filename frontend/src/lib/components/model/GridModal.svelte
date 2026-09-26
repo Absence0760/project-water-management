@@ -8,6 +8,8 @@
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import CropsTab from '$lib/components/crops/CropsTab.svelte';
+	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
+	import type { RunMeta } from '$lib/api';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { GRID_TAB, GRIDS, type GridId } from '$lib/workspace/overlays';
@@ -21,7 +23,9 @@
 		settings,
 		readonly,
 		onsave,
-		reason = $bindable('')
+		reason = $bindable(''),
+		projectId,
+		runs = null
 	}: {
 		open?: boolean;
 		grid: GridId;
@@ -32,16 +36,21 @@
 		onsave: () => void;
 		/** The save bar's reason, shared. */
 		reason?: string;
+		projectId: string;
+		/** The project's runs (the node table's flow shares and the farmers' notes need none, but NetworkTab takes them). */
+		runs?: RunMeta[] | null;
 	} = $props();
 
 	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas', demand: 'demand' } as const;
-	const area = $derived(GRID_TAB[grid] as 'crops' | 'transfers');
+	const area = $derived(grid === 'nodes' ? 'network' : (GRID_TAB[grid] as 'crops' | 'transfers'));
 </script>
 
 <Dialog bind:open title={GRIDS[grid]} full keepInputs>
 	<div class="grid-body" class:readonly data-grid={grid}>
 		<IssueList issues={editor.issues} {area} />
-		{#if grid === 'transfers'}
+		{#if grid === 'nodes'}
+			<NetworkTab {editor} {settings} {readonly} {projectId} {runs} only="table" />
+		{:else if grid === 'transfers'}
 			<TransfersTab {editor} {readonly} />
 		{:else}
 			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} />

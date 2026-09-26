@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeForm, openNodeTable, saveModelChanges } from '../support/network.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -8,27 +9,29 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 test('build a network with farms, crops and a transfer, save, reload', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Model build');
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	// The node table, as a grid over the (empty) map.
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
+	const grid = page.getByRole('dialog', { name: 'Node table' });
 
 	// --- network: outflow gauge + two farms ---------------------------------
-	await page.getByRole('button', { name: 'Add outflow gauge' }).click();
-	await page.getByRole('button', { name: '+ Add node' }).click();
-	await page.getByRole('button', { name: '+ Add node' }).click();
-	const names = page.getByRole('textbox', { name: 'Name' });
+	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
+	await grid.getByRole('button', { name: '+ Add node' }).click();
+	await grid.getByRole('button', { name: '+ Add node' }).click();
+	const names = grid.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
 	await expect(names.nth(0)).toHaveValue('Outflow gauge');
 	await names.nth(1).fill('Hilltop farm');
 	await names.nth(2).fill('Valley farm');
 
-	await expect(page.getByLabel('Kind of Outflow gauge')).toHaveValue('gauge');
-	await expect(page.getByLabel('Kind of Hilltop farm')).toHaveValue('farm');
-	await expect(page.getByLabel('Hilltop farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
+	await expect(grid.getByLabel('Kind of Outflow gauge')).toHaveValue('gauge');
+	await expect(grid.getByLabel('Kind of Hilltop farm')).toHaveValue('farm');
+	await expect(grid.getByLabel('Hilltop farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
 
-	await page.getByLabel('Area of Outflow gauge, km²', { exact: true }).fill('40');
-	await page.getByLabel('Area of Hilltop farm, km²', { exact: true }).fill('14.5');
-	await page.getByLabel('Dam capacity of Hilltop farm, m³').fill('120000');
-	await page.getByLabel('Dam initial storage of Hilltop farm, %').fill('60');
-	await page.getByLabel('Area of Valley farm, km²', { exact: true }).fill('9');
+	await grid.getByLabel('Area of Outflow gauge, km²', { exact: true }).fill('40');
+	await grid.getByLabel('Area of Hilltop farm, km²', { exact: true }).fill('14.5');
+	await grid.getByLabel('Dam capacity of Hilltop farm, m³').fill('120000');
+	await grid.getByLabel('Dam initial storage of Hilltop farm, %').fill('60');
+	await grid.getByLabel('Area of Valley farm, km²', { exact: true }).fill('9');
 
 	// The drainage tree follows the table.
 	const tree = page.getByRole('list', { name: 'Drainage tree' });
@@ -36,6 +39,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(tree.getByRole('listitem').first()).toContainText('Outflow gauge');
 	await expect(tree.getByRole('listitem').first()).toContainText('outlet');
 	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
+	// Done leaves the edits for the save bar.
+	await closeModal(page);
 
 	// --- crops, factors and planted areas ------------------------------------
 	await tab(page, 'Crops').click();
@@ -91,13 +96,12 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(page.getByLabel('Vines on Valley farm, ha')).toHaveValue('8');
 
 	await tab(page, 'Network').click();
-	// The map is the default layout; the fields are in the Table.
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
-	await expect(page.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
-	await expect(page.getByLabel('Area of Hilltop farm, km²', { exact: true })).toHaveValue('14.5');
-	await expect(page.getByLabel('Dam capacity of Hilltop farm, m³')).toHaveValue('120000');
-	await expect(page.getByLabel('Dam initial storage of Hilltop farm, %')).toHaveValue('60');
-	await expect(page.getByLabel('Valley farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
+	const table = await openNodeTable(page);
+	await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
+	await expect(table.getByLabel('Area of Hilltop farm, km²', { exact: true })).toHaveValue('14.5');
+	await expect(table.getByLabel('Dam capacity of Hilltop farm, m³')).toHaveValue('120000');
+	await expect(table.getByLabel('Dam initial storage of Hilltop farm, %')).toHaveValue('60');
+	await expect(table.getByLabel('Valley farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
 	await expect(saveBar(page)).toBeHidden();
 });
 
@@ -105,9 +109,10 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	void owner;
 	const project = await createProject(page.request, 'Model validation');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
-	const problems = page.getByRole('status').filter({ hasText: 'Fix before saving:' });
-	const save = saveBar(page).getByRole('button', { name: 'Save changes' });
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
+	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const problems = grid.getByRole('status').filter({ hasText: 'Fix before saving:' });
+	const save = grid.getByRole('button', { name: 'Save changes' });
 
 	// Second outlet.
 	await page.getByLabel('Lower farm drains into').selectOption({ label: '— Outlet (none) —' });
@@ -130,8 +135,8 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	await expect(page.getByText('Not connected to an outlet (loop):')).toBeVisible();
 	await expect(save).toBeDisabled();
 
-	// Discard puts the saved network back.
-	await saveBar(page).getByRole('button', { name: 'Discard' }).click();
+	// Discard (the grid's, as the save bar's) puts the saved network back.
+	await grid.getByRole('button', { name: 'Discard' }).click();
 	await expect(saveBar(page)).toBeHidden();
 	await expect(problems).toBeHidden();
 	await expect(page.getByLabel('Upper farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
@@ -146,8 +151,9 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	void owner;
 	const project = await createProject(page.request, 'Unsaved guard');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 	await page.getByLabel('Area of Upper farm, km²', { exact: true }).fill('99');
+	await closeModal(page);
 
 	// Answer each prompt inside its listener (a click that opens a prompt only
 	// returns once the prompt is handled), and wait for the first answer before
@@ -161,7 +167,7 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	await projectsLink.click();
 	await expect.poll(() => asked).toBe('You have unsaved model changes. Leave without saving?');
 	await expect(page.getByRole('heading', { level: 1, name: 'Unsaved guard' })).toBeVisible();
-	await expect(page.getByLabel('Area of Upper farm, km²', { exact: true })).toHaveValue('99');
+	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
 
 	page.once('dialog', (d) => void d.accept());
 	await projectsLink.click();
@@ -173,8 +179,8 @@ test('large values show thousands separators in the one-node form and the view-o
 	const project = await createProject(page.request, 'Separators');
 	await putModel(page.request, project.id, sampleModel()); // Upper farm: 150 000 m³ dam
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+	await openNodeForm(page);
+	await page.getByRole('dialog').getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 
 	const capacity = page.getByLabel('Capacity (m³)');
 	await expect(capacity).toHaveValue('150,000');
@@ -185,14 +191,15 @@ test('large values show thousands separators in the one-node form and the view-o
 	await capacity.blur();
 	await expect(capacity).toHaveValue('300,000');
 	// The editable table keeps plain numbers.
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
+	await closeModal(page);
+	await openNodeTable(page);
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300000');
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
 
 	const viewer = await signIn('Separators viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await viewer.page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 	await expect(viewer.page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300,000');
 	await expect(viewer.page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('90,000');
 });
@@ -204,7 +211,7 @@ test.describe('network layout', () => {
 		await page.setViewportSize({ width: 1920, height: 1000 });
 		const project = await createProject(page.request, 'Network fit');
 		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}?tab=network&view=table`);
+		await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
 		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -249,7 +256,7 @@ test.describe('network layout', () => {
 		await page.setViewportSize({ width: 1100, height: 900 });
 		const project = await createProject(page.request, 'Network narrow');
 		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}?tab=network&view=table`);
+		await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
 		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -268,32 +275,31 @@ test.describe('network layout', () => {
 	test.describe('phone', () => {
 		test.use({ viewport: { width: 390, height: 844 } });
 
-		test('a schematic tap brings the one-node form into view, and the picker stays under the header', async ({ page, owner }) => {
+		test('a schematic tap picks a node; Edit opens its form full screen, the picker staying at the top as it scrolls', async ({ page, owner }) => {
 			void owner;
 			const project = await createProject(page.request, 'Network phone');
 			await putModel(page.request, project.id, sampleModel());
-			await page.goto(`/projects/${project.id}?tab=network&view=node`);
+			await page.goto(`/projects/${project.id}?tab=network`);
 
-			// The one-node form, below the schematic.
-			const picker = page.getByLabel('Node to edit');
-			await expect(picker.locator('option:checked')).toHaveText('1. Outflow gauge · gauge');
-
-			// Tapping a node on the drawing selects it and brings its form up the screen.
+			// Tapping a node on the drawing picks it: its card below the map names it.
 			await page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' }).click();
-			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · farm');
-			await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
-			await expect.poll(() => picker.evaluate((p) => p.getBoundingClientRect().top)).toBeLessThan(844 * 0.6);
-			await expect(picker).toBeInViewport();
+			const card = page.getByTestId('node-card');
+			await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 
-			// Deep in the farm form, the picker and ‹ › are still on screen, just below the app header.
-			await page.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
+			// Edit opens the full form in a sheet the width of the screen.
+			await card.getByRole('button', { name: 'Edit Upper farm' }).click();
+			const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
+			const picker = sheet.getByLabel('Node to edit');
+			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · farm');
+			await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
+			expect((await sheet.boundingBox())!.width).toBeGreaterThan(370);
+
+			// Deep in the farm form, the picker and ‹ › are still on screen, at the top of the sheet.
+			await sheet.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
 			await expect(picker).toBeInViewport();
-			await expect(page.getByRole('button', { name: 'Next node' })).toBeInViewport();
-			const headerBottom = await page.getByRole('banner').evaluate((h) => h.getBoundingClientRect().bottom);
-			const pickerTop = await picker.evaluate((p) => p.getBoundingClientRect().top);
-			expect(pickerTop).toBeGreaterThanOrEqual(headerBottom);
-			await page.getByRole('button', { name: 'Next node' }).click();
-			await expect(picker.locator('option:checked')).toHaveText('3. Lower farm · farm');
+			await expect(sheet.getByRole('button', { name: 'Next node' })).toBeInViewport();
+			await sheet.getByRole('button', { name: 'Next node' }).click();
+			await expect(page.getByRole('dialog', { name: 'Edit Lower farm' }).getByLabel('Node to edit').locator('option:checked')).toHaveText('3. Lower farm · farm');
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 		});
 	});

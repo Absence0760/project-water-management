@@ -251,10 +251,10 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
-							'Press **+ Add node** for each farm, set its **Kind**, and set **Drains into** to the element directly below it on the river.',
+							'Press **+ Add node** for each farm (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every farm its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
-							'For a farm with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. The **One node** view also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
+							'For a farm with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card on the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
 							'Set the farm’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
 							'Press **Save changes** on the save bar.'
 						]
@@ -262,7 +262,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down. Once the model has been run, **Colour farms by** › **Supply, latest run** shades each farm by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%); a farm added since the run is hatched.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each farm by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour farms by** › **Supply, latest run**, on by default); a farm added since the run is hatched.'
 					}
 				]
 			},

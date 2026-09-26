@@ -733,15 +733,25 @@
 // 2026-09-26  total 985 → 895 KB (measured 890). The two entries above
 //             were written in parallel; merged, #9's reductions and #17's
 //             Network map measure 890. Headroom ~5 KB.
-// 2026-09-26  total 895 → 894 KB (measured 889: 910 738 → 909 682 bytes).
-//             Issue #9: `.small` (53 scoped copies), `.u` (22) and the `.seg`
-//             segmented control (5) live once in app.css (docs/architecture.md
-//             § Shared CSS). −1.0 KB total, not the 2–3 KB estimated: gzip
-//             had already folded the copies that shared a chunk. First loads:
-//             Runs −0.2, the report −0.2, Network and Data −0.1; home,
-//             sign-in, /farm and /share +0.06 (global CSS is on every page).
-//             Measured and not moved: the spinner (−0.3 total, +0.1 on /farm,
-//             /share and sign-in) and `.stat dd.sub` (−0.07). Headroom ~5 KB.
+// 2026-09-26  ceilings unchanged (issue #53 follow-up, measured @ 73311b3,
+//             before #9's cuts). A Lazy share-the-pain board raises the total
+//             ~1.3 KB (its own chunk compresses worse than it saves) and the
+//             Runs tab always renders it, so it stays eager. The Scale demand
+//             form is ~40 template lines in the already-lazy Scenarios chunk:
+//             not worth a chunk.
+// 2026-09-26  total stays 895 KB (measured 891). Issue #9: `.small` (53
+//             scoped copies), `.u` (22) and the `.seg` segmented control (5)
+//             live once in app.css (docs/architecture.md § Shared CSS).
+//             −1.0 KB total, not the 2–3 KB estimated: gzip had already
+//             folded the copies that shared a chunk. On main @ f784a24
+//             910 738 → 909 682 bytes; merged over origin/main @ 1a8d058
+//             (the home import dialog made lazy) 913 069 → 912 108. First
+//             loads: Runs and the report −0.2 KB, Network, Data and Settings
+//             −0.1; home, sign-in, /farm, /share and teams +0.06 (global CSS
+//             is on every page). Measured and not moved: the spinner (−0.3
+//             total, +0.1 on /farm, /share and sign-in) and `.stat dd.sub`
+//             (−0.07). Measurement + 5 would be 896, over the current
+//             ceiling, so it stays; headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -752,7 +762,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 894,
+	totalCodeKb: 895,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

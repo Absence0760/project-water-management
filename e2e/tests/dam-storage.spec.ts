@@ -6,11 +6,12 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
 async function openUpperFarm(page: Page) {
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	return page.getByRole('group', { name: 'Dam survey and releases' });
 }
@@ -38,7 +39,7 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await dam.getByLabel('Dam release of Upper farm in Oct, m³/day').fill('120');
 	await dam.getByRole('button', { name: 'Use October’s amount for every month' }).click();
 	await page.getByRole('group', { name: 'Farm dam' }).getByLabel('Seepage returning (%)').fill('40');
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
 	await page.reload();

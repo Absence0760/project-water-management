@@ -18,14 +18,15 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
+	import Dialog from '$lib/components/common/Dialog.svelte';
+	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
 	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
-	import { withParam, type GridId } from '$lib/workspace/overlays';
+	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
-	import { formOffScreen } from './scroll';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
@@ -37,7 +38,10 @@
 		settings,
 		readonly,
 		projectId = '',
-		runs = null
+		runs = null,
+		only,
+		onsave,
+		reason = $bindable('')
 	}: {
 		editor: ModelEditor;
 		settings?: ProjectSettings;
@@ -45,6 +49,12 @@
 		projectId?: string;
 		/** The project's runs, newest first (null = not loaded). Enables "Colour farms by". */
 		runs?: RunMeta[] | null;
+		/** `table`: the node table alone, as the grid modal shows it (model/GridModal.svelte). */
+		only?: 'table';
+		/** The page's model save, for the node sheet's save row (the sheet hides the save bar). */
+		onsave?: () => void;
+		/** The save bar's reason, shared with the sheet's save row. */
+		reason?: string;
 	} = $props();
 
 	const nodes = $derived(editor.model.nodes);
@@ -106,22 +116,44 @@
 		};
 	});
 
-	// Three layouts, in the URL (`view=`) so each can be linked: the Map (the
-	// default, issue #17 option A · A2: the schematic beside the picked node and
-	// a list of every node), the Table (all nodes, every field) and One node
-	// (the full form, with help text). Nothing moved out of the other two.
-	type View = 'map' | 'table' | 'detail';
-	const VIEW_PARAM: Record<View, string | null> = { map: null, table: 'table', detail: 'node' };
-	const view = $derived.by<View>(() => {
+	// The Network is one page, the map (issue #17, option A · A2): the node
+	// table opens as a grid (the Grids menu, `grid=nodes`, this component with
+	// `only="table"`) and a node's full form in a sheet over the map
+	// (`edit=<nodeId>`). `view` is 'table' only inside the grid modal.
+	type View = 'map' | 'table';
+	const view = $derived<View>(only === 'table' ? 'table' : 'map');
+	// Old links: `view=table` opens the node table, `view=node` a node's form.
+	$effect(() => {
+		if (only) return;
 		const v = page.url.searchParams.get('view');
-		return v === 'table' ? 'table' : v === 'node' ? 'detail' : 'map';
+		if (!v) return;
+		untrack(() => {
+			const q = new URLSearchParams(page.url.search);
+			q.delete('view');
+			if (v === 'table') q.set('grid', 'nodes');
+			else if (v === 'node' && nodes[0]) q.set('edit', q.get('node') ?? nodes[0].id);
+			void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+		});
 	});
-	function setView(v: View) {
-		const q = new URLSearchParams(page.url.search);
-		const p = VIEW_PARAM[v];
-		if (p) q.set('view', p);
-		else q.delete('view');
-		void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+
+	// --- the node sheet: a node's full form over the map, while the URL names it (`edit=<id>`) ---
+	const editParam = $derived(only ? null : page.url.searchParams.get('edit'));
+	const editing = $derived(editParam ? (nodes.find((n) => n.id === editParam) ?? null) : null);
+	const editIndex = $derived(editing ? nodes.indexOf(editing) : -1);
+	let sheetOpen = $state(false);
+	$effect(() => {
+		sheetOpen = !!editing;
+	});
+	$effect(() => {
+		// Closed (Done, Esc, the ✕): drop `edit` in place, so Back goes to where it was opened from.
+		if (!sheetOpen && untrack(() => editParam)) void goto(withoutParam(page.url, 'edit'), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+	$effect(() => {
+		if (editing) untrack(() => (selectedId = editing.id));
+	});
+	/** Opens a node's form; `replace` switches the open sheet to another node (‹ ›, the picker). */
+	function openEdit(id: string, replace = false) {
+		return goto(withParam(page.url, 'edit', id), { replaceState: replace, noScroll: true, keepFocus: true });
 	}
 	onMount(() => {
 		loadFarmers();
@@ -145,24 +177,12 @@
 	$effect(() => {
 		if (nodeParam) selectedId = nodeParam;
 	});
-	const selected = $derived(nodes.find((n) => n.id === selectedId) ?? nodes[0] ?? null);
-	const selectedIndex = $derived(selected ? nodes.indexOf(selected) : -1);
-	// A farm picked on the schematic or in the table: its planted areas are a click away (the farm drawer, issue #17).
-	const pickedFarm = $derived(nodes.find((n) => n.id === selectedId && n.kind === 'farm') ?? null);
-	const pickedPlanting = $derived(pickedFarm ? farmPlanting(editor.model, pickedFarm.id) : null);
 
-	let pickerEl: HTMLDivElement | undefined = $state();
 
 	function select(id: string) {
 		selectedId = id;
 		if (view === 'map') return;
-		if (view === 'detail') {
-			// The form sits below the schematic; on a phone a tapped node would
-			// otherwise change a form that is off-screen.
-			if (pickerEl && formOffScreen(pickerEl.getBoundingClientRect(), window.innerHeight)) {
-				pickerEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
-			}
-		} else {
+		{
 			queueMicrotask(() => {
 				const row = document.getElementById(`node-row-${id}`);
 				row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -174,16 +194,17 @@
 	function addUser() {
 		const n = editor.addUser();
 		selectedId = n.id;
-		if (view === 'map') setView('detail');
-		queueMicrotask(() => document.getElementById(view === 'table' ? `user-name-${n.id}` : `nd-name-${n.id}`)?.focus());
+		// On the map a new node is filled in on its form, in the sheet.
+		if (view === 'map') void openEdit(n.id).then(() => document.getElementById(`nd-name-${n.id}`)?.focus());
+		else queueMicrotask(() => document.getElementById(`user-name-${n.id}`)?.focus());
 	}
 
 	function add() {
 		const n = editor.addNode();
 		selectedId = n.id;
-		// A new node is filled in on its form.
-		if (view === 'map') setView('detail');
-		queueMicrotask(() => document.getElementById(view === 'table' ? `node-name-${n.id}` : `nd-name-${n.id}`)?.focus());
+		// On the map a new node is filled in on its form, in the sheet.
+		if (view === 'map') void openEdit(n.id).then(() => document.getElementById(`nd-name-${n.id}`)?.focus());
+		else queueMicrotask(() => document.getElementById(`node-name-${n.id}`)?.focus());
 	}
 
 	function remove(id: string, name: string) {
@@ -196,6 +217,7 @@
 		if (question && !confirm(question)) return;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
+		if (editParam === id) sheetOpen = false;
 	}
 
 	// --- reordering (display order only; the model runs in topological order) ---
@@ -255,6 +277,7 @@
 		['planted-areas', 'Planted areas'],
 		['transfers', 'Transfers']
 	];
+	const GRID_ALL: [GridId, string][] = [['nodes', 'Node table'], ...GRID_LINKS];
 	const dotBand = (id: string) => (colourBy === 'supply' ? (latestSupply?.get(id)?.band ?? null) : null);
 	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
@@ -337,14 +360,6 @@
 	const farmArea = $derived(farms.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 </script>
 
-{#snippet layoutSwitch()}
-	<div class="seg" role="group" aria-label="Layout">
-		<button type="button" class="btn btn-sm" aria-pressed={view === 'map'} onclick={() => setView('map')}>Map</button>
-		<button type="button" class="btn btn-sm" aria-pressed={view === 'table'} onclick={() => setView('table')}>Table</button>
-		<button type="button" class="btn btn-sm" aria-pressed={view === 'detail'} onclick={() => setView('detail')}>One node</button>
-	</div>
-{/snippet}
-
 {#snippet colourByControl()}
 	{#if latestRun && farms.length}
 		<div class="colour-by">
@@ -380,29 +395,224 @@
 	/>
 {/snippet}
 
-{#if view === 'map' && nodes.length}
-	<!-- Map layout (issue #17, option A · A2): a page of its own. The header
-	     names it and holds its actions; the map card fills the width beside the
-	     picked node and the node list. -->
+{#if only === 'table'}
+	<!-- The node table alone: the grid modal's "Node table" (model/GridModal.svelte). -->
+	<section class="panel" aria-labelledby="net-h">
+		<div class="panel-head"><h2 id="net-h">Network nodes</h2></div>
+		{#if nodes.length === 0}
+			<div class="empty">
+				<p>
+					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+					and the EWR applies), then add the farms and gauges that drain into it.
+				</p>
+				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
+			</div>
+		{:else}
+		<p class="muted small intro">
+				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; farms total {fmtPct(shares.sum, 2)}{/if}.
+				The ⓘ buttons and the field guide below explain each value.
+			</p>
+			<div class="table-wrap">
+				<table class="data compact net">
+					<thead>
+						<tr class="groups">
+							<th scope="col" class="sticky" rowspan="2">{#if !readonly}<span class="visually-hidden">Order and </span>{/if}Name</th>
+							<th scope="col" rowspan="2">Kind <HelpTip key="node.kind" /></th>
+							<th scope="col" rowspan="2">Drains into <HelpTip key="node.downstreamNodeId" /></th>
+							{#each groupSpans as g (g.group)}
+								<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
+							{/each}
+							{#if !readonly}<th scope="col" rowspan="2" class="rm"><span class="visually-hidden">Remove</span></th>{/if}
+						</tr>
+						<tr>
+							{#each TABLE_FIELDS as f (f.key)}
+								<!-- Label on top (non-breaking hyphens: "High-MAP" stays whole), then the
+								     unit and its ⓘ on one bottom line, the same in every column. -->
+								<th scope="col" class="num fh">
+									<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
+									<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
+								</th>
+							{/each}
+							<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">
+								<span class="fh-l">In use</span>
+								<span class="fh-u"><span class="u">%</span></span>
+							</th>
+						</tr>
+					</thead>
+					<tbody bind:this={reorder.body}>
+						{#each nodes as node, i (node.id)}
+							{@const label = node.name || 'unnamed node'}
+							{@const share = shareOf(i)}
+							{@const rs = reorder.rowState(node.id, i, nodes.length)}
+							<tr
+								id="node-row-{node.id}"
+								data-idx={i}
+								class:sel={node.id === selectedId}
+								class:dragging={rs.dragging}
+								class:drop-before={rs.before}
+								class:drop-after={rs.after}
+							>
+								<th scope="row" class="sticky">
+									<div class="namecell">
+									{#if !readonly}
+										<MoveControls id={node.id} {label} index={i} count={nodes.length} {reorder} onmove={(d) => moveBy(node.id, d, true)} />
+									{/if}
+									<input
+										id="node-name-{node.id}"
+										aria-label="Name"
+										maxlength="100"
+										readonly={readonly}
+										bind:value={node.name}
+										onfocus={() => (selectedId = node.id)}
+									/>
+									<!-- Notes on a saved node (WP-2.7); a node added since the last save has none yet. -->
+									{#if projectId && editor.savedNodeIds.has(node.id)}
+										<NotesDrawer {projectId} compact target={{ kind: 'node', nodeId: node.id, name: node.name, isFarm: node.kind === 'farm' }} />
+									{/if}
+									</div>
+								</th>
+								<td>
+									<select aria-label="Kind of {label}" disabled={readonly} bind:value={node.kind}>
+										<option value={'farm' satisfies NodeKind}>Farm</option>
+										<option value={'gauge' satisfies NodeKind}>Gauge</option>
+										<option value={'user' satisfies NodeKind}>Other user</option>
+									</select>
+								</td>
+								<td>
+									<select
+										aria-label="{label} drains into"
+										disabled={readonly}
+										value={node.downstreamNodeId ?? ''}
+										onchange={(e) => (node.downstreamNodeId = e.currentTarget.value || null)}
+									>
+										<option value="">— Outlet (none) —</option>
+										{#each nodes as other (other.id)}
+											{#if other.id !== node.id}<option value={other.id}>{other.name || '(unnamed)'}</option>{/if}
+										{/each}
+									</select>
+								</td>
+								{#each TABLE_FIELDS as f (f.key)}
+									{#if (f.farmOnly && node.kind !== 'farm') || node.kind === 'user'}
+										{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
+										<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
+									{:else}
+									<td class:pct={isPct(f)} class:vol={isVolume(f)}>
+										<NumberInput
+											label={f.aria(label)}
+											min={0}
+											max={isPct(f) ? 100 : undefined}
+											scale={isPct(f) ? 100 : 1}
+											nullable={f.nullable}
+											grouped={readonly && !isPct(f)}
+											placeholder={f.nullable ? '–' : undefined}
+											disabled={readonly}
+											value={node[f.key] ?? null}
+								onchange={(v) => setNodeField(node, f.key, v)}
+										/>
+									</td>
+									{/if}
+								{/each}
+								<td class="num share">{share === null ? '–' : fmtPct(share, 2)}</td>
+								{#if !readonly}
+									<td class="rm">
+										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove node" onclick={() => remove(node.id, label)}>✕</button>
+									</td>
+								{/if}
+							</tr>
+						{/each}
+					</tbody>
+					<tfoot>
+						<tr>
+							<th scope="row" class="sticky">Total</th>
+							<td></td>
+							<td></td>
+							{#each TABLE_FIELDS as f (f.key)}
+								<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)}>
+									{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
+								</td>
+							{/each}
+							<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002}>{farms.length ? fmtPct(shares.sum, 2) : ''}</td>
+							{#if !readonly}<td class="rm"></td>{/if}
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+			{#if !readonly}
+				<div class="toolbar after">
+					<button type="button" class="btn" onclick={add}>+ Add node</button>
+					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
+					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
+						Sort by flow path
+					</button>
+					{#if outletCount === 1}<span class="muted small">New nodes drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
+				</div>
+			{/if}
+			<details class="guide">
+				<summary>Field guide</summary>
+				<dl>
+					<div><dt>Kind</dt><dd>A <strong>farm</strong> generates runoff, has irrigation demand and may have a dam (a stand-alone dam or natural area is also a farm). A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
+					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a farm, which reduce its runoff: edit them in the node's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
+					<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
+					{#each NODE_FIELDS as f (f.key)}
+						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
+					{/each}
+				</dl>
+			</details>
+		{/if}
+	</section>
+{#if users.length}
+	<section class="panel" aria-labelledby="users-h">
+		<div class="panel-head">
+			<h2 id="users-h">Other water users <HelpTip key="node.userDemandM3Day" /></h2>
+			<span class="muted small">Towns, industry and unlisted users taking water from the river. They have no land, dam or crops.</span>
+		</div>
+		{#each users as u (u.id)}
+			<details class="user-card" open={u.id === selectedId || users.length === 1}>
+				<summary>
+					<span class="user-name">{u.name || 'unnamed user'}</span>
+					<span class="muted small">{describeUser(u)} · drains into {u.downstreamNodeId ? labelOf(u.downstreamNodeId) : 'nothing (it is the outlet)'}</span>
+				</summary>
+				<div class="field user-name-field">
+					<label for="user-name-{u.id}">User name</label>
+					<input id="user-name-{u.id}" maxlength="100" readonly={readonly} bind:value={u.name} />
+				</div>
+				<UserFields node={u} {readonly} />
+			</details>
+		{/each}
+	</section>
+{/if}
+{:else}
+	<!-- The map (issue #17, option A · A2): a page of its own. The header names
+	     it and holds its actions (with no nodes yet too); the map card fills
+	     the width beside the picked node and the node list. -->
 	<div class="net-head">
 		<div class="net-title">
 			<h2 id="net-map-h">Network</h2>
-			<p class="muted" data-testid="network-summary">{summaryLine}</p>
+			<p class="muted" data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</p>
 		</div>
 		<div class="net-actions">
-			{@render layoutSwitch()}
 			<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
 				<div class="grids-pop" role="group" aria-label="Open as a grid">
-					{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
-					<button type="button" onclick={() => setView('table')}>Node table</button>
+					{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 				</div>
 			</details>
 			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add node</button>{/if}
 		</div>
 	</div>
+	{#if nodes.length === 0}
+		<section class="panel" aria-label="No nodes yet">
+			<div class="empty">
+				<p>
+					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+					and the EWR applies), then add the farms and gauges that drain into it.
+				</p>
+				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
+			</div>
+		</section>
+	{:else}
 	<div class="map-layout" bind:this={mapEl} style:--map-top="{mapTop}px" style:--map-below="{mapBelow}px">
 		<section class="panel map-card" aria-labelledby="sch-h">
 			<div class="panel-head">
@@ -426,7 +636,7 @@
 						saved={editor.savedNodeIds.has(picked.id)}
 						farmHref={withParam(page.url, 'farm', picked.id)}
 						{readonly}
-						onedit={() => setView('detail')}
+						onedit={() => openEdit(picked.id)}
 					/>
 				{:else}
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
@@ -449,274 +659,63 @@
 			</section>
 		</aside>
 	</div>
-{:else}
-<section class="panel" aria-labelledby="sch-h">
-	<div class="panel-head">
-		<h2 id="sch-h">Schematic</h2>
-		{#if nodes.length}{@render layoutSwitch()}{/if}
-		<span class="muted small">
-			{#if nodes.length}
-				{farms.length} farm{farms.length === 1 ? '' : 's'} · {gauges.length} gauge{gauges.length === 1 ? '' : 's'} ·
-				{#if users.length}{users.length} other user{users.length === 1 ? '' : 's'} ·{/if}
-				{fmtNum(farmArea, 1)} km² of farm area
-			{:else}
-				Water flows down the page to the outflow gauge
-			{/if}
-		</span>
-	</div>
-	{@render colourByControl()}
-	{@render drawing(false)}
-	{#if pickedFarm && pickedPlanting}
-		<p class="picked small" data-testid="picked-farm">
-			<strong>{pickedFarm.name || '(unnamed)'}</strong>:
-			{#if pickedPlanting.planted}
-				{fmtNum(pickedPlanting.totalM2 / 10_000, 2)} ha planted, {pickedPlanting.planted} crop{pickedPlanting.planted === 1 ? '' : 's'}.
-			{:else}
-				nothing planted.
-			{/if}
-			<a href={withParam(page.url, 'farm', pickedFarm.id)}>Planted areas</a>
-		</p>
+
 	{/if}
-</section>
-{/if}
 
-<p class="visually-hidden" aria-live="polite">{announce}</p>
-
-{#if view !== 'map' || nodes.length === 0}
-<section class="panel" class:one-node={view === 'detail'} aria-labelledby="net-h">
-	<div class="panel-head">
-		<h2 id="net-h">Network nodes</h2>
-	</div>
-	{#if nodes.length === 0}
-		<div class="empty">
-			<p>
-				No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
-				and the EWR applies), then add the farms and gauges that drain into it.
-			</p>
-			{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
-		</div>
-	{:else if view === 'table'}
-		<p class="muted small intro">
-			Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; farms total {fmtPct(shares.sum, 2)}{/if}.
-			The ⓘ buttons and the field guide below explain each value.
-		</p>
-		<div class="table-wrap">
-			<table class="data compact net">
-				<thead>
-					<tr class="groups">
-						<th scope="col" class="sticky" rowspan="2">{#if !readonly}<span class="visually-hidden">Order and </span>{/if}Name</th>
-						<th scope="col" rowspan="2">Kind <HelpTip key="node.kind" /></th>
-						<th scope="col" rowspan="2">Drains into <HelpTip key="node.downstreamNodeId" /></th>
-						{#each groupSpans as g (g.group)}
-							<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
+	<!-- A node's full form, over the map (`edit=<id>`): every field, with its help. -->
+	{#if editing}
+		<Dialog bind:open={sheetOpen} title={readonly ? `${editing.name || '(unnamed)'}: details` : `Edit ${editing.name || '(unnamed)'}`} side wide>
+			{#snippet subhead()}
+				<div class="picker sheet-picker">
+					<label for="node-pick" class="visually-hidden">Node to edit</label>
+					<button type="button" class="btn" aria-label="Previous node" disabled={editIndex <= 0} onclick={() => openEdit(nodes[editIndex - 1]!.id, true)}>‹</button>
+					<select id="node-pick" value={editing.id} onchange={(e) => openEdit(e.currentTarget.value, true)}>
+						{#each nodes as n, i (n.id)}
+							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {n.kind}</option>
 						{/each}
-						{#if !readonly}<th scope="col" rowspan="2" class="rm"><span class="visually-hidden">Remove</span></th>{/if}
-					</tr>
-					<tr>
-						{#each TABLE_FIELDS as f (f.key)}
-							<!-- Label on top (non-breaking hyphens: "High-MAP" stays whole), then the
-							     unit and its ⓘ on one bottom line, the same in every column. -->
-							<th scope="col" class="num fh">
-								<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
-								<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
-							</th>
-						{/each}
-						<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">
-							<span class="fh-l">In use</span>
-							<span class="fh-u"><span class="u">%</span></span>
-						</th>
-					</tr>
-				</thead>
-				<tbody bind:this={reorder.body}>
-					{#each nodes as node, i (node.id)}
-						{@const label = node.name || 'unnamed node'}
-						{@const share = shareOf(i)}
-						{@const rs = reorder.rowState(node.id, i, nodes.length)}
-						<tr
-							id="node-row-{node.id}"
-							data-idx={i}
-							class:sel={node.id === selectedId}
-							class:dragging={rs.dragging}
-							class:drop-before={rs.before}
-							class:drop-after={rs.after}
-						>
-							<th scope="row" class="sticky">
-								<div class="namecell">
-								{#if !readonly}
-									<MoveControls id={node.id} {label} index={i} count={nodes.length} {reorder} onmove={(d) => moveBy(node.id, d, true)} />
-								{/if}
-								<input
-									id="node-name-{node.id}"
-									aria-label="Name"
-									maxlength="100"
-									readonly={readonly}
-									bind:value={node.name}
-									onfocus={() => (selectedId = node.id)}
-								/>
-								<!-- Notes on a saved node (WP-2.7); a node added since the last save has none yet. -->
-								{#if projectId && editor.savedNodeIds.has(node.id)}
-									<NotesDrawer {projectId} compact target={{ kind: 'node', nodeId: node.id, name: node.name, isFarm: node.kind === 'farm' }} />
-								{/if}
-								</div>
-							</th>
-							<td>
-								<select aria-label="Kind of {label}" disabled={readonly} bind:value={node.kind}>
-									<option value={'farm' satisfies NodeKind}>Farm</option>
-									<option value={'gauge' satisfies NodeKind}>Gauge</option>
-									<option value={'user' satisfies NodeKind}>Other user</option>
-								</select>
-							</td>
-							<td>
-								<select
-									aria-label="{label} drains into"
-									disabled={readonly}
-									value={node.downstreamNodeId ?? ''}
-									onchange={(e) => (node.downstreamNodeId = e.currentTarget.value || null)}
-								>
-									<option value="">— Outlet (none) —</option>
-									{#each nodes as other (other.id)}
-										{#if other.id !== node.id}<option value={other.id}>{other.name || '(unnamed)'}</option>{/if}
-									{/each}
-								</select>
-							</td>
-							{#each TABLE_FIELDS as f (f.key)}
-								{#if (f.farmOnly && node.kind !== 'farm') || node.kind === 'user'}
-									{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
-									<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
-								{:else}
-								<td class:pct={isPct(f)} class:vol={isVolume(f)}>
-									<NumberInput
-										label={f.aria(label)}
-										min={0}
-										max={isPct(f) ? 100 : undefined}
-										scale={isPct(f) ? 100 : 1}
-										nullable={f.nullable}
-										grouped={readonly && !isPct(f)}
-										placeholder={f.nullable ? '–' : undefined}
-										disabled={readonly}
-										value={node[f.key] ?? null}
-							onchange={(v) => setNodeField(node, f.key, v)}
-									/>
-								</td>
-								{/if}
-							{/each}
-							<td class="num share">{share === null ? '–' : fmtPct(share, 2)}</td>
-							{#if !readonly}
-								<td class="rm">
-									<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove node" onclick={() => remove(node.id, label)}>✕</button>
-								</td>
-							{/if}
-						</tr>
-					{/each}
-				</tbody>
-				<tfoot>
-					<tr>
-						<th scope="row" class="sticky">Total</th>
-						<td></td>
-						<td></td>
-						{#each TABLE_FIELDS as f (f.key)}
-							<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)}>
-								{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
-							</td>
-						{/each}
-						<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002}>{farms.length ? fmtPct(shares.sum, 2) : ''}</td>
-						{#if !readonly}<td class="rm"></td>{/if}
-					</tr>
-				</tfoot>
-			</table>
-		</div>
-		{#if !readonly}
-			<div class="toolbar after">
-				<button type="button" class="btn" onclick={add}>+ Add node</button>
-				{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
-				<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
-					Sort by flow path
-				</button>
-				{#if outletCount === 1}<span class="muted small">New nodes drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
-			</div>
-		{/if}
-		<details class="guide">
-			<summary>Field guide</summary>
-			<dl>
-				<div><dt>Kind</dt><dd>A <strong>farm</strong> generates runoff, has irrigation demand and may have a dam (a stand-alone dam or natural area is also a farm). A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
-				<div><dt>Land cover</dt><dd>Invasive trees and forestry on a farm, which reduce its runoff: edit them in the <strong>One node</strong> layout, under "Land cover".</dd></div>
-				<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
-				{#each NODE_FIELDS as f (f.key)}
-					<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
-				{/each}
-			</dl>
-		</details>
-	{:else if selected}
-		<!-- Sticky under the app header, so the node being edited stays named
-		     (and ‹ › stay in reach) while scrolling a long farm form. -->
-		<div class="picker" bind:this={pickerEl}>
-			<label for="node-pick" class="visually-hidden">Node to edit</label>
-			<button type="button" class="btn" aria-label="Previous node" disabled={selectedIndex <= 0} onclick={() => (selectedId = nodes[selectedIndex - 1]!.id)}>‹</button>
-			<select id="node-pick" value={selected.id} onchange={(e) => (selectedId = e.currentTarget.value)}>
-				{#each nodes as n, i (n.id)}
-					<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {n.kind}</option>
-				{/each}
-			</select>
-			<button type="button" class="btn" aria-label="Next node" disabled={selectedIndex >= nodes.length - 1} onclick={() => (selectedId = nodes[selectedIndex + 1]!.id)}>›</button>
-		</div>
-		{#if !readonly}
-			<div class="toolbar add-one">
-				<button type="button" class="btn" onclick={add}>+ Add node</button>
-				{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
-			</div>
-		{/if}
-		{#key selected.id}
-			<NodeDetail
-				node={selected}
-				{nodes}
-				share={shareOf(selectedIndex)}
-				{readonly}
-				onremove={() => remove(selected.id, selected.name || 'unnamed node')}
-				farmersNote={selected.kind === 'farm' ? linkedNote(farmerCount?.[selected.id] ?? 0) : null}
-				previewHref={selected.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(selected.id)}` : null}
-				onmove={(d) => moveBy(selected.id, d)}
-				canMoveUp={selectedIndex > 0}
-				canMoveDown={selectedIndex < nodes.length - 1}
-				onmakeoutlet={() => setOutlet(selected.id)}
-				landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === selected.id)}
-				onaddcover={() => editor.addLandCover(selected.id)}
-				onremovecover={(id) => editor.removeLandCover(id)}
-				boreholes={(editor.model.boreholes ?? []).filter((b) => b.nodeId === selected.id)}
-				onaddborehole={() => editor.addBorehole(selected.id)}
-				onremoveborehole={(id) => editor.removeBorehole(id)}
-			/>
-			{#if selected.kind === 'farm' && projectId}
-				<Lazy load={loadYield}>
-					{#snippet children(YieldPanel)}
-						<YieldPanel {projectId} nodeId={selected.id} nodeName={selected.name} {runs} canEdit={!readonly} hasDam={selected.damCapacityM3 > 0} />
-					{/snippet}
-				</Lazy>
-			{/if}
-		{/key}
-	{/if}
-</section>
-{/if}
-
-{#if view === 'table' && users.length}
-	<section class="panel" aria-labelledby="users-h">
-		<div class="panel-head">
-			<h2 id="users-h">Other water users <HelpTip key="node.userDemandM3Day" /></h2>
-			<span class="muted small">Towns, industry and unlisted users taking water from the river. They have no land, dam or crops.</span>
-		</div>
-		{#each users as u (u.id)}
-			<details class="user-card" open={u.id === selectedId || users.length === 1}>
-				<summary>
-					<span class="user-name">{u.name || 'unnamed user'}</span>
-					<span class="muted small">{describeUser(u)} · drains into {u.downstreamNodeId ? labelOf(u.downstreamNodeId) : 'nothing (it is the outlet)'}</span>
-				</summary>
-				<div class="field user-name-field">
-					<label for="user-name-{u.id}">User name</label>
-					<input id="user-name-{u.id}" maxlength="100" readonly={readonly} bind:value={u.name} />
+					</select>
+					<button type="button" class="btn" aria-label="Next node" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>
 				</div>
-				<UserFields node={u} {readonly} />
-			</details>
-		{/each}
-	</section>
+			{/snippet}
+			<div class="sheet one-node">
+		{#key editing.id}
+				<NodeDetail
+					node={editing}
+					{nodes}
+					share={shareOf(editIndex)}
+					{readonly}
+					onremove={() => remove(editing!.id, editing!.name || 'unnamed node')}
+					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
+					previewHref={editing.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}` : null}
+					onmove={(d) => moveBy(editing.id, d)}
+					canMoveUp={editIndex > 0}
+					canMoveDown={editIndex < nodes.length - 1}
+					onmakeoutlet={() => setOutlet(editing.id)}
+					landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === editing.id)}
+					onaddcover={() => editor.addLandCover(editing.id)}
+					onremovecover={(id) => editor.removeLandCover(id)}
+					boreholes={(editor.model.boreholes ?? []).filter((b) => b.nodeId === editing.id)}
+					onaddborehole={() => editor.addBorehole(editing.id)}
+					onremoveborehole={(id) => editor.removeBorehole(id)}
+				/>
+				{#if editing.kind === 'farm' && projectId}
+					<Lazy load={loadYield}>
+						{#snippet children(YieldPanel)}
+							<YieldPanel {projectId} nodeId={editing.id} nodeName={editing.name} {runs} canEdit={!readonly} hasDam={editing.damCapacityM3 > 0} />
+						{/snippet}
+					</Lazy>
+				{/if}
+			{/key}
+			</div>
+			{#snippet actions()}
+				{#if readonly || !onsave}
+					<button type="button" class="btn" onclick={() => (sheetOpen = false)}>Close</button>
+				{:else}
+					<ModelSaveRow {editor} {onsave} ondone={() => (sheetOpen = false)} bind:reason />
+				{/if}
+			{/snippet}
+		</Dialog>
+	{/if}
 {/if}
 
 <style>
@@ -755,11 +754,6 @@
 	}
 	.intro {
 		margin: -0.25rem 0 0.6rem;
-	}
-	.seg .btn[aria-pressed='true'] {
-		background: var(--accent-soft);
-		border-color: var(--accent);
-		color: var(--accent);
 	}
 	/* Keep the table as narrow as it can readably be: field headers wrap
 	   instead of setting the column width, cells are tighter, and 0–100 %
@@ -958,6 +952,12 @@
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 	}
+	/* In the node sheet the picker sits in the dialog's fixed sub-header, not in the scrolling form. */
+	.sheet-picker {
+		position: static;
+		margin: 0;
+		padding: 0 0 0.5rem;
+	}
 	.add-one {
 		margin: 0 0 0.75rem;
 	}
@@ -978,8 +978,7 @@
 	}
 	@media (max-width: 640px) {
 		.picker select,
-		.picker .btn,
-		.seg .btn {
+		.picker .btn {
 			min-height: 44px;
 		}
 	}
@@ -989,10 +988,6 @@
 		color: var(--text-muted);
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
-	}
-	.picked {
-		margin: 0.5rem 0 0;
-		color: var(--text-2);
 	}
 	/* Map layout (issue #17, A2): a header, then the map card beside the picked node and the node list. */
 	.net-head {

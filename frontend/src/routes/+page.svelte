@@ -6,7 +6,7 @@
 	import { api, hasTeamRole, type ProjectSummary, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import ImportProjectDialog from '$lib/components/import/ImportProjectDialog.svelte';
+	import { loadOnce, peek, prefetch } from '$lib/components/common/lazy';
 	import GetStarted from '$lib/components/projects/GetStarted.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
@@ -36,9 +36,39 @@
 	let importOpen = $state(false);
 	/** Which import button opened the dialog: its wording and file picker follow. */
 	let importSource = $state<'project' | 'workbook'>('project');
-	function openImport(source: 'project' | 'workbook') {
+	// The import dialog loads on demand (~18 KB gzip with its preview, the
+	// workbook review and the engine code they use; home's first load was
+	// 16 KB heavier with it). Hovering or focusing an import button starts
+	// the fetch; a press opens the dialog as soon as it's here. No loading
+	// state is shown: the chunk is almost always in by the press, and the
+	// button keeps focus (so Escape still returns focus to it). A failed
+	// download says so and offers a reload, since a browser keeps a module
+	// that failed to fetch for the life of the page; another press still
+	// tries again (lazy.ts forgets the failure) in case it was only the CSS.
+	// components/import/homeSplit.test.ts keeps the static imports off it.
+	const loadImportDialog = () => import('$lib/components/import/ImportProjectDialog.svelte');
+	const prefetchImport = () => prefetch(loadImportDialog);
+	let ImportProjectDialog = $state.raw(peek(loadImportDialog));
+	let importWaiting = $state(false);
+	let importFailed = $state(false);
+	let importRequest = 0;
+	async function openImport(source: 'project' | 'workbook') {
 		importSource = source;
-		importOpen = true;
+		if (ImportProjectDialog) {
+			importOpen = true;
+			return;
+		}
+		const request = ++importRequest;
+		importWaiting = true;
+		importFailed = false;
+		try {
+			ImportProjectDialog = await loadOnce(loadImportDialog);
+			if (request === importRequest) importOpen = true;
+		} catch {
+			if (request === importRequest) importFailed = true;
+		} finally {
+			if (request === importRequest) importWaiting = false;
+		}
 	}
 
 	let copyOpen = $state(false);
@@ -188,14 +218,34 @@
 			<p class="muted sub">Each project models one catchment: its river network, farms, dams and data.</p>
 		</div>
 		<div class="head-actions">
-			<button type="button" class="btn" onclick={() => openImport('workbook')}>Import b023 workbook</button>
-			<button type="button" class="btn" onclick={() => openImport('project')}>Import project file (.json)</button>
+			<button
+				type="button"
+				class="btn"
+				aria-busy={importWaiting && importSource === 'workbook' ? 'true' : undefined}
+				onpointerenter={prefetchImport}
+				onfocus={prefetchImport}
+				onclick={() => openImport('workbook')}>Import b023 workbook</button
+			>
+			<button
+				type="button"
+				class="btn"
+				aria-busy={importWaiting && importSource === 'project' ? 'true' : undefined}
+				onpointerenter={prefetchImport}
+				onfocus={prefetchImport}
+				onclick={() => openImport('project')}>Import project file (.json)</button
+			>
 			<button type="button" class="btn btn-primary" onclick={openCreate}>New project</button>
 		</div>
 	</div>
 
 	{#if actionError && !createOpen && !copyOpen}
 		<div class="alert alert-error" role="alert">{actionError}</div>
+	{/if}
+	{#if importFailed}
+		<div class="alert alert-error" role="alert">
+			The import could not be loaded. Check your connection, then reload the page.
+			<button type="button" class="btn btn-sm" onclick={() => location.reload()}>Reload</button>
+		</div>
 	{/if}
 
 	<LoadState {loading} error={loadError} retry={load} empty={false}>
@@ -341,13 +391,15 @@
 	{/snippet}
 </Dialog>
 
-<ImportProjectDialog
-	bind:open={importOpen}
-	source={importSource}
-	teams={addableTeams}
-	defaultTeamId={canAddTo(selectedTeam?.id) ? selectedTeam!.id : ''}
-	onimported={() => load()}
-/>
+{#if ImportProjectDialog}
+	<ImportProjectDialog
+		bind:open={importOpen}
+		source={importSource}
+		teams={addableTeams}
+		defaultTeamId={canAddTo(selectedTeam?.id) ? selectedTeam!.id : ''}
+		onimported={() => load()}
+	/>
+{/if}
 
 <Dialog bind:open={keptOpen} title="This project can't be deleted">
 	{#if kept}
@@ -418,6 +470,10 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		justify-content: flex-end;
+	}
+	/* The import dialog's chunk is still downloading after a click. */
+	.head-actions [aria-busy='true'] {
+		cursor: progress;
 	}
 	.page-head h1 {
 		margin: 0 0 0.2rem;

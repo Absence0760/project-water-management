@@ -118,6 +118,14 @@ const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
 const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+/**
+ * How a farm takes its water (engine ≥ 0.42.0, WP-3.8, docs/model.md §2.7e):
+ * the supply rule, the river pump and the trigger rule's two dam levels.
+ * Farms only; how they fit together (a gauge or user has none, trigger needs
+ * a dam, run of river has none, stop ≥ trigger) is a model rule
+ * (modelRules.ts), so applyScenario reports an op that breaks one.
+ */
+const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -125,7 +133,7 @@ const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
  * it) or `sortOrder` (display only). A gauge only measures, so only its name.
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...BOREHOLES],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...BOREHOLES, ...SUPPLY],
 	user: ['name', ...USER, ...BOREHOLES],
 	gauge: ['name']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -163,7 +171,11 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	streamDepletionLagDays: range(0, 36_500),
 	userDemandM3Day: nullable(monthlyOf(nonNeg)),
 	userReturnPct: frac,
-	userPriority: oneOf(USER_PRIORITIES)
+	userPriority: oneOf(USER_PRIORITIES),
+	supplyRule: oneOf(SUPPLY_RULES),
+	pumpCapacityM3Day: nullable(nonNeg),
+	supplyTriggerPct: frac,
+	supplyStopPct: frac
 };
 
 export type NodeSetValue<F extends NodeSetField> = Exclude<NetworkNode[F], undefined>;
@@ -497,11 +509,6 @@ const NODE_FIELDS: Record<string, Check> = {
 			? null
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
 	),
-	// Its supply rule and river pump (engine ≥ 0.42.0, WP-3.8): the editor's new node carries them; runModel checks how they fit together.
-	supplyRule: oneOf(SUPPLY_RULES),
-	pumpCapacityM3Day: nullable(nonNeg),
-	supplyTriggerPct: range(0, 1),
-	supplyStopPct: range(0, 1)
 };
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -515,10 +522,7 @@ const NODE_OPTIONAL = new Set<string>([
 	'damAreaExponent',
 	'damSeepagePerDay',
 	'damCurve',
-	'supplyRule',
-	'pumpCapacityM3Day',
-	'supplyTriggerPct',
-	'supplyStopPct',
+	...SUPPLY,
 	...DAM_STORAGE,
 	...USER,
 	...BOREHOLES

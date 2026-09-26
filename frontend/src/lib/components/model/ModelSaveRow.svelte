@@ -2,8 +2,8 @@
 	// The save row of a modal over the workspace (the farm drawer, the grid
 	// modal): a modal makes the page's fixed save bar unreachable, so it carries
 	// the same controls. Status, the optional reason (the save bar's own value,
-	// bound through), Save changes (the page's save) and Done, which closes and
-	// leaves any edit for the save bar.
+	// bound through), Discard (as the save bar's), Save changes (the page's
+	// save) and Done, which closes and leaves any edit for the save bar.
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 
 	let {
@@ -42,6 +42,7 @@
 		</label>
 	{/if}
 	<div class="buttons">
+		<button type="button" class="btn" onclick={() => { editor.revert(); reason = ''; }} disabled={editor.saving || !editor.dirty}>Discard</button>
 		<button type="button" class="btn" onclick={ondone}>Done</button>
 		<button type="button" class="btn btn-primary" onclick={onsave} disabled={editor.saving || blocking > 0 || !editor.dirty}>Save changes</button>
 	</div>
