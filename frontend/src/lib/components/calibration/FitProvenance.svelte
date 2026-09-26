@@ -6,11 +6,12 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
+	import { peText } from '$lib/components/settings/peInput';
 	import { fmtNum } from '$lib/format/number';
 	import { chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 
@@ -43,6 +44,8 @@
 	const score = (v: number | null | undefined) => (v === null || v === undefined ? '–' : fmtNum(v, 2));
 	const windowText = (r: FitRecord) =>
 		r.calibrationStart || r.calibrationEnd ? `${r.calibrationStart ?? 'start of record'} – ${r.calibrationEnd ?? 'end of record'}` : 'whole record';
+	// GR4J's PE input the fit ran under (engine ≥ 0.31.0, issue #39); a forcing without it ran on pan coefficient × A-pan.
+	const recordedPe = $derived((record?.forcing as { pe?: PeInput } | undefined)?.pe ?? { kind: 'pan' as const });
 	const exclusions = $derived((settings.calibrationExclusions ?? []) as FitRecord['exclusions']);
 </script>
 
@@ -68,7 +71,14 @@
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>
 			<div><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}, {windowText(record)}</dd></div>
 			{#if record.forcing}
-				<div><dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt><dd>{monthsText(record.forcing.panCoefficient)}</dd></div>
+				<div data-testid="fit-pe">
+					<dt>GR4J potential evaporation <HelpTip key="settings.pe" /></dt>
+					<dd>{peText(recordedPe)}{#if recordedPe.kind === 'monthly'}: {monthsText(recordedPe.mm, 0)} mm{/if}</dd>
+				</div>
+				<div>
+					<dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt>
+					<dd>{monthsText(record.forcing.panCoefficient)}{recordedPe.kind === 'monthly' ? ' (not used by GR4J under a monthly PE)' : ''}</dd>
+				</div>
 				<div><dt>A-pan evaporation <HelpTip key="settings.apanMm" /></dt><dd>{monthsText(record.forcing.apanMm, 0)} mm</dd></div>
 				<div>
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
