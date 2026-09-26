@@ -13,10 +13,20 @@
 		// A sheet down the right edge, full height, for editing one thing beside the page
 		// (the per-farm planted areas, crops/FarmCropsDrawer.svelte). Full width on a phone.
 		side = false,
+		// Leave the body's inputs at their own widths: a grid shown as it is (model/GridModal.svelte).
+		keepInputs = false,
 		children,
 		actions
-	}: { open?: boolean; title: string; wide?: boolean; full?: boolean; side?: boolean; children: Snippet; actions: Snippet } =
-		$props();
+	}: {
+		open?: boolean;
+		title: string;
+		wide?: boolean;
+		full?: boolean;
+		side?: boolean;
+		keepInputs?: boolean;
+		children: Snippet;
+		actions: Snippet;
+	} = $props();
 
 	let el: HTMLDialogElement | undefined = $state();
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
@@ -28,7 +38,7 @@
 	});
 </script>
 
-<dialog bind:this={el} class:wide class:full class:side aria-labelledby={titleId} onclose={() => (open = false)}>
+<dialog bind:this={el} class:wide class:full class:side class:keep-inputs={keepInputs} aria-labelledby={titleId} onclose={() => (open = false)}>
 	<h2 id={titleId}>{title}</h2>
 	<div class="body">{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
@@ -119,7 +129,16 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
+	/* A full dialog (a grid, a data table) takes the whole phone screen. */
 	@media (max-width: 640px) {
+		dialog.full {
+			margin: 0;
+			width: 100%;
+			height: 100%;
+			max-height: 100%;
+			border-width: 0;
+			border-radius: 0;
+		}
 		.x {
 			width: 44px;
 			height: 44px;
@@ -132,8 +151,8 @@
 	}
 	/* Text fields fill the dialog; checkboxes and radios keep their own size, or a
 	   stretched box pushes its label across the row (the series preview's column picker). */
-	.body :global(input:not([type='checkbox']):not([type='radio'])),
-	.body :global(textarea) {
+	dialog:not(.keep-inputs) .body :global(input:not([type='checkbox']):not([type='radio'])),
+	dialog:not(.keep-inputs) .body :global(textarea) {
 		width: 100%;
 	}
 	.actions {

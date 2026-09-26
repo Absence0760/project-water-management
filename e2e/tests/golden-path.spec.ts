@@ -40,6 +40,8 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	// --- network: outflow gauge + three farms, one nested ------------------------
 	await tab(page, 'Network').click();
 	await page.getByRole('button', { name: 'Add outflow gauge' }).click();
+	// A new node opens on its form; this path builds the network in the Table.
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ Add node' }).click();
 	const names = page.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(4);

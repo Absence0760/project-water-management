@@ -14,7 +14,7 @@ test('a long table keeps both header rows in view while it scrolls in its box', 
 	const farms = Array.from({ length: 40 }, (_, i) => ({ ...farm, id: crypto.randomUUID(), name: `Farm ${String(i + 1).padStart(2, '0')}`, sortOrder: i + 2 }));
 	await putModel(page.request, project.id, { nodes: [gauge, ...farms], crops: model.crops, cropAreas: [], transfers: [] });
 	await page.setViewportSize({ width: 1600, height: 700 });
-	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
 
 	const table = page.locator('table.net');
 	await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(41); // the gauge + 40 farms

@@ -113,7 +113,8 @@ export function noteHref(n: Pick<Note, 'target' | 'nodeId' | 'runId' | 'settingK
 		case 'project':
 			return null;
 		case 'node':
-			return n.nodeId ? `?tab=network#node-row-${n.nodeId}` : '?tab=network';
+			// The Network's map with the node picked: its card has the notes (issue #17).
+			return n.nodeId ? `?tab=network&node=${encodeURIComponent(n.nodeId)}` : '?tab=network';
 		case 'run':
 			return n.runId ? `?tab=runs&run=${encodeURIComponent(n.runId)}#res-notes` : '?tab=runs';
 		case 'setting': {
