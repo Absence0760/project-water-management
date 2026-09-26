@@ -8,7 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
-	import AppHeader from '$lib/components/layout/AppHeader.svelte';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
 
 	import '../app.css';
 
@@ -96,30 +96,37 @@
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady));
 </script>
 
-{#if !authScreen}
-	{#if !farmScreen}<AppHeader />{/if}
+<!-- A signed-in person's pages sit in the app frame (a sidebar on wide screens,
+     a slim bar on phones, AppShell); sign-in pages and the farmer view have
+     their own. -->
+{#snippet content()}
 	<!-- Loaded only for an unconfirmed address: it is worded from the catalogue, which the workspace doesn't load otherwise. -->
-	{#if session.user?.emailVerified === false}
+	{#if !authScreen && session.user?.emailVerified === false}
 		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}<banner.default />{/await}
 	{/if}
-{/if}
+	{#if bootError}
+		<main class="page">
+			<div class="alert alert-error" role="alert">
+				Could not reach the API: {bootError}
+				<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
+			</div>
+		</main>
+	{:else if i18nFailed && translated}
+		<main class="page">
+			<div class="alert alert-error" role="alert">
+				This page could not be loaded. Check your connection and try again.
+				<button type="button" class="btn btn-sm" onclick={() => applyLocale(accountLocale)}>Try again</button>
+			</div>
+		</main>
+	{:else if ready}
+		<div id="main" tabindex="-1">{@render children()}</div>
+	{:else}
+		<main class="page"><p class="muted" role="status">Loading…</p></main>
+	{/if}
+{/snippet}
 
-{#if bootError}
-	<main class="page">
-		<div class="alert alert-error" role="alert">
-			Could not reach the API: {bootError}
-			<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
-		</div>
-	</main>
-{:else if i18nFailed && translated}
-	<main class="page">
-		<div class="alert alert-error" role="alert">
-			This page could not be loaded. Check your connection and try again.
-			<button type="button" class="btn btn-sm" onclick={() => applyLocale(accountLocale)}>Try again</button>
-		</div>
-	</main>
-{:else if ready}
-	<div id="main" tabindex="-1">{@render children()}</div>
+{#if !authScreen && !farmScreen && session.user}
+	<AppShell>{@render content()}</AppShell>
 {:else}
-	<main class="page"><p class="muted" role="status">Loading…</p></main>
+	{@render content()}
 {/if}

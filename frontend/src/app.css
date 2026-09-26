@@ -55,7 +55,8 @@
 	--radius-sm: 4px;
 	--shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.04);
 	--gutter: 16px;
-	--header-h: 56px;
+	/* The phone bar's height (AppShell); 0 from 900 px, where the sidebar replaces it. */
+	--header-h: 52px;
 	/* Minimum touch target on small / touch screens. */
 	--tap: 44px;
 }
@@ -516,4 +517,12 @@ table.data tr.flag {
 /* Skip-link target: focusable but no ring around the whole page. */
 #main:focus {
 	outline: none;
+}
+
+/* From 900 px nothing is fixed across the top (the app sidebar, AppShell): sticky
+   headers and in-page links stop at the top edge. */
+@media (min-width: 900px) {
+	:root {
+		--header-h: 0px;
+	}
 }

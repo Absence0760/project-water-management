@@ -154,12 +154,12 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await expect(summary.getByRole('rowheader', { name: /^Ridge farm/ })).toBeVisible();
 
 	// --- more catchments for the same user ----------------------------------
-	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await expect(projectRow(page, 'Catchment D')).toBeVisible();
 	await createProjectThroughUi(page, 'Catchment E');
-	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await createProjectThroughUi(page, 'Catchment F');
-	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	for (const name of ['Catchment D', 'Catchment E', 'Catchment F']) {
 		await expect(projectRow(page, name).getByRole('cell', { name: 'owner', exact: true })).toBeVisible();

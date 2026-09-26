@@ -158,7 +158,7 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	// Answer each prompt inside its listener (a click that opens a prompt only
 	// returns once the prompt is handled), and wait for the first answer before
 	// adding the second listener, so it can't also receive the first prompt.
-	const projectsLink = page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' });
+	const projectsLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' });
 	let asked = '';
 	page.once('dialog', (d) => {
 		asked = d.message();

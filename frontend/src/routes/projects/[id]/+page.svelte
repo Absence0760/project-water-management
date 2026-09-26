@@ -50,6 +50,8 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
@@ -344,6 +346,10 @@
 	}
 	$effect(() => warmTab(tab));
 
+	// Wide screens: the sections go in the app sidebar (AppShell, issue #17's shell).
+	const wide = new MediaQuery('min-width: 900px');
+	$effect(() => fillSidebar(projectSidebar, wide.current && !!project && !applicantProject));
+
 	// Phones (< 900 px): the sections sit behind a "Sections" button, closed
 	// again by choosing a tab or Escape.
 	let navOpen = $state(false);
@@ -378,6 +384,47 @@
 	}
 </script>
 
+{#snippet sectionsNav()}
+	<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
+		{#each sections as sec (sec.id)}
+			<div class="section" role="group" aria-labelledby="nav-{sec.id}">
+				<span class="section-label" id="nav-{sec.id}">{sec.label}</span>
+				{#each sec.tabs as id (id)}
+					<a
+						id="tab-{id}"
+						href={tabHref(id)}
+						data-sveltekit-noscroll
+						aria-current={tab === id ? 'page' : undefined}
+						onkeydown={(e) => tabKeydown(e, id)}
+						onpointerenter={() => warmTab(id)}
+						onfocus={() => warmTab(id)}
+					>
+						{LABEL[id]}
+						{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
+							<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
+						{/if}
+					</a>
+				{/each}
+			</div>
+		{/each}
+	</nav>
+	{#if hasModelInputsToggle(project?.role)}
+		<label class="inputs-toggle">
+			<input type="checkbox" bind:checked={showModelInputs} />
+			Show model inputs
+		</label>
+	{/if}
+{/snippet}
+<!-- Wide screens: the sections are in the app sidebar (AppShell), under the
+     catchment's name. Phones: behind a "Sections" button here. One copy only. -->
+{#snippet projectSidebar()}
+	<div class="project-side">
+		<span class="side-kicker">Catchment</span>
+		<a class="side-project" href={tabHref('overview')}>{project?.name}</a>
+		{@render sectionsNav()}
+	</div>
+{/snippet}
+
 <svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -400,7 +447,6 @@
 			</div>
 		{:else}
 			<div class="head">
-				<nav class="crumbs" aria-label="Breadcrumb"><a href="{base}/">Projects</a> <span aria-hidden="true">/</span></nav>
 				<h1>{project.name}</h1>
 				<span class="badge" class:badge-owner={isOwner}>{project.role}</span>
 				{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
@@ -467,6 +513,7 @@
 			{/if}
 
 			<div class="workspace">
+			{#if !wide.current}
 			<div class="tab-row">
 				<button type="button" class="nav-toggle" aria-expanded={navOpen} aria-controls="project-nav" bind:this={navToggle} onclick={() => (navOpen = !navOpen)}>
 					<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
@@ -475,38 +522,9 @@
 					<svg class="chev" class:up={navOpen} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
 				</button>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="nav-panel" class:open={navOpen} id="project-nav" onkeydown={navKeydown}>
-				<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
-					{#each sections as sec (sec.id)}
-						<div class="section" role="group" aria-labelledby="nav-{sec.id}">
-							<span class="section-label" id="nav-{sec.id}">{sec.label}</span>
-							{#each sec.tabs as id (id)}
-								<a
-									id="tab-{id}"
-									href={tabHref(id)}
-									data-sveltekit-noscroll
-									aria-current={tab === id ? 'page' : undefined}
-									onkeydown={(e) => tabKeydown(e, id)}
-									onpointerenter={() => warmTab(id)}
-									onfocus={() => warmTab(id)}
-								>
-									{LABEL[id]}
-									{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
-										<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
-									{/if}
-								</a>
-							{/each}
-						</div>
-					{/each}
-				</nav>
-				{#if hasModelInputsToggle(project.role)}
-					<label class="inputs-toggle">
-						<input type="checkbox" bind:checked={showModelInputs} />
-						Show model inputs
-					</label>
-				{/if}
-				</div>
+				<div class="nav-panel" class:open={navOpen} id="project-nav" onkeydown={navKeydown}>{@render sectionsNav()}</div>
 			</div>
+			{/if}
 
 			<div class="main-col">
 			{#if !canEdit && tab !== 'overview'}
@@ -812,59 +830,52 @@
 			min-height: 44px;
 		}
 	}
-	.crumbs {
-		color: var(--text-muted);
-	}
-	/* Below the sidebar width: one strip that scrolls sideways, sections side
-	   by side with a divider; on a phone their labels are read out but not
-	   shown. Each section is the labels' containing block, so a hidden label
-	   is clipped by the strip instead of widening the page. The underline is
-	   drawn inside each tab (inset shadow), so nothing overflows vertically and
-	   no stray vertical scrollbar appears with classic scrollbars. */
-	.tab-row {
+	/* The sections, one vertical list: in the app sidebar (wide) or in the
+	   phone's Sections menu. Each section is labelled; the open one is marked. */
+	.project-side {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		box-shadow: inset 0 -1px 0 var(--border);
-		margin-bottom: 1rem;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.side-kicker {
+		padding: 0 0.75rem;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+	.side-project {
+		padding: 0 0.75rem 0.5rem;
+		color: var(--text);
+		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.tabs {
 		display: flex;
-		flex: 1 1 auto;
-		min-width: 0;
-		gap: 0.15rem;
-		overflow: auto hidden;
-		scrollbar-width: thin;
-		overscroll-behavior-x: contain;
+		flex-direction: column;
+		gap: 0.9rem;
 	}
 	.section {
-		position: relative;
 		display: flex;
-		flex: none;
-		gap: 0.15rem;
-	}
-	.section + .section {
-		margin-left: 0.35rem;
-		padding-left: 0.35rem;
-		border-left: 1px solid var(--border);
+		flex-direction: column;
 	}
 	.section-label {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
-		white-space: nowrap;
+		padding: 0 0.75rem 0.25rem;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
 	}
 	.tabs a {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
-		min-height: 44px;
-		padding: 0 0.85rem;
+		min-height: 36px;
+		padding: 0 0.75rem;
+		border-radius: var(--radius);
 		color: var(--text-2);
 		font-weight: 500;
-		white-space: nowrap;
-		flex: none;
 	}
 	.tabs a:focus-visible {
 		outline-offset: -2px;
@@ -876,197 +887,67 @@
 	}
 	.tabs a[aria-current='page'] {
 		color: var(--accent);
-		box-shadow: inset 0 -2px 0 var(--accent);
+		background: var(--accent-soft);
+		box-shadow: inset 3px 0 0 var(--accent);
 	}
-	@media (min-width: 900px) {
-		.section {
-			flex-wrap: wrap;
-			align-content: flex-start;
-		}
-		.section-label {
-			position: static;
-			flex-basis: 100%;
-			width: auto;
-			height: auto;
-			overflow: visible;
-			clip: auto;
-			padding: 0.25rem 0.85rem 0;
-			color: var(--text-muted);
-			font-size: 0.7rem;
-			font-weight: 600;
-			letter-spacing: 0.04em;
-			text-transform: uppercase;
-		}
-		.tabs a {
-			min-height: 38px;
-		}
-	}
-	/* Laptop widths and up: a sidebar beside the section's content, in view
-	   while the page scrolls. The page grows by the sidebar's width, so on a
-	   wide screen the content column keeps the usual maximum; narrower, the
-	   widest grids (the network's node table) scroll inside their own box. */
-	@media (min-width: 1100px) {
-		.page {
-			max-width: calc(1480px + 14rem);
-		}
-		.workspace {
-			display: grid;
-			grid-template-columns: 12.5rem minmax(0, 1fr);
-			gap: 1.5rem;
-			align-items: start;
-		}
-		.tab-row {
-			position: sticky;
-			top: calc(var(--header-h) + 0.75rem);
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.75rem;
-			box-shadow: none;
-			margin: 0;
-		}
-		.tabs {
-			flex-direction: column;
-			gap: 1rem;
-			overflow: visible;
-		}
-		.section {
-			flex-direction: column;
-			flex-wrap: nowrap;
-		}
-		.section + .section {
-			margin-left: 0;
-			padding-left: 0;
-			border-left: 0;
-		}
-		.section-label {
-			position: static;
-			width: auto;
-			height: auto;
-			overflow: visible;
-			clip: auto;
-			padding: 0 0.75rem 0.25rem;
-			color: var(--text-muted);
-			font-size: 0.75rem;
-			font-weight: 600;
-			letter-spacing: 0.04em;
-			text-transform: uppercase;
-		}
-		.tabs a {
-			min-height: 38px;
-			padding: 0 0.75rem;
-			border-radius: var(--radius);
-			white-space: normal;
-		}
-		.tabs a[aria-current='page'] {
-			background: var(--accent-soft);
-			box-shadow: inset 3px 0 0 var(--accent);
-		}
-		.inputs-toggle {
-			padding: 0 0.75rem;
-			white-space: normal;
-		}
-	}
-	/* A viewer's "Show model inputs" (lib/workspace/tabs.ts), at the strip's end. */
+	/* A viewer's "Show model inputs" (lib/workspace/tabs.ts), after the sections. */
 	.inputs-toggle {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		flex: none;
-		min-height: 44px;
-		padding: 0 0.25rem;
+		min-height: 40px;
+		margin-top: 0.5rem;
+		padding: 0.25rem 0.75rem 0;
+		border-top: 1px solid var(--border);
 		color: var(--text-2);
 		font-size: 0.875rem;
-		white-space: nowrap;
 		cursor: pointer;
 	}
-	/* The phone's "Sections" button (below 900 px); elsewhere the panel is
-	   transparent to layout and the strip or sidebar shows as before. */
+	/* Phones: a full-width "Sections" button naming the open tab opens the list in the page. */
+	.tab-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
 	.nav-toggle {
-		display: none;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		min-height: 44px;
+		padding: 0 0.75rem;
+		border: 1px solid var(--border-input);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+		font-weight: 600;
+		text-align: left;
+		cursor: pointer;
+	}
+	.nav-toggle-label {
+		flex: 1;
+		min-width: 0;
+	}
+	.chev {
+		transition: transform 0.15s;
+	}
+	.chev.up {
+		transform: rotate(180deg);
 	}
 	.nav-panel {
-		display: contents;
+		display: none;
 	}
-	@media (max-width: 899px) {
-		.tab-row {
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.5rem;
-			box-shadow: none;
-		}
-		.nav-toggle {
-			display: flex;
-			align-items: center;
-			gap: 0.5rem;
-			width: 100%;
-			min-height: 44px;
-			padding: 0 0.75rem;
-			border: 1px solid var(--border-input);
-			border-radius: var(--radius);
-			background: var(--surface);
-			color: var(--text);
-			font: inherit;
-			font-weight: 600;
-			text-align: left;
-			cursor: pointer;
-		}
-		.nav-toggle-label {
-			flex: 1;
-			min-width: 0;
-		}
-		.chev {
-			transition: transform 0.15s;
-		}
-		.chev.up {
-			transform: rotate(180deg);
-		}
-		.nav-panel {
-			display: none;
-		}
-		.nav-panel.open {
-			display: block;
-			padding: 0.5rem 0;
-			border: 1px solid var(--border);
-			border-radius: var(--radius);
-			background: var(--surface);
-		}
-		.tabs {
-			flex-direction: column;
-			gap: 0.5rem;
-			overflow: visible;
-		}
-		.section {
-			flex-direction: column;
-			gap: 0;
-		}
-		.section + .section {
-			margin-left: 0;
-			padding: 0.5rem 0 0;
-			border-left: 0;
-			border-top: 1px solid var(--border);
-		}
-		.section-label {
-			position: static;
-			width: auto;
-			height: auto;
-			overflow: visible;
-			clip: auto;
-			padding: 0 0.85rem 0.25rem;
-			color: var(--text-muted);
-			font-size: 0.75rem;
-			font-weight: 600;
-			letter-spacing: 0.04em;
-			text-transform: uppercase;
-		}
-		.tabs a[aria-current='page'] {
-			background: var(--accent-soft);
-			box-shadow: inset 3px 0 0 var(--accent);
-		}
-		.inputs-toggle {
-			padding: 0.25rem 0.85rem 0;
-			border-top: 1px solid var(--border);
-			margin-top: 0.5rem;
-		}
+	.nav-panel.open {
+		display: block;
+		padding: 0.5rem 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+	.nav-panel .tabs a {
+		min-height: 44px;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.chev {

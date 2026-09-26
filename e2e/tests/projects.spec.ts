@@ -19,7 +19,7 @@ async function createThroughDialog(page: Page, name: string, description = '') {
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	// Creating opens the new project's workspace.
 	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await expect(row(page, name)).toBeVisible();
 }
 
@@ -34,7 +34,8 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await expect(page.getByRole('row')).toHaveCount(4); // header + 3
 
 	// Copy A (with a model, so the copy is meaningful) as D.
-	const href = await row(page, 'Example Valley — baseline').getByRole('link', { name: 'Open' }).getAttribute('href');
+	// The name opens the project (the row's Open button folds away when the table is narrow).
+	const href = await row(page, 'Example Valley — baseline').getByRole('link', { name: 'Example Valley — baseline', exact: true }).getAttribute('href');
 	const idA = href!.split('/').pop()!;
 	const model = sampleModel();
 	await putModel(page.request, idA, model);
@@ -55,7 +56,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
 	await expect(stat('Outflow gauge')).toHaveText('Outflow gauge');
 	await expect(stat('Farms')).toHaveText(/^2\s*\+ 1 gauge$/);
-	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).
 	page.once('dialog', (d) => void d.accept());

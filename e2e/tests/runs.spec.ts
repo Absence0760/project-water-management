@@ -282,11 +282,10 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
 	const farm = page.getByRole('region', { name: 'Farm detail' });
 	await expect(farm).toBeInViewport();
-	// The section's top edge clears the sticky app header and the menu under it.
-	const header = await page.getByRole('banner').boundingBox();
+	// The section's top edge clears the sticky menu (no app bar across the top since the sidebar, issue #17).
 	const menuBox = await menu.boundingBox();
 	const top = await farm.boundingBox();
-	expect(menuBox!.y).toBeGreaterThanOrEqual(header!.y + header!.height - 1);
+	expect(menuBox!.y).toBeGreaterThanOrEqual(-1);
 	expect(top!.y).toBeGreaterThanOrEqual(menuBox!.y + menuBox!.height);
 
 	await menu.getByRole('link', { name: 'Explore outputs' }).click();
@@ -339,7 +338,8 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	await menu.getByRole('link', { name: 'EWR by month' }).click();
 	await expect(page.getByRole('region', { name: 'Runs', exact: true })).toBeInViewport();
 	// The rail needs no scrollbar of its own: nothing in it is clipped (a fixed 16rem list overflowed by 17px here).
-	const rail = page.getByRole('complementary');
+	// The runs rail (the app sidebar is a complementary landmark too, since issue #17's shell).
+	const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
 	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
 	for (const name of ['Summary', 'Explore outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
 
