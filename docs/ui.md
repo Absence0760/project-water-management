@@ -1782,7 +1782,10 @@ run's report to chosen members every week or month.
   an error when the engine is the same version, a warning when it changed),
   **Not reproducible**, or why a stored input can't be used. A run from
   before stored inputs says so instead of offering the check. The
-  flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
+  flow-duration curve with Q10–Q95 (engine `views/fdc.ts`: the Q table is
+  `fdcPercentileTable`, the same function the run summary CSV, the .xlsx
+  workbook's Summary sheet and the report's Calibration section read, so an
+  export carries exactly the chart's numbers, issue #45; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
   like, and **Observed days / Whole run** switches; the caption says which
@@ -2171,7 +2174,9 @@ exists, says so with a link to Runs & results.
   PE the monthly table shows **GR4J monthly PE (mm)** in place of the pan
   coefficient),
   **Calibration** (the calibration panel with the annual water balance, where
-  the parameters came from, the hydrograph over the whole run),
+  the parameters came from, the hydrograph over the whole run, and the
+  flow-duration percentiles Q10–Q95 in m³/s on the days the Runs tab's FDC
+  chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
   for the outlet and every farm), **Farms, warnings and checks** (the run

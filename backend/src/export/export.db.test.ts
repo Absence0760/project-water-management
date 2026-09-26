@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
+import { flowDurationTable } from './fdc.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -220,6 +221,15 @@ describe('run summary export', () => {
 		expect(rows).toContain('Water balance by water year (Oct–Sep)');
 		expect(rows.some((r) => r.startsWith('Whole run,'))).toBe(true);
 		expect(rows).toContain('Farm daily columns (the daily CSV of a farm)');
+		// The FDC chart's Q10–Q95 table (issue #45), from the run's own catchment series: the natural row is
+		// the daily CSV's natural flow column in m³/s through the same engine function.
+		expect(rows).toContain('Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days');
+		const fdc = rows.filter((r) => r.startsWith('Whole run,Natural,') || r.startsWith('Whole run,Simulated outflow,') || r.startsWith('Whole run,Observed,'));
+		expect(fdc).toHaveLength(3);
+		const daily = lines((await download(viewer, `/projects/${projectId}/runs/${runId}/export/daily.csv`)).text);
+		const naturalM3Day = daily.slice(1).map((r) => (r.split(',')[1] === '' ? null : Number(r.split(',')[1])));
+		const expected = flowDurationTable([{ key: 'natural_flow', values: naturalM3Day }]).wholeRun[0]!;
+		expect(fdc[0]!.split(',').slice(2).map(Number)).toEqual([expected.q10, expected.q50, expected.q90, expected.q95, expected.n]);
 	});
 
 	it('404s for a run of another project', async () => {

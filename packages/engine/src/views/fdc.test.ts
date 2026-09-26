@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exceedanceGrid, finiteCount, flowAtExceedance, flowDurationCurves, onDaysOf, percentileFlows, sortedDescending } from './fdc';
+import { exceedanceGrid, fdcPercentileTable, finiteCount, flowAtExceedance, flowDurationCurves, onDaysOf, percentileFlows, sortedDescending } from './fdc';
 
 describe('sortedDescending', () => {
 	it('drops gaps and sorts high → low', () => {
@@ -74,5 +74,47 @@ describe('onDaysOf', () => {
 
 	it('treats days past the end of the mask as gaps', () => {
 		expect(onDaysOf([1, 2, 3], [1])).toEqual([1, null, null]);
+	});
+});
+
+describe('fdcPercentileTable', () => {
+	// Synthetic: 200 days; natural 1 … 200, simulated 0.8 × natural, observed only on the last 120 days (0.9 × natural).
+	const natural = Array.from({ length: 200 }, (_, i) => i + 1);
+	const simulated = natural.map((v) => v * 0.8);
+	const observed = natural.map((v, i) => (i < 80 ? null : v * 0.9));
+
+	it('gives each record its Q10/Q50/Q90/Q95 over the whole run, in the chart order', () => {
+		const t = fdcPercentileTable({ observed, natural, simulated });
+		expect(t.wholeRun.map((r) => r.record)).toEqual(['natural', 'simulated', 'observed']);
+		expect(t.wholeRun[0]).toEqual({ record: 'natural', ...percentileFlows(natural) });
+		expect(t.wholeRun[2]!.n).toBe(120);
+		expect(t.runDays).toBe(200);
+		expect(t.observedDays).toBe(120);
+	});
+
+	it('ranks natural and simulated on the observed days too, when the gauge misses some of the run', () => {
+		const t = fdcPercentileTable({ natural, simulated, observed });
+		expect(t.onObservedDays!.map((r) => [r.record, r.n])).toEqual([
+			['natural', 120],
+			['simulated', 120],
+			['observed', 120]
+		]);
+		expect(t.onObservedDays![1]).toEqual({ record: 'simulated', ...percentileFlows(onDaysOf(simulated, observed)) });
+		expect(t.onObservedDays![2]).toBe(t.wholeRun[2]);
+	});
+
+	it('has no observed-days table without a gauge, or with one that reads every day', () => {
+		expect(fdcPercentileTable({ natural, simulated }).onObservedDays).toBeNull();
+		expect(fdcPercentileTable({ natural, simulated, observed: natural }).onObservedDays).toBeNull();
+		expect(fdcPercentileTable({}).wholeRun).toEqual([]);
+	});
+
+	it('is exactly the flow-duration curve the chart draws, read at 10, 50, 90 and 95 %', () => {
+		const grid = exceedanceGrid();
+		const { ys } = flowDurationCurves([natural, simulated, observed], grid);
+		const t = fdcPercentileTable({ natural, simulated, observed });
+		t.wholeRun.forEach((r, k) => {
+			expect([r.q10, r.q50, r.q90, r.q95]).toEqual([10, 50, 90, 95].map((p) => ys[k]![grid.indexOf(p)]));
+		});
 	});
 });

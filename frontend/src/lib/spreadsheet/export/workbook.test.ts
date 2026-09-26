@@ -174,6 +174,24 @@ describe('buildWorkbook', () => {
 		expect(s[XLSX.utils.encode_cell({ r: flow, c: 1 })]).toMatchObject({ v: 4321.123456789, z: '#,##0.00' });
 	});
 
+	it('puts the FDC percentile table on the Summary sheet, a small flow shown to two significant figures (issue #45)', async () => {
+		const fdc = [
+			'Flow-duration percentiles (flow equalled or exceeded on 10/50/90/95 % of days; Weibull plotting positions)',
+			'Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days',
+			'Whole run,Natural,12.5,0.5,0.0123,0.00042,365'
+		];
+		const withFdc = '﻿' + [...CSV_LINES.slice(0, CSV_LINES.indexOf('Warnings') - 1), '', ...fdc, '', 'Warnings', 'Something to check'].join('\r\n') + '\r\n';
+		const book = read(await buildWorkbook(input({ summaryCsv: withFdc })));
+		const s = book.Sheets['Summary']!;
+		const r = aoa(s).findIndex((row) => row[0] === 'Whole run' && row[1] === 'Natural');
+		expect(r).toBeGreaterThan(0);
+		expect(aoa(s)[r - 2]![0]).toMatch(/^Flow-duration percentiles/);
+		const cells = [2, 3, 4, 5].map((c) => s[XLSX.utils.encode_cell({ r, c })]);
+		expect(cells.map((c) => c.v)).toEqual([12.5, 0.5, 0.0123, 0.00042]);
+		expect(cells.map((c) => c.z)).toEqual(['#,##0.000', '#,##0.000', '#,##0.000', '#,##0.00000']);
+		expect(cells.map((c) => XLSX.SSF.format(c.z, c.v))).toEqual(['12.500', '0.500', '0.012', '0.00042']);
+	});
+
 	it('spreads the summary CSV over its sheets, every row once, values equal to the CSV', () => {
 		const csv = parseCsv(summaryCsv);
 		const nonEmpty = (rows: unknown[][]) => rows.filter((r) => r.some((c) => c !== null)).map((r) => r.slice(0, r.findLastIndex((c) => c !== null) + 1));

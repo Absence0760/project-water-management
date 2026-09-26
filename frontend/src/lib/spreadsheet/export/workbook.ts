@@ -20,7 +20,7 @@ import type { RunSummary } from '@water-management/engine';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import type { Cell } from './csv';
 import { parseCsv } from './csv';
-import { DATE_FORMAT, numberFormat, unitOf } from './formats';
+import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary, type SummarySheet } from './summary';
 import { zip, type ZipEntry } from './zip';
@@ -85,7 +85,7 @@ function rowsSheet(rows: readonly Row[], widths: number[] = [44]): XLSX.WorkShee
 			} else if (typeof c === 'number' && Number.isFinite(c)) {
 				const h = header?.[i];
 				const unit = (typeof h === 'string' ? unitOf(h) : null) ?? (label ? unitOf(label) : null);
-				const z = numberFormat(unit);
+				const z = cellFormat(unit, c);
 				out[i] = z ? { t: 'n', v: c, z } : { t: 'n', v: c };
 			}
 		});

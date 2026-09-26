@@ -24,6 +24,7 @@ import {
 	type DailyColumn
 } from './csv.js';
 import { loadDailyScope } from './daily-columns.js';
+import { loadFlowDuration } from './fdc.js';
 import { FARM_SERIES_KEYS, nodeColumnHeader, summaryCsvLines } from './run-tables.js';
 
 /** A real calendar date: 2024-02-31 is rejected (Date.parse would roll it over). */
@@ -167,7 +168,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					notes: run.notes,
 					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
 					notesUpdatedBy: run.notesUpdatedBy,
-					evidence: runEvidence(await listNominations(db, id), runId)
+					evidence: runEvidence(await listNominations(db, id), runId),
+					flowDuration: await loadFlowDuration(db, runId)
 				},
 				run.summary
 			);

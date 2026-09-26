@@ -62,6 +62,7 @@ export {
 } from './network/reliability';
 export * from './views/farmView';
 export * from './views/farmProjection';
+export * from './views/fdc';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';
