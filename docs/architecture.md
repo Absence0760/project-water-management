@@ -265,7 +265,7 @@ auto re-runs and alerts plug in as further kinds.
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
   last error. A transport only wakes a worker ("look at the table now"), so a
   lost wake-up delays a job by one poll or tick and never loses it.
-- **Transports** (`JOB_TRANSPORT`, `jobs/transport.ts`):
+- **Transports** (`JOB_TRANSPORT`, `jobs/wake.ts` `wakeWorker`):
   - `inprocess`, the default: the local worker process
     (`pnpm dev:run:worker`, or `pnpm dev:full` with the app) ticks every
     `JOB_POLL_SECONDS` (15) and at once on `LISTEN job_queued`, which the
@@ -275,6 +275,12 @@ auto re-runs and alerts plug in as further kinds.
   - `sqs`, production: the API sends a wake message to the `jobs` queue,
     which triggers the worker Lambda; an EventBridge schedule also ticks it
     every 5 minutes (infra/jobs.tf).
+  The queue messages and the SQS sender live apart in `jobs/transport.ts`,
+  which the fetcher and renderer Lambdas import: `wake.ts`'s `memory`
+  transport reaches the runner, and so `pg`, every handler and the engine,
+  which Lambdas without a database must not carry (`lambda-fetcher.test.ts`
+  checks the fetcher's import graph; `package-lambdas.sh` greps both bundles
+  for `pg`).
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.

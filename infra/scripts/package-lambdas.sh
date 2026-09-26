@@ -104,6 +104,11 @@ for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs" "$stage/fetch
   if grep -q 'chromium-bidi' "$f"; then echo "error: $(basename "$f") bundles playwright-core" >&2; exit 1; fi
 done
 
+# The fetcher and renderer have no database, so no pg (issue #34; lambda-fetcher.test.ts checks the import graph).
+for f in "$stage/fetcher/lambda-fetcher.mjs" "$out/renderer/lambda-renderer.mjs"; do
+  if grep -q 'node_modules/pg/' "$f"; then echo "error: $(basename "$f") bundles pg" >&2; exit 1; fi
+done
+
 for z in lambda migrate worker fetcher; do
   echo "== $z.zip ($(du -h "$out/$z.zip" | cut -f1))"
   unzip -Z1 "$out/$z.zip" | sed 's/^/   /'

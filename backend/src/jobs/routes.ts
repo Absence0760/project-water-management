@@ -9,7 +9,7 @@ import { readJson } from '../http/body.js';
 import { requireRole } from '../projects/access.js';
 import { RERUN_DEDUPE_KEY, RerunPayload } from './handlers/rerun.js';
 import { enqueueJob, JOB_STATUSES, listJobs } from './queue.js';
-import { wakeWorker } from './transport.js';
+import { wakeWorker } from './wake.js';
 
 const ListQuery = z.object({
 	status: z.enum(JOB_STATUSES).optional(),

@@ -118,4 +118,34 @@ describe('the fetcher bundle', () => {
 		expect(inputs.some((f) => f.endsWith('src/lambda-fetcher.ts'))).toBe(true);
 		expect(inputs.filter((f) => /(^|\/)dotenv(\/|$)/.test(f))).toEqual([]);
 	});
+
+	// The fetcher has no database (issue #34). Checked on the import graph, not
+	// the output, so it doesn't lean on tree-shaking: jobs/transport.ts once
+	// reached the runner through wakeWorker's memory transport (now jobs/wake.ts),
+	// and esbuild only dropped it because nothing called wakeWorker.
+	it('never reaches pg, the db layer, the job runner or the engine’s model', async () => {
+		const { build } = await import('esbuild');
+		const out = await build({
+			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
+			bundle: true,
+			platform: 'node',
+			format: 'esm',
+			external: ['playwright-core'],
+			write: false,
+			metafile: true,
+			logLevel: 'silent'
+		});
+		const inputs = Object.keys(out.metafile.inputs);
+		expect(inputs.some((f) => f.endsWith('src/lambda-fetcher.ts'))).toBe(true);
+		expect(inputs.filter((f) => /(^|\/)node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?pg[a-z0-9-]*\//.test(f))).toEqual([]);
+		expect(inputs.filter((f) => /src\/(db\/|jobs\/(runner|wake|queue)\.ts$)/.test(f))).toEqual([]);
+		// The feed sources use the engine's calendar helpers (toEpochDay /
+		// fromEpochDay), so the engine is on the graph; what must stay out is the
+		// model itself. It tree-shakes to ~27 KB of module stubs; the whole model
+		// is ~300 KB (the worker's bundle), so 64 KB is well clear of both.
+		const outputs = Object.values(out.metafile.outputs);
+		const engineBytes = outputs.flatMap((o) => Object.entries(o.inputs)).reduce((n, [f, v]) => (f.includes('packages/engine/') ? n + v.bytesInOutput : n), 0);
+		expect(engineBytes).toBeLessThan(64 * 1024);
+		expect(out.outputFiles.some((f) => f.text.includes('function runModel('))).toBe(false);
+	});
 });

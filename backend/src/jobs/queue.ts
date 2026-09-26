@@ -47,7 +47,7 @@ export interface EnqueueOptions {
  * Queue a job as the transaction's user, who must be an editor of the project
  * (RLS) and becomes its acting user. Enqueue inside the same transaction as
  * the change that caused it, so both commit or neither does; wake the worker
- * after the commit (transport.ts `wakeWorker`).
+ * after the commit (wake.ts `wakeWorker`).
  */
 export async function enqueueJob(db: Db, o: EnqueueOptions): Promise<{ job: JobMeta; created: boolean }> {
 	// Two tries: the pending job we collided with may be claimed (so no longer
