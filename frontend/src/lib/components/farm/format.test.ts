@@ -1,0 +1,135 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+	daysBetween,
+	fmtDay,
+	fmtDayMonth,
+	fmtM3Day,
+	fmtMonthYear,
+	fmtNumber,
+	fmtPct,
+	fmtStampDay,
+	fmtStampTime,
+	fmtVolume,
+	joinAnd,
+	litresPerSecond,
+	monthEnd,
+	plural,
+	roundAbout
+} from './format';
+
+/** The formatters use no-break spaces; the design's boards show plain ones. */
+const sp = (s: string | null) => s?.replace(/ /g, ' ');
+
+describe('volumes (§8)', () => {
+	it('m³ are whole with a space between thousands', () => {
+		expect(sp(fmtVolume(324_247, 'm3'))).toBe('324 247 m³');
+		expect(sp(fmtVolume(350_000, 'm3'))).toBe('350 000 m³');
+		expect(sp(fmtVolume(84_912.4, 'm3'))).toBe('84 912 m³');
+		expect(sp(fmtVolume(999, 'm3'))).toBe('999 m³');
+		expect(sp(fmtVolume(1_234_567, 'm3'))).toBe('1 234 567 m³');
+	});
+
+	it('ML have one decimal, with a trailing .0 trimmed', () => {
+		expect(sp(fmtVolume(324_247, 'ML'))).toBe('324.2 ML');
+		expect(sp(fmtVolume(376_466, 'ML'))).toBe('376.5 ML');
+		expect(sp(fmtVolume(350_000, 'ML'))).toBe('350 ML');
+		expect(sp(fmtVolume(84_912, 'ML'))).toBe('84.9 ML');
+		expect(sp(fmtVolume(60_020, 'ML'))).toBe('60 ML');
+		expect(sp(fmtVolume(1_234_560, 'ML'))).toBe('1 234.6 ML');
+	});
+
+	it('keeps a figure and its unit together with no-break spaces', () => {
+		expect(fmtVolume(324_247, 'm3')).toBe('324 247 m³');
+	});
+
+	it('rates are "m³ a day", whole', () => {
+		expect(sp(fmtM3Day(121.2))).toBe('121 m³ a day');
+		expect(sp(fmtM3Day(3178.9))).toBe('3 179 m³ a day');
+	});
+
+	it('writes a negative with a real minus and never "−0"', () => {
+		expect(fmtNumber(-5)).toBe('−5');
+		expect(fmtNumber(-0.2)).toBe('0');
+	});
+});
+
+describe('l/s (§8, §11 F9 F17)', () => {
+	it('is given to one decimal from 1 l/s, judged on the unrounded value', () => {
+		expect(sp(litresPerSecond((121.2 * 102) / 56))).toBe('2.6 l/s');
+		expect(sp(litresPerSecond(86.4))).toBe('1.0 l/s');
+		expect(litresPerSecond(86.39)).toBeNull(); // 0.99989 l/s would round to "1.0": still left out
+		expect(litresPerSecond(5)).toBeNull();
+	});
+});
+
+describe('the "about" figures per charged day', () => {
+	it('round to two significant figures', () => {
+		expect(roundAbout((121.2 * 102) / 56)).toBe(220);
+		expect(roundAbout((65.4 * 102) / 56)).toBe(120);
+		expect(roundAbout(1234)).toBe(1200);
+		expect(roundAbout(7.4)).toBe(7);
+		expect(roundAbout(99.96)).toBe(100);
+	});
+});
+
+describe('percentages (§8)', () => {
+	it('are whole, with <1 % and >99 % instead of 0 and 100', () => {
+		expect(sp(fmtPct(324_247 / 376_466))).toBe('86 %');
+		expect(sp(fmtPct(113_283 / 113_810))).toBe('>99 %');
+		expect(sp(fmtPct(0.004))).toBe('<1 %');
+		expect(sp(fmtPct(0))).toBe('0 %');
+		expect(sp(fmtPct(1))).toBe('100 %');
+		expect(sp(fmtPct(1.2))).toBe('100 %');
+		expect(sp(fmtPct(0.015))).toBe('2 %');
+	});
+});
+
+describe('words', () => {
+	it('pluralises', () => {
+		expect(sp(plural(1, 'day'))).toBe('1 day');
+		expect(sp(plural(16, 'day'))).toBe('16 days');
+		expect(sp(plural(0, 'farm'))).toBe('0 farms');
+	});
+
+	it('joins with "and"', () => {
+		expect(joinAnd([])).toBe('');
+		expect(joinAnd(['Nov'])).toBe('Nov');
+		expect(joinAnd(['Nov', 'Dec'])).toBe('Nov and Dec');
+		expect(joinAnd(['Oct', 'Nov', 'Dec'])).toBe('Oct, Nov and Dec');
+	});
+});
+
+describe('dates (§8)', () => {
+	it('writes calendar days as "12 Jan 2024", never ISO', () => {
+		expect(fmtDay('2024-01-10')).toBe('10 Jan 2024');
+		expect(fmtDayMonth('2023-10-01')).toBe('1 Oct');
+		expect(fmtMonthYear('2023-02')).toBe('Feb 2023');
+		expect(daysBetween('2024-01-10', '2024-01-19')).toBe(9);
+		expect(monthEnd('2024-02')).toBe('2024-02-29');
+	});
+
+	describe('under a skewed time zone', () => {
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+
+		it('never moves a calendar day, east or west of UTC', () => {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Africa/Johannesburg']) {
+				process.env.TZ = zone;
+				expect(fmtDay('2024-01-10'), zone).toBe('10 Jan 2024');
+				expect(fmtDayMonth('2023-10-01'), zone).toBe('1 Oct');
+				expect(fmtMonthYear('2023-02'), zone).toBe('Feb 2023');
+				expect(daysBetween('2023-10-01', '2024-01-10'), zone).toBe(101);
+			}
+		});
+
+		it('gives a timestamp the date and time where the viewer is', () => {
+			process.env.TZ = 'Africa/Johannesburg';
+			expect(fmtStampDay('2024-01-11T23:30:00Z')).toBe('12 Jan 2024');
+			expect(fmtStampTime('2024-01-19T05:42:00Z')).toBe('07:42 on 19 Jan 2024');
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(fmtStampDay('2024-01-11T23:30:00Z')).toBe('11 Jan 2024');
+		});
+	});
+});
