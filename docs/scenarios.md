@@ -490,7 +490,10 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
   their own `ModelEditor` loaded with the scenario's model (the base run's
   snapshot with the listed ops applied, `stepInputs(...).after`). The live
-  model is never loaded or saved there. **Record** diffs the edited model
+  model is never loaded or saved there. The Network shows its node table
+  inline (`only="table"`), not the map: the map's Grids menu opens the page's
+  grid modal, which edits and saves the catchment's own model (issue #17), so
+  override mode must never offer it. **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.add`, `node.remove` (re-linking as the editor does),
   `node.set` per changed field the engine lets a scenario set (a node's
