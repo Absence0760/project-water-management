@@ -9,6 +9,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
+	import { holdAnchor } from '$lib/help/anchor';
 	import { HELP } from '$lib/help/content';
 	import { HELP_AF } from '$lib/help/content.af';
 	import { i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
@@ -21,11 +22,21 @@
 	);
 	const paragraphs = (s: string) => s.split(/\n{2,}/);
 
-	// The SPA renders after navigation, so jump to #id once the list exists.
+	// The SPA renders after navigation, so jump to #id once the list exists,
+	// and hold the entry there while the page settles (lib/help/anchor.ts).
 	$effect(() => {
 		const id = decodeURIComponent(page.url.hash.slice(1));
 		if (!id) return;
-		tick().then(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+		let live = true;
+		let release: (() => void) | undefined;
+		tick().then(() => {
+			const el = live ? document.getElementById(id) : null;
+			if (el) release = holdAnchor(el);
+		});
+		return () => {
+			live = false;
+			release?.();
+		};
 	});
 </script>
 
