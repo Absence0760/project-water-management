@@ -119,6 +119,7 @@ const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell][] =
 	['OUT consumptive irrigation (m³)', (r) => r.consumptiveIrrigationM3],
 	['OUT other users: taken − returned (m³)', (r) => r.otherUseM3],
 	['OUT dam evaporation (m³)', (r) => r.damEvaporationM3],
+	['OUT dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null],
 	['OUT stream depletion from pumping (m³)', (r) => r.streamDepletionM3],
 	['OUT outflow at the outlet (m³)', (r) => r.outflowM3],
 	['Total out (m³)', (r) => r.outM3],
@@ -129,7 +130,8 @@ const ACCOUNT_COLUMNS: [header: string, value: (r: WaterAccountRow) => Cell][] =
 	['Memo: catchment rain (m³)', (r) => r.rainM3],
 	['Memo: rain not reaching the river (m³)', (r) => r.catchmentLossM3],
 	['Memo: irrigation supplied (m³)', (r) => r.irrigationSuppliedM3],
-	['Memo: dam seepage, rejoins the river (m³)', (r) => r.damSeepageM3]
+	['Memo: dam seepage, rejoins the river (m³)', (r) => r.damSeepageM3],
+	['Memo: released below the dams (m³)', (r) => r.damReleaseM3 ?? null]
 ];
 
 function* waterAccountLines(a: SupplyAssurance | undefined): Generator<string> {

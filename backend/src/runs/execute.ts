@@ -65,7 +65,7 @@ export function logSelfCheckFailure(projectId: string, runId: string, output: { 
 }
 
 /**
- * What made a run (model_run.trigger, 041_auto_rerun.sql): a person (`manual`:
+ * What made a run (model_run.trigger, 042_auto_rerun.sql): a person (`manual`:
  * Run, a queued re-run, an import, a scenario), the debounced re-run after
  * new data (`auto`, WP-2.11), or a forecast run (`forecast`, WP-2.12).
  */

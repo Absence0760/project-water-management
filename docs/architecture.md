@@ -365,7 +365,7 @@ which already names every step-2 kind (`feed_fetch`, `feed_ingest`, `rerun`,
 
 New data runs the model by itself when a project opts in (roadmap WP-2.11;
 `backend/src/series/newData.ts`, `backend/src/runs/autoRun.ts`,
-`041_auto_rerun.sql`). Off by default: `settings.autoRun = { enabled,
+`042_auto_rerun.sql`). Off by default: `settings.autoRun = { enabled,
 debounceMinutes, publish }` (defaults `false`, `15`, `'never'`), set in
 Settings → Automatic runs.
 

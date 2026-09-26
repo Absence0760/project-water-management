@@ -1,4 +1,4 @@
-// Automatic re-runs after new data (WP-2.11: 041_auto_rerun.sql,
+// Automatic re-runs after new data (WP-2.11: 042_auto_rerun.sql,
 // runs/autoRun.ts, jobs/handlers/rerun.ts, runs/execute.ts trimRuns,
 // publish/autoPublish.ts): the setting gate, the debounce and its maximum
 // wait, the dedupe, who may queue one, the auto run itself, the storage cap

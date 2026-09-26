@@ -1561,7 +1561,8 @@ binds, the transfer brings enough that neither MIN bites.
   leaves dam evaporation unchanged.
 - `seepage` is `node.damSeepagePerDay` (fraction of storage per day, default
   0). Seepage reaches the river below the wall and **joins the farm's outflow
-  U the same day**, so it stays in the catchment.
+  U the same day**, so it stays in the catchment, unless a share of it is
+  set to be lost (engine ≥ 0.35.0, below).
 - The clamps keep storage ≥ 0: evaporation takes at most what is there
   (yesterday's storage, the rain on the dam and today's net transfer), and
   seepage at most what evaporation leaves.
@@ -1580,6 +1581,113 @@ balance per water year gains rain on dams (in) and dam evaporation (out). A
 100 000 m³ dam of 3 ha loses about 180 m³/day at 6 mm/day of open-water
 evaporation. Decided on persona recommendation (simulated hydrologist and
 licensing-assessor reviews, 2026-09-24), pending the real hydrologist.
+
+#### Dam geometry, losses and releases (engine ≥ 0.35.0, roadmap WP-3.5)
+
+What a storage licence (s21(b)) needs beyond the power law: a surveyed
+area–volume curve, releases, lake factors that vary through the year and a
+choice of where seepage goes. **All four are off by default**, and a node or
+settings without them runs bit-identically to engine 0.31
+(`network/dam.test.ts`, "the defaults, written out, run exactly as a node
+without the fields"; the fuzz soak and every existing regression test pass
+unchanged). The code is `packages/engine/src/network/dam.ts`, read by both
+the simulation and the self-checks.
+
+**1. Survey curve** (`node.damCurve`: rows of `levelM`, `areaM2`,
+`volumeM3`, as on the DWS dam technical data form DW789). With two or more
+usable rows the surface area comes from the curve, not the power law:
+
+```
+A = linear interpolation of area in volume at store[t−1]
+    below the lowest row: from (0 m³, 0 m²) to it; above the top row: the top row's area
+b_local = store[t−1] × A′ / A      (A′ = the segment's slope dA/dV)
+E ≤ (1 − seepage) × A / A′  while b_local > 1    (the b > 1 limiter, with the curve's local exponent)
+```
+
+Rows are sorted by volume. A curve must have volume strictly rising, level
+and area never falling as volume rises, finite values ≥ 0 (level any finite
+number) and some area; at most 200 rows. The save refuses one that breaks
+this (`modelRuleProblems`, so a scenario can't introduce one either), and a
+run given one anyway (an old document) warns and uses the power law. A top
+row more than **1 %** from the capacity warns (the curve holds its top area
+above it); the form shows the same check. With a curve, W6 (estimated area)
+no longer applies to that dam. The limiter matters only for pathological
+curves: a segment would need more than ~200 m² of new surface per m³ stored.
+
+**2. Dead storage** is the dam's minimum operating level, `node.damMinPct`
+(engine 0.16.0, audit Q5): irrigation and a fixed release draw only above
+it, and it still evaporates. It interacts with WP-1.19's irrigation reserve
+by the higher of the two applying (transfers keep MAX(rule minimum, the
+dam's minimum)); no new field.
+
+**3. Releases** (`node.damReleaseRule`, `damReleaseM3Day` per water-year
+month, `damOutletCapacityM3Day`), **before irrigation**, after the dam's
+losses and inflows are in (`avail = start of the day + M + O + K + J`):
+
+```
+S = L + N − O                       the river passing the dam already
+Z = the EWR required at this node   (its own share and the upstream shares, §2.7)
+passInflow:  X = MAX(0, MIN(K + M + O,  target − S,  outlet,  avail))
+             target = damReleaseM3Day[month], or Z when that is null
+fixed:       X = MAX(0, MIN(damReleaseM3Day[month],  outlet,  avail − dead storage))
+G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U = R + S + T + returned seepage + X
+```
+
+- *Pass inflow* is the compensation-flow licence condition: the dam lets
+  through what flows into it today (upstream inflow and own runoff entering
+  it, and any diversion), up to what the river below the wall still lacks.
+  Inflow passes **whatever the dam's level**, dead storage included (the
+  licence condition binds before storage does). Without monthly amounts
+  the target is the EWR required at the node, Z: its **cumulative**
+  requirement, not the node's own share Y, since an on-stream dam captures
+  the upstream shares' water too. The WP text said "up to that node's EWR
+  share"; Z is the reading an environmental reviewer would expect (the flow
+  judged at this node is judged against Z), decided here and pending the
+  hydrologist.
+- *Fixed* releases a set amount from storage above dead storage.
+- The outlet cap (null = none) applies to both. No rule, or fixed with no
+  amounts, is no release.
+- The release joins U the same day, so it stays in the catchment and counts
+  toward every EWR site below. It is the `dam_release` series (only on a dam
+  with a rule) and the water balance's `damReleaseM3` line (part of outflow,
+  for information).
+- A transfer's room at the destination (§2.6) does not count today's
+  release, as it doesn't count today's inflow: conservative, noted in
+  [followups.md](./followups.md).
+
+**4. Monthly lake factors** (`settings.lakeEvapFactorMonthly`, 12 values
+0–2, water-year order). When set they replace `lakeEvapFactor` month by
+month: `E = k_lake[month] × Apan[month] / daysInMonth / 1000 × A`. Open water
+lags the pan through the seasons (a deep dam stores heat in autumn and
+evaporates more relative to the pan in winter), which one factor can't show.
+Values are the modeller's; no preset is offered, pending the hydrologist.
+Twelve equal values give exactly the single-factor run.
+
+**5. Seepage destination** (`node.damSeepageReturnPct`, default 1). Seepage
+Sp is split: `Sp × return` joins U the same day, `Sp × (1 − return)` is
+**lost from the catchment** (to deep groundwater), the `dam_seepage_lost`
+series (only when the share is below 1), a sink in the balance check
+(`V = … − U − Dep − seepage lost`), and the water balance's
+`damSeepageLostM3` line (out). The dam itself behaves the same either way.
+
+Not built here (tracked in [followups.md](./followups.md)): capacity loss to
+sediment (%/year) and the survey curve as a scenario `node.set` op (a
+scenario can add a dam with a curve, `node.add`, but not edit one).
+
+**Checks.** The self-checks (`verify/checks.ts`) recompute the area from the
+curve, the monthly evaporation depth, the release under its rule (and that it
+never exceeds the outlet), G, P and U with the release and the returned
+seepage, and close each farm's balance with the lost seepage as a sink; the
+water balance closes with it too. `network/dam.test.ts` has the hand-worked
+cases, including: a synthetic 100 000 m³ dam with a survey curve loses
+150–240 m³/day in a Western Cape-like summer (207 m³ on a full January day at
+0.75 × 285 mm/month over 3 ha); a larger lake factor never raises storage or
+supply; a fixed release and irrigation never take the dam below dead storage
+(with evaporation off); pass inflow releases exactly MIN(K + M, Z) when
+everything enters the dam and measurably cuts the days the EWR is missed
+below it. The random-network generator (`testing/fuzz.ts`) draws curves
+(including rejected ones and tops off the capacity), rules and seepage
+shares in 30 % of seeds.
 
 **Every column is a run series (engine ≥ 0.12.0).** Besides F, G, H, I, J, Q,
 R, U, W and Y–AB, each farm stores its working columns, so any day can be
@@ -3306,8 +3414,9 @@ the run, volumes in m³, summed over every node per day in node-id order.
   any farm (natural − Σ farm runoff − land cover, non-zero only when the flow
   shares don't sum to 1); **consumptive irrigation** G − T = G(1 − β(1 − e))
   (§2.7, audit N1: the crop's e·G plus the losses that don't return); other
-  users' take − return; dam evaporation; stream depletion; outflow at the
-  outlet.
+  users' take − return; dam evaporation; dam seepage **lost from the
+  catchment** (engine ≥ 0.35.0, the share §2.7a's seepage destination sends
+  out, `damSeepageLostM3`); stream depletion; outflow at the outlet.
 - **Δ storage:** Σ farm dam storage at the end − at the start.
 - **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
   terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤
@@ -3315,14 +3424,17 @@ the run, volumes in m³, summed over every node per day in node-id order.
   differencing prefix sums, which would carry the whole run's rounding into a
   small dry year (fuzz seed 1486).
 - **Memos**, not in the closure: rain on the catchment (rain_final × area)
-  and rain − natural flow; irrigation supplied; dam seepage (it joins the
-  farm's outflow and can be caught again by a dam downstream, so it is not a
-  loss from the network).
+  and rain − natural flow; irrigation supplied; dam seepage that returns (it
+  joins the farm's outflow and can be caught again by a dam downstream, so it
+  is not a loss from the network); dam releases (engine ≥ 0.35.0,
+  `damReleaseM3`: a release joins the river below the dam the same day, so it
+  is already inside the outflow or taken again downstream).
 - **EWR required vs met** at each EWR site (outlet, then gauges by id):
   Σ requirement, Σ MIN(flow, requirement), and the days short.
 
-Dam releases (WP-3.5) are not modelled yet; when they land they join the out
-side only if they leave the network, otherwise they stay inside the outflow.
+Dam releases (WP-3.5, engine 0.35.0) move water within the network, so they
+are a memo; only the lost share of dam seepage is a new out term. Runs made
+before 0.35.0 have neither field (all seepage returned then).
 
 ### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
 
@@ -3426,9 +3538,16 @@ of a job.
 dead storage as the same fractions of capacity, and its mean depth: surface
 area when full scales with capacity, so evaporation and rain on it scale
 too. A transfer rule drawing from it keeps its reserve as the same fraction.
-Pending the hydrologist: a real enlargement changes the area–storage curve
-in ways a constant depth doesn't capture; the WP-3.5 dam routine is the
-place for a per-dam area–capacity table.
+A dam with a **survey curve** (WP-3.5, §2.7a; engine ≥ 0.35.0) is resized
+the same way: every row's volume and area × the capacity ratio, so the dam
+keeps its shape (the same depth at the same fraction full) and a curve dam
+and a power-law dam scale alike; at capacity 0 the curve is dropped. The
+mean-supply bound *B* takes rain on the curve's top-row area. Its release
+rule is kept as it is (a fixed release or an outlet cap doesn't grow with
+the dam), and the release comes before the draft, so a dam with a release
+yields less. Pending the hydrologist: a real enlargement (a higher wall, a
+wider basin) changes the curve differently from a uniform scale; a surveyed
+curve for the enlarged dam, entered on a scenario, is the durable answer.
 
 **Monotonicity.** Yield is non-decreasing in capacity for a lossless dam
 that starts at or above its minimum operating level and is not a transfer
@@ -3628,8 +3747,8 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow; rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |

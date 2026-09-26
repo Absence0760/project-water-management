@@ -1,5 +1,5 @@
 // Automatic re-runs after new data (roadmap WP-2.11; docs/architecture.md
-// § Background work, 041_auto_rerun.sql): the project setting, the enqueue
+// § Background work, 042_auto_rerun.sql): the project setting, the enqueue
 // behind the new-data hook (series/newData.ts onSeriesDaysChanged, which
 // every source of new days calls), and the auto run's label.
 //

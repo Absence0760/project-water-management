@@ -446,6 +446,8 @@ export const SettingsPatch = z
 		// Annual assurance of supply (engine ≥ 0.32.0, WP-3.4): a water year is
 		// met when supplied ÷ demand reaches it. A fraction in (0, 1].
 		assuranceAnnualThreshold: z.number().finite().gt(0).max(1),
+		// Monthly lake factors (WP-3.5), water-year months; null = lakeEvapFactor every month.
+		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

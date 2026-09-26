@@ -139,6 +139,35 @@ describe('storageYieldCurve', () => {
 		}
 	});
 
+	it('scales a survey curve with the dam (WP-3.5): a linear curve resizes exactly like the power law with exponent 1', () => {
+		const days = 2 * 365;
+		const cap = 20_000;
+		const areaFull = 8_000;
+		const evap = { apanMm: new Array(12).fill(200) as unknown as Monthly, lakeEvapFactor: 0.75 };
+		const withEvap = (over: Partial<NetworkNode>) => {
+			const { input, natural } = singleDam(40, cap, days, over);
+			input.settings = { ...input.settings, ...evap };
+			return storageYieldCurve(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam', { points: 5 });
+		};
+		const power = withEvap({ damAreaFullM2: areaFull, damAreaExponent: 1 });
+		const curve = withEvap({
+			damAreaFullM2: 0,
+			damCurve: [
+				{ levelM: 0, areaM2: 0, volumeM3: 0 },
+				{ levelM: 3, areaM2: areaFull, volumeM3: cap }
+			]
+		});
+		const lossless = withEvap({});
+		for (let k = 0; k < power.points.length; k++) {
+			const [a, b] = [power.points[k]!, curve.points[k]!];
+			expect(b.capacityM3).toBe(a.capacityM3);
+			expect(b.yieldM3Day).toBeCloseTo(a.yieldM3Day, 6);
+			expect(b.boundM3Day).toBeCloseTo(a.boundM3Day, 9);
+			// The curve's surface evaporates: every dam above capacity 0 yields less than a lossless one.
+			if (k > 0) expect(b.yieldM3Day).toBeLessThan(lossless.points[k]!.yieldM3Day);
+		}
+	});
+
 	it('refuses a node with no dam', () => {
 		const { input, natural } = singleDam(40, 0, 50);
 		expect(() => storageYieldCurve(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam')).toThrow(/capacity above 0/);

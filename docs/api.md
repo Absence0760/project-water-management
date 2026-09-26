@@ -637,6 +637,22 @@ unchanged); a body without it has none; `PUT` refuses a patch on a node that
 isn't a farm or doesn't exist. `POST /projects/:id/copy` copies it with fresh
 ids.
 
+Dam storage (engine ≥ 0.35.0, migration 041, WP-3.5, [model.md §2.7a](./model.md)):
+every node carries `damCurve` (`null`, or up to 200 rows of `{ levelM,
+areaM2, volumeM3 }`, finite, area and volume ≥ 0), `damReleaseRule`
+(`"none"` | `"passInflow"` | `"fixed"`), `damReleaseM3Day` (12 numbers ≥ 0,
+water-year months, or `null`), `damOutletCapacityM3Day` (≥ 0 or `null` = no
+limit) and `damSeepageReturnPct` (0–1). A body without them gets `null`,
+`"none"`, `null`, `null` and 1 (no change to any run). `PUT` refuses a curve
+on a node that isn't a farm, and one whose volumes don't strictly rise or
+whose level or area falls as the volume rises (the engine's
+`modelRuleProblems`). Settings gain `lakeEvapFactorMonthly` (12 numbers 0–2,
+or `null` = `lakeEvapFactor` every month; `PATCH` refuses anything else).
+Runs of a dam with a release rule store `dam_release`; with a seepage share
+below 1, `dam_seepage_lost`; `summary.waterBalance` rows gain
+`damReleaseM3` and `damSeepageLostM3` when present (the residual subtracts
+the lost seepage), and `summary.csv` the same two columns.
+
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
@@ -792,7 +808,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   its input without the tail. The worker doesn't schedule forecast runs:
   they are made on request (WP-2.11's re-run job makes ordinary runs).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
-  `trigger` is what made the run (041_auto_rerun): `manual`, `auto` (WP-2.11)
+  `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
   (`summary.forecast.from`), else `null`.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
@@ -820,7 +836,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   before stored inputs. `trigger` is what made the run:
   `'manual'` (a person: Run, a queued re-run, an import, a scenario) or
   `'auto'` (the re-run after new data, labelled `Auto · data to <day>`, made
-  as the person whose data queued it); `'forecast'` is reserved (WP-2.12).
+  as the person whose data queued it) or `'forecast'` (a forecast run, WP-2.12, below).
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display

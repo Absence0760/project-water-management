@@ -5,6 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
+import { damCurveProblem } from './network/dam';
 import type { ProjectModel } from './project';
 
 /**
@@ -49,6 +50,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
 			add(`bhDrought:${n.id}`, `"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
 		if (n.downstreamNodeId === n.id) add(`self:${n.id}`, `"${n.name}" drains into itself`);
+		// Dam survey curve (WP-3.5): only a farm has a dam, and the curve must be one the run can use.
+		if (n.damCurve && n.damCurve.length) {
+			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
+			if (bad) add(`damCurve:${n.id}`, `"${n.name}": dam survey curve: ${bad}`);
+		}
 	}
 	for (const a of m.cropAreas) {
 		const n = byId.get(a.nodeId);

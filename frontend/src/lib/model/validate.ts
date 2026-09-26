@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import type { ProjectModel } from '@water-management/engine';
+import { damCurveProblem, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -66,6 +66,15 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			issues.push({ area: 'network', message: `${label}: borehole capacity and depletion lag can't be negative.` });
 		if (!inRange(n.streamDepletionFrac ?? 0, 0, 1) || !inRange(n.boreholeTriggerPct ?? 0.3, 0, 1))
 			issues.push({ area: 'network', message: `${label}: stream depletion and the drought trigger must be between 0% and 100%.` });
+		// Dam storage (WP-3.5), as the API checks them.
+		if (!inRange(n.damSeepageReturnPct ?? 1, 0, 1)) issues.push({ area: 'network', message: `${label}: the share of seepage returning must be between 0% and 100%.` });
+		if (!inRange(n.damOutletCapacityM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', message: `${label}: the dam outlet capacity can't be negative.` });
+		if (n.damReleaseM3Day && (n.damReleaseM3Day.length !== 12 || n.damReleaseM3Day.some((v) => !inRange(v, 0, Infinity))))
+			issues.push({ area: 'network', message: `${label}: the dam release needs 12 monthly values, none negative.` });
+		if (n.damCurve && n.damCurve.length) {
+			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a farm has a dam';
+			if (bad) issues.push({ area: 'network', message: `${label}: dam survey curve: ${bad}.` });
+		}
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });

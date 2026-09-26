@@ -1260,6 +1260,36 @@ role and not before it.
       run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
       keeps the newest unkept forecast run), deduped per project like the
       re-run. Trigger: now (WP-2.11 is merged into this branch).
+- [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
+      Built: survey curves, releases, monthly lake factors, seepage
+      destination (model.md §2.7a "Dam geometry, losses and releases").
+      Still open:
+      - *Capacity loss to sediment* (WP item 5, optional %/year for long
+        records): scale the capacity (and the curve's volumes) down by the
+        rate × years since a survey date. Needs a survey year per dam, so a
+        field and a migration. Trigger: a licence run over more than ~20
+        years, or the hydrologist asks.
+      - *The survey curve as a scenario op*: a scenario can add a dam with a
+        curve (`node.add`) but has no `node.set` for `damCurve` (the
+        override form has no table value spec). Durable fix: a `table`
+        ValueSpec in `scenarios/fields.ts` reusing `parseDamCurve`, and
+        `damCurve` in `NODE_SET_FIELDS.farm`. Trigger: an applicant's
+        scenario that raises a dam (WP-3.6 storage–yield will want it).
+      - *Transfer room ignores today's release*: a transfer into a dam with
+        a release rule is sized as if the dam kept what it releases, so it
+        can move less than it could (never more). Same conservative choice
+        as for today's inflow (§2.6). Fix with the release computed before
+        the transfer (needs Z at transfer time); trigger: a scheme with both.
+      - *Self-checks water-balance table* (`runs/checks.ts` BALANCE_COLUMNS)
+        shows neither the seepage lost nor the release (nor, already,
+        groundwater, other use, depletion or land cover), so its visible
+        terms don't add up to the residual on runs that use them; the CSV
+        and `summary.waterBalance` have them all. Fix: optional columns shown
+        only when a run has them. Coordinate with the groundwater WP (3.9),
+        which touches the same table.
+      - *Monthly lake-factor presets*: none offered; values for SA reservoirs
+        (the lag of deep-water evaporation behind the pan) pending the
+        hydrologist.
 
 - [ ] **The Sandspruit example fails `catchments.test.ts` on main** (seen
       2026-09-25 on origin/main at 9590fa1, before the scenario merge): engine
@@ -1716,7 +1746,7 @@ role and not before it.
       keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
       and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
 - [x] **Auto re-run after an ingest or a feed merge** (WP-2.11,
-      `041_auto_rerun.sql`): `series/newData.ts` `onSeriesDaysChanged`
+      `042_auto_rerun.sql`): `series/newData.ts` `onSeriesDaysChanged`
       queues the debounced `rerun` from `mergeInto`, the PUT route and the
       data feeds' ingest. A key's re-run runs as the key's creator through
       `SECURITY DEFINER app_enqueue_rerun` (no job policy for keys); a key
@@ -1814,9 +1844,13 @@ from the WP:
 - [ ] **A resized dam's shape** (pending the hydrologist). The storage–yield
       curve scales a dam's full-supply area with its capacity (constant mean
       depth) and keeps its initial and minimum levels as fractions. A real
-      raise changes the area–capacity curve differently. Durable fix: read the
-      dam's surveyed area–capacity table once WP-3.5 adds one. Trigger:
-      WP-3.5 merges.
+      raise changes the area–capacity curve differently. Since WP-3.5 merged
+      (engine 0.35.0) a dam's survey curve is used and scaled uniformly
+      (volumes and areas × the capacity ratio, model.md §2.13), which keeps
+      its shape. Durable fix: let a curve point take its own surveyed curve
+      for the enlarged dam (a scenario's dam survey), and the hydrologist to
+      confirm uniform scaling meanwhile. Trigger: the hydrologist's review,
+      or a licence application for a dam raise.
 
 ## Housekeeping
 
@@ -1828,6 +1862,16 @@ from the WP:
   close them if 028 has applied first, but a database migrated in file order
   applies 025 before 028's default-privilege change, so 025 needs its own
   `REVOKE`).
+
+- [ ] **Split the help content chunk.** `lib/help/content.ts` (every help
+      entry and the glossary, one module) is the largest page chunk at 42 KB
+      gzip, over the 41 KB it held since 2026-09-24; the per-chunk ceiling was
+      raised to 43 KB when WP-3.5's dam entries landed (2026-09-26,
+      `check_web_bundle_budget.mjs`). Durable fix: one module per help
+      category behind a small index (id → category), so a HelpTip loads its
+      own category and only the glossary and search pages load them all.
+      Trigger: the next help entries that push it past 43 KB, or #9's engine
+      split, whichever comes first.
 
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.

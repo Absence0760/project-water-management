@@ -70,6 +70,46 @@ describe('boreholes (WP-1.34)', () => {
 	});
 });
 
+describe('dam storage (WP-3.5)', () => {
+	const curve = [
+		{ levelM: 100, areaM2: 0, volumeM3: 0 },
+		{ levelM: 102, areaM2: 6000, volumeM3: 5000 },
+		{ levelM: 104, areaM2: 10_000, volumeM3: 20_000 }
+	];
+
+	it('fills the off defaults, and accepts a curve, a release rule and a seepage share', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id, { damCapacityM3: 20_000 });
+		const parsed = ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null, damOutletCapacityM3Day: null, damSeepageReturnPct: 1 });
+		const set = { ...farm, damCurve: curve, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(40), damOutletCapacityM3Day: 500, damSeepageReturnPct: 0.3 };
+		const ok = ModelBody.parse({ nodes: [out, set], crops: [], cropAreas: [], transfers: [] });
+		expect(ok.nodes[1]).toMatchObject({ damCurve: curve, damReleaseRule: 'fixed', damOutletCapacityM3Day: 500, damSeepageReturnPct: 0.3 });
+		expect(modelProblems(model([out, set as never]))).toEqual([]);
+	});
+
+	it('refuses bad fields, and a curve that is not monotone or sits on a gauge', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id, { damCapacityM3: 20_000 });
+		for (const bad of [
+			{ damReleaseRule: 'spill' },
+			{ damReleaseM3Day: [1] },
+			{ damReleaseM3Day: new Array(12).fill(-1) },
+			{ damOutletCapacityM3Day: -1 },
+			{ damSeepageReturnPct: 1.2 },
+			{ damCurve: [{ levelM: 1, areaM2: -1, volumeM3: 0 }] },
+			{ damCurve: [{ levelM: 1, areaM2: 1, volumeM3: 1, extra: 1 }] },
+			{ damCurve: new Array(201).fill(curve[1]) }
+		]) {
+			expect(ModelBody.safeParse({ nodes: [out, { ...farm, ...bad }], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad).slice(0, 80)).toBe(false);
+		}
+		const falling = { ...farm, damCurve: [curve[0], curve[2], { ...curve[1], volumeM3: 30_000 }] };
+		expect(modelProblems(model([out, falling as never])).join()).toMatch(/"A": dam survey curve: the survey area falls/);
+		const onGauge = node('Gauge', null, { damCurve: curve });
+		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": dam survey curve: only a farm has a dam/);
+	});
+});
+
 describe('land cover (WP-1.35)', () => {
 	it('defaults to none, accepts a patch on a farm, and refuses one on a gauge or an unknown node', () => {
 		const out = node('Gauge', null);

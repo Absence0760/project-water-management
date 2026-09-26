@@ -42,6 +42,14 @@ describe('damHints', () => {
 		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1, damAreaFullM2: 15_000 })).toEqual([]);
 	});
 
+	it('does not ask for an area when a survey curve gives it (WP-3.5)', () => {
+		const damCurve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 3, areaM2: 15_000, volumeM3: 40_000 }
+		];
+		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1, damAreaFullM2: null, damCurve })).toEqual([]);
+	});
+
 	it('says nothing for a farm without a dam or a gauge', () => {
 		expect(damHints({ kind: 'farm', damCapacityM3: 0, damMinPct: 0 })).toEqual([]);
 		expect(damHints({ kind: 'gauge', damCapacityM3: 40_000, damMinPct: 0 })).toEqual([]);
@@ -67,12 +75,14 @@ describe('TABLE_FIELDS', () => {
 		expect(keys).toContain('irrigationEfficiency');
 		// … and the boreholes (WP-1.34), which apply to few nodes.
 		for (const k of ['boreholeCapacityM3Day', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays']) expect(keys).not.toContain(k);
-		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 7);
+		// … and the seepage destination and outlet (WP-3.5).
+		for (const k of ['damSeepageReturnPct', 'damOutletCapacityM3Day']) expect(keys).not.toContain(k);
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 9);
 	});
 });
 
 describe('isVolume', () => {
 	it('marks the m³ and m³/day fields, whose columns need room for large values', () => {
-		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'divertCapacityM3Day', 'boreholeCapacityM3Day']);
+		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'divertCapacityM3Day', 'boreholeCapacityM3Day']);
 	});
 });

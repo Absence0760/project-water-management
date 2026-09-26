@@ -371,7 +371,7 @@ export interface RunMeta {
 	 */
 	reproducible?: boolean;
 	/**
-	 * What made the run (041_auto_rerun): 'manual' (a person), 'auto' (the
+	 * What made the run (042_auto_rerun): 'manual' (a person), 'auto' (the
 	 * debounced re-run after new data, WP-2.11), 'forecast' (WP-2.12). Absent
 	 * from an older API (= manual).
 	 */

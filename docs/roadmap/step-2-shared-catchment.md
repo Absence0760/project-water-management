@@ -1456,7 +1456,7 @@ on.** WP-2.8, WP-2.9 (`mergeInto`), WP-2.4. D6, D7.
 
 ### WP-2.11 Auto re-run after new data
 
-> **Status: built** (`041_auto_rerun.sql`, `backend/src/series/newData.ts`,
+> **Status: built** (`042_auto_rerun.sql`, `backend/src/series/newData.ts`,
 > `backend/src/runs/autoRun.ts`, `backend/src/publish/autoPublish.ts`,
 > `jobs/handlers/rerun.ts`; [architecture.md § Automatic runs](../architecture.md#automatic-runs)).
 > Where the build departs from the design below, and why:
@@ -1577,7 +1577,7 @@ in dev.
 
 ### WP-2.12 Forecast mode and forecast-day flags
 
-> **Status: built** (`packages/engine/src/forecast.ts`, `model_run.trigger` from WP-2.11's `041_auto_rerun.sql`,
+> **Status: built** (`packages/engine/src/forecast.ts`, `model_run.trigger` from WP-2.11's `042_auto_rerun.sql`,
 > `POST /runs { forecast }`, `forecast/ForecastPanel.svelte`, the `LineChart`
 > band, `farm/ForecastCard.svelte`; [model.md §2.4f](../model.md#24f-forecast-mode-engine--0350-roadmap-wp-212)).
 > Where the build departs from the plan below, and why:

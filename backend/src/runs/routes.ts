@@ -22,7 +22,7 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // `reproducible`: its input series are stored (021_series_blob), so
 // GET …/reproduce can re-run it. The same test loadRunInput makes: a run
 // with input series but no stored references is from before 021;
-// `trigger`: what made it, 'manual', 'auto' or 'forecast' (041_auto_rerun,
+// `trigger`: what made it, 'manual', 'auto' or 'forecast' (042_auto_rerun,
 // WP-2.11, WP-2.12); `forecastFrom`: a forecast run's first forecast day
 // (summary.forecast.from), else null.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",

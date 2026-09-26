@@ -12,6 +12,8 @@ export type NodeNumberKey =
 	| 'damAreaFullM2'
 	| 'damAreaExponent'
 	| 'damSeepagePerDay'
+	| 'damSeepageReturnPct'
+	| 'damOutletCapacityM3Day'
 	| 'pctUpstreamToDam'
 	| 'pctRunoffToDam'
 	| 'divertCapacityM3Day'
@@ -131,7 +133,28 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'dam',
 		farmOnly: true,
 		aria: (n) => `Dam seepage of ${n}, % of storage per day`,
-		help: 'Share of the stored water that seeps out each day. It reaches the river below the dam the same day. 0 % for a sealed dam.'
+		help: 'Share of the stored water that seeps out each day. 0 % for a sealed dam. Where it goes is the next field.'
+	},
+	{
+		key: 'damSeepageReturnPct',
+		detailOnly: true,
+		label: 'Seepage returning',
+		unit: '%',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Share of the dam seepage of ${n} returning to the river, %`,
+		help: 'Share of the seepage that reaches the river below the dam the same day. The rest is lost from the catchment (to deep groundwater). 100 % by default.'
+	},
+	{
+		key: 'damOutletCapacityM3Day',
+		detailOnly: true,
+		label: 'Outlet capacity',
+		unit: 'm³/day',
+		group: 'dam',
+		farmOnly: true,
+		nullable: true,
+		aria: (n) => `Dam outlet capacity of ${n}, m³/day`,
+		help: 'Most the dam’s outlet (a pipe or valve through the wall) can release in a day, for the release rule below. Empty: no limit.'
 	},
 	{
 		key: 'pctUpstreamToDam',
@@ -252,11 +275,12 @@ export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/da
  * A dam with no minimum operating level can be emptied by irrigation, which
  * the workbook allowed but few farmers do (docs/engine-audit.md Q5).
  */
-export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'> & Partial<Pick<NetworkNode, 'damAreaFullM2'>>): string[] {
+export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'> & Partial<Pick<NetworkNode, 'damAreaFullM2' | 'damCurve'>>): string[] {
 	if (!hasDam(n)) return [];
 	const hints: string[] = [];
 	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
-	if (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined)
+	// A survey curve (WP-3.5) gives the area; the estimate is only for the power law.
+	if ((n.damAreaFullM2 === null || n.damAreaFullM2 === undefined) && !(n.damCurve && n.damCurve.length))
 		hints.push(`No surface area: evaporation uses capacity ÷ 3 m, about ${fmtArea(n.damCapacityM3 / 3)}. Enter the dam's area when full for a better figure.`);
 	return hints;
 }

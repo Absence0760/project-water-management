@@ -66,7 +66,7 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (041): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
@@ -87,7 +87,12 @@ erDiagram
 | `divert_capacity_m3_day` | Downstream diversion back to dam | The workbook enters m³/s and converts it. We store m³/day. |
 | `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate capacity ÷ 3 m and warn (W6). The importer writes NULL |
 | `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3, default 0.7 (Liebe et al. 2005) |
-| `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow |
+| `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow (less the share lost, below) |
+| `dam_curve` | (none: b023 has no survey) | Migration 041, engine ≥ 0.35.0 ([model.md §2.7a](./model.md), "Dam geometry, losses and releases"): the dam's survey rows `[{levelM, areaM2, volumeM3}]` as `jsonb` (an array of at most 200, CHECK); NULL = the power-law area. On the node rather than a child table: always read and written with the node, so the node's RLS covers it (members, and a farmer's own linked nodes). The API checks each row's shape and the engine's save rule the monotonicity |
+| `dam_release_rule` | (none) | `none` (default), `passInflow` or `fixed` (CHECK): a release before irrigation |
+| `dam_release_m3_day` | (none) | m³/day per water-year month (12 values ≥ 0, CHECK): the fixed release, or the pass-inflow target; NULL = none (fixed) / the EWR required at the node (pass inflow) |
+| `dam_outlet_capacity_m3_day` | (none) | Most the outlet releases per day (≥ 0); NULL = no limit |
+| `dam_seepage_return_pct` | (none) | Share (0–1, default 1) of the seepage returning below the dam; the rest leaves the catchment |
 | `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, floored at 0.01, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
 | `loss_return_fraction` | (1 when r > 0, else 0) | Share β (0–1) of the application losses `(1 − e) × supplied` that returns to the river the same day; default 0.5. Migration 006 backfilled both from `return_flow_pct` and dropped that column |
 
@@ -225,7 +230,7 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   its (at most 50) nominations name, plus the cited ones (the runs its at most
   12 publications hold among them). A trimmed run's stored inputs go with it
   (see **Stored run inputs**).
-- **Each trigger is capped apart** (`model_run.trigger`, 041_auto_rerun.sql:
+- **Each trigger is capped apart** (`model_run.trigger`, 042_auto_rerun.sql:
   `manual`, the default and every existing row; `auto`, the debounced re-run
   after new data, WP-2.11; `forecast`, a forecast run, WP-2.12). The 20 above
   count `manual` runs only; of the unkept runs of each automatic trigger only
@@ -303,7 +308,7 @@ the same number. Pinning doesn't touch the note's stamp. A partial index
 cheap. `pinned` is on every run's metadata (`RunMeta`), so a feature that needs
 a kept base run (scenarios, issue #18) can read it from the run list.
 
-**Forecast runs (`trigger = 'forecast'`, 041_auto_rerun.sql, WP-2.12,
+**Forecast runs (`trigger = 'forecast'`, 042_auto_rerun.sql, WP-2.12,
 [model.md §2.4f](./model.md#24f-forecast-mode-engine--0350-roadmap-wp-212)).** Capped like
 any automatic trigger (above): the newest unkept forecast run replaces the
 one before. A forecast run's input snapshot holds the forecast tail; every
@@ -1077,7 +1082,7 @@ merges daily readings without a session (WP-2.9;
   any), and NULL in a transaction that also has a user;
   `app_api_key_allows(kind, name)` checks `allowed_series`;
   `app_api_key_label()` is the audit actor label.
-- **Automatic re-runs** (041_auto_rerun.sql, [§ Jobs](#jobs-016_jobssql)):
+- **Automatic re-runs** (042_auto_rerun.sql, [§ Jobs](#jobs-016_jobssql)):
   a key's ingest that changes days queues the project's re-run (when it has
   automatic runs on) with the key's **creator** as the acting user; the job
   runs as that person and fails closed if they are no longer an editor. When
@@ -1297,7 +1302,7 @@ The background job queue's source of truth ([architecture.md § Background work]
     `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
     one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
     cancel.
-  - `app_enqueue_rerun(project, cause)` (041_auto_rerun.sql): the
+  - `app_enqueue_rerun(project, cause)` (042_auto_rerun.sql): the
     debounced automatic re-run behind the new-data hook
     ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
     Nothing unless `settings.autoRun.enabled` (it reads the setting itself,
@@ -1316,7 +1321,7 @@ The background job queue's source of truth ([architecture.md § Background work]
     creator's account was deleted (`created_by` NULL) is the one `NULL` that
     doesn't refuse: `app_enqueue_rerun` skips the re-run (no job, no row), so
     the ingest still commits.
-- **`job_enqueue`** (replaced in 041 from 040's definition, itself 016's plus the progress and cancel resets): as before, a
+- **`job_enqueue`** (replaced in 042 from 040's definition, itself 016's plus the progress and cancel resets): as before, a
   signed-in enqueuer is stamped as the acting user and a plain insert with no
   user is refused; the one new case is a `SECURITY DEFINER` function with no
   signed-in user (`current_user` ≠ `session_user`), which may name the acting

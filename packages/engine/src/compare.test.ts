@@ -467,6 +467,31 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Land cover "invasive" removed from Rooikloof (was 1 km² condensed)']);
 	});
 
+	it('lists a dam’s survey curve, release rule and seepage destination changed (WP-3.5)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		Object.assign(f, {
+			damCurve: [
+				{ levelM: 0, areaM2: 0, volumeM3: 0 },
+				{ levelM: 4, areaM2: 5000, volumeM3: 12_000 }
+			],
+			damReleaseRule: 'fixed',
+			damReleaseM3Day: [0, 0, 0, 50, 50, 0, 0, 0, 0, 0, 0, 0],
+			damOutletCapacityM3Day: 400,
+			damSeepageReturnPct: 0.5
+		});
+		b.settings = { ...b.settings, lakeEvapFactorMonthly: [0.75, 0.75, 0.75, 0.9, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75] as never };
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: dam release rule none → fixed',
+			'Rooikloof: dam outlet capacity no limit → 400 m³/day',
+			'Rooikloof: share of dam seepage returning 100% → 50%',
+			'Rooikloof: dam release none → 0, 0, 0, 50, 50, 0, 0, 0, 0, 0, 0, 0 m³/day (Oct–Sep)',
+			'Rooikloof: dam survey curve none (power law) → 2 rows',
+			'Monthly dam evaporation factors: the one factor → 0.75, 0.75, 0.75, 0.9, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75 (Oct–Sep)'
+		]);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
