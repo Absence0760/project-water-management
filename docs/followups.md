@@ -39,7 +39,7 @@ Tick items off (or move them into an issue) as they are done.
       (details under § Features left half-way).
 
 - [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
-      decision D10).** The disclaimer on every report (engine
+      decision D10; issue #47).** The disclaimer on every report (engine
       `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
       and the five sign-off statements (`liability/signoff.ts`,
       `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
@@ -88,6 +88,9 @@ Tick items off (or move them into an issue) as they are done.
       `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
 
 ## Hydrologist
+
+Every engine decision marked "pending the hydrologist" in model.md is
+collected as a checklist in issue #46; tick it there as they answer.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
