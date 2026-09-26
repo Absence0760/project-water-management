@@ -101,7 +101,8 @@
 			const publication = await api.publication.update(projectId, current.id, { restriction: parsed.restriction, nextExpectedOn: parsed.nextExpectedOn });
 			editing = false;
 			done = 'Notice saved.';
-			onChange?.({ current: publication, history });
+			// The history entry of the current publication carries its level too.
+			onChange?.({ current: publication, history: history.map((h) => (h.id === publication.id ? { ...h, restriction: { level: publication.restriction.level } } : h)) });
 		} catch (err) {
 			error = msg(err);
 		} finally {

@@ -274,10 +274,13 @@ export async function patchPublication(db: Db, projectId: string, pubId: string,
 	if (body.restriction) {
 		set.push(['restriction_level', body.restriction.level], ['restriction_pct', body.restriction.pct], ['notice_en', body.restriction.noticeEn], ['notice_af', body.restriction.noticeAf]);
 	}
-	await db.query(
+	// Guarded again in the UPDATE: a publish that superseded this one since the
+	// check above (it waits on the row lock) must not let the edit land on history.
+	const { rowCount } = await db.query(
 		`UPDATE run_publication SET ${set.map(([k], i) => `${k} = $${i + 3}`).join(', ')}, updated_at = now(), updated_by = app_current_user_id()
-		 WHERE project_id = $1 AND id = $2`,
+		 WHERE project_id = $1 AND id = $2 AND superseded_at IS NULL`,
 		[projectId, pubId, ...set.map(([, v]) => v)]
 	);
+	if (!rowCount) throw new ApiError(409, 'this publication has been superseded; change the current one');
 	return getPublication(db, pubId);
 }

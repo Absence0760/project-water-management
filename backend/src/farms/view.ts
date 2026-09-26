@@ -113,6 +113,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			if (!cur?.view) throw notPublished();
 			const { rows: p } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
 			// The aggregate rule (D2, design §10.3): the even share is a catchment ratio, shown only with at least k − 1 other holders.
+			// cutBeyondShare is measured against that share, so it goes with it (it would bound K_tot).
 			const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1) AS n', [id]);
 			const showShare = (h[0]?.n ?? 0) >= FARMER_K - 1;
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
@@ -121,7 +122,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			);
 			const farm: FarmProjection = showShare
 				? cur.view
-				: { ...cur.view, river: { ...cur.view.river, equitableFraction: null, aboveBelowShareM3Day: null } };
+				: { ...cur.view, river: { ...cur.view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 			const [own, other] = q.lang === 'af' ? [cur.notice_af, cur.notice_en] : [cur.notice_en, cur.notice_af];
 			const noticeLang = own ? q.lang : other ? (q.lang === 'af' ? 'en' : 'af') : null;
 			const cv = cur.catchment_view;

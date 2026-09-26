@@ -174,6 +174,33 @@ describe('changing the notice', () => {
 		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${old.id}`, { note: 'late' })).status).toBe(409);
 	});
 
+	it('refuses a notice change that a concurrent publish superseded while it waited', async () => {
+		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
+		// Hold the row as a publish would (superseding it, uncommitted), then PATCH: the PATCH passes its
+		// first check, waits on the row lock, and must answer 409 once the supersession commits.
+		const pg = await import('pg');
+		const holder = new pg.default.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await holder.connect();
+		try {
+			await holder.query('BEGIN');
+			await holder.query('UPDATE run_publication SET superseded_at = now() WHERE id = $1', [cur.id]);
+			const patch = editor.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, { note: 'raced' });
+			// Wait for the real signal: the PATCH's UPDATE blocked on the row lock.
+			for (;;) {
+				// pg_locks (unlike another role's pg_stat_activity row) is visible to the schema owner. DB test files run one at a time.
+				const { rows } = await holder.query(`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted AND pid = ANY (SELECT pid FROM pg_stat_activity WHERE datname = current_database())`);
+				if (rows[0].n > 0) break;
+			}
+			await holder.query('COMMIT');
+			expect(await patch).toEqual({ status: 409, body: { error: 'this publication has been superseded; change the current one' } });
+		} finally {
+			// Put it back as the current one for the tests below.
+			await holder.query('UPDATE run_publication SET superseded_at = NULL WHERE id = $1', [cur.id]).catch(() => {});
+			await holder.end();
+		}
+		expect((await asOwner('SELECT note FROM run_publication WHERE id = $1', [cur.id]))[0].note).not.toBe('raced');
+	});
+
 	it('never lets the app change what was published, only the notice', async () => {
 		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
 		for (const sql of ["UPDATE run_publication SET catchment_view = '{}' WHERE id = $1", 'UPDATE run_publication SET published_at = now() WHERE id = $1']) {
@@ -332,7 +359,8 @@ describe('what a farmer reads', () => {
 });
 
 describe('the aggregate rule on the even share', () => {
-	const share = async (u: User, nodeId: string) => (await u.call('GET', `/projects/${projectId}/farm/${nodeId}`)).body.farm.river as { equitableFraction: number | null; aboveBelowShareM3Day: number | null };
+	const share = async (u: User, nodeId: string) =>
+		(await u.call('GET', `/projects/${projectId}/farm/${nodeId}`)).body.farm.river as { equitableFraction: number | null; aboveBelowShareM3Day: number | null; cutBeyondShare: boolean };
 
 	it('shows the even share with at least k − 1 other holders, and hides it below', async () => {
 		// Farmer: the other holders are farmer2 (farm 2) and farms 3–6 unlinked = 5 ≥ 4.
@@ -342,7 +370,7 @@ describe('the aggregate rule on the even share', () => {
 		// Farmer2 takes farms 2–4: the others are farmer2 once, farms 5 and 6 = 3 < 4.
 		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${farmer2.id}`, { nodeIds: [farms[1]!.id, farms[2]!.id, farms[3]!.id] })).status).toBe(200);
 		const hidden = await share(farmer, farms[0]!.id);
-		expect(hidden).toMatchObject({ equitableFraction: null, aboveBelowShareM3Day: null });
+		expect(hidden).toMatchObject({ equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false });
 		// Farmer2 sees farmer (farm 1) and farms 5, 6 = 3: hidden too.
 		expect((await share(farmer2, farms[2]!.id)).equitableFraction).toBeNull();
 		// Stored as computed; a viewer (who links nothing: six holders) sees it.

@@ -849,7 +849,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   share with the E7 headline and its band). `farm.river.equitableFraction`
   and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
-  D2); the stored projection keeps them.
+  D2), and `cutBeyondShare` is `false` (it is measured against the even
+  share, so it would bound it); the stored projection keeps them.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice, noticeLang? }, nextExpectedOn }`.
