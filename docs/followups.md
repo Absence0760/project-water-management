@@ -1165,7 +1165,9 @@ role and not before it.
   - [ ] **`GET …/runs/:runId/reproduce`** (`{ identical, engineVersionThen,
         engineVersionNow, differences }`), `RunMeta.reproducible`, and the
         Runs tab's "Reproducible" badge, "Cited" lock and "Check
-        reproduction" action. (`RunMeta.citedBy` is built, WP-3.2.) `loadRunInput` + `runModelChecked` +
+        reproduction" action. (`RunMeta.citedBy` is built, WP-3.2, and the
+        Runs tab already tags a scenario's base **Scenario base** without a
+        ✕; a published run is tagged **Published**.) `loadRunInput` + `runModelChecked` +
         canonical JSON is the whole server side; the route and UI are what
         remain. Trigger: WP-3.2's compare view, or an assessor asking.
   - [x] **WP-2.3's publication-history trim skips cited runs' publications**
@@ -1183,13 +1185,26 @@ role and not before it.
   (`024_scenarios.sql`, `backend/src/scenarios/`, `executeScenarioRun`,
   rebase, the scenario per side in compare) and the frontend API client
   (`api.scenarios`). Left open:
-  - [ ] **The Scenarios tab** (stage D): the list and its empty state, the
-        override-mode editor that records edits as ops with undo, the
+  - [x] **The Scenarios tab** (stage D, 2026-09-26;
+        [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)): the list and
+        its empty state, the editor that records every op with undo, the
         "Based on run X" banner and the red "Baseline assumptions changed"
-        callout, the compare page's Scenario overrides section (reusing the
-        #8 overlay), the Runs tab's cited lock, e2e (a 20 % dam raise run and
-        compared) and axe. Everything it needs is in `api.scenarios` and
-        `CompareSide.scenario`.
+        callout, rebase with a dry-run check, the scenario-vs-base
+        comparison and the compare page's Scenario overrides section
+        (reusing the #8 overlay), the Runs tab's **Scenario** and
+        **Scenario base** tags (no ✕ on a cited base), e2e
+        (`e2e/tests/scenarios.spec.ts`: a 20 % dam raise run and compared)
+        and axe in light, dark and on a phone.
+  - [ ] **Override mode for the Network, Crops and Transfers editors**
+        (roadmap WP-3.2 *Frontend*): editing the base run's model in the
+        familiar tables and recording each edit as an op, instead of the
+        one-change-at-a-time "Add a change" form. The form already builds
+        every op the engine has (`scenarios/ops.ts` `buildOp`), so the
+        durable fix is a `ModelEditor` variant loaded from the base run's
+        snapshot whose edits diff into ops (node fields → `node.set`, rows
+        → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
+        hydrologist building scenarios of more than a handful of changes,
+        or WP-3.3's applicant flow.
   - [x] **One home for the model's save rules** (2026-09-25): the rules are
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz

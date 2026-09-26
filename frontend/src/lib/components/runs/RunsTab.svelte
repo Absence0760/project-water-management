@@ -256,6 +256,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		onRunsChange?.(runs);
 	}
 
+	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
+	const citedByScenario = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'scenario');
+
 	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
 	async function togglePin(r: RunMeta) {
 		actionError = null;
@@ -450,12 +453,14 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
 										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
 										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
+										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
+										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
@@ -471,7 +476,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										onclick={() => togglePin(r)}
 										><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
 									>
-									{#if !evidenceById.has(r.id) && !r.pinned && !heldByPublication.has(r.id)}
+									{#if !evidenceById.has(r.id) && !r.pinned && !heldByPublication.has(r.id) && !r.citedBy?.length}
 										<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
 									{/if}
 								</div>

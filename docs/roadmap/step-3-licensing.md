@@ -321,7 +321,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.2 Scenarios within a project
 
-- **Status (2026-09-25): engine, backend, data model and API built**
+- **Status (2026-09-26): built**, the UI included
   ([scenarios.md](../scenarios.md), issue #18): `packages/engine/src/scenario/`,
   migration `024_scenarios.sql`, `backend/src/scenarios/`, the scenario per
   side in `/compare/runs`, and the frontend API client. Where the build
@@ -331,9 +331,12 @@ must build WP-2.15 Phase B.
   derives them from an applicant's links; a scenario run records its ops and
   their classes in its own snapshot, which is what compare shows; and
   `run_series.node_id` is checked against the run's snapshot instead of a
-  foreign key to the live `node` table. Not built yet: the Scenarios tab,
-  the compare page's Scenario overrides section, e2e and axe
-  ([followups.md](../followups.md)).
+  foreign key to the live `node` table. The Scenarios tab, its override
+  editor, the scenario-vs-base comparison, the compare page's Scenario
+  overrides section, e2e and axe are built too
+  ([ui.md § Scenarios](../ui.md#scenarios-tabscenarios)); the editor is one
+  form over every op rather than an "override mode" of the Network, Crops
+  and Transfers editors (tracked in [followups.md](../followups.md)).
 - **Goal.** A scenario is a named, ordered list of **overrides on a base
   run**. It is run and compared without copying the project.
 - **How it relates to today:**

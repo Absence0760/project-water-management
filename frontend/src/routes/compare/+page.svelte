@@ -29,6 +29,8 @@
 	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
 	// The per-node daily series overlay (issue #8): its own chunk too.
 	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
+	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
+	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
 	type Side = 'a' | 'b';
@@ -308,6 +310,15 @@
 							</div>
 						{/if}
 					</section>
+
+					{#if data.a.scenario || data.b.scenario}
+						<section class="panel" aria-labelledby="overrides-h">
+							<div class="panel-head"><h2 id="overrides-h">Scenario overrides</h2></div>
+							<Lazy load={loadOverrides}>
+								{#snippet children(ScenarioOverrides)}<ScenarioOverrides data={data!} />{/snippet}
+							</Lazy>
+						</section>
+					{/if}
 
 					<section class="panel" aria-labelledby="changes-h">
 						<div class="panel-head">

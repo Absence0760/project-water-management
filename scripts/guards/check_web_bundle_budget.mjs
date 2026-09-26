@@ -401,6 +401,19 @@
 //             and the report's inputs row. No new dependency; the largest
 //             page chunk is unchanged (39 KB). Headroom ~6 KB on the total.
 //             Issue #9 still stands.
+// 2026-09-26  total 774 → 801 KB; other ceilings unchanged. The Scenarios
+//             tab (issue #18 stage D): the list, the override editor and its
+//             "Add a change" form for every ScenarioOp, the op list with the
+//             baseline callout, and the scenario-vs-base compare section.
+//             Measured on the branch (off main 0b3f51c): 795 KB, of which
+//             the two new lazy chunks are ~24 KB gzip (the tab, editor, form
+//             and compare section ~13 KB; the op list with the field specs,
+//             op descriptions and op builder, scenarios/fields.ts + ops.ts,
+//             ~10 KB) plus ~1 KB of CSS. Both load only on ?tab=scenarios
+//             (the op list also on a compare page with a scenario side); the
+//             engine code they call is already in the shared engine chunk.
+//             No new dependency; the largest page chunk is unchanged
+//             (39 KB). Headroom ~6 KB on the total. Issue #9 still stands.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -411,7 +424,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 774,
+	totalCodeKb: 801,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,
