@@ -285,6 +285,13 @@ put the results first. Top to bottom:
   kept." Every member sees it, viewers included, so a reviewer or assessor
   can check what the importer interpreted long after the import. All the text
   came from the file and renders as text only.
+- **Time zone** (Project details, under Description; issue #45): the
+  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
+  from the browser's list of zones, saved with **Save details** (editors;
+  read-only for viewers). Every download of the project (CSV, JSON, the
+  .xlsx workbook, the server report PDF) is dated by the calendar day there,
+  so an export made just after local midnight carries today's date, not
+  UTC's yesterday. A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then
@@ -1890,7 +1897,10 @@ run's report to chosen members every week or month.
   an error when the engine is the same version, a warning when it changed),
   **Not reproducible**, or why a stored input can't be used. A run from
   before stored inputs says so instead of offering the check. The
-  flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
+  flow-duration curve with Q10–Q95 (engine `views/fdc.ts`: the Q table is
+  `fdcPercentileTable`, the same function the run summary CSV, the .xlsx
+  workbook's Summary sheet and the report's Calibration section read, so an
+  export carries exactly the chart's numbers, issue #45; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
   like, and **Observed days / Whole run** switches; the caption says which
@@ -1982,6 +1992,18 @@ run's report to chosen members every week or month.
   residual (to two significant figures, float noise), and the EWR required
   vs met at each site. Runs before engine 0.32.0 show *Not computed by
   engine x.y* in both panels.
+- **Small flows and volumes** (issue #45). Figures in m³/s, l/s and Mm³ keep
+  their fixed decimals (3 for m³/s and Mm³), but a non-zero value those
+  decimals would show with fewer than two significant figures is shown to two
+  significant figures instead (`fmtQty`, `lib/format/number.ts`): a dry
+  season's Q90 of 0.00042 m³/s reads *0.00042*, never *0.000*, and a small
+  dam's volume in the water balance by water year is no longer *0*. Zero stays
+  0 and values from 1 up are unchanged. This covers the headline cards, the
+  FDC percentile table, the water balance, the WR2012 check, the EWR
+  assurance volumes and the farm totals line; the plausibility warnings'
+  text follows the same rule (engine `plausibility/format.ts`). Tables in
+  m³/day (farms, curtailment) keep their decimals: one m³/day is already a
+  fine enough step.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
@@ -2267,7 +2289,9 @@ exists, says so with a link to Runs & results.
   PE the monthly table shows **GR4J monthly PE (mm)** in place of the pan
   coefficient),
   **Calibration** (the calibration panel with the annual water balance, where
-  the parameters came from, the hydrograph over the whole run),
+  the parameters came from, the hydrograph over the whole run, and the
+  flow-duration percentiles Q10–Q95 in m³/s on the days the Runs tab's FDC
+  chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
   for the outlet and every farm), **Farms, warnings and checks** (the run

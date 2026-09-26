@@ -646,6 +646,19 @@
 // 2026-09-26  total 953 → 957 KB (measured 952). Merging #17 step 4's farm
 //             drawer (948) with #45's import formats (+3, lazy upload chunk)
 //             and main since. Headroom ~5 KB.
+// 2026-09-26  total 945 → 947 KB. Issue #45's display and export items:
+//             fmtQty (small flows to two significant figures), the FDC
+//             percentile table moved into the engine (views/fdc.ts, now
+//             shared by the Runs tab chart and the report page's new
+//             table), the workbook's per-cell small-value format, and the
+//             project time-zone field in Project details. Measured 945 →
+//             946 over main @ 7f49dd4 (main itself was at its ceiling). No
+//             new dependency; the export code stays in its worker. Headroom
+//             ~1 KB; the ways down are unchanged (English-as-key i18n).
+// 2026-09-26  total 957 → 963 KB (measured 958). #45's display and export
+//             fixes (fmtQty for small values, the FDC percentile table from
+//             the engine, the project time-zone field: ~1 KB) merged with the
+//             #45 import, A-pan and label work. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -656,7 +669,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 957,
+	totalCodeKb: 963,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

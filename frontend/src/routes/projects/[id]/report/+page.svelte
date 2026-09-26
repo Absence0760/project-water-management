@@ -9,7 +9,8 @@
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
+	import { fdcPercentileTable, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
+	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -141,6 +142,14 @@
 	// The printed report has no legend to click, so natural flow shows from the start.
 	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
 	const ewrLines = $derived(ewrChartSeries(flows, conv));
+	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function.
+	const fdc = $derived(
+		fdcPercentileTable({
+			...(flows.natural ? { natural: conv(flows.natural) } : {}),
+			...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
+			...(flows.observed ? { observed: conv(flows.observed) } : {})
+		})
+	);
 	const days = $derived(run ? toEpochDay(run.endDate) - toEpochDay(run.startDate) + 1 : 0);
 	const farmNames = $derived(Object.fromEntries(nodes.map((n) => [n.id, n.name])));
 	const nodeOrder = $derived(new Map(nodes.map((n) => [n.id, n.sortOrder] as [string, number])));
@@ -283,6 +292,12 @@
 							series={hydro}
 							caption="The whole run. {observedCaption(flows, sources)}"
 						/>
+						{@render table(
+							`Flow-duration percentiles (m³/s): flow equalled or exceeded on 10, 50, 90 and 95 % of days, ${fdcReportDays(fdc)}`,
+							['Flow record', 'Q10', 'Q50', 'Q90', 'Q95', 'Days'],
+							[1, 2, 3, 4, 5],
+							fdcReportRows(fdc)
+						)}
 					{:else if s.id === 'curtailment'}
 						<CurtailmentTable {summary} {farmNames} />
 					{:else if s.id === 'ewr'}

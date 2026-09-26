@@ -17,6 +17,8 @@ import {
 	LOW_FLOW_WARN_FACTOR,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
+	type FdcPercentileRow,
+	type FdcPercentileTable,
 	type RunSummary,
 	type WaterBalanceRow,
 	type Wr2012FlagLevel,
@@ -100,6 +102,8 @@ export interface SummaryMeta {
 	notesUpdatedBy?: string | null;
 	/** The run's place in the evidence history (010_run_nomination); null or absent = never nominated. */
 	evidence?: RunEvidence | null;
+	/** The FDC chart's Q10–Q95 table over the run's catchment flows in m³/s (export/fdc.ts); absent = not loaded. */
+	flowDuration?: FdcPercentileTable | null;
 }
 
 /**
@@ -716,6 +720,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 	yield '';
 
+	if (meta.flowDuration !== undefined) {
+		yield* flowDurationLines(meta.flowDuration);
+		yield '';
+	}
+
 	yield* wr2012Lines(summary.wr2012, meta.notes ?? '');
 	yield '';
 
@@ -998,6 +1007,28 @@ const WR2012_FLAG_TEXT: Record<Wr2012FlagLevel, string> = {
 const SCALING_TEXT: Record<Wr2012Scaling, string> = { area: 'area ratio', areaRain: 'area and rainfall ratio' };
 /** Water year labelled by the calendar year it starts in: 2001 → "2001/02". */
 const waterYearText = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+
+const FDC_RECORD_LABEL: Record<FdcPercentileRow['record'], string> = { natural: 'Natural', simulated: 'Simulated outflow', observed: 'Observed' };
+
+/**
+ * The Runs tab's flow-duration percentile table (issue #45): Q10, Q50, Q90
+ * and Q95 of natural flow, simulated outflow and the observed record, in
+ * m³/s, from the same engine function the chart's table reads
+ * (views/fdc.ts). Every record over the whole run, then, when the observed
+ * record misses some of the run's days, natural and simulated ranked on only
+ * its days (the chart's default, like with like). Unrounded.
+ */
+export function* flowDurationLines(t: FdcPercentileTable | null): Generator<string> {
+	yield csvRow(['Flow-duration percentiles (flow equalled or exceeded on 10/50/90/95 % of days; Weibull plotting positions)']);
+	if (!t || !t.wholeRun.length) {
+		yield csvRow(['No catchment flow series stored for this run']);
+		return;
+	}
+	yield csvRow(['Days ranked', 'Flow record', 'Q10 (m³/s)', 'Q50 (m³/s)', 'Q90 (m³/s)', 'Q95 (m³/s)', 'Days']);
+	const rows = (label: string, list: FdcPercentileRow[]) => list.map((r) => csvRow([label, FDC_RECORD_LABEL[r.record], r.q10, r.q50, r.q90, r.q95, r.n]));
+	yield* rows('Whole run', t.wholeRun);
+	if (t.onObservedDays) yield* rows(`Observed days only (${t.observedDays} of ${t.runDays})`, t.onObservedDays);
+}
 
 /**
  * The WR2012 check (model.md §2.10c): reference, scaling, the MAR ratios over

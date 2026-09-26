@@ -8,10 +8,10 @@
 	import type { Snippet } from 'svelte';
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
-	import { finiteCount, flowDurationCurves, onDaysOf, percentileFlows } from '$lib/components/charts/fdc';
+	import { FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
@@ -107,12 +107,15 @@
 		const colors = ['--series-1', '--series-2', '--chart-obs'];
 		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
 		const obs = catchment.observed ? conv(catchment.observed) : null;
-		const runDays = catchment.simulated?.values.length ?? catchment.natural?.values.length ?? 0;
-		const obsDays = obs ? finiteCount(obs) : 0;
+		const converted = present.map(({ d }) => conv(d));
+		// The Q10–Q95 table is the one the exports carry (engine views/fdc.ts, issue #45).
+		const table = fdcPercentileTable(Object.fromEntries(present.map(({ i }, k) => [FDC_RECORDS[i]!, converted[k]!])));
+		const runDays = table.runDays;
+		const obsDays = table.observedDays;
 		// Only a choice when the gauge misses some of the run's days.
-		const partial = !!obs && obsDays > 0 && obsDays < runDays;
+		const partial = table.onObservedDays !== null;
 		const onObserved = partial && fdcDays === 'observed';
-		const values = present.map(({ d, i }) => (onObserved && i !== 2 ? onDaysOf(conv(d), obs!) : conv(d)));
+		const values = present.map(({ i }, k) => (onObserved && i !== 2 ? onDaysOf(converted[k]!, obs!) : converted[k]!));
 		const xy = flowDurationCurves(values);
 		return {
 			xy,
@@ -121,7 +124,7 @@
 			obsDays,
 			runDays,
 			series: present.map(({ d, i }) => ({ label: labels[i]!, startDate: d!.startDate, values: [], color: colors[i], width: 1.5, style: i === 2 ? ('dashed' as const) : undefined })),
-			q: present.map(({ i }, k) => ({ label: labels[i]!, ...percentileFlows(values[k]!) }))
+			q: (onObserved ? table.onObservedDays! : table.wholeRun).map((r) => ({ ...r, label: labels[FDC_RECORDS.indexOf(r.record)]! }))
 		};
 	});
 	const ewrSeries = $derived(ewrChartSeries(catchment, conv));
@@ -329,10 +332,10 @@
 						{#each fdc.q as q (q.label)}
 							<tr>
 								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
-								<td class="num">{fmtNum(q.q10, 3)}</td>
-								<td class="num">{fmtNum(q.q50, 3)}</td>
-								<td class="num">{fmtNum(q.q90, 3)}</td>
-								<td class="num">{fmtNum(q.q95, 3)}</td>
+								<td class="num">{fmtQty(q.q10, 3)}</td>
+								<td class="num">{fmtQty(q.q50, 3)}</td>
+								<td class="num">{fmtQty(q.q90, 3)}</td>
+								<td class="num">{fmtQty(q.q95, 3)}</td>
 							</tr>
 						{/each}
 					</tbody>

@@ -3,7 +3,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from './results';
 	import { runSentence } from './runSentence';
@@ -101,14 +101,14 @@
 <dl class="stats">
 	<div class="stat">
 		<dt>Mean natural flow <HelpTip key="catchment.meanNaturalFlowM3Day" /></dt>
-		<dd>{fmtNum(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
-		<dd class="sub">{fmtNum(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
+		<dd>{fmtQty(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
+		<dd class="sub">{fmtQty(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
 	</div>
 	<div class="stat">
 		<dt>Mean simulated outflow</dt>
-		<dd>{fmtNum(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
+		<dd>{fmtQty(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
 		<dd class="sub">
-			{fmtNum(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
+			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
 				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
 		</dd>
 	</div>
@@ -228,8 +228,8 @@
 		</table>
 	</div>
 	<p class="muted small after">
-		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
-		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
+		Annual totals: demand {fmtQty(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtQty(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
+		deficit {fmtQty(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtQty((totals.deficit * 1000) / 86_400, 1)} l/s).
 	</p>
 {/if}
 

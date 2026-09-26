@@ -2,7 +2,7 @@
 // the summary's sheet routing.
 import { describe, expect, it } from 'vitest';
 import { parseCsv } from './csv';
-import { numberFormat, unitOf } from './formats';
+import { cellFormat, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary } from './summary';
 
@@ -74,6 +74,19 @@ describe('number formats', () => {
 		expect(numberFormat('')).toBeUndefined();
 		expect(numberFormat(null)).toBeUndefined();
 		expect(numberFormat('furlongs')).toBeUndefined();
+	});
+
+	it('gives a small non-zero flow or volume the decimals for two significant figures (issue #45)', () => {
+		expect(cellFormat('m³/s', 0.00042)).toBe('#,##0.00000');
+		expect(cellFormat('Mm³', -0.0042)).toBe('#,##0.0000');
+		expect(cellFormat('l/s', 0.009)).toBe('#,##0.0000');
+		// Unchanged: zero, from 0.01 up, and every other unit.
+		expect(cellFormat('m³/s', 0)).toBe('#,##0.000');
+		expect(cellFormat('m³/s', 0.01)).toBe('#,##0.000');
+		expect(cellFormat('m³/s', 1234.5)).toBe('#,##0.000');
+		expect(cellFormat('m³/day', 0.00042)).toBe('#,##0.00');
+		expect(cellFormat(null, 0.00042)).toBeUndefined();
+		expect(cellFormat('m³/s', 1e-30)).toBe(`#,##0.${'0'.repeat(12)}`);
 	});
 });
 

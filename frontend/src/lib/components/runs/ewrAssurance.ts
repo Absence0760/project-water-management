@@ -1,7 +1,7 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
 import type { EwrAssuranceMonth, EwrAssuranceSite, EwrHighFlowReport, RunSummary } from '@water-management/engine';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import { monthName } from '$lib/format/months';
 
 /** The site the headline reports: the outlet when it has a table, else the first site. */
@@ -20,7 +20,7 @@ export function fmtFlow(v: number | null | undefined): string {
 }
 
 /** m³ → Mm³ text. */
-export const fmtMm3 = (m3: number) => fmtNum(m3 / 1e6, 3);
+export const fmtMm3 = (m3: number) => fmtQty(m3 / 1e6, 3);
 
 /** "Met in 18 of 24 months (75.0 %)", or why not assessed. */
 export function verdict(s: EwrAssuranceSite): string {

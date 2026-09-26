@@ -31,6 +31,7 @@
 import type { CalibrationFlowKind } from '../project';
 import { isFlow } from './season';
 import { waterYearLabel as wyLabel, waterYearOf } from '../calendar';
+import { amount } from './format';
 
 const SEC_PER_DAY = 86_400;
 const M3_PER_MM3 = 1e6;
@@ -175,7 +176,7 @@ export function naturalisedWarning(c: NaturalisedCheck | null): string | null {
 		`Natural flow below observed + abstraction in ${failed.length} of ${c.judgedYears} water years (${list}): ` +
 		`the ${RECORD[c.flowKind]} record plus the modelled net abstraction upstream implies more natural flow than the model simulates, ` +
 		`beyond the ${Math.round(c.tolerance * 100)} % allowed for gauging error (worst ${wyLabel(worst.waterYear)}: ` +
-		`${worst.naturalisedMm3.toFixed(2)} Mm³ implied against ${worst.naturalMm3.toFixed(2)} Mm³ simulated). ` +
+		`${amount(worst.naturalisedMm3, 2)} Mm³ implied against ${amount(worst.naturalMm3, 2)} Mm³ simulated). ` +
 		'Natural flow may be simulated too low (rain, parameters), abstraction over-estimated, or the record wrong in those years. ' +
 		'The Plausibility checks panel splits the abstraction into use, dams and land cover.'
 	);

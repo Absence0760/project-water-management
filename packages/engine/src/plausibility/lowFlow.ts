@@ -20,6 +20,7 @@
 import type { CalibrationFlowKind } from '../project';
 import type { RunoffModelId } from '../runoff/types';
 import { isFlow, type DrySeason } from './season';
+import { flowText } from './format';
 
 const SEC_PER_DAY = 86_400;
 
@@ -147,7 +148,6 @@ export function lowFlowCurves(x: LowFlowInput): LowFlowCurves | null {
 }
 
 const RECORD: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'observed gauge', flow_logger_m3s: 'logger' };
-const f3 = (v: number) => (v >= 1 ? v.toFixed(2) : v.toFixed(3));
 
 /** The run warning when the simulated dry-season Q90 is outside a factor LOW_FLOW_WARN_FACTOR of the observed; null otherwise. */
 export function lowFlowWarning(lf: LowFlowCurves | null): string | null {
@@ -155,7 +155,7 @@ export function lowFlowWarning(lf: LowFlowCurves | null): string | null {
 	if (!c || c.withinFactor) return null;
 	const high = c.ratio > 1;
 	return (
-		`Dry-season low flows: on the ${c.days} dry-season days of the ${RECORD[c.flowKind]} record, the simulated outflow's Q90 is ${f3(c.simulatedQ90M3s)} m³/s against ${f3(c.observedQ90M3s)} m³/s observed ` +
+		`Dry-season low flows: on the ${c.days} dry-season days of the ${RECORD[c.flowKind]} record, the simulated outflow's Q90 is ${flowText(c.simulatedQ90M3s)} m³/s against ${flowText(c.observedQ90M3s)} m³/s observed ` +
 		`(${high ? `${c.ratio.toFixed(1)}× higher` : `${(1 / c.ratio).toFixed(1)}× lower`}), more than the factor of ${LOW_FLOW_WARN_FACTOR} that low-flow gauging error can explain. ` +
 		(high
 			? 'The model keeps too much water in the river in the dry season: check the base flow (GR4J X3), dam releases and the abstraction. '

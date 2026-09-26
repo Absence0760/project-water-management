@@ -25,6 +25,35 @@ export function fmtNum(n: number | null | undefined, digits = 0, trim = false): 
 	return out === '-0' ? '0' : out;
 }
 
+const sigCache = new Map<number, Intl.NumberFormat>();
+
+/** At most `sig` significant figures, trailing zeros dropped. */
+function sigFormatter(sig: number): Intl.NumberFormat {
+	let f = sigCache.get(sig);
+	if (!f) {
+		f = new Intl.NumberFormat('en-US', { maximumSignificantDigits: sig, useGrouping: true });
+		sigCache.set(sig, f);
+	}
+	return f;
+}
+
+/**
+ * A flow or volume: fmtNum's fixed decimals, except that a non-zero value
+ * below 1 which those decimals would show with fewer than `sig` significant
+ * figures gets `sig` significant figures instead, so a small flow never reads
+ * as 0.000 (issue #45): fmtQty(0.00042, 3) → "0.00042", fmtQty(0.0123, 3) →
+ * "0.012" (unchanged), fmtQty(0.4, 0) → "0.4". Zero stays "0", 1 and above
+ * are exactly fmtNum. Below 1e-6 (float noise, not a flow) it is written in
+ * exponent form ("2.3e-9"). Null/NaN → "–".
+ */
+export function fmtQty(n: number | null | undefined, digits = 0, trim = false, sig = 2): string {
+	if (n == null || !Number.isFinite(n)) return '–';
+	const a = Math.abs(n);
+	if (a === 0 || a >= 1 || a >= 10 ** (sig - 1 - digits)) return fmtNum(n, digits, trim);
+	if (a < 1e-6) return n.toExponential(sig - 1).replace(/\.?0+e/, 'e').replace('e+', 'e');
+	return sigFormatter(sig).format(n);
+}
+
 /**
  * One day's reading (a chart's hover value, a daily table's cell) with the
  * decimals its size needs: 1234 → "1,234", 12.345 → "12.35", 0.0123 → "0.012",

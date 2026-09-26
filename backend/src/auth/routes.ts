@@ -6,6 +6,7 @@ import { trySendMail } from '../mail/transport.js';
 import { markVerified, verificationMail } from './email-routes.js';
 import { buildSubjectExport, ExportThrottled } from './export.js';
 import { attachment } from '../export/csv.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { clearSession, issueSession } from './session.js';
@@ -178,7 +179,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		}
 		return c.body(JSON.stringify(doc, null, 2), 200, {
 			'Content-Type': 'application/json; charset=utf-8',
-			'Content-Disposition': attachment(`my-data_${doc.exportedAt.slice(0, 10)}.json`),
+			'Content-Disposition': attachment(`my-data_${localDate(new Date(doc.exportedAt), DEFAULT_TIME_ZONE)}.json`),
 			'Cache-Control': 'no-store'
 		});
 	})

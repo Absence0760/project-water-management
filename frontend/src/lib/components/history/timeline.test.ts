@@ -96,6 +96,9 @@ describe('what an item says', () => {
 		);
 		expect(eventLine(ev('run.deleted', { runIds: ['a', 'b'], reason: 'trimmed' }))).toBe('Removed 2 old runs to stay within the storage cap');
 		expect(eventLine(ev('project.changed', { fields: ['name'], from: 'Old', to: 'New' }))).toBe('Renamed the project from “Old” to “New”');
+		expect(eventLine(ev('project.changed', { fields: ['time_zone'], timeZone: { from: 'Africa/Johannesburg', to: 'Africa/Windhoek' } }))).toBe(
+			'Set the time zone to Africa/Windhoek'
+		);
 		expect(eventLine(ev('restore', { target: 'series', kind: 'flow_observed_m3s', name: 'weir' }))).toBe('Restored earlier values of the Flow — observed gauge “weir” series');
 		expect(eventLine(ev('something.new'))).toBe('something.new');
 	});

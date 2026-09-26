@@ -9,7 +9,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { BALANCE_COLUMNS, balanceTableRows, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 	let {
@@ -133,7 +133,7 @@
 							{#each BALANCE_COLUMNS as col (col.key)}
 								{@const x = col.value(r)}
 								<td class="num" class:off={col.key === 'residual' && !residualIsNoise(r)}>
-									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtNum(x, 3, true)}
+									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtQty(x, 3, true)}
 								</td>
 							{/each}
 							{#if hasStores}<td class="num">{fmtValue(r.runoff?.residualMm ?? null)}</td>{/if}

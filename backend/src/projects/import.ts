@@ -82,9 +82,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 	// the SELECT policy before the AFTER trigger has made the importer owner.
 	await db.query(
-		`INSERT INTO project (id, name, description, settings, created_by, team_id)
-		 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
-		[id, opts.name ?? data.name, data.description, JSON.stringify(importedSettings(data.settings, ids)), opts.teamId ?? null]
+		`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
+		 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
+		[id, opts.name ?? data.name, data.description, JSON.stringify(importedSettings(data.settings, ids)), opts.teamId ?? null, data.timeZone]
 	);
 	await saveModel(db, id, model);
 	for (const s of data.series) {
