@@ -99,6 +99,13 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ runId: 'r1', reason: 'why' });
 	});
 
+	it('GETs a reproduction of a run', async () => {
+		const body = { status: 'identical', identical: true, engineVersionThen: '1.0.0', engineVersionNow: '1.0.0', differences: [], truncated: 0 };
+		const get = mockFetch(200, body);
+		await expect(createApi('', get).runs.reproduce('p1', 'r/1')).resolves.toEqual(body);
+		expect((get.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/runs/r%2F1/reproduce');
+	});
+
 	it('reads the publication, POSTs a publish and PATCHes the notice by publication id', async () => {
 		const body = { current: null, history: [] };
 		const get = mockFetch(200, body);

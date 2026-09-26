@@ -18,7 +18,10 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // `pinned` keeps it past the storage cap (015_run_pinned); `published` says
 // the project's current publication holds it (022_publication). `scenarioId` /
 // `scenarioName`: the scenario that made the run (024_scenarios; the name the
-// run recorded once the scenario is gone); `citedBy`: what keeps it for good.
+// run recorded once the scenario is gone); `citedBy`: what keeps it for good;
+// `reproducible`: its input series are stored (021_series_blob), so
+// GET …/reproduce can re-run it. The same test loadRunInput makes: a run
+// with input series but no stored references is from before 021.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
@@ -27,7 +30,9 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned,
 	EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id AND p.superseded_at IS NULL) AS published,
 	r.scenario_id AS "scenarioId", COALESCE(sc.name, r.inputs->'scenario'->>'name') AS "scenarioName",
-	${CITED_BY_SQL} AS "citedBy"`;
+	${CITED_BY_SQL} AS "citedBy",
+	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
+		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 /** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */

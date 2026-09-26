@@ -290,7 +290,30 @@ export interface RunMeta {
 	 * that you can see, oldest first. Absent from an older API.
 	 */
 	citedBy?: RunCitation[];
+	/**
+	 * Its input series are stored (021_series_blob), so GET …/reproduce can
+	 * re-run it; false for a run from before stored inputs. Absent from an older API.
+	 */
+	reproducible?: boolean;
 }
+
+/** GET …/runs/:runId/reproduce (WP-3.1): the run re-run from its stored inputs with today's engine. */
+export interface Reproduction {
+	/** identical; differs (with the list); not_reproducible (from before stored inputs); inconsistent (a stored input fails its check); failed (today's engine refuses the input). */
+	status: 'identical' | 'differs' | 'not_reproducible' | 'inconsistent' | 'failed';
+	identical: boolean;
+	engineVersionThen: string;
+	engineVersionNow: string;
+	differences: ReproductionDifference[];
+	/** Differences beyond the first 50, not listed. */
+	truncated: number;
+	message?: string;
+}
+
+export type ReproductionDifference =
+	| { kind: 'summary'; path: string }
+	| { kind: 'series'; key: string; nodeId: string | null; label: string; days: number; firstDate: string; maxAbsDiff: number | null }
+	| { kind: 'series_missing' | 'series_extra'; key: string; nodeId: string | null; label: string };
 
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the

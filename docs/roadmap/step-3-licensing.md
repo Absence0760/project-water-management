@@ -214,7 +214,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.1 Reproducible inputs and cited runs
 
-- **Status:** backend and engine core built (`021_series_blob.sql`,
+- **Status (2026-09-26): built** (`021_series_blob.sql`,
   [data-model.md § Stored run inputs](../data-model.md#stored-run-inputs-021_series_blobsql)),
   differently from the plan below in places:
   - engine `manifest.ts`: `canonicalJson` (RFC 8785, the Appendix B number
@@ -237,10 +237,17 @@ must build WP-2.15 Phase B.
     so trim and the `DELETE` route (`409 this run is cited by scenario "…",
     so it is kept`) keep it. Also built with WP-3.2: the unpin `409`, cited
     runs off the pin ceiling, and `RunMeta.citedBy`.
-  - Not built yet (tracked in [followups.md](../followups.md)): the
-    `…/reproduce` endpoint, `RunMeta.reproducible`, the Runs tab badge, lock
-    and "Check reproduction" action, and the publication-trim skip for cited
-    runs (nothing to act on until WP-2.3 lands).
+  - Built since (2026-09-26): `GET …/runs/:runId/reproduce`
+    (`backend/src/runs/reproduce.ts`: `identical`, `differs` with the list,
+    `not_reproducible`, `inconsistent`, `failed`), `RunMeta.reproducible`, and
+    the Runs tab's **Check reproduction** action (`runs/ReproducePanel.svelte`)
+    with an **Inputs not stored** tag on runs from before 021. The tag marks
+    the exception rather than badging nearly every run "Reproducible", and the
+    "Cited" lock is the existing **Published** / **Scenario base** tags with
+    no ✕ (both UI choices pending the hydrologist). The publication-trim skip
+    for cited runs landed with 024.
+  - Left for the WPs that add them: the evidence-pack and assessment clauses
+    of `model_run_cited` (WP-3.13, WP-3.14).
 - **Goal.** A run can be recomputed exactly years later, and a run that
   evidence cites can never disappear.
 - **What Steps 1–2 already give, and the gap that remains:**

@@ -38,6 +38,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
+	// "Check reproduction" (WP-3.1): its own chunk, like the evidence panel.
+	const loadReproducePanel = () => import('./ReproducePanel.svelte');
 	// Publishing a run and the WP-2.3 notice editor: their own chunk, like the evidence panel.
 	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
@@ -420,7 +422,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
 										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
@@ -428,6 +430,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
 										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
+										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
@@ -610,6 +613,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 								<Lazy load={loadEvidencePanel}>
 									{#snippet children(EvidencePanel)}
 										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+									{/snippet}
+								</Lazy>
+							{/key}
+							{#key shownRunId}
+								<Lazy load={loadReproducePanel}>
+									{#snippet children(ReproducePanel)}
+										<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
 									{/snippet}
 								</Lazy>
 							{/key}
