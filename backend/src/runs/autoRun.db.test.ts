@@ -2,7 +2,8 @@
 // runs/autoRun.ts, jobs/handlers/rerun.ts, runs/execute.ts trimRuns,
 // publish/autoPublish.ts): the setting gate, the debounce and its maximum
 // wait, the dedupe, who may queue one, the auto run itself, the storage cap
-// that keeps only the newest unkept auto run, and the opt-in auto-publish.
+// that keeps only the newest unkept auto run, and the opt-in auto-publish;
+// and the scheduled forecast run a forecast feed's new days queue (WP-2.12).
 //
 // Runs under a skewed machine zone (CLAUDE.md rule 7): the debounce is
 // timestamptz arithmetic and the label's day is a calendar day, so neither
@@ -13,7 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
-import { utcToday } from '../feeds/fetch.js';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { fetchWindow, utcToday } from '../feeds/fetch.js';
 import { ingestResult } from '../feeds/ingest.js';
 import { feedForJob } from '../feeds/store.js';
 import { runTick } from '../jobs/runner.js';
@@ -404,5 +406,129 @@ describe('auto-publish (settings.autoRun.publish)', () => {
 		const [warned] = await asOwner(`SELECT summary->'warnings' AS w FROM model_run WHERE id = $1`, [autos.at(-1)!.id]);
 		expect((warned.w as string[]).length).toBeGreaterThan(0);
 		expect((await published(pid))!.run_id).toBe(first);
+	});
+});
+
+describe('scheduled forecast runs (a forecast feed’s new days, WP-2.12)', () => {
+	const day = (n: number) => fromEpochDay(toEpochDay(utcToday()) + n);
+	/** A whole 16-day CHIRPS-GEFS issue from `issued` days after today (≤ 0: its 16th day can't pass today + 15), every day `mm`. */
+	const issue = (issued: number, mm: number) => ({ ok: true, startDate: day(issued), values: new Array(16).fill(mm), meta: { days: 16, issued: day(issued) } });
+
+	/** A runnable project whose observed rain reaches `observedTo` days after today, with a CHIRPS-GEFS feed. */
+	async function gefsProject(name: string, autoRun?: Record<string, unknown>, observedTo = -1) {
+		const u = await signUp(name);
+		const pid = await runnable(u, autoRun);
+		const rain = Array.from({ length: 400 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+		expect((await u.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: day(observedTo - 399), values: rain })).status).toBe(200);
+		const feedId = (await u.call('POST', `/projects/${pid}/feeds`, { source: 'chirps_gefs', config: { cells: [{ ...FIXTURE_CELL(), weight: 1 }] } })).body.feed.id as string;
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		// Just scheduled, so a tick doesn't fetch the fixture issue itself: the test ingests the issues it wants.
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() WHERE id = $1`, [feedId]);
+		// As the feed_ingest handler does: read the feed, then ingest, in one transaction as the feed's acting user.
+		const ingest = (raw: unknown) =>
+			withUser(u.id, async (db) => {
+				const feed = (await feedForJob(db, pid, feedId))!;
+				return ingestResult(db, feed, raw, fetchWindow('chirps_gefs', feed.config, feed.lastDataDate, utcToday()));
+			});
+		return { u, pid, ingest };
+	}
+	const forecastJobs = async (pid: string) =>
+		(await asOwner(`SELECT id, status, run_after, payload, acting_user_id FROM job WHERE project_id = $1 AND dedupe_key = 'forecast' ORDER BY created_at`, [pid])) as {
+			id: string;
+			status: string;
+			run_after: Date;
+			payload: Record<string, unknown>;
+			acting_user_id: string;
+		}[];
+	const makeForecastDue = (pid: string) => asOwner(`UPDATE job SET run_after = now() - interval '1 second' WHERE project_id = $1 AND dedupe_key = 'forecast' AND status = 'queued'`, [pid]);
+	const forecastRuns = async (pid: string) => (await runs(pid)).filter((r) => r.trigger === 'forecast');
+	const cleanUp = async (pid: string) => {
+		await asOwner('DELETE FROM data_feed WHERE project_id = $1', [pid]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	};
+
+	it('queues nothing while automatic runs are off; on, one forecast run per project that runs as a forecast run', async () => {
+		const off = await gefsProject('ForecastOff');
+		await off.ingest(issue(0, 4));
+		expect(await forecastJobs(off.pid)).toHaveLength(0);
+		await cleanUp(off.pid);
+
+		// Positive control: automatic runs on.
+		const { u, pid, ingest } = await gefsProject('ForecastOn', { enabled: true, debounceMinutes: 30 });
+		const before = Date.now();
+		await ingest(issue(-1, 4));
+		const [job] = await forecastJobs(pid);
+		expect(job).toMatchObject({ status: 'queued', payload: { trigger: 'forecast', cause: 'feed' }, acting_user_id: u.id });
+		// The re-run's debounce.
+		expect(job!.run_after.getTime()).toBeGreaterThanOrEqual(before + 29 * MIN);
+		// A newer issue before it runs joins it: still one pending forecast run. The auto re-run is its own job.
+		expect((await ingest(issue(0, 6))).merged).toBe(16);
+		expect(await forecastJobs(pid)).toHaveLength(1);
+		expect(await rerunJobs(pid)).toHaveLength(2);
+
+		await makeForecastDue(pid);
+		await runTick();
+		expect((await forecastJobs(pid))[0]!.status).toBe('done');
+		// Observed rain to yesterday, so the forecast starts today.
+		expect(await forecastRuns(pid)).toEqual([expect.objectContaining({ label: `Forecast · from ${day(0)}`, trigger: 'forecast' })]);
+		const [run] = await asOwner(`SELECT summary->'forecast'->>'from' AS "from" FROM model_run WHERE project_id = $1 AND trigger = 'forecast'`, [pid]);
+		expect(run.from).toBe(day(0));
+		await cleanUp(pid);
+	});
+
+	it('keeps one forecast run: the next issue’s run replaces the last, and never pushes out a manual run', async () => {
+		const { u, pid, ingest } = await gefsProject('ForecastPile', { enabled: true, debounceMinutes: 0 });
+		expect((await u.call('POST', `/projects/${pid}/runs`, { label: 'Manual' })).status).toBe(201);
+		for (const n of [-2, -1, 0]) {
+			expect(await ingest(issue(n, n + 3)), `issue ${n}`).toMatchObject({ merged: 16 });
+			await makeForecastDue(pid);
+			await runTick();
+		}
+		expect((await forecastJobs(pid)).map((j) => j.status)).toEqual(['done', 'done', 'done']);
+		const kept = await forecastRuns(pid);
+		expect(kept).toHaveLength(1);
+		const [newest] = await asOwner(`SELECT id FROM model_run WHERE project_id = $1 AND trigger = 'forecast' ORDER BY created_at DESC LIMIT 1`, [pid]);
+		expect(kept[0]!.id).toBe(newest.id);
+		expect((await runs(pid)).filter((r) => r.trigger === 'manual').map((r) => r.label)).toEqual(['Manual']);
+		await cleanUp(pid);
+	});
+
+	it('does nothing when automatic runs were turned off since, or when no forecast day is left after the observed rain', async () => {
+		const later = await gefsProject('ForecastLater', { enabled: true });
+		await later.ingest(issue(0, 4));
+		await later.u.call('PATCH', `/projects/${later.pid}`, { settings: { autoRun: { enabled: false } } });
+		await makeForecastDue(later.pid);
+		await runTick();
+		expect((await forecastJobs(later.pid))[0]!.status).toBe('done');
+		expect(await forecastRuns(later.pid)).toHaveLength(0);
+		await cleanUp(later.pid);
+
+		// Observed rain reaches past the whole issue: nothing to forecast, and the job is done, not dead.
+		const overtaken = await gefsProject('ForecastOvertaken', { enabled: true }, 20);
+		await overtaken.ingest(issue(0, 4));
+		await makeForecastDue(overtaken.pid);
+		await runTick();
+		expect((await forecastJobs(overtaken.pid))[0]!.status).toBe('done');
+		expect(await forecastRuns(overtaken.pid)).toHaveLength(0);
+		await cleanUp(overtaken.pid);
+	});
+
+	it('only a forecast feed queues one: observed data, a person’s forecast upload and an API key’s push do not', async () => {
+		const u = await signUp('ForecastOnlyFeed');
+		const pid = await runnable(u, { enabled: true });
+		const change = { seriesId: crypto.randomUUID(), kind: 'rain_forecast_mm', name: '', daysChanged: 3 };
+		for (const c of [
+			{ ...change, kind: 'rain_chirps_mm', via: 'feed' as const },
+			{ ...change, via: 'user' as const },
+			{ ...change, via: 'api_key' as const },
+			{ ...change, via: 'feed' as const, daysChanged: 0 }
+		]) {
+			await withUser(u.id, (db) => onSeriesDaysChanged(db, pid, c));
+			expect(await forecastJobs(pid), JSON.stringify(c)).toHaveLength(0);
+		}
+		// Positive control.
+		await withUser(u.id, (db) => onSeriesDaysChanged(db, pid, { ...change, via: 'feed' }));
+		expect(await forecastJobs(pid)).toHaveLength(1);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 });

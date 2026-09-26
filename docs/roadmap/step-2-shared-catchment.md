@@ -1613,10 +1613,13 @@ in dev.
 >   projection: the forecast then always comes from the same model snapshot
 >   as the figures beside it. The farm view reads `farm.forecast` (not a
 >   top-level `forecast`), with the day the forecast was made.
-> - **Not built here:** scheduled forecast runs. WP-2.11 owns re-run
->   enqueueing; its re-run job makes ordinary runs. A nightly forecast run
->   after each GEFS ingest is the natural hand-off (`executeRun(…, 'forecast')`
->   then `trimRuns`, whose per-trigger cap keeps the newest unkept forecast run).
+> - **Scheduled forecast runs** (the WP-2.11 hand-off, built 2026-09-26): a
+>   CHIRPS-GEFS ingest that changes days queues a forecast run (`rerun` job,
+>   `trigger: 'forecast'`, dedupe key `forecast`) when the project has
+>   automatic runs on, after the re-run's debounce; it runs
+>   `executeRun(…, 'forecast')` then `trimRuns`, whose per-trigger cap keeps
+>   the newest unkept forecast run. Never auto-published
+>   ([architecture.md § Background work](../architecture.md)).
 
 **Goal.** Show the next 7–14 days distinctly, with early warnings. Forecast
 rain must never change the historical figures farmers and regulators rely on.

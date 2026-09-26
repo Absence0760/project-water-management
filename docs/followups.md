@@ -1265,12 +1265,17 @@ role and not before it.
       nothing. An engine behaviour change, so the engine owner's call and an
       `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
       or a user asking why a forecast run's first forecast day steps.
-- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
-      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
-      job lands, a GEFS ingest that changes days should also queue a forecast
-      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
-      keeps the newest unkept forecast run), deduped per project like the
-      re-run. Trigger: now (WP-2.11 is merged into this branch).
+- [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
+      [architecture.md § Background work](./architecture.md)). A forecast
+      feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with
+      `trigger: 'forecast'` (`series/newData.ts` `queueForecastFor` →
+      `runs/autoRun.ts` `enqueueForecastRun`, dedupe key `forecast`, the
+      re-run's debounce), only while `settings.autoRun.enabled` (the same
+      opt-in as the re-run: a scheduled forecast run is an automatic run).
+      The job runs `executeRun(db, id, forecastRunLabel, 'forecast')` then
+      `trimRuns` (one unkept forecast run kept), is never auto-published, and
+      does nothing when the observed rain has overtaken the issue. Tests:
+      `runs/autoRun.db.test.ts` § scheduled forecast runs.
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").

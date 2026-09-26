@@ -815,8 +815,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   periods. A forecast run is reproduced by `runForecastChecked(loadRunInput(run))`;
   it can't be a scenario's base, nominated as evidence or signed off (each
   `409`: all three are judged on the record), and its uncertainty bands run on
-  its input without the tail. The worker doesn't schedule forecast runs:
-  they are made on request (WP-2.11's re-run job makes ordinary runs).
+  its input without the tail. Made on request, and, when the project has
+  automatic runs on (`settings.autoRun.enabled`), after each forecast feed
+  (CHIRPS-GEFS) ingest that changes days: a `rerun` job with `trigger:
+  'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
+  `Forecast · from <day>`, never published automatically
+  ([architecture.md § Background work](./architecture.md)).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
   `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
