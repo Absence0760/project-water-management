@@ -334,7 +334,13 @@ arbiter:
   double-mass check will attribute to the catchment. Replace the whole
   column with one version and refit the factors. The app's feed reads v3's
   daily `sat` product, which starts in 1998 (CHC daily readme); earlier
-  days need v3's `rnl` daily product.
+  days need v3's `rnl` daily product, for the whole record, since the two
+  disaggregate the same pentads with different daily timing. The app
+  enforces this (issue #40 part c): each series records its product and
+  version, the feed never writes into a series of another one without an
+  owner confirming a whole-series replacement (a full backfill, `rnl` for a
+  record before 1998), and the fit record and run comparison flag the
+  change (architecture.md § Data feeds).
 
 ### 5. Carry the uncertainty into calibration
 
