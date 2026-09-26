@@ -21,7 +21,13 @@ const PUBLIC = new Set([
 	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
 	// render token is the credential, and the session it buys reads one
 	// project and run only (reports/reports.db.test.ts).
-	'POST /auth/render-session'
+	'POST /auth/render-session',
+	// Read-only share links (WP-2.3 phase 2): the link's token is the
+	// credential, and it reads only the current publication's catchment view
+	// and allowlisted catchment series, through SECURITY DEFINER functions
+	// (share/share.db.test.ts).
+	'POST /share/view',
+	'POST /share/series'
 ]);
 
 const app = createApp();
@@ -93,6 +99,16 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
+	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
+		for (const r of ['GET /projects/:id/share-links', 'POST /projects/:id/share-links', 'DELETE /projects/:id/share-links/:linkId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('POST /share/view');
+		expect(routes).toContain('POST /share/series');
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');
@@ -113,7 +129,9 @@ describe('route auth inventory', () => {
 		'POST /auth/reset-password',
 		'POST /auth/verify-email',
 		'POST /auth/invite-info',
-		'POST /auth/render-session'
+		'POST /auth/render-session',
+		'POST /share/view',
+		'POST /share/series'
 	])('%s answers anonymous requests (400 on an empty body, not 401)', async (route) => {
 		const path = route.split(' ')[1]!;
 		const res = await app.request(path, {

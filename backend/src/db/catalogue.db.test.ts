@@ -28,7 +28,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'superseded_at',
 		'updated_at',
 		'updated_by'
-	]
+	],
+	// A share link is withdrawn, never edited: who revoked it and when (024_share_links.sql).
+	share_link: ['revoked_at', 'revoked_by']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -47,9 +49,11 @@ const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
- * can't be cherry-picked (014_run_uncertainty.sql).
+ * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
+ * not deleted: the row is the record of who made and withdrew it until the
+ * audit log (WP-2.4) has events for both (024_share_links.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * Empty since run_series gained its publication-scoped farmer policy

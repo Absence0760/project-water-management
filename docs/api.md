@@ -826,6 +826,53 @@ received (they come as their own block with WP-2.12).
 - Nothing here is audited yet beyond the `updatedAt` / `updatedBy` stamp:
   the audit log is WP-2.4.
 
+## Share
+
+Read-only links to a project's **current** publication for people outside
+the project (roadmap WP-2.3 phase 2; `024_share_links.sql`,
+[security.md § Share links](./security.md#share-links)). An owner makes a
+link; whoever holds it opens `/share#t=<token>` signed out and sees the
+catchment-level result: the project name, who published it and when, the
+WUA's notice and the EWR days-not-met counts. Never the modeller's note, and
+never a farm's row, name or id.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/share-links` | – | `{ links: ShareLink[] }`, newest first, revoked and expired ones included | owner |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole) }` | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>`: the **only** time the token is sent; it isn't stored, so it can't be shown again | owner |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too; another project's link `404`). A link is never deleted | owner |
+| POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
+| POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
+
+- `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt }`
+  (`createdBy` / `revokedBy` are display names, `null` once that account is
+  gone). `lastUsedAt` moves at most once an hour, on a `/share/view`.
+- `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn } }`.
+  `catchmentView = { runStart, dataUntil, runDays, season, last30, farmCount, sites }`,
+  the publication's [`catchmentView`](#publication) cut to an allowlist
+  (no `engineVersion`, `runoffModel` or `calibration`), and the outlet's
+  `name` is `null`: the outflow node may be a farm. Gauge names stay
+  (public infrastructure).
+- `ShareSeries = { key, label, unit, monthly: { startMonth: 'YYYY-MM', values }, recent: { startDate, values } }`:
+  one catchment series of the published run as monthly means (m³/day; a
+  month without a value is `null`) from the run's first month, and the last
+  365 days daily. `key` must be one of `natural_flow`, `simulated_outflow`,
+  `observed_flow`, `ewr`, `ewr_shortfall`. It answers only when the
+  catchment has at least `FARMER_K` = 5 farm **holders** (farms linked to one
+  user count once, an unlinked farm on its own; design
+  [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
+  in a smaller catchment the flows would reveal the farms' use.
+- Every dead link answers the same `404 { error: "not found" }`: unknown,
+  malformed, revoked or expired token, or nothing published. `/share/series`
+  answers the same `404` for a key off the allowlist (every farm key), a key
+  the run doesn't have (`observed_flow` without observed data), and below
+  `k` holders. A body without `token` (or `key`) is `400`.
+- No session and no rate limit of its own: the WAF's per-IP limit on `/api/*`
+  covers both reads, and a 256-bit token can't be guessed.
+- Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
+  `revokedBy`), not yet as audit events (WP-2.4,
+  [followups.md](./followups.md)).
+
 ## Farm
 
 The farmer's farm view (roadmap WP-2.6 API; design
