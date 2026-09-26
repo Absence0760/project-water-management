@@ -2186,7 +2186,8 @@ section), WP-2.7 (notes). D9, D10.
 
 **Results, first pass (2026-09-26), over what Step 2 has built.** WP-2.5
 (i18n), WP-2.12 (forecast) and WP-2.13 (alerts) are still being built, so
-their rows stay pending and the pass runs again when they land. Status: ✅
+their rows stay pending and the pass runs again when they land (all three
+have since landed; the second pass is [issue #51](https://github.com/Absence0760/project-water-management/issues/51)). Status: ✅
 proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 (a WP not built yet, or an item for the client, tracked in
 [followups.md § POPIA and the Step 2 release](../followups.md#popia-and-the-step-2-release-wp-216)).
@@ -2234,7 +2235,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Privacy notice, lawful basis, operator agreement, region, deleted-note bodies, backups | ⏳ | followups.md § POPIA and the Step 2 release (client / information officer) |
 | Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm: runbook 3, WP-2.13) |
 | `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (the unsubscribe: [security.md § Alerts](../security.md#alerts)) |
-| Personas (§9) and load checks | ⏳ | Now that WP-2.5, WP-2.12 and WP-2.13 are built (three personas judge those) |
+| Personas (§9) and load checks | ⏳ | Now that WP-2.5, WP-2.12 and WP-2.13 are built (three personas judge those); issue #51 |
 
 **Size.** S. **Depends on.** Everything above.
 
