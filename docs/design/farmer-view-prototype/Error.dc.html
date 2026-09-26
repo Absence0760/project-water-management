@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Could not load your farm</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}</style>
+</helmet>
+<div style="width: 360px; height: 760px; box-sizing: border-box; background: #f3f5f9; color: #161816; font-size: 16px; line-height: 1.45; display: flex; flex-direction: column">
+<header style="height: 56px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; background: #fdfdfe; border-bottom: 1px solid #d9dcd9">
+<span style="font-weight: 600; font-size: 17px">My farm</span>
+</header>
+<main style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div role="alert" style="padding: 16px; border-radius: 8px; background: #fdecea; border: 1px solid #e3a59f; color: #b42318; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+<h1 style="margin: 0; font-size: 19px; line-height: 1.3">We couldn't load your farm</h1>
+<p style="margin: 0; color: #161816">Check your signal and try again. Your figures are safe; nothing was changed.</p>
+<button type="button" onClick="{{retry}}" style="min-height: 44px; padding: 0 16px; border-radius: 4px; font: inherit; font-weight: 600; border: 1px solid #b42318; background: #fdfdfe; color: #b42318">Try again</button>
+<sc-if value="{{tried}}" hint-placeholder-val="{{false}}">
+<p role="status" style="margin: 0; color: #161816">Still no connection. If this keeps happening, contact Example WUA.</p>
+</sc-if>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":360,"height":760}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tried: false }; }
+  renderVals() {
+    return { tried: this.state.tried, retry: () => this.setState({ tried: true }) };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My farms</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600&amp;display=swap">
+<style>body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}a{color:#161816;text-decoration:none}</style>
+</helmet>
+<div style="width: 360px; height: 760px; box-sizing: border-box; background: #f3f5f9; color: #161816; font-size: 16px; line-height: 1.45; display: flex; flex-direction: column">
+<header style="height: 56px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; background: #fdfdfe; border-bottom: 1px solid #d9dcd9">
+<span style="font-weight: 600; font-size: 17px">My farms</span>
+</header>
+<main style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<h1 style="margin: 0; font-family: Outfit, system-ui, sans-serif; font-weight: 600; font-size: 26px; line-height: 1.2">Your farms</h1>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+<li>
+<a href="Main.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; min-height: 44px">
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><strong style="font-size: 17px">Vaalbank (example)</strong><span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #fdf3dc; color: #8a5a00">Advisory</span></span>
+<span style="font-size: 14px; color: #4d514e">Sandspruit (example catchment)</span>
+<span style="font-size: 15px">86 % of water needed · dam 24 %</span>
+</a>
+</li>
+<li>
+<a href="Main.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; min-height: 44px">
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><strong style="font-size: 17px">Rietspruit (example)</strong><span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #fdf3dc; color: #8a5a00">Advisory</span></span>
+<span style="font-size: 14px; color: #4d514e">Sandspruit (example catchment)</span>
+<span style="font-size: 15px">100 % of water needed · dam 26 %</span>
+</a>
+</li>
+<li>
+<a href="NoPublication.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; min-height: 44px">
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><strong style="font-size: 17px">Kareebos (example)</strong></span>
+<span style="font-size: 14px; color: #4d514e">Droëvlei (example catchment)</span>
+<span style="font-size: 15px; color: #4d514e">Not published yet</span>
+</a>
+</li>
+</ul>
+<p style="margin: 0; font-size: 14px; color: #666a66">Each farm's figures are seen by the people linked to it and the WUA's staff and modeller. Other farmers can't see them.</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":360,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -219,6 +219,13 @@ surfaces** (2.14–2.15), then **release hardening** (2.16).
 
 ### WP-2.1 Farmer role and farm-scoped RLS
 
+**Design input.** [design/farmer-view.md](../design/farmer-view.md) §10 (issue #14)
+settles what a farmer may see about other farms: D1 (b); D2 `k = 5` counted
+by holders and covering the even share; no `inflow_upstream` and no catchment
+flow series for farmers; a farm-count definer function (E6); and who may hold
+viewer on a project with farmers (FV-D5). Where it differs from this section,
+the design doc is the newer decision.
+
 **Goal.** A user linked to farm nodes sees their own farm's figures and
 nothing about any other farm. This holds even if an API route forgets to
 filter, because Postgres refuses the rows.
@@ -827,6 +834,12 @@ keys), api.md (`/auth/me`), run-locally.md (`check:i18n`).
 ---
 
 ### WP-2.6 Phone-first farmer view
+
+**Design.** [design/farmer-view.md](../design/farmer-view.md) (issue #14) is the
+spec: content model, curtailment wording, card order, band, states, offline
+rules, and a clickable prototype. Its §12 lists what it changes below (the
+model card's headline, "compared with last season" from the projection rather
+than `/history`, more routes); where they differ, the design doc wins.
 
 **Goal.** Open the link, see "your water" in 10 seconds on a 360 px phone:
 supplied, dam level %, likely restrictions, and what's coming. Plain words, in
