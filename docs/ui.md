@@ -672,28 +672,41 @@ note's link on the Summary, `notes.ts` `noteHref`).
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
-- **Colour farms by** (above the schematic, offered once the project has a
-  run and a farm): **Supply, latest run** (the default once there is a run,
-  since issue #17) or **Nothing** (the plain drawing). The choice is
-  component state, not kept in the URL. On, it
-  fetches the newest run's summary (`api.runs.get`, sharing the Runs tab's
-  `detailCache`; a quiet status line covers loading, and a failure offers
-  Retry without touching editing) and fills each farm by `fractionSupplied`
-  (`network/supplyColour.ts`): **≥ 95 %** (`SUPPLY_TARGET`, the farm table's
-  flag), **70–95 %** and **under 70 %** (`LOW_SUPPLY`, this view's own lower break, so "short" separates from "badly short"), in success / warning / danger
-  mixes that step in lightness as well as hue in both themes. A boundary
-  value falls in the higher band. A farm with no irrigation demand in the
-  run (the engine reports it as 100 %) is "no demand", dashed and unfilled;
-  a farm in the model but not in the run (added since, or a gauge then) is
-  "not in this run", hatched with a dashed outline. The share is the node's
-  second label line on its own while colouring is on (the area and dam
-  volume move to its tooltip, so a long line can't run into the next
-  column's label), and also on its tooltip and the drainage-tree text, so nothing is
-  colour-only. A second legend row lists the bands present and names the
-  run ("… in run “label”, ran 2 days ago", by the viewer's calendar); with
-  unsaved model edits it adds that the colours show the run, not the edits.
-  Gauges and other water users are not coloured. Selection, hover and drop
-  states are unchanged (they live on the halo and opacity).
+- **Colour farms by** (the Catchment map card's header, offered once there is
+  a farm; component state, not kept in the URL). Rules in
+  `network/farmColour.ts`; each mode gives every farm a band, the words for its
+  second label line, the legend entries and a caption sentence, so nothing is
+  colour-only (the words are also in the node's tooltip and the drainage-tree
+  text):
+  - **Supply, latest run** (the default once there is a run): the newest
+    run's summary (`api.runs.get`, sharing the Runs tab's `detailCache`; a
+    quiet status line covers loading, and a failure offers Retry) banded by
+    `fractionSupplied` (`network/supplyColour.ts`): **≥ 95 %**
+    (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
+    demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
+    (added since) hatched. Label: "82% supplied".
+  - **Dam level, end of latest run** (offered with a run and a dam): each
+    dam's storage on the run's last day, from its `dam_storage` series,
+    fetched only while this mode is picked, four at a time
+    (`overview/damLevels.ts` `loadDamLevels`, shared with the Summary's Dam
+    levels; "Loading dam levels (N of M)…", Retry on failure). Bands on the
+    same three colours: **60 % full or more** (`DAM_FULL_PCT`), **30–60 %**,
+    **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
+    the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and
+    minimum come from the run's own model. (Issue #55 would make this one
+    request.)
+  - **Irrigated area** (no run needed; follows unsaved edits at once): each
+    farm's planted hectares, in one hue over three steps (thirds of the
+    largest farm's area, since more area is neither good nor bad) and
+    "nothing planted" dashed. Label: "20.0 ha planted".
+
+  The caption names the run ("… in run “test”, ran today"; with unsaved
+  edits it adds that the colours show the run, not the edits). The **All
+  nodes** list's dots take the same bands (hollow for no dam / nothing
+  planted / no demand). Gauges and other water users are never coloured.
+  Selection, hover and drop states live on the halo and opacity, so they're
+  unchanged. The printable report colours by supply the same way
+  (`supplyColouring`).
 - **The node table and the one-node form** (the grid and the sheet above):
   every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored

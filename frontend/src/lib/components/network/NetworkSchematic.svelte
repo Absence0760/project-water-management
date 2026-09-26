@@ -12,7 +12,7 @@
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
 	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, type SchematicNode } from './schematic';
-	import { BAND_LABEL, bandsPresent, type SchematicSupply } from './supplyColour';
+	import type { Colouring } from './farmColour';
 
 	let {
 		nodes,
@@ -21,7 +21,7 @@
 		onselect,
 		editable = false,
 		onreparent,
-		supply = null,
+		colouring = null,
 		fill = false
 	}: {
 		nodes: NetworkNode[];
@@ -31,8 +31,8 @@
 		/** Allow dragging a node onto another to re-point "drains into". */
 		editable?: boolean;
 		onreparent?: (id: string, drainsInto: string) => void;
-		/** Colour farms by how much of their demand a run supplied (null = the plain drawing). */
-		supply?: SchematicSupply | null;
+		/** Colour farms by supply, dam level or irrigated area (farmColour.ts); null = the plain drawing. */
+		colouring?: Colouring | null;
 		/**
 		 * Fill the box it sits in (the Network's Map layout, issue #17): the
 		 * columns and rows spread out to the box's width and height (at most
@@ -48,8 +48,8 @@
 	let boxW = $state(0);
 	let boxH = $state(0);
 
-	const supplyOf = (id: string) => supply?.byNode.get(id);
-	const bands = $derived(supply ? bandsPresent(supply.byNode) : []);
+	const supplyOf = (id: string) => colouring?.byNode.get(id);
+	const legend = $derived(colouring?.legend ?? []);
 
 	const short = (s: string, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 	const name = (n: NetworkNode) => n.name || '(unnamed)';
@@ -171,8 +171,8 @@
 
 	const metaText = (ln: SchematicNode) => {
 		const s = supplyOf(ln.node.id);
-		// Coloured, a farm's second line is its supply alone ("82% supplied"): with the area and dam
-		// as well it ran into the next column's label. Both stay in the node's tooltip.
+		// Coloured, a farm's second line is what it's coloured by alone ("82% supplied", "64% full"):
+		// with the area and dam as well it ran into the next column's label. Both stay in its tooltip.
 		if (s) return s.text;
 		return `${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}`;
 	};
@@ -263,7 +263,7 @@
 					onpointerup={onUp}
 					onpointercancel={() => (drag = null)}
 				>
-					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text} in run “${supply?.runName}”` : ''}</title>
+					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
 					<circle class="halo" r="17" />
 					{#if n.kind === 'user'}
 						<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
@@ -295,14 +295,14 @@
 				<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow</li>
 				{#if nodes.some((n) => n.kind === 'user')}<li><svg width="16" height="16" viewBox="-11 -11 22 22"><path class="user" d="M0,-9 L9,0 L0,9 L-9,0 Z" /></svg> Other user</li>{/if}
 				<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
-				{#each bands as b (b)}
-					<li data-supply={b}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {BAND_LABEL[b]}</li>
+				{#each legend as l (l.band)}
+					<li data-supply={l.band}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {l.label}</li>
 				{/each}
 			</ul>
-			{#if supply}
+			{#if colouring}
 				<p class="supply-run">
-					Farms coloured by share of irrigation demand supplied in run “{supply.runName}”, ran {supply.ago}.
-					{#if supply.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+					{colouring.caption}
+					{#if colouring.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
 				</p>
 			{/if}
 			{#if editable}
@@ -358,17 +358,17 @@
 		<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
 		<li class="muted">Line width grows with upstream area; labels show area incl. upstream.</li>
 	</ul>
-	{#if supply}
-		<!-- Read out (not aria-hidden): which run the colours come from. The
-		     bands themselves are also in each node's label and the drainage tree. -->
+	{#if colouring}
+		<!-- Read out (not aria-hidden): what the colours show and from which run.
+		     The bands themselves are also in each node's label and the drainage tree. -->
 		<div class="supply-legend">
 			<p class="supply-run">
-				Farms coloured by share of irrigation demand supplied in run “{supply.runName}”, ran {supply.ago}.
-				{#if supply.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+				{colouring.caption}
+				{#if colouring.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
 			</p>
 			<ul class="legend" aria-hidden="true">
-				{#each bands as b (b)}
-					<li data-supply={b}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {BAND_LABEL[b]}</li>
+				{#each legend as l (l.band)}
+					<li data-supply={l.band}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {l.label}</li>
 				{/each}
 			</ul>
 		</div>
@@ -564,6 +564,19 @@
 		fill: var(--danger);
 	}
 	[data-supply='low'] .dam-water {
+		stroke: var(--sch-fill);
+	}
+	/* Irrigated area: one hue in three steps (more area is neither good nor bad). */
+	[data-supply='area1'] .farm {
+		fill: color-mix(in srgb, var(--accent) 22%, var(--sch-fill));
+	}
+	[data-supply='area2'] .farm {
+		fill: color-mix(in srgb, var(--accent) 55%, var(--sch-fill));
+	}
+	[data-supply='area3'] .farm {
+		fill: var(--accent);
+	}
+	[data-supply='area3'] .dam-water {
 		stroke: var(--sch-fill);
 	}
 	[data-supply='none'] .farm {

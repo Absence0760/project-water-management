@@ -24,7 +24,8 @@
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import NetworkSchematic from '$lib/components/network/NetworkSchematic.svelte';
-	import { ranAgo, supplyByNode } from '$lib/components/network/supplyColour';
+	import { ranAgo } from '$lib/components/network/supplyColour';
+	import { supplyColouring } from '$lib/components/network/farmColour';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 	import { isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
@@ -250,7 +251,7 @@
 						<NetworkSchematic
 							{nodes}
 							transfers={model.transfers ?? []}
-							supply={{ byNode: supplyByNode(nodes, summary), runName, ago: ranAgo(run.createdAt), unsaved: false }}
+							colouring={supplyColouring(nodes, summary, { name: runName, ago: ranAgo(run.createdAt) }, false)}
 						/>
 					{:else if s.id === 'inputs'}
 						<p class="muted small">As this run used them: its own copy of the settings and the model, not today’s.</p>
