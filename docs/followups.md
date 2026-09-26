@@ -1763,8 +1763,8 @@ from the WP:
 - [ ] **Dam filling vs registered storage** (s21b): the comparison counts
       supply from the farm's own dam as abstraction and compares storage with
       the dam capacity only. Pending the hydrologist.
-- [ ] **POPIA**: allocations and holder names in the data-subject export and
-      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **POPIA**: allocations and holder names in the data-subject export,
+      with the rest of the POPIA work ([§ POPIA and the Step 2 release](#popia-and-the-step-2-release-wp-216)).
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
@@ -1901,3 +1901,75 @@ Left, each with its trigger:
       (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
       years lists only the first ones. Trigger: a catchment that hits it;
       the fix is a full list on the check or in the statement.
+
+## POPIA and the Step 2 release (WP-2.16)
+
+The Step 2 release-hardening pass (2026-09-26,
+[step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
+documented what is true today in
+[security.md § Personal information](./security.md#personal-information-popia)
+and fixed what it could in code (045_account_deletion). These need the
+client, its information officer or legal, and none is a code change on its
+own. Loop in the CISO or security analyst before acting on any of them.
+
+- [ ] **Privacy notice for farmers and members.** What is collected (the
+      security.md table), why, who sees a farm's figures (D1, FV-D5), the
+      retention periods, the rights and how to exercise them, and the
+      responsible party's contact. Needs the client's information officer
+      and the Afrikaans translation (WP-2.5). Then a link on sign-up, the
+      invite email and the farm view. Trigger: **blocking** before the first
+      farmer is invited on production.
+- [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
+      security.md: farmers' accounts and farm links (the WUA's function or
+      legitimate interest, not consent), notes and the audit log kept for
+      the life of the project, alerts as opt-out service messages (WP-2.13).
+      Who: the client's information officer. Trigger: with the privacy
+      notice.
+- [ ] **Operator agreement** (POPIA s20–21) between the client as
+      responsible party and the operator: security measures, sub-processors
+      (AWS), breach notification to the client. Who: operator + client
+      legal. Trigger: before production holds client data.
+- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
+      Africa; any other region is a transfer under s72 and needs the client's
+      agreement. Trigger: the region choice in § Blocking releases.
+- [ ] **Data-subject export** ("download my data", plan.md Phase 7). Not
+      built: the operator answers a request by query today. Durable fix: a
+      `GET /auth/me/export` that returns, as JSON, the account, memberships,
+      farm links, notes written, the audit events about or by the person
+      (through a `SECURITY DEFINER` reader, since farmers can't read the log
+      under RLS), pending invites to their address, sign-offs, and the farm
+      projections of their linked farms. Trigger: before the first farmer is
+      invited on production, or the first request, whichever comes first.
+- [ ] **Self-service account deletion, and evidence that names its maker.**
+      Deleting an account is an operator act today (deployment.md §
+      Runbooks, item 7), and it is refused for anyone who created a
+      project, team, run, scenario, ensemble, import or nomination (those
+      keys restrict: `catalogue.db.test.ts` `APP_USER_ON_DELETE`). Decide
+      with the information officer whether that evidence keeps the name (the
+      regulator's record, like a sign-off), is reassigned, or is
+      pseudonymised, then change those keys to match and build the Account
+      page's "delete my account". Trigger: before public registration opens,
+      or the first deletion request from a modeller.
+- [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
+      body for editors for the life of the project (037). Decide a limit (for
+      example a year, then purge the body and keep the event). Who: client.
+      Trigger: with the privacy notice.
+- [ ] **Backups after an erasure.** A deleted account stays in RDS automated
+      backups for up to `db_backup_retention_days` (7–35). The usual
+      answer is that backups age out and are never restored into live use
+      without re-applying erasures; confirm and put it in the notice. Who:
+      operator + information officer. Trigger: with the privacy notice.
+- [ ] **D12 confirmation.** The audit log is pseudonymised on account
+      deletion ("Deleted user", 045) as the roadmap recommends; the
+      information officer confirms it (or asks for full deletion of the
+      events, which would weaken the regulator's trail). Trigger: with the
+      privacy notice.
+- [ ] **Personal-information incident procedure** for the "a farmer sees the
+      wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
+      WUA decides on notifying the Information Regulator and the data
+      subject (s22), and in what time. Who: client. Trigger: before go-live.
+- [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
+      pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
+      with the verdicts recorded in step-2 §9, and the 60-farm load
+      timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
+      since three of the personas judge those.

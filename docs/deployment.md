@@ -651,6 +651,57 @@ plan-only until the first deploy):
   ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
   endpoint.
 
+## Runbooks
+
+Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-cost-and-operations)).
+Every step is an ordinary app action by an owner unless it says "operator".
+
+1. **Bad data pushed by a gateway (an API key).**
+   1. Revoke the key (Settings → API keys → Revoke). It stops working on the
+      next request.
+   2. In History, filter by `series` and find the key's `series.merged` /
+      `series.created` events (the actor is `API key “<name>”`; each gives
+      the day range and days changed). A `series.held` event means the
+      data-quality rules already caught it and automatic runs are waiting.
+   3. Re-push the right days (a new key, or the Add data dialog). A key's
+      merges keep no series revision, so there is nothing to restore from;
+      a person's earlier merges can still be restored from the series'
+      revisions (180 days / 5 versions).
+   4. Run the model (this also ends a hold). If the bad days reached a
+      publication, publish the corrected run and say so in the notice.
+2. **A feed failing.** Settings → Data feeds shows the error and the
+   consecutive failures; `feed.failed` is in History. Check the source's
+   status (CHIRPS / DWS sites) and the parser error. Switch the feed off
+   while it's broken (its days so far stay), tell the modeller, and switch
+   it back on once the source recovers: its next fetch catches up.
+3. **Alert storm.** Pending WP-2.13 (alerts aren't built yet); the plan is
+   `ALERTS_ENABLED=false`, fix the rule, re-enable.
+4. **A farmer sees the wrong farm** (a possible personal-information
+   incident). Unlink them at once (Overview → Farmers: change their farms,
+   or remove them): access ends on their next request. Check History for the
+   `farmer.linked` events (who linked what, when, and whether from an
+   invite). Tell the WUA, which as the responsible party decides whether to
+   notify the Information Regulator and the farmer whose figures were seen
+   (POPIA s22). Record what was visible and for how long.
+5. **A share link leaked.** Overview → Share links → Revoke: the next view
+   answers 404. Make a new link for the people who should have it. A link
+   shows catchment-level figures only, never a farm.
+6. **The worker is stuck.** See [§ Background jobs](#background-jobs): check
+   the worker's logs and the `jobs-dlq`, redrive or purge it; leases expire
+   after 6 minutes and the next tick claims the jobs again.
+7. **A POPIA request to delete a person's account** (operator; there is no
+   self-service deletion yet, [security.md § Personal information](./security.md#personal-information-popia)).
+   Confirm the request with the WUA (the responsible party for its farmers).
+   As the schema owner, in one transaction: `DELETE FROM app_user WHERE id =
+   '…';`. Memberships, farm links, tokens, their pending jobs and the invites
+   they sent go with it; notes, publications, keys and links stay with no
+   author; the audit log is pseudonymised ("Deleted user"). A foreign-key
+   error (`23503`) means they made a project, team, run, scenario, ensemble,
+   import or nomination: that is evidence naming them, and what happens to it
+   is for the operator and the client's information officer to decide first
+   (followups.md § POPIA). Record the request and the outcome in the operator
+   log.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same
