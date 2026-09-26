@@ -621,7 +621,8 @@ In short:
     deletion, the run cap skips them, and the delete route answers `409`.
   - The history shows everywhere a reader weighs results: the Runs tab, the
     run header, compare, the summary CSV; a later run of another runoff model
-    raises a warning.
+    raises a warning (since engine 1.0.0 only a stored legacy run can be
+    one).
   - The **project is kept too** (issue #43, 035_project_evidence_guard): a
     project with any nomination, current or since replaced, can't be deleted.
     The `project_evidence_guard` BEFORE DELETE trigger (`SECURITY DEFINER`,
@@ -1292,7 +1293,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     limitations, the notes, the disclaimer version, the run's id and engine
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
-    ticked; a legacy run can't be signed (audit H1).
+    ticked; a legacy run (a stored run from before engine 1.0.0, which
+    removed that model) can't be signed (audit H1).
   - *Immutable:* `water_app` has no `UPDATE` or `DELETE` on `signoff` and no
     policy allows either (catalogue guard); the signed run is cited, so it
     can't be deleted or trimmed. Each sign-off is in the audit log.

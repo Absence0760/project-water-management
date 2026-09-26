@@ -1642,7 +1642,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
       committed, with the Python extractor's JSON output committed as the
       expected result;
     - keep the Python CLI for the regression fixtures
-      (`extract_flow_fixture.py`) (D17).
+      (`extract_flow_fixture.py`, deleted in engine 1.0.0 with the
+      legacy model's `flow.test.ts`; `extract_project.py` still writes the
+      rest) (D17).
 - **Data model:** none.
 - **API:** reuses the import route.
 - **UI:**
