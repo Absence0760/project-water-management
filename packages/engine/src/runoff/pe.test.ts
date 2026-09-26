@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, gr4jPeMonthlyMm, PE_SOURCE_MAX, resolvePe, type ModelInput, type PeInput } from '../project';
 import { runModel } from '../run';
-import { GR4J_NO_PET, hasPotentialEvaporation, runoffForcing } from './simulate';
+import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
+import { runoffForcing } from './simulate';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 const pe: number[] = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];

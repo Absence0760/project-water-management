@@ -2632,7 +2632,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   phase 6 §"make the logger fit identifiable"): the box the search may
   explore, per parameter.
   - `'wide'` (default): each `ParamSpec`'s min/max (§2.4a for GR4J,
-    `runoff/legacy.ts` `LEGACY_PARAMS` for legacy).
+    `runoff/params.ts` `LEGACY_PARAMS` for legacy).
   - `'typical'`: Perrin et al.'s (2003) 80 % confidence range (`ParamSpec.typical`)
     over 429 catchments — for GR4J, X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9
     days. A short, drought-dominated record often can't pin down X1 and X3, so

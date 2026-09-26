@@ -11,7 +11,8 @@
 // change itself does. Members are judged once, on the baseline: the
 // application changes the network, not the observed history.
 import type { ModelInput, ModelOutput } from '../project';
-import { ENGINE_VERSION, prepareRun, runModelWithoutChecks } from '../run';
+import { runModelWithoutChecks } from '../run';
+import { ENGINE_VERSION } from '../version';
 import { band, type Band } from './bands';
 import {
 	ensembleContext,
@@ -24,6 +25,7 @@ import {
 	type MemberMetrics,
 	type MemberResult
 } from './ensemble';
+import { prepareRun } from '../prepare';
 
 export interface PairedMember {
 	/** The baseline member's index. */

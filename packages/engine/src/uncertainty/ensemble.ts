@@ -23,115 +23,41 @@
 // Every member is a full model run of the project (runModelWithoutChecks:
 // runModel less the plausibility checks, which no member result reads), so
 // the same seed and options reproduce the ensemble exactly (./verify.ts checks it).
-import { fromEpochDay, toEpochDay, waterYearIndex, type Monthly } from '../calendar';
-import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, prepareCalibration, type CalibrationBounds, type ParamSet } from '../calibrate/calibrate';
-import { fitScores, OBJECTIVE_LABELS, OBJECTIVES, type ObjectiveId } from '../calibrate/objective';
-import { waterYearOf } from '../network/stats';
+import { fromEpochDay, toEpochDay, waterYearIndex, waterYearOf, type Monthly } from '../calendar';
+import { prepareCalibration } from '../calibrate/calibrate';
+import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
+import { fitScores } from '../calibrate/objective';
 import { CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
-import { chirpsColumns, ENGINE_VERSION, pickObservedKind, prepareRun, runModelWithoutChecks, type PreparedRun } from '../run';
-import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/simulate';
+import { chirpsColumns, pickObservedKind, runModelWithoutChecks } from '../run';
+import { ENGINE_VERSION } from '../version';
+import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
 import { defaultScale, latinHypercube, pickUnit, scaleUnit } from './sample';
-
-export const ENSEMBLE_METHODS = ['lhs'] as const;
-export type EnsembleMethod = (typeof ENSEMBLE_METHODS)[number];
-
-/** 'recorded': the project's rain as a run uses it (station rain, CHIRPS where it is blank). 'chirps': bias-corrected CHIRPS on every day. */
-export const RAIN_SOURCES = ['recorded', 'chirps'] as const;
-export type RainSource = (typeof RAIN_SOURCES)[number];
-export const RAIN_SOURCE_LABELS: Record<RainSource, string> = {
-	recorded: 'Station rain, CHIRPS infill (as the run)',
-	chirps: 'CHIRPS only (bias-corrected)'
-};
-
-export const RECORD_LABELS: Record<CalibrationFlowKind, string> = {
-	flow_observed_m3s: 'gauge record',
-	flow_logger_m3s: 'logger record'
-};
-
-/** Order of strictness of the WR2012 flag: a member passes at or below the threshold's level. */
-export const WR2012_LEVELS: readonly Wr2012FlagLevel[] = ['ok', 'note', 'query', 'unusable'];
-
-export interface AcceptanceThresholds {
-	/** The skill score, scored on the member's own observed record before the split date. */
-	objective: ObjectiveId;
-	/** Lowest score kept. */
-	minSkill: number;
-	/**
-	 * Worst WR2012 MAR flag kept (Phase 8, model.md §2.10c), judged on the
-	 * member's natural flow. 'unusable' switches the check off. When the
-	 * project sets a MAR band (settings.wr2012.calibrationPenalty), the MAR
-	 * must also fall inside it. No reference: no check.
-	 */
-	wr2012MaxLevel: Wr2012FlagLevel;
-	/** Largest |low-flow FDC volume bias| kept, % (Yilmaz et al. 2008, bottom 30 % of days); null = no check. */
-	maxLowFlowBiasPct: number | null;
-}
-
-/** One sampled dimension, stored with the ensemble so the sample reproduces from the seed. */
-export type EnsembleDimension =
-	| { kind: 'param'; key: string; min: number; max: number; scale: 'linear' | 'log' }
-	| { kind: 'pan'; min: number; max: number; scale: 'linear' }
-	| { kind: 'rain'; values: RainSource[] }
-	| { kind: 'record'; values: CalibrationFlowKind[] };
-
-/** Everything that decides an ensemble, fully resolved: the server stores it and the browser runs it. */
-export interface ResolvedEnsembleOptions {
-	model: RunoffModelId;
-	method: EnsembleMethod;
-	/** Sampled members, not counting member 0 (the run's own parameters). */
-	members: number;
-	seed: number;
-	bounds: CalibrationBounds;
-	free: string[];
-	/** Half-width of the additive pan-coefficient shift; 0 = not varied (always 0 for legacy). */
-	panOffset: number;
-	rainSources: RainSource[];
-	/** The first is the primary record: it sets the split date. */
-	records: CalibrationFlowKind[];
-	thresholds: AcceptanceThresholds;
-	/** The LHS dimensions, in sample column order. */
-	dimensions: EnsembleDimension[];
-	/** Acceptance on the first half of the primary record's scored days; coverage on the second. */
-	holdOut: 'secondHalf';
-	percentiles: readonly [5, 50, 95];
-	minMembers: number;
-	/** Coverage below this share warns. */
-	coverageWarning: number;
-}
-
-/** What a caller may ask for; the rest is resolved against the project (resolveEnsembleOptions). */
-export interface EnsembleRequest {
-	model?: RunoffModelId;
-	members?: number;
-	seed?: number;
-	bounds?: CalibrationBounds;
-	free?: string[];
-	panOffset?: number;
-	rainSources?: RainSource[];
-	records?: CalibrationFlowKind[];
-	thresholds?: Partial<AcceptanceThresholds>;
-}
-
-export const ENSEMBLE_DEFAULTS = {
-	members: 300,
-	seed: 1,
-	bounds: 'typical' as CalibrationBounds,
-	panOffset: 0.1,
-	thresholds: { objective: 'kgePrime', minSkill: 0.5, wr2012MaxLevel: 'query', maxLowFlowBiasPct: 50 } as AcceptanceThresholds
-};
-export const ENSEMBLE_MEMBERS_MIN = MIN_BAND_MEMBERS;
-export const ENSEMBLE_MEMBERS_MAX = 1000;
-export const PAN_OFFSET_MAX = 0.3;
-/** The FAO-56 range of Class A pan coefficients: a shifted month stays inside it (or at the project's own value, if that is outside). */
-export const PAN_SHIFT_RANGE: readonly [number, number] = [0.35, 0.85];
-/** Share of run days CHIRPS must cover for the CHIRPS-only rain source. */
-export const CHIRPS_ONLY_MIN_COVERAGE = 0.99;
-export const COVERAGE_WARNING = 0.7;
-/** Exceedance % of the monthly flow-duration curves. */
-export const FDC_POINTS: readonly number[] = [5, 10, 20, 30, 50, 70, 80, 90, 95, 99];
+import {
+	CHIRPS_ONLY_MIN_COVERAGE,
+	COVERAGE_WARNING,
+	ENSEMBLE_DEFAULTS,
+	ENSEMBLE_MEMBERS_MAX,
+	ENSEMBLE_MEMBERS_MIN,
+	FDC_POINTS,
+	objectiveShortLabel,
+	PAN_OFFSET_MAX,
+	PAN_SHIFT_RANGE,
+	RAIN_SOURCES,
+	RECORD_LABELS,
+	REJECT_LABELS,
+	WR2012_LEVELS,
+	type AcceptanceThresholds,
+	type EnsembleDimension,
+	type EnsembleRequest,
+	type RainSource,
+	type RejectReason,
+	type ResolvedEnsembleOptions
+} from './options';
+import { OBJECTIVES } from '../calibrate/objectives';
+import { prepareRun, type PreparedRun } from '../prepare';
 
 export interface EnsembleMember {
 	/** 0 = the run's own parameters and forcing; 1 … members = the Latin hypercube, in order. */
@@ -157,8 +83,6 @@ export interface MemberScores {
 	/** Inside the project's MAR band; null without one. */
 	wr2012InBand: boolean | null;
 }
-
-export type RejectReason = 'skill' | 'wr2012' | 'lowFlow';
 
 /** A member's outputs (rounded to 6 significant figures). Maps are keyed by node id; the outlet's Reserve site is 'outlet'. */
 export interface MemberMetrics {
@@ -236,7 +160,6 @@ export interface EnsembleProgress {
 
 const DAYS_PER_YEAR = 365.25;
 const r6 = (v: number): number => (Number.isFinite(v) && v !== 0 ? Number(v.toPrecision(6)) : v);
-const labelOf = (o: ObjectiveId) => OBJECTIVE_LABELS[o].replace(/ \(.*\)$/, '');
 
 // ---------------------------------------------------------------------------
 // Options
@@ -774,7 +697,7 @@ const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1
 /** The acceptance rule, the percentiles and the coverage test, in words. */
 export function ensembleDecisionRule(o: ResolvedEnsembleOptions, h: Pick<EnsembleHeader, 'splitDate' | 'hasWr2012' | 'wr2012Band'>): string {
 	const t = o.thresholds;
-	const parts = [`${labelOf(t.objective)} ≥ ${fmt(t.minSkill)} against its observed record before ${h.splitDate}`];
+	const parts = [`${objectiveShortLabel(t.objective)} ≥ ${fmt(t.minSkill)} against its observed record before ${h.splitDate}`];
 	if (h.hasWr2012 && t.wr2012MaxLevel !== 'unusable') {
 		const worst = t.wr2012MaxLevel === 'ok' ? 'no WR2012 flag' : `a WR2012 MAR flag no worse than “${t.wr2012MaxLevel}”`;
 		parts.push(h.wr2012Band ? `${worst} and a natural MAR inside ${fmt(h.wr2012Band.lowMm3)}–${fmt(h.wr2012Band.highMm3)} Mm³/a` : worst);
@@ -843,45 +766,4 @@ export function summariseEnsemble(r: Pick<EnsembleResult, 'options' | 'header' |
 		decisionRule: ensembleDecisionRule(o, h),
 		notes
 	};
-}
-
-export const REJECT_LABELS: Record<RejectReason, string> = { skill: 'skill score', wr2012: 'WR2012 check', lowFlow: 'low-flow check' };
-
-// ---------------------------------------------------------------------------
-// Diffing two ensembles' rules
-// ---------------------------------------------------------------------------
-
-export interface OptionChange {
-	label: string;
-	a: string;
-	b: string;
-}
-
-const dimText = (o: ResolvedEnsembleOptions) =>
-	o.dimensions.map((d) => (d.kind === 'param' ? `${d.key} ${d.min}–${d.max} (${d.scale})` : d.kind === 'pan' ? `pan ±${d.max}` : `${d.kind}: ${d.values.join(', ')}`)).join('; ');
-
-/** What differs between two ensembles' options (thresholds first): stored thresholds, diffed. */
-export function diffEnsembleOptions(a: ResolvedEnsembleOptions, b: ResolvedEnsembleOptions): OptionChange[] {
-	const rows: [string, (o: ResolvedEnsembleOptions) => string][] = [
-		['Skill score', (o) => labelOf(o.thresholds.objective)],
-		['Lowest skill kept', (o) => String(o.thresholds.minSkill)],
-		['Worst WR2012 flag kept', (o) => (o.thresholds.wr2012MaxLevel === 'unusable' ? 'no check' : o.thresholds.wr2012MaxLevel)],
-		['Largest low-flow bias kept', (o) => (o.thresholds.maxLowFlowBiasPct === null ? 'no check' : `±${o.thresholds.maxLowFlowBiasPct} %`)],
-		['Runoff model', (o) => o.model],
-		['Method', (o) => o.method],
-		['Members', (o) => String(o.members)],
-		['Seed', (o) => String(o.seed)],
-		['Bounds', (o) => o.bounds],
-		['Pan coefficient shift', (o) => (o.panOffset > 0 ? `±${o.panOffset}` : 'not varied')],
-		['Rain sources', (o) => o.rainSources.map((x) => RAIN_SOURCE_LABELS[x]).join(', ')],
-		['Observed records', (o) => o.records.map((x) => RECORD_LABELS[x]).join(', ')],
-		['Sampled dimensions', dimText],
-		['Fewest kept for percentiles', (o) => String(o.minMembers)],
-		['Coverage warning below', (o) => `${Math.round(o.coverageWarning * 100)} %`]
-	];
-	return rows.flatMap(([label, f]) => {
-		const x = f(a);
-		const y = f(b);
-		return x === y ? [] : [{ label, a: x, b: y }];
-	});
 }

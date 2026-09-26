@@ -30,7 +30,7 @@ import {
 	type Transfer,
 	type ZeroRainMode
 } from '../project';
-import { GR4J_PARAMS } from '../runoff/gr4j';
+import { GR4J_PARAMS } from '../runoff/params';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 
 // ---------------------------------------------------------------------------

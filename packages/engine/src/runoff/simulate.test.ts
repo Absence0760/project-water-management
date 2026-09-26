@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type ModelInput } from '../project';
-import { ENGINE_VERSION, runModel } from '../run';
+import { runModel } from '../run';
+import { ENGINE_VERSION } from '../version';
 import { gr4j } from './gr4j';
-import { GR4J_NO_PET, hasPotentialEvaporation, resolveParams, runoffForcing, simulateRunoff } from './simulate';
-import { GR4J_PARAMS } from './gr4j';
+import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
+import { resolveParams, runoffForcing, simulateRunoff } from './simulate';
+import { GR4J_PARAMS } from './params';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 

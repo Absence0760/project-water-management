@@ -5,8 +5,8 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { damCurveProblem } from './network/dam';
 import type { ProjectModel } from './project';
+import { damCurveProblem } from './network/damCurve';
 
 /**
  * Every rule a model breaks, keyed by what breaks it (ids, not names, so

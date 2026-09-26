@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calibrationStats, waterYearOf } from './stats';
-import { toEpochDay } from '../calendar';
+import { calibrationStats } from './stats';
+import { toEpochDay, waterYearOf } from '../calendar';
 
 const D = 86_400;
 const m3day = (m3s: number[]) => m3s.map((v) => v * D);

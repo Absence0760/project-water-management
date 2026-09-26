@@ -10,13 +10,14 @@ import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { RainAccumulationInfo } from './accumulation';
-import type { Gr4jParams } from './runoff/gr4j';
+import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
-import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
+import type { Wr2012Report } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { SupplyAssurance } from './network/reliability';
+import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';

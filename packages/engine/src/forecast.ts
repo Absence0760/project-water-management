@@ -39,7 +39,8 @@
 import { fromEpochDay, toEpochDay } from './calendar';
 import type { ModelInput, ModelOutput, RunSeries } from './project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
-import { prepareRun, runModelChecked } from './run';
+import { runModelChecked } from './run';
+import { prepareRun } from './prepare';
 
 /** A deficit below this (m³/day, under a millilitre) is float noise, not a short day (as views/farmProjection.ts). */
 const NOISE_M3 = 1e-6;

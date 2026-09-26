@@ -28,9 +28,8 @@
 // of every fit (the CHIRPS factors, a 'fit' here, the accumulation detection)
 // and out of the zero-run handling (§2.4c). The stored series are never
 // changed.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from './calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX } from './calibrate/provenance';
-import { waterYearOf } from './network/stats';
 import {
 	RAIN_SOURCE_FALLBACKS,
 	RAIN_SOURCE_REFERENCES,
@@ -42,7 +41,7 @@ import {
 	type SeriesKind,
 	type ZeroRainSettings
 } from './project';
-import { rainVsChirps, waterYearLabel } from './quality';
+import { rainVsChirps } from './quality';
 import { provenanceLabel, type SeriesProvenance } from './seriesProvenance';
 import {
 	CHIRPS_FACTOR_MAX,

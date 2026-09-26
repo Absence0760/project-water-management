@@ -22,7 +22,7 @@ fool it?"**
    verification), `docs/data-model.md`, `docs/security.md`,
    `docs/run-comparison.md` and, if present, `docs/engine-audit.md`.
 2. Starting points:
-   - `packages/engine/src/run.ts` (`ENGINE_VERSION`, run snapshot)
+   - `packages/engine/src/run.ts` (run snapshot) and `version.ts` (`ENGINE_VERSION`)
    - `packages/engine/src/compare.ts`
    - `backend/src/runs/`, `backend/src/projects/routes.ts` (roles, copy)
    - `backend/migrations/` (RLS, what is stored per run)

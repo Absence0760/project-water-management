@@ -6,7 +6,7 @@
 // agree on what a stored value means.
 import { GA538_GROUNDWATER_LIMIT_M3_YEAR, type Borehole, type GroundwaterAnnualUse, type NetworkNode, type ProjectModel } from '../project';
 import { cmpStr } from '../order';
-import { waterYearOf } from './stats';
+import { waterYearOf } from '../calendar';
 
 /** One pumping unit of a node (WP-3.9): its combined capacity (WP-1.34) or one borehole. */
 export interface PlanBoreholeUnit {

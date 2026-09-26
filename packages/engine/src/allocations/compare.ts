@@ -13,8 +13,7 @@
 // supply is modelled, not metered, and the registered volume may be
 // incomplete). The wording on every screen follows that.
 
-import { fromEpochDay, toEpochDay } from '../calendar';
-import { waterYearOf } from '../network/stats';
+import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 
 export type AllocationWaterSource = 'surface' | 'groundwater';
 
