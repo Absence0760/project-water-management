@@ -379,6 +379,8 @@ export const FitRecord = z
 				rainSource: RainSource.optional(),
 				// Engine ≥ 0.31.0 (issue #39): GR4J's PE input. Optional, as above; absent = ran as 'pan'.
 				pe: PeInput.optional(),
+				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
+				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
 				zeroRainRuns: z
 					.object({
@@ -439,6 +441,8 @@ export const SettingsPatch = z
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		// GR4J's PE input (engine project.ts PeInput, issue #39); replaced whole.
 		pe: PeInput,
+		// Where the pan-coefficient row came from (engine ≥ 0.31.1): free text, provenance only; '' = none.
+		panCoefficientSource: z.string().trim().max(PE_SOURCE_MAX),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
 		// Which part of the record the CHIRPS factors are fitted on (engine rain.ts, issue #40); replaced whole.
 		chirpsFitPeriod: ChirpsFitPeriod,
