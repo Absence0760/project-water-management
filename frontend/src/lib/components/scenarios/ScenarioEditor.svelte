@@ -7,11 +7,20 @@
 	// and delete. Every edit is a PATCH that answers
 	// with the scenario's check against its base, so problems show without
 	// running. Viewers get the same page read only.
+	//
+	// An application (origin 'applicant', WP-3.3, docs/ui.md § Applications):
+	// only its owner changes it, and moves it with Submit / Withdraw / Reopen;
+	// an editor who isn't its owner decides a submitted one (DecideForm). An
+	// applicant (`applicant`) reads the base through the applicant projection
+	// (api.scenarios.base: other farms anonymised) and never the comparison
+	// (the assessors compare; an applicant view of results is a follow-up).
 	import { untrack } from 'svelte';
 	import type { ScenarioOp } from '@water-management/engine';
 	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '$lib/api';
+	import { session } from '$lib/auth/session.svelte';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtDate } from '$lib/format/number';
+	import ApplicationPanel from './ApplicationPanel.svelte';
 	import OpForm from './OpForm.svelte';
 	import OpList from './OpList.svelte';
 	import ScenarioCompare from './ScenarioCompare.svelte';
@@ -28,6 +37,7 @@
 		data,
 		runs,
 		canEdit,
+		applicant = false,
 		onchange,
 		ondeleted,
 		onran
@@ -35,14 +45,25 @@
 		projectId: string;
 		data: ScenarioWithCheck;
 		runs: RunMeta[];
+		/** An editor or owner of the project. */
 		canEdit: boolean;
+		/** The caller is an applicant (the contributor role): the applicant projection of the base, no comparison. */
+		applicant?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
 		ondeleted: () => void;
 		onran: (run: Run, removedRunIds: string[]) => void;
 	} = $props();
 
 	const s = $derived(data.scenario);
-	const editable = $derived(canEdit && s.status === 'draft');
+	const isApplication = $derived(s.origin === 'applicant');
+	const isOwner = $derived(!!session.user && session.user.id === s.ownerUserId);
+	/** Who changes it: an editor on a team scenario, only its owner on an application. */
+	const canChange = $derived(isApplication ? isOwner : canEdit);
+	/** Who runs it: an editor; on an application also its owner and the people it's shared with. */
+	const canRun = $derived(canEdit || (isApplication && applicant));
+	const editable = $derived(canChange && s.status === 'draft');
+	/** Nodes the applicant sees only by kind and an anonymous name: their values are blank, not the base's. */
+	let anonymised = $state.raw(new Set<string>());
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 	// --- the base run's model and settings (names, current values) -------------
@@ -50,6 +71,19 @@
 	let baseError = $state<string | null>(null);
 	async function loadBase(runId: string) {
 		baseError = null;
+		if (applicant) {
+			// The applicant projection of the published base (a contributor can't read the run).
+			baseRun = null;
+			try {
+				const b = await api.scenarios.base(projectId, s.id);
+				if (runId !== s.baseRunId) return;
+				anonymised = new Set(b.anonymisedNodeIds);
+				baseRun = { id: b.baseRunId, model: b.model, settings: b.settings } as unknown as Run;
+			} catch (e) {
+				if (runId === s.baseRunId) baseError = msg(e);
+			}
+			return;
+		}
 		const hit = detailCache.get(runId);
 		if (hit) {
 			baseRun = hit.run;
@@ -72,10 +106,12 @@
 	/**
 	 * The names the server kept with the ops (from the base each op was made
 	 * on), so an op on a node a rebase dropped still reads by name after a
-	 * reload; the current base and the ops' own new nodes and crops win.
+	 * reload; the current base and the ops' own new nodes and crops win. An
+	 * applicant gets only their own nodes' names (the server filters them).
 	 */
 	const names = $derived(new Map([...s.opNames.map((x) => [x.id, x.name] as const), ...namesOf([baseInput?.model], s.ops)]));
-	const list = $derived(opItems(s.ops, data.check?.classified ?? null, data.check, baseInput, names));
+	// An anonymised node's values are blanks, so an op on one isn't shown "from" them.
+	const list = $derived(opItems(s.ops, data.check?.classified ?? null, data.check, anonymised.size ? null : baseInput, names));
 	/** What a new op meets: the base with every listed op applied. */
 	const effective = $derived(baseInput ? stepInputs(baseInput, s.ops).after : null);
 
@@ -259,7 +295,8 @@
 	<div class="panel-head">
 		<h2 id="scenario-h">{s.name}</h2>
 		<span class="status status-{s.status}">{STATUS_LABEL[s.status]}</span>
-		{#if canEdit && !renaming}<button type="button" class="btn btn-sm btn-ghost" onclick={startRename}>Rename</button>{/if}
+		{#if isApplication}<span class="status">Application</span>{/if}
+		{#if canChange && !renaming}<button type="button" class="btn btn-sm btn-ghost" onclick={startRename}>Rename</button>{/if}
 	</div>
 
 	{#if renaming}
@@ -282,7 +319,7 @@
 	{/if}
 
 	<p class="banner" data-testid="scenario-base">
-		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong> (run {fmtDate(s.baseRun.createdAt, true)}{baseMeta?.published ? ', published' : ''}).
+		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong>{#if s.baseRun.createdAt}{' '}(run {fmtDate(s.baseRun.createdAt, true)}{baseMeta?.published || isApplication ? ', published' : ''}){/if}.
 		{#if s.owner}Created by {s.owner}.{/if}
 		The base can't be deleted or trimmed while this scenario exists.
 	</p>
@@ -324,7 +361,7 @@
 		<p class="visually-hidden" role="status">{note}</p>
 	</section>
 
-	{#if baseNodes.length && (editable || s.ownedNodeIds.length)}
+	{#if baseNodes.length && !isApplication && (editable || s.ownedNodeIds.length)}
 		<fieldset class="owned">
 			<legend>The proposer's nodes</legend>
 			<p class="hint">
@@ -338,19 +375,26 @@
 		</fieldset>
 	{/if}
 
-	{#if canEdit}
+	{#if canRun || canChange}
 		<div class="actions">
-			<button type="button" class="btn btn-primary" disabled={running || busy || !data.check || problems > 0 || !s.ops.length} onclick={run}
-				>{running ? 'Running…' : 'Run scenario'}</button
-			>
-			{#each SCENARIO_STATUS_MOVES[s.status] as to (to)}
-				<button type="button" class="btn" disabled={busy} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
-			{/each}
-			{#if s.status === 'draft' || s.status === 'withdrawn'}
-				<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>Delete scenario</button>
+			{#if canRun}
+				<button type="button" class="btn btn-primary" disabled={running || busy || !data.check || problems > 0 || !s.ops.length} onclick={run}
+					>{running ? 'Running…' : 'Run scenario'}</button
+				>
+			{/if}
+			{#if canChange && !isApplication}
+				{#each SCENARIO_STATUS_MOVES[s.status] as to (to)}
+					<button type="button" class="btn" disabled={busy} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
+				{/each}
+			{/if}
+			{#if canChange && (s.status === 'draft' || s.status === 'withdrawn')}
+				<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>Delete {isApplication ? 'application' : 'scenario'}</button>
 			{/if}
 		</div>
-		{#if !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
+		{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
+	{/if}
+	{#if isApplication}
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 	{#if error}
 		<div class="alert alert-error" role="alert">
@@ -363,7 +407,7 @@
 		</div>
 	{/if}
 
-	{#if editable && !overriding}
+	{#if editable && !isApplication && !overriding}
 		<details class="rebase">
 			<summary>Rebase onto another run</summary>
 			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a node removed since, say).</p>
@@ -416,6 +460,7 @@
 				input={effective}
 				loadKey="{s.baseRunId} {s.opsSha256}"
 				{saving}
+				anonymisedCount={anonymised.size}
 				onrecord={addMany}
 				onclose={() => {
 					overriding = false;
@@ -427,7 +472,13 @@
 	</Lazy>
 {/if}
 
-<ScenarioCompare {projectId} scenario={s} />
+{#if applicant}
+	<p class="panel muted" data-testid="applicant-results-note">
+		The assessors compare each run of your application with the published baseline. A view of the results for applicants is still to come.
+	</p>
+{:else}
+	<ScenarioCompare {projectId} scenario={s} />
+{/if}
 
 {#if yieldFarms.length}
 	<section class="panel" aria-labelledby="scenario-yield-h">

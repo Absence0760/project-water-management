@@ -1420,11 +1420,11 @@ role and not before it.
         The shared editors weren't changed, so no pinning e2e was needed;
         e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
-        `044_scenario_op_names`, `backend/src/scenarios/names.ts`): the
+        `047_scenario_op_names`, `backend/src/scenarios/names.ts`): the
         server keeps `op_names`, `{ id, name }` for every node and crop the
         ops name, from the base run's snapshot on create, on a PATCH of the
         ops and on a rebase, keeping a name a later base no longer has while
-        an op still names it (044 backfilled existing scenarios from their
+        an op still names it (047 backfilled existing scenarios from their
         base). The editor names from `Scenario.opNames`, and the in-memory
         `seenNames` is gone. Tests: `names.test.ts`, the rebase case in
         `scenarios.db.test.ts`, and the rebase e2e reloads.
@@ -1807,6 +1807,20 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Notes (WP-2.7)
+
+- [x] **Notes in the project export and copy** (2026-09-26). The export
+      (`export.json`) carries the undeleted notes the exporter can read, as
+      a record the importer ignores; a copy takes none. Why, per path:
+      [data-model.md § Notes](./data-model.md#notes-037_notessql). Tests in
+      `notes/notes.db.test.ts`.
+- [x] **The notes count cache never evicted** (2026-09-26). The module-level
+      map in `notes/counts.svelte.ts` kept one entry per project opened in a
+      session, and a project visited again showed its first visit's counts.
+      Now only the open project's counts are kept (another project replaces
+      them) and sign-out clears them (`clearNoteCounts`, AppHeader and
+      FarmShell). Test: `notes/counts.test.ts`.
+
 ## Portfolio dashboard (WP-2.14)
 
 - [ ] **Traffic-light thresholds per team (D11).** Green < 5 %, amber < 20 %
@@ -1829,22 +1843,25 @@ from the WP:
       `#res-*` fragment once its results render (a Runs-tab change, so
       coordinate with whoever owns `components/runs/`). Trigger: the WUA
       persona or a user reports it, or the next Runs-tab round.
-- [ ] **No perf guard on the portfolio query.** Measured once at a median
-      51 ms for 10 × 60-farm catchments (roadmap WP-2.14 status); the
-      backend `perf` vitest project has no database, so it can't hold a
-      budget on it. Durable fix: a `perf-db` project with the db project's
-      global setup and a `portfolio.perf.test.ts` (10 × 60, budget 500 ms,
-      median of 7). Trigger: the next query that needs a DB timing budget, or
-      the portfolio growing a new join.
+- [x] **No perf guard on the portfolio query** (done 2026-09-26). The
+      backend's `perf-db` vitest project (the db project's global setup) runs
+      `portfolio/portfolio.db.perf.test.ts`: 10 published catchments × 60
+      farms, 10-year runs, budget 500 ms, median of 7 (measured 41 ms).
+      `pnpm test:backend:perf:db`, alone, not in `pnpm test` or CI
+      ([testing.md § Performance budgets](./testing.md#performance-budgets)).
 
 ## Firm yield (WP-3.6)
 
 - [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
       `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
-      they own". The `contributor` role is WP-3.3's and doesn't exist yet,
-      so 040_yield gives editors and viewers only. Trigger: WP-3.3 lands its
-      role; its migration adds those policies from 040's definitions (and
-      023's `job_insert`), with the positive-control DB test (a contributor
+      they own". WP-3.3's first slice (044/045) landed the role without them:
+      a contributor reads no job and no yield result
+      (`scenarios/contributor-tables.db.test.ts`), and 045's
+      `yield_result_select` already hides a yield of an application from
+      anyone who can't read it. Trigger: the applicant's view of results
+      (followups.md § Applicants); a new migration adds those policies from
+      045's `yield_result_select` and 016's `job_insert` (023 for the job
+      kinds), with the positive-control DB test (a contributor
       queues a yield for their own scenario, not another's or a run) and the
       fail-closed test (the job dies once they lose the role).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
@@ -1871,6 +1888,58 @@ from the WP:
       for the enlarged dam (a scenario's dam survey), and the hydrologist to
       confirm uniform scaling meanwhile. Trigger: the hydrologist's review,
       or a licence application for a dam raise.
+
+## Applicants (WP-3.3)
+
+The first slice (migrations 044/045, [scenarios.md § Applications](./scenarios.md#applications-wp-33))
+built the role, its RLS, applications and their workflow, sharing, the
+Applicant view and the Applications tab. Left:
+
+- [ ] **The applicant's view of results.** An applicant runs their
+      application but sees no result: `/compare/runs` refuses a contributor
+      (it returns `inputs`, every farm), and the scenario run answers with
+      metadata only. Durable fix: a contributor projection of a scenario run
+      against its base (the roadmap's D2 default: catchment series, their own
+      nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
+      downstream: supply −4 %"), built from the run and base server-side like
+      `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
+      next WP-3.3 slice, before an applicant uses it for real.
+- [ ] **A contributor can `SELECT` their own application runs' rows**, whose
+      `inputs` snapshot holds the whole base (every farm's parameters); the
+      API never returns them (RLS can't hide a column). Durable fix: store
+      the applicant's projection with the run, or read scenario runs for
+      contributors only through a `SECURITY DEFINER` projection and drop
+      `model_run_select`'s contributor branch. Trigger: the results slice
+      above, which needs the same projection.
+- [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
+      recommended defaults: D2's anonymised baseline and the outcome words
+      (`approved`, `approved_with_conditions`, `refused`) are **pending the
+      client and the licensing authority**. Trigger: the client's answers.
+- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
+      a contributor-or-above member of the project; renaming their own farm
+      to a neighbour's name gets the duplicate-name problem (the name comes
+      back anonymised, but its existence shows). Durable fix: share by a
+      member picker the owner curates (the assessor adds consultants to an
+      application), and check names against the projected base for
+      contributors. Trigger: before applicants from competing parties share a
+      project.
+- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
+      access** (WP-3.15) link from the list and the Application panel.
+      Trigger: those WPs.
+- [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
+      share links' rule, applied conservatively; the hydrologist and the
+      client may prefer catchment flows always visible to applicants (they
+      are gauge data). Pending the hydrologist.
+- [ ] **Performance of `run_series_select`.** Every viewer read of run series
+      now evaluates `app_hidden_scenario_runs()` and the contributor policy's
+      two helpers once per query (hashed subplans; the contributor ones exit
+      after one index probe for a non-contributor). Measured ~6 ms per query
+      on a loaded test database; run `pnpm test:backend:perf` alone on a quiet
+      machine to confirm the budgets hold. Trigger: the next perf run.
+- [ ] **Invite as an applicant with farms.** A contributor's farm links are
+      set by the owner after they join (`/farmers/:userId`); a farmer invite
+      carries farms, a contributor invite doesn't. Trigger: the first client
+      catchment with an irrigator applicant.
 
 ## Housekeeping
 

@@ -1,31 +1,68 @@
 // /projects/:id/scenarios — named overrides on a base run (roadmap WP-3.2,
-// docs/api.md § Scenarios, docs/scenarios.md). Viewers read, editors write;
-// farmers get 403 like every viewer route (their farm-scoped reads are
-// elsewhere). RLS (024_scenarios.sql) enforces the same underneath.
+// docs/api.md § Scenarios, docs/scenarios.md) — and applications, the
+// scenarios a contributor (a licence applicant, WP-3.3) makes on the
+// published baseline and submits to the assessors (docs/scenarios.md
+// § Applications).
+//
+// Who may do what (RLS in 024/045 enforces the same underneath):
+//  - a team scenario: viewers read, editors write, as WP-3.2 built it;
+//  - an application: its owner and the people they add (scenario_member)
+//    read it, editors once submitted, viewers once decided. Only its owner
+//    edits, submits, withdraws and reopens it; only an editor who isn't its
+//    owner decides it. A contributor never receives the base run's input:
+//    they get the applicant projection (applicant.ts), with the engine's
+//    messages about other farms renamed;
+//  - farmers: 403, like every viewer route.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
-import { requireRole, UUID } from '../projects/access.js';
+import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
-import { checkScenario, executeScenarioRun, loadBaseInput, loadScenario, SCENARIO_SELECT, type ScenarioCheck, type ScenarioRow } from './execute.js';
-import { opNames, snapshotNames } from './names.js';
-import { CreateScenarioBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, STATUS_MOVES } from './schema.js';
+import { applicantRedactor, projectBaseForApplicant } from './applicant.js';
+import {
+	checkScenario,
+	executeScenarioRun,
+	loadBaseInput,
+	loadScenario,
+	SCENARIO_SELECT,
+	trimApplicationRuns,
+	type ScenarioCheck,
+	type ScenarioRow
+} from './execute.js';
+import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
+import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 
 const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
 
 /** What the editor shows beside the ops: which applied, which don't, and how each is classed. The input itself stays server-side. */
-const checkView = (c: ScenarioCheck) => ({ applied: c.applied, problems: c.problems, classified: c.classified });
+function checkView(c: ScenarioCheck, redact?: (t: string) => string) {
+	if (!redact) return { applied: c.applied, problems: c.problems, classified: c.classified };
+	return {
+		applied: c.applied.map((a) => ({ ...a, notes: a.notes.map(redact) })),
+		problems: c.problems.map(redact),
+		classified: c.classified
+	};
+}
+
+/**
+ * A contributor sees the base through the applicant projection, so the
+ * engine's messages must not name a node the projection anonymises. The
+ * scenario's own nodes (its owner's farm links) are the ones shown.
+ */
+const redactorFor = (role: Role, base: Parameters<typeof projectBaseForApplicant>[0], s: ScenarioRow) =>
+	role === 'contributor' ? applicantRedactor(base, projectBaseForApplicant(base, s.ownedNodeIds)) : undefined;
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
-async function withCheck(db: Db, projectId: string, s: ScenarioRow) {
+async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
+	const scenario = applicantOpNames(s, role);
 	try {
-		const base = await loadBaseInput(db, projectId, s.baseRunId);
-		return { scenario: s, check: checkView(checkScenario(base, s.ops, s.ownedNodeIds)), checkError: null };
+		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
+		return { scenario, check: checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s)), checkError: null };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario: s, check: null, checkError: err.message };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message };
 		throw err;
 	}
 }
@@ -42,52 +79,141 @@ const duplicateName = (err: unknown): never => {
 };
 
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
+const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
+
+/** Change a scenario's ops, name, base or status: an editor on a team scenario, the owner on an application. */
+function assertCanChange(s: ScenarioRow, role: Role, userId: string) {
+	if (isApplication(s)) {
+		if (s.ownerUserId !== userId) throw new ApiError(403, 'only the applicant changes their application');
+	} else if (rank[role] < rank.editor) {
+		throw new ApiError(403, 'requires editor role');
+	}
+}
+
+/** op_names as stored: an application keeps only its own nodes' names (047; its applicant sees the rest anonymised). */
+const namesToStore = (s: ScenarioRow, names: OpName[], ownedNodeIds: string[]): OpName[] =>
+	isApplication(s) ? ownNames({ opNames: names, ownedNodeIds }).opNames : names;
+
+/** The current user's farm links in the project: an applicant's own nodes (045; classifyOp's proposal nodes). */
+async function ownFarms(db: Db, projectId: string): Promise<string[]> {
+	const { rows } = await db.query<{ id: string }>('SELECT app_farm_nodes($1) AS id ORDER BY 1', [projectId]);
+	return rows.map((r) => r.id);
+}
+
+/**
+ * The audit subject for a scenario event. An application's name stays out of
+ * the project's log (every viewer reads it) until it is decided, when viewers
+ * may read the application itself.
+ */
+const subject = (s: Pick<ScenarioRow, 'id' | 'name' | 'origin'>, extra: Record<string, unknown> = {}, decided = false) =>
+	s.origin === 'applicant' && !decided ? { scenarioId: s.id, application: true, ...extra } : { scenarioId: s.id, name: s.name, ...extra };
+
+/** Move a scenario's status after the caller's right to has been checked; the guard trigger checks the move again. */
+async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatus, extra: { outcome?: string; note?: string } = {}) {
+	if (!STATUS_MOVES[s.status].includes(to)) throw new ApiError(409, `a ${s.status} scenario can't become ${to}`);
+	// Only from the status the caller read: a concurrent move (the applicant
+	// withdrawing while the assessor decides) makes this match no row, and RLS
+	// filters an UPDATE silently, so a zero count is the 409, never a success.
+	const { rowCount } = await db.query(
+		`UPDATE scenario SET status = $3, outcome = COALESCE($4, outcome), decision_note = COALESCE($5, decision_note)
+		 WHERE project_id = $1 AND id = $2 AND status = $6`,
+		[projectId, s.id, to, extra.outcome ?? null, extra.note ?? null, s.status]
+	);
+	if (!rowCount) {
+		const now = await loadScenario(db, projectId, s.id).catch(() => null);
+		throw new ApiError(409, `this scenario is ${now?.status ?? 'no longer available'}; it can't become ${to}`);
+	}
+}
 
 export const scenarioRoutes = new Hono<AuthEnv>()
 	.get('/:id/scenarios', async (c) => {
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			// RLS lists what the caller reads: a contributor, their own applications and those shared with them.
+			const role = await requireRole(db, id, 'contributor');
 			const { rows } = await db.query<ScenarioRow>(`${SCENARIO_SELECT} WHERE s.project_id = $1 ORDER BY s.created_at DESC, s.id DESC`, [id]);
-			return c.json({ scenarios: rows });
+			return c.json({ scenarios: rows.map((s) => applicantOpNames(s, role)) });
 		});
 	})
 	.post('/:id/scenarios', async (c) => {
 		const id = c.req.param('id');
 		const body = CreateScenarioBody.parse(await json(c));
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
+			const role = await requireRole(db, id, 'contributor');
+			// A viewer reads scenarios but makes none; a contributor makes applications.
+			if (role === 'viewer') throw new ApiError(403, 'requires editor role');
+			const applicant = role === 'contributor';
+			if (applicant && body.ownedNodeIds.length) throw new ApiError(403, "an applicant's own nodes are their farm links");
 			// Citing a run: not while a trim or delete of this project's runs is under way (it would miss the citation).
 			await lockProjectRuns(db, id);
-			await loadBaseInput(db, id, body.baseRunId);
-			const names = opNames(body.ops, await snapshotNames(db, body.baseRunId), []);
+			const base = await loadBaseInput(db, id, body.baseRunId, role);
+			// The names the ops need, from the full base (server-side; applicantOpNames filters them for an applicant).
+			const all = opNames(body.ops, base.model, []);
+			const owned = applicant ? await ownFarms(db, id) : body.ownedNodeIds;
+			const names = applicant ? ownNames({ opNames: all, ownedNodeIds: owned }).opNames : all;
 			const { rows } = await db
 				.query<{ id: string }>(
 					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, op_names)
 					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), body.ownedNodeIds, JSON.stringify(names)]
+					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), owned, JSON.stringify(names)]
 				)
 				.catch(duplicateName);
-			await recordAudit(db, id, 'scenario.created', { scenarioId: rows[0]!.id, name: body.name, baseRunId: body.baseRunId, ops: body.ops.length });
-			return c.json(await withCheck(db, id, await loadScenario(db, id, rows[0]!.id)), 201);
+			const s = await loadScenario(db, id, rows[0]!.id);
+			await recordAudit(db, id, 'scenario.created', subject(s, { baseRunId: body.baseRunId, ops: body.ops.length }));
+			return c.json(await withCheck(db, id, s, role), 201);
+		});
+	})
+	// The assessors' list: every application that has been submitted (drafts are the applicant's alone).
+	.get('/:id/applications', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const { rows } = await db.query<ScenarioRow>(
+				`${SCENARIO_SELECT} WHERE s.project_id = $1 AND s.origin = 'applicant' AND s.status <> 'draft'
+				 ORDER BY COALESCE(s.submitted_at, s.updated_at) DESC, s.id DESC`,
+				[id]
+			);
+			return c.json({ applications: rows });
 		});
 	})
 	.get('/:id/scenarios/:sid', async (c) => {
 		const { id, sid } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
-			return c.json(await withCheck(db, id, await loadScenario(db, id, scenarioId(sid))));
+			const role = await requireRole(db, id, 'contributor');
+			return c.json(await withCheck(db, id, await loadScenario(db, id, scenarioId(sid)), role));
+		});
+	})
+	// The base the scenario applies to, as the caller may see it: the run's
+	// model and settings for a viewer and above, the applicant projection for
+	// a contributor (applicant.ts).
+	.get('/:id/scenarios/:sid/base', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			const base = await loadBaseInput(db, id, s.baseRunId, role);
+			const view = role === 'contributor' ? projectBaseForApplicant(base, s.ownedNodeIds) : { settings: base.settings, model: base.model, anonymisedNodeIds: [] };
+			return c.json({ baseRunId: s.baseRunId, ...view });
 		});
 	})
 	.patch('/:id/scenarios/:sid', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = PatchScenarioBody.parse(await json(c));
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
+			const role = await requireRole(db, id, 'contributor');
+			const userId = c.get('userId');
 			const s = await loadScenario(db, id, scenarioId(sid));
+			assertCanChange(s, role, userId);
+			if (isApplication(s)) {
+				if (body.ownedNodeIds !== undefined) throw new ApiError(403, "an application's own nodes are its owner's farm links");
+				if (body.status !== undefined && body.status !== s.status)
+					throw new ApiError(409, 'an application moves through …/submit, …/withdraw, …/reopen and (for the assessor) …/decide');
+			}
 			if ((body.ops !== undefined || body.ownedNodeIds !== undefined) && s.status !== 'draft') throw frozen(s);
 			if (body.status !== undefined && body.status !== s.status && !STATUS_MOVES[s.status].includes(body.status))
 				throw new ApiError(409, `a ${s.status} scenario can't become ${body.status}`);
+			// An application's own nodes follow its owner's farm links while it is a draft.
+			const owned = isApplication(s) && body.ops !== undefined ? await ownFarms(db, id) : body.ownedNodeIds;
 			const set: [string, unknown][] = [];
 			if (body.name !== undefined) set.push(['name', body.name]);
 			if (body.description !== undefined) set.push(['description', body.description]);
@@ -96,9 +222,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					['ops', JSON.stringify(body.ops)],
 					['ops_sha256', opsSha256(body.ops)],
 					// The names the ops need, from the base as it is now, keeping those an earlier base gave (a node a rebase dropped).
-					['op_names', JSON.stringify(opNames(body.ops, await snapshotNames(db, s.baseRunId), s.opNames))]
+					['op_names', JSON.stringify(namesToStore(s, opNames(body.ops, await baseNames(db, id, s.baseRunId, role), s.opNames), owned ?? s.ownedNodeIds))]
 				);
-			if (body.ownedNodeIds !== undefined) set.push(['owned_node_ids', body.ownedNodeIds]);
+			if (owned !== undefined) set.push(['owned_node_ids', owned]);
 			if (body.status !== undefined) set.push(['status', body.status]);
 			await db
 				.query(`UPDATE scenario SET ${set.map(([k], i) => `${k} = $${i + 3}`).join(', ')} WHERE project_id = $1 AND id = $2`, [
@@ -119,30 +245,31 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				name: body.name,
 				description: body.description,
 				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
-				owned_node_ids: body.ownedNodeIds !== undefined ? [...body.ownedNodeIds].sort().join(',') : undefined,
+				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status
 			};
 			const fields = Object.keys(now).filter((k) => now[k] !== undefined && now[k] !== was[k]);
 			if (fields.length)
-				await recordAudit(db, id, 'scenario.changed', {
-					scenarioId: sid,
-					name: body.name ?? s.name,
-					fields,
-					...(body.status !== undefined && body.status !== s.status ? { from: s.status, to: body.status } : {})
-				});
-			return c.json(await withCheck(db, id, await loadScenario(db, id, sid)));
+				await recordAudit(
+					db,
+					id,
+					'scenario.changed',
+					subject({ ...s, name: body.name ?? s.name }, { fields, ...(body.status !== undefined && body.status !== s.status ? { from: s.status, to: body.status } : {}) })
+				);
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
 		});
 	})
 	.delete('/:id/scenarios/:sid', async (c) => {
 		const { id, sid } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
+			const role = await requireRole(db, id, 'contributor');
 			const s = await loadScenario(db, id, scenarioId(sid));
+			assertCanChange(s, role, c.get('userId'));
 			if (s.status === 'submitted' || s.status === 'decided') throw new ApiError(409, `a ${s.status} scenario can't be deleted`);
 			// Its base run stops being cited and may be trimmed: under the project's run lock, as a trim is.
 			await lockProjectRuns(db, id);
 			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]);
-			await recordAudit(db, id, 'scenario.deleted', { scenarioId: sid, name: s.name });
+			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
 		});
 	})
@@ -150,12 +277,29 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		const { id, sid } = c.req.param();
 		const body = ScenarioRunBody.parse(await json(c));
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
-			const { id: runId, check } = await executeScenarioRun(db, id, scenarioId(sid), body.label).catch((err: Error) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			// A team scenario: an editor runs it. An application: whoever reads it
+			// as its owner or a shared member, and the assessors; never a viewer.
+			if (role === 'viewer' || (!isApplication(s) && rank[role] < rank.editor)) throw new ApiError(403, 'requires editor role');
+			const { id: runId, check } = await executeScenarioRun(db, id, s.id, body.label, role).catch((err: Error) => {
 				// As POST …/runs: engine problems with the input are the user's to fix.
 				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
 				throw new ApiError(400, `model run failed: ${err.message}`);
 			});
+			if (role === 'contributor') {
+				// The applicant's own cap (they can't trim the project's runs), and
+				// the run's metadata only: its summary names every farm.
+				const removedRunIds = await trimApplicationRuns(db, id, s.id);
+				if (removedRunIds.length) await recordAudit(db, id, 'run.deleted', { runIds: removedRunIds, reason: 'trimmed' });
+				const { rows } = await db.query(
+					`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate", r.end_date AS "endDate",
+						r.created_at AS "createdAt", r.scenario_id AS "scenarioId" FROM model_run r WHERE r.id = $1`,
+					[runId]
+				);
+				const { applied, classified } = checkView(check, redactorFor(role, check.base, s));
+				return c.json({ run: rows[0], removedRunIds, applied, classified }, 201);
+			}
 			// A scenario run counts toward the cap like any other.
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META_SQL.meta}, r.summary ${RUN_META_SQL.from} WHERE r.id = $1`, [runId]);
@@ -166,11 +310,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		const { id, sid } = c.req.param();
 		const body = RebaseBody.parse(await json(c));
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
-			scenarioId(sid);
+			const role = await requireRole(db, id, 'contributor');
+			const current = await loadScenario(db, id, scenarioId(sid));
+			assertCanChange(current, role, c.get('userId'));
 			// Lock first (as a trim and a scenario run do), then the new base's input.
 			if (!body.dryRun) await lockProjectRuns(db, id);
-			const base = await loadBaseInput(db, id, body.baseRunId);
+			const base = await loadBaseInput(db, id, body.baseRunId, role);
 			if (!body.dryRun) {
 				// The update takes the row lock, so the ops checked below are the ones the
 				// scenario has now, not ones a concurrent PATCH has since replaced.
@@ -179,11 +324,114 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			}
 			const s = await loadScenario(db, id, sid);
 			if (!body.dryRun) {
-				// Names from the new base, keeping the old base's for nodes the new one dropped.
-				s.opNames = opNames(s.ops, await snapshotNames(db, body.baseRunId), s.opNames);
+				// Names from the new (full) base, keeping the old base's for nodes the new one dropped.
+				s.opNames = namesToStore(s, opNames(s.ops, base.model, s.opNames), s.ownedNodeIds);
 				await db.query('UPDATE scenario SET op_names = $3 WHERE project_id = $1 AND id = $2', [id, sid, JSON.stringify(s.opNames)]);
-				await recordAudit(db, id, 'scenario.changed', { scenarioId: sid, name: s.name, fields: ['base_run_id'], baseRunId: body.baseRunId });
+				await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
 			}
-			return c.json({ scenario: s, ...checkView(checkScenario(base, s.ops, s.ownedNodeIds)) });
+			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s)) });
+		});
+	})
+	// --- the submission workflow (WP-3.3) ---------------------------------------------
+	// Submit: freezes the ops (their hash is the one the assessor decides on).
+	// Only a scenario whose every op applies to its base may be submitted.
+	.post('/:id/scenarios/:sid/submit', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			assertCanChange(await loadScenario(db, id, scenarioId(sid)), role, c.get('userId'));
+			// Held until the submit commits, so the ops checked below are the ones
+			// frozen: a concurrent PATCH waits, then finds it submitted.
+			await db.query('SELECT 1 FROM scenario WHERE project_id = $1 AND id = $2 FOR UPDATE', [id, sid]);
+			const s = await loadScenario(db, id, sid);
+			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario can't be submitted`);
+			const base = await loadBaseInput(db, id, s.baseRunId, role);
+			const { problems } = checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s));
+			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems });
+			await move(db, id, s, 'submitted');
+			await recordAudit(db, id, 'scenario.submitted', subject(s, { opsSha256: s.opsSha256 }));
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
+		});
+	})
+	.post('/:id/scenarios/:sid/withdraw', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			assertCanChange(s, role, c.get('userId'));
+			await move(db, id, s, 'withdrawn');
+			await recordAudit(db, id, 'scenario.withdrawn', subject(s));
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
+		});
+	})
+	// Withdrawn → draft: editable again (and to be submitted again).
+	.post('/:id/scenarios/:sid/reopen', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			assertCanChange(s, role, c.get('userId'));
+			await move(db, id, s, 'draft');
+			await recordAudit(db, id, 'scenario.reopened', subject(s));
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
+		});
+	})
+	// The assessor's decision: an editor who didn't make the application.
+	.post('/:id/scenarios/:sid/decide', async (c) => {
+		const { id, sid } = c.req.param();
+		const body = DecideBody.parse(await json(c));
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'editor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant can’t decide their own application');
+			await move(db, id, s, 'decided', { outcome: body.outcome, note: body.note });
+			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome }, true));
+			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
+		});
+	})
+	// --- sharing an application with a consultant or client (scenario_member) ----------
+	.post('/:id/scenarios/:sid/members', async (c) => {
+		const { id, sid } = c.req.param();
+		const body = ShareBody.parse(await json(c));
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (!isApplication(s)) throw new ApiError(409, 'a team scenario is read by every viewer: there is nothing to share');
+			assertCanChange(s, role, c.get('userId'));
+			// app_user has no RLS (sign-in needs it); the insert's trigger checks the
+			// address belongs to a contributor-or-above member of this project. Every
+			// refusal reads the same, so it says nothing more about the address.
+			const notMember = new ApiError(404, 'no contributor or above on this project has that address');
+			const { rows: users } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [body.email]);
+			const user = users[0];
+			if (!user) throw notMember;
+			if (user.id === s.ownerUserId) throw new ApiError(409, 'you already own this application');
+			await db.query('SAVEPOINT scenario_share');
+			const added = await db
+				.query('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [s.id, id, user.id])
+				.catch(async (err: { code?: string }) => {
+					if (err.code === '23514' || err.code === '23503') {
+						await db.query('ROLLBACK TO SAVEPOINT scenario_share');
+						throw notMember;
+					}
+					throw err;
+				});
+			if (added.rowCount) await recordAudit(db, id, 'scenario.shared', subject(s, { userId: user.id }));
+			return c.json({ members: (await loadScenario(db, id, s.id)).members }, added.rowCount ? 201 : 200);
+		});
+	})
+	// The owner removes anyone; anyone listed may leave.
+	.delete('/:id/scenarios/:sid/members/:userId', async (c) => {
+		const { id, sid, userId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
+			const me = c.get('userId');
+			if (s.ownerUserId !== me && userId !== me) throw new ApiError(403, 'only the applicant removes someone else');
+			const { rowCount } = await db.query('DELETE FROM scenario_member WHERE scenario_id = $1 AND user_id = $2', [s.id, userId]);
+			if (!rowCount) throw new ApiError(404, 'not found');
+			await recordAudit(db, id, 'scenario.unshared', subject(s, { userId, self: userId === me }));
+			return c.body(null, 204);
 		});
 	});

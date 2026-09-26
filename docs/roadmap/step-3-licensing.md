@@ -346,7 +346,7 @@ must build WP-2.15 Phase B.
   plan's **override mode**: the Network, Crops and Transfers tables on the
   scenario's model, their edits recorded as ops
   (`scenarios/OverrideEditor.svelte`, `overrideDiff.ts`). A scenario also
-  keeps the display names its ops need (`044_scenario_op_names`), so a node
+  keeps the display names its ops need (`047_scenario_op_names`), so a node
   a rebase dropped still reads by name.
 - **Goal.** A scenario is a named, ordered list of **overrides on a base
   run**. It is run and compared without copying the project.
@@ -460,6 +460,29 @@ must build WP-2.15 Phase B.
 ---
 
 ### WP-3.3 Applicant role and submission workflow
+
+- **Status (2026-09-26): first slice built**, UI included
+  ([scenarios.md § Applications](../scenarios.md#applications-wp-33),
+  [ui.md § Applications](../ui.md#applications-wp-33)): migrations
+  `044_contributor_role.sql` and `045_contributor_scope.sql` (the role, the
+  audit of WP-2.1's policies, `scenario.origin` and the decision columns,
+  `scenario_member`, the origin-aware scenario, `model_run` and `run_series`
+  policies), the scenario routes' ownership rules and the
+  `…/submit | withdraw | reopen | decide`, `…/members`, `…/base` and
+  `/applications` routes, the contributor route inventory and every RLS
+  test below, the Applicant view, the assessors' Applications tab, the
+  Members panel's "Applicant", `seed:examples`' demo applicant, e2e and axe.
+  Where the build differs from the plan: the base is read through
+  `app_published_run_input(project, run)` rather than
+  `app_scenario_base(scenario)` (so create and rebase use it too); a
+  withdrawn application reopens through `…/reopen`; drafts are private from
+  viewers *and* editors for applications only, a team scenario (an
+  editor's, `origin = 'team'`) keeping WP-3.2's viewer-read rule; there is no
+  "under review" status (a submitted application is the assessors' queue).
+  D2 is built on its recommended default, **pending the client**. Left, in
+  [followups.md § Applicants](../followups.md#applicants-wp-33): the
+  applicant's view of results (the `GET /compare/runs` contributor
+  projection), the run-row exposure it would close, and the open decisions.
 
 - **Goal.** Applicants and their consultants work on the **assessor's
   published baseline** without seeing other applicants' drafts, other

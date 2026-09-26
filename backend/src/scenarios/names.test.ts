@@ -1,8 +1,8 @@
-// opNames (044_scenario_op_names): the names a scenario's ops need, from the
+// opNames (047_scenario_op_names): the names a scenario's ops need, from the
 // base run's snapshot, keeping names an earlier base gave.
 import type { ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { opNames } from './names.js';
+import { applicantOpNames, opNames, ownNames } from './names.js';
 
 const [a, b, c, crop, t] = ['00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-00000000000b', '00000000-0000-4000-8000-00000000000c', '00000000-0000-4000-8000-0000000000cc', '00000000-0000-4000-8000-0000000000ff'];
 const model = {
@@ -48,5 +48,21 @@ describe('opNames', () => {
 			{ id: b, name: 'Kliphuis' }
 		]);
 		expect(opNames(ops, null, kept)).toEqual(kept.slice(0, 2));
+	});
+});
+
+describe('what an applicant is shown (applicantOpNames)', () => {
+	const s = {
+		ownedNodeIds: [a],
+		opNames: [
+			{ id: a, name: 'Rooikloof' },
+			{ id: b, name: 'Kliphuis' },
+			{ id: crop, name: 'Citrus' }
+		]
+	};
+	it('shows a contributor only the scenario’s own nodes, and the team every name', () => {
+		expect(applicantOpNames(s, 'contributor').opNames).toEqual([{ id: a, name: 'Rooikloof' }]);
+		expect(ownNames(s).opNames).toEqual([{ id: a, name: 'Rooikloof' }]);
+		for (const role of ['viewer', 'editor', 'owner'] as const) expect(applicantOpNames(s, role)).toBe(s);
 	});
 });

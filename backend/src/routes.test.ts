@@ -114,6 +114,25 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Applications (WP-3.3, 045_contributor_scope): auth-gated like every project
+	// route; which a contributor may call is scenarios/applications.db.test.ts.
+	it('inventories the application routes as auth-gated', () => {
+		const applications = [
+			'GET /projects/:id/applications',
+			'GET /projects/:id/scenarios/:sid/base',
+			'POST /projects/:id/scenarios/:sid/submit',
+			'POST /projects/:id/scenarios/:sid/withdraw',
+			'POST /projects/:id/scenarios/:sid/reopen',
+			'POST /projects/:id/scenarios/:sid/decide',
+			'POST /projects/:id/scenarios/:sid/members',
+			'DELETE /projects/:id/scenarios/:sid/members/:userId'
+		];
+		for (const r of applications) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Server-side PDF reports and their schedules (WP-2.15 Phase B): auth-gated like every project route.
 	it('inventories the report routes as auth-gated, and the render-session exchange as public', () => {
 		const reports = [

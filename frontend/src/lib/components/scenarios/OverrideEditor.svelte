@@ -33,6 +33,7 @@
 		input,
 		loadKey,
 		saving,
+		anonymisedCount = 0,
 		onrecord,
 		onclose,
 		dirty = $bindable(false)
@@ -43,6 +44,12 @@
 		/** Changes when the scenario's changes or base do: the editor then reloads from `input`. */
 		loadKey: string;
 		saving: boolean;
+		/**
+		 * Nodes an applicant sees only by kind and an anonymous name (WP-3.3):
+		 * their values are blanks, not the base's, so an edit isn't described
+		 * "from" them.
+		 */
+		anonymisedCount?: number;
 		/** Append these changes to the scenario; true once saved. */
 		onrecord: (ops: ScenarioOp[]) => Promise<boolean>;
 		onclose: () => void;
@@ -73,7 +80,7 @@
 
 	const diff = $derived(editor.dirty && loaded ? diffModel(loaded, editor.snapshot()) : null);
 	const blocking = $derived(editor.issues.length);
-	const pending = $derived(diff && loaded ? opItems(diff.ops, null, null, loaded, namesOf([editor.model, loaded.model], diff.ops)) : null);
+	const pending = $derived(diff && loaded ? opItems(diff.ops, null, null, anonymisedCount ? null : loaded, namesOf([editor.model, loaded.model], diff.ops)) : null);
 	const canRecord = $derived(!!diff && diff.ops.length > 0 && !diff.unsupported.length && !diff.problems.length && !blocking && !saving);
 	let note = $state('');
 
@@ -105,6 +112,12 @@
 			These tables start from the scenario's base run with its changes applied. What you edit here is recorded as changes to this
 			scenario; the catchment's own model (the Network, Crops and Transfers tabs) is not touched.
 		</p>
+		{#if anonymisedCount}
+			<p data-testid="override-anonymised">
+				Other farms and users appear under an anonymous name with their values blank, as in the published baseline you can see. A value you
+				enter on one replaces the baseline's own, which you can't see, and is a baseline assumption.
+			</p>
+		{/if}
 		<button type="button" class="btn btn-sm" onclick={close}>Close override mode</button>
 	</div>
 	<div class="seg" role="group" aria-label="Part of the model">
