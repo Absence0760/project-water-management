@@ -11,6 +11,7 @@ import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
 import { farmViewRoutes } from './farms/view.js';
 import { historyRoutes } from './history/routes.js';
+import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
@@ -105,10 +106,14 @@ export function createApp() {
 	projects.route('/', publicationRoutes);
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
+	projects.route('/', apiKeyRoutes);
 	app.route('/projects', projects);
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.
 	app.route('/share', sharePublicRoutes);
+
+	// The ingest endpoint (WP-2.9): no session, a per-project API key is the credential (ingest/auth.ts).
+	app.route('/ingest', ingestRoutes);
 
 	const teams = new Hono<AuthEnv>();
 	teams.use('*', requireUser);

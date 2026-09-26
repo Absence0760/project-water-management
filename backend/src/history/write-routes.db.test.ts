@@ -211,6 +211,21 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['share_link.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/share-links/${c.shareLinkId}`)
 	},
+	// API keys (WP-2.9). What a key then writes through /ingest records series.* as the key (ingest/ingest.db.test.ts).
+	{
+		route: `POST ${P}/api-keys`,
+		records: ['api_key.created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/api-keys`, { name: 'Guard key' });
+			c.apiKeyId = r.body.key?.id;
+			return r;
+		}
+	},
+	{
+		route: `DELETE ${P}/api-keys/:keyId`,
+		records: ['api_key.revoked'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
+	},
 	{
 		route: `DELETE ${P}/runs/:runId`,
 		records: ['run.deleted'],
