@@ -632,6 +632,7 @@ export interface SeriesRevisionMeta {
 	kind: string;
 	name: string;
 	unit: string;
+}
 
 /** Longest share-link label and lifetime (backend share/links.ts, 025_share_links.sql). */
 export const SHARE_LABEL_MAX = 100;
