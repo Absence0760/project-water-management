@@ -435,6 +435,43 @@
 //             ~1 KB in the project page. No new dependency; the largest page
 //             chunk stays under 41 KB. Headroom ~6 KB. #9 (engine shipped
 //             twice, help text loaded eagerly: ~50 KB) is now the next job.
+// 2026-09-26  ceilings unchanged (issue #9, second pass). main @ 61ef104
+//             measures 815 KB. Help text: already off the critical path
+//             since the first pass (HelpTip imports it lazily; help.spec.ts
+//             pins open, Escape and focus return), and it is counted once, so
+//             nothing is left to win on the total. Landed: the engine is
+//             side-effect free to Rollup (frontend/vite.config.ts
+//             treeshake.moduleSideEffects, guarded by
+//             src/lib/engineSideEffects.test.ts). The total doesn't move (815),
+//             but engine code no longer follows phantom barrel imports into
+//             pages that never call it. First loads, gzip: farm pages 76–86 →
+//             64–74 KB (−13), share 77 → 65, home 89 → 81, a catchment 126 →
+//             118; that engine code now loads with the tabs that call it
+//             (Data 61 → 67, Settings 76 → 81, Runs 114 → 120, Scenarios +3),
+//             so a catchment opened on Runs is 240 → 238. Compare 114 → 111,
+//             report 181 → 178. Measured and not landed:
+//             - Worker as a chunk of the page build (a plugin emitting
+//               autocal.worker.ts as a Rollup entry, the page taking its URL
+//               from a virtual module), so it shares the page's engine chunks:
+//               total 815 → 794 (−21), but a chunk holds whole modules, and
+//               the page's small imports from run.ts (prepareRun, ENGINE_VERSION,
+//               mergeSettings), calibrate.ts (CALIBRATION_PARAMS…), gr4j.ts and
+//               legacy.ts (their param tables) then drag the worker's whole
+//               run/network/calibration code in: Runs 120 → 147, Settings
+//               81 → 110, compare 111 → 144, report 178 → 210. With those
+//               exports moved to modules of their own (tried throwaway:
+//               prepare.ts, version.ts, calibrate/params.ts) the total is 798
+//               (−17) and, against the landed config, compare 111 → 102 and
+//               Runs 120 → 118 but a catchment +4, Data +6, Settings +3.5,
+//               report +3.5, farm +1 (the rest: gr4j.ts and legacy.ts param
+//               tables share a module with the runoff code, wr2012.ts and
+//               objective.ts mix page and fit code). A fuller engine split is
+//               the real fix; it waits for a quiet engine (docs/followups.md,
+//               "Stop shipping the engine twice").
+//             - experimentalMinChunkSize 5000: total −6 KB, every first load
+//               +3.5 to +8 KB. At 1500: −2 KB total, +2 KB on every page.
+//             - Svelte css: 'injected' (80 CSS files, 65 of them under 1 KB,
+//               cost ~23 KB of gzip overhead): total +6 KB, largest chunk 42.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

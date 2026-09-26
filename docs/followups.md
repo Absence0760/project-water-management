@@ -871,6 +871,34 @@ the suggested order (the IDs carry the detail):
       in the guard's change log: sharing the engine with the calibration
       worker (−13 KB total but +23 KB on a catchment's cold open) and
       `experimentalMinChunkSize` (1–4 KB, cold loads grow).
+- [x] **Engine code followed phantom imports into pages** (issue #9 second
+      pass, 2026-09-26): Rollup treated every engine module as possibly having
+      side effects, so a page that reached a module through the
+      `@water-management/engine` barrel depended on it without calling it.
+      `frontend/vite.config.ts` now marks the engine side-effect free
+      (`frontend/src/lib/engineSideEffects.test.ts` fails on any top-level
+      statement in `packages/engine/src`). First loads: farm pages −13 KB,
+      share −13, home −9, a catchment −8 (that code now loads with the Data,
+      Settings and Runs tabs, +6 each). The total stays 815 KB.
+- [ ] **Stop shipping the engine twice** (issue #9, measured 2026-09-26; the
+      numbers are in the bundle guard's change log). The calibration worker
+      bundles its own engine copy (57 KB gzip), ~130 KB raw of which the pages
+      ship too. Emitting the worker as a chunk of the page build (a Vite
+      plugin: `this.emitFile({ type: 'chunk' })` for `autocal.worker.ts`, the
+      page reading its URL from a virtual module) takes the total 815 → 794 KB,
+      but a chunk holds whole modules, and pages import small things from
+      modules that also hold the fit and run code: `ENGINE_VERSION`,
+      `prepareRun` and `mergeSettings` from `run.ts`; `CALIBRATION_PARAMS`,
+      `CALIBRATION_BOUNDS`, `MAX_STARTS` and `DEFAULT_STARTS` from
+      `calibrate/calibrate.ts`; the param tables from `runoff/gr4j.ts` and
+      `runoff/legacy.ts`; the check helpers in `reference/wr2012.ts`; the labels in
+      `calibrate/objective.ts`. So the Runs tab grows 27 KB and compare 32 KB.
+      **Durable fix:** move those page-side exports to modules of their own
+      (a throwaway split of the first two files alone gave 798 KB with compare
+      −9 KB and Runs −2, but a catchment +4 and Data +6 until the rest move too),
+      then land the worker plugin. **Trigger:** when no engine branch is open
+      (it moves `prepareRun` and `mergeSettings`, which most engine changes
+      edit), and before the next ceiling raise.
 - [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
       gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
       `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
