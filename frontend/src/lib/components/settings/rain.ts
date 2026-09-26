@@ -1,6 +1,6 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
 // engine ≥ 0.7.0; docs/model.md §2.4b).
-import type { AccumulationMode, ChirpsBiasMode, ZeroRainMode, ZeroRainSettings } from '@water-management/engine';
+import { resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ZeroRainMode, type ZeroRainSettings } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [
 	{
@@ -14,6 +14,41 @@ export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: 
 		help: 'CHIRPS is used as stored. Only for a CHIRPS series that is already corrected to the catchment; raw CHIRPS can read well below catchment rain.'
 	}
 ];
+
+// Which part of the record the CHIRPS factors are fitted on
+// (settings.chirpsFitPeriod, engine ≥ 0.29.0, issue #40; docs/model.md §2.4b).
+// 'ranges' stands for a list of water-year ranges in the picker. There is no
+// automatic mode: the double-mass breaks only propose ranges to confirm.
+export type ChirpsFitChoice = 'all' | 'ranges';
+export const CHIRPS_FIT_OPTIONS: { value: ChirpsFitChoice; label: string; help: string }[] = [
+	{
+		value: 'all',
+		label: 'Whole record (default)',
+		help: 'One set of monthly factors fitted over every year. When the Data tab’s double-mass check finds a break, a gap in one era is filled with a blend of every era’s catchment ÷ CHIRPS ratio.'
+	},
+	{
+		value: 'ranges',
+		label: 'Listed water years',
+		help: 'One set of factors per range, each fitted only on its own years; years outside every range stay out of every fit, and a gap there takes the nearest range’s factors. Put each break where the station records or the CHIRPS version say it is. “Propose from the double-mass breaks” fills the list from the check, but its break years are estimates that can be a year or two off, and a CHIRPS change moves them too: check each range, and its reason, before saving.'
+	}
+];
+export const chirpsFitChoice = (v: unknown): ChirpsFitChoice => (Array.isArray(v) ? 'ranges' : 'all');
+
+/** Why a list of CHIRPS fit ranges can't be saved, or null: the engine's rules (each a real range with a reason, none overlapping), one message. */
+export function chirpsFitRangesError(list: ChirpsFitRange[]): string | null {
+	if (!list.length) return 'List at least one water-year range, or fit on the whole record';
+	for (const [i, r] of list.entries()) {
+		const n = `Fit range ${i + 1}`;
+		if (!Number.isInteger(r.fromWaterYear) || !Number.isInteger(r.toWaterYear)) return `${n}: enter both water years`;
+		if (r.fromWaterYear > r.toWaterYear) return `${n}: ends before it starts`;
+		if (!r.reason.trim()) return `${n}: needs a reason`;
+	}
+	const w: string[] = [];
+	const kept = resolveChirpsFitPeriod(list, w);
+	if (Array.isArray(kept) && kept.length === list.length && !w.length) return null;
+	const clash = w.find((x) => x.includes('overlaps'));
+	return clash ? `Fit ranges overlap: ${clash.replace(/^CHIRPS fit range /, '').replace(/; ignored$/, '')}` : (w[0] ?? 'Invalid fit ranges');
+}
 
 // Flagged zero-rain runs (settings.zeroRainRuns.mode, engine ≥ 0.15.0;
 // docs/model.md §2.4c).

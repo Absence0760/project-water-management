@@ -1,4 +1,4 @@
-import { defaultProjectSettings } from '@water-management/engine';
+import { defaultProjectSettings, resolveChirpsFitPeriod } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 
@@ -71,6 +71,71 @@ describe('SettingsPatch.chirpsBiasCorrection', () => {
 	it('defaults to monthly for settings stored before it existed', () => {
 		expect(mergeSettings({}).chirpsBiasCorrection).toBe('monthly');
 		expect(mergeSettings({ chirpsBiasCorrection: 'none' }).chirpsBiasCorrection).toBe('none');
+	});
+});
+
+describe('SettingsPatch.chirpsFitPeriod (engine ≥ 0.29.0)', () => {
+	const ok = (chirpsFitPeriod: unknown) => SettingsPatch.safeParse({ chirpsFitPeriod }).success;
+	const r = (fromWaterYear: number, toWaterYear: number, reason = 'new network') => ({ fromWaterYear, toWaterYear, reason });
+
+	it('accepts the whole record and non-overlapping water-year ranges, each with a reason', () => {
+		expect(ok('all')).toBe(true);
+		expect(ok([r(1990, 2004), r(2005, 2019)])).toBe(true);
+		expect(ok([r(2005, 2005)])).toBe(true);
+	});
+
+	it('refuses anything the engine would drop', () => {
+		// 'segments' is not a mode: the double-mass breaks only propose ranges.
+		for (const bad of ['segments', 'latest', '', null, 1, [], [r(2005, 2004)], [r(1990, 2004, ' ')], [r(1990, 2004), r(2004, 2010)], [r(1799, 1800)], [{ ...r(1990, 1999), extra: 1 }], [r(1990.5, 1999)]]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('defaults to the whole record for settings stored before it existed', () => {
+		expect(mergeSettings({}).chirpsFitPeriod).toBe('all');
+		expect(mergeSettings({ chirpsFitPeriod: [r(1990, 2004)] }).chirpsFitPeriod).toEqual([r(1990, 2004)]);
+	});
+
+	// The API schema and the engine's resolver must agree on what a valid fit period is, so a value the
+	// API stores is never silently changed by a run, and one the engine would drop is refused up front.
+	it('agrees with the engine’s resolveChirpsFitPeriod on a table of valid and invalid values', () => {
+		const table: [string, unknown][] = [
+			['whole record', 'all'],
+			['one range', [r(1990, 2004)]],
+			['two ranges, unsorted', [r(2005, 2019), r(1990, 2004)]],
+			['a one-year range', [r(2005, 2005)]],
+			['the year bounds', [r(1800, 1800), r(2200, 2200)]],
+			['a reason padded with spaces', [r(1990, 2004, '  network  ')]],
+			['a reason of 500 characters', [r(1990, 2004, 'x'.repeat(500))]],
+			['100 ranges', Array.from({ length: 100 }, (_, i) => r(1800 + i, 1800 + i))],
+			['segments (not a mode)', 'segments'],
+			['an unknown mode', 'latest'],
+			['an empty string', ''],
+			['a number', 1990],
+			['an object', { fromWaterYear: 1990, toWaterYear: 2004, reason: 'x' }],
+			['an empty list', []],
+			['a range ending before it starts', [r(2005, 2004)]],
+			['a blank reason', [r(1990, 2004, '   ')]],
+			['a missing reason', [{ fromWaterYear: 1990, toWaterYear: 2004 }]],
+			['a reason of 501 characters', [r(1990, 2004, 'x'.repeat(501))]],
+			['a fractional year', [r(1990.5, 2004)]],
+			['a year as a string', [{ fromWaterYear: '1990', toWaterYear: 2004, reason: 'x' }]],
+			['a year before 1800', [r(1799, 1800)]],
+			['a year after 2200', [r(2200, 2201)]],
+			['an extra field', [{ ...r(1990, 2004), note: 'x' }]],
+			['a null entry', [null]],
+			['overlapping ranges', [r(1990, 2004), r(2004, 2010)]],
+			['one range inside another', [r(1990, 2010), r(1995, 2000)]],
+			['101 ranges', Array.from({ length: 101 }, (_, i) => r(1800 + i, 1800 + i))]
+		];
+		for (const [name, value] of table) {
+			const warnings: string[] = [];
+			const resolved = resolveChirpsFitPeriod(value, warnings);
+			// The engine keeps a value as it is (up to order and trimming) exactly when it has nothing to warn about.
+			const engineOk = warnings.length === 0;
+			if (engineOk && Array.isArray(value)) expect((resolved as unknown[]).length, name).toBe(value.length);
+			expect(SettingsPatch.safeParse({ chirpsFitPeriod: value }).success, name).toBe(engineOk);
+		}
 	});
 });
 
@@ -424,6 +489,16 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing', keepDry: [], missing: [] } } })).toBe(true);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, accumulationMode: 'smear' } } })).toBe(false);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: ' ' }] } } })).toBe(false);
+	});
+
+	it('accepts an optional CHIRPS fit period and factor sets inside forcing (engine ≥ 0.29.0)', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
+		const sets = [{ label: 'range 1990/91–1999/00 (old network), filling up to 1999/00', fittedOn: '1990/91–1999/00', factors: [...new Array(11).fill(1.5), null] }];
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'all', chirpsFactors: sets } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFactors: [{ label: 'whole record', factors: new Array(12).fill(1) }] } })).toBe(true); // fittedOn optional
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: [{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'x' }], chirpsFactors: null } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'segments' } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFactors: [{ label: 'x', factors: [1, 2] }] } })).toBe(false); // 12 months
 	});
 
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {

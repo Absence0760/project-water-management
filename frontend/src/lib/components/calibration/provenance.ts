@@ -13,6 +13,17 @@ export function monthsText(values: readonly number[], decimals = 2): string {
 	return values.every((v) => v === values[0]) ? `${fmtNum(values[0], decimals)} every month` : values.map((v, i) => `${WATER_YEAR_MONTHS[i]} ${fmtNum(v, decimals)}`).join(', ');
 }
 
+/**
+ * One recorded set of CHIRPS factors (FitRecord.forcing.chirpsFactors, engine
+ * ≥ 0.29.0; calendar months Jan … Dec) in water-year order: "1.52 every
+ * month", or "Oct 1.40, Nov 1.61, …", a month without a factor as "–".
+ */
+export function chirpsFactorsText(factors: readonly (number | null)[]): string {
+	const wy = [9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8].map((m) => factors[m] ?? null);
+	if (wy.every((v) => v !== null && v === wy[0])) return `${fmtNum(wy[0]!, 2)} every month`;
+	return wy.map((v, i) => `${WATER_YEAR_MONTHS[i]} ${v === null ? '–' : fmtNum(v, 2)}`).join(', ');
+}
+
 /** "GR4J" or "Legacy (workbook comparison)" (audit H1): the fit record's model, in the heading of FitProvenance. */
 export function fitModelLabel(model: RunoffModelId): string {
 	return model === 'gr4j' ? 'GR4J' : 'Legacy (workbook comparison)';

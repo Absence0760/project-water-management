@@ -180,6 +180,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  `chirpsFitPeriod` (engine ≥ 0.29.0) is `all` (the default: one set of
+  factors over the whole record) or a list (1–100) of `{ fromWaterYear, toWaterYear, reason }`
+  (integers 1800–2200, from ≤ to, a reason of 1–500 characters, trimmed; no
+  two ranges overlapping), replaced whole by a `PATCH`. Anything else is a
+  `400`; settings stored before it read back as `all`.
+  [model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40).
   `zeroRainRuns` (engine ≥ 0.15.0) is `{ mode, keepDry, missing }`:
   `mode` is `missing` (the default: flagged zero-rain runs in the catchment
   rain are treated as blank, so corrected CHIRPS fills them) or `asRecorded`
@@ -221,12 +227,17 @@ alongside teams, e.g. to give an outside client `viewer` access.
   no others. `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
   (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
-  chirpsBiasCorrection, zeroRainRuns }`, `panCoefficient`/`apanMm` each 12
+  chirpsBiasCorrection, zeroRainRuns, chirpsFitPeriod, chirpsFactors }`,
+  `panCoefficient`/`apanMm` each 12
   monthly numbers with the same bounds as the settings fields,
   `chirpsBiasCorrection` optional — `monthly | none`, `zeroRainRuns` optional
   and whole — `{ mode, keepDry, missing }` validated like the setting, plus
   optional `accumulationMode`, `keepReadings`, `addAccumulations` from engine
-  0.20.0) is the
+  0.20.0; from engine 0.29.0 optional `chirpsFitPeriod`, validated like the
+  setting, and `chirpsFactors`, `null` or a list of `{ label, fittedOn?,
+  factors }` with 12 factors each, Jan … Dec, `null` for a month without one,
+  and `fittedOn` the reference window in words: the factors per fit range the
+  fit's rain used) is the
   pan coefficient, A-pan evaporation, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
@@ -1174,8 +1185,13 @@ matched.
   `marRatioWhole`, `lowFlowRatio` and `patternCorrelation`.
   `comparison.chirpsFit` (`null` when neither run fitted CHIRPS factors) is
   `{ pooledFactor: MetricDelta, excludedWaterYearsA, excludedWaterYearsB,
+  fitPeriodA, fitPeriodB, segmentsA, segmentsB, fitWindowsA, fitWindowsB,
   changed }`: `changed` when any month's applied factor or the water years
-  left out of the fit differ ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+  left out of the fit differ, or (engine ≥ 0.29.0) the fit period (in words,
+  `null` for a side without factors), the fit ranges (by name), any range's
+  factors or any fit's reference window (`fitWindows*`: the water years that
+  gave each fit its shared days; empty for a run before 0.29.0, not
+  compared then) differ ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
 - Each side's `run` carries its `notes` (and `notesUpdatedAt` / `notesUpdatedBy`),
   so the modeller's explanation of each run is shown next to the comparison.
 - Each side's `run.evidence` is its place in its own project's evidence

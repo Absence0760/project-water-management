@@ -6,6 +6,7 @@ import {
 	DOUBLE_MASS_MIN_YEARS,
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
+	fitPeriodText,
 	FLOW_DM_MIN_DAYS,
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
@@ -159,9 +160,13 @@ function labelledRows(obj: Record<string, unknown>, labels: Record<string, strin
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** Water-year order (Oct … Sep), as the app's monthly settings and the run warning list them. */
 const WY_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-const SOURCE_TEXT = { month: 'own month', pooled: 'pooled (all months)' } as const;
+const SOURCE_TEXT = { month: 'own month', pooled: 'pooled (all months)', record: 'all ranges (range too thin)' } as const;
 
-/** The 12 CHIRPS bias factors the run applied (model.md §2.4b), one row per calendar month. */
+/**
+ * The 12 CHIRPS bias factors the run applied (model.md §2.4b), one row per
+ * calendar month; then (engine ≥ 0.29.0) the fit period, the water years
+ * the factors were fitted on and, with listed ranges, each range's factors.
+ */
 export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator<string> {
 	yield csvRow(['CHIRPS bias correction']);
 	if (c === undefined) {
@@ -176,22 +181,27 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 		yield csvRow(["Setting 'none': CHIRPS used as uploaded"]);
 		return;
 	}
-	yield csvRow(['Month', 'Factor applied', 'Source', 'Own factor', 'Clamped', 'Shared days', 'Catchment rain on them (mm)', 'CHIRPS on them (mm)', 'Days CHIRPS filled in']);
-	for (const m of WY_MONTHS) {
-		const f = c.months[m - 1]!;
-		yield csvRow([
-			MONTH_NAMES[m - 1]!,
-			f.factor,
-			f.source ? SOURCE_TEXT[f.source] : 'none (CHIRPS used as uploaded)',
-			f.ownFactor,
-			f.clamped ? 'yes' : 'no',
-			f.days,
-			f.catchmentMm,
-			f.chirpsMm,
-			f.fallbackDays
-		]);
+	const header = ['Month', 'Factor applied', 'Source', 'Own factor', 'Clamped', 'Shared days', 'Catchment rain on them (mm)', 'CHIRPS on them (mm)', 'Days CHIRPS filled in'];
+	type Fit = NonNullable<RunSummary['chirpsCorrection']>;
+	function* monthRows(months: Fit['months'], pooled: Fit['pooled'], fallbackDays: number): Generator<string> {
+		for (const m of WY_MONTHS) {
+			const f = months[m - 1]!;
+			yield csvRow([
+				MONTH_NAMES[m - 1]!,
+				f.factor,
+				f.source ? SOURCE_TEXT[f.source] : 'none (CHIRPS used as uploaded)',
+				f.ownFactor,
+				f.clamped ? 'yes' : 'no',
+				f.days,
+				f.catchmentMm,
+				f.chirpsMm,
+				f.fallbackDays
+			]);
+		}
+		yield csvRow(['Pooled', pooled.factor, 'all months together', pooled.ownFactor, pooled.clamped ? 'yes' : 'no', pooled.days, pooled.catchmentMm, pooled.chirpsMm, fallbackDays]);
 	}
-	yield csvRow(['Pooled', c.pooled.factor, 'all months together', c.pooled.ownFactor, c.pooled.clamped ? 'yes' : 'no', c.pooled.days, c.pooled.catchmentMm, c.pooled.chirpsMm, c.fallbackDays]);
+	yield csvRow(header);
+	yield* monthRows(c.months, c.pooled, c.fallbackDays);
 	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
 	// Engine ≥ 0.18.0: why, and the days left out one by one (absent on older runs).
 	if (c.lowVsChirpsYears?.length) yield csvRow(['of which far below CHIRPS', c.lowVsChirpsYears.join(' ')]);
@@ -201,6 +211,32 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	if (c.flaggedDaysLeftOut) yield csvRow(['Days of flagged zero runs left out (treated as missing)', c.flaggedDaysLeftOut]);
 	if (c.missingDaysLeftOut) yield csvRow(['Days listed as missing left out', c.missingDaysLeftOut]);
 	if (c.keptDryDaysInFit) yield csvRow(['Kept-dry days kept in the fit', c.keptDryDaysInFit]);
+
+	// Engine ≥ 0.29.0: the fit period and the reference window, then one block per listed range. Absent before: those runs fitted the whole record.
+	if (!c.fitPeriod) return;
+	const segs = c.fitPeriod.segments;
+	const window = (w: typeof c.fitWindow) => (w ? [w.fromWaterYear, w.toWaterYear] : ['no shared days', '']);
+	yield csvRow(['Fit period', fitPeriodText(c.fitPeriod)]);
+	yield csvRow([segs.length ? 'All ranges together: fitted on water years' : 'Fitted on water years', ...window(c.fitWindow)]);
+	if (!segs.length) return;
+	yield csvRow(['A range month too thin for its own or its range’s pooled factor takes the all-ranges factor above']);
+	if (c.outsideRangeDaysLeftOut) yield csvRow(['Shared days outside the listed fit ranges left out of every fit', c.outsideRangeDaysLeftOut]);
+	for (const s of segs) {
+		yield csvRow([
+			'Fit range',
+			s.fromWaterYear,
+			s.toWaterYear,
+			'reason',
+			s.reason,
+			'fitted on water years',
+			...window(s.fitWindow),
+			'fills water years',
+			s.fillFrom ?? 'record start',
+			s.fillTo ?? 'record end'
+		]);
+		yield csvRow(header);
+		yield* monthRows(s.months, s.pooled, s.fallbackDays);
+	}
 }
 
 /**

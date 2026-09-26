@@ -1,4 +1,5 @@
-import { createProject } from '../support/api.ts';
+import type { Page } from '@playwright/test';
+import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
@@ -162,4 +163,122 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 	await blockers.getByRole('link', { name: /^Calibration record: / }).click();
 	await expect(page).toHaveURL(/#set-record$/);
 	await expect(page.getByRole('heading', { name: 'Calibration record' })).toBeInViewport();
+});
+
+// CHIRPS fit period (engine ≥ 0.29.0, issue #40). Synthetic records only.
+test.describe('CHIRPS fit period', () => {
+	const fit = (page: Page) => page.getByTestId('chirps-fit-period');
+	const saved = (page: Page) => expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	test('listed water-year ranges: add and remove, a missing reason or an overlap blocks Save, and the list survives a reload', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Settings fit period');
+		await page.goto(`/projects/${project.id}?tab=settings`);
+		const section = fit(page);
+		const save = page.getByRole('button', { name: 'Save settings' });
+		const mode = section.getByLabel('CHIRPS fit period', { exact: true });
+		await expect(mode).toHaveValue('all');
+
+		await mode.selectOption('ranges');
+		// A new range has no reason yet: Save is blocked and the section says why.
+		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
+		await expect(save).toBeDisabled();
+		await section.getByLabel('From water year').first().fill('1990');
+		await section.getByLabel('To water year').first().fill('2004');
+		await section.getByLabel('Reason').first().fill('old gauge network');
+		await expect(section.getByRole('alert')).toBeHidden();
+
+		// A second range, overlapping the first.
+		await section.getByRole('button', { name: 'Add a range' }).click();
+		await section.getByLabel('From water year').nth(1).fill('2000');
+		await section.getByLabel('To water year').nth(1).fill('2019');
+		await section.getByLabel('Reason').nth(1).fill('new gauge network');
+		await expect(section.getByRole('alert')).toHaveText('Fit ranges overlap: 2000/01–2019/20 overlaps 1990/91–2004/05.');
+		await expect(save).toBeDisabled();
+		await section.getByLabel('From water year').nth(1).fill('2005');
+		await expect(section.getByRole('alert')).toBeHidden();
+		await expect(save).toBeEnabled();
+
+		await save.click();
+		await saved(page);
+		await page.reload();
+		await expect(mode).toHaveValue('ranges');
+		await expect(section.getByLabel('From water year')).toHaveCount(2);
+		await expect(section.getByLabel('From water year').nth(1)).toHaveValue('2005');
+		await expect(section.getByLabel('Reason').nth(1)).toHaveValue('new gauge network');
+
+		// Remove one, save, reload: one left.
+		await section.getByRole('button', { name: 'Remove fit range 2' }).click();
+		await save.click();
+		await saved(page);
+		await page.reload();
+		await expect(section.getByLabel('From water year')).toHaveCount(1);
+		await expect(section.getByLabel('Reason')).toHaveValue('old gauge network');
+	});
+
+	test('an invalid list stays visible and fixable after turning bias correction off', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Settings fit period off');
+		await page.goto(`/projects/${project.id}?tab=settings`);
+		const section = fit(page);
+		const save = page.getByRole('button', { name: 'Save settings' });
+		await section.getByLabel('CHIRPS fit period', { exact: true }).selectOption('ranges');
+		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
+		await page.getByLabel('CHIRPS bias correction', { exact: true }).selectOption('none');
+		// Still shown, marked as unused, and still what blocks Save, so it can be fixed.
+		await expect(section.getByTestId('chirps-fit-inactive')).toBeVisible();
+		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
+		await expect(save).toBeDisabled();
+		await section.getByLabel('Reason').fill('station history');
+		await expect(save).toBeEnabled();
+	});
+
+	test('proposes ranges from the double-mass breaks, stored only on Save', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Settings fit proposal');
+		// 20 water years from 1990: CHIRPS every third day, catchment 2 × CHIRPS to 1999/00 and 1.2 × after.
+		const base = [0, 2, 2, 4, 6, 10, 12, 12, 10, 6, 4, 3, 2];
+		const catchment: number[] = [];
+		const chirps: number[] = [];
+		for (let t = Date.UTC(1990, 9, 1), i = 0; t < Date.UTC(2010, 9, 1); t += 86_400_000, i++) {
+			const d = new Date(t);
+			const month = d.getUTCMonth() + 1;
+			const wy = d.getUTCFullYear() - (month >= 10 ? 0 : 1);
+			const v = i % 3 === 0 ? base[month]! * (0.8 + 0.1 * (wy % 5)) : 0;
+			chirps.push(v);
+			catchment.push(v * (wy < 2000 ? 2 : 1.2));
+		}
+		await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '1990-10-01', values: catchment });
+		await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1990-10-01', values: chirps });
+
+		await page.goto(`/projects/${project.id}?tab=settings`);
+		const section = fit(page);
+		const propose = section.getByRole('button', { name: 'Propose from the double-mass breaks' });
+		await propose.click();
+		await expect(section.getByTestId('chirps-fit-proposal')).toContainText('Proposed 2 ranges from the double-mass breaks');
+		await expect(section.getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('ranges');
+		await expect(section.getByLabel('From water year').nth(0)).toHaveValue('1990');
+		await expect(section.getByLabel('To water year').nth(0)).toHaveValue('1999');
+		await expect(section.getByLabel('From water year').nth(1)).toHaveValue('2000');
+		await expect(section.getByLabel('Reason').nth(1)).toHaveValue(/^proposed from the double-mass check \(catchment \/ CHIRPS 1\.20\)/);
+
+		// Nothing is stored until Save.
+		await page.reload();
+		await expect(section.getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
+		await propose.click();
+		await expect(section.getByLabel('From water year')).toHaveCount(2);
+		await page.getByRole('button', { name: 'Save settings' }).click();
+		await saved(page);
+		await page.reload();
+		await expect(section.getByLabel('From water year').nth(1)).toHaveValue('2000');
+	});
+
+	test('says why there is nothing to propose', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Settings fit no proposal');
+		await page.goto(`/projects/${project.id}?tab=settings`);
+		await fit(page).getByRole('button', { name: 'Propose from the double-mass breaks' }).click();
+		await expect(fit(page).getByTestId('chirps-fit-proposal')).toHaveText(/needs a catchment rain series and a CHIRPS series/);
+		await expect(fit(page).getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
+	});
 });

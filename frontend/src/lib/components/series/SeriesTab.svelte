@@ -14,6 +14,7 @@
 		rainVsChirps,
 		rainVsChirpsCheck,
 		resolveDataQuality,
+		resolveChirpsFitPeriod,
 		resolveZeroRain,
 		SERIES_KINDS,
 		toEpochDay,
@@ -185,7 +186,9 @@
 		if (!viewing || viewing.kind !== 'rain_catchment_mm' || viewing.id !== first('rain_catchment_mm')?.id) return null;
 		const v = values[viewing.id];
 		const h = first('rain_chirps_mm');
-		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly') : null;
+		// The CHIRPS fit period too (engine ≥ 0.29.0): accumulations are judged with each range's factors, as a run judges them.
+		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []) };
+		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly', fit) : null;
 	});
 
 	// Gauge vs logger, when both records exist.
@@ -219,7 +222,8 @@
 		return vc && vh ? { series: c!, result: doubleMass({ rain_catchment_mm: vc, rain_chirps_mm: vh }, resolveZeroRain(zeroRainRuns, [])) } : null;
 	});
 	const dmCheck = $derived.by(() => {
-		const check = dm ? doubleMassCheck(dm.result) : null;
+		const fp = resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []);
+		const check = dm ? doubleMassCheck(dm.result, Array.isArray(fp) ? 'ranges' : fp) : null;
 		return check ? { id: `${dm!.series.id}-${check.check}`, series: dm!.series, check } : null;
 	});
 

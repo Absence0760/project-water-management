@@ -708,7 +708,19 @@ which checks every catchment tab).
   per month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
-  days in its warnings. Below it, **Zero-rain runs in the catchment rain**
+  days in its warnings. Below it, **CHIRPS fit period** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
+  (`settings/ChirpsFitPeriodSection.svelte`, `settings.chirpsFitPeriod`,
+  engine ≥ 0.29.0): "Whole record (default)" or "Listed water years", the
+  latter with rows of from / to water year and a required reason
+  (overlapping or reasonless ranges block Save). **Propose from the
+  double-mass breaks** (`settings/proposeFitRanges.ts`, pure part
+  `fitRangeProposal.ts`) loads the catchment rain and CHIRPS and fills the
+  list with one range per double-mass segment, each reason saying it is a
+  proposal; nothing is saved until Save, and the hint says to check each
+  range against the station history, since a detected break can be a year
+  or two off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
+  Fit provenance shows the fit period and the factors per range, with the
+  years each was fitted on, that the fit ran under. Below it, **Zero-rain runs in the catchment rain**
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
   **Flagged zero runs** picker ("Treat as missing (default)" or "Run as

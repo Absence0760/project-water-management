@@ -11,7 +11,8 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type { CalibrationFlowKind, ChirpsBiasMode, ProjectSettings, ZeroRainSettings } from '../project';
+import type { CalibrationFlowKind, ChirpsBiasMode, ChirpsFitPeriod, ProjectSettings, ZeroRainSettings } from '../project';
+import type { ChirpsFactorSet } from '../rain';
 import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
@@ -184,8 +185,19 @@ export interface FitRecord {
 	 * accumulation fields) which multi-day accumulations are spread, so it
 	 * changes the rain the fit saw; absent on a `forcing` made before it, and
 	 * the accumulation fields absent on one made before 0.20.0.
+	 * `settings.chirpsFitPeriod` (engine ≥ 0.29.0) decides which factors fill
+	 * each gap, so it is recorded too, with the factors themselves per fit
+	 * range (`chirpsFactors`, from the fit's own run); both absent on a
+	 * `forcing` made before them.
 	 */
-	forcing?: { panCoefficient: number[]; apanMm: number[]; chirpsBiasCorrection?: ChirpsBiasMode; zeroRainRuns?: ZeroRainSettings };
+	forcing?: {
+		panCoefficient: number[];
+		apanMm: number[];
+		chirpsBiasCorrection?: ChirpsBiasMode;
+		zeroRainRuns?: ZeroRainSettings;
+		chirpsFitPeriod?: ChirpsFitPeriod;
+		chirpsFactors?: ChirpsFactorSet[] | null;
+	};
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
@@ -209,6 +221,7 @@ export interface FitContext {
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
 		calibrationExclusions?: CalibrationExclusion[] | null;
 		zeroRainRuns?: ZeroRainSettings;
+		chirpsFitPeriod?: ChirpsFitPeriod;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -246,7 +259,9 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			panCoefficient: [...ctx.settings.panCoefficient],
 			apanMm: [...ctx.settings.apanMm],
 			chirpsBiasCorrection: ctx.settings.chirpsBiasCorrection,
-			...(ctx.settings.zeroRainRuns ? { zeroRainRuns: structuredClone(ctx.settings.zeroRainRuns) } : {})
+			...(ctx.settings.zeroRainRuns ? { zeroRainRuns: structuredClone(ctx.settings.zeroRainRuns) } : {}),
+			chirpsFitPeriod: structuredClone(ctx.settings.chirpsFitPeriod ?? 'all'),
+			...(r.chirpsFactors !== undefined ? { chirpsFactors: structuredClone(r.chirpsFactors) } : {})
 		},
 		splitSample: r.splitSample,
 		differential: r.differential,
@@ -336,7 +351,7 @@ const accumulationOf = (z: Partial<ZeroRainSettings> | undefined) => ({
 function forcingDiff(
 	settings: Partial<ProjectSettings>,
 	record: FitRecord
-): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean } | null {
+): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean } | null {
 	if (!record.forcing) return null;
 	return {
 		panCoefficient: !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
@@ -347,7 +362,9 @@ function forcingDiff(
 			record.forcing.zeroRainRuns !== undefined &&
 			(!sameJson(zeroRainOf(settings), zeroRainOf({ zeroRainRuns: record.forcing.zeroRainRuns })) ||
 				(record.forcing.zeroRainRuns.accumulationMode !== undefined &&
-					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns))))
+					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns)))),
+		// Engine ≥ 0.29.0; absent on an older forcing, so never flagged there.
+		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod)
 	};
 }
 
@@ -362,7 +379,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
-		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns)
+		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod)
 	};
 }
 
@@ -378,7 +395,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.forcingChanged) {
 		out.push(
-			'The pan coefficient, A-pan evaporation, CHIRPS bias correction or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS settings change the rain fed to it on days CHIRPS fills a gap, so refit before relying on them.'
+			'The pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS settings change the rain fed to it on days CHIRPS fills a gap, so refit before relying on them.'
 		);
 	}
 	return out;

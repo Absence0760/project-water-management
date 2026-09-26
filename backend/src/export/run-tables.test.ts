@@ -355,6 +355,34 @@ describe('CHIRPS bias factors block', () => {
 		]);
 	});
 
+	it('adds the fit period, its reference window and each listed range’s factors (engine ≥ 0.29.0)', () => {
+		const seg = (from: number, fillFrom: number | null, fillTo: number | null, reason: string) => ({
+			fromWaterYear: from, toWaterYear: from + 9, reason, fillFrom, fillTo, fitWindow: { fromWaterYear: from, toWaterYear: from + 8 },
+			pooled: corr.pooled, months: corr.months, fallbackDays: 31, correctedDays: 31, fallbackRawMm: 10, fallbackCorrectedMm: 17
+		});
+		const all = [...chirpsFactorLines({ ...corr, fitPeriod: { period: 'all', ranges: [], segments: [] }, fitWindow: { fromWaterYear: 1990, toWaterYear: 2014 } })];
+		expect(all.slice(16)).toEqual(['Fit period,whole record', 'Fitted on water years,1990,2014']);
+		const ranges = [{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'old network' }, { fromWaterYear: 2005, toWaterYear: 2014, reason: 'new network' }];
+		const lines = [
+			...chirpsFactorLines({
+				...corr,
+				outsideRangeDaysLeftOut: 1826,
+				fitWindow: { fromWaterYear: 1990, toWaterYear: 2013 },
+				fitPeriod: { period: 'ranges', ranges, segments: [seg(1990, null, 2001, 'old network'), seg(2005, 2002, null, 'new network')] }
+			})
+		];
+		expect(lines[16]).toBe('Fit period,listed water years: 1990/91–1999/00 (old network); 2005/06–2014/15 (new network)');
+		expect(lines[17]).toBe('All ranges together: fitted on water years,1990,2013');
+		expect(lines[18]).toMatch(/^A range month too thin/);
+		expect(lines[19]).toBe('Shared days outside the listed fit ranges left out of every fit,1826');
+		expect(lines[20]).toBe('Fit range,1990,1999,reason,old network,fitted on water years,1990,1998,fills water years,record start,2001');
+		expect(lines[21]!.startsWith('Month,Factor applied,Source')).toBe(true);
+		expect(lines[22]).toBe('Oct,2,own month,2,no,100,200,100,0');
+		expect(lines[34]!.startsWith('Pooled,2,all months together')).toBe(true);
+		expect(lines[35]).toBe('Fit range,2005,2014,reason,new network,fitted on water years,2005,2013,fills water years,2002,record end');
+		expect(lines).toHaveLength(50);
+	});
+
 	it('says why there are no factors', () => {
 		expect([...chirpsFactorLines({ ...corr, mode: 'none' })][1]).toMatch(/used as uploaded/);
 		expect([...chirpsFactorLines(null)][1]).toMatch(/No CHIRPS series/);
