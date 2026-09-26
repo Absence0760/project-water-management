@@ -385,6 +385,22 @@
 //             f072a83: 748 → 753 KB (+5). No new dependency; the largest
 //             chunk is unchanged (38 KB). Headroom ~7 KB. Issue #9 still
 //             stands.
+// 2026-09-26  total 760 → 774 KB, calibration worker 55 → 57 KB; other
+//             ceilings unchanged. Rain-source periods (issue #40 (b), engine
+//             0.30.0). Measured over main 59225ac (753 KB) → the branch:
+//             768 KB (+15). The engine's rainSourcePeriods.ts (the resolver
+//             and its messages, the fit, the fallbacks, the run warning, the
+//             CSV/compare wording) sits in the shared engine chunks and,
+//             since a fit must run the forcing it records, again in the
+//             autocal worker (+~2 KB there: it bundles its own engine copy,
+//             so the same code counts twice). The rest: Settings → Rain
+//             source periods (RainSourceSection + settings/rainSource.ts,
+//             in the lazy Settings chunk), the Upload form's sub-daily day
+//             boundary and free product fields with the CSV aggregation,
+//             three help entries, the fit provenance row, the compare note
+//             and the report's inputs row. No new dependency; the largest
+//             page chunk is unchanged (39 KB). Headroom ~6 KB on the total.
+//             Issue #9 still stands.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -395,9 +411,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 760,
+	totalCodeKb: 774,
 	largestChunkKb: 41,
-	largestWorkerKb: 55,
+	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });

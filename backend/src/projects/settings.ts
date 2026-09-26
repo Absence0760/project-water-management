@@ -30,6 +30,7 @@ import {
 	wr2012FlagIssues,
 	wr2012PenaltyIssues,
 	wr2012ReferenceIssues,
+	rainSourceError,
 	ZERO_RAIN_MODES,
 	type ProjectSettings
 } from '@water-management/engine';
@@ -231,6 +232,22 @@ const ChirpsFitPeriod = z.union([
 ]);
 const ExclusionList = periodList('calibration exclusion');
 
+/**
+ * settings.rainSource (engine ≥ 0.30.0, issue #40 (b)): periods whose
+ * catchment rain comes from another series × monthly factors. Checked by the
+ * engine's own rainSourceError, the rule its resolver (rainSourcePeriods.ts
+ * resolveRainSource) drops a period by, so the two can't disagree: fixed
+ * factors need their provenance, 'fit' needs a reference that isn't CHIRPS
+ * when the period says CHIRPS ingests its gauge, no two periods overlap.
+ */
+const RainSource = z
+	.array(z.unknown())
+	.max(EXCLUSIONS_MAX)
+	.superRefine((list, ctx) => {
+		const err = rainSourceError(list);
+		if (err) ctx.addIssue({ code: 'custom', message: err });
+	});
+
 const scoreValue = z.number().finite().nullable();
 const ScoredPeriod = z
 	.object({
@@ -332,6 +349,8 @@ export const FitRecord = z
 					.max(EXCLUSIONS_MAX + 3)
 					.nullable()
 					.optional(),
+				// Engine ≥ 0.30.0 (issue #40 (b)): the rain-source periods. Optional, as above.
+				rainSource: RainSource.optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
 				zeroRainRuns: z
 					.object({
@@ -393,6 +412,8 @@ export const SettingsPatch = z
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
 		// Which part of the record the CHIRPS factors are fitted on (engine rain.ts, issue #40); replaced whole.
 		chirpsFitPeriod: ChirpsFitPeriod,
+		// Periods whose catchment rain comes from another series (engine rainSourcePeriods.ts, issue #40 (b)); replaced whole.
+		rainSource: RainSource,
 		// Flagged zero-rain runs (engine rain.ts, CR-20): any subset may be
 		// patched; each list is replaced whole.
 		zeroRainRuns: z

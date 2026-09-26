@@ -14,6 +14,7 @@ import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import { provenanceLabel, sameProvenance, type SeriesProvenance } from './seriesProvenance';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
+import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
 	upgradeLegacyModel,
@@ -163,6 +164,13 @@ export interface RunComparison {
 		fitWindowsB?: string[];
 		changed: boolean;
 	} | null;
+	/**
+	 * The rain-source periods each run applied (engine ≥ 0.30.0, model.md
+	 * §2.4e): one line per period with its factors, where they came from (the
+	 * provenance, or a fit's reference and reference windows) and its
+	 * fallback. null when neither run has any; `changed` when the lines differ.
+	 */
+	rainSource?: { periodsA: string[]; periodsB: string[]; changed: boolean } | null;
 	/**
 	 * Reserve compliance by month (engine ≥ 0.21.0, model.md §2.9c): one row
 	 * per EWR site with a rule table in either run, matched by site (the
@@ -333,6 +341,9 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 			return m.factor === null || f === null ? m.factor !== f : Math.abs(m.factor - f) > 1e-9;
 		});
 	const segsOf = (x: ChirpsCorrection | null) => x?.fitPeriod?.segments ?? [];
+	const rsa = rainSourceLines(a.summary.rainSource);
+	const rsb = rainSourceLines(b.summary.rainSource);
+	const rainSource = rsa.length || rsb.length ? { periodsA: rsa, periodsB: rsb, changed: !same(rsa, rsb) } : null;
 	const chirpsFit =
 		xa || xb
 			? {
@@ -403,6 +414,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 					}
 				: null,
 		chirpsFit,
+		rainSource,
 		wr2012:
 			wa || wb
 				? {
@@ -532,6 +544,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	},
 	// Engine ≥ 0.29.0; a snapshot without it takes the default, 'all', which is what older runs did.
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
+	// Engine ≥ 0.30.0; a snapshot without it had none.
+	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },

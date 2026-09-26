@@ -166,6 +166,8 @@ export interface ChirpsCorrection {
 	accumulationDaysLeftOut?: number;
 	/** Listed fit ranges only (engine ≥ 0.29.0): usable shared days in water years outside every range, left out of every fit. */
 	outsideRangeDaysLeftOut?: number;
+	/** With settings.rainSource periods (engine ≥ 0.30.0): shared days inside them, whose catchment reading the run replaces, left out one by one. */
+	replacedDaysLeftOut?: number;
 	/**
 	 * Calendar months 1–12, in order: the factors over every fitted year (the
 	 * whole record; with listed fit ranges, the ranges together). With fit
@@ -198,11 +200,12 @@ export const KEEP_DRY_DOUBT_MIN_MM = 50;
 export const KEEP_DRY_DOUBT_ANNUAL_SHARE = 0.25;
 
 /**
- * How a catchment-rain day counts as suspect: listed missing, in a multi-day
+ * How a catchment-rain day counts as suspect: in a settings.rainSource period
+ * (engine ≥ 0.30.0: its reading is replaced), listed missing, in a multi-day
  * accumulation window (engine ≥ 0.20.0), a flagged zero run, or a flagged run
  * kept dry.
  */
-export type SuspectRainDay = 'missing' | 'accumulation' | 'flagged' | 'keptDry';
+export type SuspectRainDay = 'replaced' | 'missing' | 'accumulation' | 'flagged' | 'keptDry';
 
 /** Epoch-day spans (inclusive) of accumulation windows, as the fit leaves them out (./accumulation.ts fitExcludedWindows). */
 export type AccumulationSpans = readonly { from: number; to: number }[];
@@ -222,9 +225,15 @@ export interface SuspectRainDays {
  * period holds it, and 'flagged' when not. In 'asRecorded' mode every flagged
  * day is 'flagged': that mode runs them dry as a blanket choice, not as a
  * confirmed reading. A day of an accumulation window in `accumulations` is
- * 'accumulation', unless it is listed missing.
+ * 'accumulation', unless it is listed missing. A day of a rain-source period
+ * (`replaced`, engine ≥ 0.30.0) is 'replaced' before anything else.
  */
-export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRainSettings, accumulations: AccumulationSpans = []): SuspectRainDays {
+export function suspectRainDays(
+	catchment: DailySeries | undefined,
+	zr: ZeroRainSettings,
+	accumulations: AccumulationSpans = [],
+	replaced: AccumulationSpans = []
+): SuspectRainDays {
 	const runs = catchment
 		? zeroRainRuns(catchment).runs.map((r) => ({ start: r.startDate, end: r.endDate, from: toEpochDay(r.startDate), to: toEpochDay(r.endDate) }))
 		: [];
@@ -235,6 +244,7 @@ export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRain
 	return {
 		runs,
 		status: (day) => {
+			if (replaced.some((w) => day >= w.from && day <= w.to)) return 'replaced';
 			if (within(missing, day)) return 'missing';
 			if (accumulations.some((w) => day >= w.from && day <= w.to)) return 'accumulation';
 			if (!runs.some((r) => day >= r.from && day <= r.to)) return null;
@@ -243,14 +253,14 @@ export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRain
 	};
 }
 
-type MonthSums = { days: number[]; cMm: number[]; hMm: number[] };
+export type MonthSums = { days: number[]; cMm: number[]; hMm: number[] };
 
 /**
  * Per-month factors from the month sums: own where the sample is big enough,
  * else pooled; clamped. With `record` (a fit range's, engine ≥ 0.29.0), a
  * month with neither takes the whole record's factor for it.
  */
-function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[]): { pooled: ChirpsCorrection['pooled']; months: ChirpsMonthFactor[] } {
+export function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[]): { pooled: ChirpsCorrection['pooled']; months: ChirpsMonthFactor[] } {
 	const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
 	const pd = sum(t.days);
 	const pc = sum(t.cMm);
@@ -284,9 +294,29 @@ function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[]): { poo
 	return { pooled, months };
 }
 
+/**
+ * The series with the catchment rain blanked on the days of `replaced`
+ * (settings.rainSource periods, engine ≥ 0.30.0), for the fits' own
+ * low-vs-CHIRPS judgement; the same object when there are none. The data
+ * checks keep judging the series as recorded.
+ */
+export function withoutReplaced(series: Partial<Record<SeriesKind, DailySeries>>, replaced: AccumulationSpans | undefined): Partial<Record<SeriesKind, DailySeries>> {
+	const sa = series.rain_catchment_mm;
+	if (!sa || !replaced?.length) return series;
+	const a0 = toEpochDay(sa.startDate);
+	const values = sa.values.map((v, i) => (replaced.some((w) => a0 + i >= w.from && a0 + i <= w.to) ? null : v));
+	return { ...series, rain_catchment_mm: { ...sa, values } };
+}
+
 /** Where the factors are fitted (engine ≥ 0.29.0): settings.chirpsFitPeriod. */
 export interface ChirpsFitOptions {
 	fitPeriod?: ChirpsFitPeriod;
+	/**
+	 * Epoch-day spans of the settings.rainSource periods (engine ≥ 0.30.0,
+	 * ./rainSourcePeriods.ts): their catchment reading is replaced, so it stays out of
+	 * every fit, like a missing period's.
+	 */
+	replaced?: AccumulationSpans;
 }
 
 type SegmentPlan = Pick<ChirpsFitSegment, 'fromWaterYear' | 'toWaterYear' | 'reason' | 'fillFrom' | 'fillTo'>;
@@ -350,8 +380,9 @@ export function chirpsBiasFactors(
 	const sb = series.rain_chirps_mm;
 	if (!sb) return null;
 	const sa = series.rain_catchment_mm;
-	const lowYears = sa ? (rainVsChirps(series)?.flaggedYears ?? []) : [];
-	const suspect = suspectRainDays(sa, zeroRain, accumulations);
+	// The low-vs-CHIRPS years are judged without the replaced days (engine ≥ 0.30.0): a replaced era far below CHIRPS mustn't take the rest of its water years out too.
+	const lowYears = sa ? (rainVsChirps(withoutReplaced(series, opts.replaced))?.flaggedYears ?? []) : [];
+	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced);
 	const b0 = toEpochDay(sb.startDate);
 
 	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their status.
@@ -414,6 +445,7 @@ export function chirpsBiasFactors(
 	let keptDryDaysInFit = 0;
 	let accumulationDaysLeftOut = 0;
 	let outsideRangeDaysLeftOut = 0;
+	let replacedDaysLeftOut = 0;
 	for (const d of shared) {
 		const wy = waterYearOf(d.day);
 		if (doubtYears.has(wy)) continue;
@@ -421,7 +453,8 @@ export function chirpsBiasFactors(
 			if (d.status === null || d.status === 'keptDry') outsideRangeDaysLeftOut++;
 			continue;
 		}
-		if (d.status === 'missing') missingDaysLeftOut++;
+		if (d.status === 'replaced') replacedDaysLeftOut++;
+		else if (d.status === 'missing') missingDaysLeftOut++;
 		else if (d.status === 'flagged') flaggedDaysLeftOut++;
 		else if (d.status === 'keptDry') keptDryDaysInFit++;
 		else if (d.status === 'accumulation') accumulationDaysLeftOut++;
@@ -478,6 +511,7 @@ export function chirpsBiasFactors(
 		keptDryDaysInFit,
 		accumulationDaysLeftOut,
 		...(listed ? { outsideRangeDaysLeftOut } : {}),
+		...(opts.replaced?.length ? { replacedDaysLeftOut } : {}),
 		months: fit.months,
 		fallbackDays: 0,
 		correctedDays: 0,
@@ -659,6 +693,7 @@ export function fitExclusionText(c: ChirpsCorrection): string {
 	if (low.length) parts.push(`water years far below CHIRPS (${low.map(waterYearLabel).join(', ')})`);
 	if (doubt.length) parts.push(`water years of kept-dry runs that CHIRPS contradicts (${doubt.map(waterYearLabel).join(', ')})`);
 	if (c.flaggedDaysLeftOut) parts.push(`${plural(c.flaggedDaysLeftOut, 'day')} of flagged zero runs treated as missing`);
+	if (c.replacedDaysLeftOut) parts.push(`${plural(c.replacedDaysLeftOut, 'day')} in rain-source periods (replaced from another series)`);
 	if (c.missingDaysLeftOut) parts.push(`${plural(c.missingDaysLeftOut, 'day')} listed as missing`);
 	if (c.accumulationDaysLeftOut) parts.push(`${plural(c.accumulationDaysLeftOut, 'day')} of multi-day accumulation windows`);
 	const outside = c.outsideRangeDaysLeftOut ? ` ${plural(c.outsideRangeDaysLeftOut, 'shared day')} outside the listed fit ranges stay out of every fit.` : '';
@@ -813,14 +848,18 @@ export interface ZeroRainMask {
  * catchment rain series. filledMm / unfilledDays stay 0 until
  * finishZeroRainInfill has the rain used. A day `claimed(day)` says is an
  * accumulation window's (engine ≥ 0.20.0, ./accumulation.ts) is not set aside
- * as part of a flagged run: the window's own total covers it.
+ * as part of a flagged run: the window's own total covers it. A day
+ * `replaced(day)` says is in a rain-source period (engine ≥ 0.30.0,
+ * ./rainSourcePeriods.ts) is set aside by neither a flagged run nor a listed
+ * missing period: the period's own series gives its rain.
  */
 export function zeroRainMask(
 	catchment: DailySeries | undefined,
 	zr: ZeroRainSettings,
 	start: number,
 	days: number,
-	claimed: (day: number) => boolean = () => false
+	claimed: (day: number) => boolean = () => false,
+	replaced: (day: number) => boolean = () => false
 ): ZeroRainMask | null {
 	if (!catchment) return null;
 	const c0 = toEpochDay(catchment.startDate);
@@ -843,7 +882,7 @@ export function zeroRainMask(
 		const i = periods.length;
 		for (let day = from; day <= to; day++) {
 			const t = day - start;
-			if (mask[t] || !reading(day) || skip(day)) continue;
+			if (mask[t] || !reading(day) || replaced(day) || skip(day)) continue;
 			mask[t] = 1;
 			owner[t] = i;
 			period.days++;
@@ -856,7 +895,7 @@ export function zeroRainMask(
 		const span = inRun(toEpochDay(run.startDate), toEpochDay(run.endDate));
 		if (!span) continue;
 		if (zr.mode === 'asRecorded') {
-			for (let day = span[0]; day <= span[1]; day++) if (!claimed(day)) asRecordedDays++;
+			for (let day = span[0]; day <= span[1]; day++) if (!claimed(day) && !replaced(day)) asRecordedDays++;
 			continue;
 		}
 		const keptBy = (day: number) => {

@@ -8,6 +8,7 @@ import {
 	landCoverLines,
 	ewrSiteLines,
 	zeroRainLines,
+	rainSourceCsvLines,
 	accumulationLines,
 	doubleMassLines,
 	plausibilityLines,
@@ -77,9 +78,9 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
-		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, multi-day accumulations,
+		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, rain-source periods, multi-day accumulations,
 		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(16);
+		expect(lines.filter((l) => l === '').length).toBe(17);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -263,6 +264,47 @@ describe('catchment rain treated as missing block (CR-20)', () => {
 		]);
 		expect([...zeroRainLines(null)][1]).toBe('No catchment rain series');
 		expect([...zeroRainLines(undefined)][1]).toMatch(/before engine 0\.15\.0/);
+	});
+});
+
+describe('rain-source block (engine ≥ 0.30.0)', () => {
+	const period = {
+		start: '2012-10-01',
+		end: '2019-09-30',
+		series: 'rain_catchment_alt_mm' as const,
+		reason: 'automatic station, gauges closed',
+		factorMode: 'fixed' as const,
+		factors: [1.1, 1.1, 1.2, 1.2, 1.2, 1.3, 1.3, 1.3, 1.2, 1.2, 1.1, 1.1],
+		provenance: { source: 'hydrologist', fittedFrom: '2012-10-01', fittedTo: '2015-09-30', method: 'overlap ratio' },
+		fit: null,
+		fallback: 'chirps' as const,
+		gaugeInChirps: false,
+		seriesPresent: true,
+		seriesProvenance: { product: 'SASSCAL AWS', version: '1' },
+		runDays: 2556,
+		seriesDays: 2500,
+		seriesRawMm: 5000,
+		seriesMm: 6000,
+		chirpsDays: 50,
+		reanalysisDays: 0,
+		forecastDays: 0,
+		noneDays: 6
+	};
+
+	it('lists each period with its reason, where its days came from, its factors and its fallback', () => {
+		expect([...rainSourceCsvLines({ periods: [period] })]).toEqual([
+			'Rain-source periods',
+			'Start,End,Series,Reason,Run days,From the series,From CHIRPS,From reanalysis,From forecast,No value,Series rain (mm),Rain used from it (mm),Factors,Gaps from',
+			'2012-10-01,2019-09-30,alternative catchment gauge (SASSCAL AWS v1),"automatic station, gauges closed",2556,2500,50,0,0,6,5000,6000,"fixed, from hydrologist, fitted on 2012-10-01 to 2015-09-30 by overlap ratio",CHIRPS × the CHIRPS fit-period factors',
+			'Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep',
+			'2012-10-01 to 2019-09-30,1.2,1.1,1.1,1.1,1.1,1.2,1.2,1.2,1.3,1.3,1.3,1.2'
+		]);
+		expect([...summaryCsvLines(meta, { ...summary, rainSource: { periods: [period] } })]).toContain('Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep');
+	});
+
+	it('says when there are none, or the run predates them', () => {
+		expect([...rainSourceCsvLines(null)][1]).toBe('None: the catchment series throughout');
+		expect([...rainSourceCsvLines(undefined)][1]).toMatch(/before engine 0\.30\.0/);
 	});
 });
 

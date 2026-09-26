@@ -281,7 +281,7 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all' });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [] });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});
@@ -295,6 +295,24 @@ describe('fitRecordFor', () => {
 		expect(rec.forcing!.chirpsFactors).toEqual(sets);
 		ranges[0]!.toWaterYear = 2010;
 		expect((rec.forcing!.chirpsFitPeriod as typeof ranges)[0]!.toWaterYear).toBe(2004);
+	});
+
+	it('records the rain-source periods the fit ran under, copied (engine ≥ 0.30.0)', () => {
+		const period = {
+			start: '2012-10-01',
+			end: '2019-09-30',
+			series: 'rain_catchment_alt_mm' as const,
+			factors: 'fit' as const,
+			fitReference: { series: 'rain_reanalysis_mm' as const, fromWaterYear: 1995, toWaterYear: 2011 },
+			reason: 'automatic station'
+		};
+		const form = { ...defaultProjectSettings(), rainSource: [period] };
+		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
+		expect(rec.forcing!.rainSource).toEqual([period]);
+		period.end = '2020-09-30';
+		expect(rec.forcing!.rainSource![0]!.end).toBe('2019-09-30');
+		// And a change of periods flags "forcing changed since fit".
+		expect(fitRecordStatus({ ...form, rainSource: [] }, rec).forcingChanged).toBe(true);
 	});
 
 	it('records the CHIRPS bias correction mode the fit ran under too', () => {

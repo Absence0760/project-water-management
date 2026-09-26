@@ -325,9 +325,40 @@ Tick items off (or move them into an issue) as they are done.
       range whose factors filled each gap; Settings → Rain gaps and CHIRPS →
       *CHIRPS fit period*
       ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
-      Never applied silently: the default stays `'all'`. The rest of issue
-      #40 (a per-period rain source with its replaced days out of every fit,
-      CHIRPS version provenance, 08:00 aggregation) is separate work.
+      Never applied silently: the default stays `'all'`. CHIRPS version
+      provenance was issue #40 (c); the per-period rain source and 08:00
+      aggregation are the next item.
+- [x] **Per-period rain source (done, engine 0.30.0, issue #40 (b) and its
+      amendments).** `settings.rainSource` lists periods whose catchment rain
+      comes from a second catchment-rain kind, `rain_catchment_alt_mm`, ×
+      monthly factors: fixed with their provenance (source, dates fitted on,
+      method), or `'fit'` against a reference that doesn't contain the gauge
+      (a new gauge-free kind, `rain_reanalysis_mm`; CHIRPS is refused once
+      the period says CHIRPS ingests the gauge) over a named reference era,
+      recording both ratios' windows. Gaps fall through to a named fallback
+      (default CHIRPS × the fit-period factors; or reanalysis × its own
+      era's factors), then forecast. The primary days in a period stay out
+      of every fit (a test pins a replaced period at 10 × CHIRPS). Per-day
+      `rain_source` column, `summary.rainSource`, a warning per period, a
+      summary CSV block with the reasons, run comparison
+      (`RunComparison.rainSource` and a settings line), fit provenance
+      (`forcing.rainSource`, "Forcing changed since fit"), Settings → *Rain
+      source periods*. Sub-daily uploads are added up into 08:00–08:00 days
+      booked to the start day (or midnight days), recorded on the series
+      (`time_series.day_boundary`, 033) and guarded against merging the
+      other window
+      ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+- [ ] **Quantile-map a replacement gauge's daily intensities
+      (calibration-research.md §4, *Check daily intensity*).** A rain-source
+      period scales the alternative gauge by a monthly factor, which keeps
+      its own wet-day distribution: a single automatic gauge has more
+      intense days than a mean of several manual gauges, and GR4J turns more
+      of that into flow. Durable fix: an optional per-period quantile
+      mapping of the wet-day distribution, month by month, onto the primary
+      series' reference era, preserving the monthly totals. Trigger: the
+      hydrologist applies a rain-source period to the client record and the
+      share of rain on heavy days (≥ 20 mm) in the period differs from the
+      reference era by more than the calibration band allows.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no

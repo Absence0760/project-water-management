@@ -1,7 +1,7 @@
 // Client-side parsing of a two-column daily series CSV (date,value) into the
 // API's dense representation: values[i] = value on startDate + i days, with
 // null for every day missing from the file.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay, type DayBoundary } from '@water-management/engine';
 
 export interface ParsedSeries {
 	startDate: string;
@@ -15,6 +15,19 @@ export interface ParsedSeries {
 	dateOrder: 'iso' | DateOrder;
 	/** True when no day above 12 settled the order and day/month was assumed. */
 	dateOrderAssumed: boolean;
+	/** Sub-daily readings added up into days (only when parsed with a day boundary). */
+	subDaily?: SubDailyInfo;
+}
+
+/** How a sub-daily file was added up into days (issue #40 (b), 033_series_day_boundary.sql). */
+export interface SubDailyInfo {
+	dayBoundary: DayBoundary;
+	/** Rows with a value. */
+	readings: number;
+	/** The most common number of readings in a day: the file's interval (24 for hourly). */
+	readingsPerDay: number;
+	/** Days with a value but fewer readings than that: their totals may be short. */
+	incompleteDays: number;
 }
 
 /** Order of a slash/dot/dash date whose year comes last: 05/01/2020. */
@@ -23,7 +36,9 @@ export type DateOrder = 'dmy' | 'mdy';
 export class CsvError extends Error {
 	constructor(
 		message: string,
-		readonly line?: number
+		readonly line?: number,
+		/** The file holds several timed readings a day: parse it again with a day boundary. */
+		readonly subDaily = false
 	) {
 		super(line ? `Line ${line}: ${message}` : message);
 		this.name = 'CsvError';
@@ -37,6 +52,32 @@ const SLASH_YMD = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/;
 const DMY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/;
 
 const dateCell = (raw: string) => raw.trim().replace(/^"|"$/g, '').split(/[ T]/)[0] ?? '';
+
+/** Minutes after midnight of a cell's time part ("2020-01-05 08:30", "…T08:30:00"), 0–1440 (24:00 allowed); null without one; NaN for a bad one. */
+export function parseTime(raw: string): number | null {
+	const t = raw.trim().replace(/^"|"$/g, '').split(/[ T]/)[1];
+	if (t === undefined || t === '') return null;
+	const m = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(t);
+	if (!m) return NaN;
+	const [h, min, sec] = [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
+	if (min > 59 || sec > 59 || h > 24 || (h === 24 && (min > 0 || sec > 0))) return NaN;
+	return h * 60 + min + sec / 60;
+}
+
+const BOUNDARY_MINUTES: Record<DayBoundary, number> = { '00:00': 0, '08:00': 480 };
+
+/**
+ * The day a timed reading is booked to (epoch day). A logger's timestamp
+ * closes its interval (the rain fell in the hour before 09:00 for a 09:00
+ * reading), so a reading stamped exactly at the boundary belongs to the
+ * window it closes: with '08:00', 08:00 on the 6th closes the window
+ * 08:00 on the 5th → 08:00 on the 6th, booked to the 5th, the day it starts
+ * (the manual-gauge convention); with '00:00', midnight closes the day before.
+ */
+export function bookedDay(date: string, minutes: number, boundary: DayBoundary): number {
+	const instant = toEpochDay(date) * 1440 + minutes;
+	return Math.floor((instant - BOUNDARY_MINUTES[boundary] - 1e-6) / 1440);
+}
 
 /**
  * Accepts YYYY-MM-DD, YYYY/MM/DD, and year-last dates in the given order:
@@ -90,12 +131,22 @@ function detectOrder(cells: string[]): { order: 'iso' | DateOrder; assumed: bool
 /** A header cell is text; a cell starting with a digit is a (possibly bad) date. */
 const isHeaderCell = (cell: string) => !/^\d/.test(dateCell(cell));
 
-export function parseSeriesCsv(text: string): ParsedSeries {
+/**
+ * Parse a date,value CSV into daily values. With `dayBoundary`, the file is
+ * sub-daily (hourly, 10-minute…): each row's date and time say when its
+ * interval ended, and the values are added up into days in that window
+ * (bookedDay). Without it, one row per day; a file with several timed rows a
+ * day throws a CsvError marked `subDaily`, so the form can ask for a boundary.
+ */
+export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary } = {}): ParsedSeries {
 	const lines = text.replace(/^﻿/, '').split(/\r?\n/);
 	const rows = lines.map((raw, i) => ({ line: raw.trim(), n: i + 1 })).filter((r) => r.line && !r.line.startsWith('#'));
 	const cellsOf = rows.map((r) => splitRow(r.line));
 	const { order, assumed } = detectOrder(cellsOf.map((c) => c[0] ?? ''));
 	const byDay = new Map<number, number | null>();
+	const readingsOn = new Map<number, number>();
+	let timed = false;
+	let readings = 0;
 	for (let r = 0; r < rows.length; r++) {
 		const cells = cellsOf[r]!;
 		const i = rows[r]!.n - 1;
@@ -111,8 +162,25 @@ export function parseSeriesCsv(text: string): ParsedSeries {
 			value = Number(rawVal.replace(/\s/g, ''));
 			if (!Number.isFinite(value)) throw new CsvError(`"${rawVal}" is not a number`, i + 1);
 		}
+		const minutes = parseTime(cells[0] ?? '');
+		if (minutes !== null && Number.isNaN(minutes)) throw new CsvError(`"${cells[0]}" has a time that isn't HH:MM`, i + 1);
+		if (minutes !== null) timed = true;
+		if (opts.dayBoundary) {
+			if (minutes === null) throw new CsvError(`"${cells[0]}" has no time: every row of a sub-daily file needs one (YYYY-MM-DD HH:MM)`, i + 1);
+			const day = bookedDay(date, minutes, opts.dayBoundary);
+			if (!byDay.has(day)) byDay.set(day, null);
+			if (value !== null) {
+				byDay.set(day, (byDay.get(day) ?? 0) + value);
+				readingsOn.set(day, (readingsOn.get(day) ?? 0) + 1);
+				readings++;
+			}
+			continue;
+		}
 		const day = toEpochDay(date);
-		if (byDay.has(day)) throw new CsvError(`duplicate date ${date}`, i + 1);
+		if (byDay.has(day)) {
+			if (timed) throw new CsvError(`several readings on ${date}: this looks like sub-daily data; choose how to add it up into days`, i + 1, true);
+			throw new CsvError(`duplicate date ${date}`, i + 1);
+		}
 		byDay.set(day, value);
 	}
 	if (byDay.size === 0) throw new CsvError('no data rows found');
@@ -129,7 +197,7 @@ export function parseSeriesCsv(text: string): ParsedSeries {
 		values[day - start] = v;
 		if (v !== null) rowCount++;
 	}
-	return {
+	const out: ParsedSeries = {
 		startDate: fromEpochDay(start),
 		endDate: fromEpochDay(end),
 		values,
@@ -138,4 +206,15 @@ export function parseSeriesCsv(text: string): ParsedSeries {
 		dateOrder: order,
 		dateOrderAssumed: assumed
 	};
+	if (opts.dayBoundary) {
+		// The file's interval: the most common count of readings in a day (the larger on a tie).
+		const tally = new Map<number, number>();
+		for (const n of readingsOn.values()) tally.set(n, (tally.get(n) ?? 0) + 1);
+		let perDay = 0;
+		let seen = -1;
+		for (const [n, c] of tally) if (c > seen || (c === seen && n > perDay)) [perDay, seen] = [n, c];
+		const incompleteDays = [...readingsOn.values()].filter((n) => n < perDay).length;
+		out.subDaily = { dayBoundary: opts.dayBoundary, readings, readingsPerDay: perDay, incompleteDays };
+	}
+	return out;
 }

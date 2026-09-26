@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -93,6 +93,11 @@
 						</dd>
 					</div>
 				{/if}
+				<!-- Engine ≥ 0.30.0 (issue #40 b): a forcing without it ran with none. -->
+				<div data-testid="fit-rain-source">
+					<dt>Rain source periods <HelpTip key="settings.rainSource" /></dt>
+					<dd>{rainSourceText(record.forcing.rainSource ?? [])}</dd>
+				</div>
 				<div>
 					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" /></dt>
 					<dd>{record.forcing.zeroRainRuns ? describeZeroRain(record.forcing.zeroRainRuns) : 'not recorded (fit made before this was tracked)'}</dd>

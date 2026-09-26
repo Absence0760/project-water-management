@@ -26,6 +26,16 @@ export const KIND_ROLES: Record<string, KindRole> = {
 		help: 'Forecast rainfall (mm). Used only on days both catchment and CHIRPS rainfall are missing, e.g. to run into the coming days.',
 		driver: true
 	},
+	rain_catchment_alt_mm: {
+		role: 'Rain-source period',
+		help: 'A second catchment gauge (mm), e.g. an in-catchment automatic station. Read only inside a rain-source period (Settings → Rain source), where it replaces the catchment rainfall × monthly factors.',
+		driver: true
+	},
+	rain_reanalysis_mm: {
+		role: 'Rain reference',
+		help: 'A gauge-free reanalysis such as ERA5 (mm). Read only by a rain-source period (Settings → Rain source): the reference its factors are fitted against, or the series its gaps fall through to.',
+		driver: true
+	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
 		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS).',
@@ -45,16 +55,34 @@ export const KIND_ROLES: Record<string, KindRole> = {
 
 /** Kinds a run never reads, so no series of the kind is ever "in use". */
 const NEVER_READ = new Set(['flow_reference_m3s']);
+/** Kinds a run reads only when a rain-source period names them (engine ≥ 0.30.0). */
+const PERIOD_ONLY = new Set(['rain_catchment_alt_mm', 'rain_reanalysis_mm']);
+/** A kind a run reads only when a rain-source period names it. */
+export const isPeriodOnly = (kind: string) => PERIOD_ONLY.has(kind);
+
+/** The series kinds settings.rainSource periods name: the period's series, its fit reference and its fallback. */
+export function rainSourceKinds(periods: readonly { series: string; fitReference?: { series: string }; fallback?: { series: string } }[] | null | undefined): Set<string> {
+	const out = new Set<string>();
+	for (const p of periods ?? []) {
+		out.add(p.series);
+		if (p.fitReference) out.add(p.fitReference.series);
+		if (p.fallback) out.add(p.fallback.series);
+	}
+	return out;
+}
 
 /**
  * Ids of the series a run actually reads: the first of each kind by name
  * (the backend's DISTINCT ON (kind) … ORDER BY kind, name), and the logger
  * only when there is no observed-gauge series. A reference gauge is never in
- * use: the engine ignores it.
+ * use: the engine ignores it. The alternative catchment gauge and the
+ * reanalysis are in use only when a rain-source period names them
+ * (`periodKinds`, rainSourceKinds).
  */
-export function seriesInUse(list: SeriesMeta[]): Set<string> {
+export function seriesInUse(list: SeriesMeta[], periodKinds: ReadonlySet<string> = new Set()): Set<string> {
 	const first = new Map<string, SeriesMeta>();
 	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
+		if (PERIOD_ONLY.has(s.kind) && !periodKinds.has(s.kind)) continue;
 		if (!first.has(s.kind) && !NEVER_READ.has(s.kind)) first.set(s.kind, s);
 	}
 	if (first.has('flow_observed_m3s')) first.delete('flow_logger_m3s');

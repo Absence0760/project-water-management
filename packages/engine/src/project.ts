@@ -7,6 +7,7 @@ import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
 import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
+import type { RainSourceInfo } from './rainSourcePeriods';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
@@ -46,6 +47,66 @@ export interface ChirpsFitRange {
 	reason: string;
 }
 export type ChirpsFitPeriod = (typeof CHIRPS_FIT_PERIOD_MODES)[number] | ChirpsFitRange[];
+
+/**
+ * Per-period forcing source (settings.rainSource, engine ≥ 0.30.0,
+ * ./rainSourcePeriods.ts, issue #40 (b), docs/model.md §2.4e). Over each period,
+ * catchment rain comes from `series` × its month's factor instead of the
+ * primary catchment series; a day the series lacks falls through to the
+ * named `fallback` (default CHIRPS × the §2.4b factors), then forecast rain.
+ */
+export const RAIN_SOURCE_SERIES = ['rain_catchment_alt_mm'] as const;
+export type RainSourceSeries = (typeof RAIN_SOURCE_SERIES)[number];
+/** Series a 'fit' can be measured against, and a fallback can name. */
+export const RAIN_SOURCE_REFERENCES = ['rain_reanalysis_mm', 'rain_chirps_mm'] as const;
+export type RainSourceReference = (typeof RAIN_SOURCE_REFERENCES)[number];
+/** Series a period's gaps can fall through to by name; absent = CHIRPS × the §2.4b factors. */
+export const RAIN_SOURCE_FALLBACKS = ['rain_reanalysis_mm'] as const;
+export type RainSourceFallback = (typeof RAIN_SOURCE_FALLBACKS)[number];
+
+/** Where fixed factors came from (the amendment's provenance): who, over which dates, how. */
+export interface RainSourceFactorProvenance {
+	source: string;
+	/** The dates the factors were fitted on (ISO, inclusive). */
+	fittedFrom: string;
+	fittedTo: string;
+	method: string;
+}
+
+/** A reference series and the water years it is read over (the reference era). */
+export interface RainSourceReferenceEra {
+	series: RainSourceReference;
+	fromWaterYear: number;
+	toWaterYear: number;
+}
+
+export interface RainSourcePeriod {
+	/** ISO dates, inclusive. */
+	start: string;
+	end: string;
+	series: RainSourceSeries;
+	/**
+	 * 12 fixed factors in water-year order (Oct … Sep), as the other monthly
+	 * settings, with `provenance`; or 'fit', measured against `fitReference`.
+	 */
+	factors: number[] | 'fit';
+	provenance?: RainSourceFactorProvenance;
+	/**
+	 * 'fit' only: factor(m) = (catchment ÷ reference over the reference era) ÷
+	 * (series ÷ reference over the period). The reference must not contain the
+	 * series: CHIRPS is refused when `gaugeInChirps` is set.
+	 */
+	fitReference?: RainSourceReferenceEra;
+	/**
+	 * Where a day the series lacks takes its rain. Absent = CHIRPS × the §2.4b
+	 * factors (the fit period's). A reanalysis fallback needs the era its
+	 * factors (catchment ÷ reanalysis per month) are fitted on.
+	 */
+	fallback?: { series: RainSourceFallback; fromWaterYear: number; toWaterYear: number };
+	/** The series' gauge reports to CHIRPS in this period: CHIRPS can be neither the fit reference nor the fallback. */
+	gaugeInChirps?: boolean;
+	reason: string;
+}
 
 /**
  * What a run does with the zero runs the catchment-rain check flags as
@@ -205,6 +266,11 @@ export interface ProjectSettings {
 	 */
 	chirpsFitPeriod: ChirpsFitPeriod;
 	/**
+	 * Periods whose catchment rain comes from another series × monthly factors
+	 * (engine ≥ 0.30.0, ./rain.ts, issue #40 (b)). Default none.
+	 */
+	rainSource: RainSourcePeriod[];
+	/**
 	 * Flagged zero runs in the catchment rain, and other periods the
 	 * hydrologist marks, treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20).
 	 */
@@ -300,6 +366,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
+		rainSource: [],
 		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: {
 			a: 0.09,
@@ -438,10 +505,19 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * reads it: it is not a driver, not a calibration or validation record, not
  * in the gauge-vs-logger agreement check and not in the EWR comparison, and
  * it is deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10).
+ *
+ * `rain_catchment_alt_mm` (engine ≥ 0.30.0, issue #40 (b)) is a second
+ * catchment-rain record, e.g. an in-catchment automatic station. The engine
+ * reads it only inside a settings.rainSource period (docs/model.md §2.4e).
+ * `rain_reanalysis_mm` is a gauge-free reanalysis (ERA5): a reference a
+ * rain-source 'fit' can be measured against, and a named fallback for the
+ * alternative series' gaps. Neither is ever read outside a period.
  */
 export const SERIES_KINDS = [
 	'rain_catchment_mm',
+	'rain_catchment_alt_mm',
 	'rain_chirps_mm',
+	'rain_reanalysis_mm',
 	'rain_forecast_mm',
 	'flow_observed_m3s',
 	'flow_logger_m3s',
@@ -711,6 +787,15 @@ export interface LandCoverPatch {
 	factors: { mar: number; lowFlow: number } | null;
 }
 
+/**
+ * How an upload of sub-daily readings was added up into days
+ * (time_series.day_boundary, 033_series_day_boundary.sql, issue #40 (b)):
+ * '08:00' = 08:00 to 08:00, booked to the day it starts (the manual-gauge
+ * convention); '00:00' = midnight to midnight.
+ */
+export const DAY_BOUNDARIES = ['00:00', '08:00'] as const;
+export type DayBoundary = (typeof DAY_BOUNDARIES)[number];
+
 /** A daily series: values[i] is the value on startDate + i days; null = missing. */
 export interface DailySeries {
 	startDate: string;
@@ -733,6 +818,8 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/** Sub-daily readings added up into days in this window (033_series_day_boundary.sql); null = daily values as uploaded. */
+	dayBoundary?: DayBoundary | null;
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;
@@ -1271,6 +1358,8 @@ export interface RunSummary {
 	 * the project has no catchment rain; absent on older runs.
 	 */
 	zeroRainInfill?: ZeroRainInfill | null;
+	/** What settings.rainSource did (engine ≥ 0.30.0, ./rainSourcePeriods.ts); null without periods, absent before 0.30.0. */
+	rainSource?: RainSourceInfo | null;
 	/**
 	 * Untagged multi-day accumulations in the catchment rain (engine ≥ 0.20.0,
 	 * ./accumulation.ts, audit B4): the windows detected or listed, what the

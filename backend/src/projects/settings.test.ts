@@ -1,6 +1,6 @@
-import { defaultProjectSettings, resolveChirpsFitPeriod } from '@water-management/engine';
+import { defaultProjectSettings, resolveChirpsFitPeriod, resolveRainSource } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -136,6 +136,66 @@ describe('SettingsPatch.chirpsFitPeriod (engine ≥ 0.29.0)', () => {
 			if (engineOk && Array.isArray(value)) expect((resolved as unknown[]).length, name).toBe(value.length);
 			expect(SettingsPatch.safeParse({ chirpsFitPeriod: value }).success, name).toBe(engineOk);
 		}
+	});
+});
+
+describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
+	const ok = (rainSource: unknown) => SettingsPatch.safeParse({ rainSource }).success;
+	const fixed = {
+		start: '2012-10-01',
+		end: '2019-09-30',
+		series: 'rain_catchment_alt_mm',
+		factors: new Array(12).fill(1.1),
+		provenance: { source: 'hydrologist', fittedFrom: '2012-10-01', fittedTo: '2015-09-30', method: 'overlap with the old gauges' },
+		reason: 'automatic station'
+	};
+	const fit = { ...fixed, factors: 'fit', provenance: undefined, fitReference: { series: 'rain_reanalysis_mm', fromWaterYear: 1995, toWaterYear: 2011 } };
+	const { provenance: _p, ...fitNoProv } = fit;
+	const fallback = { series: 'rain_reanalysis_mm', fromWaterYear: 1995, toWaterYear: 2011 };
+
+	it('accepts none, fixed factors with provenance, and a fit against a gauge-free reference', () => {
+		expect(ok([])).toBe(true);
+		expect(ok([fixed])).toBe(true);
+		expect(ok([fitNoProv])).toBe(true);
+		expect(ok([{ ...fitNoProv, gaugeInChirps: true, fallback }])).toBe(true);
+		expect(mergeSettings({}).rainSource).toEqual([]);
+	});
+
+	// The API schema and the engine's resolver must agree, so a stored value never runs differently from what was validated.
+	it('agrees with the engine’s resolveRainSource on a table of valid and invalid values', () => {
+		const table: [string, unknown][] = [
+			['none', []],
+			['fixed', [fixed]],
+			['fit', [fitNoProv]],
+			['two periods, unsorted', [{ ...fixed, start: '2020-01-01', end: '2020-12-31' }, fitNoProv]],
+			['a reanalysis fallback', [{ ...fixed, fallback }]],
+			['CHIRPS as the fit reference, gauge not in CHIRPS', [{ ...fitNoProv, fitReference: { ...fitNoProv.fitReference, series: 'rain_chirps_mm' } }]],
+			['CHIRPS as the fit reference, gauge in CHIRPS', [{ ...fitNoProv, gaugeInChirps: true, fallback, fitReference: { ...fitNoProv.fitReference, series: 'rain_chirps_mm' } }]],
+			['gauge in CHIRPS without a named fallback', [{ ...fitNoProv, gaugeInChirps: true }]],
+			['fixed factors without provenance', [{ ...fixed, provenance: undefined }]],
+			['a factor out of range', [{ ...fixed, factors: [...new Array(11).fill(1), 4.5] }]],
+			['11 factors', [{ ...fixed, factors: new Array(11).fill(1) }]],
+			['a fit without a reference', [{ ...fitNoProv, fitReference: undefined }]],
+			['overlapping periods', [fixed, { ...fitNoProv, start: '2019-01-01', end: '2021-01-01' }]],
+			['a blank reason', [{ ...fixed, reason: ' ' }]],
+			['an unknown series', [{ ...fixed, series: 'rain_catchment_mm' }]],
+			['an extra field', [{ ...fixed, note: 'x' }]],
+			['a bad date', [{ ...fixed, end: '2019-02-30' }]],
+			['not a list', { ...fixed }],
+			['101 periods', Array.from({ length: 101 }, (_, i) => ({ ...fixed, start: `${1800 + i}-01-01`, end: `${1800 + i}-06-30` }))]
+		];
+		for (const [name, value] of table) {
+			const warnings: string[] = [];
+			const resolved = resolveRainSource(value, warnings);
+			const engineOk = warnings.length === 0;
+			if (engineOk && Array.isArray(value)) expect(resolved.length, name).toBe(value.length);
+			expect(ok(value), name).toBe(engineOk);
+		}
+	});
+
+	it('is recorded in a fit record’s forcing, optionally', () => {
+		expect(FitRecord.shape.forcing.unwrap().shape.rainSource.safeParse([fixed]).success).toBe(true);
+		expect(FitRecord.shape.forcing.unwrap().shape.rainSource.safeParse([{ ...fixed, reason: '' }]).success).toBe(false);
 	});
 });
 

@@ -190,7 +190,8 @@ export function rainAccumulations(
 		const v = sa.values[day - c0];
 		return isReading(v) ? v : null;
 	};
-	const missing = exclusionRanges(zr.missing).map(spanOf);
+	// Rain-source periods (engine ≥ 0.30.0) replace the catchment reading, so they count as missing here.
+	const missing = [...exclusionRanges(zr.missing).map(spanOf), ...(fit.replaced ?? []).map((w): Span => [w.from, w.to])];
 	const keepDry = zr.mode === 'missing' ? exclusionRanges(zr.keepDry).map(spanOf) : [];
 	const keep = exclusionRanges(zr.keepReadings);
 	const windows: AccumulationWindow[] = [];
@@ -202,7 +203,7 @@ export function rainAccumulations(
 		const [from, to] = spanOf(r);
 		const label = `${r.start} to ${r.end}`;
 		if (overlaps(missing, from, to)) {
-			skipped.push(`Listed accumulation ${label} overlaps a period listed as missing, so it is not spread: the missing period wins.`);
+			skipped.push(`Listed accumulation ${label} overlaps a period listed as missing or a rain-source period, so it is not spread: that period wins.`);
 			continue;
 		}
 		if (overlaps(listed, from, to)) {

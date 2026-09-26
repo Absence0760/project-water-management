@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asksProvenance, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
+import { asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -46,5 +46,16 @@ describe('series provenance choices', () => {
 		expect(chirpsSourceOfInput({ rain_chirps_mm: {} })).toBeUndefined();
 		expect(chirpsSourceOfInput({})).toBeNull();
 		expect(chirpsSourceOfInput(undefined)).toBeUndefined();
+	});
+});
+
+describe('free product and version (the alternative gauge and the reanalysis, issue #40 (b))', () => {
+	it('asks for them on those kinds only, and sends both or neither', () => {
+		expect(asksFreeProvenance('rain_catchment_alt_mm')).toBe(true);
+		expect(asksFreeProvenance('rain_reanalysis_mm')).toBe(true);
+		expect(asksFreeProvenance('rain_chirps_mm')).toBe(false);
+		expect(freeProvenanceFields(' SASSCAL AWS ', ' 1 ')).toEqual({ product: 'SASSCAL AWS', productVersion: '1' });
+		expect(freeProvenanceFields('ERA5', ' ')).toBeNull();
+		expect(freeProvenanceFields('', '')).toBeNull();
 	});
 });

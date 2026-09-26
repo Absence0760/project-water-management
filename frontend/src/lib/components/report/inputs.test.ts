@@ -48,6 +48,22 @@ describe('settingsRows', () => {
 		expect(legacy['GR4J parameters']).toBeUndefined();
 		expect(legacy['Calibration window']).toBe('from 2003-10-01');
 	});
+
+	it('lists the rain-source periods, or none (engine ≥ 0.30.0)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		expect(Object.fromEntries(settingsRows(effectiveSettings({}), run))['Rain source periods']).toBe('none (the catchment series throughout)');
+		const period = {
+			start: '2005-10-01',
+			end: '2010-09-30',
+			series: 'rain_catchment_alt_mm' as const,
+			factors: 'fit' as const,
+			fitReference: { series: 'rain_reanalysis_mm' as const, fromWaterYear: 1995, toWaterYear: 2004 },
+			reason: 'automatic station'
+		};
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ rainSource: [period] }), run))['Rain source periods']).toBe(
+			'2005-10-01 to 2010-09-30: alternative catchment gauge, fitted against reanalysis 1995/96–2004/05 (automatic station)'
+		);
+	});
 });
 
 describe('monthlyRows', () => {

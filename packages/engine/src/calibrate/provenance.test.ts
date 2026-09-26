@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
-import { defaultProjectSettings, type ProjectSettings, type ZeroRainSettings } from '../project';
+import { defaultProjectSettings, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import {
@@ -152,7 +152,7 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
-		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all' });
+		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all', rainSource: [] });
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -210,7 +210,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period or zero-rain run handling has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
@@ -275,6 +275,29 @@ describe('fit record', () => {
 		// A forcing recorded before it: nothing to compare, so it alone never flags.
 		const { chirpsFitPeriod: _p, chirpsFactors: _f, ...pre029 } = rec.forcing!;
 		expect(fitRecordStatus({ ...base, chirpsFitPeriod: ranges }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
+	});
+
+	it('records the rain-source periods and flags "forcing changed since fit" when they change (engine ≥ 0.30.0)', () => {
+		const period: RainSourcePeriod = {
+			start: '2012-10-01',
+			end: '2019-09-30',
+			series: 'rain_catchment_alt_mm',
+			factors: 'fit',
+			fitReference: { series: 'rain_reanalysis_mm', fromWaterYear: 1995, toWaterYear: 2008 },
+			reason: 'automatic station replaces the averaged gauges'
+		};
+		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, rainSource: [period] } });
+		expect(rec.forcing!.rainSource).toEqual([period]);
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const };
+		// Positive control: the same periods are no change.
+		expect(fitRecordStatus({ ...base, rainSource: [{ ...period }] }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, rainSource: [] }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, rainSource: [{ ...period, end: '2020-09-30' }] }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, rainSource: [{ ...period, fitReference: { ...period.fitReference!, fromWaterYear: 1990 } }] }, rec).forcingChanged).toBe(true);
+		// A forcing recorded before 0.30.0 ran with no periods: adding one is a change, none is not.
+		const { rainSource: _r, ...pre030 } = rec.forcing!;
+		expect(fitRecordStatus({ ...base, rainSource: [period] }, { ...rec, forcing: pre030 }).forcingChanged).toBe(true);
+		expect(fitRecordStatus(base, { ...rec, forcing: pre030 }).forcingChanged).toBe(false);
 	});
 
 	it('flags a fit made on another CHIRPS version (issue #40 part c), only when both sides know the version', () => {

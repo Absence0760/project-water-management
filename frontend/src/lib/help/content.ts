@@ -1292,6 +1292,41 @@ export const HELP: HelpEntry[] = [
 		source: 'Not in the workbook; Viney & Bates 2004; docs/model.md §2.4d; engine-audit.md B4'
 	},
 	{
+		id: 'rain-source',
+		term: 'Rain source periods',
+		short: 'Dates when catchment rain comes from another gauge × monthly factors instead of the catchment series; its gaps take a named fallback.',
+		long: 'Use a rain-source period when the catchment series stops describing the catchment for a stretch of years (a gauge moved or closed, the average was rebuilt) and another gauge covers it, such as an in-catchment automatic station. Within the period, each day\'s rain is that gauge\'s reading × its month\'s factor; the catchment series is not used there and stays out of every factor fit.\n\n**Factors.** Normally 12 fixed values (Oct … Sep, 0.25–4) with where they came from: who fitted them, over which dates, and how. Or **Fit**: the gauge is scaled to the catchment series\' level in a reference era you name, measured against a reference series that doesn\'t contain the gauge: factor = (catchment ÷ reference in the reference era) ÷ (gauge ÷ reference in the period). Use a gauge-free reanalysis such as ERA5 as the reference. CHIRPS is refused once you tick "CHIRPS ingests this gauge", because the fit would then be circular.\n\n**Gaps.** A day the gauge has no reading takes CHIRPS × the CHIRPS factors by default, or a named reanalysis × factors fitted on the catchment series over its own era; then forecast rain. With "CHIRPS ingests this gauge" ticked, name a reanalysis fallback.\n\nEach run warns once per period with the day counts and factors, adds a daily "Rain source" column (0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast) and a block in its summary CSV, and comparing runs sets the periods side by side. A saved calibration is flagged "forcing changed since fit" when the periods change. Not in the workbook (docs/model.md §2.4e, issue #40).',
+		category: 'data',
+		aliases: ['rainSource', 'replacement gauge', 'alternative gauge', 'automatic station', 'splice rain records', 'era replacement'],
+		fields: ['settings.rainSource', 'run.rain_source'],
+		related: ['rain-catchment-alt', 'rain-reanalysis', 'chirps-bias', 'zero-rain-runs'],
+		source: 'Not in the workbook; docs/model.md §2.4e; docs/calibration-research.md § Rain forcing'
+	},
+	{
+		id: 'rain-catchment-alt',
+		term: 'Alternative catchment gauge',
+		short: 'A second catchment rain record (mm/day), e.g. an in-catchment automatic station. Read only inside a rain-source period.',
+		units: 'mm/day',
+		long: 'Upload it as its own series kind. Outside every rain-source period (Settings → Rain source) the model never reads it. An automatic station often logs hourly: upload the hourly file and pick how to add it up into days. Manual gauges are read at 08:00 and the reading booked to the day before, so choose 08:00 to 08:00 to line it up with a manual record; the series records the choice. Its product and version (e.g. the station network) can be recorded with it.',
+		category: 'data',
+		aliases: ['automatic weather station', 'AWS', 'replacement gauge', 'second gauge'],
+		fields: ['series.rain_catchment_alt_mm'],
+		related: ['rain-source', 'rain-catchment'],
+		source: 'docs/model.md §2.4e'
+	},
+	{
+		id: 'rain-reanalysis',
+		term: 'Reanalysis rainfall',
+		short: 'A gauge-free gridded rain product such as ERA5 (mm/day): a reference for a rain-source fit, or the fallback for its gaps.',
+		units: 'mm/day',
+		long: 'ERA5\'s precipitation is a model forecast that assimilates no rain gauges outside the United States, so a local gauge change can\'t enter it: a good yardstick for scaling a replacement gauge to the catchment record\'s level. The model reads it only when a rain-source period names it. Free without an account from the Open-Meteo archive API (docs/calibration-research.md § Rain forcing).',
+		category: 'data',
+		aliases: ['ERA5', 'reanalysis', 'gauge-free reference'],
+		fields: ['series.rain_reanalysis_mm'],
+		related: ['rain-source', 'chirps-bias'],
+		source: 'docs/calibration-research.md § Rain forcing'
+	},
+	{
 		id: 'rain-forecast',
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm, used after the other rain series run out, to look ahead a few days.',

@@ -172,7 +172,7 @@ describe('rainAccumulations and spreadAccumulations', () => {
 		const listed = { start: fromEpochDay(day(1)), end: fromEpochDay(day(r)), reason: 'x' };
 		const both = rainAccumulations(series, zr({ missing: [period], addAccumulations: [listed] }), 'monthly')!;
 		expect(both.windows).toEqual([]);
-		expect(both.skipped).toEqual([`Listed accumulation ${listed.start} to ${listed.end} overlaps a period listed as missing, so it is not spread: the missing period wins.`]);
+		expect(both.skipped).toEqual([`Listed accumulation ${listed.start} to ${listed.end} overlaps a period listed as missing or a rain-source period, so it is not spread: that period wins.`]);
 		expect(rainAccumulations(series, zr({ keepDry: [period] }), 'monthly')!.windows).toEqual([]);
 		// Keep-dry only means something in zero-run mode 'missing', as elsewhere.
 		expect(rainAccumulations(series, zr({ mode: 'asRecorded', keepDry: [period] }), 'monthly')!.windows).toHaveLength(1);

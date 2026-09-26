@@ -3,7 +3,7 @@
 // `POST /projects/import` / `pnpm import:project` read it (projects/import.ts),
 // so a project round-trips export → import. The Python workbook importer
 // (scripts/wbt-import) emits the same shape.
-import { ENGINE_VERSION, SERIES_KINDS, type ProjectModel } from '@water-management/engine';
+import { DAY_BOUNDARIES, ENGINE_VERSION, SERIES_KINDS, type DayBoundary, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
@@ -34,7 +34,9 @@ export const ProjectFile = z.object({
 				startDate: SeriesStartDate,
 				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES),
 				// What the values are (032_series_provenance.sql), e.g. CHIRPS 2.0; absent = not recorded.
-				...ProvenanceFields
+				...ProvenanceFields,
+				// How sub-daily readings were added up into days (033_series_day_boundary.sql); absent = daily values.
+				dayBoundary: z.enum(DAY_BOUNDARIES).optional()
 			})
 			.superRefine(checkProvenance)
 			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
@@ -55,7 +57,7 @@ export interface ProjectDocument {
 	settings: Record<string, unknown>;
 	model: ProjectModel;
 	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
-	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string }[];
+	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string; dayBoundary?: DayBoundary }[];
 }
 
 /** Read a project as a portable document (caller has already checked access). */
@@ -67,12 +69,18 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	const p = rows[0];
 	if (!p) return null;
 	const model = await loadModel(db, projectId);
-	const { rows: stored } = await db.query<ProjectDocument['series'][number] & { product: string | null; productVersion: string | null }>(
-		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion"
+	const { rows: stored } = await db.query<
+		Omit<ProjectDocument['series'][number], 'dayBoundary'> & { product: string | null; productVersion: string | null; dayBoundary: DayBoundary | null }
+	>(
+		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary"
 		 FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
-	const series = stored.map(({ product, productVersion, ...s }) => (product !== null && productVersion !== null ? { ...s, product, productVersion } : s));
+	const series = stored.map(({ product, productVersion, dayBoundary, ...s }) => ({
+		...s,
+		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
+		...(dayBoundary !== null ? { dayBoundary } : {})
+	}));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,
 		version: PROJECT_DOCUMENT_VERSION,

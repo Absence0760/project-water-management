@@ -186,6 +186,24 @@ alongside teams, e.g. to give an outside client `viewer` access.
   two ranges overlapping), replaced whole by a `PATCH`. Anything else is a
   `400`; settings stored before it read back as `all`.
   [model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40).
+  `rainSource` (engine ≥ 0.30.0, issue #40 (b)) is a list (0–100, default
+  `[]`) of periods whose catchment rain comes from another series, replaced
+  whole by a `PATCH`: `{ start, end, series, factors, provenance?,
+  fitReference?, fallback?, gaugeInChirps?, reason }`. `start` ≤ `end` are
+  `YYYY-MM-DD`; `series` is `rain_catchment_alt_mm`; `reason` 1–500
+  characters, trimmed. `factors` is either 12 numbers (Oct … Sep, each
+  0.25–4) with `provenance: { source, fittedFrom, fittedTo, method }`
+  (source and method 1–200 characters, the dates `YYYY-MM-DD`, from ≤ to),
+  or `'fit'` with `fitReference: { series, fromWaterYear, toWaterYear }`
+  (`rain_reanalysis_mm` or `rain_chirps_mm`, water years 1800–2200, from ≤
+  to). `fallback` is absent (CHIRPS × the fit-period factors) or `{ series:
+  'rain_reanalysis_mm', fromWaterYear, toWaterYear }`. With `gaugeInChirps:
+  true`, `fitReference.series` may not be `rain_chirps_mm` and `fallback`
+  is required. No other keys, and no two periods overlapping. The check is
+  the engine's own (`rainSourceError`), so a stored value never runs
+  differently from what was validated; anything else is a `400`. Settings
+  stored before it read back as `[]`.
+  [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b).
   `zeroRainRuns` (engine ≥ 0.15.0) is `{ mode, keepDry, missing }`:
   `mode` is `missing` (the default: flagged zero-rain runs in the catchment
   rain are treated as blank, so corrected CHIRPS fills them) or `asRecorded`
@@ -237,7 +255,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   setting, and `chirpsFactors`, `null` or a list of `{ label, fittedOn?,
   factors }` with 12 factors each, Jan … Dec, `null` for a month without one,
   and `fittedOn` the reference window in words: the factors per fit range the
-  fit's rain used) is the
+  fit's rain used; from engine 0.30.0 optional `rainSource`, validated like
+  the setting, absent = none) is the
   pan coefficient, A-pan evaporation, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
@@ -517,12 +536,12 @@ naming `startDate`, not a server error).
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
-| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion? }` | `SeriesMeta` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion? }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
+| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta` (upsert on kind+name) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, dayBoundary, rebuilding }` —
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
@@ -538,6 +557,20 @@ recorded. A merge without them keeps the series' label; a merge with them
 labels a new or empty series, and is `409 { error: "the series holds CHIRPS
 v2.0 and these days are CHIRPS sat v3.0: merging them would splice two
 versions into one record. …" }` into a series holding values of another.
+
+**Day boundary** (issue #40 (b), [data-model.md § Series day
+boundary](./data-model.md#series-day-boundary-033_series_day_boundarysql)):
+`dayBoundary` is `'08:00'` (the days were added up from sub-daily readings
+in 08:00–08:00 windows, booked to the day each starts), `'00:00'`
+(midnight to midnight) or `null` (daily values as uploaded). The browser
+does the adding up; the API stores the label. A PUT says it or clears it
+(absent = `null`). A merge without it keeps the series' label; a merge with
+it labels a new or empty series, and is `409 { error: "the series holds
+08:00–08:00 days and these days are 00:00–00:00 days: merging them would put
+two day boundaries in one record. …" }` into a filled series holding the
+other (`null` counts as its own). Copies, the exported project document,
+imports and series revisions keep it (a restore puts it back; the
+revisions list returns it as `dayBoundary`).
 
 **Units.** A series is stored in its kind's canonical unit, the one the model
 reads: m³/s for `flow_*`, mm for `rain_*`. `unit` on PUT, merge, the data
@@ -558,8 +591,13 @@ series' data feed, which then keeps them rather than replacing them
 ([data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)).
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
-`rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
-and `flow_reference_m3s` (`flow_pitman_m3s` was removed in engine 0.10.0). The last is a gauge on a different
+`rain_catchment_alt_mm`, `rain_chirps_mm`, `rain_reanalysis_mm`,
+`rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
+and `flow_reference_m3s` (`flow_pitman_m3s` was removed in engine 0.10.0).
+`rain_catchment_alt_mm` (an alternative catchment gauge) and
+`rain_reanalysis_mm` (a gauge-free reanalysis such as ERA5), engine ≥ 0.30.0,
+are read only by a `settings.rainSource` period
+([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)). The last is a gauge on a different
 river (a regional wet/dry index): runs store it in their input snapshot but
 never read it, and it can't be a `calibrationFlowKind`
 ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)).
@@ -810,6 +848,20 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   and `chirpsMm` for a window not spread. The catchment series
   `rain_catchment_spread` is 1 on each day whose rain came from a window.
   Rules: [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
+- `summary.rainSource` (engine ≥ 0.30.0) is what `settings.rainSource` did,
+  `null` without periods, absent on older runs: `{ periods: [{ start, end,
+  series, reason, factorMode: 'fixed' | 'fit', factors (12, Jan … Dec, null
+  = none), provenance, fit: { reference, referenceWindow, periodWindow,
+  referenceDays, periodDays, months: [{ month, catchmentRatio, seriesRatio,
+  factor, clamped }] } | null, fallback: 'chirps' | { era, fitWindow, days,
+  factors }, gaugeInChirps, seriesPresent, seriesProvenance?, runDays,
+  seriesDays, seriesRawMm, seriesMm, chirpsDays, reanalysisDays,
+  forecastDays, noneDays }] }`. The catchment series `rain_source` (only
+  with periods) is each day's source: 0 catchment, 1 alternative gauge, 2
+  CHIRPS, 3 reanalysis, 4 forecast, `null` for none. With periods,
+  `summary.chirpsCorrection.replacedDaysLeftOut` counts the shared days the
+  CHIRPS fit left out because a period replaces them.
+  Rules: [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b).
 
 ### Uncertainty bands
 
@@ -1272,7 +1324,7 @@ ahead of the usual header row.
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
 | `/projects/:id/runs/:runId/export/farms.csv` | `key`, `from?`, `to?` | `date` + one column per farm of the run, in the run's farm order (upstream first, the order of `RunSummary.farms`), for one farm series `key` (any key of `FARM_COLUMNS`, the optional ones included, e.g. `landcover_reduction`; `400` otherwise). `key=runoff` is the workbook's `[Fragmented flow]` sheet (column I), `key=ewr` its `[Fragmented EWR]` sheet (column Y). Each header is the farm's current name, then the letter and unit (`Farm A [I] (m³/day)`); a farm deleted from the model since the run keeps its column under the name the run knew (a run keeps all its series, migration 024), and a farm without that series (a dam column on a farm with no dam) is left out. `404` when no farm has the series |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 
@@ -1299,7 +1351,7 @@ order:
 | EWR grid | `summary.ewrCompliance` | Days simulated, then per site (the outlet, each farm) days not met and volume short (m³), water year × month (Oct … Sep) with a year total |
 | Reserve compliance | summary CSV | Reserve compliance by month (EWR rule tables) |
 | Annual volumes | summary CSV + `summary.calibration.annualVolumes` | The water balance per water year, then observed vs simulated volume per water year over the calibration window |
-| Data checks | summary CSV | CHIRPS factors, rain treated as missing, accumulations, double-mass, plausibility checks |
+| Data checks | summary CSV | CHIRPS factors, rain treated as missing, rain-source periods, accumulations, double-mass, plausibility checks |
 | Inputs | `run.settings`, `run.model` | Every setting the run used (arrays across the row), then each part of the model snapshot as a table, references shown by name |
 | Warnings | summary CSV | Only when the run has warnings |
 
