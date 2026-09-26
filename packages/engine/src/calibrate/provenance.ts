@@ -215,7 +215,7 @@ export interface FitRecord {
 		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
 		panCoefficientSource?: string;
 		/**
-		 * The daily A-pan series the fit ran on (engine ≥ 0.38.0, issue #45,
+		 * The daily A-pan series the fit ran on (engine ≥ 0.40.0, issue #45,
 		 * docs/model.md §2.3a): its start, length and the SHA-256 of its values,
 		 * as a run's input snapshot records them; null = the project had none.
 		 * Absent on a record made before it was tracked, which is never flagged.
@@ -385,7 +385,7 @@ export interface FitRecordStatus {
 	 */
 	chirpsSourceChanged: boolean;
 	/**
-	 * The daily A-pan series (engine ≥ 0.38.0, issue #45) was added, removed
+	 * The daily A-pan series (engine ≥ 0.40.0, issue #45) was added, removed
 	 * or changed since a GR4J fit that ran on pan coefficient × A-pan, and
 	 * GR4J still does: the PE on the days it covers changed. False when the
 	 * record or the caller doesn't know the series, for a legacy fit, and
@@ -502,7 +502,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
  * Were these settings' parameters fitted on the days a run scores (issue
  * #45)? Only then are the calibration statistics in-sample. `flowKind` is
  * the record the run scored (the default pick resolved). A change of forcing
- * since the fit doesn't count here: the days are still the ones fitted.
+ * since the fit doesn't count here, a replaced daily A-pan series included
+ * (apanDailyChanged, engine ≥ 0.40.0): the days are still the ones fitted;
+ * the fit record's forcingChanged says the fit may no longer hold.
  */
 export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind): CalibrationFitStatus {
 	const record = resolveFitRecord(settings as Partial<ProjectSettings> & Record<string, unknown>);

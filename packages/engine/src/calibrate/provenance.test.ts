@@ -194,6 +194,10 @@ describe('fit record', () => {
 		expect(calibrationFitStatus({ ...s, fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
 		// A forcing change since the fit leaves the days fitted the same.
 		expect(calibrationFitStatus({ ...s, chirpsBiasCorrection: 'none', fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
+		// So does a fit recorded on a daily A-pan series (engine ≥ 0.40.0): replacing it is forcingChanged, not fitStatus.
+		const onPan = fitRecordFromReport(report(), { ...ctx, apanDaily: { startDate: '2012-10-01', length: 730, valuesSha256: 'a'.repeat(64) } });
+		expect(calibrationFitStatus({ ...s, fitRecord: onPan }, 'flow_logger_m3s')).toBe('fitted');
+		expect(fitRecordStatus({ ...s, fitRecord: onPan }, onPan, { apanDaily: null }).apanDailyChanged).toBe(true);
 		// Nothing fitted: no record, or a record for the other runoff model.
 		expect(calibrationFitStatus(s, 'flow_logger_m3s')).toBe('notFitted');
 		expect(calibrationFitStatus({ ...s, runoffModel: 'legacy', fitRecord: rec }, 'flow_logger_m3s')).toBe('notFitted');

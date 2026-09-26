@@ -254,8 +254,10 @@ series it ran on as `forcing.apanDaily`: its start, length and the SHA-256 of
 its values (the hash a run's input snapshot keeps as `valuesSha256`), or null
 when the project had none. Adding, replacing or removing the series after a
 GR4J fit made under pan coefficient × A-pan marks the fit stale
-(`apanDailyChanged`, and with it `forcingChanged`), with its own caveat; see
-§2.10b.
+(`apanDailyChanged`, and with it `forcingChanged`), with its own caveat (engine
+≥ 0.40.0, which bumped the version for the new fit-record field; see §2.10b).
+The run's `fitStatus` (in-sample or not, §2.10) is unaffected: the scored days
+are still the fitted ones.
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
@@ -2603,8 +2605,13 @@ and the same flow record as the one scored; `notFitted` when there is no
 such record (parameters set by hand, imported or defaults); `edited` when a
 fitted parameter was changed by hand; `otherPeriod` when the fit used another
 window, other exclusions or the other record. A forcing change since the fit
-(PE, CHIRPS, rain-source settings) doesn't change it: the days are still the
-ones fitted, though the fit record flags the forcing. Hand-tuned parameters
+(PE, CHIRPS, rain-source settings, and from engine 0.40.0 a daily A-pan series
+added, replaced or removed, §2.3a) doesn't change it: the question here is
+whether the scored days are the fitted ones, and they still are. That the fit
+may no longer hold under the new forcing is a separate flag, the fit record's
+`forcingChanged` (and `apanDailyChanged`), shown with the fit record and as
+"Forcing changed since fit" (§2.10b); `calibrationFitStatus` deliberately
+doesn't read it, so `fitted` never turns into a staleness verdict. Hand-tuned parameters
 flatter the model as much as a fit does, which the `notFitted` note says. The
 field never changes a result; a run from before 0.39.0 has none, and the UI
 then says only "calibration period".
@@ -2892,7 +2899,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   gap-filled day's rain changed. A record made before it, or a caller that
   doesn't know the label, compares nothing. The record never
   changes a result.
-  **The daily A-pan series (engine ≥ 0.38.0, issue #45, §2.3a).** The forcing
+  **The daily A-pan series (engine ≥ 0.40.0, issue #45, §2.3a).** The forcing
   also records `apanDaily`: the start, length and SHA-256 of the values
   (`seriesDigest`, the same hash as a run snapshot's `valuesSha256`) of the
   daily A-pan series the fit ran on, or null for none. As with the CHIRPS

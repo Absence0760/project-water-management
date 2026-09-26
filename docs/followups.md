@@ -397,7 +397,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       `summary.apanDaily` and a run warning. No series, byte-identical
       results. Settings → Demand says which source A-pan comes from
       ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
-- [x] **Fit provenance of the daily A-pan series (done, engine 0.38.0).**
+- [x] **Fit provenance of the daily A-pan series (done, engine 0.40.0).**
       The fit record's `forcing.apanDaily` keeps the start, length and
       SHA-256 of the daily A-pan series the fit ran on (null = none);
       `fitRecordStatus(settings, record, { apanDaily })` sets
