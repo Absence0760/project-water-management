@@ -40,7 +40,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 | Feature | Why | Effort |
 | --- | --- | --- |
 | ⬜ **Water-use licences / allocations** | Registered volumes per farm (National Water Act, WARMS) vs modelled use → over/under-use and compliance. Central to catchment management agencies. | M |
-| ⬜ **Assurance of supply & yield** | Reliability (% of time demand met), firm yield of each dam, storage–yield curves. Standard planning outputs. | M |
+| 🟡 **Assurance of supply & yield** | Reliability (% of time demand met), firm yield of each dam, storage–yield curves. Standard planning outputs. — **Yield built** (engine 0.32.0, roadmap WP-3.6, model.md §2.12, pending the hydrologist): historical firm yield and yield at an assurance level of a dam, with a constant or demand-shaped draft, and an 11-point storage–yield curve, as a background job with a panel on the farm and under a scenario. Stochastic yield is Step 4. | M |
 | ✅ **Dam evaporation, seepage, area–volume curves** | b023 ignores dam losses; material for small farm dams in summer. — **Done** (engine 0.16.0, audit N2, pending the hydrologist): power-law area–volume, lake evaporation from A-pan, rain on the dam and seepage (model.md §2.7a). Survey curves and releases are roadmap WP-3.5. | M |
 | ⬜ **Operating rules** | Pump scenarios from the node-based design (dam-first, river-first, trigger-based, run-of-river) and drought restrictions (curtail when storage < x %). | L |
 | ✅ **Groundwater abstraction** | Boreholes on farms and other users (supplemental, primary, drought) with lagged stream depletion of the river. Built in engine 0.23.0 (model.md §2.7d), off by default; the method and values await the hydrologist. Roadmap WP-1.34. | M |
