@@ -1697,6 +1697,18 @@ which checks every catchment tab).
   Decision-support outputs). Viewers see the group read-only. Like
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
+- **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
+  `outlook/OutlookSettingsSection.svelte`, a lazy chunk inside the form,
+  like the outcome matrix's): how the Runs tab's
+  [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
+  the default season (1 Oct – 30 Apr)** ticked by default and a **Default
+  pending the client** badge while it is (O3); unticked, the decision date
+  and the season end as a month and a day each (29 February and a one-day
+  season block Save). **Planning share**, with **Use the default planning
+  share (80 %)** and the same badge (O6); unticked, a % of analogue years
+  in (0, 100]. The defaults are the engine's (`DEFAULT_OUTLOOK_SEASON`,
+  `DEFAULT_PLANNING_SHARE`). Viewers see it read-only; saving only this
+  group doesn't mark the runs as out of date.
 
 ### Data feeds
 
@@ -1890,7 +1902,9 @@ run's report to chosen members every week or month.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow, EWR by month, the **Uncertainty bands** (their own
      panel and menu entry, beside the findings they qualify), the **Outcome
-     matrix** ([§ Outcome matrix](#outcome-matrix)) and the water account.
+     matrix** ([§ Outcome matrix](#outcome-matrix)), the **Seasonal
+     outlook** ([§ Seasonal outlook](#seasonal-outlook)) and the water
+     account.
   3. **Units & users**: curtailment (led by the share-the-pain board, with
      the other water users and the EWR sites tables), unit detail.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
@@ -2366,7 +2380,7 @@ run's report to chosen members every week or month.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
-- **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
+- **Assurance of supply** (`#res-assurance`, under *Units & users* after the
   curtailment table; `reliability/AssurancePanel.svelte`, helpers in
   `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
@@ -2383,6 +2397,10 @@ run's report to chosen members every week or month.
   uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, its own chunk):
   the run's inputs at a few demand levels by class of water year, described
   in [§ Outcome matrix](#outcome-matrix) below.
+- **Seasonal outlook** (`#res-outlook`, after the outcome matrix;
+  `outlook/OutlookPanel.svelte`, its own chunk): the season from the run's
+  state at a few demand levels over the record's past years, described in
+  [§ Seasonal outlook](#seasonal-outlook) below.
 - **Water account** (`#res-water-account`, last under *River & Reserve*;
   `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
@@ -2480,6 +2498,74 @@ without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
 `e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
 matrix against the stored series; a gauge's matrix against its stored
 Reserve months, the viewer, the fallback).
+
+### Seasonal outlook
+
+Issue #53 R5 ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml),
+[model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)).
+A panel under *River & Reserve* on the Runs tab, after the outcome matrix
+(`#res-outlook`, menu entry **Seasonal outlook**;
+`outlook/OutlookPanel.svelte`, its own chunk loaded when a run is shown,
+view model `outlook/view.ts`). For the WUA; English, like the workspace.
+There is no farmer view yet (ask E3 waits on the client's O5).
+
+- **Starting an outlook** (editors): **Demand levels** (% of today's farm
+  demand, default *100, 85, 70*; up to 6, 0–200 %, separated by commas),
+  each one `demand.scale` op on every farm from the decision date. **Add a
+  monthly plan** adds one more level: a name (default *Monthly plan*) and
+  a % per month of the project's season (Oct … Apr by default), sent as
+  R1's `months` form, one `demand.scale` per distinct % (so the plan and
+  the levels together are at most 6). **Run seasonal outlook** queues an
+  [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
+  the planning share are the project's settings (Settings → Seasonal
+  outlook), the decision date the latest one the run's state reaches. Only
+  on an ordinary run (a scenario or forecast run says it can't). Viewers
+  see the newest outlook, with no button.
+- **Pending and complete** follow the outlook's own status and its job's
+  (`GET /projects/:id/outlooks/:outlookId`, polled every 1.5 s while
+  pending): *Queued: waiting for the background worker*, *Running every
+  demand level in every analogue year…* with a progress bar, a retry, or,
+  for an outlook whose job died, why it couldn't run. The panel carries
+  `data-state` (`loading`, `empty`, `pending`, `stuck`, `complete`).
+- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*) and
+  **Season pending the client** while it is the engine's default and the
+  project hasn't set one; the planning share (*80 % of analogue years*)
+  and **Planning share pending the client** while it is the default; the
+  measure (days below the pragmatic EWR at the outlet, or Reserve months
+  met with a rule table there); the number of analogue years. Then the
+  farm dams' storage on the day before the decision date, which every year
+  starts from.
+- **The table**: one row per demand level, in the order given: **dam
+  storage at season end**, **farm demand met** and **days below the EWR**
+  (or **Reserve months met**), each the median in bold with its 10–90 %
+  range under it, and **years met in full** ("EWR met on every day in 7 of
+  12 years"). The planning figure's level carries a **Planning figure**
+  badge. A level whose ops didn't apply is a row saying so, with the reason.
+  Under it, plainly: lower demand doesn't always mean fewer days below the
+  EWR, because part of the water irrigated from a dam drains back to the
+  river (model.md §2.15's invariants).
+- **Planning figure**: the engine's `describePlanningFigure`, counting
+  years ("70 %: met the EWR on every day of the season in 12 of 12
+  analogue years, the highest demand level to do so in at least 80 % of
+  them"), and that the WUA decides the level and publishes it as the
+  restriction notice. **Too few years** (fewer than 10): a warning, no
+  ranges and no planning figure; each year's values are still shown.
+- **Every analogue year** (collapsed): per year and level, the days below
+  the EWR (or months met) and the season-end storage. Then the years not
+  used and why (outside the record, a rainless day, the season itself,
+  over the 40-year limit, a failed member), members the engine refused,
+  the engine's warnings, and the draft disclaimer's first and third
+  paragraphs with its draft note (D10).
+- **No recommendation.** The panel reports how past years went at each
+  level and never picks one (a unit test holds the view model to that, and
+  the e2e spec checks the rendered panel).
+
+Tests: `outlook/view.test.ts` (the request and monthly plan, the state,
+the view against the engine's `summariseOutlook` on invented members, the
+pending badges, too few years, the wording guard, the settings check) and
+`e2e/tests/seasonal-outlook.spec.ts` (settings, outlook with a monthly
+plan, worker, the rendered table against the stored per-year values
+re-summarised by hand, a viewer).
 
 ## Scenarios (`?tab=scenarios`)
 

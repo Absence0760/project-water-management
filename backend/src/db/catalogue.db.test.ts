@@ -42,7 +42,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	alert_event: ['cleared_at', 'detail', 'state', 'value'],
 	// A sweep's base run, job, name and members' ops are fixed at insert; each gets its outcome once (062_scenario_sweeps.sql).
 	scenario_sweep: ['completed_at', 'engine_version', 'status'],
-	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary']
+	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
+	// An outlook's base run, job, season, levels and share are fixed at insert; it is completed once (063_seasonal_outlook.sql).
+	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -87,9 +89,10 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
- * dam (040_yield.sql).
+ * dam (040_yield.sql). An outlook member is written once, complete, by its
+ * job, and goes with its outlook (063_seasonal_outlook.sql).
  */
-const NO_UPDATE = new Set(['yield_result']);
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -155,6 +158,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
 	'scenario_sweep.created_by': 'set null',
+	// An outlook likewise (063_seasonal_outlook.sql).
+	'seasonal_outlook.created_by': 'set null',
 	'series_revision.created_by': 'set null',
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',

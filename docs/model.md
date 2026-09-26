@@ -4216,8 +4216,12 @@ number is the wrong answer). Pure, in `packages/engine/src/outlook/`
 `outlookMemberInput`, `outlookMember`, `summariseOutlook` for a job that
 runs the members one by one). A derived view: its only engine change is
 `settings.demandFactorFrom` (§2.3 step 4a), which moved the version to
-0.44.0. The backend job, the screen and the farmer view are not built yet
-(design §3.5).
+0.44.0. The backend job (`outlook`, migration 063,
+[api.md § Seasonal outlooks](./api.md#seasonal-outlooks)) runs the members
+one at a time, and the Runs tab shows the result
+([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)); the season and the
+planning share are project settings (`settings.outlook`). The farmer view
+is not built yet (design §3.5).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.

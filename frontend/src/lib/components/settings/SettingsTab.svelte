@@ -48,8 +48,9 @@
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import type { AutoRunSettings, OutcomeSettings } from '$lib/api/types';
+	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
+	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -72,6 +73,8 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// The outcome matrix's settings (issue #53 R4): part of the form, but its own chunk (this one is at its ceiling).
 	const loadOutcomes = () => import('$lib/components/outcomes/OutcomeSettingsSection.svelte');
+	// The seasonal outlook's settings (issue #53 R5): likewise its own chunk.
+	const loadOutlook = () => import('$lib/components/outlook/OutlookSettingsSection.svelte');
 
 	let {
 		project,
@@ -108,11 +111,14 @@
 		autoRun: AutoRunSettings;
 		/** How the outcome matrix reads a sweep (issue #53 R4); defaults filled in for an older API. */
 		outcomes: OutcomeSettings;
+		/** How a seasonal outlook is set up (issue #53 R5); defaults filled in for an older API. */
+		outlook: OutlookSettings;
 	};
-	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings }): Editable => {
+	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings }): Editable => {
 		const c = JSON.parse(JSON.stringify(v)) as Editable;
 		c.autoRun = resolveAutoRun(v);
 		c.outcomes = resolveOutcomes(v);
+		c.outlook = resolveOutlook(v);
 		return c;
 	};
 
@@ -158,10 +164,11 @@
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	const autoError = $derived(autoRunError(s.autoRun));
 	const outError = $derived(outcomesError(s.outcomes));
+	const outlookErr = $derived(outlookError(s.outlook));
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -179,6 +186,7 @@
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
+			{ id: 'set-outlook', message: outlookErr },
 			{ id: 'set-auto', message: autoError }
 		])
 	);
@@ -1017,6 +1025,13 @@
 		<Lazy load={loadOutcomes}>
 			{#snippet children(OutcomeSettingsSection)}
 				<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
+			{/snippet}
+		</Lazy>
+	</div>
+	<div id="set-outlook">
+		<Lazy load={loadOutlook}>
+			{#snippet children(OutlookSettingsSection)}
+				<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
 			{/snippet}
 		</Lazy>
 	</div>

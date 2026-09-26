@@ -779,6 +779,22 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// 2026-09-26  total 924 → 939 KB (measured 934: 955 896 bytes, from 923 on
+//             main @ 6380d36, R6's engine half merged). Issue #53 R5's seasonal outlook screen: the
+//             Runs tab's panel (outlook/OutlookPanel.svelte with its view
+//             model: the demand levels and the monthly plan, the table of
+//             medians and 10–90 % ranges, every analogue year, the planning
+//             figure, 7.0 KB), Settings → Seasonal outlook (1.8 KB), the
+//             engine's outlook defaults and describePlanningFigure (0.5 KB, a
+//             chunk the two share) and the draft disclaimer (0.5 KB, now a
+//             chunk the report and the panel share), the lazy hooks, menu
+//             entries and outlooks API client. All lazy: the panel loads when
+//             a run is shown, the section when Settings is. The outlook runner
+//             (runSeasonalOutlook, outlookMemberInput) is in no chunk: the
+//             backend's job runs it. The Settings chunk is 42 741 bytes, 267
+//             under its 42 KB ceiling, so the next Settings group must
+//             lazy-load its blocker check too. No new dependency. Headroom
+//             ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -789,7 +805,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 924,
+	totalCodeKb: 939,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

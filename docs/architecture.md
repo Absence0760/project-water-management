@@ -481,8 +481,8 @@ stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
 
-**Jobs keep the engine inside their transaction.** The `rerun`, `yield` and
-`sweep` handlers run in the job's `withUser` transaction (`executeRun`, one
+**Jobs keep the engine inside their transaction.** The `rerun`, `yield`,
+`sweep` and `outlook` handlers run in the job's `withUser` transaction (`executeRun`, one
 transaction). A job's writes must commit together with its `done` (see
 [Background work](#background-work)), which is what makes a retry after a
 crash or a lost lease store nothing twice. The worker's pool serves one job
@@ -499,7 +499,8 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 [§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield` and the scenario sweep's `sweep` (below); step 2's
+dam yield's `yield`, the scenario sweep's `sweep` and the seasonal
+outlook's `outlook` (below); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -581,6 +582,19 @@ alerts plug in as a further kind.
   catchment). The sweep row and its members are written by the request in
   the same transaction as the job, and completed by the job. At most 2
   pending per user.
+- **`outlook`** (issue #53 R5, `jobs/handlers/outlook.ts`, [api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
+  [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
+  a base run × a season × up to 6 demand levels over the record's analogue
+  years (at most the newest 40), as the editor who asked. The base run's
+  stored input is rebuilt and run once (its state and rain on this engine),
+  then every level × year is one member run (`outlookMemberInput` →
+  `runModelWithoutChecks` → `outlookMember`), each stored as it finishes;
+  the engine's `summariseOutlook` is the result. A member the engine
+  refuses is stored as failed and the outlook carries on. At most 240
+  member runs, each a full run of the record, in one transaction: on the
+  synthetic 13-year test catchment 39 members take well under a second; the
+  cap keeps a long record inside the worker Lambda's 300 s. `progress`
+  after each member, no cancel, at most 2 pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one
   with its key is running. That departs from the roadmap's index over

@@ -94,6 +94,8 @@ import type {
 	JobMeta,
 	Sweep,
 	SweepRequest,
+	Outlook,
+	OutlookRequest,
 	YieldRequest,
 	YieldResult
 } from './types';
@@ -663,6 +665,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One sweep, each member with its summary; `series: true` adds each done member's outcome series. */
 			get: (id: string, sweepId: string, q: { series?: boolean } = {}) =>
 				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
+		},
+		/**
+		 * Seasonal outlooks (docs/api.md § Seasonal outlooks, issue #53 R5): a base
+		 * run × a season × demand levels over the record's analogue years, run by
+		 * one background job. Follow a pending one with get().
+		 */
+		outlooks: {
+			create: (id: string, body: OutlookRequest) => request<{ outlook: Outlook; jobId: string; job: JobMeta }>('POST', `${p(id)}/outlooks`, body),
+			list: (id: string, q: { baseRunId?: string } = {}) =>
+				request<{ outlooks: Outlook[] }>('GET', `${p(id)}/outlooks${q.baseRunId ? `?${new URLSearchParams({ baseRunId: q.baseRunId })}` : ''}`).then((r) => r.outlooks),
+			/** One outlook, with its result once complete. */
+			get: (id: string, outlookId: string) => request<{ outlook: Outlook }>('GET', `${p(id)}/outlooks/${enc(outlookId)}`).then((r) => r.outlook)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */
