@@ -828,7 +828,9 @@ to the run's end. So the run records the days that used forecast rain
 many fall in the reporting window, and the last day of recorded rain) and
 warns: *3 days (… to …) of this run use forecast rain, not recorded rain
 (catchment or CHIRPS); all of them fall in the reporting window (…), so
-curtailment and the EWR sites cover forecast days*. Because the feed
+curtailment and the EWR sites cover forecast days*. That is `runModel` on
+its own. A saved run never does it any more: an ordinary run leaves the
+forecast tail out, and a forecast run keeps it apart (§2.4f). Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
@@ -1164,6 +1166,92 @@ daily intensities (calibration-research.md §4) is not applied: a factor
 keeps the gauge's own wet-day distribution. A replacement from a gridded
 product alone (no gauge) is still a `missing` period (§2.4c) filled from
 CHIRPS.
+
+### 2.4f Forecast mode (roadmap WP-2.12)
+
+The workbook marks the rows after the last observed rain "F": they run on
+forecast rain. Left to `runModel`, a forecast tail flows into every summary
+(the curtailment window, the EWR days not met, the farm averages,
+calibration, the compliance grid), so yesterday's forecast would change the
+figures farmers and regulators rely on. Forecast mode
+(`packages/engine/src/forecast.ts`) keeps the two apart. It adds no step to
+`runModel`, whose output is unchanged.
+
+**Where the forecast starts.** `forecastSplit` reads the rain exactly as the
+run does (`prepareRun`: zero runs set aside, accumulations spread, rain-source
+periods, CHIRPS blocked where it may not fill) and labels each day with the
+source of its rain, in the codes of the `rain_source` column (§2.4e): 0
+catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank for
+none. `forecastFrom` is the first forecast-sourced day **after** the last day
+whose rain came from any other source. So:
+- a forecast that overlaps the record changes nothing on the record's days
+  (the record wins there) and starts the tail the day after it;
+- forecast rain that fills a gap *inside* the record is history, filled like
+  any gap, not the tail;
+- dry days between the last observed rain and the first forecast day (a
+  logger's padded tail, CHIRPS still to come) are history too: they run as
+  0 mm in both runs;
+- with no observed rain at all, or a simulation end before the forecast,
+  there is no tail (`forecastFrom = null`).
+
+**The run without the tail.** `withoutForecastTail` cuts the forecast series
+to end the day before `forecastFrom` (dropping it when nothing is left) and
+sets `simulationEnd` to that day. This is what every ordinary saved run uses
+(`POST /runs`, the re-run job, imports), so forecast rain past the record
+never reaches an ordinary run. It stores that input, so
+`runModel(loadRunInput(run))` still reproduces it.
+
+**A forecast run.** `runForecastChecked` runs the model twice: without the
+tail and with it. Its output is
+- every summary (farms, curtailment, EWR days, calibration, compliance,
+  assurance, water balance, self-checks, warnings) of the run **without**
+  the tail;
+- every daily series of the run without the tail up to `forecastFrom − 1`,
+  and of the run with it from `forecastFrom` on, plus the `rain_source`
+  column when the run has none (so charts and exports can mark the days);
+- `ModelOutput.forecastFrom` and `summary.forecast`: over the tail days, per
+  farm the lowest dam level (storage ÷ capacity, and the first day at it),
+  the days with a deficit, demand, supply and supplied ÷ demand, and at the
+  outlet the days the EWR is not met (`outletEwrDaysAtRisk`, the outlet test
+  of `ewrDaysNotMet`), with the forecast rain used;
+- `summary.forecastRain` of the run with the tail (it names the forecast
+  days), but not its warning (the summaries no longer cover them);
+- a self-check the run with the tail fails, added to the warnings as *self-check
+  failed on the run with the forecast tail (…)*.
+
+**Why two runs: the model is not causal.** The plan assumed a run with a
+tail and one without agree on every shared day because the simulation is
+causal. It isn't quite: a few figures are record-wide statistics, so a day at
+the end of the record moves values at its start. The land-cover low-flow
+threshold is the natural flow's Q75 over the record (§2.5a); EWR rule tables
+are read against the record's flow-duration curve (§2.9c); GR4J's warm-up
+cycles the forcing when the record is shorter than the warm-up (§2.4a). A
+14-day tail on a 900-day random network moved historical values by about
+1e-8 relative; on a short record, by more. Taking the history from the run
+without the tail makes it an ordinary run's **to the bit**, by construction.
+The forecast days carry on from the run with the tail, so the join between
+the two is continuous only up to that noise: the water balance of each run
+closes (both are self-checked), the spliced series across the join to within
+it. Making those statistics causal (fitting them on a fixed window) would let
+one run do; that is an engine decision, not forecast mode's.
+
+**The invariant.** `checkForecastPrefix` (`testing/forecastInvariants.ts`)
+asserts, on random networks with a synthetic tail (after the record, overlapping
+it, or after a gap) and on the three example catchments: without a tail a
+forecast run is `runModelChecked`'s output; with one, `forecastFrom` is a
+forecast-rain day with no observed rain after it, every series of the run
+without the tail equals the forecast run's up to `forecastFrom − 1` bit for
+bit, every summary figure but `forecast`, `forecastRain` and `warnings` is
+the same, and `summary.forecast`'s counts fit its days and its fractions are
+in range. Soak: `FORECAST_FUZZ_CASES=20000 pnpm -C packages/engine exec vitest
+run src/forecast.invariants.test.ts`.
+
+**What the forecast rain is.** Whatever `rain_forecast_mm` holds: uploaded,
+or the CHIRPS-GEFS feed (WP-2.10). Forecast rain is not bias-corrected (§2.4b).
+Each GEFS issue replaces the one before from its issue date on, so the series
+may keep an older issue's first day before today's; after the last observed
+rain those days are forecast-sourced and so in the tail, never read as
+observed.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 

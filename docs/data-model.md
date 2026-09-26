@@ -62,7 +62,7 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, and `scenario_id` (024), the scenario that made it (null for a run of the live model) | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (038: `manual`, `auto` or `forecast`) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
@@ -219,7 +219,11 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   unpinned, unnominated, uncited runs, plus at most 10 pinned, plus the runs
   its (at most 50) nominations name, plus the cited ones (the runs its at most
   12 publications hold among them). A trimmed run's stored inputs go with it
-  (see **Stored run inputs**).
+  (see **Stored run inputs**). **Forecast runs** (`trigger = 'forecast'`,
+  see **Run triggers** below) are outside this cap: `trimRuns` neither counts
+  nor deletes them, and `trimForecastRuns` keeps a project's newest one,
+  deleting its older forecast runs that aren't kept (same exemption, same
+  lock, recorded as `run.deleted` with reason `superseded forecast`).
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -288,6 +292,18 @@ the same number. Pinning doesn't touch the note's stamp. A partial index
 (`model_run_pinned_idx`, `WHERE pinned`) keeps counting a project's pins
 cheap. `pinned` is on every run's metadata (`RunMeta`), so a feature that needs
 a kept base run (scenarios, issue #18) can read it from the run list.
+
+**Run triggers (038_run_trigger.sql).** `model_run.trigger` (text, default
+`manual`, CHECK `manual | auto | forecast`) says what made a run: a person
+pressing Run, an automatic re-run after new data (WP-2.11), or a forecast run
+(WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-roadmap-wp-212)). It is
+set at insert and never changes (water_app has no `UPDATE` on it). A partial
+index (`model_run_forecast_idx`, `(project_id, created_at DESC) WHERE trigger =
+'forecast'`) finds a project's forecast runs for their trim. The migration is
+written to be a no-op if WP-2.11's migration added the column first (`ADD
+COLUMN IF NOT EXISTS`, the constraint only when missing). A forecast run's
+input snapshot holds the forecast tail; an ordinary run's doesn't (the
+backend stores the input it ran on, cut at the tail).
 
 **Evidence nomination (010_run_nomination.sql).** Which run, and so which
 runoff model, the project stands behind as evidence, so an applicant can't
