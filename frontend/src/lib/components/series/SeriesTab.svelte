@@ -33,6 +33,7 @@
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
+	import { asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
@@ -255,6 +256,19 @@
 		}
 	}
 
+	/** Say which CHIRPS product and version a series holds (issue #40 part c); its values are untouched. */
+	async function relabel(s: SeriesMeta, key: string) {
+		actionError = null;
+		const f = provenanceFields(key);
+		try {
+			const meta = await api.series.label(projectId, s.id, f.product, f.productVersion);
+			list = list.map((x) => (x.id === s.id ? { ...x, product: meta.product, productVersion: meta.productVersion } : x));
+			onSeriesChange?.(list);
+		} catch (e) {
+			actionError = msg(e);
+		}
+	}
+
 	async function uploaded(r: UploadResult) {
 		values = Object.fromEntries(Object.entries(values).filter(([id]) => id !== r.meta.id));
 		await load();
@@ -326,6 +340,22 @@
 							<th scope="row" role="rowheader">
 								<span class="kind">{kindLabel(s.kind)}</span>
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
+								{#if asksProvenance(s.kind)}
+									{#if readonly}
+										<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
+									{:else}
+										<select
+											class="prov"
+											data-testid="series-provenance"
+											aria-label="Product and version of {s.name || kindLabel(s.kind)}"
+											value={s.product && s.productVersion ? `${s.product}/${s.productVersion}` : ''}
+											onchange={(e) => relabel(s, e.currentTarget.value)}
+										>
+											<option value="">Version not recorded</option>
+											{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+										</select>
+									{/if}
+								{/if}
 								{#if role}
 									<span class="role" class:unused={!inUse.has(s.id)} title={role.help}>
 										{inUse.has(s.id) || s.kind === 'flow_reference_m3s'
@@ -484,6 +514,12 @@
 		font-weight: 400;
 		color: var(--text-2);
 		font-size: 0.82rem;
+	}
+	.prov {
+		display: block;
+		margin-top: 0.15rem;
+		font-size: 0.75rem;
+		max-width: 100%;
 	}
 	.role {
 		display: inline-block;

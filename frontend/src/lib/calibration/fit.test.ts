@@ -236,7 +236,8 @@ describe('applyReport', () => {
 			windowChanged: false,
 			exclusionsChanged: false,
 			flowKindChanged: false,
-			forcingChanged: false
+			forcingChanged: false,
+			chirpsSourceChanged: false
 		});
 	});
 });
@@ -306,6 +307,15 @@ describe('fitRecordFor', () => {
 		expect(rec.forcing!.zeroRainRuns).toEqual(form.zeroRainRuns);
 		form.zeroRainRuns.keepDry[0]!.reason = 'changed';
 		expect(rec.forcing!.zeroRainRuns!.keepDry[0]!.reason).toBe('real');
+	});
+
+	it('records the CHIRPS series’ product and version the fit ran on, when known (issue #40c)', () => {
+		const form = defaultProjectSettings();
+		const v2 = { product: 'CHIRPS', version: '2.0' };
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null, chirpsSource: v2 }).forcing!.chirpsSource).toEqual(v2);
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null, chirpsSource: null }).forcing!.chirpsSource).toBeNull();
+		// Not known: nothing recorded, so nothing is ever compared.
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing).not.toHaveProperty('chirpsSource');
 	});
 
 	it('shows the fit time in UTC to the minute', () => {

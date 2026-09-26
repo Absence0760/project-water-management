@@ -286,6 +286,14 @@ workbook part is `WorkbookReview.svelte`.
      read) and updates the counts, notes and report in place; a date without
      a factor (or the other way round) or a non-positive factor is flagged
      and blocks Import.
+   - **CHIRPS column** (only when the workbook has one; issue #40 part c):
+     which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
+     b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The
+     series goes in labelled with the answer
+     ([data-model.md § Series provenance](./data-model.md#series-provenance-031_series_provenancesql)),
+     which is what later stops the CHIRPS feed (v3.0) splicing onto it. The
+     Python importer (`pnpm import:project`, `seed:demo`) leaves it
+     unrecorded; say it on the Data tab.
    - **Importer notes**, each marked *Note* or *Warning*, with its sheet and
      cell: the Python importer's `note:` / `WARNING:` lines, same text.
    - **Unmapped report**, its own section and table (*Where*, *Element*,
@@ -503,7 +511,14 @@ Each series shows its role in the model, its period, its last date and age,
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
 that series in the chart below. Editors can **Delete** a series (after a
-confirm; runs already stored are not affected). Below 640px wide each row becomes a card
+confirm; runs already stored are not affected). A CHIRPS series shows which
+product and version it holds (issue #40 part c): editors get a select
+(*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
+relabels it without touching its values (`PATCH …/series/:id`), viewers the
+words. The **Upload CSV** form asks the same for a CHIRPS file (*Not known*
+by default, or the existing series' own label when appending to it); a
+merge of another version into a filled series is refused by the server with
+its reason. Below 640px wide each row becomes a card
 (series and role on top, then labelled Period / Data up to / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
@@ -790,7 +805,9 @@ which checks every catchment tab).
     bias correction or zero-rain runs since the fit shows a **Forcing changed since fit** badge
     and a caveat explaining why (evaporation trades off against X1/X3, and
     CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
-    fit needs redoing).
+    fit needs redoing). So does a CHIRPS series that now holds another product
+    or version than the fit ran on (issue #40 part c; the fit records it, and
+    Settings compares the series a run would use), with its own caveat.
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -870,13 +887,20 @@ its own chunk loaded with the tab; WP-2.10,
   **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
   card carries `data-state`), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
-  schedule and who it runs as, the health sentence ("The last fetch
+  what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
+  runs as, the health sentence ("The last fetch
   failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.",
   written by the panel from the server's reason code and days, `healthMessage`
   in `feeds.ts`, its days like the rest of the app's calendar days), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
+- **A version conflict** (issue #40 part c): when the feed's series holds
+  another CHIRPS product or version, or an unrecorded one, the card says
+  every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
+  writes CHIRPS sat v3.0 …"), and owners get **Replace the series** (after a
+  confirm naming the full backfill, the History tab keeping the old values,
+  and the refit). Once confirmed the card says the next fetch replaces it.
 - **A warning** above the list counts the feeds that are stale or failing
   ("1 feed needs attention: …", `role="alert"`).
 - **Run now** (editors) queues a fetch at once and says so; the status
@@ -886,7 +910,12 @@ its own chunk loaded with the tab; WP-2.10,
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write), an optional series name, the schedule, and either **Grid cells**
   (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The
+  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
+  CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
+  days*, the default, or *rnl: from 1981, final days only*: one product end
+  to end, never one spliced onto the other) and an optional **Start date**,
+  checked against the product's first day (a sat date before 1998 says to
+  choose rnl). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
 - **Taking over a series.** A feed replaces its series' values on every day
@@ -899,7 +928,13 @@ its own chunk loaded with the tab; WP-2.10,
   ("CHIRPS", "CHIRPS 2", "DWS A2H012"). Focus lands on **Use a separate
   series: CHIRPS**, which fills the name and focuses the name field;
   **Replace its values** attaches into the existing series; Escape backs out
-  to the name field. Changing the series drops the question.
+  to the name field. Changing the series drops the question. When the series
+  holds another CHIRPS product or version (or an unrecorded one), the
+  question says so instead ("It holds CHIRPS v2.0, and this feed writes CHIRPS
+  sat v3.0 … never splices one onto the other"), and the second button is
+  **Replace the series with CHIRPS sat v3.0**: the feed is attached with the
+  replacement confirmed (`replaceSeries`), and its first fetch replaces the
+  series whole, backfilling from its first day.
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by
@@ -1154,7 +1189,8 @@ run's report to chosen members every week or month.
   Settings, with the in-sample score beside its validation scores, the
   "Parameters edited since fit" badge when they were edited, and a
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
-  CHIRPS bias correction or zero-rain runs differ from what the fit was made under), or "No fit
+  CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
+  CHIRPS series held another product or version, from the run's `inputSeries`), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

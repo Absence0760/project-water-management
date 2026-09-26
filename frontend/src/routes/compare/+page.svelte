@@ -18,6 +18,7 @@
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
 	import { asFitRecord } from '$lib/components/compare/fit';
+	import { chirpsSourceOfInput } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
@@ -318,6 +319,8 @@
 							b={asFitRecord(data.b.run.inputs.settings?.fitRecord)}
 							settingsA={data.a.run.inputs.settings}
 							settingsB={data.b.run.inputs.settings}
+							chirpsA={chirpsSourceOfInput(data.a.run.inputs.series)}
+							chirpsB={chirpsSourceOfInput(data.b.run.inputs.series)}
 						/>
 					</section>
 

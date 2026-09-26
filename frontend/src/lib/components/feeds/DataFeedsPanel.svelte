@@ -11,10 +11,13 @@
 	import { fmtNum } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import {
+		CHIRPS_PRODUCT_FIRST_DAY,
+		conflictMessage,
 		describePlace,
 		describeRunsAs,
 		describeTarget,
 		describeTimes,
+		describeWrites,
 		draftToBody,
 		emptyDraft,
 		type FeedDraft,
@@ -26,7 +29,8 @@
 		needsAttention,
 		separateName,
 		STATE_LABELS,
-		takeoverOf
+		takeoverOf,
+		versionClash
 	} from './feeds';
 
 	let { projectId }: { projectId: string } = $props();
@@ -44,7 +48,7 @@
 	let draft = $state<FeedDraft>(emptyDraft());
 	let formError = $state<string | null>(null);
 	/** The field formError is about (a client-side check), for aria-invalid and focus. */
-	let formField = $state<'cells' | 'station' | null>(null);
+	let formField = $state<'cells' | 'station' | 'start' | null>(null);
 	let heading = $state<HTMLElement>();
 	let attachButton = $state<HTMLButtonElement>();
 	/**
@@ -52,7 +56,7 @@
 	 * values on the days it fetches, so the form asks first. Shown only while
 	 * the form still names that series; changing it drops the question.
 	 */
-	let takeover = $state<{ kind: string; name: string; days: number; suggestion: string } | null>(null);
+	let takeover = $state<{ kind: string; name: string; days: number; suggestion: string; clash: { holds: string; writes: string } | null } | null>(null);
 	const asking = $derived(takeover && takeover.kind === draft.targetKind && takeover.name === draft.targetName.trim() ? takeover : null);
 	let separateButton = $state<HTMLButtonElement>();
 
@@ -126,6 +130,8 @@
 		}
 		busy = 'add';
 		formError = formField = message = error = null;
+		// Confirming a takeover of a series of another CHIRPS version replaces it whole (issue #40c).
+		const replaceSeries = confirmed && !!asking?.clash;
 		if (!confirmed && data) {
 			// Ask before a feed takes over a series that already holds data.
 			let series;
@@ -138,7 +144,13 @@
 			}
 			const hit = takeoverOf(series, data.feeds, parsed.body);
 			if (hit) {
-				takeover = { kind: hit.kind, name: hit.name, days: hit.length, suggestion: separateName(parsed.body, series, data.feeds) };
+				takeover = {
+					kind: hit.kind,
+					name: hit.name,
+					days: hit.length,
+					suggestion: separateName(parsed.body, series, data.feeds),
+					clash: versionClash(hit, parsed.body)
+				};
 				busy = null;
 				await tick();
 				separateButton?.focus();
@@ -148,9 +160,11 @@
 		takeover = null;
 		let attached = false;
 		try {
-			const feed = await feeds.create(parsed.body);
+			const feed = await feeds.create(replaceSeries ? { ...parsed.body, replaceSeries } : parsed.body);
 			attached = true;
-			message = `Feed attached: ${describeTarget(feed)} from ${describePlace(feed)}. It runs on the next schedule, or now with “Run now”.`;
+			message = replaceSeries
+				? `Feed attached: its first fetch replaces ${describeTarget(feed)} with ${describeWrites(feed).slice(3)}. The old values stay in the History tab. Refit afterwards.`
+				: `Feed attached: ${describeTarget(feed)} from ${describePlace(feed)}. It runs on the next schedule, or now with “Run now”.`;
 		} catch (err) {
 			formError = errorText(err);
 		}
@@ -168,15 +182,25 @@
 		document.getElementById(`${uid}-name`)?.focus();
 	}
 
-	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove') {
+	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace') {
 		if (busy) return;
 		if (what === 'remove' && !confirm(`Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
+		if (
+			what === 'replace' &&
+			!confirm(
+				`Replace “${describeTarget(f)}” with${describeWrites(f).slice(2)}? The feed’s next fetch replaces the whole series from its start date; the old values stay in the History tab, where they can be restored. The CHIRPS factors change with it, so refit afterwards.`
+			)
+		)
+			return;
 		busy = f.id;
 		message = error = null;
 		try {
 			if (what === 'run') {
 				const r = await feeds.runNow(f.id);
 				message = r.created ? 'Fetch queued. The status below updates once the background worker has run it.' : 'A fetch for this feed is already waiting to run.';
+			} else if (what === 'replace') {
+				await feeds.update(f.id, { replaceSeries: true });
+				message = 'Replacement confirmed: the next fetch replaces the series. Run it now, or wait for the schedule.';
 			} else if (what === 'toggle') {
 				await feeds.update(f.id, { enabled: !f.enabled });
 				message = f.enabled ? 'Feed switched off.' : 'Feed switched on; it runs on the next schedule.';
@@ -232,13 +256,19 @@
 							<strong>{sourceLabel(f)}</strong>
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
-						<p class="where muted small">{describePlace(f)} · {f.schedule}{describeRunsAs(f)}</p>
+						<p class="where muted small">{describePlace(f)}{describeWrites(f)} · {f.schedule}{describeRunsAs(f)}</p>
 						<p class="health">{healthMessage(f.health)}</p>
+						{#if conflictMessage(f)}
+							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
+						{/if}
 						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
 									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
+								{/if}
+								{#if data.canEdit && f.versionConflict && f.replaceFrom === null}
+									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === f.id} aria-label="Replace the series: {describeTarget(f)}" onclick={() => act(f, 'replace')}>Replace the series</button>
 								{/if}
 								{#if data.canEdit}
 									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>
@@ -309,6 +339,33 @@
 						<span class="hint" id="{uid}-station-h">The gauge code, e.g. A2H012. Verified DWS data lags by months: use it for calibration, not day-to-day operation.</span>
 					</div>
 				{:else}
+					{#if draft.source === 'chirps'}
+						<div class="form-row">
+							<div class="field">
+								<label for="{uid}-product">Daily product</label>
+								<select id="{uid}-product" bind:value={draft.product} aria-describedby="{uid}-product-h">
+									<option value="sat">sat: from 1998, with preliminary days</option>
+									<option value="rnl">rnl: from 1981, final days only</option>
+								</select>
+							</div>
+							<div class="field">
+								<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
+								<input
+									id="{uid}-start"
+									type="date"
+									min={CHIRPS_PRODUCT_FIRST_DAY[draft.product]}
+									bind:value={draft.startDate}
+									aria-invalid={formField === 'start' || undefined}
+									aria-describedby="{uid}-product-h{formField === 'start' ? ` ${uid}-err` : ''}"
+								/>
+							</div>
+						</div>
+						<span class="hint" id="{uid}-product-h">
+							CHIRPS v3 comes as two daily products with the same pentad totals but different daily timing. A feed reads one of them for the
+							whole record, never one spliced onto the other: choose rnl for a record that starts before 1998. Without a start date the feed
+							reads the last 60 days, then keeps up.
+						</span>
+					{/if}
 					<div class="field">
 						<label for="{uid}-cells">Grid cells</label>
 						<textarea
@@ -345,14 +402,25 @@
 						}}
 					>
 						<p id="{uid}-to-h"><strong>“{describeTarget({ targetKind: q.kind, targetName: q.name })}” already has data ({fmtNum(q.days)} days).</strong></p>
-						<p id="{uid}-to-d">
-							The feed will replace its values on every day it fetches, including values you uploaded or imported (a day the source has no
-							value for keeps what is there). To keep this record as it is, send the feed to a separate series, such as “{q.suggestion}”, and
-							compare the two.
-						</p>
+						{#if q.clash}
+							<p id="{uid}-to-d" data-testid="feed-version-question">
+								It holds {q.clash.holds}, and this feed writes {q.clash.writes}. The two differ by an amount that changes over the years, so a
+								feed never splices one onto the other. It can replace the whole series from its start date (the old values stay in the History
+								tab, and the CHIRPS factors and any fit made on the old values no longer hold), or write to a separate series, such as
+								“{q.suggestion}”, so you can compare the two.
+							</p>
+						{:else}
+							<p id="{uid}-to-d">
+								The feed will replace its values on every day it fetches, including values you uploaded or imported (a day the source has no
+								value for keeps what is there). To keep this record as it is, send the feed to a separate series, such as “{q.suggestion}”, and
+								compare the two.
+							</p>
+						{/if}
 						<div class="row">
 							<button type="button" class="btn btn-sm btn-primary" bind:this={separateButton} onclick={() => answerTakeover(q.suggestion)}>Use a separate series: {q.suggestion}</button>
-							<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Replace its values</button>
+							<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === 'add'} onclick={() => add(null, true)}
+								>{q.clash ? `Replace the series with ${q.clash.writes}` : 'Replace its values'}</button
+							>
 						</div>
 					</div>
 				{/if}
@@ -433,6 +501,11 @@
 	.add h3 {
 		margin: 0 0 0.5rem;
 		font-size: 1rem;
+	}
+	.version {
+		margin: 0.3rem 0;
+		font-size: 0.85rem;
+		max-width: 75ch;
 	}
 	.takeover p {
 		margin: 0 0 0.4rem;

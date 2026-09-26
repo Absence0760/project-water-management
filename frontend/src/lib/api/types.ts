@@ -17,6 +17,7 @@ import type {
 	RestrictionLevel,
 	RunComparison,
 	RunInputsSnapshot,
+	RunSeriesSnapshot,
 	RunSummary,
 	ScenarioOp
 } from '@water-management/engine';
@@ -90,6 +91,9 @@ export interface ProjectFileSeries {
 	unit: string;
 	startDate: string;
 	values: (number | null)[];
+	/** What the values are (031_series_provenance.sql), e.g. CHIRPS / 2.0; absent or null = not recorded. */
+	product?: string | null;
+	productVersion?: string | null;
 }
 
 /** POST /projects/import. `runId` / `runError` only when a run was asked for. */
@@ -341,6 +345,12 @@ export interface Run extends RunMeta {
 	 * fills its Inputs sheet from it. Absent from an older API.
 	 */
 	model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown>;
+	/**
+	 * Each input series kind's start, length, hash and product/version as the
+	 * run recorded them (GET …/runs/:runId only; `provenance` absent on a run
+	 * saved before 031). The fit record compares the CHIRPS one.
+	 */
+	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
 }
 
 /** One output series available for a run (values fetched separately). */

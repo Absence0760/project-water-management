@@ -46,6 +46,16 @@ describe('what an item says', () => {
 		expect(eventLine(ev('series.replaced', { kind: 'rain_catchment_mm', name: '', daysChanged: 12, from: '2024-01-01', to: '2024-03-31' }))).toBe(
 			'Replaced the Rainfall — catchment series: 12 days changed (1 Jan 2024 to 31 Mar 2024)'
 		);
+		// Issue #40c: a confirmed feed replacement, a relabel, and the confirmation itself.
+		expect(
+			eventLine(ev('series.replaced', { kind: 'rain_chirps_mm', name: '', daysChanged: 3, feedId: 'f', source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } }))
+		).toBe('The CHIRPS feed replaced the Rainfall — CHIRPS series: 3 days changed; now CHIRPS sat v3.0, was CHIRPS v2.0');
+		expect(eventLine(ev('series.labelled', { kind: 'rain_chirps_mm', name: '', provenance: { from: 'an unrecorded version', to: 'CHIRPS v2.0' } }))).toBe(
+			'Marked the Rainfall — CHIRPS series as CHIRPS v2.0 (was an unrecorded version)'
+		);
+		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
+			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
+		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);

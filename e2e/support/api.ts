@@ -78,7 +78,7 @@ export async function putModel(request: APIRequestContext, projectId: string, mo
 export async function putSeries(
 	request: APIRequestContext,
 	projectId: string,
-	s: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[] }
+	s: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string }
 ): Promise<void> {
 	const res = await request.put(`${API_URL}/projects/${projectId}/series`, { data: s });
 	await json(res, 200);

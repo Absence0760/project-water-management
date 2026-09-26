@@ -2,13 +2,15 @@
 // feeds). The types mirror backend/src/feeds/store.ts FeedMeta; the calls go
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
-import type { SeriesMeta } from '@water-management/engine';
+import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, provenanceLabel, sameProvenance, type SeriesMeta, type SeriesProvenance } from '@water-management/engine';
 import type { Api } from '$lib/api';
 import { ApiError } from '$lib/api/client';
 import { fmtDate, fmtDay } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
+/** CHIRPS v3's two daily products (backend/src/feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
+export type ChirpsProduct = 'sat' | 'rnl';
 export type FeedState = 'ok' | 'stale' | 'failing' | 'pending' | 'disabled';
 
 export interface GridCell {
@@ -20,7 +22,7 @@ export interface GridCell {
 export interface FeedMeta {
 	id: string;
 	source: FeedSource;
-	config: { cells?: GridCell[]; station?: string; startDate?: string; staleAfterDays?: number };
+	config: { cells?: GridCell[]; station?: string; startDate?: string; staleAfterDays?: number; product?: ChirpsProduct };
 	targetKind: string;
 	targetName: string;
 	enabled: boolean;
@@ -36,6 +38,14 @@ export interface FeedMeta {
 	lastError: string | null;
 	lastMeta: Record<string, string | number> | null;
 	health: FeedHealth;
+	/** What the feed writes (CHIRPS sat v3.0 …); null for the forecast and DWS. */
+	writes: SeriesProvenance | null;
+	/** The target series now, or null when it doesn't exist. */
+	series: { filled: boolean; provenance: SeriesProvenance | null } | null;
+	/** The target holds another product or version: every fetch is refused until an owner confirms replacing it. */
+	versionConflict: boolean;
+	/** A confirmed replacement waiting for the next fetch: what it will replace ('' = unrecorded). */
+	replaceFrom: string | null;
 }
 
 /** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
@@ -75,10 +85,12 @@ export interface FeedList {
 
 export interface FeedBody {
 	source: FeedSource;
-	config: { cells: GridCell[] } | { station: string };
+	config: { cells: GridCell[]; product?: ChirpsProduct; startDate?: string } | { station: string };
 	targetKind: string;
 	targetName: string;
 	schedule: 'daily' | 'hourly';
+	/** The owner confirmed replacing a target that holds another product or version (issue #40c). */
+	replaceSeries?: boolean;
 }
 
 export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
@@ -87,7 +99,7 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 	return {
 		list: () => api.request<FeedList>('GET', base),
 		create: (body: FeedBody) => api.request<{ feed: FeedMeta }>('POST', base, body).then((r) => r.feed),
-		update: (id: string, patch: Partial<FeedBody> & { enabled?: boolean }) => api.request<{ feed: FeedMeta }>('PATCH', one(id), patch).then((r) => r.feed),
+		update: (id: string, patch: Partial<FeedBody> & { enabled?: boolean; replaceSeries?: boolean }) => api.request<{ feed: FeedMeta }>('PATCH', one(id), patch).then((r) => r.feed),
 		remove: (id: string) => api.request<void>('DELETE', one(id)),
 		runNow: (id: string) => api.request<{ created: boolean }>('POST', `${one(id)}/run-now`)
 	};
@@ -102,6 +114,10 @@ export interface FeedDraft {
 	targetKind: string;
 	targetName: string;
 	schedule: 'daily' | 'hourly';
+	/** CHIRPS only: which v3 daily product. */
+	product: ChirpsProduct;
+	/** CHIRPS only: the first day to fetch, YYYY-MM-DD, or '' for the default (60 days back). */
+	startDate: string;
 }
 
 export const emptyDraft = (source: FeedSource = 'chirps', kinds: string[] = []): FeedDraft => ({
@@ -110,8 +126,17 @@ export const emptyDraft = (source: FeedSource = 'chirps', kinds: string[] = []):
 	station: '',
 	targetKind: kinds[0] ?? '',
 	targetName: '',
-	schedule: 'daily'
+	schedule: 'daily',
+	product: 'sat',
+	startDate: ''
 });
+
+/** The first day each CHIRPS v3 daily product has (backend CHIRPS_PRODUCT_FIRST_DAY). */
+export const CHIRPS_PRODUCT_FIRST_DAY: Record<ChirpsProduct, string> = { sat: '1998-01-01', rnl: '1981-01-01' };
+
+/** What a feed of this source and product writes, as the series records it (backend feedProvenance). */
+export const feedWrites = (source: FeedSource, product: ChirpsProduct = 'sat'): SeriesProvenance | null =>
+	source !== 'chirps' ? null : product === 'rnl' ? CHIRPS_V3_RNL : CHIRPS_V3_SAT;
 
 const NUM = /^[+-]?(\d+\.?\d*|\.\d+)$/;
 /** The largest cell weight the server takes (GridConfig). */
@@ -150,8 +175,10 @@ export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
 /** Only river gauges (H codes) can be fed: the backend's DWS_RIVER_GAUGE (feeds/config.ts) says why. */
 export const DWS_RIVER_GAUGE = /^[A-Z]\d[H]\d{3}$/;
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 /** The request body for a draft, or the first problem in words and the field it is in. */
-export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'station' } {
+export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'station' | 'start' } {
 	const common = { source: d.source, targetKind: d.targetKind, targetName: d.targetName.trim(), schedule: d.schedule };
 	if (d.source === 'dws') {
 		const station = d.station.trim().toUpperCase();
@@ -161,8 +188,55 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 	}
 	const cells = parseCells(d.cells);
 	if ('error' in cells) return { error: cells.error, field: 'cells' };
-	return { body: { ...common, config: { cells: cells.cells } } };
+	if (d.source !== 'chirps') return { body: { ...common, config: { cells: cells.cells } } };
+	// CHIRPS: one daily product end to end, from no earlier than its first day (issue #40 part c).
+	const start = d.startDate.trim();
+	const first = CHIRPS_PRODUCT_FIRST_DAY[d.product];
+	if (start && !ISO_DAY.test(start)) return { error: 'The start date should be a day, YYYY-MM-DD.', field: 'start' };
+	if (start && start < first) {
+		return {
+			error:
+				d.product === 'sat'
+					? `The sat product begins on ${first}. For earlier days choose the rnl product, which reads 1981 onwards for the whole record.`
+					: `CHIRPS begins on ${first}.`,
+			field: 'start'
+		};
+	}
+	return {
+		body: {
+			...common,
+			config: { cells: cells.cells, ...(d.product === 'rnl' ? { product: 'rnl' as const } : {}), ...(start ? { startDate: start } : {}) }
+		}
+	};
 }
+
+/**
+ * A feed about to write into a series that holds values of another product or
+ * version (or an unrecorded one): what it holds and what the feed writes, or
+ * null when the feed may merge (same version, empty, or a source with no
+ * version). The server refuses the attach without a confirmation either way.
+ */
+export function versionClash(
+	series: Pick<SeriesMeta, 'length' | 'product' | 'productVersion'> | null,
+	body: Pick<FeedBody, 'source' | 'config'>
+): { holds: string; writes: string } | null {
+	const writes = feedWrites(body.source, 'product' in body.config ? body.config.product : undefined);
+	if (!writes || !series || !(series.length > 0)) return null;
+	const holds = series.product && series.productVersion ? { product: series.product, version: series.productVersion } : null;
+	return sameProvenance(holds, writes) ? null : { holds: provenanceLabel(holds), writes: provenanceLabel(writes) };
+}
+
+/** A listed feed whose target holds another version: what to tell the owner, or null. */
+export function conflictMessage(f: Pick<FeedMeta, 'versionConflict' | 'series' | 'writes' | 'replaceFrom'>): string | null {
+	if (!f.versionConflict || !f.writes) return null;
+	const holds = provenanceLabel(f.series?.provenance);
+	const writes = provenanceLabel(f.writes);
+	if (f.replaceFrom !== null) return `Replacement confirmed: the next fetch replaces the series (${holds}) with ${writes}, from the feed’s start date. Refit afterwards.`;
+	return `The series holds ${holds} and this feed writes ${writes}, so every fetch is refused: two versions spliced into one record would break it. Replace the series, or remove the feed and attach it to a separate series.`;
+}
+
+/** The product and version a feed writes, for its summary line (" · CHIRPS sat v3.0"), or ''. */
+export const describeWrites = (f: Pick<FeedMeta, 'writes'>) => (f.writes ? ` · ${provenanceLabel(f.writes)}` : '');
 
 /** Where a feed reads, in words. */
 export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
@@ -239,11 +313,11 @@ export function healthMessage(h: FeedHealth): string {
  * the target already holds data. A series another feed already writes is not
  * a takeover: the server refuses a second feed for it with its own message.
  */
-export function takeoverOf(
-	series: readonly Pick<SeriesMeta, 'kind' | 'name' | 'length'>[],
+export function takeoverOf<S extends Pick<SeriesMeta, 'kind' | 'name' | 'length'>>(
+	series: readonly S[],
 	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[],
 	target: Pick<FeedBody, 'targetKind' | 'targetName'>
-): Pick<SeriesMeta, 'kind' | 'name' | 'length'> | null {
+): S | null {
 	if (feeds.some((f) => f.targetKind === target.targetKind && f.targetName === target.targetName)) return null;
 	return series.find((s) => s.kind === target.targetKind && s.name === target.targetName && s.length > 0) ?? null;
 }

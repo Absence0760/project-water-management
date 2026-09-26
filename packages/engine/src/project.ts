@@ -707,6 +707,9 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/** What the values are (031_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
+	product?: string | null;
+	productVersion?: string | null;
 }
 
 // ---------------------------------------------------------------------------

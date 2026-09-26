@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import {
+	conflictMessage,
 	describePlace,
+	describeWrites,
+	feedWrites,
+	versionClash,
 	describeRunsAs,
 	describeTarget,
 	describeTimes,
@@ -62,6 +66,49 @@ describe('draftToBody', () => {
 		expect(draftToBody({ ...emptyDraft('dws'), station: 'X0H00' })).toEqual({ error: expect.stringMatching(/looks like A2H012/), field: 'station' });
 		expect(draftToBody({ ...emptyDraft('dws'), station: 'x0r000' })).toEqual({ error: expect.stringMatching(/river gauge.*H code/), field: 'station' });
 		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '' })).toEqual({ error: expect.stringMatching(/at least one/), field: 'cells' });
+	});
+
+	// Issue #40c: one CHIRPS v3 daily product end to end, from no earlier than its first day.
+	it('CHIRPS sends its daily product (rnl only: sat is the default) and an optional start date the product covers', () => {
+		const chirps = { ...emptyDraft('chirps', ['rain_chirps_mm']), cells: '-20.12, 25.17' };
+		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }], product: 'rnl', startDate: '1985-01-01' } } });
+		expect(draftToBody({ ...chirps, startDate: '1998-01-01' })).toMatchObject({ body: { config: { startDate: '1998-01-01' } } });
+		expect(draftToBody({ ...chirps, startDate: '1997-12-31' })).toEqual({ error: expect.stringMatching(/sat product begins on 1998-01-01\. For earlier days choose the rnl product/), field: 'start' });
+		expect(draftToBody({ ...chirps, product: 'rnl', startDate: '1980-12-31' })).toEqual({ error: 'CHIRPS begins on 1981-01-01.', field: 'start' });
+		expect(draftToBody({ ...chirps, startDate: '1 Jan 2020' })).toEqual({ error: expect.stringMatching(/YYYY-MM-DD/), field: 'start' });
+		// The forecast has no product or start date field.
+		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '-20.12, 25.17', product: 'rnl', startDate: '1985-01-01' })).toMatchObject({ body: { config: { cells: [{ lat: -20.12, lon: 25.17 }] } } });
+		expect((draftToBody({ ...emptyDraft('chirps_gefs'), cells: '-20.12, 25.17' }) as { body: { config: object } }).body.config).not.toHaveProperty('product');
+	});
+});
+
+describe('the CHIRPS version guard (issue #40c)', () => {
+	const body = (product?: 'sat' | 'rnl') => ({ source: 'chirps' as const, config: { cells: [], ...(product ? { product } : {}) } });
+	it('says what a feed writes', () => {
+		expect(feedWrites('chirps')).toEqual({ product: 'CHIRPS sat', version: '3.0' });
+		expect(feedWrites('chirps', 'rnl')).toEqual({ product: 'CHIRPS rnl', version: '3.0' });
+		expect(feedWrites('dws')).toBeNull();
+		expect(describeWrites({ writes: { product: 'CHIRPS sat', version: '3.0' } })).toBe(' · CHIRPS sat v3.0');
+		expect(describeWrites({ writes: null })).toBe('');
+	});
+
+	it('finds a clash with a filled series of another product or version, or an unrecorded one', () => {
+		const v2 = { length: 10, product: 'CHIRPS', productVersion: '2.0' };
+		expect(versionClash(v2, body())).toEqual({ holds: 'CHIRPS v2.0', writes: 'CHIRPS sat v3.0' });
+		expect(versionClash({ length: 10, product: null, productVersion: null }, body('rnl'))).toEqual({ holds: 'an unrecorded version', writes: 'CHIRPS rnl v3.0' });
+		expect(versionClash({ length: 10, product: 'CHIRPS sat', productVersion: '3.0' }, body('rnl'))).toEqual({ holds: 'CHIRPS sat v3.0', writes: 'CHIRPS rnl v3.0' });
+		// Positive controls: the same version, an empty or missing series, a source without versions.
+		expect(versionClash({ length: 10, product: 'CHIRPS sat', productVersion: '3.0' }, body())).toBeNull();
+		expect(versionClash({ ...v2, length: 0 }, body())).toBeNull();
+		expect(versionClash(null, body())).toBeNull();
+		expect(versionClash(v2, { source: 'dws', config: { station: 'X0H000' } })).toBeNull();
+	});
+
+	it('tells the owner why a listed feed is refused, or that the replacement is waiting', () => {
+		const f = { versionConflict: true, series: { filled: true, provenance: { product: 'CHIRPS', version: '2.0' } }, writes: { product: 'CHIRPS sat', version: '3.0' }, replaceFrom: null };
+		expect(conflictMessage(f)).toMatch(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
+		expect(conflictMessage({ ...f, replaceFrom: 'CHIRPS/2.0' })).toMatch(/^Replacement confirmed: the next fetch replaces the series \(CHIRPS v2\.0\) with CHIRPS sat v3\.0/);
+		expect(conflictMessage({ ...f, versionConflict: false })).toBeNull();
 	});
 });
 

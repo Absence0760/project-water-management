@@ -22,6 +22,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
+	import { chirpsSourceOf } from '$lib/series/provenance';
 	import { api, ApiError, hasRole, type Project, type RunMeta } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -435,7 +436,14 @@
 				{:else if tab === 'settings'}
 					<Lazy load={LOAD.settings}>
 						{#snippet children(SettingsTab)}
-							<SettingsTab project={project!} {editor} seriesKinds={series?.map((x) => x.kind) ?? null} readonly={!canEdit} {onProjectChange} />
+							<SettingsTab
+								project={project!}
+								{editor}
+								seriesKinds={series?.map((x) => x.kind) ?? null}
+								chirpsSource={chirpsSourceOf(series)}
+								readonly={!canEdit}
+								{onProjectChange}
+							/>
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'series'}
