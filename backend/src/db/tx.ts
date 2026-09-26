@@ -11,7 +11,7 @@ export type Db = pg.PoolClient;
  *
  * Also sets `app.change_set_id` to a fresh UUID: every history row the
  * transaction writes (model_revision, series_revision, audit_event;
- * 026_history.sql) defaults its change_set to it, so one request's rows group
+ * 027_history.sql) defaults its change_set to it, so one request's rows group
  * together in the History tab.
  */
 export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): Promise<T> {

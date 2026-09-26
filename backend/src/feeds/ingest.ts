@@ -1,7 +1,7 @@
 // Apply a fetch's result to its feed, inside the job's transaction as the
 // feed's acting user: merge the days into the target series through the same
 // path as POST /projects/:id/series/merge (series/merge.ts mergeSeries), then
-// record the feed's health. The change history (026_history.sql) gets a
+// record the feed's health. The change history (027_history.sql) gets a
 // series.merged event for days that changed (no series revision: a feed's
 // merges are append-mostly and would push a person's restore points out) and
 // a feed.failed event when a working feed starts failing, not on every

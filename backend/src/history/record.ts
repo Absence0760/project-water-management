@@ -1,4 +1,4 @@
-// Writing the change history (026_history.sql; docs/data-model.md § Change
+// Writing the change history (027_history.sql; docs/data-model.md § Change
 // history). Every function runs inside the caller's withUser transaction, as
 // the signed-in user under RLS, so a history row commits with the change it
 // records or not at all.

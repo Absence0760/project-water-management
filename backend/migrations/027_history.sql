@@ -1,4 +1,4 @@
--- 026_history — change history and audit log, with restore (roadmap WP-2.4,
+-- 027_history — change history and audit log, with restore (roadmap WP-2.4,
 -- issue #28; docs/data-model.md § Change history, docs/security.md § Change
 -- history and audit log).
 --
@@ -80,7 +80,7 @@ CREATE TABLE model_revision (
 	change_set    uuid DEFAULT app_change_set_id()
 );
 COMMENT ON TABLE model_revision IS
-	'The project''s { settings, model } after each change, with its diffInputs lines and reason (026_history, WP-2.4). Append-only.';
+	'The project''s { settings, model } after each change, with its diffInputs lines and reason (027_history, WP-2.4). Append-only.';
 CREATE INDEX model_revision_project_idx ON model_revision (project_id, created_at DESC, id DESC);
 CREATE INDEX model_revision_created_by_idx ON model_revision (created_by);
 CREATE INDEX model_revision_restored_from_idx ON model_revision (restored_from);
@@ -110,7 +110,7 @@ CREATE TABLE series_revision (
 	change_set    uuid DEFAULT app_change_set_id()
 );
 COMMENT ON TABLE series_revision IS
-	'A series'' values before a replace, delete, UI merge or restore (026_history, WP-2.4). Newest 5 per (project, kind, name), at most 180 days old. Append-only for the app.';
+	'A series'' values before a replace, delete, UI merge or restore (027_history, WP-2.4). Newest 5 per (project, kind, name), at most 180 days old. Append-only for the app.';
 CREATE INDEX series_revision_series_idx ON series_revision (project_id, kind, name, created_at DESC);
 CREATE INDEX series_revision_series_id_idx ON series_revision (series_id);
 CREATE INDEX series_revision_created_by_idx ON series_revision (created_by);
@@ -159,7 +159,7 @@ CREATE TABLE audit_event (
 	change_set       uuid DEFAULT app_change_set_id()
 );
 COMMENT ON TABLE audit_event IS
-	'Who did what to a project, other than model and settings edits (026_history, WP-2.4). Append-only.';
+	'Who did what to a project, other than model and settings edits (027_history, WP-2.4). Append-only.';
 CREATE INDEX audit_event_project_idx ON audit_event (project_id, created_at DESC, id DESC);
 CREATE INDEX audit_event_kind_idx ON audit_event (project_id, kind);
 CREATE INDEX audit_event_actor_idx ON audit_event (actor_user_id);

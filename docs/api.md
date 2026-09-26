@@ -1109,7 +1109,7 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
 
 ## History
 
-Change history and the audit log (WP-2.4, [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-026_historysql)).
+Change history and the audit log (WP-2.4, [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-027_historysql)).
 Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |

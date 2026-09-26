@@ -251,13 +251,13 @@ In short:
   project_id = …` therefore returns nothing rather than someone else's data.
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
-- **Change history and audit log (WP-2.4, 026).** `model_revision`,
+- **Change history and audit log (WP-2.4, 027).** `model_revision`,
   `series_revision` and `audit_event` are append-only for `water_app`
   (`SELECT` and `INSERT` grants, no `UPDATE` or `DELETE` policy); only the
   `series_revision` retention trigger deletes, and only that series' old
   rows. An audit row must name the caller as its actor. Viewers and above
   read history; farmers and strangers see nothing. Invite emails in events
-  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-026_historysql).
+  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-027_historysql).
 - **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
   existing policy and every `requireRole(…, 'viewer')` refuses them (fail
   closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
