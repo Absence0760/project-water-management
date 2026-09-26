@@ -454,7 +454,7 @@ put the results first; its first screen follows board A1 of the redesign
   consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
-  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
+  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
   the email's language) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
