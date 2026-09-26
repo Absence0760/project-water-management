@@ -810,7 +810,14 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
 		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
 		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
-		yield csvRow(['Month', 'Complete years', 'Months met', 'Met (%)', 'Deficit (m³)', `Mean required (${u})`, `Mean simulated (${u})`, 'FDC points met']);
+		// Engine ≥ 0.32.0 (model.md §2.9d): the low flows of a total table, as extra lines and columns only when the table has them.
+		const low = r.lowFlow;
+		if (low) {
+			yield csvRow(['Low flows: months met', low.met, 'of', low.months, 'Met (%)', pct(low.rate) as Cell]);
+			yield csvRow(['Low flows: deficit over the run (m³)', low.deficitM3]);
+			yield csvRow(['Low flows: longest run of months not met', low.longestNotMetRun]);
+		}
+		yield csvRow(['Month', 'Complete years', 'Months met', 'Met (%)', 'Deficit (m³)', `Mean required (${u})`, `Mean simulated (${u})`, 'FDC points met', ...(low ? ['Low flows met (%)'] : [])]);
 		for (const m of r.byMonth) {
 			const fdcMet = m.fdc.filter((f) => f.met).length;
 			yield csvRow([
@@ -821,10 +828,23 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 				m.deficitM3,
 				m.meanRequired,
 				m.meanActual,
-				m.years ? `${fdcMet} of ${m.fdc.length}` : ''
+				m.years ? `${fdcMet} of ${m.fdc.length}` : '',
+				...(low ? [pct(m.lowFlowRate ?? null) as Cell] : [])
 			]);
 		}
-		yield csvRow(['Year', 'Month', 'Water year', `Natural (${u})`, 'Natural condition (% exceedance)', 'Beyond the table', `Required (${u})`, `Simulated (${u})`, 'Met', 'Deficit (m³)']);
+		yield csvRow([
+			'Year',
+			'Month',
+			'Water year',
+			`Natural (${u})`,
+			'Natural condition (% exceedance)',
+			'Beyond the table',
+			`Required (${u})`,
+			`Simulated (${u})`,
+			'Met',
+			'Deficit (m³)',
+			...(low ? [`Low flow required (${u})`, 'Low flows met', `High-flow part (${u})`] : [])
+		]);
 		for (const m of r.months) {
 			yield csvRow([
 				m.year,
@@ -836,8 +856,15 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 				m.required,
 				m.actual,
 				m.met ? 'yes' : 'no',
-				m.deficitM3
+				m.deficitM3,
+				...(low ? [m.requiredLowFlow ?? null, m.lowFlowMet ? 'yes' : 'no', m.requiredHighFlow ?? null] : [])
 			]);
+		}
+		for (const h of r.highFlows ?? []) {
+			yield csvRow(['High flow', h.label, 'starts in', h.months.map((m) => MONTH_NAMES[m - 1]!).join(' '), 'peak (m³/s)', h.peakAppliedM3s, 'days at peak', h.durationDays, 'per water year', h.perYear]);
+			yield csvRow(['Water years met', h.overall.met, 'of', h.overall.required, 'that had it naturally', 'Met (%)', pct(h.overall.rate) as Cell, 'Water years assessed', h.overall.years]);
+			yield csvRow(['Water year', 'Natural events', 'Simulated events', 'Required', 'Met']);
+			for (const y of h.years) yield csvRow([waterYearText(y.waterYear), y.natural, y.actual, y.required, y.required === 0 ? 'not required' : y.met ? 'yes' : 'no']);
 		}
 	}
 }
