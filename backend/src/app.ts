@@ -33,6 +33,7 @@ import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
 import { signoffRoutes } from './signoffs/routes.js';
 import { sweepRoutes } from './sweeps/routes.js';
+import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
 import { yieldRoutes } from './yield/routes.js';
 
@@ -116,6 +117,7 @@ export function createApp() {
 	projects.route('/', jobRoutes);
 	projects.route('/', yieldRoutes);
 	projects.route('/', sweepRoutes);
+	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);

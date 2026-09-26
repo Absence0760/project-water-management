@@ -128,6 +128,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Seasonal outlooks (issue #53 R5, 063_seasonal_outlook): auth-gated like every project route.
+	it('inventories the outlook routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/outlooks', 'GET /projects/:id/outlooks', 'GET /projects/:id/outlooks/:outlookId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Applications (WP-3.3, 045_contributor_scope): auth-gated like every project
 	// route; which a contributor may call is scenarios/applications.db.test.ts.
 	it('inventories the application routes as auth-gated', () => {

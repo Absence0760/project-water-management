@@ -21,6 +21,7 @@ import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from
 import { TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
+import { resolveOutlook } from './outlookSettings.js';
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
@@ -59,12 +60,12 @@ const summary = (r: ProjectRow) => ({
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
-// settings.autoRun and settings.outcomes aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
+// settings.autoRun, settings.outcomes and settings.outlook aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
 // rerunQueuedFor: when the pending re-run is due (the header's "Re-run queued for 14:05"), or null.
 const full = (r: ProjectRow) => ({
 	...summary(r),
 	timeZone: r.time_zone,
-	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings), outcomes: resolveOutcomes(r.settings) },
+	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings), outcomes: resolveOutcomes(r.settings), outlook: resolveOutlook(r.settings) },
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null
 });
 
@@ -144,15 +145,16 @@ const stableJson = (v: unknown): string =>
 		x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x
 	);
 const withoutRunPolicy = (settings: unknown) => {
-	const { autoRun: _autoRun, outcomes: _outcomes, ...rest } = settings as Record<string, unknown>;
+	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, ...rest } = settings as Record<string, unknown>;
 	return rest;
 };
 
 /**
  * A patch that changes nothing but settings.autoRun (when the project re-runs
- * itself, not how) or settings.outcomes (how the outcome matrix reads a
- * sweep) leaves updated_at alone: updated_at is "the inputs changed since the
- * latest run" to the Runs tab, and neither changes an input. The Settings
+ * itself, not how), settings.outcomes (how the outcome matrix reads a
+ * sweep) or settings.outlook (how a seasonal outlook is set up) leaves
+ * updated_at alone: updated_at is "the inputs changed since the latest run"
+ * to the Runs tab, and none of them changes an input. The Settings
  * form sends every setting, so this compares the settings as they'd be
  * saved, not the keys sent.
  */
