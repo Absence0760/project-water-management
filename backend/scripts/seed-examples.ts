@@ -12,13 +12,15 @@
 //     example.com is linked to Rietspruit (Sandspruit) and Kareebos (Droëvlei),
 //     so the farm-scoped views (WP-2.1, docs/design/farmer-view.md) have a
 //     one-farm and a several-farm user
-// Each project gets one model run so results show immediately. Building the
+// Each project gets one model run, published by its owner (WP-2.3; Sandspruit
+// with an advisory notice), so results and the farm views show immediately. Building the
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
 // (several seconds). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { withoutUser, withUser } from '../src/db/tx.js';
+import { publishRun } from '../src/publish/publish.js';
 import { executeRun } from '../src/runs/execute.js';
 import { buildExamples } from './examples/catchments.js';
 import { importProjectData } from './import-project.js';
@@ -74,8 +76,25 @@ async function share(ownerEmail: string, projectId: string, email: string, role:
 	);
 }
 
-async function run(email: string, projectId: string) {
-	await withUser(await userId(email), (db) => executeRun(db, projectId, 'Initial run (seed)'));
+async function run(email: string, projectId: string): Promise<string> {
+	return withUser(await userId(email), async (db) => (await executeRun(db, projectId, 'Initial run (seed)')).id);
+}
+
+/**
+ * The WUA's notice seeded on Sandspruit, so a demo farmer sees the official
+ * answer first (docs/design/farmer-view.md §6.1). Invented wording; the app
+ * never writes restriction text itself, only the WUA does.
+ */
+export const SANDSPRUIT_NOTICE = {
+	level: 'advisory' as const,
+	pct: null,
+	noticeEn: 'The river is low. Please irrigate at night and check your pipes for leaks. (Demo notice.)',
+	noticeAf: 'Die rivier is laag. Besproei asseblief snags en kyk jou pype vir lekke. (Demonstrasie-kennisgewing.)'
+};
+
+/** Publish the seeded run as the project's owner (WP-2.3), so farmers and viewers see it straight away. */
+async function publish(email: string, projectId: string, runId: string, restriction?: typeof SANDSPRUIT_NOTICE) {
+	await withUser(await userId(email), (db) => publishRun(db, projectId, { runId, note: 'Seeded example run', ...(restriction ? { restriction } : {}) }));
 }
 
 export async function seedExamples(): Promise<string[]> {
@@ -87,7 +106,8 @@ export async function seedExamples(): Promise<string[]> {
 		[sandspruit!, ANALYST]
 	] as const) {
 		const id = await importProjectData(ex, who.email, { password: who.password, displayName: who.displayName });
-		await run(who.email, id);
+		const runId = await run(who.email, id);
+		await publish(who.email, id, runId, ex === sandspruit ? SANDSPRUIT_NOTICE : undefined);
 		ids.push(id);
 		console.log(`seeded ${ex.name} (${who.email})`);
 	}
