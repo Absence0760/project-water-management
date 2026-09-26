@@ -128,6 +128,8 @@ export function parseCells(text: string): { cells: GridCell[] } | { error: strin
 }
 
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
+/** Only river gauges (H codes) can be fed: the backend's DWS_RIVER_GAUGE (feeds/config.ts) says why. */
+export const DWS_RIVER_GAUGE = /^[A-Z]\d[H]\d{3}$/;
 
 /** The request body for a draft, or the first problem in words and the field it is in. */
 export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string; field: 'cells' | 'station' } {
@@ -135,6 +137,7 @@ export function draftToBody(d: FeedDraft): { body: FeedBody } | { error: string;
 	if (d.source === 'dws') {
 		const station = d.station.trim().toUpperCase();
 		if (!DWS_STATION.test(station)) return { error: 'A DWS station code looks like A2H012: letter, digit, letter, three digits.', field: 'station' };
+		if (!DWS_RIVER_GAUGE.test(station)) return { error: 'Only a DWS river gauge can be fed (an H code, e.g. A2H012): a reservoir’s (R) daily table is its spillway discharge, not the river’s flow.', field: 'station' };
 		return { body: { ...common, config: { station } } };
 	}
 	const cells = parseCells(d.cells);
