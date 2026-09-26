@@ -197,4 +197,36 @@ describe('schema catalogue', () => {
 		);
 		expect(rows.map((r) => r.fk)).toEqual([]);
 	});
+
+	it('positive control: the two guards above see a recent migration’s objects (018_feeds)', async () => {
+		// If a migration's objects landed outside `public`, both guards would pass vacuously.
+		const { rows: fns } = await db.query<{ proname: string; pinned: boolean; secdef: boolean }>(
+			`SELECT p.proname, p.prosecdef AS secdef,
+				EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}')) c WHERE c LIKE 'search_path=%') AS pinned
+			 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND (p.proname LIKE 'app\\_%feed%' OR p.proname = 'data_feed_stamp')
+			 ORDER BY p.proname`
+		);
+		expect(fns).toEqual([
+			{ proname: 'app_claim_due_feeds', pinned: true, secdef: true },
+			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
+			{ proname: 'app_feed_schedule_failed', pinned: true, secdef: true },
+			{ proname: 'app_record_feed_result', pinned: true, secdef: true },
+			{ proname: 'data_feed_stamp', pinned: true, secdef: false }
+		]);
+		// And only water_app may call the SECURITY DEFINER ones (018 revokes PUBLIC).
+		for (const f of fns.filter((f) => f.secdef)) {
+			const { rows } = await db.query<{ pub: boolean; app: boolean }>(
+				`SELECT has_function_privilege('public', p.oid, 'EXECUTE') AS pub, has_function_privilege('water_app', p.oid, 'EXECUTE') AS app
+				 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = $1`,
+				[f.proname]
+			);
+			expect(rows[0], f.proname).toEqual({ pub: false, app: true });
+		}
+		const { rows: fks } = await db.query<{ cols: string }>(
+			`SELECT string_agg(a.attname, ',' ORDER BY a.attname) AS cols FROM pg_constraint c
+			 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+			 WHERE c.contype = 'f' AND c.conrelid = 'public.data_feed'::regclass GROUP BY c.oid ORDER BY 1`
+		);
+		expect(fks.map((f) => f.cols)).toEqual(['acting_user_id', 'created_by', 'project_id']);
+	});
 });
