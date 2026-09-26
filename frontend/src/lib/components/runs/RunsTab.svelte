@@ -516,7 +516,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
 						</span>
 					</div>
-					<DownloadMenu items={downloadItems} />
+					<div class="head-acts">
+						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
+						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>
+						<DownloadMenu items={downloadItems} />
+					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
@@ -687,6 +691,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {/if}
 
 <style>
+	.head-acts {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
 	.evidence-line {
 		display: block;
 		margin: 0.15rem 0;

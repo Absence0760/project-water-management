@@ -1,12 +1,24 @@
 import { createHash } from 'node:crypto';
-import { resolveFitRecord, runModelChecked, type DailySeries, type ModelInput, type ModelOutput, type RunVerification, type SeriesKind } from '@water-management/engine';
+import {
+	resolveFitRecord,
+	runModelChecked,
+	seriesDigest,
+	type DailySeries,
+	type ModelInput,
+	type ModelOutput,
+	type RunVerification,
+	type SeriesKind
+} from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
 
-/** SHA-256 hex of a series' values as JSON (null = missing day), stored in the run's input snapshot. */
-export const seriesHash = (values: readonly (number | null)[]): string =>
-	createHash('sha256').update(JSON.stringify(values)).digest('hex');
+/**
+ * SHA-256 hex of a series' values (engine `seriesDigest`: the values as JSON,
+ * null = missing day), stored in the run's input snapshot as `valuesSha256`
+ * and the key of the values' `series_blob` (021_series_blob.sql).
+ */
+export const seriesHash = (values: readonly (number | null)[]): string => createHash('sha256').update(seriesDigest(values)).digest('hex');
 
 /** Gather everything the engine needs for a project. */
 export async function loadModelInput(db: Db, projectId: string): Promise<ModelInput> {
@@ -57,15 +69,34 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
 
 /**
  * True for a run the storage cap never trims and the DELETE route refuses, as
- * a SQL expression over `model_run r`: one the evidence history names, now or
- * before (010_run_nomination), one an editor pinned (015_run_pinned), or one
- * a publication in the project's history holds (022_publication; the history
- * is capped at 12, and a run leaves this set when its last publication is
- * trimmed). The single exemption path for all three, so they can't drift apart.
+ * a SQL expression over `model_run r`: one an editor pinned (015_run_pinned),
+ * one the evidence history names, now or before (010_run_nomination), or one
+ * something **cites** (`model_run_cited`, 021_series_blob.sql; a
+ * publication in the project's history cites its run, 022_publication.sql,
+ * so a published run is kept until its last publication is trimmed from the
+ * history of 12). The single exemption path for all of them, so they can't
+ * drift apart.
+ *
+ * A new kind of citation (a scenario's base run, WP-3.2; an evidence pack or
+ * assessment, WP-3.13/3.14) is not added here: its migration adds one EXISTS
+ * clause to `model_run_cited` (CREATE OR REPLACE; the pattern is in
+ * 021_series_blob.sql), and this expression, trimRuns and the DELETE route
+ * pick it up unchanged.
  */
-export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id))`;
+export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
 
-/** Also a SQL expression over `model_run r`: a publication (current or in the history) holds the run. */
+/**
+ * Serialise the project's run writes and removals to the end of the caller's
+ * transaction: trimRuns, the run DELETE route and executeRun's stored inputs
+ * all take it. Without it a new run could reuse a stored input series
+ * (series_blob) in the same moment a trim frees that series' last other
+ * reference and garbage-collects it, failing one of the two.
+ */
+export async function lockProjectRuns(db: Db, projectId: string): Promise<void> {
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('model_run_trim:' || $1::text, 0))`, [projectId]);
+}
+
+/** Also over `model_run r`: a publication (current or in the history) holds the run, for the DELETE route's message. */
 export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id)`;
 
 /**
@@ -73,8 +104,8 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
  *
- * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or published)
- * is never trimmed and doesn't count against the cap: the cap keeps the
+ * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or
+ * cited, published runs included) is never trimmed and doesn't count against the cap: the cap keeps the
  * newest `keep` runs that are neither.
  *
  * One trim at a time per project, held to the end of the caller's
@@ -83,9 +114,13 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  * committed, so none saw the full count and the project kept more than
  * `keep`. With it, the second waits for the first to commit and its DELETE
  * (a new statement, READ COMMITTED) sees that run.
+ *
+ * A trimmed run's input references go with it (cascade), and the
+ * run_input_series_gc trigger then removes every stored input series no
+ * remaining run uses; kept runs keep theirs.
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
-	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('model_run_trim:' || $1::text, 0))`, [projectId]);
+	await lockProjectRuns(db, projectId);
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
 			SELECT r.id FROM model_run r
@@ -97,22 +132,40 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 	return rows.map((r) => r.id);
 }
 
-/** Run the engine and persist outputs. Returns the new run id. */
+/** One input series kind as a run snapshot records it (`model_run.inputs.series[kind]`). */
+interface SnapshotSeries {
+	startDate: string;
+	length: number;
+	/** SHA-256 of seriesDigest(values); absent on runs saved before the hash existed. */
+	valuesSha256?: string;
+}
+
+/**
+ * Run the engine and persist outputs. Returns the new run id.
+ *
+ * The run's input series are stored too (021_series_blob.sql): each kind's
+ * values go to `series_blob` under their SHA-256 (only if the project doesn't
+ * hold those exact values already) and `run_input_series` records which blob
+ * and start date the run used, so loadRunInput can rebuild the exact input
+ * later, whatever happens to the live series.
+ */
 export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
 	const input = await loadModelInput(db, projectId);
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
 	const output = runModelChecked(input);
+	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
 		// fit marked), so the run shows which fit and validation produced them.
 		settings: { ...input.settings, fitRecord: resolveFitRecord(input.settings) },
 		model: input.model,
-		// Values aren't copied (they're large); a hash lets "what changed"
-		// catch values corrected within the same dates (compare.ts diffSeries).
+		// The values themselves are in series_blob (below), keyed by this hash;
+		// the hash also lets "what changed" catch values corrected within the
+		// same dates (compare.ts diffSeries).
 		series: Object.fromEntries(
 			Object.entries(input.series).map(([k, v]) => [
 				k,
-				{ startDate: v.startDate, length: v.values.length, valuesSha256: seriesHash(v.values) }
+				{ startDate: v.startDate, length: v.values.length, valuesSha256: hashes[k]! } satisfies SnapshotSeries
 			])
 		)
 	};
@@ -134,6 +187,121 @@ export async function executeRun(db: Db, projectId: string, label: string): Prom
 		});
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
+	await storeRunInputs(db, projectId, runId, input.series, hashes);
 	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };
+}
+
+/**
+ * Write a new run's input series: each distinct content once per project
+ * (series_blob), then the run's references to it (run_input_series). Last
+ * in executeRun, so the project's run lock (taken here, held to commit, the
+ * one trimRuns takes next anyway) covers as little of the run as it can.
+ */
+async function storeRunInputs(
+	db: Db,
+	projectId: string,
+	runId: string,
+	series: ModelInput['series'],
+	hashes: Record<string, string>
+): Promise<void> {
+	const kinds = Object.keys(series) as SeriesKind[];
+	if (kinds.length === 0) return;
+	await lockProjectRuns(db, projectId);
+	// Most runs reuse every series of the run before, so ship only new values.
+	const { rows: held } = await db.query<{ sha256: string }>(`SELECT sha256 FROM series_blob WHERE project_id = $1 AND sha256 = ANY($2::text[])`, [
+		projectId,
+		[...new Set(Object.values(hashes))]
+	]);
+	const have = new Set(held.map((r) => r.sha256));
+	for (const kind of kinds) {
+		const sha = hashes[kind]!;
+		if (have.has(sha)) continue;
+		have.add(sha);
+		await db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, $3::float8[]) ON CONFLICT DO NOTHING`, [
+			projectId,
+			sha,
+			series[kind]!.values
+		]);
+	}
+	await db.query(
+		`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256)
+		 SELECT $1, $2, k, d, h FROM unnest($3::text[], $4::date[], $5::text[]) AS t(k, d, h)`,
+		[runId, projectId, kinds, kinds.map((k) => series[k]!.startDate), kinds.map((k) => hashes[k]!)]
+	);
+}
+
+/** Why a run's input can't be rebuilt (loadRunInput). */
+export type RunInputProblem =
+	/** No such run, or not one the user can see. */
+	| 'not_found'
+	/** Saved before runs stored their input series (021_series_blob.sql): only hashes were kept. */
+	| 'not_reproducible'
+	/** The stored input disagrees with the run's own snapshot (a missing kind, a start, length or hash mismatch). */
+	| 'inconsistent';
+
+export class RunInputError extends Error {
+	constructor(
+		readonly problem: RunInputProblem,
+		message: string
+	) {
+		super(message);
+		this.name = 'RunInputError';
+	}
+}
+
+/**
+ * The exact ModelInput a run used, rebuilt from its snapshot
+ * (`model_run.inputs`: settings and model) and its stored input series
+ * (`run_input_series` → `series_blob`), so `runModel(await loadRunInput(db,
+ * id))` recomputes the run whatever has happened to the live project since.
+ * The settings are the snapshot's, with the fit record as the run resolved it
+ * (provenance only; the engine never reads it).
+ *
+ * Runs under the caller's RLS: a run the user can't see is `not_found`, and
+ * its blobs are unreadable. Throws RunInputError:
+ * - `not_found`: no such run visible to the user;
+ * - `not_reproducible`: a run saved before stored inputs (migration 021), which
+ *   kept only hashes of its series;
+ * - `inconsistent`: a stored series doesn't match the snapshot's start date,
+ *   length or SHA-256 (each blob is re-hashed on the way out), or a kind is
+ *   missing on either side. Should never happen; if it does the run must not
+ *   be presented as reproduced.
+ */
+export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
+	const { rows: run } = await db.query<{ created_at: Date; inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries> } }>(
+		'SELECT created_at, inputs FROM model_run WHERE id = $1',
+		[runId]
+	);
+	const r = run[0];
+	if (!r) throw new RunInputError('not_found', 'run not found');
+	const snap = r.inputs.series ?? {};
+	const { rows: refs } = await db.query<{ kind: string; start_date: string; sha256: string; values: (number | null)[] | null }>(
+		`SELECT i.kind, i.start_date, i.sha256, b."values"
+		 FROM run_input_series i LEFT JOIN series_blob b ON b.project_id = i.project_id AND b.sha256 = i.sha256
+		 WHERE i.run_id = $1`,
+		[runId]
+	);
+	const kinds = Object.keys(snap);
+	if (refs.length === 0 && kinds.length > 0) {
+		throw new RunInputError(
+			'not_reproducible',
+			`this run is not reproducible from stored inputs: it was made on ${r.created_at.toISOString().slice(0, 10)}, before runs stored their input series (only hashes of them were kept)`
+		);
+	}
+	const byKind = new Map(refs.map((x) => [x.kind, x]));
+	const series: Partial<Record<SeriesKind, DailySeries>> = {};
+	for (const kind of kinds) {
+		const want = snap[kind]!;
+		const got = byKind.get(kind);
+		const bad = (why: string) => new RunInputError('inconsistent', `the stored ${kind} series of this run ${why}`);
+		if (!got || got.values === null) throw bad('is missing');
+		if (got.start_date !== want.startDate) throw bad(`starts on ${got.start_date}, not ${want.startDate} as the run recorded`);
+		if (got.values.length !== want.length) throw bad(`has ${got.values.length} days, not ${want.length} as the run recorded`);
+		if (got.sha256 !== want.valuesSha256 || seriesHash(got.values) !== got.sha256) throw bad('fails its SHA-256 check');
+		series[kind as SeriesKind] = { startDate: got.start_date, values: got.values };
+	}
+	const extra = refs.find((x) => !(x.kind in snap));
+	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);
+	return { settings: r.inputs.settings, model: r.inputs.model, series };
 }

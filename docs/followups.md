@@ -1044,6 +1044,70 @@ role and not before it.
 
 ## Features left half-way
 
+- **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
+  scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
+  Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
+  (`series_blob`, `run_input_series`, the GC trigger, `model_run_cited`),
+  `executeRun` storing inputs, `loadRunInput` (byte-identical round trip on
+  the three examples), the run-input route for uncertainty bands using it.
+  Left open:
+  - [ ] **Scenarios add the first "cited" clause** (WP-3.2): its migration
+        `CREATE OR REPLACE`s `model_run_cited` with `EXISTS (SELECT 1 FROM
+        scenario s WHERE s.base_run_id = p_run)` (021's header has it
+        verbatim), with a `RESTRICT` foreign key. In the same WP: the unpin
+        route answers `409 run is cited by …` on a cited run, and cited runs
+        stop counting against `PINNED_RUNS_PER_PROJECT_MAX` (today the pin
+        trigger counts every pinned run). Trigger: WP-3.2.
+  - [ ] **`GET …/runs/:runId/reproduce`** (`{ identical, engineVersionThen,
+        engineVersionNow, differences }`), `RunMeta.reproducible` and
+        `citedBy`, and the Runs tab's "Reproducible" badge, "Cited" lock and
+        "Check reproduction" action. `loadRunInput` + `runModelChecked` +
+        canonical JSON is the whole server side; the route and UI are what
+        remain. Trigger: WP-3.2's compare view, or an assessor asking.
+  - [ ] **WP-2.3's publication-history trim skips cited runs' publications.**
+        Trigger: WP-2.3 landing (no publications exist yet).
+
+- **Scenarios** (issue #18, WP-3.2, 2026-09-25;
+  [scenarios.md](./scenarios.md)). Built: the engine part,
+  `packages/engine/src/scenario/` (`applyScenario`, `classifyOp`,
+  `classifyScenario`, `validateScenarioOps`), with the invariant and
+  no-silent-change fuzz. Left open:
+  - [ ] **Backend, data model, API and the Scenarios tab** (the rest of
+        WP-3.2). WP-3.1's stored run inputs (above) are built, so the base can be loaded with `loadRunInput`.
+  - [ ] **One home for the model's save rules.** `scenario/structure.ts`
+        repeats `backend/src/model/validate.ts` `modelProblems`, so a rule
+        added to one can miss the other. Move the rules into the engine and
+        have `modelProblems` call them. Trigger: the backend scenario routes,
+        which must accept exactly what `applyScenario` produces.
+  - [ ] **Later ops**: `ewrSite.set`, `allocation.set`, moving a node or
+        inserting one mid-river, `crop.set`, `landCover.set`
+        ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
+        Trigger: the scenario editor needing them.
+
+- **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
+  [ui.md § Report](./ui.md#report)). Built: the print route
+  `/projects/:id/report?run=`, the Runs tab's **Report** button, A4 print
+  CSS, charts at 2 device pixels per CSS pixel, the `data-report-ready`
+  signal, e2e (`e2e/tests/report.spec.ts`) including `page.pdf()`. Left open:
+  - [ ] **Phase B, server-side PDFs** (a `report_render` job in headless
+        Chromium, S3 / MinIO, a single-use render token). Trigger: decision
+        D9, when someone asks for emailed or scheduled reports. The job queue
+        (WP-2.8) is in place; the route and `data-report-ready` are what it
+        would open and wait on.
+  - [ ] **Sections waiting on other work**, added to `report/sections.ts`
+        when their data exists (no placeholders until then): the cover's
+        published-by line and restriction notice (WP-2.3), changes since the
+        previous publication (WP-2.4), the disclaimer (D10, text still to be
+        agreed), and the licensing evidence pack's sections and uncertainty
+        display (#15). WP-2.3 also adds the Overview published card's Report
+        entry point.
+  - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
+        Chromium and Firefox; e2e runs Chromium only, so print the largest
+        example from Firefox by hand before calling Phase A accepted.
+  - [ ] **Farmer access test** (a farmer gets 403): waits for WP-2.1's farmer
+        role. Today the test is a non-member, with a viewer as the positive
+        control.
+
 - **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
   CHIRPS, CHIRPS-GEFS and DWS parsers on synthetic fixtures, `018_feeds`,
@@ -1182,12 +1246,42 @@ role and not before it.
         through `GET /projects/:id/import-report` and on the Overview's
         Import record, both lists collapsed at first; not dismissible, since
         it is the audit trail. Not in `export.json` (api.md § Import report).
-  - [ ] **Measured in a real browser** (issue #23). The memory figures above are Node;
-        no one has profiled the client workbook's import in Chrome or Safari,
-        or on a phone (the e2e tests run the streaming reader in Chromium on
-        the synthetic workbook only). Trigger: a user reports the import
-        failing on a phone or low-memory machine, or a workbook with a longer
-        record than the client's.
+  - [x] **Measured in a real browser** (issue #23, 2026-09-26). The client
+        workbook (~87 MB `.xlsm`) imported through the real worker code in
+        desktop Chrome 154, Safari 26.6, iOS Safari (iPhone 17e simulator,
+        iOS 26.4) and Android Chrome 145 (Pixel 10 Pro emulator, 3 GB). A
+        throwaway harness (not committed) timed `parse()` from File to result
+        and sampled the tab's process memory (macOS RSS; Android RSS + swap,
+        since the emulator swaps to zram) from just before the pick to the
+        result; median of 3, growth over the tab's baseline:
+
+        | Browser | Before: growth / peak | After: growth / peak | Time before → after |
+        | --- | --- | --- | --- |
+        | Chrome (desktop) | ~180 / ~310 MB | ~100 / ~230 MB | 0.68 → 0.68 s |
+        | Safari (desktop) | ~605 / ~670 MB | ~140 / ~200 MB | 0.68 → 0.70 s |
+        | iOS Safari (simulator) | ~450 / ~630 MB | ~125 / ~310 MB | 0.73 → 0.76 s |
+        | Android Chrome (emulator) | ~170 / ~385 MB | ~70 / ~285 MB | 0.99 → 0.82 s |
+
+        Two causes, both fixed at the source in `zip.ts`. (1) WebKit's
+        `DecompressionStream` inflates each input chunk into one output
+        chunk, so the 6 MB compressed [Flow data] handed over whole came out
+        as a single 38 MB chunk; compressed bytes now go in 64 KB slices,
+        pulled on demand. (2) The worker loaded the whole File as an
+        `ArrayBuffer` (~87 MB) for the whole read; the zip reader now reads
+        the File itself with `Blob.slice`: the end record and directory,
+        then each needed entry 64 KB at a time. Safari's drop is larger than
+        the ~125 MB of buffers removed; why WebKit held the rest isn't pinned
+        down (it also shrank with the big buffers gone). Guarded by
+        `zip.test.ts` (a spy Blob: reading one part of a 3 MB archive reads
+        < 100 KB of it, and the inflater never gets a slice over 64 KB).
+        Pick to review screen in the real app (Playwright, disk-backed file,
+        after): Chromium ~0.83 s, WebKit ~1.34 s. The result sent back to the
+        page is ~0.4 MB as JSON, so the copy between worker and page doesn't
+        matter. **Not done: a real phone.** None was connected; simulators
+        and emulators don't enforce a phone's per-tab memory limit. At a
+        ~125 MB peak growth the import should fit comfortably, but the first
+        client import from a phone, or any report of a failing import, is
+        the trigger to confirm on a device (the harness notes in issue #23).
 
 - **Publication** (roadmap WP-2.3 phase 1, 2026-09-25; [data-model.md §
   Publications](./data-model.md#publications-022_publicationsql),
@@ -1232,18 +1326,6 @@ role and not before it.
       - a CodeQL Python leg for `scripts/wbt-import`.
 
 ## Housekeeping
-
-- [ ] **The feeds and jobs DB tests fail intermittently in a full
-      `pnpm test:backend:db` run** (2026-09-25), and pass when run on their
-      own: a different one or two of `feeds.db.test.ts` / `jobs.db.test.ts`
-      each time, on `eaafecd` as on the publication branch, so it predates
-      WP-2.3. Likely cause, unconfirmed: the job queue and the feed scheduler
-      are global, so a tick in one file also claims (or is crowded out by)
-      jobs and due feeds another file left behind, against the header's
-      assumption that "a tick here sees only this file's jobs". Durable fix:
-      scope each test's ticks to its own projects (or clear the queue and
-      disable leftover feeds before each file), not retries. Trigger: the
-      next change to either file, or the first CI failure from it.
 
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.

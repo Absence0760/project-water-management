@@ -34,9 +34,12 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * (010_run_nomination.sql). A job's row changes only through the queue's
  * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql). An import
  * report is the record of what the importer flagged (017_project_import.sql).
- * A farm's projection is what its farmers were shown (022_publication.sql).
+ * A run's stored inputs are immutable: a reference goes only with its run
+ * (cascade) and a blob only when no run references it, through the
+ * series_blob_gc trigger (021_series_blob.sql). A farm's projection is what
+ * its farmers were shown (022_publication.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'publication_farm']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series', 'publication_farm']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band

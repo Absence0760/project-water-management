@@ -271,8 +271,10 @@ writing, or gives a ranked change list.
   met, and annual water balance (observed vs simulated MAR per year). Built:
   the EWR compliance grid (`EwrHeatmap`, outlet and per farm, engine
   `EwrCompliance`) and the annual water balance table in the calibration
-  panel. A printable catchment report is
-  [#19](https://github.com/Absence0760/project-water-management/issues/19).
+  panel. The printable catchment report
+  ([#19](https://github.com/Absence0760/project-water-management/issues/19),
+  WP-2.15 Phase A) puts them, with the rest of a run's results, on A4
+  ([ui.md § Report](./ui.md#report)).
 - 🚧 **Calibration workbench:** plot observed vs simulated, adjust the rain→flow
   parameters with live NSE/PBIAS, and save a calibration version (the
   workbook's "Calibration" button and `[Log]`). Built: the calibration panel,
@@ -283,7 +285,8 @@ writing, or gives a ranked change list.
   from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
   advisories), in a Web Worker. The import needs no Python. Since then it
   reads workbooks with its own streaming reader instead of SheetJS (peak
-  memory on the largest workbooks, [followups.md](./followups.md)).
+  memory on the largest workbooks, measured in Chrome, Safari and phone
+  simulators, [followups.md](./followups.md)).
 - 🚧 An audit log per project: who changed what, and which run used which
   inputs. Done: each run snapshots its inputs with a content hash per input
   series. Not built: the change log (roadmap WP-2.4).

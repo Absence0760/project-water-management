@@ -1,0 +1,495 @@
+// Scenario operations (roadmap WP-3.2, docs/scenarios.md): the closed union
+// of overrides a scenario applies to a base run's input, the per-field value
+// checks, and a zod-free runtime validator the backend can call on a request
+// body (or mirror in zod). Pure: no I/O.
+import { fromEpochDay, toEpochDay } from '../calendar';
+import {
+	ACCUMULATION_MODES,
+	BOREHOLE_RULES,
+	CALIBRATION_FLOW_KINDS,
+	CHIRPS_BIAS_MODES,
+	LAND_COVER_CLASSES,
+	USER_PRIORITIES,
+	ZERO_RAIN_MODES,
+	type CalibrationFlowKind,
+	type ChirpsBiasMode,
+	type AccumulationMode,
+	type CropDef,
+	type FlowShareMethod,
+	type LandCoverPatch,
+	type NetworkNode,
+	type NodeKind,
+	type Transfer,
+	type ZeroRainMode
+} from '../project';
+import { GR4J_PARAMS } from '../runoff/gr4j';
+import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
+
+// ---------------------------------------------------------------------------
+// Value checks: each returns an error message, or null when the value is fine.
+// Ranges follow the backend's zod schemas (backend/src/model/validate.ts,
+// backend/src/projects/settings.ts), so an applied scenario still validates.
+// The backend leaves `calibration` unbounded; the calibration.* bounds here
+// are plausibility limits of the engine's own, wider than LEGACY_PARAMS.
+// ---------------------------------------------------------------------------
+
+type Check = (v: unknown) => string | null;
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const range =
+	(lo: number, hi: number, opts: { loOpen?: boolean; int?: boolean } = {}): Check =>
+	(v) => {
+		if (!isNum(v)) return 'must be a finite number';
+		if (opts.int && !Number.isInteger(v)) return 'must be a whole number';
+		if (opts.loOpen ? !(v > lo) : !(v >= lo)) return `must be ${opts.loOpen ? 'above' : 'at least'} ${lo}`;
+		if (!(v <= hi)) return `must be at most ${hi}`;
+		return null;
+	};
+const nullable =
+	(c: Check): Check =>
+	(v) =>
+		v === null ? null : c(v);
+const oneOf =
+	(xs: readonly string[]): Check =>
+	(v) =>
+		typeof v === 'string' && xs.includes(v) ? null : `must be one of ${xs.join(', ')}`;
+const monthlyOf =
+	(c: Check): Check =>
+	(v) => {
+		if (!Array.isArray(v) || v.length !== 12) return 'must be 12 monthly values (Oct–Sep)';
+		for (let i = 0; i < 12; i++) {
+			const e = c(v[i]);
+			if (e) return `month ${i + 1}: ${e}`;
+		}
+		return null;
+	};
+const boolean: Check = (v) => (typeof v === 'boolean' ? null : 'must be true or false');
+const nonNeg = range(0, Number.MAX_VALUE);
+const frac = range(0, 1);
+/** A list of calendar months 1–12 (order and repeats are normalised away on apply). */
+const months: Check = (v) => {
+	if (!Array.isArray(v) || v.length > 12) return 'must be a list of at most 12 calendar months';
+	return v.every((m) => Number.isInteger(m) && m >= 1 && m <= 12) ? null : 'months must be whole numbers 1–12';
+};
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** An ISO calendar date that exists (not 2021-02-30). */
+export function isIsoDate(v: unknown): v is string {
+	if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;
+	try {
+		return fromEpochDay(toEpochDay(v)) === v;
+	} catch {
+		return false;
+	}
+}
+const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
+/** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
+const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');
+const name: Check = (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 100 ? null : 'must be a name of 1–100 characters');
+
+// ---------------------------------------------------------------------------
+// node.set: the editable fields, per node kind
+// ---------------------------------------------------------------------------
+
+const DAM_AND_IRRIGATION = [
+	'pctUpstreamToDam',
+	'pctRunoffToDam',
+	'damCapacityM3',
+	'damInitialPct',
+	'damMinPct',
+	'damAreaFullM2',
+	'damAreaExponent',
+	'damSeepagePerDay',
+	'divertCapacityM3Day',
+	'irrigationEfficiency',
+	'lossReturnFraction'
+] as const;
+/** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
+const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
+const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
+const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+
+/**
+ * The fields `node.set` may change, per node kind. Never `id`, `kind`,
+ * `downstreamNodeId` (the network's shape: `node.add` / `node.remove` change
+ * it) or `sortOrder` (display only). A gauge only measures, so only its name.
+ */
+export const NODE_SET_FIELDS = {
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...BOREHOLES],
+	user: ['name', ...USER, ...BOREHOLES],
+	gauge: ['name']
+} as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
+
+export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
+
+/** node.set fields that are baseline hydrology even on the applicant's own farm (classifyOp). */
+export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = LAND;
+
+const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
+	name,
+	areaKm2: nonNeg,
+	areaHiKm2: nonNeg,
+	areaLoKm2: nonNeg,
+	flowShareManual: nullable(frac),
+	pctUpstreamToDam: frac,
+	pctRunoffToDam: frac,
+	damCapacityM3: nonNeg,
+	damInitialPct: frac,
+	damMinPct: frac,
+	damAreaFullM2: nullable(nonNeg),
+	damAreaExponent: range(0, 3, { loOpen: true }),
+	damSeepagePerDay: frac,
+	divertCapacityM3Day: nonNeg,
+	irrigationEfficiency: range(0, 1, { loOpen: true }),
+	lossReturnFraction: frac,
+	boreholeCapacityM3Day: nullable(nonNeg),
+	boreholeRule: oneOf(BOREHOLE_RULES),
+	boreholeTriggerPct: frac,
+	streamDepletionFrac: frac,
+	streamDepletionLagDays: range(0, 36_500),
+	userDemandM3Day: nullable(monthlyOf(nonNeg)),
+	userReturnPct: frac,
+	userPriority: oneOf(USER_PRIORITIES)
+};
+
+export type NodeSetValue<F extends NodeSetField> = Exclude<NetworkNode[F], undefined>;
+
+/** Check a node.set value (the kind rule is applyScenario's: it needs the node). */
+export function nodeFieldError(field: string, value: unknown): string | null {
+	const c = (NODE_FIELD_CHECKS as Record<string, Check>)[field];
+	return c ? c(value) : `"${field}" is not a field a scenario can set`;
+}
+
+// ---------------------------------------------------------------------------
+// transfer.set
+// ---------------------------------------------------------------------------
+
+export const TRANSFER_SET_FIELDS = ['fromNodeId', 'toNodeId', 'months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority'] as const;
+export type TransferSetField = (typeof TRANSFER_SET_FIELDS)[number];
+
+const TRANSFER_FIELD_CHECKS: Record<TransferSetField, Check> = {
+	fromNodeId: id,
+	toNodeId: id,
+	months,
+	maxRateM3s: nonNeg,
+	dailyCapM3: nullable(nonNeg),
+	minStoragePct: frac,
+	enabled: boolean,
+	priority: range(-1_000_000, 1_000_000, { int: true })
+};
+
+export function transferFieldError(field: string, value: unknown): string | null {
+	const c = (TRANSFER_FIELD_CHECKS as Record<string, Check>)[field];
+	return c ? c(value) : `"${field}" is not a transfer field a scenario can set`;
+}
+
+// ---------------------------------------------------------------------------
+// settings.set: whitelisted paths and their value types
+// ---------------------------------------------------------------------------
+
+/** The settings a scenario may change, by dotted path, with the value each takes. */
+export interface SettingsPathValues {
+	februaryDays: number;
+	effectiveRainFraction: number;
+	effectiveRainStoreMm: number;
+	lakeEvapFactor: number;
+	apanMm: number[];
+	panCoefficient: number[];
+	ewrPragmaticM3PerDay: number[];
+	flowShareMethod: FlowShareMethod;
+	'hiLoSplit.hi': number;
+	'hiLoSplit.lo': number;
+	runoffModel: RunoffModelId;
+	'gr4j.x1': number;
+	'gr4j.x2': number;
+	'gr4j.x3': number;
+	'gr4j.x4': number;
+	'gr4j.warmupDays': number;
+	chirpsBiasCorrection: ChirpsBiasMode;
+	'zeroRainRuns.mode': ZeroRainMode;
+	'zeroRainRuns.accumulationMode': AccumulationMode;
+	'calibration.a': number;
+	'calibration.b': number;
+	'calibration.rainThresholdMm': number;
+	'calibration.summerFactor': number;
+	'calibration.winterFactor': number;
+	'calibration.baseFlowInitial': number;
+	'calibration.catchmentAreaKm2': number | null;
+	'calibration.summerMonths': number[];
+	simulationStart: string | null;
+	simulationEnd: string | null;
+	reportStart: string | null;
+	reportEnd: string | null;
+	calibrationStart: string | null;
+	calibrationEnd: string | null;
+	calibrationFlowKind: CalibrationFlowKind | null;
+}
+export type SettingsPath = keyof SettingsPathValues;
+
+const gr4j = (key: string): Check => {
+	const p = GR4J_PARAMS.find((x) => x.key === key)!;
+	return range(p.min, p.max);
+};
+
+const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
+	februaryDays: range(28, 29),
+	effectiveRainFraction: frac,
+	effectiveRainStoreMm: range(0, 500),
+	lakeEvapFactor: range(0, 2),
+	apanMm: monthlyOf(range(0, 10_000)),
+	panCoefficient: monthlyOf(range(0, 2)),
+	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
+	flowShareMethod: oneOf(['area', 'hiLo', 'manual']),
+	'hiLoSplit.hi': frac,
+	'hiLoSplit.lo': frac,
+	runoffModel: oneOf(RUNOFF_MODELS),
+	'gr4j.x1': gr4j('x1'),
+	'gr4j.x2': gr4j('x2'),
+	'gr4j.x3': gr4j('x3'),
+	'gr4j.x4': gr4j('x4'),
+	'gr4j.warmupDays': range(0, 3650, { int: true }),
+	chirpsBiasCorrection: oneOf(CHIRPS_BIAS_MODES),
+	'zeroRainRuns.mode': oneOf(ZERO_RAIN_MODES),
+	'zeroRainRuns.accumulationMode': oneOf(ACCUMULATION_MODES),
+	'calibration.a': range(0, 100, { loOpen: true }),
+	'calibration.b': range(0, 5, { loOpen: true }),
+	'calibration.rainThresholdMm': range(0, 1000),
+	'calibration.summerFactor': range(0, 100),
+	'calibration.winterFactor': range(0, 100),
+	'calibration.baseFlowInitial': nonNeg,
+	'calibration.catchmentAreaKm2': nullable(range(0, 1e6, { loOpen: true })),
+	'calibration.summerMonths': months,
+	simulationStart: nullable(isoDate),
+	simulationEnd: nullable(isoDate),
+	reportStart: nullable(isoDate),
+	reportEnd: nullable(isoDate),
+	calibrationStart: nullable(isoDate),
+	calibrationEnd: nullable(isoDate),
+	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS))
+};
+
+export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];
+
+export function settingsValueError(path: string, value: unknown): string | null {
+	const c = (SETTINGS_CHECKS as Record<string, Check>)[path];
+	return c ? c(value) : `"${path}" is not a setting a scenario can change`;
+}
+
+// ---------------------------------------------------------------------------
+// series.scale
+// ---------------------------------------------------------------------------
+
+/**
+ * The series `series.scale` may scale: the rain drivers only. Evaporation is
+ * not a series (it is the monthly `apanMm` setting: use `settings.set`).
+ * Observed and logger flow are measurements the run is scored against, not
+ * drivers: scaling them would change calibration statistics and the EWR
+ * agreement, never the simulated water, so they are not scalable. The
+ * reference gauge is never read by the engine.
+ */
+export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'] as const;
+export type ScalableSeriesKind = (typeof SCALABLE_SERIES_KINDS)[number];
+/** Largest factor series.scale accepts: a scenario scales rain, it doesn't replace it. */
+export const SERIES_SCALE_MAX = 10;
+
+// ---------------------------------------------------------------------------
+// The ops
+// ---------------------------------------------------------------------------
+
+export type NodeSetOp = { [F in NodeSetField]: { op: 'node.set'; nodeId: string; field: F; value: NodeSetValue<F> } }[NodeSetField];
+export type TransferSetOp = { [F in TransferSetField]: { op: 'transfer.set'; transferId: string; field: F; value: Transfer[F] } }[TransferSetField];
+export type SettingsSetOp = { [P in SettingsPath]: { op: 'settings.set'; path: P; value: SettingsPathValues[P] } }[SettingsPath];
+
+/**
+ * One override. A closed union: every op targets an existing element by id
+ * (or adds one with a fresh id), so a scenario lines up with its base run by
+ * id in run comparison. docs/scenarios.md has the catalogue.
+ */
+export type ScenarioOp =
+	| NodeSetOp
+	/** A new leaf node draining into an existing one (it can't become the outflow). */
+	| { op: 'node.add'; node: NetworkNode }
+	/** Remove a node; its upstream nodes drain into its downstream node instead. */
+	| { op: 'node.remove'; nodeId: string }
+	/** Set a farm's area of one crop; 0 removes the row. */
+	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number }
+	| { op: 'crop.add'; crop: CropDef }
+	| { op: 'transfer.add'; transfer: Transfer }
+	| TransferSetOp
+	| { op: 'transfer.remove'; transferId: string }
+	| { op: 'landCover.add'; patch: LandCoverPatch }
+	| { op: 'landCover.remove'; patchId: string }
+	| SettingsSetOp
+	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
+	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string };
+
+export type ScenarioOpName = ScenarioOp['op'];
+export const SCENARIO_OP_NAMES = [
+	'node.set',
+	'node.add',
+	'node.remove',
+	'cropArea.set',
+	'crop.add',
+	'transfer.add',
+	'transfer.set',
+	'transfer.remove',
+	'landCover.add',
+	'landCover.remove',
+	'settings.set',
+	'series.scale'
+] as const satisfies readonly ScenarioOpName[];
+
+/** Most ops one scenario may hold (the backend's body limit mirrors it). */
+export const SCENARIO_OPS_MAX = 500;
+
+// ---------------------------------------------------------------------------
+// Validator
+// ---------------------------------------------------------------------------
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Build a clean object from `fields`, collecting the errors; unknown keys are dropped. */
+function pickFields(src: Obj, fields: Record<string, Check>, optional: ReadonlySet<string>, where: string, errors: string[]): Obj {
+	const out: Obj = {};
+	for (const [k, c] of Object.entries(fields)) {
+		if (!(k in src) || src[k] === undefined) {
+			if (!optional.has(k)) errors.push(`${where}.${k}: missing`);
+			continue;
+		}
+		const e = c(src[k]);
+		if (e) errors.push(`${where}.${k}: ${e}`);
+		else out[k] = cloneValue(src[k]);
+	}
+	return out;
+}
+const cloneValue = (v: unknown): unknown => (Array.isArray(v) ? v.map(cloneValue) : isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, cloneValue(x)])) : v);
+
+const NODE_FIELDS: Record<string, Check> = {
+	id,
+	kind: oneOf(['farm', 'gauge', 'user']),
+	downstreamNodeId: id,
+	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
+	...NODE_FIELD_CHECKS
+};
+/** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
+const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', ...USER, ...BOREHOLES]);
+const CROP_FIELDS: Record<string, Check> = {
+	id,
+	name,
+	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
+	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0')
+};
+const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
+const LAND_COVER_FIELDS: Record<string, Check> = {
+	id,
+	nodeId: id,
+	coverClass: oneOf(LAND_COVER_CLASSES.map((c) => c.id)),
+	areaKm2: nonNeg,
+	densityPct: frac,
+	factors: nullable((v) => (isObj(v) && frac(v.mar) === null && frac(v.lowFlow) === null ? null : 'must be { mar, lowFlow }, each 0–1'))
+};
+const NONE = new Set<string>();
+
+function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp | null {
+	if (!isObj(raw)) {
+		errors.push(`${where}: must be an object`);
+		return null;
+	}
+	const n = errors.length;
+	const need = (k: string, c: Check) => {
+		const e = k in raw ? c(raw[k]) : 'missing';
+		if (e) errors.push(`${where}.${k}: ${e}`);
+		return raw[k];
+	};
+	const sub = (k: string, fields: Record<string, Check>, optional = NONE): Obj => {
+		const v = raw[k];
+		if (!isObj(v)) {
+			errors.push(`${where}.${k}: must be an object`);
+			return {};
+		}
+		return pickFields(v, fields, optional, `${where}.${k}`, errors);
+	};
+	let op: ScenarioOp | null = null;
+	switch (raw.op) {
+		case 'node.set': {
+			const nodeId = need('nodeId', id);
+			const field = need('field', (v) => (typeof v === 'string' && v in NODE_FIELD_CHECKS ? null : 'is not a node field a scenario can set'));
+			if (typeof field === 'string' && field in NODE_FIELD_CHECKS) need('value', (v) => nodeFieldError(field, v));
+			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
+		case 'node.add':
+			op = { op: 'node.add', node: sub('node', NODE_FIELDS, NODE_OPTIONAL) as unknown as NetworkNode };
+			break;
+		case 'node.remove':
+			op = { op: 'node.remove', nodeId: need('nodeId', id) as string };
+			break;
+		case 'cropArea.set':
+			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
+			break;
+		case 'crop.add':
+			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder'])) as unknown as CropDef };
+			break;
+		case 'transfer.add':
+			op = { op: 'transfer.add', transfer: sub('transfer', TRANSFER_FIELDS) as unknown as Transfer };
+			break;
+		case 'transfer.set': {
+			const transferId = need('transferId', id);
+			const field = need('field', (v) => (typeof v === 'string' && v in TRANSFER_FIELD_CHECKS ? null : 'is not a transfer field a scenario can set'));
+			if (typeof field === 'string' && field in TRANSFER_FIELD_CHECKS) need('value', (v) => transferFieldError(field, v));
+			op = { op: 'transfer.set', transferId, field, value: cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
+		case 'transfer.remove':
+			op = { op: 'transfer.remove', transferId: need('transferId', id) as string };
+			break;
+		case 'landCover.add':
+			op = { op: 'landCover.add', patch: sub('patch', LAND_COVER_FIELDS) as unknown as LandCoverPatch };
+			break;
+		case 'landCover.remove':
+			op = { op: 'landCover.remove', patchId: need('patchId', id) as string };
+			break;
+		case 'settings.set': {
+			const path = need('path', (v) => (typeof v === 'string' && v in SETTINGS_CHECKS ? null : 'is not a setting a scenario can change'));
+			if (typeof path === 'string' && path in SETTINGS_CHECKS) need('value', (v) => settingsValueError(path, v));
+			op = { op: 'settings.set', path, value: cloneValue(raw.value) } as ScenarioOp;
+			break;
+		}
+		case 'series.scale': {
+			const kind = need('kind', oneOf(SCALABLE_SERIES_KINDS)) as ScalableSeriesKind;
+			const factor = need('factor', range(0, SERIES_SCALE_MAX)) as number;
+			const s: { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string } = { op: 'series.scale', kind, factor };
+			for (const k of ['from', 'to'] as const) {
+				if (raw[k] === undefined) continue;
+				if (isIsoDate(raw[k])) s[k] = raw[k];
+				else errors.push(`${where}.${k}: must be an ISO date (YYYY-MM-DD)`);
+			}
+			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${s.from} is after to ${s.to}`);
+			op = s;
+			break;
+		}
+		default:
+			errors.push(`${where}.op: must be one of ${SCENARIO_OP_NAMES.join(', ')}`);
+	}
+	return errors.length === n ? op : null;
+}
+
+/**
+ * Check an untrusted op list (a request body, a stored `scenario.ops`).
+ * Returns the ops rebuilt from their known fields only (unknown keys are
+ * dropped) and every error, each prefixed with its path (`ops[3].value: …`).
+ * Callers reject the list when `errors` is non-empty; `ops` then holds only
+ * the entries that passed. Existence of the ids an op targets is not checked
+ * here: that depends on the base run, and `applyScenario` reports it.
+ */
+export function validateScenarioOps(raw: unknown): { ops: ScenarioOp[]; errors: string[] } {
+	if (!Array.isArray(raw)) return { ops: [], errors: ['ops: must be a list'] };
+	if (raw.length > SCENARIO_OPS_MAX) return { ops: [], errors: [`ops: at most ${SCENARIO_OPS_MAX} ops`] };
+	const errors: string[] = [];
+	const ops: ScenarioOp[] = [];
+	raw.forEach((r, i) => {
+		const op = validateOne(r, `ops[${i}]`, errors);
+		if (op) ops.push(op);
+	});
+	return { ops, errors };
+}

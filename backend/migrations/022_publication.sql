@@ -9,9 +9,9 @@
 -- per farm (the FarmProjection of packages/engine/src/views/farmView.ts,
 -- readable by viewers and by the farmers linked to that farm).
 --
--- A publication keeps its run: run_id has no cascade, trimRuns skips a
--- published run (runs/execute.ts RUN_KEPT_SQL) and DELETE /runs/:runId
--- answers 409. The foreign key is NO ACTION rather than RESTRICT: RESTRICT is
+-- A publication keeps its run: run_id has no cascade, a publication cites its
+-- run (model_run_cited below, so trimRuns and the DELETE route, through
+-- runs/execute.ts RUN_KEPT_SQL, skip it) and DELETE /runs/:runId answers 409. The foreign key is NO ACTION rather than RESTRICT: RESTRICT is
 -- checked at once, so deleting a project (which cascades to its runs and its
 -- publications in one statement) would fail on whichever came first; NO
 -- ACTION checks at the end of the statement, and still refuses a plain
@@ -136,6 +136,15 @@ CREATE FUNCTION run_publication_cap() RETURNS trigger
 	$$;
 CREATE TRIGGER run_publication_cap AFTER INSERT ON run_publication
 	FOR EACH ROW EXECUTE FUNCTION run_publication_cap();
+
+-- A publication cites its run (021_series_blob.sql's one place for citations):
+-- the latest body is 021's `SELECT false`, so this is its first clause.
+CREATE OR REPLACE FUNCTION model_run_cited(p_run uuid) RETURNS boolean
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$ SELECT EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = p_run) $$;
+
+COMMENT ON FUNCTION model_run_cited(uuid) IS
+	'True for a run a publication (022_publication), scenario, evidence pack or assessment cites (021_series_blob; one EXISTS clause per citing table, added by that table''s migration). Part of RUN_KEPT_SQL in backend/src/runs/execute.ts.';
 
 -- ---------------------------------------------------------------------------
 -- Row-level security

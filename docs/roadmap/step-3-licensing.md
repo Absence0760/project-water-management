@@ -214,6 +214,33 @@ must build WP-2.15 Phase B.
 
 ### WP-3.1 Reproducible inputs and cited runs
 
+- **Status:** backend and engine core built (`021_series_blob.sql`,
+  [data-model.md § Stored run inputs](../data-model.md#stored-run-inputs-021_series_blobsql)),
+  differently from the plan below in places:
+  - engine `manifest.ts`: `canonicalJson` (RFC 8785, the Appendix B number
+    vectors and §3.2 examples as tests) and `seriesDigest`, equal to the old
+    `seriesHash` input;
+  - `series_blob` is keyed `(project_id, sha256)` and holds only the values;
+    a second table, `run_input_series (run_id, kind, start_date, sha256)`,
+    holds each run's references (a relational link, so garbage collection and
+    the blob's RLS are joins, not jsonb scans). Blobs are readable only
+    through a run the user can see, not by project role alone; `water_app`
+    has no UPDATE or DELETE on either table; a trigger deletes a blob when
+    its last run goes ([security.md](../security.md#authorization-per-project-roles-enforced-by-postgres-rls));
+  - `loadRunInput(db, runId)` rebuilds the `ModelInput`; the round trip is
+    byte-identical on all three example catchments. Older runs throw
+    `not_reproducible`. The uncertainty band's `…/runs/:runId/model-input`
+    now uses it, so a run saved since 020 keeps getting bands after its data
+    changes;
+  - "cited" is the SQL function `model_run_cited(run)` inside `RUN_KEPT_SQL`,
+    `false` until a citing table exists: **WP-3.2's migration adds its one
+    clause there** (the pattern is in 020's header), and trim and the
+    `DELETE` route (`409 this run is cited, so it is kept`) follow.
+  - Not built yet (tracked in [followups.md](../followups.md)): the
+    `…/reproduce` endpoint, `RunMeta.reproducible` / `citedBy`, the Runs tab
+    badge, lock and "Check reproduction" action, the unpin `409` and the
+    publication-trim skip for cited runs (the last two have nothing to act
+    on until WP-3.2 / WP-2.3 land).
 - **Goal.** A run can be recomputed exactly years later, and a run that
   evidence cites can never disappear.
 - **What Steps 1–2 already give, and the gap that remains:**

@@ -8,10 +8,13 @@
 // directory, then inflates only the entries asked for, with the platform's
 // `DecompressionStream('deflate-raw')` (native zlib; browsers, workers and
 // Node alike), and streams them: readWorkbook() parses each part as its
-// chunks come out (./xml.ts), so no sheet is ever held whole.
+// chunks come out (./xml.ts), so no sheet is ever held whole. It reads the
+// picked File itself, slice by slice (Blob.slice), never loading it whole:
+// the ~87 MB client workbook used to sit in the worker as an ArrayBuffer for
+// the whole read (issue #23).
 //
 // The file is untrusted. Every offset and length is bounds-checked against
-// the buffer; each inflated entry and the total are capped before anything is
+// the file; each inflated entry and the total are capped before anything is
 // allocated, and an entry that inflates past its declared size is stopped at
 // once (a zip bomb gets WorkbookTooLargeError, not an out-of-memory tab);
 // encrypted entries, ZIP64, split archives and methods other than stored and
@@ -68,19 +71,27 @@ export class ZipArchive {
 	readonly limits: Required<ZipLimits>;
 
 	private constructor(
-		private readonly bytes: Uint8Array,
-		private readonly view: DataView,
+		private readonly file: Blob,
 		limits: ZipLimits
 	) {
 		this.limits = { ...ZIP_LIMITS, ...limits };
 	}
 
-	/** Parse the end record and the central directory. Throws a WorkbookImportError on anything malformed. */
-	static open(bytes: Uint8Array, limits: ZipLimits = {}): ZipArchive {
-		const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-		const zip = new ZipArchive(bytes, view, limits);
-		zip.readDirectory();
+	/**
+	 * Parse the end record and the central directory, reading only those from
+	 * the file. Throws a WorkbookImportError on anything malformed. Bytes
+	 * already in memory (the tests) are wrapped in a Blob.
+	 */
+	static async open(file: Blob | Uint8Array, limits: ZipLimits = {}): Promise<ZipArchive> {
+		const zip = new ZipArchive(file instanceof Blob ? file : new Blob([file]), limits);
+		await zip.readDirectory();
 		return zip;
+	}
+
+	/** The file's bytes [start, end), which the caller has checked lie inside it. */
+	private async slice(start: number, end: number): Promise<{ bytes: Uint8Array; view: DataView }> {
+		const buf = await this.file.slice(start, end).arrayBuffer();
+		return { bytes: new Uint8Array(buf), view: new DataView(buf) };
 	}
 
 	/** Every entry name, in directory order. */
@@ -103,37 +114,44 @@ export class ZipArchive {
 		return this.inflated;
 	}
 
-	private readDirectory(): void {
-		const { bytes, view } = this;
-		if (bytes.length >= 8 && view.getUint32(0, false) === 0xd0cf11e0 && view.getUint32(4, false) === 0xa1b11ae1) {
+	private async readDirectory(): Promise<void> {
+		const size = this.file.size;
+		const head = await this.slice(0, Math.min(size, 8));
+		if (size >= 8 && head.view.getUint32(0, false) === 0xd0cf11e0 && head.view.getUint32(4, false) === 0xa1b11ae1) {
 			throw unreadable('not-zip', "it's password-protected or an old-format .xls file; save it from Excel as .xlsm or .xlsx, without a password");
 		}
-		if (bytes.length < 22) throw unreadable('not-zip', "it isn't an .xlsx or .xlsm file");
-		// The end record is the last 22 bytes plus a comment of up to 65535.
+		if (size < 22) throw unreadable('not-zip', "it isn't an .xlsx or .xlsm file");
+		// The end record is the last 22 bytes plus a comment of up to 65535;
+		// the tail read also takes the 20 bytes a ZIP64 locator would fill.
+		const tailStart = Math.max(0, size - 22 - U16_MAX - 20);
+		const tail = await this.slice(tailStart, size);
 		let end = -1;
-		for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - U16_MAX); i--) {
-			if (view.getUint32(i, true) === SIG_END && i + 22 + view.getUint16(i + 20, true) <= bytes.length) {
+		for (let i = size - 22; i >= Math.max(0, size - 22 - U16_MAX); i--) {
+			if (tail.view.getUint32(i - tailStart, true) === SIG_END && i + 22 + tail.view.getUint16(i - tailStart + 20, true) <= size) {
 				end = i;
 				break;
 			}
 		}
 		if (end < 0) throw unreadable('not-zip', "it isn't an .xlsx or .xlsm file");
-		const disk = view.getUint16(end + 4, true);
-		const cdDisk = view.getUint16(end + 6, true);
-		const onDisk = view.getUint16(end + 8, true);
-		const count = view.getUint16(end + 10, true);
-		const cdSize = view.getUint32(end + 12, true);
-		const cdOffset = view.getUint32(end + 16, true);
-		if ((end >= 20 && view.getUint32(end - 20, true) === SIG_ZIP64_LOCATOR) || count === U16_MAX || cdSize === U32_MAX || cdOffset === U32_MAX) {
+		const e = end - tailStart;
+		const disk = tail.view.getUint16(e + 4, true);
+		const cdDisk = tail.view.getUint16(e + 6, true);
+		const onDisk = tail.view.getUint16(e + 8, true);
+		const count = tail.view.getUint16(e + 10, true);
+		const cdSize = tail.view.getUint32(e + 12, true);
+		const cdOffset = tail.view.getUint32(e + 16, true);
+		if ((end >= 20 && tail.view.getUint32(e - 20, true) === SIG_ZIP64_LOCATOR) || count === U16_MAX || cdSize === U32_MAX || cdOffset === U32_MAX) {
 			throw unreadable('zip64', 'it uses the ZIP64 format, which the importer does not read');
 		}
 		if (disk !== 0 || cdDisk !== 0 || onDisk !== count) throw unreadable('corrupt', 'it is a split or damaged zip archive');
 		if (count > this.limits.maxEntries) throw unreadable('corrupt', `it lists ${count} parts, more than a workbook has`);
 		if (cdOffset + cdSize > end) throw unreadable('corrupt', 'its zip directory is damaged');
 
-		let p = cdOffset;
+		// The directory alone, offsets from its start.
+		const { bytes, view } = await this.slice(cdOffset, cdOffset + cdSize);
+		let p = 0;
 		for (let i = 0; i < count; i++) {
-			if (p + 46 > cdOffset + cdSize || view.getUint32(p, true) !== SIG_CENTRAL) throw unreadable('corrupt', 'its zip directory is damaged');
+			if (p + 46 > cdSize || view.getUint32(p, true) !== SIG_CENTRAL) throw unreadable('corrupt', 'its zip directory is damaged');
 			const flags = view.getUint16(p + 8, true);
 			const method = view.getUint16(p + 10, true);
 			const crc = view.getUint32(p + 16, true);
@@ -144,7 +162,7 @@ export class ZipArchive {
 			const commentLen = view.getUint16(p + 32, true);
 			const localOffset = view.getUint32(p + 42, true);
 			const next = p + 46 + nameLen + extraLen + commentLen;
-			if (next > cdOffset + cdSize) throw unreadable('corrupt', 'its zip directory is damaged');
+			if (next > cdSize) throw unreadable('corrupt', 'its zip directory is damaged');
 			if (compressedSize === U32_MAX || size === U32_MAX || localOffset === U32_MAX) {
 				throw unreadable('zip64', 'it uses the ZIP64 format, which the importer does not read');
 			}
@@ -157,14 +175,15 @@ export class ZipArchive {
 		}
 	}
 
-	/** Where the entry's data starts, checked against the buffer and the directory. */
-	private dataRange(e: ZipEntryInfo): [number, number] {
-		const { view } = this;
+	/** Where the entry's data lies, from its local header, checked against the file and the directory. */
+	private async dataRange(e: ZipEntryInfo): Promise<[number, number]> {
 		const h = e.localOffset;
-		if (h + 30 > this.bytes.length || view.getUint32(h, true) !== SIG_LOCAL) throw unreadable('corrupt', `a part of it (${e.name}) is damaged`);
-		const start = h + 30 + view.getUint16(h + 26, true) + view.getUint16(h + 28, true);
+		if (h + 30 > this.file.size) throw unreadable('corrupt', `a part of it (${e.name}) is damaged`);
+		const { view } = await this.slice(h, h + 30);
+		if (view.getUint32(0, true) !== SIG_LOCAL) throw unreadable('corrupt', `a part of it (${e.name}) is damaged`);
+		const start = h + 30 + view.getUint16(26, true) + view.getUint16(28, true);
 		const stop = start + e.compressedSize;
-		if (stop > this.bytes.length) throw unreadable('corrupt', `a part of it (${e.name}) is truncated`);
+		if (stop > this.file.size) throw unreadable('corrupt', `a part of it (${e.name}) is truncated`);
 		return [start, stop];
 	}
 
@@ -191,8 +210,8 @@ export class ZipArchive {
 	 */
 	async stream(name: string, sink: (chunk: Uint8Array) => void): Promise<void> {
 		const e = this.checked(name);
-		const [start, stop] = this.dataRange(e);
-		const packed = this.bytes.subarray(start, stop);
+		const [start, stop] = await this.dataRange(e);
+		const read = async (at: number, to: number) => (await this.slice(start + at, start + to)).bytes;
 		let crc = 0;
 		let n = 0;
 		const feed = (chunk: Uint8Array) => {
@@ -203,9 +222,9 @@ export class ZipArchive {
 		};
 		if (e.method === 0) {
 			if (e.compressedSize !== e.size) throw unreadable('corrupt', `a part of it (${e.name}) is damaged`);
-			for (let i = 0; i < packed.length; i += STORED_CHUNK) feed(packed.subarray(i, Math.min(packed.length, i + STORED_CHUNK)));
+			for (let i = 0; i < e.size; i += STORED_CHUNK) feed(await read(i, Math.min(e.size, i + STORED_CHUNK)));
 		} else {
-			await inflateRawChunks(packed, e.name, feed);
+			await inflateRawChunks(read, stop - start, e.name, feed);
 		}
 		if (n !== e.size) throw unreadable('corrupt', `a part of it (${e.name}) is shorter than its zip header says`);
 		if (crc !== e.crc) throw unreadable('corrupt', `a part of it (${e.name}) is damaged (checksum mismatch)`);
@@ -227,16 +246,33 @@ export class ZipArchive {
 /** Stored entries go to a stream() sink in slices of this size, as inflated ones arrive in chunks. */
 const STORED_CHUNK = 64 * 1024;
 
+/** Compressed bytes go into the inflater in slices of this size (see inflateRawChunks). */
+const INFLATE_SLICE = 64 * 1024;
+
 /**
- * Raw inflate, each chunk handed to `feed` as it comes out. A failure of the
- * compressed data itself is UnreadableWorkbookError 'corrupt'; whatever
- * `feed` throws cancels the inflater and propagates as it is.
+ * Raw inflate of `length` compressed bytes, which `read(from, to)` returns a
+ * slice at a time; each inflated chunk is handed to `feed` as it comes out. A
+ * failure of the compressed data itself is UnreadableWorkbookError 'corrupt';
+ * whatever `feed` throws cancels the inflater and propagates as it is.
  */
-async function inflateRawChunks(packed: Uint8Array, name: string, feed: (chunk: Uint8Array) => void): Promise<void> {
+async function inflateRawChunks(
+	read: (from: number, to: number) => Promise<Uint8Array>,
+	length: number,
+	name: string,
+	feed: (chunk: Uint8Array) => void
+): Promise<void> {
+	// Pulled in slices, on demand, never enqueued whole: WebKit's
+	// DecompressionStream inflates each input chunk into a single output
+	// chunk, so the 6 MB packed [Flow data] handed over at once came out as
+	// one 38 MB chunk (issue #23). A slice at a time keeps every browser's
+	// output chunks small, and only one slice of the file is read at once.
+	let at = 0;
 	const source = new ReadableStream<Uint8Array>({
-		start(c) {
-			c.enqueue(packed);
-			c.close();
+		async pull(c) {
+			if (at >= length) return c.close();
+			const to = Math.min(length, at + INFLATE_SLICE);
+			c.enqueue(await read(at, to));
+			at = to;
 		}
 	});
 	const reader = source.pipeThrough(new DecompressionStream('deflate-raw')).getReader();
@@ -264,7 +300,7 @@ async function inflateRawChunks(packed: Uint8Array, name: string, feed: (chunk: 
 export async function inflateRaw(packed: Uint8Array, size: number, name = 'a part'): Promise<Uint8Array> {
 	const out = new Uint8Array(size);
 	let n = 0;
-	await inflateRawChunks(packed, name, (chunk) => {
+	await inflateRawChunks(async (from, to) => packed.subarray(from, to), packed.length, name, (chunk) => {
 		if (n + chunk.length > size) throw unreadable('corrupt', `a part of it (${name}) unpacks to more than its zip header says`);
 		out.set(chunk, n);
 		n += chunk.length;

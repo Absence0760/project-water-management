@@ -1199,6 +1199,65 @@ its own chunk loaded with the tab; WP-2.10,
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
   Large arrays live in `$state.raw` and are replaced, never mutated.
+- **Report**, beside the Download menu in the run header, opens the shown
+  run's printable report (§ Report below).
+
+## Report
+
+`/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
+WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
+anyone who can view the project. Without `?run=` it reports the latest run. It
+uses only existing API routes (the project, the run with its settings and model
+snapshot, the series list, four catchment series) and is its own lazy route
+chunk. A non-member gets the workspace's "This project doesn't exist or you
+don't have access to it"; a project with no runs, or a run that no longer
+exists, says so with a link to Runs & results.
+
+- **Sections**, in order, from `report/sections.ts` (data-driven, so the
+  licensing evidence pack, #15, can add its own): the cover (project, run,
+  period, when and by whom it was made, engine version, evidence badge, a
+  legacy-model warning, the run's summary sentence, contents), then numbered
+  sections: **Network** (the schematic of the run's own model, farms
+  coloured by supply), **Inputs** (the run's settings, monthly A-pan, pan
+  coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
+  each input series' dates and days inside the run; `report/inputs.ts`),
+  **Calibration** (the calibration panel with the annual water balance, where
+  the parameters came from, the hydrograph over the whole run),
+  **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
+  compliance for every rule-table site with Month by month open, the EWR grid
+  for the outlet and every farm), **Farms, warnings and checks** (the run
+  summary: warnings, headline cards, the farm table; the self-checks and the
+  water balance by water year, without Trace a day) and **Notes** (the run's
+  notes, when it has any). A section appears only when the run has its data;
+  nothing is printed as a placeholder. Not yet: the published-by line and
+  restriction notice (WP-2.3), changes since the previous publication (WP-2.4),
+  the disclaimer (D10).
+- **Components reused, in print modes.** `LineChart`'s `print` prop draws a
+  fixed `printWidth` × `height` box at 2 device pixels per CSS pixel
+  (`printScale`: uPlot has no pixel-ratio option, so on a 1× screen the plot
+  is laid out twice as large and scaled back into the box), with no cursor,
+  zoom or controls, the whole period and a plain legend. `EwrHeatmap`'s `site`
+  and `print` show one site, named in the heading, without the pickers or the
+  keyboard read-out; `EwrAssurancePanel`'s `print` opens Month by month (the
+  report renders one panel per site); `SelfChecksPanel`'s `trace={false}`
+  leaves Trace a day out.
+- **Ready.** Each chart sets `data-ready="true"` on its figure once it has
+  drawn (or has nothing to draw), and the page's `<main>` gets
+  `data-report-ready` once every fetch is in (including the summary's lazy
+  human-impact tables) and every chart has drawn (`isReportReady`). Until then
+  the bar says "Preparing the report…" and **Download PDF** is disabled. The
+  signal is what e2e waits on, and what a server-side render (Phase B) would.
+- **Download PDF** calls `window.print()`; the hint says to choose **Save as
+  PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
+  before each section, headings kept with what follows, rows and figures not
+  split, tables printed whole with their header row repeated, wide tables
+  tightened to fit the page width, background colours kept (the heat map,
+  flagged rows), and no app header, banner or on-screen bar.
+- **Themes.** On screen the report follows the light or dark theme. A print
+  is always light: on `beforeprint` the page and each print-mode chart set
+  `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
+  the charts redraw synchronously, so the canvas is light before the page is
+  laid out; `afterprint` puts the previous theme back.
 
 ## Help (`/help`)
 

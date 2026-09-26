@@ -656,7 +656,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every farm, the farm table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme. Viewers can open it too.'
 					}
 				]
 			},

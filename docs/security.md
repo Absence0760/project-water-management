@@ -228,6 +228,46 @@ In short:
   project was created by that user in the same transaction and stamps who and
   when), and `water_app` has no `UPDATE` or `DELETE` on it. Viewers read it.
   See [§ Import reports](#import-reports).
+- **Stored run inputs are readable only through a run you can see, and are
+  never shared across projects** (021_series_blob, roadmap WP-3.1,
+  [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
+  A run's input series are kept content-addressed (`series_blob`, keyed by
+  the SHA-256 of the values) so the run can be recomputed years later:
+  - **Dedup is per project, by design.** The key is `(project_id, sha256)`,
+    not the hash alone. A global store would dedup a little more (two
+    projects with the same public rainfall record), but it would need a read
+    path from one project into content another project wrote, and an
+    `INSERT … ON CONFLICT` would tell anyone who can write a blob whether
+    *some other* project holds exactly those values: an existence oracle for
+    guessable data. Per project, neither exists; the cost is one extra copy
+    of a series two projects share (tens of KB).
+  - **Read = through a visible run.** `series_blob`'s `SELECT` policy needs a
+    `run_input_series` row the user can see, and that table's needs a
+    `model_run` the user can see; both subqueries are themselves under RLS. So
+    blobs follow `model_run`'s policy (viewer today), and narrow with it if
+    run visibility ever does (applicants, WP-3.3). Knowing a hash gives
+    nothing: another project's member reads no row, by hash or at all
+    (`reproducible.db.test.ts`, with the owner and a viewer as positive
+    controls), and can't point a run of theirs at it (the composite foreign
+    key finds no such blob in their project).
+  - **Immutable by privilege.** `water_app` has `SELECT` and `INSERT` only on
+    both tables (the catalogue test's `APPEND_ONLY`). Blobs are inserted by
+    editors; a reference only by an editor, to a run of the same project
+    saved **in the same transaction** (the insert policy checks
+    `model_run.created_at = now()`), so an older run can't be given inputs
+    after the fact. Removal is only the `series_blob_gc` trigger
+    (`SECURITY DEFINER`, pinned `search_path`), which deletes a blob of the
+    affected project once no run references it; the foreign key refuses
+    removing one that is still referenced.
+  - **Integrity on the way out.** `loadRunInput` re-hashes every blob and
+    checks it against the run's own snapshot hash, start date and length, and
+    refuses (`inconsistent`) rather than present altered values as the run.
+    The schema owner (`water`, migrations only) could still alter a blob; the
+    check catches that too.
+  - **Cited runs** (`model_run_cited`, `SECURITY DEFINER`): it answers only
+    "is this run cited" for a run id the caller already holds, and sees every
+    citation even when a narrower policy hides the citing row from the caller,
+    so a trim never tries to delete a run someone else's scenario rests on.
 - **Data feeds run as the owner who configured them** (018_feeds,
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Owners
   attach and change feeds (RLS); saving stamps the saver as the feed's acting
@@ -281,6 +321,9 @@ In short:
     declared, so a zip bomb is a clear "too large" error, not a crashed tab.
     Encrypted entries, ZIP64, split archives and compression methods other
     than stored and deflate are refused, and every part's CRC-32 is checked;
+  - the picked file is read from disk a slice at a time (`Blob.slice`), never
+    loaded whole, and every slice's offsets are checked against the file's
+    size first;
   - only the parts the import reads are ever unpacked (content types,
     relationships, the workbook, shared strings, styles, the b023 config
     sheets). The VBA project, the per-farm result sheets, drawings and
