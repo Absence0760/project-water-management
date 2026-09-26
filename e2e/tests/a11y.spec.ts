@@ -27,7 +27,8 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 			await expect(p.getByRole('region', { name: 'Run summary' })).toBeVisible();
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
-	}
+	},
+	{ id: 'history', ready: (p) => expect(p.getByTestId('history-entry').first()).toBeVisible() }
 ];
 
 // Both themes: the dark palette has its own contrast to keep in check.

@@ -1,19 +1,23 @@
 <script lang="ts">
 	// Sticky footer shared by the Network, Crops and Transfers tabs: unsaved
-	// indicator, validation summary, Save / Discard.
+	// indicator, validation summary, the optional reason for the change (kept
+	// with it in the History tab), Save / Discard.
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 
 	let {
 		editor,
 		onsave,
 		readonly,
-		height = $bindable(0)
+		height = $bindable(0),
+		reason = $bindable('')
 	}: {
 		editor: ModelEditor;
 		onsave: () => void;
 		readonly: boolean;
 		/** Rendered height (0 when hidden), so the page can keep content clear of it. */
 		height?: number;
+		/** The optional "why" sent with the save (at most 500 characters). */
+		reason?: string;
 	} = $props();
 
 	const shown = $derived(!readonly && (editor.dirty || !!editor.saveError));
@@ -41,7 +45,11 @@
 				{/if}
 			</span>
 			<div class="spacer"></div>
-			<button type="button" class="btn" onclick={() => editor.revert()} disabled={editor.saving || !editor.dirty}>
+			<label class="reason">
+				<span class="visually-hidden">Reason for this change (optional)</span>
+				<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={editor.saving} />
+			</label>
+			<button type="button" class="btn" onclick={() => { editor.revert(); reason = ''; }} disabled={editor.saving || !editor.dirty}>
 				Discard
 			</button>
 			<button type="button" class="btn btn-primary" onclick={onsave} disabled={editor.saving || blocking > 0 || !editor.dirty}>
@@ -89,12 +97,25 @@
 	.where {
 		font-weight: 400;
 	}
+	.reason {
+		flex: 0 1 22rem;
+		min-width: 12rem;
+	}
+	.reason input {
+		width: 100%;
+	}
 	@media (max-width: 640px) {
 		.btn {
 			min-height: 44px;
 		}
 		.where {
 			display: none;
+		}
+		.reason {
+			flex-basis: 100%;
+		}
+		.reason input {
+			min-height: 44px;
 		}
 	}
 </style>

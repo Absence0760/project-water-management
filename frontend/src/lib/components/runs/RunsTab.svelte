@@ -39,6 +39,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
+	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
+	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
 	const loadTableDialog = () => import('$lib/components/export/DailyTableDialog.svelte');
 
@@ -50,7 +52,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		runs: initialRuns = null,
 		canRun,
 		modelDirty,
-		onRunsChange
+		onRunsChange,
+		onInputsRestored
 	}: {
 		projectId: string;
 		project: Project;
@@ -62,6 +65,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		canRun: boolean;
 		modelDirty: boolean;
 		onRunsChange?: (runs: RunMeta[]) => void;
+		/** "Restore these inputs" changed the saved settings and model: the page reloads them. */
+		onInputsRestored?: () => Promise<void>;
 	} = $props();
 
 	let runs = $state<RunMeta[]>(untrack(() => initialRuns ?? []));
@@ -553,6 +558,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						</Lazy>
 					{/key}
 				</div>
+				{#key shownRunId}
+					<Lazy load={loadRunInputsPanel}>
+						{#snippet children(RunInputsPanel)}
+							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
+						{/snippet}
+					</Lazy>
+				{/key}
 			</section>
 			<section class="panel" id="res-publication">
 				{#if publicationError}
