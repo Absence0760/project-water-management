@@ -27,13 +27,14 @@ import { envInt, runTick, type TickResult } from './runner.js';
 const summary = (r: TickResult) =>
 	(r.feeds ? `feeds: ${r.feeds.queued} queued${r.feeds.refused ? `, ${r.feeds.refused} refused` : ''}; ` : '') +
 	(r.reports?.queued || r.reports?.skipped ? `scheduled reports: ${r.reports.queued} queued${r.reports.skipped ? `, ${r.reports.skipped} skipped` : ''}; ` : '') +
+	(r.alerts?.sent || r.alerts?.skipped || r.alerts?.failed ? `alerts: ${r.alerts.sent} sent, ${r.alerts.skipped} skipped, ${r.alerts.failed} failed; ` : '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;
 
 if (process.argv.includes('--once')) {
 	try {
 		const schedule = !process.argv.includes('--no-schedule');
-		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds'), feeds: schedule, reports: schedule })));
+		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds'), feeds: schedule, reports: schedule, alerts: schedule })));
 	} finally {
 		await closePool();
 	}
@@ -56,7 +57,7 @@ async function loop(): Promise<void> {
 		}
 		ticking = runTick()
 			.then((r) => {
-				if (r.claimed) console.log(summary(r));
+				if (r.claimed || r.alerts?.sent || r.alerts?.failed) console.log(summary(r));
 			})
 			.catch((err) => console.error('job tick failed:', (err as Error).message))
 			.finally(() => {

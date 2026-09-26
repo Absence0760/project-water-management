@@ -35,7 +35,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
 	share_link: ['revoked_at', 'revoked_by'],
 	// An API key likewise: never its hash, scopes or series, only its revocation (039_api_keys.sql).
-	api_key: ['revoked_at', 'revoked_by']
+	api_key: ['revoked_at', 'revoked_by'],
+	// An alert event's rule, project, farm and opening time are fixed; it clears, and its value and detail follow the watched figure (051_alerts.sql).
+	alert_event: ['cleared_at', 'detail', 'state', 'value']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -111,6 +113,10 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
  * account-deletion.db.test.ts checks the outcome end to end.
  */
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
+	// A person's alert mails and choices are theirs (051_alerts.sql); a rule is the project's.
+	'alert_delivery.user_id': 'cascade',
+	'alert_rule.created_by': 'set null',
+	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
 	'api_key.created_by': 'set null',
 	'api_key.revoked_by': 'set null',

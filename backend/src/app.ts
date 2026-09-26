@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
+import { alertProjectRoutes, alertPublicRoutes, meAlertRoutes } from './alerts/routes.js';
 import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
@@ -79,7 +80,12 @@ export function createApp() {
 	);
 	// Session cookies are SameSite=Lax; this additionally rejects cross-origin
 	// form posts (the only cross-site writes a browser can make without CORS).
-	app.use('*', csrf({ origin: allowedOrigins }));
+	// One exact route is exempt: POST /alerts/unsubscribe, which a mail
+	// client calls as a form post from its own servers (RFC 8058 one-click,
+	// no Origin). It reads no session and turns off only the subscription its
+	// token names, so a cross-site post gains nothing the token didn't give.
+	const csrfCheck = csrf({ origin: allowedOrigins });
+	app.use('*', (c, next) => (c.req.method === 'POST' && c.req.path === '/alerts/unsubscribe' ? next() : csrfCheck(c, next)));
 	// Largest legitimate body is a time-series upload (60k values ≈ 1 MB JSON).
 	// POST /projects/import carries a whole project and sets its own cap (the
 	// export cap, IMPORT_MAX_BYTES) on the route; only that exact path skips this one.
@@ -118,7 +124,17 @@ export function createApp() {
 	projects.route('/', allocationRoutes);
 	projects.route('/', noteRoutes);
 	projects.route('/', apiKeyRoutes);
+	projects.route('/', alertProjectRoutes);
 	app.route('/projects', projects);
+
+	// Your own alert choices across projects (WP-2.13).
+	const me = new Hono<AuthEnv>();
+	me.use('*', requireUser);
+	me.route('/', meAlertRoutes);
+	app.route('/me', me);
+
+	// One-click unsubscribe from alert emails (WP-2.13): no session, the token is the credential.
+	app.route('/alerts', alertPublicRoutes);
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.
 	app.route('/share', sharePublicRoutes);

@@ -173,6 +173,13 @@ resource "aws_lambda_function" "worker" {
       MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
       SITE_URL                  = local.site_origin
       SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
+      # Alert emails (WP-2.13, docs/deployment.md § Alerts). Only the worker
+      # signs unsubscribe links; the API checks a link by its hash alone.
+      # Rotating the secret (taint the resource) breaks every link in mails
+      # already sent. ALERTS_ENABLED is the kill switch (runbook: alert storm).
+      ALERTS_TOKEN_SECRET = random_password.alerts_token_secret.result
+      ALERTS_ENABLED      = var.alerts_enabled ? "true" : "false"
+      ALERTS_DAILY_CAP    = "5"
     }
   }
 
@@ -448,7 +455,51 @@ resource "aws_cloudwatch_metric_alarm" "job_dead" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "A background job is dead. Its project's GET /projects/:id/jobs shows the kind and the (sanitised) reason. Until WP-2.13 emails the project's owners, this alarm is how anyone hears."
+  alarm_description   = "A background job is dead. Its project's GET /projects/:id/jobs shows the kind and the (sanitised) reason. Projects with the job_dead alert on also email their owners (WP-2.13)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# --- Alert emails (WP-2.13, backend/src/alerts/) --------------------------------
+
+# Signs the one-click unsubscribe links in alert emails (alerts/tokens.ts).
+# Only the worker holds it. Replacing it
+# (`terraform apply -replace=random_password.alerts_token_secret`) breaks the
+# unsubscribe link in every alert already sent; "Manage your alerts" still works.
+resource "random_password" "alerts_token_secret" {
+  length  = 48
+  special = false
+}
+
+# An alert storm: far more alert mail in 5 minutes than normal operation sends
+# (each person gets at most ALERTS_DAILY_CAP immediate mails a day, so a burst
+# means many people or a loop). Runbook: docs/deployment.md § Runbooks,
+# "Alert storm" (the kill switch is var.alerts_enabled).
+resource "aws_cloudwatch_metric_alarm" "alert_storm" {
+  alarm_name          = "${local.project}-alert-storm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AlertMailsSent"
+  namespace           = "${local.project}/Jobs"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = var.alert_storm_mails_per_5min
+  alarm_description   = "More alert emails in 5 minutes than the storm threshold. Runbook: docs/deployment.md § Runbooks, Alert storm (kill switch: alerts_enabled = false)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# Alert mails the transport kept refusing (SES throttling, a rejected address).
+resource "aws_cloudwatch_metric_alarm" "alert_mail_failures" {
+  alarm_name          = "${local.project}-alert-mail-failures"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "AlertMailsFailed"
+  namespace           = "${local.project}/Jobs"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Alert emails failing to send for 15 minutes. Check the worker's alert_send_failed log lines (event ids, never addresses) and SES."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

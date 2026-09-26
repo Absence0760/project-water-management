@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-432 strings: 380 on the site, 28 in emails, 24 in the glossary.
+473 strings: 380 on the site, 69 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -700,6 +700,68 @@ Email: the farmer invite, how to accept. “signUp” lines go to an address wit
 | `mail.invite.confirmAction` | Confirm email and accept |  |  |
 | `mail.invite.confirmExpires` | This link expires in 48 hours. |  |  |
 | `mail.invite.confirmTakeOver` | If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead. | Keep: {product} |  |
+
+### mail.alert
+
+Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `mail.alert.subject` | {what} — {project} | The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment. Keep: {project}, {what} |  |
+| `mail.alert.openFarm` | Open your farm |  |  |
+| `mail.alert.openProject` | Open the catchment |  |  |
+| `mail.alert.model` | This comes from the catchment model: an estimate from the figures the WUA published, not a measurement, and not an instruction. Check with your WUA before you act on it. |  |  |
+| `mail.alert.why` | You get this email because you get {kind} alerts for {project}. | Keep: {kind}, {project} |  |
+| `mail.alert.unsubscribe` | Stop these emails |  |  |
+| `mail.alert.manage` | Manage your alerts |  |  |
+| `mail.alert.dam.what` | Dam low on {farm} | Keep: {farm} |  |
+| `mail.alert.dam.latest` | The model puts the dam on {farm} at about {pct} of capacity on {date}, below the alert level of {threshold}. | Keep: {date}, {farm}, {pct}, {threshold} |  |
+| `mail.alert.dam.forecast` | On the rain forecast of {madeOn}, the model expects the dam on {farm} to fall to about {pct} of capacity around {date}, below the alert level of {threshold}. Forecasts change. | Keep: {date}, {farm}, {madeOn}, {pct}, {threshold} |  |
+| `mail.alert.ewr.what` | River flow at risk in the forecast |  |  |
+| `mail.alert.ewr.body` | On the rain forecast of {madeOn}, the model expects the river’s ecological flow (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. | Keep: {days}, {from}, {madeOn}, {of}, {threshold}, {to} |  |
+| `mail.alert.stale.what` | Data feed behind |  |  |
+| `mail.alert.stale.body` | These data feeds are more than {threshold} days later than usual: | Keep: {threshold} |  |
+| `mail.alert.stale.line` | {feed}: newest day {newest}, {overdue} days late | One line per data feed; {overdue} is a number of days. Keep: {feed}, {newest}, {overdue} |  |
+| `mail.alert.failing.what` | Data feed failing |  |  |
+| `mail.alert.failing.body` | These data feeds have failed {threshold} or more times in a row: | Keep: {threshold} |  |
+| `mail.alert.failing.line` | {feed}: {failures} failures in a row | Keep: {failures}, {feed} |  |
+| `mail.alert.jobs.what` | Background jobs failed |  |  |
+| `mail.alert.jobs.body` | {count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment. | Keep: {count} |  |
+| `mail.alert.restriction.what` | New restriction notice |  |  |
+| `mail.alert.restriction.liftedWhat` | Restriction lifted |  |  |
+| `mail.alert.restriction.body` | The WUA published a notice for {project} on {date}: {level}. | {level} is one of the level lines below. Keep: {date}, {level}, {project} |  |
+| `mail.alert.restriction.bodyPct` | The WUA published a notice for {project} on {date}: {level}, {pct} less water. | {level} is one of the level lines below; {pct} is the WUA’s percentage, like “20 %”. Keep: {date}, {level}, {pct}, {project} |  |
+| `mail.alert.restriction.lifted` | The WUA lifted the restriction for {project} on {date}. | Keep: {date}, {project} |  |
+| `mail.alert.restriction.notice` | The WUA’s notice: “{notice}” | Keep: {notice} |  |
+| `mail.alert.restriction.level.none` | no restriction |  |  |
+| `mail.alert.restriction.level.advisory` | please use less water (advisory) |  |  |
+| `mail.alert.restriction.level.restricted` | restricted |  |  |
+| `mail.alert.restriction.wua` | This notice is the WUA’s own. It is shown here as the WUA published it. |  |  |
+
+### mail.alert.digest
+
+Alert emails: the daily summary (06:00), listing several alerts in one email.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `mail.alert.digest.subject` | Your alerts for {project} — {product} | Keep: {product}, {project} |  |
+| `mail.alert.digest.heading` | Your alerts for {project} | Keep: {project} |  |
+| `mail.alert.digest.intro` | Since the last summary: |  |  |
+| `mail.alert.digest.why` | You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day. | Keep: {cap}, {project} |  |
+| `mail.alert.digest.unsubscribe` | Stop all alert emails for this catchment |  |  |
+
+### mail.alert.kind
+
+Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `mail.alert.kind.dam_below` | dam level |  |  |
+| `mail.alert.kind.ewr_forecast_fail` | river flow forecast |  |  |
+| `mail.alert.kind.data_stale` | missing data |  |  |
+| `mail.alert.kind.restriction_published` | restriction notice |  |  |
+| `mail.alert.kind.job_dead` | failed background job |  |  |
+| `mail.alert.kind.feed_failing` | failing data feed |  |  |
 
 ## Glossary
 

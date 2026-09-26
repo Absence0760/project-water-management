@@ -3,10 +3,12 @@
 // and change the notice. RLS (022_publication.sql) enforces the same.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
+import { queueAlertEval } from '../alerts/queue.js';
 import { withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
 
@@ -31,6 +33,9 @@ export const publicationRoutes = new Hono<AuthEnv>()
 				restriction: { level: p.restriction.level, pct: p.restriction.pct },
 				farms: published.farms
 			});
+			return { published, alertJob: await queueAlertEval(db, id, 'publish') };
+		}).then(async ({ published, alertJob }) => {
+			if (alertJob?.created) await wakeWorker(alertJob.id);
 			return c.json(published, 201);
 		});
 	})
@@ -49,6 +54,9 @@ export const publicationRoutes = new Hono<AuthEnv>()
 				fields,
 				restriction: { level: publication.restriction.level, pct: publication.restriction.pct }
 			});
+			return { publication, alertJob: body.restriction ? await queueAlertEval(db, id, 'publish') : null };
+		}).then(async ({ publication, alertJob }) => {
+			if (alertJob?.created) await wakeWorker(alertJob.id);
 			return c.json({ publication });
 		});
 	});

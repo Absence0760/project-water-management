@@ -913,6 +913,27 @@ run "background_jobs" {
     condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
     error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
   }
+
+  # --- Alert emails (WP-2.13) -------------------------------------------------------
+  assert {
+    condition = (
+      contains(keys(aws_lambda_function.worker.environment[0].variables), "ALERTS_TOKEN_SECRET") &&
+      random_password.alerts_token_secret.length >= 32 && !random_password.alerts_token_secret.special &&
+      aws_lambda_function.worker.environment[0].variables["ALERTS_ENABLED"] == "true"
+    )
+    error_message = "The worker signs unsubscribe links (ALERTS_TOKEN_SECRET, ≥ 32 characters) and sends alerts unless the kill switch is off."
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "ALERTS_TOKEN_SECRET")
+    error_message = "Only the worker holds the unsubscribe-token secret: the API checks a token by its hash alone."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.alert_storm.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.alert_storm.metric_name == "AlertMailsSent" &&
+      aws_cloudwatch_metric_alarm.alert_storm.alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The alert-storm alarm must read the metric lambda-worker.ts emits (AlertMailsSent) and notify the alerts topic."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -1325,4 +1346,3 @@ run "rejects_bad_renderer_image_tag" {
 
   expect_failures = [var.renderer_image_tag]
 }
-

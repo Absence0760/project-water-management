@@ -205,6 +205,8 @@ export type AuditKind =
 	| 'scenario.decided'
 	| 'scenario.shared'
 	| 'scenario.unshared'
+	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
+	| 'alert_rules.changed'
 	| 'restore';
 
 /**

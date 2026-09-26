@@ -226,6 +226,12 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
 	},
+	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
+	{
+		route: `PUT ${P}/alert-rules`,
+		records: ['alert_rules.changed'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] })
+	},
 	{
 		route: `DELETE ${P}/runs/:runId`,
 		records: ['run.deleted'],

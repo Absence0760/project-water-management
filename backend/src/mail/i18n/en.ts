@@ -46,7 +46,58 @@ export const en = {
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',
 	'mail.invite.confirmTakeOver':
-		"If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead."
+		"If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.",
+
+	// Alert emails (WP-2.13): the frame shared by every alert and the digest.
+	'mail.alert.subject': '{what} — {project}',
+	'mail.alert.openFarm': 'Open your farm',
+	'mail.alert.openProject': 'Open the catchment',
+	'mail.alert.model':
+		'This comes from the catchment model: an estimate from the figures the WUA published, not a measurement, and not an instruction. Check with your WUA before you act on it.',
+	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
+	'mail.alert.unsubscribe': 'Stop these emails',
+	'mail.alert.manage': 'Manage your alerts',
+	'mail.alert.digest.subject': 'Your alerts for {project} — {product}',
+	'mail.alert.digest.heading': 'Your alerts for {project}',
+	'mail.alert.digest.intro': 'Since the last summary:',
+	'mail.alert.digest.why': 'You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day.',
+	'mail.alert.digest.unsubscribe': 'Stop all alert emails for this catchment',
+
+	// The kind names, in "you get {kind} alerts".
+	'mail.alert.kind.dam_below': 'dam level',
+	'mail.alert.kind.ewr_forecast_fail': 'river flow forecast',
+	'mail.alert.kind.data_stale': 'missing data',
+	'mail.alert.kind.restriction_published': 'restriction notice',
+	'mail.alert.kind.job_dead': 'failed background job',
+	'mail.alert.kind.feed_failing': 'failing data feed',
+
+	// One alert each: the subject's {what}, the heading, the sentence.
+	'mail.alert.dam.what': 'Dam low on {farm}',
+	'mail.alert.dam.latest': 'The model puts the dam on {farm} at about {pct} of capacity on {date}, below the alert level of {threshold}.',
+	'mail.alert.dam.forecast':
+		'On the rain forecast of {madeOn}, the model expects the dam on {farm} to fall to about {pct} of capacity around {date}, below the alert level of {threshold}. Forecasts change.',
+	'mail.alert.ewr.what': 'River flow at risk in the forecast',
+	'mail.alert.ewr.body':
+		'On the rain forecast of {madeOn}, the model expects the river’s ecological flow (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days.',
+	'mail.alert.stale.what': 'Data feed behind',
+	'mail.alert.stale.body': 'These data feeds are more than {threshold} days later than usual:',
+	'mail.alert.stale.line': '{feed}: newest day {newest}, {overdue} days late',
+	'mail.alert.failing.what': 'Data feed failing',
+	'mail.alert.failing.body': 'These data feeds have failed {threshold} or more times in a row:',
+	'mail.alert.failing.line': '{feed}: {failures} failures in a row',
+	'mail.alert.jobs.what': 'Background jobs failed',
+	'mail.alert.jobs.body': '{count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment.',
+	'mail.alert.restriction.what': 'New restriction notice',
+	'mail.alert.restriction.liftedWhat': 'Restriction lifted',
+	'mail.alert.restriction.body': 'The WUA published a notice for {project} on {date}: {level}.',
+	'mail.alert.restriction.bodyPct': 'The WUA published a notice for {project} on {date}: {level}, {pct} less water.',
+	'mail.alert.restriction.lifted': 'The WUA lifted the restriction for {project} on {date}.',
+	'mail.alert.restriction.notice': 'The WUA’s notice: “{notice}”',
+	'mail.alert.restriction.level.none': 'no restriction',
+	'mail.alert.restriction.level.advisory': 'please use less water (advisory)',
+	'mail.alert.restriction.level.restricted': 'restricted',
+	'mail.alert.restriction.wua':
+		'This notice is the WUA’s own. It is shown here as the WUA published it.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -63,11 +114,19 @@ export const sections: Record<string, string> = {
 	'mail.farmer':
 		'Email: the farmer invite. The WUA gives a farmer access to their farm(s) in a catchment. {farms} is one or more farm names joined with “and” (or “your farm”).',
 	'mail.invite':
-		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet.'
+		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet.',
+	'mail.alert':
+		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
+	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',
+	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.'
 };
 
 /** Notes for single keys, where the section doesn't say enough. */
 export const notes: Partial<Record<MailKey, string>> = {
 	'mail.farmer.yourFarm': 'Stands in for {farms} when the invite names no farm.',
-	'mail.farmer.and': 'Joins the last two farm names: “Vaalbank and Rietvlei”.'
+	'mail.farmer.and': 'Joins the last two farm names: “Vaalbank and Rietvlei”.',
+	'mail.alert.subject': 'The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment.',
+	'mail.alert.stale.line': 'One line per data feed; {overdue} is a number of days.',
+	'mail.alert.restriction.body': '{level} is one of the level lines below.',
+	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s percentage, like “20 %”.'
 };

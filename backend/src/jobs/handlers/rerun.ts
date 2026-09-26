@@ -19,10 +19,12 @@
 // since it was queued does nothing, and so does one while an API key's
 // anomalous push is held for review (series/hold.ts heldSinceLastRun).
 //
-// WP-2.13 (alerts) queues `alert_eval` here after an auto run; the kind has
-// no handler yet, so queueing it now would only make dead jobs.
+// After an auto run or a forecast run it queues `alert_eval` (WP-2.13,
+// alerts/queue.ts; nothing when the project has no alert on), which runs
+// next in the same tick and sees the new run (and publication).
 import { z } from 'zod';
 import { ApiError } from '../../http/errors.js';
+import { queueAlertEval } from '../../alerts/queue.js';
 import { autoPublish } from '../../publish/autoPublish.js';
 import { autoRunLabel, forecastRunLabel, NEW_DATA_CAUSES, resolveAutoRun } from '../../runs/autoRun.js';
 import { executeRun, NoForecastRainError, trimRuns } from '../../runs/execute.js';
@@ -68,5 +70,6 @@ export const rerunHandler = defineHandler({
 		if (!run) return;
 		await trimRuns(db, job.projectId);
 		if (publish) await autoPublish(db, job.projectId, run.id);
+		if (trigger !== 'manual') await queueAlertEval(db, job.projectId, trigger);
 	}
 });

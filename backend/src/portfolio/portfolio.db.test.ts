@@ -151,7 +151,7 @@ describe('the figures, and where they come from', () => {
 			lowestDamPct: null,
 			damsKnown: false,
 			feeds: { total: 0, ok: 0, failing: 0 },
-			alertsFiring: null,
+			alertsFiring: 0,
 			restriction: null
 		});
 	});
@@ -229,5 +229,24 @@ describe('the figures, and where they come from', () => {
 		expect(row.figuresUntil).toBe('2023-12-29');
 		expect(row.behindData).toBe(true);
 		expect(row.feeds).toEqual({ total: 2, ok: 1, failing: 1 });
+	});
+});
+
+describe('firing alerts (WP-2.13)', () => {
+	it('counts the firing alerts per project, not the cleared ones (positive control: another project stays at 0)', async () => {
+		const farm = (await asOwner(`SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' ORDER BY name LIMIT 1`, [published]))[0].id;
+		// Arranged as the schema owner: the count is what's under test (alerts/alerts.db.test.ts drives real events).
+		const [dam] = await asOwner(`INSERT INTO alert_rule (project_id, kind, node_id, threshold) VALUES ($1, 'dam_below', $2, 0.3) RETURNING id`, [published, farm]);
+		const [job] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'job_dead', 1) RETURNING id`, [published]);
+		await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value) VALUES ($1, $2, 'firing', 0.1), ($3, $2, 'firing', 2), ($3, $2, 'cleared', 1)`, [dam.id, published, job.id]);
+		try {
+			const rows = (await portfolio(admin)).body.projects as PortfolioProject[];
+			expect(byId(rows, published)!.alertsFiring).toBe(2);
+			expect(byId(rows, runOnly)!.alertsFiring).toBe(0);
+			// A team viewer sees the same count (RLS: viewers read every event).
+			expect(byId((await portfolio(teamViewer)).body.projects, published)!.alertsFiring).toBe(2);
+		} finally {
+			await asOwner('DELETE FROM alert_rule WHERE project_id = $1', [published]);
+		}
 	});
 });

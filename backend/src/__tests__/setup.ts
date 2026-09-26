@@ -6,6 +6,8 @@
 process.env.ALLOWED_ORIGINS = 'http://localhost:7777';
 process.env.SITE_URL = 'http://localhost:7777';
 process.env.AUTH_JWT_SECRET = 'test-only-jwt-secret-0000000000000000000';
+// Signs alert unsubscribe tokens (alerts/tokens.ts).
+process.env.ALERTS_TOKEN_SECRET = 'test-only-alerts-secret-000000000000000';
 process.env.COOKIE_SECURE = 'false';
 // Outgoing email collects in memory (src/mail/transport.ts `outbox`).
 process.env.MAIL_TRANSPORT = 'memory';

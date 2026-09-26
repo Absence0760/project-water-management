@@ -243,6 +243,24 @@ variable "jobs_backlog_alarm_seconds" {
   }
 }
 
+# --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
+
+variable "alerts_enabled" {
+  description = "The alert-email kill switch (ALERTS_ENABLED on the worker). false: alerts are still evaluated and shown in the app, but no alert email is sent and waiting ones are dropped. Runbook: docs/deployment.md § Runbooks, Alert storm."
+  type        = bool
+  default     = true
+}
+
+variable "alert_storm_mails_per_5min" {
+  description = "Alarm when the worker sends more alert emails than this in 5 minutes (the alert-storm alarm)."
+  type        = number
+  default     = 200
+  validation {
+    condition     = var.alert_storm_mails_per_5min >= 10
+    error_message = "At least 10, or a single publication to a large catchment fires it."
+  }
+}
+
 # --- Email (SES, ses.tf) -----------------------------------------------------
 
 variable "mail_from_local_part" {

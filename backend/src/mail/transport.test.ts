@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { oneLine, outbox, sendMail, trySendMail } from './transport.js';
+import { oneLine, outbox, safeHeaders, sendMail, trySendMail } from './transport.js';
 
 const mail = { to: 'ann@example.com', subject: 'Hello', text: 'secret link ?token=abc', html: '<p>hi</p>' };
 
@@ -14,6 +14,15 @@ describe('mail transport', () => {
 		vi.stubEnv('MAIL_TRANSPORT', 'memory');
 		await sendMail(mail);
 		expect(outbox).toEqual([mail]);
+	});
+
+	it('passes extra headers on one line each, and refuses a header name that isn’t a token (alert mails, RFC 8058)', async () => {
+		vi.stubEnv('MAIL_TRANSPORT', 'memory');
+		await sendMail({ ...mail, headers: { 'List-Unsubscribe': '<https://x/a?token=t>\r\nBcc: evil@example.com', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } });
+		expect(outbox[0]!.headers).toEqual({ 'List-Unsubscribe': '<https://x/a?token=t> Bcc: evil@example.com', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
+		expect(() => safeHeaders({ 'Bad\r\nName': 'x' })).toThrow(/not a header name/);
+		expect(() => safeHeaders({ 'X: y': 'x' })).toThrow(/not a header name/);
+		expect(safeHeaders(undefined)).toBeUndefined();
 	});
 
 	it('defaults to the log transport, which prints the message locally', async () => {

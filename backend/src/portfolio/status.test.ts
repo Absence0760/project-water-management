@@ -82,6 +82,7 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	run_days30: null,
 	run_not_met30: null,
 	live_farm_count: 13,
+	alerts_firing: 0,
 	feeds: [],
 	...over
 });
@@ -111,7 +112,7 @@ describe('toPortfolioProject', () => {
 			lowestDamPct: { nodeName: 'Kareebos', pct: 0.18 },
 			damsKnown: true,
 			feeds: { total: 0, ok: 0, failing: 0 },
-			alertsFiring: null,
+			alertsFiring: 0,
 			restriction: { level: 'advisory', pct: 12.5 }
 		});
 	});

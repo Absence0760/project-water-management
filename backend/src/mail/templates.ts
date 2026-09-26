@@ -22,10 +22,18 @@ export function siteLink(path: string, token: string, param = 'token'): string {
 	return `${base}${path}?${param}=${encodeURIComponent(token)}`;
 }
 
-type Body = { heading: string; paragraphs: string[]; action: { label: string; url: string }; footer: string[] };
+export type Body = {
+	heading: string;
+	paragraphs: string[];
+	action: { label: string; url: string };
+	footer: string[];
+	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
+	links?: { label: string; url: string }[];
+};
 
 /** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
-function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT('en')): Mail {
+export function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT('en')): Mail {
+	const links = b.links ?? [];
 	const fallbackLine = tr.t('mail.buttonFallback');
 	const text = [
 		b.heading,
@@ -34,6 +42,7 @@ function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT
 		`${b.action.label}: ${b.action.url}`,
 		'',
 		...b.footer.flatMap((p) => [p, '']),
+		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
 	].join('\n');
 	const p = (s: string) => `<p style="margin:0 0 16px">${escapeHtml(s)}</p>`;
@@ -47,7 +56,7 @@ function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT
 ${b.paragraphs.map(p).join('\n')}
 <p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
 <p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
-${b.footer.map(p).join('\n')}
+${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
 <p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
 </main>
 </body>

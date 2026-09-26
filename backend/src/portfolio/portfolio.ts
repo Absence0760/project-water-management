@@ -56,11 +56,8 @@ export interface PortfolioProject {
 	damsKnown: boolean;
 	/** Data feeds: how many, how many healthy, how many failing or stale (feeds/health.ts). */
 	feeds: { total: number; ok: number; failing: number };
-	/**
-	 * Firing alerts. Always null until WP-2.13 (alerts) is built: the hook for
-	 * its alert_event count, deliberately not faked.
-	 */
-	alertsFiring: null;
+	/** Alerts firing now (alert_event state 'firing', WP-2.13): 0 when none, or when the project has no alert switched on. */
+	alertsFiring: number;
 	/** The current publication's restriction; null when nothing is published. */
 	restriction: { level: RestrictionLevel; pct: number | null } | null;
 }
@@ -90,6 +87,7 @@ export interface PortfolioRow {
 	run_days30: number | null;
 	run_not_met30: number | null;
 	live_farm_count: number;
+	alerts_firing: number;
 	feeds: (Omit<HealthInput, 'config'> & { config: FeedConfig; source: FeedSource })[];
 }
 
@@ -128,6 +126,8 @@ const PORTFOLIO_SQL = `
 		to_char(lr.until, 'YYYY-MM-DD') AS run_until, lr.ewr_set AS run_ewr_set,
 		rew.days AS run_days30, rew.not_met AS run_not_met30,
 		(SELECT count(*)::int FROM node n WHERE n.project_id = pr.id AND n.kind = 'farm') AS live_farm_count,
+		-- Firing alerts (051_alerts; alert_event_project_idx covers it).
+		(SELECT count(*)::int FROM alert_event e WHERE e.project_id = pr.id AND e.state = 'firing') AS alerts_firing,
 		fd.feeds
 	FROM proj pr
 	LEFT JOIN run_publication pub ON pub.project_id = pr.id AND pub.superseded_at IS NULL
@@ -209,7 +209,7 @@ export function toPortfolioProject(r: PortfolioRow, today: string): PortfolioPro
 		lowestDamPct: published && r.dam_name !== null && r.dam_pct !== null ? { nodeName: r.dam_name, pct: r.dam_pct } : null,
 		damsKnown: published,
 		feeds: { total: r.feeds.length, ok, failing },
-		alertsFiring: null,
+		alertsFiring: r.alerts_firing,
 		restriction: published && r.restriction_level ? { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct) } : null
 	};
 }
