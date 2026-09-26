@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 
 describe('paramLabel', () => {
 	it('names each model’s parameters, and falls back to the key', () => {
@@ -31,5 +31,13 @@ describe('fitModelLabel', () => {
 	it('marks a legacy fit as workbook comparison only (audit H1)', () => {
 		expect(fitModelLabel('gr4j')).toBe('GR4J');
 		expect(fitModelLabel('legacy')).toBe('Legacy (workbook comparison)');
+	});
+});
+
+describe('apanDailyText (issue #45)', () => {
+	it('says whether the fit ran on a daily A-pan series, and which', () => {
+		expect(apanDailyText(undefined)).toBe('not recorded (fit made before this was tracked)');
+		expect(apanDailyText(null)).toBe('none (monthly means only)');
+		expect(apanDailyText({ startDate: '2020-10-01', length: 1461, valuesSha256: '0123456789abcdef'.repeat(4) })).toBe('from 2020-10-01, 1,461 days (SHA-256 0123456789ab)');
 	});
 });

@@ -1226,7 +1226,13 @@ which checks every catchment tab).
     or version than the fit ran on (issue #40 part c; the fit records it, and
     Settings compares the series a run would use), with its own caveat. The
     record's **CHIRPS series** row names the product and version the fit ran
-    on, and the series' current one when it differs. Its **Rain source
+    on, and the series' current one when it differs. Its **Daily A-pan
+    series** row (engine ≥ 0.38.0, issue #45) gives the daily A-pan record
+    the fit ran on (its first day, length and a 12-character SHA-256, or
+    "none (monthly means only)"), and the series now when it was added,
+    replaced or removed since, which also shows **Forcing changed since fit**
+    with its own caveat (Settings fetches and hashes the series only when the
+    record tracked one). Its **Rain source
     periods** row lists the periods the fit ran under (engine ≥ 0.30.0; a
     fit made before them ran with none), and a change of periods also shows
     **Forcing changed since fit**. Its **GR4J potential evaporation** row
@@ -1768,7 +1774,8 @@ run's report to chosen members every week or month.
   "Parameters edited since fit" badge when they were edited, and a
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
   PE input, CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
-  CHIRPS series held another product or version, from the run's `inputSeries`), or "No fit
+  CHIRPS series held another product or version, or its daily A-pan series
+  differs from the fit's, from the run's `inputSeries`), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

@@ -1,5 +1,5 @@
 // Labels for the fit record display (FitProvenance.svelte). Pure, so it is unit-tested.
-import { CALIBRATION_PARAMS, type RunoffModelId } from '@water-management/engine';
+import { CALIBRATION_PARAMS, type ApanDailyFingerprint, type RunoffModelId } from '@water-management/engine';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum } from '$lib/format/number';
 
@@ -27,4 +27,11 @@ export function chirpsFactorsText(factors: readonly (number | null)[]): string {
 /** "GR4J" or "Legacy (workbook comparison)" (audit H1): the fit record's model, in the heading of FitProvenance. */
 export function fitModelLabel(model: RunoffModelId): string {
 	return model === 'gr4j' ? 'GR4J' : 'Legacy (workbook comparison)';
+}
+
+/** A fit record's daily A-pan series (issue #45) in words: 'none', or its first day, length and a short hash. */
+export function apanDailyText(f: ApanDailyFingerprint | null | undefined): string {
+	if (f === undefined) return 'not recorded (fit made before this was tracked)';
+	if (f === null) return 'none (monthly means only)';
+	return `from ${f.startDate}, ${fmtNum(f.length, 0)} days (SHA-256 ${f.valuesSha256.slice(0, 12)})`;
 }
