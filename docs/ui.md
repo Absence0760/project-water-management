@@ -307,7 +307,8 @@ turns a project document into a new project through `POST /projects/import`:
    (`import/projectFile.ts`); a file that isn't JSON, isn't a project document
    or is over the 5 MB cap is refused here, before anything is sent.
 2. **Preview** (`ImportPreview.svelte`): the importer's notes first (for
-   example, a file with no time series), then the name (editable, prefilled
+   example, a file with no time series, or an export's notes, which aren't
+   imported and aren't sent), then the name (editable, prefilled
    from the file), *Belongs to* (only when you're a member or admin of a team;
    preselected when the list is filtered to one), what's in the file
    (farms, gauges and other water users, crops and planted areas, transfers,
@@ -1956,7 +1957,9 @@ March") is kept against what it is about.
     each naming and linking to its target, and the project-level notes
     button.
   One `GET /notes/counts` per project feeds every badge
-  (`counts.svelte.ts`), refreshed after any change.
+  (`counts.svelte.ts`), refreshed after any change. Only the open project's
+  counts are kept: opening another project drops them (coming back loads
+  them again), and signing out forgets them.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
   hidden from everyone, kept for the audit trail). On a farm, *Also show to

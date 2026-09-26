@@ -324,6 +324,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 				 SELECT $2, kind, name, unit, start_date, "values", product, product_version, day_boundary FROM time_series WHERE project_id = $1`,
 				[srcId, newId]
 			);
+			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a
+			// note is its author's words about the original; RLS inserts a note only
+			// as yourself, so keeping the author would mean bypassing it, and
+			// re-authoring as the copier would misattribute. The original keeps them.
 			// The copy's history starts with its first state; the original's stays with the original.
 			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: `Copied from "${src.name}"`.slice(0, 500) });
 			return c.json({ project: full(await getProject(db, newId)) }, 201);

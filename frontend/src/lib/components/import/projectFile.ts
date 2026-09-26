@@ -59,6 +59,9 @@ export function parseProjectFileText(text: string): ParsedImport {
 
 	const notes: string[] = [];
 	if (!(file.series ?? []).length) notes.push('The file has no time series. Add rainfall (and flow) on the Data tab before running the model.');
+	// An export carries the project's notes as a record; the server doesn't import them (docs/data-model.md § Notes).
+	const kept = Array.isArray(doc.notes) ? doc.notes.length : 0;
+	if (kept) notes.push(`The file holds ${kept === 1 ? '1 note' : `${kept} notes`} from the project it came from. Notes aren't imported: they stay with the project they were written in.`);
 	return { file, notes };
 }
 
@@ -107,11 +110,14 @@ function addDays(iso: string, n: number): string | null {
 }
 
 /**
- * The document as it will be sent: the preview's name, and the body's size
- * against the server's cap, counting the import report that rides beside it.
+ * The document as it will be sent: the preview's name, without the export's
+ * notes, and the body's size against the server's cap, counting the import
+ * report that rides beside it.
  */
 export function importBody(file: ProjectFile, name: string, report?: ImportReport): { file: ProjectFile; bytes: number } {
-	const out = { ...file, name: name.trim() };
+	// The server ignores an export's notes, so they aren't sent (or counted against the cap).
+	const { notes: _notes, ...rest } = file;
+	const out = { ...rest, name: name.trim() } as ProjectFile;
 	return { file: out, bytes: new TextEncoder().encode(JSON.stringify(report ? { ...out, importReport: report } : out)).length };
 }
 

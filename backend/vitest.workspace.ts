@@ -1,12 +1,16 @@
 import { defineWorkspace } from 'vitest/config';
 
-// Three projects:
+// Four projects:
 //   unit — pure logic, no database, no wall-clock assertions (`pnpm test`).
 //   db   — against real Postgres (`pnpm test:backend:db`, needs `pnpm dev:db:up`).
 //          globalSetup rebuilds the water_test database from migrations first.
 //   perf — timing budgets (`*.perf.test.ts`), run serially with a
 //          median-of-several sampling so a loaded machine doesn't produce a
 //          flake (`pnpm test:perf`, root `pnpm test:backend:perf`).
+//   perf-db — timing budgets against Postgres (`*.db.perf.test.ts`), with the
+//          db project's setup and global setup (a fresh water_test…), serial
+//          (`pnpm test:perf:db`, root `pnpm test:backend:perf:db`). It rebuilds
+//          the same test database as `db`, so never run the two at once.
 export default defineWorkspace([
 	{
 		test: {
@@ -49,9 +53,22 @@ export default defineWorkspace([
 			name: 'perf',
 			environment: 'node',
 			include: ['src/**/*.perf.test.ts'],
+			exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.perf.test.ts'],
 			// Timing runs share the machine's CPU; don't let them race each other.
 			// fileParallelism alone doesn't serialise a workspace project (see the
 			// backend db project); singleFork does.
+			fileParallelism: false,
+			poolOptions: { forks: { singleFork: true } }
+		}
+	},
+	{
+		test: {
+			name: 'perf-db',
+			environment: 'node',
+			setupFiles: ['./src/__tests__/setup.ts'],
+			globalSetup: ['./src/__tests__/db-global-setup.ts'],
+			include: ['src/**/*.db.perf.test.ts'],
+			// Serial for both reasons above: timings share the CPU, and files share one database.
 			fileParallelism: false,
 			poolOptions: { forks: { singleFork: true } }
 		}

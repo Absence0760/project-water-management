@@ -1859,8 +1859,8 @@ the forecast kinds.
 > the demo team (Sandspruit stays the analyst's own, which the e2e uses as
 > the negative control). Measured locally: 10 published catchments × 60
 > farms (10-year runs) answer in a median 51 ms of API time (7 calls), well
-> inside the 500 ms criterion; there is no DB perf guard for it yet
-> (followups.md).
+> inside the 500 ms criterion; `pnpm test:backend:perf:db` holds that
+> budget (`portfolio.db.perf.test.ts`, median 41 ms when added).
 
 **Goal.** All of a team's catchments on one screen: is anything wrong, is
 the data current, who is short this week?
