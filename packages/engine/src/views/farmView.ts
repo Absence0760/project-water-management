@@ -114,6 +114,30 @@ export interface FarmProjection {
 	/** The 12 calendar months to dataUntil, oldest first. */
 	monthly: MonthTotals[];
 	river: RiverShare;
+	/**
+	 * The forecast days after dataUntil (WP-2.12), when the published run is a
+	 * forecast run (summary.forecast); absent otherwise. Modelled on forecast
+	 * rain, so a guide, never a promise.
+	 */
+	forecast?: FarmForecast;
+}
+
+/** One farm's forecast days (WP-2.12, ../forecast.ts ForecastFarm). Fractions 0–1. */
+export interface FarmForecast {
+	/** The first and last forecast day (ISO). */
+	from: string;
+	to: string;
+	days: number;
+	/** The day the forecast run was made (UTC, ISO). */
+	madeOn: string;
+	/** Lowest dam storage ÷ capacity on any forecast day; null without a dam. */
+	minDamPct: number | null;
+	/** The first forecast day at that level (ISO); null without a dam. */
+	minDamDate: string | null;
+	/** Forecast days the farm is expected to be short. */
+	deficitDays: number;
+	/** supplied ÷ demand over the days; null without demand. */
+	suppliedFraction: number | null;
 }
 
 /** Anonymised context (D1 b; app_farm_context). Counts only. */

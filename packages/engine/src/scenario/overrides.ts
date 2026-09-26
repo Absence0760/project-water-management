@@ -4,7 +4,7 @@
 // backend loads the base input, this transforms plain data, and runModel is
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
-import { upgradeLegacyModel, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	NODE_SET_FIELDS,
@@ -117,6 +117,7 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
 			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)');
 			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)');
 			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)');
+			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)');
 			if (Array.isArray(d.settings.ewrRules)) {
 				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there');
 			}
@@ -179,6 +180,20 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
 		case 'landCover.remove': {
 			if (!(m.landCover ?? []).some((p) => p.id === op.patchId)) fail(`land-cover patch ${op.patchId} not found`);
 			m.landCover = m.landCover!.filter((p) => p.id !== op.patchId);
+			break;
+		}
+		case 'borehole.add': {
+			const b = op.borehole;
+			if (typeof b?.id !== 'string') fail('the new borehole needs an id');
+			if ((m.boreholes ?? []).some((x) => x.id === b.id)) fail(`borehole id ${b.id} is already in use`);
+			const n = findNode(d, b.nodeId);
+			if (n.kind === 'gauge') fail(`a borehole supplies a farm or other user; "${n.name}" is a gauge`);
+			m.boreholes = [...(m.boreholes ?? []), cloneData(b) as Borehole];
+			break;
+		}
+		case 'borehole.remove': {
+			if (!(m.boreholes ?? []).some((b) => b.id === op.boreholeId)) fail(`borehole ${op.boreholeId} not found`);
+			m.boreholes = m.boreholes!.filter((b) => b.id !== op.boreholeId);
 			break;
 		}
 		case 'settings.set': {
@@ -316,6 +331,12 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'landCover.remove': {
 			const p = input?.model.landCover?.find((x) => x.id === op.patchId);
 			return ok(!!p && mine(p.nodeId));
+		}
+		case 'borehole.add':
+			return ok(mine(op.borehole.nodeId));
+		case 'borehole.remove': {
+			const b = input?.model.boreholes?.find((x) => x.id === op.boreholeId);
+			return ok(!!b && mine(b.nodeId));
 		}
 		default:
 			return 'baseline';

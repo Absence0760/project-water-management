@@ -17,7 +17,8 @@
 		nodeNames,
 		nodeOrder = new Map(),
 		flowUnit = 'm³/day',
-		flowToolbar
+		flowToolbar,
+		band
 	}: {
 		projectId: string;
 		runId: string;
@@ -27,6 +28,8 @@
 		flowUnit?: 'm³/s' | 'm³/day';
 		/** Shown in the chart's toolbar while a flow series is picked (the results' m³/s ↔ m³/day switch). */
 		flowToolbar?: Snippet;
+		/** A forecast run's band (WP-2.12, forecast/forecast.ts forecastBand). */
+		band?: { from: string; label: string; note: string };
 	} = $props();
 
 	const CATCHMENT = '__catchment';
@@ -125,6 +128,7 @@
 			recentDays={3 * 365}
 			recentLabel="Last 3 years"
 			toolbar={isFlow ? flowToolbar : undefined}
+			{band}
 		/>
 	</LoadState>
 {/if}

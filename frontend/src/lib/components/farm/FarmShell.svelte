@@ -10,6 +10,7 @@
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
+	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
 	import { clearAllSaved, keepsCopy, setKeepsCopy } from './savedCopy';
 
@@ -55,6 +56,7 @@
 		}
 		clearAllSaved();
 		clearFarmMemo();
+		clearNoteCounts();
 		session.user = null;
 		await tick();
 		await goto(`${base}/login`);

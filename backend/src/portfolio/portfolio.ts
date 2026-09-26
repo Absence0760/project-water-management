@@ -164,8 +164,9 @@ const PORTFOLIO_SQL = `
 		)), '[]'::jsonb) AS feeds
 		FROM data_feed f LEFT JOIN feed_stage st ON st.feed_id = f.id WHERE f.project_id = pr.id
 	) fd ON true
-	-- A farmer sees their own farms, never a catchment roll-up of their neighbours.
-	WHERE pr.role IS NOT NULL AND pr.role <> 'farmer'
+	-- A farmer sees their own farms, never a catchment roll-up of their neighbours;
+	-- nor does an applicant (contributor, 044), who ranks below viewer too.
+	WHERE pr.role >= 'viewer'::project_role
 	ORDER BY pr.name, pr.id`;
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);

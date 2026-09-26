@@ -3,6 +3,13 @@
 // `POST /projects/import` / `pnpm import:project` read it (projects/import.ts),
 // so a project round-trips export → import. The Python workbook importer
 // (scripts/wbt-import) emits the same shape.
+//
+// The export also carries the project's notes (037_notes.sql) as a record:
+// what the team wrote down belongs with the project's data. The importer
+// doesn't read them back (ProjectFile has no `notes`, so zod drops the key):
+// a note is its author's words, RLS lets a note be inserted only as
+// yourself, and re-authoring them as the importer would misattribute them
+// (docs/data-model.md § Notes).
 import { DAY_BOUNDARIES, ENGINE_VERSION, SERIES_KINDS, type DayBoundary, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -10,6 +17,7 @@ import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
 import { checkProvenance, ProvenanceFields, toCanonicalUnit } from '../series/merge.js';
+import { targetOf } from '../notes/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
@@ -58,6 +66,74 @@ export interface ProjectDocument {
 	model: ProjectModel;
 	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
 	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string; dayBoundary?: DayBoundary }[];
+	/** The notes the exporter can see, oldest first; informational, the importer ignores them. */
+	notes: ProjectDocumentNote[];
+}
+
+/**
+ * A note as the export writes it. Never a deleted note (the API lists none to
+ * anyone, so neither does the export, though RLS shows editors their bodies).
+ * `visibility` says who saw it in the app: `team`, or `farm` (also the farm's
+ * linked farmers). `nodeId` is the node's id in this document's model;
+ * `runId`/`runLabel` name a run the document doesn't carry.
+ */
+export interface ProjectDocumentNote {
+	body: string;
+	/** Display name; null once that account is gone. */
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+	target: 'project' | 'node' | 'run' | 'setting';
+	nodeId: string | null;
+	nodeName: string | null;
+	runId: string | null;
+	runLabel: string | null;
+	settingKey: string | null;
+	visibility: 'team' | 'farm';
+}
+
+/**
+ * The project's notes for the export, as the caller sees them (RLS), without
+ * deleted ones. Only viewers and above can export, and they see every
+ * undeleted note, `farm` ones included, so the file is what they can read in
+ * the app.
+ */
+export async function loadDocumentNotes(db: Db, projectId: string): Promise<ProjectDocumentNote[]> {
+	const { rows } = await db.query<{
+		body: string;
+		author: string | null;
+		created_at: Date;
+		edited_at: Date | null;
+		node_id: string | null;
+		node_name: string | null;
+		run_id: string | null;
+		run_label: string | null;
+		setting_key: string | null;
+		visibility: 'team' | 'farm';
+	}>(
+		`SELECT n.body, u.display_name AS author, n.created_at, n.edited_at, n.node_id, nd.name AS node_name,
+			n.run_id, r.label AS run_label, n.setting_key, n.visibility
+		 FROM note n
+		 LEFT JOIN app_user u ON u.id = n.author_id
+		 LEFT JOIN node nd ON nd.id = n.node_id
+		 LEFT JOIN model_run r ON r.id = n.run_id
+		 WHERE n.project_id = $1 AND n.deleted_at IS NULL
+		 ORDER BY n.created_at, n.id`,
+		[projectId]
+	);
+	return rows.map((r) => ({
+		body: r.body,
+		author: r.author,
+		createdAt: r.created_at.toISOString(),
+		editedAt: r.edited_at?.toISOString() ?? null,
+		target: targetOf(r),
+		nodeId: r.node_id,
+		nodeName: r.node_name,
+		runId: r.run_id,
+		runLabel: r.run_label,
+		settingKey: r.setting_key,
+		visibility: r.visibility
+	}));
 }
 
 /** Read a project as a portable document (caller has already checked access). */
@@ -90,6 +166,7 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 		description: p.description,
 		settings: mergeSettings(p.settings) as unknown as Record<string, unknown>,
 		model,
-		series
+		series,
+		notes: await loadDocumentNotes(db, projectId)
 	};
 }

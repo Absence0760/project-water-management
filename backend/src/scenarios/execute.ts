@@ -7,8 +7,9 @@
 import { applyScenario, classifyScenario, type AppliedOp, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
-import type { ScenarioStatus } from './schema.js';
+import type { Role } from '../projects/access.js';
+import { loadPublishedRunInput, loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
+import type { ScenarioOutcome, ScenarioStatus } from './schema.js';
 
 /** A scenario row as the API returns it. */
 export interface ScenarioRow {
@@ -16,14 +17,25 @@ export interface ScenarioRow {
 	name: string;
 	description: string;
 	baseRunId: string;
-	/** The base run's label and date, for the "Based on run X" banner. */
-	baseRun: { id: string; label: string; createdAt: string };
+	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
+	baseRun: { id: string; label: string; createdAt: string | null };
 	ops: ScenarioOp[];
 	opsSha256: string;
 	ownedNodeIds: string[];
 	ownerUserId: string;
 	owner: string | null;
 	status: ScenarioStatus;
+	/** 'team': a modelling scenario (WP-3.2). 'applicant': an application by a contributor (WP-3.3, 045_contributor_scope). */
+	origin: ScenarioOrigin;
+	/** When it was last submitted (null while a draft). */
+	submittedAt: string | null;
+	/** The assessor's decision, once decided. */
+	decidedAt: string | null;
+	decidedBy: string | null;
+	outcome: ScenarioOutcome | null;
+	decisionNote: string;
+	/** Who else reads an application (scenario_member): the applicant's consultant or client. */
+	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
 	/** Runs of this scenario still stored, and the newest one. */
@@ -31,14 +43,25 @@ export interface ScenarioRow {
 	lastRun: { id: string; label: string; createdAt: string } | null;
 }
 
+export type ScenarioOrigin = 'team' | 'applicant';
+
+/** Most runs an application keeps (the newest; kept runs aside): its owner's runs never count against the project's cap, which they can't trim. */
+export const APPLICATION_RUNS_KEPT = 5;
+
+// The base run through app_run_brief (045): an applicant can't read the
+// published run's row, only its label and date.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",
-	jsonb_build_object('id', b.id, 'label', b.label, 'createdAt', b.created_at) AS "baseRun",
+	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.owner_user_id AS "ownerUserId",
-	u.display_name AS owner, s.status, s.created_at AS "createdAt", s.updated_at AS "updatedAt",
+	u.display_name AS owner, s.status, s.origin, s.submitted_at AS "submittedAt", s.decided_at AS "decidedAt",
+	du.display_name AS "decidedBy", s.outcome, s.decision_note AS "decisionNote",
+	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
+	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
+	s.created_at AS "createdAt", s.updated_at AS "updatedAt",
 	(SELECT count(*)::int FROM model_run r WHERE r.scenario_id = s.id) AS "runCount",
 	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM model_run r
 	 WHERE r.scenario_id = s.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"
-	FROM scenario s JOIN model_run b ON b.id = s.base_run_id JOIN app_user u ON u.id = s.owner_user_id`;
+	FROM scenario s JOIN app_user u ON u.id = s.owner_user_id LEFT JOIN app_user du ON du.id = s.decided_by`;
 
 /** One scenario of a project, or 404. `lock` holds it against a concurrent delete until the transaction ends. */
 export async function loadScenario(db: Db, projectId: string, scenarioId: string, lock = false): Promise<ScenarioRow> {
@@ -63,11 +86,32 @@ export interface ScenarioCheck {
  * another project, or one the caller can't see, is 404; a run that can't be
  * rebuilt (saved before stored inputs, or failing its checks) is 409 with
  * loadRunInput's message.
+ *
+ * A contributor can't read a run's row: for them the base is a **published**
+ * run, rebuilt past RLS (loadPublishedRunInput), and 404 for any other. The
+ * input stays on the server (scenarios/applicant.ts projects what they see).
  */
-export async function loadBaseInput(db: Db, projectId: string, runId: string): Promise<ModelInput> {
-	const { rows } = await db.query<{ scenarioId: string | null }>('SELECT scenario_id AS "scenarioId" FROM model_run WHERE project_id = $1 AND id = $2', [projectId, runId]);
+export async function loadBaseInput(db: Db, projectId: string, runId: string, role?: Role): Promise<ModelInput> {
+	if (role === 'contributor') {
+		let base: Awaited<ReturnType<typeof loadPublishedRunInput>>;
+		try {
+			base = await loadPublishedRunInput(db, projectId, runId);
+		} catch (err) {
+			if (err instanceof RunInputError) throw new ApiError(err.problem === 'not_found' ? 404 : 409, err.problem === 'not_found' ? 'published run not found' : err.message);
+			throw err;
+		}
+		// As below: an application is judged on history, not on forecast rain (WP-2.12).
+		if (base.trigger === 'forecast') throw new ApiError(409, 'the published run is a forecast run; an application needs an ordinary run of the model published');
+		return base.input;
+	}
+	const { rows } = await db.query<{ scenarioId: string | null; trigger: string }>(
+		'SELECT scenario_id AS "scenarioId", "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
+		[projectId, runId]
+	);
 	if (!rows[0]) throw new ApiError(404, 'base run not found');
 	if (rows[0].scenarioId) throw new ApiError(409, 'that run is a scenario run; base a scenario on a run of the model itself');
+	// A forecast run's input runs on past the record on forecast rain (WP-2.12); a scenario is judged on history.
+	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; base a scenario on an ordinary run of the model');
 	try {
 		return await loadRunInput(db, runId);
 	} catch (err) {
@@ -94,14 +138,18 @@ export async function executeScenarioRun(
 	db: Db,
 	projectId: string,
 	scenarioId: string,
-	label: string | undefined
+	label: string | undefined,
+	role?: Role
 ): Promise<{ id: string; output: ModelOutput; check: ScenarioCheck; scenario: ScenarioRow }> {
-	// The project's run lock first, then the scenario row: the order the delete
-	// and rebase routes take them in, so a run racing a delete waits instead of
-	// deadlocking. (runAndStore and trimRuns take the same lock again later.)
+	// The project's run lock first, then the scenario row. The delete and rebase
+	// routes take the same run lock before they touch the row, so a run racing
+	// either waits for it and reads the scenario as it then is. (runAndStore and
+	// trimRuns take the same lock again later.) The row itself is read without
+	// FOR KEY SHARE: that lock needs the UPDATE policy (045), which a shared
+	// member or an assessor running an application doesn't pass.
 	await lockProjectRuns(db, projectId);
-	const scenario = await loadScenario(db, projectId, scenarioId, true);
-	const base = await loadBaseInput(db, projectId, scenario.baseRunId);
+	const scenario = await loadScenario(db, projectId, scenarioId);
+	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
 	const check = checkScenario(base, scenario.ops, scenario.ownedNodeIds);
 	if (check.problems.length)
 		throw new ApiError(422, check.problems.length === 1 ? "an op of this scenario doesn't apply to its base run" : `${check.problems.length} ops of this scenario don't apply to its base run`, {
@@ -115,6 +163,25 @@ export async function executeScenarioRun(
 		opsSha256: scenario.opsSha256,
 		ownedNodeIds: scenario.ownedNodeIds,
 		classified: check.classified
-	});
+	}, 'manual', { privateLabel: scenario.origin === 'applicant' });
 	return { id, output, check, scenario };
+}
+
+/**
+ * Keep an application's newest APPLICATION_RUNS_KEPT runs, as its owner (RLS:
+ * model_run_delete_contributor, which also spares a kept run). Its owner's
+ * runs are hidden from the editors whose runs trimRuns counts, so they have
+ * a cap of their own. Returns the ids removed.
+ */
+export async function trimApplicationRuns(db: Db, projectId: string, scenarioId: string, keep = APPLICATION_RUNS_KEPT): Promise<string[]> {
+	await lockProjectRuns(db, projectId);
+	const { rows } = await db.query<{ id: string }>(
+		`DELETE FROM model_run WHERE id IN (
+			SELECT r.id FROM model_run r
+			WHERE r.project_id = $1 AND r.scenario_id = $2 AND NOT app_run_kept(r.id)
+			ORDER BY r.created_at DESC, r.id DESC OFFSET $3
+		) RETURNING id`,
+		[projectId, scenarioId, keep]
+	);
+	return rows.map((r) => r.id);
 }

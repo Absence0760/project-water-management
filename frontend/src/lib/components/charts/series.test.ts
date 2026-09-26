@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignDaily, fmtCompact, isolatedIndices, panWindow, printScale } from './series';
+import { alignDaily, bandSpan, fmtCompact, isolatedIndices, panWindow, printScale } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -86,5 +86,26 @@ describe('panWindow', () => {
 	it('shows the whole range when the window is as wide as the data', () => {
 		expect(panWindow(0, 100, 30, 0, 100)).toEqual({ min: 0, max: 100 });
 		expect(panWindow(-5, 120, 30, 0, 100)).toEqual({ min: 0, max: 100 });
+	});
+});
+
+describe('bandSpan (the forecast band, WP-2.12)', () => {
+	const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
+	const x = ['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24'].map(day);
+
+	it('covers from the start of its first day to the end of the data', () => {
+		expect(bandSpan({ from: '2026-09-23' }, x)).toEqual({ start: day('2026-09-23'), end: day('2026-09-25') });
+	});
+
+	it('ends at the end of `to` when given, and is clipped to the data at both ends', () => {
+		expect(bandSpan({ from: '2026-09-21', to: '2026-09-22' }, x)).toEqual({ start: day('2026-09-21'), end: day('2026-09-23') });
+		expect(bandSpan({ from: '2026-09-01', to: '2026-12-31' }, x)).toEqual({ start: day('2026-09-20'), end: day('2026-09-25') });
+	});
+
+	it('is null when it misses the data, or there is none', () => {
+		expect(bandSpan({ from: '2026-10-01' }, x)).toBeNull();
+		expect(bandSpan({ from: '2026-09-01', to: '2026-09-10' }, x)).toBeNull();
+		expect(bandSpan({ from: '2026-09-21' }, [])).toBeNull();
+		expect(bandSpan({ from: 'not a date' }, x)).toBeNull();
 	});
 });

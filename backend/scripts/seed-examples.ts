@@ -12,6 +12,10 @@
 //     example.com is linked to Rietspruit (Sandspruit) and Kareebos (Droëvlei),
 //     so the farm-scoped views (WP-2.1, docs/design/farmer-view.md) have a
 //     one-farm and a several-farm user
+//   applicant@example.com is a contributor (a licence applicant, WP-3.3) on
+//     Sandspruit, also linked to Klipdrift (an irrigator applying to raise
+//     their own dam), with a submitted application that doubles its dam, so
+//     the analyst's Applications tab has one to assess
 // Each project gets one model run, published by its owner (WP-2.3; Sandspruit
 // with an advisory notice), so results and the farm views show immediately. Building the
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
@@ -21,7 +25,10 @@ import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { withoutUser, withUser } from '../src/db/tx.js';
 import { publishRun } from '../src/publish/publish.js';
+import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
+import { executeScenarioRun } from '../src/scenarios/execute.js';
+import { opsSha256 } from '../src/scenarios/schema.js';
 import { buildExamples } from './examples/catchments.js';
 import { importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
@@ -37,6 +44,9 @@ export const FARMERS = [
 	{ email: 'farmer2@example.com', password: 'demo-password', displayName: 'Demo Farmer Two', farms: [['Sandspruit', 'Rietspruit'], ['Droëvlei', 'Kareebos']] }
 ] as const;
 
+// DEV-ONLY demo applicant (WP-3.3): a contributor on Sandspruit, linked to one farm.
+export const APPLICANT = { email: 'applicant@example.com', password: 'demo-password', displayName: 'Demo Applicant', catchment: 'Sandspruit', farm: 'Klipdrift' } as const;
+
 /** A verified demo account, created once (a re-seed finds it). */
 async function ensureUser(u: { email: string; password: string; displayName: string }) {
 	const hash = await hashPassword(u.password);
@@ -50,11 +60,11 @@ async function ensureUser(u: { email: string; password: string; displayName: str
 	});
 }
 
-/** Make `email` a farmer on the project, linked to the named farm, as the project's owner would. */
-async function linkFarmer(ownerEmail: string, projectId: string, farmerId: string, farm: string) {
+/** Make `email` a farmer (or a contributor) on the project, linked to the named farm, as the project's owner would. */
+async function linkFarmer(ownerEmail: string, projectId: string, farmerId: string, farm: string, role: 'farmer' | 'contributor' = 'farmer') {
 	const owner = await userId(ownerEmail);
 	await withUser(owner, async (db) => {
-		await db.query(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, 'farmer') ON CONFLICT DO NOTHING`, [projectId, farmerId]);
+		await db.query(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [projectId, farmerId, role]);
 		const { rowCount } = await db.query(
 			`INSERT INTO farm_link (project_id, node_id, user_id, added_by)
 			 SELECT $1, id, $2, $4 FROM node WHERE project_id = $1 AND kind = 'farm' AND name = $3
@@ -125,7 +135,37 @@ export async function seedExamples(): Promise<string[]> {
 		const id = await ensureUser(f);
 		for (const [catchment, farm] of f.farms) await linkFarmer(byName[catchment].owner, byName[catchment].id, id, farm);
 	}
+	await seedApplication(byName[APPLICANT.catchment]);
 	return ids;
+}
+
+/**
+ * The demo applicant's submitted application (WP-3.3, docs/scenarios.md
+ * § Applications): double their dam on the published baseline, run it, submit
+ * it, as the applicant would through the API.
+ */
+async function seedApplication(project: { id: string; owner: string }) {
+	const applicant = await ensureUser(APPLICANT);
+	await linkFarmer(project.owner, project.id, applicant, APPLICANT.farm, 'contributor');
+	await withUser(applicant, async (db) => {
+		const { rows: pub } = await db.query<{ run_id: string }>('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [project.id]);
+		const { rows: own } = await db.query<{ id: string }>('SELECT app_farm_nodes($1) AS id', [project.id]);
+		const { rows: dam } = await db.query<{ capacity: number }>(
+			`SELECT (n->>'damCapacityM3')::float8 AS capacity FROM app_published_run_input($1, $2) r, jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $3`,
+			[project.id, pub[0]!.run_id, own[0]!.id]
+		);
+		const ops = [{ op: 'node.set' as const, nodeId: own[0]!.id, field: 'damCapacityM3' as const, value: dam[0]!.capacity * 2 }];
+		const name = `Raise the ${APPLICANT.farm} dam`;
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+			[project.id, name, 'Demo application: double the farm dam (invented).', pub[0]!.run_id, JSON.stringify(ops), opsSha256(ops), own.map((r) => r.id)]
+		);
+		const sid = rows[0]!.id;
+		await recordAudit(db, project.id, 'scenario.created', { scenarioId: sid, application: true, baseRunId: pub[0]!.run_id, ops: ops.length });
+		await executeScenarioRun(db, project.id, sid, undefined, 'contributor');
+		await db.query(`UPDATE scenario SET status = 'submitted' WHERE id = $1`, [sid]);
+		await recordAudit(db, project.id, 'scenario.submitted', { scenarioId: sid, application: true, opsSha256: opsSha256(ops) });
+	});
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -133,7 +173,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	config({ path: ['.env.development.local', '.env.development'] });
 	seedExamples()
 		.then(() =>
-			console.log(`\nSign in as ${DEMO.email} or ${ANALYST.email}, or as a farmer, ${FARMERS.map((f) => f.email).join(' or ')} (password: ${DEMO.password})`)
+			console.log(
+				`\nSign in as ${DEMO.email} or ${ANALYST.email}, as a farmer, ${FARMERS.map((f) => f.email).join(' or ')}, or as an applicant, ${APPLICANT.email} (password: ${DEMO.password})`
+			)
 		)
 		.catch((err) => {
 			console.error(err.message);

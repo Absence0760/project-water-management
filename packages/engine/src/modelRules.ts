@@ -43,6 +43,17 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (n.kind !== 'farm')
 			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
 	}
+	// Individual boreholes (WP-3.9): on a farm or other user; emergency mode and pumping into the dam need a farm dam.
+	dupes('borehole id', (m.boreholes ?? []).map((b) => b.id));
+	for (const b of m.boreholes ?? []) {
+		const n = byId.get(b.nodeId);
+		if (!n) add(`bhNode:${b.id}`, `borehole ${b.id} references an unknown node`);
+		else if (n.kind === 'gauge') add(`bhGauge:${b.id}`, `borehole "${b.name}" is on gauge "${n.name}": a gauge can't have boreholes`);
+		else if (b.mode !== 'none' && !(n.kind === 'farm' && n.damCapacityM3 > 0)) {
+			if (b.mode === 'emergency') add(`bhEmergency:${b.id}`, `borehole "${b.name}" on "${n.name}": emergency mode needs a farm dam to trigger on`);
+			if (b.target === 'dam') add(`bhDam:${b.id}`, `borehole "${b.name}" on "${n.name}": it pumps into a dam, and there is none`);
+		}
+	}
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown node`);
 		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.

@@ -15,14 +15,15 @@ export interface ResultGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance' | 'plausibility'>;
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance' | 'plausibility' | 'forecast'>;
 
 export function resultGroups(summary: SectionInput): ResultGroup[] {
 	return [
 		{
 			// The run header says whether the run is the evidence and previews its notes (links to Record).
 			label: null,
-			sections: [{ id: 'res-summary', label: 'Summary' }]
+			// A forecast run's forecast days (WP-2.12) follow the summary, apart from it.
+			sections: [{ id: 'res-summary', label: 'Summary' }, ...(summary.forecast ? [{ id: 'res-forecast', label: 'Forecast' }] : [])]
 		},
 		{
 			label: 'River & Reserve',

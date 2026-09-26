@@ -17,6 +17,7 @@ import {
 	dailyCsvLines,
 	dayRange,
 	exportFilename,
+	forecastColumn,
 	MAX_EXPORT_BYTES,
 	seriesHeader,
 	withLegacyComment,
@@ -102,7 +103,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const daily = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
 			if (!daily) throw new ApiError(404, 'not found');
 			const scope = daily.name;
-			const columns: DailyColumn[] = daily.series.map((s) => ({ header: s.header, values: s.values }));
+			const flag = forecastColumn(run.startDate, run.summary.forecast);
+			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...daily.series.map((s) => ({ header: s.header, values: s.values }))];
 			const length = Math.max(...daily.series.map((s) => s.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
@@ -136,7 +138,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 				return r ? [{ ...r, name: r.nodeName ?? f.name }] : [];
 			});
 			if (!farms.length) throw new ApiError(404, 'not found');
-			const columns: DailyColumn[] = farms.map((f) => ({ header: nodeColumnHeader(q.key, f.name, f.unit, 'farm'), values: f.values }));
+			const flag = forecastColumn(run.startDate, run.summary.forecast);
+			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...farms.map((f) => ({ header: nodeColumnHeader(q.key, f.name, f.unit, 'farm'), values: f.values }))];
 			const length = Math.max(...farms.map((f) => f.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);

@@ -438,8 +438,14 @@ describe('a run that goes on on forecast rain', () => {
 	it('projects only to the last day of observed rain, and the CSV stops there too', async () => {
 		const p = await makeProject(owner, 'Forecast tail', false, 90); // observed rain to 2021-12-29
 		expect((await owner.call('PUT', `/projects/${p}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2021-12-30', values: new Array(10).fill(4) })).status).toBe(200);
-		const r = await run(owner, p);
-		const meta = (await owner.call('GET', `/projects/${p}/runs`)).body.runs.find((x: { id: string }) => x.id === r);
+		// An ordinary run stops at the observed rain (WP-2.12); a forecast run goes on through the forecast.
+		const ordinary = await run(owner, p);
+		const res = await owner.call('POST', `/projects/${p}/runs`, { label: 'forecast', forecast: true });
+		expect(res.status).toBe(201);
+		const r = res.body.run.id as string;
+		const metas = (await owner.call('GET', `/projects/${p}/runs`)).body.runs as { id: string; endDate: string }[];
+		expect(metas.find((x) => x.id === ordinary)!.endDate).toBe('2021-12-29');
+		const meta = metas.find((x) => x.id === r)!;
 		expect(meta.endDate).toBe('2022-01-08');
 		expect((await publish(owner, r, {}, p)).status).toBe(201);
 		const farmId = (await owner.call('GET', `/projects/${p}/farm`)).body.farms[0].nodeId as string;

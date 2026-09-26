@@ -101,6 +101,10 @@ const NominateBody = z
 	})
 	.strict();
 
+/** Why a forecast run (WP-2.12, model_run.trigger 'forecast') can't be nominated. */
+export const FORECAST_NOT_EVIDENCE =
+	'a forecast run cannot be nominated as evidence: evidence is judged on the record, and its last days are modelled on forecast rain; nominate an ordinary run of the model';
+
 export const evidenceRoutes = new Hono<AuthEnv>()
 	.get('/:id/evidence', async (c) => {
 		const id = c.req.param('id');
@@ -115,12 +119,14 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// Friendly answers first; the stamp trigger enforces each of these again.
-			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null }>(
-				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings
+			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null; trigger: string }>(
+				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings, "trigger"
 				   FROM model_run WHERE project_id = $1 AND id = $2`,
 				[id, body.runId]
 			);
 			if (!run[0]) throw new ApiError(404, 'run not found');
+			// Evidence is judged on history; a forecast run's tail is modelled on forecast rain (WP-2.12).
+			if (run[0].trigger === 'forecast') throw new ApiError(409, FORECAST_NOT_EVIDENCE);
 			if (run[0].runoffModel === 'legacy')
 				throw new ApiError(409, 'a run of the legacy runoff model is workbook comparison only and cannot be nominated as evidence');
 			// Runs before engine 0.27.1 ran with flow shares over 100 % (water from nowhere); newer ones are refused.

@@ -251,3 +251,79 @@ describe('editing and deleting', () => {
 		expect((await viewer.call('GET', notesUrl(`?runId=${run}`))).body.notes).toEqual([]);
 	});
 });
+
+// Decisions in docs/data-model.md § Notes: the export carries the notes as a
+// record (never a deleted one), the importer ignores them, and a copy starts
+// with none.
+describe('notes in the project export and copy', () => {
+	interface ExportedNote {
+		body: string;
+		author: string | null;
+		target: string;
+		nodeId: string | null;
+		nodeName: string | null;
+		runId: string | null;
+		runLabel: string | null;
+		settingKey: string | null;
+		visibility: string;
+	}
+	const exportAs = async (u: User) => u.call('GET', `/projects/${projectId}/export.json`);
+	let deletedBodies: string[];
+
+	beforeAll(async () => {
+		expect((await farmer.call('POST', notesUrl(), { body: 'Borehole pump replaced', nodeId: farmA.id })).status).toBe(201);
+		// Set up by the tests above: soft-deleted notes whose bodies RLS still shows to editors and their authors.
+		deletedBodies = (await asOwner('SELECT body FROM note WHERE project_id = $1 AND deleted_at IS NOT NULL', [projectId])).map((r) => r.body as string);
+		expect(deletedBodies.length).toBeGreaterThan(0);
+	});
+
+	it('exports every undeleted note the viewer can read, with its target, author and visibility', async () => {
+		const res = await exportAs(viewer);
+		expect(res.status).toBe(200);
+		const notes = res.body.notes as ExportedNote[];
+		const listed = (await viewer.call('GET', notesUrl('?limit=500'))).body.notes as { body: string }[];
+		expect(notes.map((n) => n.body).sort()).toEqual(listed.map((n) => n.body).sort());
+		expect(notes.find((n) => n.body === 'Dam raised in 2019 per owner')).toMatchObject({ author: 'Neditor', target: 'node', nodeId: farmA.id, nodeName: 'Farm A', visibility: 'team' });
+		expect(notes.find((n) => n.body === 'Borehole pump replaced')).toMatchObject({ author: 'Nfarmer', target: 'node', nodeId: farmA.id, visibility: 'farm' });
+		expect(notes.find((n) => n.body === 'Calibrated against the weir')).toMatchObject({ target: 'run', runId, runLabel: 'notes' });
+		expect(notes.find((n) => n.body === 'a from the 2015 study')).toMatchObject({ target: 'setting', settingKey: 'calibration.a', nodeId: null, runId: null });
+		// A node note points at a node in the document's own model.
+		const ids = new Set((res.body.model.nodes as { id: string }[]).map((n) => n.id));
+		for (const n of notes.filter((x) => x.nodeId)) expect(ids.has(n.nodeId!)).toBe(true);
+	});
+
+	it('never exports a deleted note, not even to an editor or its author, whom RLS shows the body', async () => {
+		// Positive control: RLS does show the editor the deleted bodies.
+		expect((await rowsAs(editor, 'SELECT body FROM note WHERE project_id = $1 AND deleted_at IS NOT NULL', [projectId])).length).toBe(deletedBodies.length);
+		for (const u of [editor, viewer, owner]) {
+			const text = JSON.stringify((await exportAs(u)).body.notes);
+			for (const body of deletedBodies) expect(text).not.toContain(body);
+		}
+	});
+
+	it('gives a farmer no export, so no team note leaves through it', async () => {
+		expect((await exportAs(farmer)).status).toBe(403);
+	});
+
+	it('imports the rest of the document but none of its notes', async () => {
+		const doc = (await exportAs(viewer)).body;
+		expect(doc.notes.length).toBeGreaterThan(0);
+		const res = await viewer.call('POST', '/projects/import', { ...doc, name: 'Notes imported' });
+		expect(res.status).toBe(201);
+		const imported = res.body.project.id as string;
+		expect((await viewer.call('GET', `/projects/${imported}/model`)).body.nodes).toHaveLength(3);
+		expect((await viewer.call('GET', `/projects/${imported}/notes`)).body.notes).toEqual([]);
+		expect(await asOwner('SELECT 1 FROM note WHERE project_id = $1', [imported])).toEqual([]);
+	});
+
+	it('copies a project without its notes, and the original keeps them', async () => {
+		const before = (await viewer.call('GET', notesUrl('?limit=500'))).body.notes.length;
+		const res = await editor.call('POST', `/projects/${projectId}/copy`, { name: 'Notes copy' });
+		expect(res.status).toBe(201);
+		const copy = res.body.project.id as string;
+		expect((await editor.call('GET', `/projects/${copy}/notes`)).body.notes).toEqual([]);
+		expect((await editor.call('GET', `/projects/${copy}/notes/counts`)).body).toEqual({ project: 0, nodes: {}, runs: {}, settings: {} });
+		expect(await asOwner('SELECT 1 FROM note WHERE project_id = $1', [copy])).toEqual([]);
+		expect((await viewer.call('GET', notesUrl('?limit=500'))).body.notes).toHaveLength(before);
+	});
+});

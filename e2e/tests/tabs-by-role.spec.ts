@@ -11,7 +11,9 @@ const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sect
 const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catchment' });
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
-const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations', 'History'];
+// Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
+const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations', 'Applications', 'History'];
+const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios', 'Allocations'];
 
 /** The strip's tab names, in order. */
@@ -58,7 +60,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 	await expectNoViolations(v);
 
 	await toggle(v).check();
-	await expect.poll(() => tabNames(v)).toEqual(EVERY_TAB);
+	await expect.poll(() => tabNames(v)).toEqual(VIEWER_ALL);
 	await expect(steps.getByRole('link')).toHaveCount(5);
 
 	// A model tab opens read-only from the strip.

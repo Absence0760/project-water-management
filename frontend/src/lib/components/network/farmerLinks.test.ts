@@ -45,4 +45,10 @@ describe('removeMessage', () => {
 			'Remove "Farm A"? Its 1 crop area(s) and 0 transfer(s) are removed too; nodes draining into it are re-routed downstream.'
 		);
 	});
+
+	it('names the boreholes that go with the node (WP-3.9), even on a node with nothing else', () => {
+		expect(removeMessage({ ...base, isFarm: false, farmers: null, boreholes: 2 })).toBe(
+			'Remove "Farm A"? Its 0 crop area(s), 0 transfer(s) and 2 borehole(s) are removed too; nodes draining into it are re-routed downstream.'
+		);
+	});
 });
