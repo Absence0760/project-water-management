@@ -514,6 +514,15 @@ naming `startDate`, not a server error).
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 
+**Units.** A series is stored in its kind's canonical unit, the one the model
+reads: m³/s for `flow_*`, mm for `rain_*`. `unit` on PUT, merge, the data
+feeds and a project import may be any the engine's table knows (`units.ts`:
+m³/s, l/s, m³/day, m³/h, ML/day; mm, cm, in; common spellings such as `m3/s`,
+`cumecs`, `L/s`), and the values are scaled on the way in; the stored and
+returned `unit` is the canonical one. Any other unit is a `400` naming the
+accepted ones (a flow in l/s used to be stored as given and run 1 000 × too
+large).
+
 `merge` is for daily or batch appends (loggers, CHIRPS, forecasts): the days
 sent are merged into the existing series by date. Incoming values win on
 overlapping days, the series extends in either direction, and any gap days

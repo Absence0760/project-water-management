@@ -1,4 +1,4 @@
-import { fromEpochDay, SERIES_KINDS, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, scaleValues, SERIES_KINDS, seriesUnit, toEpochDay } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -16,13 +16,31 @@ export const SeriesStartDate = z
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a calendar date');
 
 /** A whole series, or the days to merge into one (PUT and POST …/series/merge, and the data feeds). */
-export const SeriesBody = z.object({
-	kind: z.enum(SERIES_KINDS),
-	name: z.string().trim().max(100).default(''),
-	unit: z.string().trim().min(1).max(20),
-	startDate: SeriesStartDate,
-	values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES)
-});
+export const SeriesBody = z
+	.object({
+		kind: z.enum(SERIES_KINDS),
+		name: z.string().trim().max(100).default(''),
+		unit: z.string().trim().min(1).max(20),
+		startDate: SeriesStartDate,
+		values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES)
+	})
+	.transform(toCanonicalUnit);
+
+/**
+ * The model reads flow in m³/s and rain in mm whatever a series' label says,
+ * so a series is stored in its kind's canonical unit: the values given in
+ * l/s, m³/day, ML/day, cm, in… are scaled, and a unit the engine's table
+ * doesn't know is refused (engine units.ts). Shared by every route that
+ * writes a series: upload, merge, the data feeds and the project import.
+ */
+export function toCanonicalUnit<T extends { kind: string; unit: string; values: (number | null)[] }>(b: T, ctx: z.RefinementCtx): T {
+	const u = seriesUnit(b.kind, b.unit);
+	if (!u.ok) {
+		ctx.addIssue({ code: 'custom', path: ['unit'], message: u.error });
+		return z.NEVER;
+	}
+	return { ...b, unit: u.unit, values: scaleValues(b.values, u.factor) };
+}
 export type SeriesBody = z.output<typeof SeriesBody>;
 
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell

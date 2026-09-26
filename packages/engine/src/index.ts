@@ -34,3 +34,4 @@ export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, t
 export { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, demandPctNote, EQUITABLE_SHARE_FOOTNOTE, M3_PER_DAY_PER_LS, type CurtailmentInput, type ReportWindow } from './network/curtailment';
 export * from './views/farmView';
 export * from './views/farmProjection';
+export * from './units';
