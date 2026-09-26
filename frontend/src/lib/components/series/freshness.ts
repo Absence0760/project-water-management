@@ -14,12 +14,22 @@ export const seriesEnd = (s: Pick<SeriesMeta, 'startDate' | 'length'>) =>
 /** Kinds that drive a run (rainfall); observed flow only scores it. */
 export const isDriver = (kind: string) => kind.startsWith('rain_');
 
+/**
+ * Recorded rain: what a run is driven by, so what freshness measures. A
+ * forecast runs into the future and observed flow only scores a run: either
+ * would read "up to date" while the rain lags (the backend's `dataUntil`
+ * uses the same two kinds).
+ */
+export const isRecordedRain = (kind: string) => kind === 'rain_catchment_mm' || kind === 'rain_chirps_mm';
+
 export interface Freshness {
-	/** Latest end date across the series. */
-	latest: string;
-	/** Days from `latest` to today. */
-	age: number;
+	/** Latest end of the recorded rain; null when there is none. */
+	latest: string | null;
+	/** Days from `latest` to today; null without recorded rain. */
+	age: number | null;
+	/** Recorded rain older than the limit, or none at all. */
 	stale: boolean;
+	/** Every series, newest end first. */
 	perSeries: { id: string; kind: string; name: string; end: string; age: number }[];
 }
 
@@ -31,7 +41,8 @@ export function freshness(list: readonly SeriesMeta[], today: string, staleDays 
 			return { id: s.id, kind: s.kind, name: s.name, end, age: toEpochDay(today) - toEpochDay(end) };
 		})
 		.sort((a, b) => b.end.localeCompare(a.end));
-	const top = perSeries[0]!;
+	const top = perSeries.find((p) => isRecordedRain(p.kind));
+	if (!top) return { latest: null, age: null, stale: true, perSeries };
 	return { latest: top.end, age: top.age, stale: top.age > staleDays, perSeries };
 }
 

@@ -108,7 +108,7 @@ describe('attention', () => {
 		expect(items).toEqual([
 			{
 				id: 'stale-data',
-				text: 'The newest input data ends 28 Jan 2022 (4 years ago), more than 7 days ago.',
+				text: 'The newest recorded rain ends 28 Jan 2022 (4 years ago), more than 7 days ago.',
 				action: 'Add data',
 				href: '?tab=series'
 			}

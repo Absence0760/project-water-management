@@ -87,7 +87,10 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (fresh?.stale)
 			out.push({
 				id: 'stale-data',
-				text: `The newest input data ends ${fmtDay(fresh.latest)} (${describeAge(fresh.age)}), more than ${plural(STALE_DAYS, 'day')} ago.`,
+				text:
+					fresh.latest !== null && fresh.age !== null
+						? `The newest recorded rain ends ${fmtDay(fresh.latest)} (${describeAge(fresh.age)}), more than ${plural(STALE_DAYS, 'day')} ago.`
+						: 'There is no recorded rain (catchment or CHIRPS) yet.',
 				action: 'Add data',
 				href: '?tab=series'
 			});

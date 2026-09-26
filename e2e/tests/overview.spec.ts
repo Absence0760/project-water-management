@@ -70,7 +70,7 @@ test('needs attention: stale data links to the Data tab; a project with no runs 
 	await page.goto(`/projects/${project.id}`);
 	// The seeded rain ends in January 2022, long before today.
 	const panel = page.getByRole('region', { name: 'Needs attention', exact: true });
-	await expect(panel).toContainText('The newest input data ends 28 Jan 2022');
+	await expect(panel).toContainText('The newest recorded rain ends 28 Jan 2022');
 	await expect(panel.getByRole('link', { name: 'Add data' })).toHaveAttribute('href', '?tab=series');
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toHaveCount(0);
 

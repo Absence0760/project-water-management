@@ -50,8 +50,11 @@ const SELECT_PROJECT = `
 		t.name AS team_name, app_project_role(p.id) AS role,
 		-- Data freshness and last run for the project list, in the same query
 		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
+		-- Freshness is recorded rain (catchment or CHIRPS): what a run is driven
+		-- by. A forecast runs into the future and observed flow only scores a
+		-- run, so either one would read "up to date" while the rain lags.
 		(SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
-			WHERE ts.project_id = p.id AND cardinality(ts."values") > 0) AS data_until,
+			WHERE ts.project_id = p.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0) AS data_until,
 		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at
 	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 

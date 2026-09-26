@@ -291,7 +291,11 @@
 						<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
 							<summary>
 								<span class="dot" aria-hidden="true"></span>
-								Data up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+								{#if fresh.latest !== null && fresh.age !== null}
+									Rain up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+								{:else}
+									No recorded rain yet
+								{/if}
 							</summary>
 							<div class="fresh-pop">
 								<table class="data compact">
@@ -302,7 +306,10 @@
 										{/each}
 									</tbody>
 								</table>
-								<p class="muted">Flagged when the newest data is more than {STALE_DAYS} days old.</p>
+								<p class="muted">
+									Flagged when the newest recorded rain (catchment or CHIRPS) is more than {STALE_DAYS} days old. A forecast
+									and flow series don't count: runs are driven by the recorded rain.
+								</p>
 							</div>
 						</details>
 					{:else if series}

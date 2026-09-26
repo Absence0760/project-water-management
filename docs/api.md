@@ -112,8 +112,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
-- `dataUntil` — the last day covered by any of the project's time series
-  (`YYYY-MM-DD`: the latest `startDate + length − 1`), or `null` with no data.
+- `dataUntil` — the last day of the project's **recorded rain**
+  (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
+  `startDate + length − 1`), or `null` with none. A forecast or a flow series
+  doesn't count: a forecast runs into the future and flow only scores a run.
   `lastRunAt` — ISO timestamp of the newest run, or `null`. Both come from the
   same query as the list (no per-project calls), for the list's freshness badge.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
