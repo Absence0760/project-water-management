@@ -198,7 +198,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
   `naturalSource` is `table`, else `null`), `scale` (above 0, at most 1 000)
-  `}`. The engine's own checks run too (`ewrRuleTableIssues`), and two tables
+  `}`, and from engine 0.33.0 (model.md §2.9d) two optional fields:
+  `lowFlow` (the low-flow grid of a `total` table, same shape as `ewr`, or
+  `null`; refused on a `lowFlow` table) and `highFlows` (at most 12 `{ label`
+  1–100 chars, `months` (calendar 1–12, each once), `peakM3s` (above 0),
+  `durationDays` (whole, 1–90), `perYear` (whole, 1–12) `}`, strict; events ×
+  days must fit in a year). A table stored without them stays valid. The
+  engine's own checks run too (`ewrRuleTableIssues`), and two tables
   for one site are a `400`. The list is replaced whole by a `PATCH`.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
@@ -845,7 +851,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `{ month, years, met, rate, deficitM3, meanRequired, meanActual,
   naturalCurve, fdc: [{ point, required, impacted, met }] }`); `overall {
   months, met, rate, deficitM3, longestNotMetRun, meanShortfallPct }`; `fdc {
-  cells, met, rate }` and `minYears`. Each site also has the daily series
+  cells, met, rate }` and `minYears`. From engine 0.33.0, only when the table
+  has them (model.md §2.9d): with a low-flow grid, each month adds
+  `requiredLowFlow`, `lowFlowMet`, `requiredHighFlow`, each month of the year
+  `lowFlowRate`, and the site `lowFlow { months, met, rate, deficitM3,
+  longestNotMetRun }`; with high-flow components, `highFlows` (each the
+  component plus `peakAppliedM3s`, `years: [{ waterYear, natural, actual,
+  required, met }]` over the complete water years, and `overall { years,
+  required, met, rate }`). Each site also has the daily series
   `ewr_rule` (m³/day; NaN outside complete months). Rules:
   [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6).
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:

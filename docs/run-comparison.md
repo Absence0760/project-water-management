@@ -151,7 +151,13 @@ The page has these sections, top to bottom:
    table added or removed (*"EWR rule table at the outlet added ("Reserve
    determination, table 4", 10 % points, natural percentile from the run)"*),
    each field changed (source, what it covers, unit, natural source, scale,
-   % points) and the months whose EWR values or natural flows changed.
+   % points) and the months whose EWR values or natural flows changed. From
+   engine 0.33.0 (model.md §2.9d), when either run has them, *Low flows:
+   months met* and *High flows: years met* (years met ÷ years the natural
+   flow had the event, over every component) join the table, a changed
+   low-flow grid or component makes the tables "different", and *What
+   changed* says "low-flow values added / removed / changed in Feb" and
+   "high-flow components Freshet → Freshet (values changed)".
 4. **EWR test against observed flow** (issue #4). The two runoff models can
    disagree strongly on how many days the EWR is not met; the observed record
    settles it, because a gauge or logger measures the same outflow the EWR

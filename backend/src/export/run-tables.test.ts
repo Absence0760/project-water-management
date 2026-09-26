@@ -766,6 +766,31 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.length).toBe(detail + 1 + 24);
 	});
 
+	it('adds the low flows and the high-flow components when the table has them (engine ≥ 0.33.0)', () => {
+		const withBoth = {
+			...table,
+			component: 'total' as const,
+			lowFlow: Array.from({ length: 12 }, () => [1, 0.6, 0.2]),
+			highFlows: [{ label: 'Synthetic freshet', months: [10], peakM3s: 0.5, durationDays: 3, perYear: 1 }]
+		};
+		const r = assessSite(start, days, { table: withBoth, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
+		const lines = [...ewrAssuranceLines([r])];
+		// The first October (0.6 Mm³) is below the 0.75 total but above the 0.4 low flow.
+		expect(lines).toContain('Low flows: months met,24,of,24,Met (%),100');
+		expect(lines).toContain('Month,Complete years,Months met,Met (%),Deficit (m³),Mean required (Mm³),Mean simulated (Mm³),FDC points met,Low flows met (%)');
+		const detail = lines.findIndex((l) => l.startsWith('Year,Month,Water year'));
+		expect(lines[detail]!.endsWith('Low flow required (Mm³),Low flows met,High-flow part (Mm³)')).toBe(true);
+		const oct = lines[detail + 1]!.split(',');
+		expect(Number(oct[10])).toBeCloseTo(0.4, 9);
+		expect(oct[11]).toBe('yes');
+		expect(Number(oct[12])).toBeCloseTo(0.35, 9);
+		// Natural ~0.56 m³/s all year stays above the 0.5 m³/s peak: one event a year from 1 October; the first
+		// October's flow (40 %) is below it, so water year 2000 is not met.
+		expect(lines).toContain('High flow,Synthetic freshet,starts in,Oct,peak (m³/s),0.5,days at peak,3,per water year,1');
+		expect(lines).toContain('Water years met,1,of,2,that had it naturally,Met (%),50,Water years assessed,2');
+		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
+	});
+
 	it('says when nothing was assessed, and is part of the summary sheet', () => {
 		expect([...ewrAssuranceLines(undefined)]).toEqual([
 			'Reserve compliance by month (EWR rule tables)',

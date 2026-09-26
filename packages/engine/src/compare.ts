@@ -207,6 +207,10 @@ export interface EwrAssuranceDelta {
 	fdcRate: MetricDelta;
 	/** Months met ÷ complete years per calendar month, water-year order (Oct … Sep). */
 	byMonth: MetricDelta[];
+	/** Months the low flows were met (engine ≥ 0.33.0; null values without a low-flow grid). */
+	lowFlowRate: MetricDelta;
+	/** Water years the high-flow components were met ÷ years they were required, summed over the components (engine ≥ 0.33.0). */
+	highFlowRate: MetricDelta;
 }
 
 export type InputChangeArea = 'settings' | 'network' | 'crops' | 'transfers' | 'series';
@@ -430,6 +434,13 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	};
 }
 
+/** Years a site's high-flow components were met ÷ years they were required, over every component; null without one. */
+function highFlowRate(s: EwrAssuranceSite | null): number | null {
+	const h = s?.highFlows ?? [];
+	const req = h.reduce((n, c) => n + c.overall.required, 0);
+	return req ? h.reduce((n, c) => n + c.overall.met, 0) / req : null;
+}
+
 /** Pair each EWR site's Reserve compliance across the runs: the outlet with the outlet, gauges by id then name. */
 function compareAssurance(ra: EwrAssuranceSite[] | undefined, rb: EwrAssuranceSite[] | undefined): EwrAssuranceDelta[] | null {
 	const a = ra ?? [];
@@ -437,7 +448,18 @@ function compareAssurance(ra: EwrAssuranceSite[] | undefined, rb: EwrAssuranceSi
 	if (!a.length && !b.length) return null;
 	const key = (s: EwrAssuranceSite) => (s.isOutlet ? '(outlet)' : (s.nodeId ?? ''));
 	const m = matchByIdThenName(a, b, key, (s) => (s.isOutlet ? '(outlet)' : s.name));
-	const tableOf = (s: EwrAssuranceSite) => ({ source: s.source, component: s.component, unit: s.unit, naturalSource: s.naturalSource, scale: s.scale, points: s.points, ewr: s.byMonth.map((x) => x.fdc.map((f) => f.required)) });
+	const tableOf = (s: EwrAssuranceSite) => ({
+		source: s.source,
+		component: s.component,
+		unit: s.unit,
+		naturalSource: s.naturalSource,
+		scale: s.scale,
+		points: s.points,
+		ewr: s.byMonth.map((x) => x.fdc.map((f) => f.required)),
+		// Engine ≥ 0.33.0: whether low flows are split out, and the high-flow components (not their yearly results).
+		lowFlow: !!s.lowFlow,
+		highFlows: (s.highFlows ?? []).map((h) => [h.label, h.months, h.peakM3s, h.durationDays, h.perYear])
+	});
 	const row = (x: EwrAssuranceSite | null, y: EwrAssuranceSite | null): EwrAssuranceDelta => ({
 		name: (y ?? x)!.name,
 		isOutlet: (y ?? x)!.isOutlet,
@@ -449,7 +471,9 @@ function compareAssurance(ra: EwrAssuranceSite[] | undefined, rb: EwrAssuranceSi
 		deficitM3: metricDelta(x?.overall.deficitM3, y?.overall.deficitM3),
 		longestNotMetRun: metricDelta(x?.overall.longestNotMetRun, y?.overall.longestNotMetRun),
 		fdcRate: metricDelta(x?.fdc.rate, y?.fdc.rate),
-		byMonth: Array.from({ length: 12 }, (_, i) => metricDelta(x?.byMonth[i]?.rate, y?.byMonth[i]?.rate))
+		byMonth: Array.from({ length: 12 }, (_, i) => metricDelta(x?.byMonth[i]?.rate, y?.byMonth[i]?.rate)),
+		lowFlowRate: metricDelta(x?.lowFlow?.rate, y?.lowFlow?.rate),
+		highFlowRate: metricDelta(highFlowRate(x), highFlowRate(y))
 	});
 	const rows = [...m.pairs.map(([x, y]) => row(x, y)), ...m.onlyA.map((x) => row(x, null)), ...m.onlyB.map((y) => row(null, y))];
 	return rows.sort((p, q) => Number(q.isOutlet) - Number(p.isOutlet));
@@ -866,6 +890,21 @@ function diffEwrRules(ra: unknown, rb: unknown, siteName: (id: string | null) =>
 		const nat = months(x.natural, y.natural);
 		if (nat.length && (x.naturalSource === 'table' || y.naturalSource === 'table')) {
 			out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} natural flows`, text: `${subject(id)}: natural flows changed in ${nat.join(', ')}` });
+		}
+		// Engine ≥ 0.33.0: the low-flow grid and the high-flow components; absent, null and [] are all "none".
+		const xl = x.lowFlow ?? null;
+		const yl = y.lowFlow ?? null;
+		if (!xl !== !yl) out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} low flows`, text: `${subject(id)}: low-flow values ${yl ? 'added' : 'removed'}` });
+		else if (xl && yl) {
+			const low = months(xl, yl);
+			if (low.length) out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} low flows`, text: `${subject(id)}: low-flow values changed in ${low.join(', ')}` });
+		}
+		const hf = (t: EwrRuleTable) => (Array.isArray(t.highFlows) ? t.highFlows : []);
+		const hx = hf(x);
+		const hy = hf(y);
+		if (!same(hx, hy)) {
+			const names = (l: readonly { label?: unknown }[]) => l.map((e) => String(e?.label ?? '')).join(', ') || 'none';
+			out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} high flows`, text: `${subject(id)}: high-flow components ${names(hx)} → ${names(hy)}${names(hx) === names(hy) ? ' (values changed)' : ''}` });
 		}
 	}
 	return out;

@@ -1037,6 +1037,19 @@ which checks every catchment tab).
   natural flow) show under the table without blocking Save; a missing source,
   a bad point list or a blank cell, and two tables for one site, block Save
   and the save bar links here. **Remove the rule table at …** deletes one.
+  From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
+  **Also enter the low flows (maintenance and drought)**, which adds a blank
+  **Low flows (maintenance to drought)** grid (blank cells block Save; switching
+  the table to *Low flows only* drops it) and a **Fill the low flows** button;
+  **Load a CSV file** reads a file into the paste box, and two links download
+  synthetic example layouts (a total-flow and a low-flow table, DRM style).
+  Under each table, **High flows: freshets and floods**
+  (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
+  months it may start in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, days
+  at peak, events per year) with **Add a high flow** and Remove, a **Paste high
+  flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
+  example CSV. The two status lines are named *Paste result* and *High-flow
+  paste result*.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
@@ -1525,7 +1538,18 @@ run's report to chosen members every week or month.
   FDC points met), and, collapsed, **Month by month**: every complete month's
   natural flow, its condition (% exceedance, or wetter / drier than the table),
   the requirement, the simulated flow, the share of the requirement and met or
-  not met (rows not met shaded). The daily requirement is the series
+  not met (rows not met shaded). From engine 0.33.0 ([model.md §2.9d](./model.md)),
+  a **heat map** of the chosen site: water-year rows × Oct … Sep, each month
+  blank when met, light blue with ◐ when only the high flows were short (the
+  low flows met; only with a low-flow grid), dark blue with ● when the low
+  flows (or, without a low-flow grid, the month) were short, the number the
+  simulated flow as % of the requirement, each cell's full reading in its
+  title and for screen readers, and a key; with a low-flow grid, a **Low flows
+  met** figure, a column in the by-month table and two in Month by month; and
+  with high-flow components, a **High flows** table (each component, its
+  months, peak, days, per year and "Met in 3 of the 4 water years whose
+  natural flow had it") and, collapsed, **High flows year by year** (natural,
+  simulated and required events). The daily requirement is the series
   `ewr_rule` in the explorer and the daily CSV. Then the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the
   site picker), the **EWR test

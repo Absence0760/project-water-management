@@ -792,6 +792,25 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues({ siteNodeId: null }).length).toBeGreaterThan(0);
 	});
 
+	it('accepts a low-flow grid and high-flow components, and runs the engine checks on them (engine ≥ 0.33.0)', () => {
+		const lowFlow = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
+		const fresh = { label: 'Class II freshet', months: [11, 12], peakM3s: 8, durationDays: 3, perYear: 2 };
+		expect(issues([table({ lowFlow, highFlows: [fresh] })])).toEqual([]);
+		// Optional: a table saved before 0.33.0 has neither, and null / [] mean none.
+		expect(issues([table({ lowFlow: null, highFlows: [] })])).toEqual([]);
+		expect(issues([table({ component: 'lowFlow', lowFlow })])).toEqual([
+			'ewrRules.0.lowFlow: A low-flow table already is the low flows: clear the separate low-flow values, or say the table covers the total flow.'
+		]);
+		expect(issues([table({ lowFlow: lowFlow.map((r) => r.slice(1)) })])).toEqual(['ewrRules.0.lowFlow: Each low-flow row needs one value per % point (Oct has 2 of 3).']);
+		expect(issues([table({ highFlows: [{ ...fresh, durationDays: 90, perYear: 5 }] })])).toEqual(["ewrRules.0.highFlows: High flow 1: 5 events of 90 days don't fit in a year."]);
+		expect(issues([table({ highFlows: [{ ...fresh, months: [11, 11] }] })])).toEqual(['ewrRules.0.highFlows: High flow 1: pick the months it may start in (each once).']);
+		// The shape: whole days, months 1–12, a peak above 0, no unknown keys, at most 12.
+		for (const bad of [{ durationDays: 1.5 }, { months: [0] }, { peakM3s: 0 }, { perYear: 13 }, { label: '' }, { extra: 1 }]) {
+			expect(issues([table({ highFlows: [{ ...fresh, ...bad }] })]).length, JSON.stringify(bad)).toBeGreaterThan(0);
+		}
+		expect(issues([table({ highFlows: Array.from({ length: 13 }, () => fresh) })]).length).toBeGreaterThan(0);
+	});
+
 	it('defaults to none for settings stored before it, and a patch replaces the whole list', () => {
 		expect(mergeSettings({}).ewrRules).toEqual([]);
 		const stored = { ewrRules: [table(), table({ siteNodeId: 'g1' })] };
