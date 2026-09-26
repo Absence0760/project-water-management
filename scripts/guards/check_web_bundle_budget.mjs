@@ -646,6 +646,11 @@
 // 2026-09-26  total 953 → 957 KB (measured 952). Merging #17 step 4's farm
 //             drawer (948) with #45's import formats (+3, lazy upload chunk)
 //             and main since. Headroom ~5 KB.
+// 2026-09-26  total 957 → 963 KB. main measured 955 (merges since the 957
+//             entry); the Summary's Dam levels panel (issue #17 follow-on,
+//             its own lazy chunk: the panel and the damLevels reduction)
+//             adds 3: 958. Headroom ~5 KB. The way down is still
+//             English-as-key i18n (~5–7 KB, docs/followups.md).
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -656,7 +661,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 957,
+	totalCodeKb: 963,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
