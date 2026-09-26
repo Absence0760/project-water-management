@@ -39,7 +39,7 @@
 // or accepted it.
 // A person's own merge from the UI is never held, and a data feed's values
 // are checked by its parser instead (feeds/ingest.ts).
-import { OUTLIER_FACTOR, OUTLIER_MIN_POSITIVE, type SeriesKind } from '@water-management/engine';
+import { OUTLIER_MIN_POSITIVE, outlierFactorOf, type SeriesKind } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 
@@ -74,7 +74,7 @@ function engineLimit(kind: SeriesKind, values: number[]): number | null {
 	const lo = Math.floor(pos);
 	const hi = Math.ceil(pos);
 	const p99 = positive[lo]! + (positive[hi]! - positive[lo]!) * (pos - lo);
-	return (kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow) * p99;
+	return outlierFactorOf(kind) * p99;
 }
 
 /**

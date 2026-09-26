@@ -9,6 +9,7 @@ import type { DoubleMass } from './doublemass';
 import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
+import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
@@ -600,6 +601,13 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * `rain_reanalysis_mm` is a gauge-free reanalysis (ERA5): a reference a
  * rain-source 'fit' can be measured against, and a named fallback for the
  * alternative series' gaps. Neither is ever read outside a period.
+ *
+ * `evap_apan_mm` (engine ≥ 0.38.0, issue #45) is a daily Class-A pan
+ * evaporation record (mm/day), e.g. from a nearby weather station. On the
+ * days it has a value it replaces `settings.apanMm[month] ÷ days in the
+ * month` wherever A-pan is read: GR4J's PE under `pe.kind: 'pan'`, crop
+ * demand and dam evaporation; every other day falls back to the monthly
+ * mean (./evaporation/apanDaily.ts, docs/model.md §2.3a).
  */
 export const SERIES_KINDS = [
 	'rain_catchment_mm',
@@ -609,7 +617,8 @@ export const SERIES_KINDS = [
 	'rain_forecast_mm',
 	'flow_observed_m3s',
 	'flow_logger_m3s',
-	'flow_reference_m3s'
+	'flow_reference_m3s',
+	'evap_apan_mm'
 ] as const;
 export type SeriesKind = (typeof SERIES_KINDS)[number];
 
@@ -1598,6 +1607,13 @@ export interface RunSummary {
 	zeroRainInfill?: ZeroRainInfill | null;
 	/** What settings.rainSource did (engine ≥ 0.30.0, ./rainSourcePeriods.ts); null without periods, absent before 0.30.0. */
 	rainSource?: RainSourceInfo | null;
+	/**
+	 * How the daily A-pan series was used (engine ≥ 0.38.0, issue #45,
+	 * ./evaporation/apanDaily.ts): the run days it covered and the days that
+	 * fell back to the monthly means. Absent when the project has no daily
+	 * A-pan series, and on older runs.
+	 */
+	apanDaily?: ApanDailyInfo;
 	/**
 	 * Untagged multi-day accumulations in the catchment rain (engine ≥ 0.20.0,
 	 * ./accumulation.ts, audit B4): the windows detected or listed, what the

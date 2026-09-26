@@ -133,9 +133,10 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    demand by roughly a quarter. The Crops tab says so and points out any factor
    above 1.0 (a hint, not an error).
 
-   Demand always reads `apanMm`. GR4J's own PE input (`settings.pe`, §2.4a,
-   engine ≥ 0.31.0) never reaches it, so a monthly PE for GR4J leaves demand
-   unchanged.
+   Demand always reads A-pan: `apanMm`, or on the days it covers the daily
+   A-pan series (§2.3a, engine ≥ 0.38.0). GR4J's own PE input (`settings.pe`,
+   §2.4a, engine ≥ 0.31.0) never reaches it, so a monthly PE for GR4J leaves
+   demand unchanged.
 
 4. **Soil-water carry-over (engine ≥ 0.14.0, [audit N3](./engine-audit.md)).**
    The workbook's rule above lets rain offset only the day it falls on: a 60 mm
@@ -182,6 +183,76 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    supply, deficit, the fraction supplied and the curtailment report are all
    measured against it, so "100 % supplied" means the crop got its whole
    requirement (crop use = e × G = F). The workbook has no such step (e = 1).
+
+### 2.3a Daily A-pan evaporation (engine ≥ 0.38.0, issue #45)
+
+`settings.apanMm` holds 12 monthly means (WR90 / WR2012). A hydrologist often
+has a daily Class-A pan record from a nearby weather station as well. It is
+uploaded like rain (Data tab → Add data, kind **Evaporation — A-pan, daily**)
+as the series `evap_apan_mm`, in mm/day (mm, cm or inches accepted, stored in
+mm), and is used by `packages/engine/src/evaporation/apanDaily.ts`.
+
+**Precedence, day by day.** On a day the series has a value ≥ 0, that value
+is the day's A-pan. On any other day (no value, a negative value, or a day
+outside the record) the day's A-pan is the month's mean spread over the
+month, exactly as a run without the series. Wherever the model reads A-pan:
+
+| Consumer | A day the series covers | Any other day (unchanged) |
+| --- | --- | --- |
+| Crop demand (§2.3), gross farm demand, m³/day | Σ area × crop factor[month] × `apan[t]` ÷ 1000 | `grossFarmDemandM3PerDay`: Σ area × `apanMm[month]` × crop factor ÷ 1000 ÷ days in month (28.25-day February) |
+| Dam evaporation depth (§2.7a), mm/day | lake factor[month] × `apan[t]` | lake factor[month] × `apanMm[month]` ÷ days in month (28.25-day February) |
+| GR4J PE under `pe.kind: 'pan'` (§2.4a), mm/day | pan coefficient[month] × `apan[t]` | pan coefficient[month] × `apanMm[month]` ÷ calendar days in month |
+
+Under `pe.kind: 'monthly'` GR4J runs on the monthly PE row and reads neither
+the A-pan means nor the daily series; demand and dams still read both. The
+legacy runoff model never reads evaporation. A daily record doesn't change
+the crop factors, the lake factors or the pan coefficient: they multiply the
+day's A-pan the same way they multiply the monthly mean.
+
+**Fallback, counted and reported.** The run records
+`summary.apanDaily = { dailyDays, fallbackDays, invalidDays, first, last }`:
+the run days the series supplied, the days that used the monthly mean, how
+many of those had a negative value, and the first and last day supplied.
+When any day falls back, a run warning says so ("daily A-pan evaporation
+covers 3650 of 7305 run days (… to …); the other 3655 use the monthly
+A-pan mean spread over the month"), adding when the monthly means are all 0
+that those days then have no crop demand, dam evaporation or GR4J
+evaporation. A series with no usable day in the run says every day uses the
+monthly means. A negative value is also the series check's "negative value"
+warning (§2.10a). Flat stretches of 7 or more days of one non-zero value are
+flagged (a monthly mean pasted into a daily record looks like that), and the
+outlier check uses the rain factor. A forecast run's forecast days (§2.4f)
+are past the record, so they fall back to the monthly means and are counted.
+
+**No series, no change.** Without an `evap_apan_mm` series nothing above
+runs: every consumer keeps its monthly expression, the summary has no
+`apanDaily` and no warning is added, so results are byte-identical to engine
+0.37.0 (the client catchment regression suite and the invariant suites run
+unchanged; `apanDaily.test.ts` holds the positive control that the series
+does move the outputs it should). `ENGINE_VERSION` went to **0.38.0**
+because the model gained an input.
+
+**Every path sees the same input.** All consumers read the series through
+`prepareRun`'s `aligned`, so runs, automatic calibration (`prepareCalibration`,
+in the browser worker and server-side), the uncertainty ensemble, forecast
+mode, scenarios and firm yield use the same days. The "no evaporation, no
+run" refusal (`GR4J_NO_PET`, §2.4a) counts a daily series with a value above
+0, under `pe.kind: 'pan'` with a pan coefficient above 0, as evaporation, so a
+project with only a daily record runs. A run stores the series in its inputs
+(`run_input_series`, like every input series), so re-running it reproduces
+the same days. `pnpm pan-sensitivity` reads the series from a project.json
+too, so its cases vary the coefficient that multiplies the daily A-pan on the
+days it covers.
+
+**Scenarios.** `series.scale` can scale the daily series (it is in
+`SCALABLE_SERIES_KINDS`). A `settings.set` on `apanMm` reaches only the days
+the series doesn't cover, so a scenario that raises evaporation on a project
+with a daily record scales the series as well.
+
+**Not yet tracked.** A calibration's fit record (§2.10b) records the monthly
+A-pan and the pan coefficient it ran under, not the daily series, so
+replacing the daily record doesn't mark a fit stale
+([followups.md](./followups.md), "Fit provenance of the daily A-pan series").
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
@@ -306,14 +377,17 @@ predates the setting, so run comparison reads it as legacy.
   calendar month, so each month's PET totals exactly that month's PE:
   - `{ kind: 'pan' }`, the default: PE = `panCoefficient[month] ×
     apanMm[month]`. This is what every run did before 0.31.0, and a project
-    saved without `pe` runs it; its results are byte-identical.
+    saved without `pe` runs it; its results are byte-identical. On a day a
+    daily A-pan series covers (engine ≥ 0.38.0, §2.3a) the day's PE is
+    `panCoefficient[month] × apan[t]` instead of the month's share.
   - `{ kind: 'monthly', mm, source }`: PE is `mm[month]` directly, 12
     water-year values in mm (for example a station FAO-56 ET₀ × a stated
     factor), spread over the month's days the same way. `source` says where
     the values came from (required, at most 600 characters). The pan
     coefficient is not used.
 
-  Irrigation demand (§2.3) and dam evaporation (§2.7a) always read `apanMm`,
+  Irrigation demand (§2.3) and dam evaporation (§2.7a) always read A-pan
+  (`apanMm`, and the daily A-pan series where it has a value, §2.3a),
   whichever kind is chosen, so a monthly PE moves only the runoff model.
 
   **Why a separate input.** Before 0.31.0 one A-pan row drove three things:
@@ -1556,9 +1630,10 @@ binds, the transfer brings enough that neither MIN bites.
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
   not be applied to A-pan directly. 0 turns dam evaporation off.
-- `Apan` is always `settings.apanMm`. GR4J's own PE input (`settings.pe`,
-  §2.4a, engine ≥ 0.31.0) never reaches the dams, so a monthly PE for GR4J
-  leaves dam evaporation unchanged.
+- `Apan` is `settings.apanMm[month] ÷ days in month`, or on a day the daily
+  A-pan series covers (engine ≥ 0.38.0, §2.3a) that day's value. GR4J's own
+  PE input (`settings.pe`, §2.4a, engine ≥ 0.31.0) never reaches the dams, so
+  a monthly PE for GR4J leaves dam evaporation unchanged.
 - `seepage` is `node.damSeepagePerDay` (fraction of storage per day, default
   0). Seepage reaches the river below the wall and **joins the farm's outflow
   U the same day**, so it stays in the catchment, unless a share of it is
@@ -4042,7 +4117,7 @@ step when a definition changes.
 
 | Term | Meaning |
 | --- | --- |
-| **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. |
+| **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the A-pan, MAP and naturalised flow data per quaternary catchment. |
 | **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |

@@ -27,6 +27,7 @@ export * from './quality';
 export * from './rain';
 export * from './rainSourcePeriods';
 export * from './evaporation/fao56Table5';
+export * from './evaporation/apanDaily';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';

@@ -76,7 +76,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
-| `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
+| `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
 `downstreamNodeId` (the network's shape: use `node.add` / `node.remove`) or
@@ -115,11 +115,13 @@ a source that is not blank when trimmed, at most 600 characters. Like every
 `settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
 
-**Which series scale.** Only the rain drivers: `rain_catchment_mm`,
-`rain_chirps_mm`, `rain_forecast_mm`.
-- Evaporation is not a series. It is the monthly A-pan setting `apanMm`
-  (and, for GR4J, `panCoefficient` or a monthly `pe` row), changed with
-  `settings.set`.
+**Which series scale.** The rain drivers, `rain_catchment_mm`,
+`rain_chirps_mm`, `rain_forecast_mm`, and the daily A-pan evaporation
+`evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
+- The monthly A-pan means are the setting `apanMm` (and, for GR4J,
+  `panCoefficient` or a monthly `pe` row), changed with `settings.set`. On a
+  project with a daily A-pan series they reach only the days the series
+  doesn't cover, so an evaporation scenario there scales the series too.
 - Observed and logger flow are measurements the run is *scored against*,
   not drivers: scaling them would change the calibration statistics and the
   EWR agreement, never the simulated water. Not scalable.

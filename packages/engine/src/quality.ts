@@ -225,7 +225,9 @@ export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_forecast_mm: 5,
 	flow_observed_m3s: 14,
 	flow_logger_m3s: 14,
-	flow_reference_m3s: 14
+	flow_reference_m3s: 14,
+	// A week of one value is how a monthly mean pasted into a daily pan record shows (issue #45).
+	evap_apan_mm: 7
 };
 const MAX_EXAMPLES = 5;
 
@@ -237,9 +239,15 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	rain_forecast_mm: 'Rainfall (forecast)',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
-	flow_reference_m3s: 'Reference gauge (other catchment)'
+	flow_reference_m3s: 'Reference gauge (other catchment)',
+	evap_apan_mm: 'A-pan evaporation (daily)'
 };
-const unitOf = (k: SeriesKind) => (k.startsWith('rain_') ? 'mm' : 'm³/s');
+const unitOf = (k: SeriesKind) => (k.endsWith('_mm') ? 'mm' : 'm³/s');
+/**
+ * The outlier factor for a kind: depths (rain, and daily A-pan evaporation,
+ * engine ≥ 0.38.0) use the rain factor, flows the flow factor.
+ */
+export const outlierFactorOf = (kind: string): number => (kind.startsWith('flow_') ? OUTLIER_FACTOR.flow : OUTLIER_FACTOR.rain);
 const fmt = (v: number) => String(+v.toPrecision(4));
 const valid = (v: number | null | undefined): v is number => v != null && Number.isFinite(v);
 
@@ -280,7 +288,7 @@ export function seriesRowFlags(kind: SeriesKind, s: DailySeries): SeriesRowFlags
 
 	const positive = Float64Array.from(s.values.filter((v): v is number => valid(v) && v > 0)).sort();
 	if (positive.length >= OUTLIER_MIN_POSITIVE) {
-		const factor = kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow;
+		const factor = outlierFactorOf(kind);
 		const limit = factor * quantileSorted(positive, 0.99);
 		s.values.forEach((v, i) => {
 			if (valid(v) && v > limit) outlier[i] = true;
@@ -329,14 +337,17 @@ export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
 			check: 'negative',
 			days: negDays,
 			examples: neg,
-			text: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
+			text:
+				kind === 'evap_apan_mm'
+					? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Evaporation can't be negative; the run uses the monthly A-pan mean on these days`
+					: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
 		});
 	}
 
 	// Outliers against the series' own distribution.
 	const positive = Float64Array.from(s.values.filter((v): v is number => valid(v) && v > 0)).sort();
 	if (positive.length >= OUTLIER_MIN_POSITIVE) {
-		const factor = kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow;
+		const factor = outlierFactorOf(kind);
 		const limit = factor * quantileSorted(positive, 0.99);
 		const hits: SeriesCheck['examples'] = [];
 		s.values.forEach((v, i) => {

@@ -32,6 +32,7 @@ import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, pickObservedKind, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
+import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
 import { defaultScale, latinHypercube, pickUnit, scaleUnit } from './sample';
@@ -211,7 +212,7 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	const notes: string[] = [];
 	const model = req.model ?? settings.runoffModel;
 	if (!RUNOFF_MODELS.includes(model)) throw new Error(`unknown runoff model "${String(model)}"`);
-	if (model === 'gr4j' && !hasPotentialEvaporation(settings)) throw new Error(GR4J_NO_PET);
+	if (model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
 	const members = req.members ?? ENSEMBLE_DEFAULTS.members;
 	if (!isInt(members, ENSEMBLE_MEMBERS_MIN, ENSEMBLE_MEMBERS_MAX)) {
 		throw new Error(`members must be a whole number from ${ENSEMBLE_MEMBERS_MIN} to ${ENSEMBLE_MEMBERS_MAX}`);
@@ -363,7 +364,7 @@ export interface EnsembleContext {
 export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOptions, scoring = true): EnsembleContext {
 	const run = prepareRun(input);
 	const { settings, days, startDate } = run;
-	if (options.model === 'gr4j' && !hasPotentialEvaporation(settings)) throw new Error(GR4J_NO_PET);
+	if (options.model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
 	// Pin the window, so the CHIRPS-only source (without the station series) covers the same days.
 	const pin = (i: ModelInput): ModelInput => ({ ...i, settings: { ...i.settings, simulationStart: startDate, simulationEnd: fromEpochDay(run.end) } });
 	const base = pin(input);
