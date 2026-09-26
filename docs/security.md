@@ -877,7 +877,7 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   statement lists every open engine-audit.md item, generated from the doc;
   a test fails when the committed list and the doc differ.
 - **Sign-off.** A registered professional signs a run
-  ([data-model.md § Sign-offs](./data-model.md#sign-offs-035_signoffsql)).
+  ([data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
   - *Who:* editors and owners, as themselves only (RLS `user_id =
     app_current_user_id()`); viewers read; farmers see nothing.
   - *What:* the server rebuilds the statement (the five confirmations, the

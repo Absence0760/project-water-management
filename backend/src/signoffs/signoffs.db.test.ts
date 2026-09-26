@@ -1,4 +1,4 @@
-// Sign-offs on a run (035_signoff.sql, WP-3.13): who may sign, what binds a
+// Sign-offs on a run (036_signoff.sql, WP-3.13): who may sign, what binds a
 // signature to the statement shown, and that a sign-off can't be changed,
 // removed or forged, at the route and at RLS.
 import { signoffStatement, signoffStatementText } from '@water-management/engine';

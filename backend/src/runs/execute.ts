@@ -100,7 +100,7 @@ export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n
  * `{ kind, id, name }`, oldest first, of the citations the caller can see
  * (RLS): publications (022_publication.sql; `name` is the day it was
  * published, YYYY-MM-DD), scenarios (024_scenarios.sql) and sign-offs
- * (035_signoff.sql; `name` is the signer's full name). Evidence packs and
+ * (036_signoff.sql; `name` is the signer's full name). Evidence packs and
  * assessments add their kinds here with their migrations. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */

@@ -1825,7 +1825,7 @@ Built 2026-09-26: the draft disclaimer, the validation statement with the
 known limitations generated from engine-audit.md, and the immutable
 professional sign-off on a run, all on the report route
 ([ui.md § Report](./ui.md#report), [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313),
-[data-model.md § Sign-offs](./data-model.md#sign-offs-035_signoffsql)).
+[data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
 Left, each with its trigger:
 
 - [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an

@@ -51,7 +51,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * (023_reports.sql). The change history is the record of who changed what: a
  * model revision and an audit event go only with their project, a series
  * revision also through its retention trim (030_history.sql). A sign-off
- * is a professional's signature on a run, never changed (035_signoff.sql).
+ * is a professional's signature on a run, never changed (036_signoff.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',
