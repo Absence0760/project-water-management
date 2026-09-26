@@ -85,9 +85,6 @@
 		font-size: 11px;
 		fill: var(--danger);
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.field {
 		max-width: 12rem;
 	}

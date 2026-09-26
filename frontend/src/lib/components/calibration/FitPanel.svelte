@@ -376,9 +376,6 @@
 	h4 {
 		margin: 0.75rem 0 0.25rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.hint {
 		font-size: 0.8rem;
 		color: var(--text-muted);

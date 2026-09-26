@@ -54,7 +54,4 @@
 	h3 {
 		margin: 1rem 0 0.25rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 </style>

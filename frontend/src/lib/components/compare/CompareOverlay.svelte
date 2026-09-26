@@ -228,19 +228,6 @@
 		margin: 0.75rem 0 0;
 		padding-left: 1.2rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-		margin-left: -1px;
-	}
 	@media (max-width: 640px) {
 		.pickers .field {
 			min-width: 0;

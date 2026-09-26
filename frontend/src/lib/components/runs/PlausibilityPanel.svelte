@@ -320,15 +320,8 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	h4 {
 		margin: 1.25rem 0 0.35rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	.flags {
 		list-style: none;

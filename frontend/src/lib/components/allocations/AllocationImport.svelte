@@ -180,9 +180,6 @@
 	.grow {
 		flex: 1 1 16rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.note {
 		display: block;
 		font-size: 0.75rem;
