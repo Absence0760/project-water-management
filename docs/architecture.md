@@ -229,6 +229,14 @@ drops those entries; every CSS file and every chunk not yet loaded stays, so
 nothing loads later or in a different order. −2.3 KB gzip across the bundle;
 `src/lib/preloadDedupe.test.ts` pins the rule.
 
+Svelte scopes each component's styles with a class on its elements. The
+default is `svelte-<hash>`; `frontend/svelte.config.js` sets `cssHash` to
+`s<hash>` (the same hash of the file name), which appears thousands of times
+in the compiled templates and CSS: −2.6 KB gzip across the bundle and a little
+off every first load. `src/lib/cssHash.test.ts` computes every component's
+class the way the build does and fails if one equals a class the app writes
+itself (`small`, `steps`…), or two components share one.
+
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
