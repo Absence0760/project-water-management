@@ -195,6 +195,172 @@ CR-30 and CR-31 are the larger licensing features in roadmap step 3.
 5. **The two MAR estimates (CR-7).** Which does the hydrologist trust, and
    why? Or should results be reported toward both ends?
 
+## Rain forcing: which record, and how to homogenise it (issue #12)
+
+A method note (2026-09-25) for choosing the rain record that forces a
+catchment model and making it consistent over time. It came out of the
+client catchment study for issue #12. The client findings, figures and
+station details are in the private source repo
+(`Research/rainfall-forcing.md`); nothing here identifies the catchment.
+Items marked **(judgement)** are engineering judgement, not a published rule.
+
+**Why it matters.** GR4J's parameters absorb the level of the rain that
+drove the calibration. If the forcing reads higher in the calibration years
+than in the years the model is later run on, the model under-produces flow
+in those years and the error lands on the EWR and curtailment results. A
+double-mass break against CHIRPS (model.md §2.10a) shows that *something*
+changed, but not *which* record.
+
+### 1. Find out what the series is before judging it
+
+Station metadata (who read which gauge, from when, how the average was
+built) is the primary evidence (WMO 2020, *Guidelines on homogenization*,
+WMO-No. 1245; Peterson et al. 1998). When the metadata is missing, the
+values themselves carry a lot of it:
+
+- **Value resolution.** A manual gauge read to whole millimetres gives
+  integers; an automatic tipping bucket gives 0.1 or 0.2 mm steps. An
+  average of *n* gauges gives multiples of 1/*n* of the gauge step: thirds
+  mean three whole-mm gauges, thirtieths three 0.1-mm gauges, twentieths two.
+  A change in the mix of denominators from one year to the next dates a
+  change in the network behind a "catchment average", with no reference
+  series needed.
+- **Wet-day frequency.** An average of several gauges has more wet days than
+  any one of them (a day is wet if any gauge is), and a gauge read weekly or
+  irregularly has far fewer, with large "daily" totals. A step in the number
+  of days ≥ 1 mm is a network or reading-practice change, not weather.
+- **Reading-day patterns.** An excess of rain on Mondays or after public
+  holidays is an unread gauge's accumulation (§2.4d already spreads these).
+
+These markers date the changes. They don't say whether the *level* changed:
+that needs references.
+
+### 2. Compare with more than one reference, including a gauge-free one
+
+- **CHIRPS is not a fixed yardstick.** It blends satellite estimates with
+  whatever station reports reach it each month, and the number of South
+  African stations it ingests has changed over the decades. A catchment /
+  CHIRPS ratio can therefore drift because CHIRPS drifted. v2 and v3 also
+  differ: v3 (released 2025) adds many stations, corrects gauge undercatch
+  and fills gaps from ERA5, so it is wetter than v2 overall, and not by a
+  fixed factor (CHC, CHIRPS v3.0 README). The CHC publishes the stations
+  v3 used each month (`diagnostics/monthly_station_data/`): check how close
+  the nearest one is, and when it enters. Where there is none for decades,
+  CHIRPS there is satellite plus climatology. Where a gauge *inside* the
+  catchment enters, CHIRPS stops being independent of it.
+- **Find out which CHIRPS the project holds.** A workbook column labelled
+  "CHIRPS" may be v2. Match its monthly totals against v2 and v3 cells: the
+  right version and cell match to a few mm a month, the wrong one doesn't.
+- **Use a gauge-independent reference.** ERA5's precipitation is a model
+  forecast; outside a radar–gauge composite over the United States it
+  assimilates no rain gauges (Hersbach et al. 2020), so a local gauge
+  network change can't enter it. Its own observing system changes (the
+  satellite era) can, which is why one reference is not enough.
+  ERA5-Land's precipitation is ERA5's, interpolated to 0.1° (Muñoz-Sabater et al. 2021), so it adds nothing for
+  rain. MERRA-2's land precipitation is corrected towards
+  gauge-based and merged products (CPCU, and GPCP over Africa; Reichle et al.
+  2017), so it is a third, partly independent view.
+  All three are free: CHIRPS from the CHC server (the app's feed code reads
+  it), ERA5 and MERRA-2 without an account through the Open-Meteo archive
+  API and NASA POWER. IMERG and the Copernicus CDS need a registered
+  account.
+- **Look for newer gauges inside the catchment.** Automatic-station
+  networks installed since about 2015 can publish daily data without an
+  account (SASSCAL WeatherNet is one in southern Africa). A few years of an
+  in-catchment gauge beside the modelled series is the most direct test of
+  a recent era, and a candidate replacement for it. Check its missing days
+  month by month before using its totals.
+- **Attribution rule (judgement).** Compute the station ÷ reference ratio by
+  water year against each reference, and each reference against the others.
+  - A step that appears against *every* reference is in the station series.
+  - A step that appears against one reference only, and in that reference's
+    ratio to the others, is in that reference.
+  - Judge steps at the water-year and era scale, not daily: daily timing
+    differs between products and gauges (model.md §2.10a).
+- **Seasonal shape, not only level.** Compare station ÷ reference by
+  calendar month within each era. A change of level with the same shape is
+  a scaling problem. A change of *shape* (for example the winter ratio
+  collapsing while summer is unchanged) means the series now describes a
+  different part of the catchment, and scaling it back is not defensible.
+
+### 3. Check each candidate against the runoff
+
+A 0.05–0.25° product can't resolve orographic rain on a narrow mountain
+range, so its level is not the truth either: CHIRPS under-reads in nearly
+all of South Africa's winter-rainfall catchments (Pitman & Bailey 2021; Du
+Plessis & Kibii 2021). Observed runoff is the
+arbiter:
+
+- Over the years with a flow record, compute the runoff coefficient Q/P for
+  each candidate forcing.
+- Place each (P, Q) pair against a Budyko curve (Fu's form, ω about 1.8–2.6,
+  PET from the project's pan data). A forcing that needs Q/P far above what
+  the curve allows at that aridity can't be the catchment's rain. In a
+  winter-rainfall climate, rain falls when PET is low, so ω sits at the
+  low end (Milly 1994; judgement for any given catchment).
+- Compare the long-term runoff the forcing implies with the published
+  natural MAR for the quaternary or quinary (WR2012; the quinary database),
+  remembering those estimates can differ by a factor of two.
+
+### 4. Homogenise to the calibration era
+
+- **Pick a reference era: the years that overlap the calibration flow
+  record** (judgement). The model will be fitted to that forcing, so every
+  other era should be made consistent with it, not with an abstract "true"
+  level.
+- **Measure each other era against it** with the gauge-independent
+  references (step 2): era factor = (station ÷ reference over the era) ÷
+  (station ÷ reference over the reference era), per reference.
+  - If the factors from the different references agree, and the difference
+    from 1 is larger than the year-to-year scatter of the ratio, scale that
+    era by their mean.
+  - If they straddle 1 or disagree, **leave the era as recorded** and carry
+    the spread as uncertainty. Scaling on a disputed break adds error.
+- **Replace, don't scale, an era whose seasonal shape changed.** Use an
+  in-catchment gauge for that era if one exists, scaled to the reference
+  era's level against the gauge-independent references (by season if its
+  seasonal ratio differs). Otherwise treat the era as missing (the
+  `missing` periods of §2.4c) and fill it from a gridded product with
+  factors fitted in the reference era. Two gridded fills can disagree by
+  tens of percent in a given year, so a gauge anchor is worth a lot.
+- **Fit infill factors per era, not over the whole record.** Today one set
+  of monthly CHIRPS factors is fitted over every era (§2.4b), so a gap is
+  filled with a blend of ratios. Factors fitted in the reference era, or in
+  the gap's own double-mass segment, keep the fill consistent with the
+  calibration forcing. This is the *CHIRPS fit period / per-segment
+  factors* followup.
+- **Don't mix product versions in one series.** A CHIRPS series built from
+  v2 for the past and v3 for new days has a break at the join that the
+  double-mass check will attribute to the catchment. Replace the whole
+  column with one version and refit the factors. The app's feed reads v3's
+  daily `sat` product, which starts in 1998 (CHC daily readme); earlier
+  days need v3's `rnl` daily product.
+
+### 5. Carry the uncertainty into calibration
+
+- Keep the rain as a **fixed input with era-specific sensitivity ranges**,
+  never a free calibration parameter (Renard et al. 2010; CR-21).
+- Tie the width of each range to how the era was treated (judgement):
+  - narrowest in the reference era: point-to-area error only;
+  - wider in an era left as recorded against a disputed break;
+  - widest in an era replaced by a gridded product, where the references
+    themselves can disagree by tens of percent.
+- Report EWR compliance across those ranges, as CR-21 proposes, and state
+  in the data-quality panel (CR-22) which years were scaled or replaced.
+
+**References for this section** (the others are in [§ References](#references); unmarked ones are cited from their standard reference, not reopened).
+Hersbach et al. 2020, *Q. J. R. Meteorol. Soc.* 146:1999, doi:10.1002/qj.3803 ·
+Muñoz-Sabater et al. 2021, *Earth Syst. Sci. Data* 13:4349, doi:10.5194/essd-13-4349-2021 ·
+Reichle et al. 2017, *J. Climate* 30:2961, doi:10.1175/JCLI-D-16-0720.1 ·
+Funk et al. 2015, *Sci. Data* 2:150066, doi:10.1038/sdata.2015.66 ·
+CHC, CHIRPS v3.0 README and daily readme, https://data.chc.ucsb.edu/products/CHIRPS/v3.0/ (verified 2026-09-25) ·
+Pitman & Bailey 2021, *Water SA* 47(2), CHIRPS against WR2012 rainfall (verified 2026-09-25) ·
+SASSCAL WeatherNet, https://sasscalweathernet.org (verified 2026-09-25) ·
+Peterson et al. 1998, *Int. J. Climatol.* 18:1493 ·
+WMO 2020, *Guidelines on homogenization*, WMO-No. 1245 ·
+Fu 1981 and Zhang et al. 2004, *WRR* 40, W02502 (Budyko–Fu form) ·
+Milly 1994, *WRR* 30:2143 (seasonality and the water balance).
+
 ## Where no authoritative guidance was found
 
 - A DWS standard for WULA hydrology (methods, calibration thresholds,
