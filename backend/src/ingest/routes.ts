@@ -14,6 +14,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { mergeInto, SeriesBody } from '../series/merge.js';
+import { wakeForRerun } from '../series/routes.js';
 import { type IngestEnv, requireApiKey, requireScope } from './auth.js';
 import { type ApiKeyRow, CreateKeyBody, IngestExtras, keyAllows, newApiKey, SELECT_KEYS, toApiKey } from './keys.js';
 
@@ -110,9 +111,9 @@ export const ingestRoutes = new Hono<IngestEnv>()
 		const body = SeriesBody.parse(raw);
 		// Checked here for a clear 403; the time_series policies check it again (app_api_key_allows).
 		if (!keyAllows(key.allowedSeries, body.kind, body.name)) throw new ApiError(403, 'this key may not write that series');
-		return withApiKey(key.id, async (db) => {
-			const r = await mergeInto(db, key.projectId, body, { keepRevision: false, audit: source ? { source } : {} });
-			c.header('Cache-Control', 'no-store');
-			return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor });
-		});
+		// via 'api_key': the new-data hook queues the project's automatic re-run as the key's creator (041_auto_rerun.sql).
+		const r = await withApiKey(key.id, (db) => mergeInto(db, key.projectId, body, { keepRevision: false, via: 'api_key', audit: source ? { source } : {} }));
+		await wakeForRerun(r.rerun);
+		c.header('Cache-Control', 'no-store');
+		return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor });
 	});

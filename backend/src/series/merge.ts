@@ -5,7 +5,8 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
-import { onSeriesDaysChanged } from './newData.js';
+import type { QueuedRerun } from '../runs/autoRun.js';
+import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
 
 export { MAX_SERIES_VALUES, SeriesStartDate };
 
@@ -397,6 +398,8 @@ export interface MergeIntoOptions {
 	 * logger's are append-mostly and would push a person's restore points out.
 	 */
 	keepRevision: boolean;
+	/** Who wrote the days, for the new-data hook (series/newData.ts): a person, or an API key's ingest. */
+	via: Extract<SeriesDaysChanged['via'], 'user' | 'api_key'>;
 	/** Extra fields for the audit subject (the ingest's `source` label). */
 	audit?: Record<string, unknown>;
 }
@@ -407,6 +410,8 @@ export interface MergeIntoResult {
 	daysChanged: number;
 	/** When a re-run is queued for (series/newData.ts), or null. */
 	rerunQueuedFor: string | null;
+	/** The re-run the merge queued or pushed back (null: none), for the route to wake the worker after commit. */
+	rerun: QueuedRerun | null;
 }
 
 /**
@@ -443,15 +448,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			: undefined;
 		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
 	}
-	const rerunQueuedFor =
-		daysChanged > 0
-			? await onSeriesDaysChanged(db, projectId, {
-					seriesId: r.meta.id,
-					kind: r.meta.kind,
-					name: r.meta.name,
-					daysChanged,
-					via: opts.keepRevision ? 'user' : 'api_key'
-				})
-			: null;
-	return { meta: r.meta, daysChanged, rerunQueuedFor };
+	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
+	const rerun = await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
+	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun };
 }

@@ -277,11 +277,11 @@ sequenceDiagram
 Work that shouldn't run inside a request, or can't fit the API Lambda's 30 s,
 goes through one job queue (roadmap WP-2.8; `backend/src/jobs/`,
 `016_jobs.sql`). Its consumers are `rerun` (a model run off the request
-path, `POST /projects/:id/jobs`), the data feeds' `feed_fetch` /
+path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
+[§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield` (below); step 2's auto re-runs and alerts plug in as
-further kinds.
+dam yield's `yield` (below); step 2's alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
@@ -360,6 +360,64 @@ payload, run })` (`jobs/registry.ts` documents the contract) and list it in
 `jobs/handlers/index.ts`. The kind must be one of the table's CHECK list,
 which already names every step-2 kind (`feed_fetch`, `feed_ingest`, `rerun`,
 `alert_eval`, `report_render`).
+
+### Automatic runs
+
+New data runs the model by itself when a project opts in (roadmap WP-2.11;
+`backend/src/series/newData.ts`, `backend/src/runs/autoRun.ts`,
+`041_auto_rerun.sql`). Off by default: `settings.autoRun = { enabled,
+debounceMinutes, publish }` (defaults `false`, `15`, `'never'`), set in
+Settings → Automatic runs.
+
+- **One hook for every source of new days**:
+  `series/newData.ts` `onSeriesDaysChanged(db, projectId, { seriesId, kind,
+  name, daysChanged, via })`. A person's merge or whole-series replace
+  (`via: 'user'`), a data feed's merge or its confirmed replacement swapping in
+  (`'feed'`) and an API key's ingest (`'api_key'`, WP-2.9) call it inside the
+  write's transaction, only when days changed, so an idempotent re-send
+  queues nothing. It returns when the re-run is due (ISO), or null when the
+  project has automatic runs off: the `rerunQueuedFor` the merge routes
+  answer with. A restore isn't new data and doesn't call it.
+- **Debounce, maximum wait, dedupe** (`app_enqueue_rerun`, `SECURITY
+  DEFINER`): one pending `rerun` job per project (the shared `rerun` dedupe
+  key, which the dedupe index scopes per project), due `debounceMinutes` from
+  now. Each later call pushes the pending auto re-run back, never past its
+  `created_at` + 2 h, so a logger that sends every few minutes still gets a
+  run at least every two hours. A pending manual re-run, or one failed and
+  waiting to retry, is left alone (it reads the inputs when it runs); a
+  re-run that is running doesn't count, so data that arrives mid-run queues
+  another, which the claim holds back until the first finishes. The
+  function reads `settings.autoRun` itself (so a key's transaction, which
+  can't see the project, can queue too), with the same defaults as
+  `resolveAutoRun`. Enqueues for one project serialise on an advisory lock.
+- **Who it runs as**: `app_rerun_acting_user(project)`: the signed-in
+  editor who wrote the data (for a feed, the feed's acting user), or for an
+  API key's ingest the key's creator (`api_key.created_by`) while the
+  transaction acts as a live key of the project; `job_enqueue` lets a
+  `SECURITY DEFINER` caller with no signed-in user name the acting user (a
+  plain insert with no user is still refused). Like any job, the re-run runs
+  as that person under RLS and fails closed if they are no longer an editor.
+  A key whose creator's account was deleted has nobody to run as: the re-run
+  is skipped (`rerunQueuedFor: null`) and the ingest still commits.
+- **The run** (`jobs/handlers/rerun.ts`, payload `trigger: 'auto'`): does
+  nothing if the project turned automatic runs off since; otherwise
+  `executeRun(db, id, autoRunLabel, 'auto')`, labelled `Auto · data to
+  <last observed day>` (the forecast series doesn't count), stored with
+  `model_run.trigger = 'auto'`, then `trimRuns`, which caps each trigger
+  apart: the newest unkept auto run replaces the older one, and never pushes
+  a person's run out ([data-model.md](./data-model.md), **Run output volume**).
+- **Publication stays a person's act** (roadmap D5): the Overview offers
+  the editor "New auto run: publish?". A project may opt in to
+  `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
+  replaces the current publication, never the first one, when none of its
+  self-checks failed and it raises no warning the published run didn't (the
+  same sentence with other numbers or dates is the same warning), carrying
+  the WUA's notice and next-update date over; the audit event says `auto:
+  true`. There is no "always".
+- **Waking the worker**: a route wakes it after commit only when the re-run
+  is due at once (a debounce of 0, handy in dev); a debounced one is found
+  by the next poll (15 s locally) or the production tick (5 minutes) once
+  due. WP-2.13 will queue `alert_eval` after each auto run.
 
 ## Data feeds
 

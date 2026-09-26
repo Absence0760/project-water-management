@@ -9,7 +9,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, trimForecastRuns, trimRuns } from './execute.js';
+import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
@@ -21,9 +21,10 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // run recorded once the scenario is gone); `citedBy`: what keeps it for good;
 // `reproducible`: its input series are stored (021_series_blob), so
 // GET …/reproduce can re-run it. The same test loadRunInput makes: a run
-// with input series but no stored references is from before 021.
-// `trigger` (038_run_trigger): manual, auto or forecast; `forecastFrom`: a
-// forecast run's first forecast day (summary.forecast.from), else null.
+// with input series but no stored references is from before 021;
+// `trigger`: what made it, 'manual', 'auto' or 'forecast' (041_auto_rerun,
+// WP-2.11, WP-2.12); `forecastFrom`: a forecast run's first forecast day
+// (summary.forecast.from), else null.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
@@ -35,7 +36,7 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	${CITED_BY_SQL} AS "citedBy",
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
-	r."trigger", r.summary->'forecast'->>'from' AS "forecastFrom"`;
+	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom"`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 /** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */
@@ -67,13 +68,13 @@ export const runRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const { id: runId } = await executeRun(db, id, body.label, { forecast: body.forecast }).catch((err: Error) => {
+			const { id: runId } = await executeRun(db, id, body.label, body.forecast ? 'forecast' : 'manual').catch((err: Error) => {
 				// Engine problems (bad inputs, missing series) are the user's to fix.
 				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
 				throw new ApiError(400, `model run failed: ${err.message}`);
 			});
-			// Keep the newest N manual runs per project (the new one included), or the newest forecast run.
-			const removedRunIds = body.forecast ? await trimForecastRuns(db, id, runId) : await trimRuns(db, id);
+			// Keep the newest N manual runs per project (the new one included), and the newest unkept run of each automatic trigger (a forecast run replaces the last).
+			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [runId]);
 			return c.json({ run: rows[0], removedRunIds }, 201);
 		});

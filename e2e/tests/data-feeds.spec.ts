@@ -4,8 +4,11 @@
 // day; the forecast series appears on the Data tab. A feed pointed at the
 // fixture grid's sea cell shows as failing, with the warning above the list,
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
+// Automatic runs (WP-2.11, docs/ui.md § Automatic runs) live here too: new
+// data runs the model through the same worker tick, so they share the file's
+// one-at-a-time order.
 import type { APIRequestContext } from '@playwright/test';
-import { addMember, createProject, putSeries } from '../support/api.ts';
+import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -351,4 +354,49 @@ test('on a phone the panel, its feed card and the open form fit the screen', asy
 		return [...el.querySelectorAll('*')].filter((c) => c.getBoundingClientRect().right > edge + 0.5).map((c) => c.outerHTML.slice(0, 80));
 	});
 	expect(poking).toEqual([]);
+});
+
+test('with automatic runs on, new data runs the model without anyone pressing Run, and the editor is offered to publish it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Auto runs');
+	const baseline = await createRun(page.request, project.id, 'Baseline');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId: baseline } })).status()).toBe(201);
+
+	// Settings → Automatic runs: on, with no wait (the dev setting), saved like any setting.
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const group = page.getByRole('region', { name: 'Automatic runs' });
+	await group.getByLabel('Re-run the model after new data').check();
+	await group.getByLabel(/^Wait after the latest new data/).fill('0');
+	await expect(group.getByLabel('Publishing')).toHaveValue('never');
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	// New days (the seed's rain runs 2021-10-01 to 2022-01-28): the merge answers when the re-run is due.
+	const merged = await page.request.post(`${API_URL}/projects/${project.id}/series/merge`, {
+		data: { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-01-29', values: [4, 0] }
+	});
+	expect(merged.status(), await merged.text()).toBe(200);
+	expect(((await merged.json()) as { rerunQueuedFor: string | null }).rerunQueuedFor).not.toBeNull();
+
+	// The header says a re-run is on its way instead of offering the button.
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByTestId('rerun-queued')).toHaveText('An automatic re-run is due now.');
+	await expect(page.getByRole('button', { name: 'Re-run model' })).toHaveCount(0);
+
+	await runJobsTick();
+
+	// The run is there, labelled and tagged as automatic, without anyone pressing Run.
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	const auto = list.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Auto · data to 2022-01-30/ }) });
+	await expect(auto).toHaveCount(1);
+	await expect(auto.getByText('Auto', { exact: true })).toBeVisible();
+
+	// Publication stays a person's act: the Overview offers it, with the comparison.
+	await page.goto(`/projects/${project.id}`);
+	const offer = page.getByRole('region', { name: 'Published baseline' }).getByTestId('auto-publish-offer');
+	await expect(offer).toContainText('New auto run: publish? “Auto · data to 2022-01-30” is newer than the published run.');
+	await expect(offer.getByRole('link', { name: 'Compare with the published run' })).toHaveAttribute('href', new RegExp(`/compare\\?a=${project.id}%3A${baseline}&b=${project.id}%3A`));
+	await expect(offer.getByRole('link', { name: 'Review and publish' })).toBeVisible();
+	await expect(page.getByTestId('rerun-queued')).toHaveCount(0);
 });

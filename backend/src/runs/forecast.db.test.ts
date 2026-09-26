@@ -103,7 +103,7 @@ describe('POST /runs { forecast }', () => {
 		expect(second.body.removedRunIds).toEqual([first]);
 		expect(await asOwner(`SELECT id FROM model_run WHERE project_id = $1 AND "trigger" = 'forecast'`, [pid])).toEqual([{ id: second.body.run.id }]);
 		expect(await asOwner(`SELECT subject->>'reason' AS reason FROM audit_event WHERE project_id = $1 AND kind = 'run.deleted'`, [pid])).toEqual([
-			{ reason: 'superseded forecast' }
+			{ reason: 'trimmed' }
 		]);
 		// A pinned forecast run stays (positive control above: an unpinned one went).
 		expect((await owner.call('PATCH', `/projects/${pid}/runs/${second.body.run.id}`, { pinned: true })).status).toBe(200);

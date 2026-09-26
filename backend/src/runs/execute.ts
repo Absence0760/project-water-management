@@ -43,7 +43,9 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
 	}
-	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
+	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how: it's no model input, so runs don't record it.
+	const { autoRun: _autoRun, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
+	return { settings: settings as unknown as ModelInput['settings'], model, series };
 }
 
 /**
@@ -61,6 +63,21 @@ export function logSelfCheckFailure(projectId: string, runId: string, output: { 
 	if (checks.length === 0) return;
 	console.error(JSON.stringify({ event: 'self_check_failed', projectId, runId, checks }));
 }
+
+/**
+ * What made a run (model_run.trigger, 041_auto_rerun.sql): a person (`manual`:
+ * Run, a queued re-run, an import, a scenario), the debounced re-run after
+ * new data (`auto`, WP-2.11), or a forecast run (`forecast`, WP-2.12).
+ */
+export const RUN_TRIGGERS = ['manual', 'auto', 'forecast'] as const;
+export type RunTrigger = (typeof RUN_TRIGGERS)[number];
+
+/**
+ * How many unkept runs of each automatic trigger a project keeps: the newest
+ * auto run (and, with WP-2.12, forecast run) replaces the one before, so a
+ * daily feed doesn't grow storage and never pushes a person's run out.
+ */
+export const AUTOMATIC_RUNS_KEPT = 1;
 
 /** Default for RUNS_KEPT_PER_PROJECT. */
 export const DEFAULT_RUNS_KEPT = 20;
@@ -158,7 +175,10 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  *
  * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or
  * cited, published runs included) is never trimmed and doesn't count against the cap: the cap keeps the
- * newest `keep` runs that are neither.
+ * newest `keep` manual runs that are neither, and the newest
+ * AUTOMATIC_RUNS_KEPT of each automatic trigger (`auto`, `forecast`;
+ * model_run.trigger), counted apart: an auto run replaces the older auto run
+ * and never pushes a person's run out, however often data arrives.
  *
  * One trim at a time per project, held to the end of the caller's
  * transaction (as the pin limit's trigger does, 015_run_pinned.sql). Without
@@ -173,35 +193,19 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
 	await lockProjectRuns(db, projectId);
-	// Forecast runs (038_run_trigger, WP-2.12) have their own limit, trimForecastRuns: they neither count nor go here.
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
-			SELECT r.id FROM model_run r
-			WHERE r.project_id = $1 AND r."trigger" <> 'forecast' AND NOT ${RUN_KEPT_SQL}
-			ORDER BY r.created_at DESC, r.id DESC OFFSET $2
+			SELECT t.id FROM (
+				SELECT r.id, r.trigger, row_number() OVER (PARTITION BY r.trigger ORDER BY r.created_at DESC, r.id DESC) AS n
+				FROM model_run r
+				WHERE r.project_id = $1 AND NOT ${RUN_KEPT_SQL}
+			) t
+			WHERE t.n > CASE WHEN t.trigger = 'manual' THEN $2::int ELSE $3::int END
 		) RETURNING id`,
-		[projectId, keep]
+		[projectId, keep, AUTOMATIC_RUNS_KEPT]
 	);
 	// The storage cap's removals are in the project's history too (030_history.sql).
 	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'trimmed' });
-	return rows.map((r) => r.id);
-}
-
-/**
- * Keep one forecast run per project (WP-2.12): delete the project's forecast
- * runs other than `keepId` that nothing keeps (RUN_KEPT_SQL: a pinned,
- * nominated or cited forecast run, a published one included, stays). A
- * forecast is out of date the day the next one is made, so older ones would
- * only use storage. Like trimRuns: as the signed-in editor, under the
- * project's run lock, recorded in the history. Returns the ids removed.
- */
-export async function trimForecastRuns(db: Db, projectId: string, keepId: string): Promise<string[]> {
-	await lockProjectRuns(db, projectId);
-	const { rows } = await db.query<{ id: string }>(
-		`DELETE FROM model_run r WHERE r.project_id = $1 AND r."trigger" = 'forecast' AND r.id <> $2 AND NOT ${RUN_KEPT_SQL} RETURNING id`,
-		[projectId, keepId]
-	);
-	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'superseded forecast' });
 	return rows.map((r) => r.id);
 }
 
@@ -243,24 +247,24 @@ export interface RunScenarioSnapshot {
  * and start date the run used, so loadRunInput can rebuild the exact input
  * later, whatever happens to the live series.
  */
-export async function executeRun(db: Db, projectId: string, label: string, opts: { forecast?: boolean } = {}): Promise<{ id: string; output: ModelOutput }> {
-	const input = await loadModelInput(db, projectId);
+export async function executeRun(
+	db: Db,
+	projectId: string,
+	label: string | ((input: ModelInput) => string),
+	trigger: RunTrigger = 'manual'
+): Promise<{ id: string; output: ModelOutput }> {
+	const live = await loadModelInput(db, projectId);
 	// Forecast mode (WP-2.12): the history as an ordinary run, the forecast days
-	// after it, summary.forecast over them. An ordinary run leaves the forecast
-	// tail out entirely (withoutForecastTail), so forecast rain never reaches
-	// the figures farmers and regulators rely on; it stores the input it ran on,
-	// so runModel(loadRunInput(run)) still reproduces it.
-	if (opts.forecast) {
-		if (!forecastSplit(input).forecastFrom) {
-			throw new ApiError(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
-		}
-		return runAndStore(db, projectId, label, input, undefined, 'forecast');
+	// after it, summary.forecast over them. Every other run (manual, auto)
+	// leaves the forecast tail out entirely (withoutForecastTail), so forecast
+	// rain never reaches the figures farmers and regulators rely on; it stores
+	// the input it ran on, so runModel(loadRunInput(run)) still reproduces it.
+	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) {
+		throw new ApiError(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
 	}
-	return runAndStore(db, projectId, label, withoutForecastTail(input));
+	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
+	return runAndStore(db, projectId, typeof label === 'function' ? label(input) : label, input, undefined, trigger);
 }
-
-/** What made a run (model_run.trigger, 038_run_trigger). 'auto' is WP-2.11's. */
-export type RunTrigger = 'manual' | 'auto' | 'forecast';
 
 /**
  * Run the engine on `input` and persist the run, its outputs and its stored
@@ -303,7 +307,7 @@ export async function runAndStore(
 		...(scenario ? { scenario } : {})
 	};
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, "trigger")
+		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
 		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
 		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);

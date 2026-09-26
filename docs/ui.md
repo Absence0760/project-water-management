@@ -136,6 +136,13 @@ shorter than the cap looks as before.
 - After an upload a banner offers **Re-run model**. Every tab notes new data
   since the last run: a rainfall series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
+- **Automatic runs** (WP-2.11): when the project has them on and a re-run is
+  queued (`project.rerunQueuedFor`, and the upload's own answer), both
+  banners say "An automatic re-run is queued for 14:05." (the viewer's local
+  time; "… for 27 Sep 00:05" on another day; "… is due now." once its time
+  has passed) instead of offering **Re-run model**
+  (`autorun/autoRun.ts` `rerunQueuedText`). The page doesn't poll: the run
+  shows in the Runs list on the next load.
 
 ## Overview
 
@@ -181,6 +188,13 @@ record (an imported project only), recent notes ([§ Notes](#notes)), team and m
   the notice has one editor, not two. With nothing published: "No run is
   published yet. Stakeholders and farmers see nothing until you publish one
   (Runs tab)." Its own `LoadState` (loading, an error with a retry).
+  **New auto run: publish?** (WP-2.11, editors): when the newest automatic
+  run is newer than the published run (`autorun/autoRun.ts`
+  `autoRunToPublish`), the card names it with **Compare with the published
+  run** (the compare page, published run as A) and **Review and publish**
+  (the Runs tab on the auto run, at its Publication panel). Publication stays
+  a person's act unless the project chose "Publish if there are no new
+  warnings" in Settings; nothing here publishes.
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): one sentence and one link per item, hidden when
   there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
@@ -1128,6 +1142,14 @@ which checks every catchment tab).
   thirds), 150 %, 90 days). Out-of-range
   values block Save with a message. They only change which water years are
   flagged, never the results.
+- **Automatic runs** (WP-2.11, `settings.autoRun`): **Re-run the model after
+  new data** (off by default); **Wait after the latest new data** (minutes,
+  0–120, default 15; more data within the wait pushes the run back, never
+  more than 2 hours after the first of it); **Publishing**: *Never: a person
+  publishes* (the default) or *Publish if there are no new warnings*. The
+  wait and publishing are disabled while it is off; a wait outside 0–120
+  whole minutes blocks Save. Saving only this group doesn't mark the runs as
+  out of date (it changes no input).
 
 ### Data feeds
 
@@ -1344,7 +1366,7 @@ run's report to chosen members every week or month.
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
-  (latest, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
+  (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
   can't be re-run from them, Workbook comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and

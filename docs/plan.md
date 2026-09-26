@@ -224,8 +224,13 @@ rows exist for this.
   in production a fetcher Lambda outside the VPC (Terraform plan only). By
   cells, not a polygon yet; DWS unverified against the live site
   ([followups.md](./followups.md)).
-- ⬜ **Auto re-run** after new data (debounced), keeping earlier runs for comparison;
-  "new data since last run" banner.
+- ✅ **Auto re-run** after new data (WP-2.11; [architecture.md § Automatic runs](./architecture.md#automatic-runs)):
+  opt-in per project (Settings → Automatic runs), debounced (15 min by
+  default, at most 2 h after the first new data), one pending re-run per
+  project; auto runs are tagged and capped apart (the newest unkept one is
+  kept), so a person's runs stay for comparison; the "new data since last
+  run" banner says when the re-run is queued. Publication stays a person's
+  act unless the project opts in to "if no new warnings".
 - ⬜ **Partial recompute** from the first changed day, reusing stored state
   (the workbook's "New data from" logic) — only needed if full runs get slow
   (currently a fraction of a second of engine time for the full record).
