@@ -336,6 +336,15 @@ export interface ProjectSettings {
 	simulationStart: string | null;
 	simulationEnd: string | null;
 	/**
+	 * The first day (ISO) the nodes' demand factors (NetworkNode.demandFactor,
+	 * the demand.scale scenario op) apply (engine ≥ 0.44.0, issue #53 R5):
+	 * before it every factor is 1. null / absent = every day of the run. Set
+	 * only by the seasonal outlook (./outlook), so a demand level changes the
+	 * season after the decision date and not the history that sets the state
+	 * the season starts from. Not a project setting: no form or save carries it.
+	 */
+	demandFactorFrom?: string | null;
+	/**
 	 * Reporting window (ISO dates, inclusive) for the curtailment report, the
 	 * b023 [Shortfalls] "Set reporting period" cells. null = the run's start /
 	 * end. Clipped to the simulation period.
@@ -783,6 +792,14 @@ export interface NetworkNode {
  */
 export const SUPPLY_RULES = ['damFirst', 'riverFirst', 'trigger', 'runOfRiver'] as const;
 export type SupplyRule = (typeof SUPPLY_RULES)[number];
+
+/** Each supply rule in plain words, as run comparison, the scenario form and the node form show it. */
+export const SUPPLY_RULE_LABEL: Record<SupplyRule, string> = {
+	damFirst: 'dam only',
+	riverFirst: 'river first',
+	trigger: 'dam, river when low',
+	runOfRiver: 'run of river'
+};
 
 /** What a node without the supply fields runs as: the dam only, no river pump (WP-3.8). */
 export const SUPPLY_DEFAULTS = {

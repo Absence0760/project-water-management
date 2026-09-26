@@ -9,7 +9,8 @@
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import AppHeader from '$lib/components/layout/AppHeader.svelte';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
+	import { msg, type Msg } from '$lib/i18n/msg';
 
 	import '../app.css';
 
@@ -72,6 +73,17 @@
 	let i18nModule = $state.raw<I18n | null>(null);
 	let i18nReady = $state(false);
 	let i18nFailed = $state(false);
+
+	// The "confirm your email" banner is its own chunk (it carries the i18n
+	// module). If it fails to download, say so in its place rather than drop
+	// the reminder: an unconfirmed address holds back pending invitations.
+	// Worded here with msg(), since the banner's own t() calls are in the chunk
+	// that failed: through the i18n module where the page loaded it (the
+	// translated pages), else the English (the workspace is English).
+	// i18n-section: banner
+	const BANNER_FAILED = msg('The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.');
+	const RELOAD_PAGE = msg('Reload page');
+	const words = (m: Msg): string => (i18nModule ? i18nModule.t(m) : m);
 	const accountLocale = $derived(session.user?.locale ?? null);
 	async function applyLocale(chosen: string | null) {
 		i18nFailed = false;
@@ -100,27 +112,45 @@
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady));
 </script>
 
-{#if !authScreen}
-	{#if !farmScreen}<AppHeader />{/if}
+<!-- A signed-in person's pages sit in the app frame (a sidebar on wide screens,
+     a slim bar on phones, AppShell); sign-in pages and the farmer view have
+     their own. -->
+{#snippet content()}
 	<!-- Loaded only for an unconfirmed address: it is worded from the catalogue, which the workspace doesn't load otherwise. -->
-	{#if session.user?.emailVerified === false}
-		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}<banner.default />{/await}
+	{#if !authScreen && session.user?.emailVerified === false}
+		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}
+			<banner.default />
+		{:catch}
+			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
+		{/await}
 	{/if}
+	{#if bootError}
+		<main class="page">
+			<div class="alert alert-error" role="alert">
+				Could not reach the API: {bootError}
+				<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
+			</div>
+		</main>
+	{:else if i18nFailed && translated}
+		<main class="page">
+			<ChunkFailed what="This page" />
+		</main>
+	{:else if ready}
+		<div id="main" tabindex="-1">{@render children()}</div>
+	{:else}
+		<main class="page"><p class="muted" role="status">Loading…</p></main>
+	{/if}
+{/snippet}
+
+{#if !authScreen && !farmScreen && session.user}
+	<AppShell>{@render content()}</AppShell>
+{:else}
+	{@render content()}
 {/if}
 
-{#if bootError}
-	<main class="page">
-		<div class="alert alert-error" role="alert">
-			Could not reach the API: {bootError}
-			<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
-		</div>
-	</main>
-{:else if i18nFailed && translated}
-	<main class="page">
-		<ChunkFailed what="This page" />
-	</main>
-{:else if ready}
-	<div id="main" tabindex="-1">{@render children()}</div>
-{:else}
-	<main class="page"><p class="muted" role="status">Loading…</p></main>
-{/if}
+<style>
+	/* In the verify-email banner's place, under the header. */
+	.verify-failed {
+		padding: 0.5rem var(--gutter) 0;
+	}
+</style>

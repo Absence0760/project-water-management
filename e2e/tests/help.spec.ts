@@ -157,15 +157,18 @@ test('the help sidebar stays beside the glossary and follows the section being r
 	await expect(nav.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(nav.getByRole('link', { name: first, exact: true })).toHaveAttribute('aria-current', 'location');
 
-	// Scroll to the end: the sidebar is still in view (its search box at the
-	// top, the list scrolled within it), and marks the last topic, on screen.
+	// The search heads the page, above the text (not in the contents column, issue #17).
+	const search = await page.getByRole('searchbox', { name: 'Search help' }).boundingBox();
+	const main = await page.getByRole('main').boundingBox();
+	expect(search!.y).toBeLessThan(main!.y);
+	expect(search!.x).toBeGreaterThanOrEqual(main!.x - 1);
+
+	// Scroll to the end: the contents column is still in view (the list scrolled
+	// within it), and marks the last topic, on screen.
 	await page.keyboard.press('End');
 	await expect(nav.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'location');
 	await expect(nav.getByRole('link', { name: first, exact: true })).not.toHaveAttribute('aria-current', 'location');
 	await expect(nav.getByRole('link', { name: last, exact: true })).toBeInViewport();
-	const box = await page.getByRole('searchbox', { name: 'Search help' }).boundingBox();
-	expect(box!.y).toBeGreaterThanOrEqual(0);
-	expect(box!.y).toBeLessThan(200);
 
 	// The current topic lists its terms, and a term link jumps to it.
 	// (The Glossary item holds every topic, so the topic's own item is the innermost match.)

@@ -53,6 +53,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
+	// The outcome matrix (issue #53 R4): a demand sweep of this run by class of water year; its own chunk.
+	const loadOutcomePanel = () => import('$lib/components/outcomes/OutcomeMatrixPanel.svelte');
 	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
 	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
@@ -615,6 +617,21 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							{#snippet children(UncertaintyPanel)}
 								{#key shownRunId}
 									<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
+								{/key}
+							{/snippet}
+						</Lazy>
+					</div>
+					<div class="panel" id="res-outcomes">
+						<Lazy load={loadOutcomePanel}>
+							{#snippet children(OutcomeMatrixPanel)}
+								{#key shownRunId}
+									<OutcomeMatrixPanel
+										{projectId}
+										run={shownRun}
+										hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
+										outcomes={project.settings.outcomes}
+										canEdit={canRun}
+									/>
 								{/key}
 							{/snippet}
 						</Lazy>

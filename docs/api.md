@@ -239,12 +239,25 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `debounceMinutes` a whole number 0–120, `publish` `never` |
   `if_no_new_warnings` (no other value, no other key; `400`). It is not a
   model input: runs don't record it, and a `PATCH` that changes nothing but
-  `autoRun` leaves `updatedAt` alone. `rerunQueuedFor` is when the project's
+  `autoRun` leaves `updatedAt` alone. `settings.outcomes = { yearClassMethod,
+  riskCutoffs: { reserveMonthsMet, daysBelowEwr } }` (issue #53 R4,
+  `projects/outcomeSettings.ts`, [ui.md § Outcome matrix](./ui.md#outcome-matrix))
+  is always present too, defaults `{ yearClassMethod: 'auto', riskCutoffs:
+  { reserveMonthsMet: null, daysBelowEwr: null } }` (null = the engine's
+  `DEFAULT_OUTCOME_RISK_CUTOFFS`, placeholders pending the hydrologist,
+  plan.md O1). `PATCH` takes either field: `yearClassMethod` `auto` |
+  `terciles` | `quintiles`; `riskCutoffs` whole, both metrics, each null or
+  `{ lower, increasing }` shares 0–1 in the metric's own order (months met:
+  `lower ≥ increasing`; days below the EWR: `lower ≤ increasing`), checked
+  by the engine's `validateOutcomeCutoffs` (`400` with its message). Like
+  `autoRun` it is no model input: runs don't record it, and a `PATCH` that
+  changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
+  `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
   `{ project }`, not on the list.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
-  `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
+  `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
   (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
@@ -1390,7 +1403,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `409 this scenario changed while it ran (its ops or base run); run it again` when its ops, base run or owned nodes changed while the engine ran, and `404` when it was deleted (nothing is stored in either case; a rename doesn't count); `400 model run failed: …` as for any run | editor |
-| POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
+| POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`), or once for an edit group of `node.set` ops on one node that breaks a rule (`ops 2–4 (node.set, "Upper farm"): …`, [scenarios.md § Engine](./scenarios.md#engine-applyscenario)). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
 - `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
   createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, opNames, ownerUserId,

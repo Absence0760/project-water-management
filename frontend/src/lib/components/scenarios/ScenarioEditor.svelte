@@ -119,7 +119,8 @@
 	const yieldFarms = $derived((effective?.model.nodes ?? []).filter((n) => n.kind === 'farm'));
 	let yieldNodeId = $state('');
 	const yieldNode = $derived(yieldFarms.find((n) => n.id === yieldNodeId) ?? null);
-	const problems = $derived(data.check?.problems.length ?? 0);
+	/** Changes that don't apply: an edit group's one problem line counts each of its ops. */
+	const problems = $derived(data.check ? s.ops.length - data.check.applied.length : 0);
 	const baseMeta = $derived(runs.find((r) => r.id === s.baseRunId));
 
 	// --- editing the ops, with undo ------------------------------------------------
@@ -245,7 +246,7 @@
 	/** Another run of the model to base the scenario on (a scenario run can't be a base). */
 	const rebaseChoices = $derived(runs.filter((r) => !r.scenarioId && r.id !== s.baseRunId));
 	let rebaseTo = $state('');
-	let rebaseCheck = $state<{ runId: string; problems: string[] } | null>(null);
+	let rebaseCheck = $state<{ runId: string; problems: string[]; skipped: number } | null>(null);
 	let rebasing = $state(false);
 	async function checkRebase() {
 		if (!rebaseTo) return;
@@ -253,7 +254,7 @@
 		error = null;
 		try {
 			const r = await api.scenarios.rebase(projectId, s.id, rebaseTo, true);
-			rebaseCheck = { runId: rebaseTo, problems: r.problems };
+			rebaseCheck = { runId: rebaseTo, problems: r.problems, skipped: s.ops.length - r.applied.length };
 		} catch (e) {
 			error = msg(e);
 		} finally {
@@ -453,7 +454,7 @@
 					<div data-testid="rebase-check">
 						{#if rebaseCheck.problems.length}
 							<p class="warn">
-								{rebaseCheck.problems.length === 1 ? "1 change doesn't" : `${rebaseCheck.problems.length} changes don't`} apply to that run:
+								{rebaseCheck.skipped === 1 ? "1 change doesn't" : `${rebaseCheck.skipped} changes don't`} apply to that run:
 							</p>
 							<ul class="warn">
 								{#each rebaseCheck.problems as p, i (i)}<li>{nameIds(p, names)}</li>{/each}

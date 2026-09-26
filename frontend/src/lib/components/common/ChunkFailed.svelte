@@ -5,16 +5,23 @@
 	// loop if the chunk is really gone). The reload goes through the page's
 	// beforeunload guard, so with unsaved changes the browser asks first; the
 	// message warns about them (chunkFailed.ts, provideUnsaved).
+	// A translated page passes its own `text` and `reload` wording (t()), since
+	// this component stays off the i18n module; those pages keep no unsaved
+	// state, so `text` is the whole message.
 	import { chunkFailedText, unsavedCheck } from './chunkFailed';
 
-	let { what = 'This part of the page' }: { what?: string } = $props();
+	let {
+		what = 'This part of the page',
+		text,
+		reload = 'Reload page'
+	}: { what?: string; text?: string; reload?: string } = $props();
 
 	const unsaved = unsavedCheck();
 </script>
 
 <div class="alert alert-error" role="alert">
-	{chunkFailedText(what, unsaved())}
-	<button type="button" class="btn btn-sm" onclick={() => location.reload()}>Reload page</button>
+	{text ?? chunkFailedText(what, unsaved())}
+	<button type="button" class="btn btn-sm" onclick={() => location.reload()}>{reload}</button>
 </div>
 
 <style>

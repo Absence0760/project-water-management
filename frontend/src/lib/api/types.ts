@@ -22,6 +22,7 @@ import type {
 	RunSummary,
 	ScenarioOp,
 	SeriesMeta,
+	YearClassMethod,
 	YieldPoint
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
@@ -96,10 +97,23 @@ export interface AutoRunSettings {
 	publish: 'never' | 'if_no_new_warnings';
 }
 
+/** One metric's risk cut-offs (engine OutcomeRiskCutoffs); null = the engine's defaults, pending the hydrologist. */
+export type OutcomeCutoffPair = { lower: number; increasing: number };
+
+/**
+ * settings.outcomes (issue #53 R4, backend projects/outcomeSettings.ts): how
+ * the outcome matrix splits water years and colours its cells. Not a model
+ * input, so not in the engine's ProjectSettings; the API always sends every field.
+ */
+export interface OutcomeSettings {
+	yearClassMethod: YearClassMethod;
+	riskCutoffs: { reserveMonthsMet: OutcomeCutoffPair | null; daysBelowEwr: OutcomeCutoffPair | null };
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 }
@@ -1277,6 +1291,57 @@ export interface JobMeta {
 	createdBy: string;
 	/** 0–100 while a job that reports progress runs (yield); null otherwise. Absent from an older API. */
 	progress?: number | null;
+}
+
+/** A sweep member's outcome series as stored (docs/api.md § Sweeps): a missing value is null. */
+export interface StoredRunSeries {
+	nodeId: string | null;
+	key: string;
+	label: string;
+	unit: string;
+	values: (number | null)[];
+}
+
+/** One named op set of a sweep (GET /projects/:id/sweeps…, backend sweeps/store.ts SweepMemberRow). */
+export interface SweepMember {
+	id: string;
+	position: number;
+	name: string;
+	ops: ScenarioOp[];
+	opsSha256: string;
+	/** done: summary (and series) stored; problems: its ops don't apply; failed: the engine refused it. */
+	status: 'pending' | 'done' | 'problems' | 'failed';
+	problems: string[];
+	startDate: string | null;
+	endDate: string | null;
+	finishedAt: string | null;
+	/** Only on GET …/sweeps/:sweepId, and only when done. */
+	summary?: RunSummary | null;
+	/** Only on GET …/sweeps/:sweepId?series=true, and only when done. */
+	series?: StoredRunSeries[] | null;
+}
+
+/** A scenario sweep (issue #53 R2, docs/api.md § Sweeps). */
+export interface Sweep {
+	id: string;
+	name: string;
+	baseRunId: string;
+	baseRun: { id: string; label: string; createdAt: string };
+	status: 'pending' | 'complete';
+	engineVersion: string | null;
+	/** The job computing it; null once the 30-day purge removed it. */
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	members: SweepMember[];
+}
+
+/** POST /projects/:id/sweeps. */
+export interface SweepRequest {
+	name: string;
+	baseRunId: string;
+	members: { name: string; ops: ScenarioOp[] }[];
 }
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */

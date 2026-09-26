@@ -20,7 +20,8 @@ test('register lands on the project list, sign out and back in', async ({ page }
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
-	await expect(page.getByRole('banner')).toContainText('New User');
+	// The account sits at the foot of the app sidebar.
+	await expect(page.getByRole('button', { name: 'Account menu for New User' })).toContainText('New User');
 
 	await page.getByRole('button', { name: 'Account menu for New User' }).click();
 	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -46,7 +47,7 @@ test('"Sign out everywhere" from the account menu also signs out another device'
 	await expect(otherPage.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 
 	await page.goto('/');
-	await page.getByRole('banner').getByRole('button').click();
+	await page.getByRole('button', { name: /^Account menu for / }).click();
 	page.once('dialog', (d) => void d.accept());
 	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
 	await expect(page).toHaveURL('/login');
@@ -61,7 +62,7 @@ test('"Sign out everywhere" from the account menu also signs out another device'
 test('cancelling "Sign out everywhere" leaves the session signed in', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/');
-	await page.getByRole('banner').getByRole('button').click();
+	await page.getByRole('button', { name: /^Account menu for / }).click();
 	page.once('dialog', (d) => void d.dismiss());
 	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
 

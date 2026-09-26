@@ -7,7 +7,7 @@ import {
 	DEMAND_SCALE_MAX,
 	LAND_COVER_CLASSES,
 	SCALABLE_SERIES_KINDS,
-	applyScenario,
+	scenarioSteps,
 	upgradeLegacyModel,
 	validateScenarioOps,
 	type AppliedOp,
@@ -49,15 +49,15 @@ export function snapshotInput(model: unknown, settings: unknown): ModelInput {
 	};
 }
 
-/** The input each op meets (`before[i]`, the base with ops 0…i−1 applied) and the input after them all. */
+/**
+ * The input each op meets (`before[i]`, the base with ops 0…i−1 applied as
+ * the engine applies them: an op in an edit group meets the group's earlier
+ * ops) and what a next op meets (`after`: every op, an incomplete last
+ * `node.set` group included, so "Add a change" builds on it). The engine's
+ * scenarioSteps (docs/scenarios.md § Edit groups).
+ */
 export function stepInputs(base: ModelInput, ops: readonly ScenarioOp[]): { before: ModelInput[]; after: ModelInput } {
-	const before: ModelInput[] = [];
-	let cur = base;
-	for (const op of ops) {
-		before.push(cur);
-		cur = applyScenario(cur, [op]).input;
-	}
-	return { before, after: cur };
+	return scenarioSteps(base, ops);
 }
 
 /** Every node and crop name the base or an op gives an id, for describing an op whose target is gone. */
@@ -95,9 +95,26 @@ export interface OpStatus {
 	notes: string[];
 }
 
+/** The 0-based ops a problem's `3`, `3–5` or `3, 5` names (1-based), or null if it isn't that. */
+function namedOps(text: string): number[] | null {
+	const out: number[] = [];
+	for (const part of text.split(', ')) {
+		const m = /^(\d+)(?:–(\d+))?$/.exec(part);
+		if (!m) return null;
+		const a = Number(m[1]);
+		const b = m[2] === undefined ? a : Number(m[2]);
+		if (b < a || b - a > 10_000) return null;
+		for (let k = a; k <= b; k++) out.push(k - 1);
+	}
+	return out;
+}
+
 /**
  * Line the check's `applied` and `problems` up with the ops. A problem names
- * its op as `op N (kind): …` (1-based); one that names no op in range is
+ * its op as `op N (kind): …` (1-based), or an edit group's ops as
+ * `ops 3–5 (node.set, "Upper farm"): …` / `ops 3, 5 (…): …` (docs/scenarios.md
+ * § Edit groups): each op it names gets it as its problem, so every op of a
+ * group that doesn't apply shows why. One that names no op in range is
  * returned in `other`, so nothing the server said is dropped.
  */
 export function statusByOp(count: number, applied: readonly AppliedOp[], problems: readonly string[]): { ops: OpStatus[]; other: string[] } {
@@ -105,10 +122,14 @@ export function statusByOp(count: number, applied: readonly AppliedOp[], problem
 	for (const a of applied) if (ops[a.index]) ops[a.index]!.notes = a.notes;
 	const other: string[] = [];
 	for (const p of problems) {
-		const m = /^op (\d+) \([^)]*\): (.*)$/s.exec(p);
-		const i = m ? Number(m[1]) - 1 : -1;
-		if (m && ops[i]) ops[i]!.problem = ops[i]!.problem ? `${ops[i]!.problem}; ${m[2]}` : m[2]!;
-		else other.push(p);
+		// The label's parentheses may hold a node name with its own: the first "): " ends it.
+		const m = /^ops? ([\d–, ]+?) \(.*?\): (.*)$/s.exec(p);
+		const named = m ? namedOps(m[1]!) : null;
+		if (!m || !named?.length || !named.every((i) => ops[i])) {
+			other.push(p);
+			continue;
+		}
+		for (const i of named) ops[i]!.problem = ops[i]!.problem ? `${ops[i]!.problem}; ${m[2]}` : m[2]!;
 	}
 	return { ops, other };
 }
@@ -217,7 +238,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
-			// An unset date or PE input has a meaning (start of data; pan × A-pan, as the engine runs it): show it as the "was".
+			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
 			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
 			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;

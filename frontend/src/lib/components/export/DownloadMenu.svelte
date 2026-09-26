@@ -10,6 +10,7 @@
 	// closes the menu and opens the in-page table (export/DailyTableDialog).
 	// Focus moves to the Download button first, so closing the dialog returns
 	// focus there rather than to a button inside the now-hidden list.
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { menuPlacement, placementStyle } from '$lib/export/menuPosition';
 	import type { DownloadItem, WorkbookRequest } from '$lib/export/urls';
@@ -24,6 +25,8 @@
 	let open = $state(false);
 	let busy = $state<string | null>(null);
 	let error = $state<string | null>(null);
+	/** The workbook writer's chunk didn't download: only a reload can fetch it (common/lazy.ts). */
+	let writerFailed = $state(false);
 	let done = $state<string | null>(null);
 	let root: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
@@ -51,8 +54,16 @@
 	async function buildWorkbook(request: WorkbookRequest) {
 		close(true);
 		progress = { phase: 'fetch', done: 0, total: 1, label: 'the run' };
+		let runner: typeof import('$lib/spreadsheet/export/runner');
 		try {
-			const { startWorkbookExport, ExportCancelled } = await import('$lib/spreadsheet/export/runner');
+			runner = await import('$lib/spreadsheet/export/runner');
+		} catch {
+			progress = null;
+			writerFailed = true;
+			return;
+		}
+		const { startWorkbookExport, ExportCancelled } = runner;
+		try {
 			const job = startWorkbookExport(request, (p) => (progress = p));
 			cancelExport = job.cancel;
 			try {
@@ -77,6 +88,7 @@
 	async function get(item: DownloadItem) {
 		busy = item.url;
 		error = null;
+		writerFailed = false;
 		done = null;
 		if (item.workbook) {
 			await buildWorkbook(item.workbook);
@@ -178,6 +190,7 @@
 	<p class="msg" role="status" aria-live="polite">
 		{#if progress}<span class="small">{progressText}</span>{:else if error}<span class="err">{error}</span>{:else if done}<span class="visually-hidden">{done}</span>{/if}
 	</p>
+	{#if writerFailed}<div class="failed"><ChunkFailed what="The workbook download" /></div>{/if}
 </div>
 
 <style>
@@ -265,6 +278,12 @@
 		max-width: 24rem;
 		font-size: 0.85rem;
 		color: var(--text-muted);
+	}
+	/* Below the menu, as narrow as the inline error. */
+	.failed {
+		margin-top: 0.3rem;
+		max-width: 24rem;
+		font-size: 0.85rem;
 	}
 	.err {
 		display: block;
