@@ -56,6 +56,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
+	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts).
+	it('inventories the account routes as auth-gated', () => {
+		for (const r of ['PATCH /auth/me', 'POST /auth/change-password']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The data feeds (WP-2.10): auth-gated like every project route.
 	it('inventories the feed routes as auth-gated', () => {
 		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now'];

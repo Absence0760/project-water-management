@@ -28,7 +28,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   as is a session for an account that no longer exists. A password reset sets
   the watermark, so it signs out every device, including a thief's, and so
   does `POST /auth/logout-everywhere` ("sign out everywhere", for a lost
-  laptop or a suspected copied cookie). Plain logout clears the cookie only
+  laptop or a suspected copied cookie). Changing the password while signed
+  in (`POST /auth/change-password`, the Account page) sets it too, then
+  re-issues this device's cookie, so only the device that changed it stays
+  signed in. Plain logout clears the cookie only
   (that one token stays valid until expiry if it was copied). Rotating
   `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
@@ -45,7 +48,11 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   can lock someone else's address for up to 15 minutes at a time (sessions
   already signed in are unaffected, and a password reset lifts it). The
   WAF's per-IP rate limits (below) are still the first line against spraying
-  many addresses.
+  many addresses. Changing the password while signed in checks the current
+  password through the same lockout (keyed by the account's address), so a
+  stolen session can't guess it faster than the sign-in form; the flip side
+  is that a locked address can't change its password until the lock ends
+  (a reset still works).
 
 ## Password reset, email verification and invites
 
@@ -737,7 +744,6 @@ readable by anyone. The rules:
 
 - No app-level rate limit on `/auth/register` beyond the WAF's per-IP
   `/api/auth/*` rule. (Phase 7)
-- No password change while signed in (use "Forgot password"). (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build

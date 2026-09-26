@@ -18,6 +18,8 @@ storage.
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
+| PATCH | `/auth/me` | `{ displayName }` | `200 { user }`; `400` blank or over 100 characters (signed in) |
+| POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
@@ -50,6 +52,18 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **`logout-everywhere`** is reachable from the frontend header's account menu
   ("Sign out everywhere", next to plain "Sign out"), which asks for
   confirmation before calling it (docs/ui.md § Header).
+- **`change-password`** (the Account page, WP-1.9) checks the current
+  password through the **same lockout as `login`**: each attempt counts
+  against the account's address before the bcrypt check, a wrong current
+  password (`403`) is a failed attempt, and while the address is locked it
+  answers `429` without checking. On success it sets the new password, moves
+  `app_user.sessions_revoked_at` to now (every existing session, this
+  device's old cookie included, gets `401` on its next request), deletes any
+  outstanding reset link, clears the lockout count, and sets a fresh cookie
+  so this device stays signed in. A body that fails validation (`400`) is
+  refused before anything is counted.
+- **`PATCH /auth/me`** changes only the display name (trimmed, 1–100
+  characters). The email address isn't editable; other keys are ignored.
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).

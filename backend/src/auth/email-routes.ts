@@ -89,9 +89,11 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 				newHash,
 				new Date()
 			]);
-			// Outstanding reset links are dead too, and the address's sign-in
-			// lockout is lifted (the link proved the inbox).
-			await db.query("DELETE FROM email_token WHERE user_id = $1 AND purpose = 'reset'", [userId]);
+			// No other reset link is outstanding: app_issue_email_token keeps one
+			// per purpose and consuming it just deleted it. (A DELETE here would
+			// be a silent no-op anyway: this transaction has no user, and
+			// email_token's RLS shows it nothing.) The address's sign-in lockout
+			// is lifted (the link proved the inbox).
 			await db.query('SELECT app_login_succeeded(email) FROM app_user WHERE id = $1', [userId]);
 			await markVerified(db, userId);
 			return true;

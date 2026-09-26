@@ -9,7 +9,7 @@
 	import BrandMark from './BrandMark.svelte';
 
 	let signingOut = $state(false);
-	// The account menu: a disclosure list of buttons, same pattern as
+	// The account menu: a disclosure list of a link and buttons, same pattern as
 	// DownloadMenu (no role="menu"/menuitem, so no arrow-key contract to keep).
 	// It sits under a sticky header with room below, so plain CSS anchoring is
 	// enough — no viewport math like DownloadMenu needs for scrolling tables.
@@ -26,6 +26,8 @@
 		if (p.startsWith('/help')) return 'help';
 		return null;
 	});
+
+	const onAccountPage = $derived((page.url.pathname.slice(base.length) || '/') === '/account');
 
 	const initials = $derived(
 		(session.user?.displayName ?? '')
@@ -136,6 +138,17 @@
 				<span aria-hidden="true" class="caret">▾</span>
 			</button>
 			<ul id={menuId} class="menu" hidden={!menuOpen}>
+				<li>
+					<a
+						class="item"
+						href="{base}/account"
+						aria-current={onAccountPage ? 'page' : undefined}
+						onclick={() => closeMenu()}
+					>
+						<span class="label">Account</span>
+						<span class="hint" aria-hidden="true">Name and password</span>
+					</a>
+				</li>
 				<li>
 					<button type="button" class="item" onclick={signOut} disabled={signingOut}>
 						<span class="label">Sign out</span>
@@ -329,6 +342,11 @@
 	.item:hover:not(:disabled),
 	.item:focus-visible {
 		background: var(--row-hover);
+		text-decoration: none;
+	}
+	a.item[aria-current='page'] .label {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.item:disabled {
 		cursor: not-allowed;
