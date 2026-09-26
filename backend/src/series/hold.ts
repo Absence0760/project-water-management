@@ -24,7 +24,7 @@
 //   2. `accepted`: for a series the key fills (a logger's, where 1 leaves
 //      too few days), what a person last accepted: the values the project's
 //      latest manual run read from this series (run_input_series.series_id,
-//      055), on the days 1 leaves out, beside the days 1 keeps. A key can't
+//      056), on the days 1 leaves out, beside the days 1 keeps. A key can't
 //      make a run; running the model is also what ends a hold.
 //   3. `own`, deliberately, only while no person has accepted enough of the
 //      series (no manual run has read it yet, or what it read is too short):
@@ -167,7 +167,7 @@ export function anomalousPushedDays(
 
 /**
  * The values the project's latest manual run read from this series, as a
- * person accepted them (055_accepted_series: app_api_key_accepted_series,
+ * person accepted them (056_accepted_series: app_api_key_accepted_series,
  * in the key's transaction), or null when no manual run has read it.
  */
 export async function acceptedInput(db: Db, seriesId: string): Promise<Daily | null> {

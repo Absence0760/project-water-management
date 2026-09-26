@@ -34,7 +34,7 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	return (await loadLiveInput(db, projectId)).input;
 }
 
-/** Which series each kind of a live input was read from (run_input_series.series_id, 055_accepted_series). */
+/** Which series each kind of a live input was read from (run_input_series.series_id, 056_accepted_series). */
 export type InputSeriesIds = Partial<Record<SeriesKind, string>>;
 
 /** loadModelInput, with the id of the series each kind came from. */
@@ -281,7 +281,7 @@ export interface RunPlan {
 	scenario?: RunScenarioSnapshot;
 	/** A draft application's run: its label stays out of the project's log (storeRun's audit event). */
 	privateLabel?: boolean;
-	/** For a run of the live model: the series each input kind was read from (stored as run_input_series.series_id, 055). */
+	/** For a run of the live model: the series each input kind was read from (stored as run_input_series.series_id, 056). */
 	seriesIds?: InputSeriesIds;
 }
 
@@ -419,7 +419,7 @@ export function runFailure(err: Error): never {
  * later, whatever happens to the live series, and (for a run of the live
  * model, `plan.seriesIds`) which series it was read from: a manual run's is
  * what the ingest hold takes as a person's accepted values
- * (055_accepted_series, series/hold.ts).
+ * (056_accepted_series, series/hold.ts).
  */
 export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Promise<{ id: string; output: ModelOutput }> {
 	const { projectId, label, input, scenario, trigger } = plan;

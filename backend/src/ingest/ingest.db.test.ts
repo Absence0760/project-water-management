@@ -653,9 +653,9 @@ describe('the hold judges a key without its own earlier days (053)', () => {
 // A series only the key writes (a logger's): without the key's own days
 // nothing is left to judge by, so the hold takes the limit from what a
 // person last accepted, the values the latest manual run read from the
-// series (055_accepted_series; series/hold.ts). Until a manual run has read
+// series (056_accepted_series; series/hold.ts). Until a manual run has read
 // it, the limit is the series the key shaped (`own`), and says so.
-describe('a key that alone fills a series is judged by what a person last accepted (055)', () => {
+describe('a key that alone fills a series is judged by what a person last accepted (056)', () => {
 	let pid: string;
 	let key: { id: string; secret: string };
 	const day = (n: number) => new Date(Date.UTC(2022, 0, 1 + n)).toISOString().slice(0, 10);

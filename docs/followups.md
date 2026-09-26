@@ -2286,7 +2286,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       own limit; another key's and a person's days still count),
       `series/hold.test.ts`.
 - [x] **The ingest hold has no reference for a series one key fills.**
-      Fixed in 055_accepted_series.sql: `run_input_series.series_id` records
+      Fixed in 056_accepted_series.sql: `run_input_series.series_id` records
       which series each input of a run was read from, and when the series
       without the key's days is too short to judge by, the limit comes from
       the latest manual run's input of that series (what a person accepted;

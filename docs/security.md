@@ -313,7 +313,7 @@ and nothing else.
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
     read from that series (`run_input_series.series_id`, read by the key
-    through `app_api_key_accepted_series`, 055), which a key can't write,
+    through `app_api_key_accepted_series`, 056), which a key can't write,
     since it can't make a run. Running the model is already what ends a
     hold, so it is the same act of review. Those values fill the key's
     days; days a person or a feed wrote since count as they are now. A
@@ -327,7 +327,7 @@ and nothing else.
     alternative, no outlier limit until a person runs the model, would let
     even one absurd value through; this still catches that, and a key
     poisoning slowly can lift it only until the first manual run. A run
-    saved before 055 records no series, so it is no reference either.
+    saved before 056 records no series, so it is no reference either.
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the

@@ -1,4 +1,4 @@
--- 055_accepted_series — the ingest hold's reference for a series one API key
+-- 056_accepted_series — the ingest hold's reference for a series one API key
 -- fills: what a person last accepted (followups.md "The ingest hold has no
 -- reference for a series one key fills"; series/hold.ts; docs/security.md
 -- § API keys; docs/data-model.md § Stored run inputs, § API keys).
@@ -39,7 +39,7 @@ ALTER TABLE run_input_series
 CREATE INDEX run_input_series_series_idx ON run_input_series (project_id, series_id);
 
 COMMENT ON COLUMN run_input_series.series_id IS
-	'The series this input was read from (055_accepted_series); NULL for a scenario run, a run before 055, or a series since deleted.';
+	'The series this input was read from (056_accepted_series); NULL for a scenario run, a run before 056, or a series since deleted.';
 
 -- Not SECURITY DEFINER: whoever stores a run reads the project's series.
 CREATE FUNCTION run_input_series_series_kind() RETURNS trigger

@@ -62,7 +62,7 @@ describe('anomalousPushedDays', () => {
 		expect(othersSuffice(null, { startDate: '2030-01-01', values: [1] }, [])).toBe(false);
 	});
 
-	describe('a series the key alone fills (055)', () => {
+	describe('a series the key alone fills (056)', () => {
 		const d0 = toEpochDay('2021-01-01');
 		// 600 days the key wrote: 10 mm every 5th day, then 20 days of 45 mm it slipped in, batch by batch.
 		const poisoned = () => {
