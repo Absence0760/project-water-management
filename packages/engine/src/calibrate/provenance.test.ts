@@ -268,7 +268,7 @@ describe('fit record', () => {
 		const changed = fitRecordStatus(s, rec, { chirpsSource: v3 });
 		expect(changed).toMatchObject({ forcingChanged: true, chirpsSourceChanged: true });
 		const caveats = fitRecordCaveats(changed);
-		expect(caveats.filter((c) => /CHIRPS series holds another product version than the fit ran on/.test(c))).toHaveLength(1);
+		expect(caveats.filter((c) => /CHIRPS series holds another product or version than the fit ran on/.test(c))).toHaveLength(1);
 		// Said once, not again as the generic forcing caveat.
 		expect(caveats.some((c) => /pan coefficient, A-pan evaporation/.test(c))).toBe(false);
 		// Unrecorded is a version of its own: a fit on v2.0 against a series whose version is no longer recorded is flagged.
