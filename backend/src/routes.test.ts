@@ -116,6 +116,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Farmers and farmer invites (WP-2.1, WP-2.2): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	it('inventories the farmer routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/farmers', 'POST /projects/:id/farmers', 'POST /projects/:id/farmers/bulk', 'PUT /projects/:id/farmers/:userId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The change history (WP-2.4): auth-gated like every project route.
 	it('inventories the history routes as auth-gated', () => {
 		const history = [

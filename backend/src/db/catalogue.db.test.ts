@@ -70,12 +70,12 @@ const APPEND_ONLY = new Set([
 const NO_DELETE = new Set(['run_uncertainty', 'share_link']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
- * Empty since run_series gained its publication-scoped farmer policy
- * (022_publication.sql). Every table with a node column needs a farmer-aware
- * SELECT policy (one that calls app_farm_nodes) or a place here, so a new
- * per-farm table can't ship without a decision about farmers.
+ * invite_node is a pending farmer invite's farms, owners only like invite
+ * (034_farmer_invites.sql). Every table with a node column needs a
+ * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
+ * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>();
+const FARMERS_NEVER_READ = new Set<string>(['invite_node']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 

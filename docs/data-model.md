@@ -419,7 +419,9 @@ the result change?", and put back any earlier version.
   unused until API keys exist). Kinds recorded: `member.added/removed/role`
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
-  or a restore causes), `invite.sent/revoked` (email masked `j•••@domain`),
+  or a restore causes, and a farmer invite's links, cause `invite`, logged
+  in `app_accept_invites`), `invite.sent/revoked` (email masked
+  `j•••@domain`; a farmer invite adds its number of `farms`),
   `publication.published/notice_changed`, `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
@@ -725,6 +727,14 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   them (trigger `node_unlink_farmers`), and the Network tab says so first. A trigger allows only `farm`
   nodes and only members whose role is `farmer`; `assert_same_project` keeps
   the node in the project.
+- **Farmer invites** (034, WP-2.2): an address without a verified account is
+  invited with the role `farmer`, and `invite_node (invite_id, project_id,
+  node_id)` holds the farms the invite will link. Accepting it creates the
+  membership and those `farm_link` rows together (`app_accept_invites`,
+  [§ Email tokens and invites](#email-tokens-and-invites-004_emailsql)).
+  Deleting a farm, or turning it into a gauge or water user
+  (`node_unlink_farmers` also clears `invite_node`), takes it out of every
+  pending invite; the invite stays with its other farms.
 - **Who can see a farm** (022, design §10.2): `app_farm_access(project,
   node)` lists everyone who can read that farm, by display name and effective
   role, never an email: its linked farmers, and every viewer-and-above member
@@ -955,7 +965,8 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (accounts that predate 004 were backfilled as verified) |
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
-| `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`; unique per (project, email) / (team, email) |
+| `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (`en` / `af`, the email's language, default `en`; 034); unique per (project, email) / (team, email) |
+| `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
   functions: `app_issue_email_token()` (per-address cooldown, replaces older
@@ -967,8 +978,14 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   updates must leave `invited_by` = the current user. `app_invite_for_token()` answers the
   public "what is this link for?" lookup; `app_accept_invites(user)` converts
   every live invite for the user's **verified** address into
-  `project_member` / `team_member` rows and deletes those invites. Invites
-  cascade away with their project or team.
+  `project_member` / `team_member` rows, links the farms of each farmer
+  invite (`farm_link` from `invite_node`, only where the membership really is
+  `farmer`: someone already on the project with another role keeps it and
+  gets no link), records `member.added` and `farmer.linked` (cause `invite`),
+  and deletes those invites. Invites cascade away with their project or team.
+- `invite_node` RLS mirrors `invite`: project owners only, for every
+  operation. Farmers never read it (the catalogue's "farmers never read"
+  list).
 
 ### Sign-in lockout (005_login_throttle.sql)
 

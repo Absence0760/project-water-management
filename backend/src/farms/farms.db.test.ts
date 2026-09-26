@@ -221,8 +221,12 @@ describe('/farmers', () => {
 	});
 
 	it('adds only verified accounts, only to farms, only by an owner, and never an existing member', async () => {
+		// An unverified account is invited instead (WP-2.2, farms/invites.db.test.ts), not added.
 		const later = await signUp('Unverified', { verified: false });
-		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: later.email, nodeIds: [farmA.id] })).status).toBe(409);
+		const invited = await owner.call('POST', `/projects/${projectId}/farmers`, { email: later.email, nodeIds: [farmA.id] });
+		expect(invited.status).toBe(201);
+		expect(invited.body.invited).toBe(true);
+		expect(await rowsAs(later, 'SELECT 1 FROM project WHERE id = $1', [projectId])).toEqual([]);
 		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: stranger.email, nodeIds: [outlet.id] })).status).toBe(400);
 		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: viewer.email, nodeIds: [farmA.id] })).status).toBe(409);
 		expect((await viewer.call('POST', `/projects/${projectId}/farmers`, { email: stranger.email, nodeIds: [farmA.id] })).status).toBe(403);

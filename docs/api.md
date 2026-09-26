@@ -412,13 +412,39 @@ only, farmers are added below.
 Members with the role `farmer`, linked to the farm nodes they may read
 ([data-model.md § Farmers](./data-model.md#farmers-019_farmer_rolesql-020_farm_scopesql)).
 Remove one (or a farmer leaves) with `DELETE /projects/:id/members/:userId`;
-their links go with the membership.
+their links go with the membership. An address without a **verified**
+account is invited instead (WP-2.2, [§ Invites](#invites)), with the farms
+the invite will link; revoke a pending one with
+`DELETE /projects/:id/invites/:inviteId`.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/farmers` | – | `{ farmers: { userId, email, displayName, nodeIds }[] }` | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50] }` | `201 { farmer }`. `409` when no **verified** account has the address (invites for farmers are WP-2.2) or the account is already a member; `400` when a node isn't a farm of this project | owner |
+| GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: 'en' \| 'af' }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
+| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer here | owner |
+
+- `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
+  displayName, nodeIds }` or an `InvitedFarmer = { status: 'invited' |
+  'expired', inviteId, email, nodeIds, invitedBy, expiresAt, locale }`. An
+  invite's `nodeIds` shrink when one of its farms is deleted or stops being a
+  farm; it never gains one.
+- `locale` is the invite email's language, `en` by default. `af` is stored
+  and sent in English until the Afrikaans wording lands (WP-2.5).
+- **Bulk** takes one farm per row (a CSV of `email,farm,language`). Each row
+  is checked on its own, and a bad row never stops the others: an invalid
+  address, a farm name that doesn't match a farm of this project **exactly
+  and case-insensitively** (never a guess at a near name), or a language
+  other than `en`/`af` (`English`/`Afrikaans` also accepted) is that row's
+  `error`. Rows are then grouped by address: a verified account is added (or,
+  already a farmer, gains the farms; the rows never take one away), anyone
+  else is invited with the farms of all their rows (added to any the invite
+  already names), and a member with another role is an `error`. One email
+  per address at most, after commit, with the usual re-send cooldown; the
+  first row's language wins. `row` is the index into `rows`.
+- `dryRun: true` works out every row's outcome and rolls the lot back:
+  nothing is written, no email goes out. The Invite farmers dialog shows it
+  as the preview before sending.
 
 ### Invites
 
