@@ -117,9 +117,6 @@
 	.context .lbl {
 		color: var(--text);
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	/* Four cards: one row, then 2 × 2 on narrow screens. */
 	.stats {
 		grid-template-columns: repeat(4, minmax(0, 1fr));

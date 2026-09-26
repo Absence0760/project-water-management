@@ -260,10 +260,6 @@
 		grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
 		gap: 0 1rem;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.lbl {
 		display: inline-flex;
 		align-items: center;

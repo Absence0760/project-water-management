@@ -504,19 +504,6 @@
 		gap: 0.4rem;
 		align-items: center;
 	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn {
-		border-radius: 0;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-		margin-left: -1px;
-	}
 	.tools :global(.btn[aria-pressed='true']) {
 		background: var(--accent-soft);
 		border-color: var(--accent);

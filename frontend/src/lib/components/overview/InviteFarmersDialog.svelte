@@ -252,9 +252,6 @@
 </Dialog>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.modes,
 	.farms {
 		border: 0;

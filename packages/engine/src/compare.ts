@@ -627,6 +627,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
+	// Engine ≥ 0.44.0; set only by the seasonal outlook's members, never a project setting.
+	demandFactorFrom: { label: 'Demand factors apply from', fmt: (v) => (v ? String(v) : 'the run start') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },

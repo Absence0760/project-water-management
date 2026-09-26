@@ -1089,9 +1089,6 @@
 </Lazy>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.lead {
 		max-width: 80ch;
 		margin: -0.25rem 0 0.9rem;

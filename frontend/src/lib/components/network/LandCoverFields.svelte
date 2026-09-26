@@ -126,17 +126,10 @@
 		align-items: center;
 		min-height: 36px;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.defaults {
 		grid-column: span 2;
 		margin: 0;
 		font-size: 0.85rem;
-	}
-	.small {
-		font-size: 0.8rem;
 	}
 	.warn {
 		color: var(--warning);

@@ -262,7 +262,7 @@ export interface RecordProblem {
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
 export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId): CalibrationProblem {
 	const run = prepareRun(input);
-	const { settings, days, startDate, aligned, month, warnings } = run;
+	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (modelId === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
@@ -272,7 +272,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			? { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) }
 			: Object.fromEntries(LEGACY_PARAMS.map((s) => [s.key, settings.calibration[s.key] as number]));
 	const natural = new Float64Array(days);
-	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
+	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start);
 
 	const kind = pickObservedKind(settings.calibrationFlowKind, input.series ?? {}, warnings);
 	if (!kind) throw new Error('no observed flow series to calibrate against: upload a gauge or logger record');

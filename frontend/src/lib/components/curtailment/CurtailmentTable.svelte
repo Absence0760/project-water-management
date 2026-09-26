@@ -268,15 +268,8 @@
 	.curtailment h3 {
 		margin-top: 1.1rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.note {
 		margin-top: 0.5rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	tr.group th {
 		text-align: center;

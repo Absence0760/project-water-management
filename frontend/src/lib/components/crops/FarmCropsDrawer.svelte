@@ -114,10 +114,6 @@
 	.areas th[scope='row'] {
 		text-align: left;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.small {
 		font-size: 0.85rem;
 	}

@@ -299,6 +299,39 @@ guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
 holds the largest single chunk down, which is what catches a tab's code
 sliding back into the page chunk.
 
+## Shared CSS (frontend)
+
+Styles live in two places. `frontend/src/app.css` is global and loads with
+every page: the design tokens (light and dark), element defaults, and the
+shared classes (`.btn`, `.field`, `.panel`, `table.data`, `.alert`,
+`.badge`, `.stat`, `.muted`, `.num`, …). Everything else is a component's
+own scoped `<style>`, which Svelte compiles with the component's hash class
+and ships in that component's chunk.
+
+The shared utilities at the end of `app.css` (issue #9) were scoped copies
+until then: `.small` (secondary text, 0.8rem; 53 copies), `.u` (a unit in a
+label or table head; 22) and `.seg`, the segmented control (a row of `.btn`
+joined into one, any number of buttons; 5). Use them rather than copying
+the rule into a component. A component that needs a different value keeps
+its own rule, which wins because its selector carries the hash class (a
+few have `.small { font-size: 0.85rem }`, and the Settings sections a `.u`
+with its own size). They come after the other shared rules so they win the same
+ties the scoped copies did. `e2e/tests/shared-css.spec.ts` pins their
+computed styles (light, dark, phone, desktop, the report in print, the
+override editor's three-button switch).
+
+A rule moves into `app.css` only when it is identical in three or more
+components *and* the move lowers the total: global CSS is on every page's
+first load, so a rule only a lazy tab uses costs every other page for
+nothing. Moving these three saved 1.0 KB gzip in total and 0.1–0.2 KB on
+the Runs, Network, Data and Settings tabs and the report, for ~0.06 KB more
+on pages that use none of them (home, sign-in, /farm, /share). Measured and left scoped:
+the loading spinner (−0.3 KB total but +0.1 KB on /farm, /share and sign-in,
+which never show it), `.stat dd.sub` (−0.07 KB, and three components style
+their `dd.sub` differently, so a global rule would leak into them), and the
+Settings sections' repeated field and table rules (their copies share one
+lazy chunk, where gzip already folds them).
+
 ## Request lifecycle (backend)
 
 1. CloudFront adds `X-CloudFront-Shared-Secret`, and the backend rejects

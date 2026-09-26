@@ -98,9 +98,6 @@
 		max-width: 72ch;
 		line-height: 1.5;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	@media print {
 		.no-print {
 			display: none;

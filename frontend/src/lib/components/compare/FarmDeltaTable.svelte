@@ -91,13 +91,6 @@
 {/if}
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.sort {
 		background: none;
 		border: 0;

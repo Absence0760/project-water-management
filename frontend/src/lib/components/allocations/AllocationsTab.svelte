@@ -348,9 +348,6 @@
 		gap: 0.5rem;
 		flex-wrap: wrap;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.form {
 		margin-bottom: 1rem;
 		padding-bottom: 0.75rem;

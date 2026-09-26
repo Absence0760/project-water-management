@@ -106,9 +106,6 @@
 	.owner-line {
 		margin-bottom: 0.4rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.move {
 		margin-top: 0.75rem;
 	}

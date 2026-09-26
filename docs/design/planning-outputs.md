@@ -8,8 +8,9 @@ describes them generically. The build is tracked in
 [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
 Built so far: R1 (`demand.scale`, engine 0.41.0,
 [scenarios.md](../scenarios.md)), R3's equal-share board
-([ui.md § Share the pain](../ui.md#share-the-pain)) and R4's engine half
-(§3.4); the rest is not yet.
+([ui.md § Share the pain](../ui.md#share-the-pain)), R2's sweeps (§3.2),
+R4's engine half (§3.4) and R5's engine core (§3.5, engine 0.44.0); the
+rest is not yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -153,6 +154,35 @@ Still to build: the project settings for the method and the risk cut-offs
   "likely".
 
 ### 3.5 R5: the seasonal outlook (**M–L**)
+
+**Status: engine core built** (`packages/engine/src/outlook/`, engine
+0.44.0 for `settings.demandFactorFrom`; method, day mapping, state
+continuation, metric and planning rule in
+[model.md §2.15](../model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)).
+`runSeasonalOutlook(input, { decisionDate, seasonEnd, levels,
+analogueYears?, planningShare?, … })` runs every analogue year × demand
+level from the base run's state on the decision date and returns, per
+level, season-end storage (total and per dam), % of demand met and the
+EWR/Reserve share as median and 10th–90th percentiles with every year's
+values, and the planning figure as data (`describePlanningFigure`: "in 17
+of 21 analogue years"). Defaults waiting on the client: the season,
+1 October – 30 April (`defaultOutlookSeason`, O3), and the planning share,
+80 % (O6); the 10-year minimum for percentiles waits on the hydrologist.
+Only `demand.scale` ops make a level (anything else would change the
+history the season starts from). Still to build:
+- **the backend half**: a sweep from a decision-date state. R2's sweep job
+  runs whole-record members; the outlook needs a job kind (or a sweep mode)
+  that builds its members with `outlookMemberInput` and stores each
+  `OutlookMember` (years × levels of them, more than the 12-member sweep
+  cap, so its own limits), then `summariseOutlook`; plus the project
+  settings for the season (O3) and the planning share (O6);
+- **the WUA screen**: the demand levels side by side (the percentiles, the
+  per-year spread, the planning figure in its own words, the pending
+  defaults marked), and the monthly-plan entry of R1's `months` form;
+- **the farmer view E3**: the published level's outcome per farm, once the
+  WUA publishes it (O5 decides whether farmers see it, and in Afrikaans);
+- R6's review triggers, which re-run this from storage bands at the review
+  date.
 
 - **Method:** ESP from the run's state on a decision date (a project
   setting, default the start of the irrigation season). For each historical

@@ -229,10 +229,6 @@
 	h4 {
 		margin-top: 1rem;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.note {
 		font-size: 0.8rem;
 	}
