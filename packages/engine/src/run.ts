@@ -68,6 +68,19 @@ import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurv
 
 const SEC_PER_DAY = 86_400;
 
+/**
+ * A plain number[] copy of a daily series. A run writes ~150 series of a
+ * whole record (≈ 830 000 values on an example catchment); Array.from on a
+ * typed array walks its iterator and cost ~14 ms of a ~70 ms run, where an
+ * indexed copy costs ~1 ms (docs/followups.md, the example-catchment budget).
+ */
+function toPlainArray(values: ArrayLike<number>): number[] {
+	const n = values.length;
+	const a = new Array<number>(n);
+	for (let i = 0; i < n; i++) a[i] = values[i]!;
+	return a;
+}
+
 export type { NaturalFlowInput, RunContext } from './runoff';
 export { resolveCatchmentAreaKm2 } from './runoff';
 
@@ -170,7 +183,7 @@ function runNetwork(
 	// --- outputs -----------------------------------------------------------------
 	const out: RunSeries[] = [];
 	const push = (nodeId: string | null, key: string, label: string, unit: string, values: ArrayLike<number>) =>
-		out.push({ nodeId, key, label, unit, values: Array.from(values) });
+		out.push({ nodeId, key, label, unit, values: toPlainArray(values) });
 
 	const simOutflow = topo.outflow >= 0 ? sim.nodes[topo.outflow]!.outflow : new Float64Array(days);
 	const observedKind = pickObservedKind(settings.calibrationFlowKind, series, warnings);
