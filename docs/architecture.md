@@ -347,6 +347,8 @@ merges into:
   merged (the fetch falls back to yesterday's, or fails and retries). DWS re-reads a year before its newest day (verified
   data is revised in arrears), 10 years on the first fetch; rows the page
   dates outside that window, or after today, are dropped (`outside`).
+  A feed's `startDate` is a floor for every fetch, not just the first: the re-read
+  never reaches before it, where the series may hold the owner's own data.
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health
@@ -365,9 +367,10 @@ merges into:
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
   source normally lags: 12 days for CHIRPS, under 12 days ahead for the
-  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`,
-  `disabled`. A feed not fetched two days after it was attached is stale ("the
-  background worker may not be running"). Emailing owners about a stale feed
+  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
+  (not fetched yet, or not since a new place or series was saved),
+  `disabled`. A feed not fetched two days after it was attached or changed is
+  stale ("the background worker may not be running"). Emailing owners about a stale feed
   is WP-2.13.
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):

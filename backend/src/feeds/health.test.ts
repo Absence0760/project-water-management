@@ -76,7 +76,26 @@ describe('feedHealth', () => {
 	it('stale: never fetched days after it was attached (is the worker running?), or fetching but finding nothing', () => {
 		const never = { ...base, createdAt: '2026-09-20T10:00:00Z', lastAttemptAt: null, lastSuccessAt: null, lastDataDate: null };
 		expect(feedHealth(never, today)).toMatchObject({ state: 'stale', message: expect.stringMatching(/worker may not be running/) });
-		expect(feedHealth({ ...never, lastAttemptAt: '2026-09-24T06:00:00Z' }, today)).toMatchObject({ state: 'stale', message: expect.stringMatching(/found no data yet/) });
+		const empty = { ...never, lastAttemptAt: '2026-09-24T06:00:00Z', lastSuccessAt: '2026-09-24T06:00:00Z' };
+		expect(feedHealth(empty, today)).toMatchObject({ state: 'stale', message: 'Fetches succeed but have found no data yet: check the cells or station.' });
+	});
+
+	it('pending again after a new place or series is saved: the old fetches say nothing about it', () => {
+		// 018_feeds.sql clears the data, success and failures on a re-target, but keeps last_attempt_at.
+		const retargeted = { ...base, updatedAt: '2026-09-25T09:00:00Z', lastSuccessAt: null, lastDataDate: null, consecutiveFailures: 0 };
+		expect(feedHealth(retargeted, today)).toEqual({ state: 'pending', stale: false, staleAfterDays: 12, message: 'Waiting for its first fetch.' });
+		// Still unfetched two days on: the worker may not be running, counted from the save.
+		expect(feedHealth(retargeted, '2026-09-28')).toMatchObject({
+			state: 'stale',
+			message: 'Not fetched since it was changed on 2026-09-25: the background worker may not be running.'
+		});
+		// Fetched since, finding nothing: the usual message.
+		expect(feedHealth({ ...retargeted, lastAttemptAt: '2026-09-25T09:05:00Z', lastSuccessAt: '2026-09-25T09:05:00Z' }, today)).toMatchObject({
+			state: 'ok',
+			message: 'OK; no data yet, checked 2026-09-25.'
+		});
+		// A plain save (same place and series) keeps the data, so the data decides.
+		expect(feedHealth({ ...base, updatedAt: '2026-09-25T09:00:00Z' }, today).state).toBe('ok');
 	});
 
 	it('disabled, whatever else', () => {

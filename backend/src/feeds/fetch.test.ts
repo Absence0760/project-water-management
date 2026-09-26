@@ -42,6 +42,23 @@ describe('fetchWindow', () => {
 		expect(CHIRPS_MAX_DAYS).toBe(120);
 	});
 
+	it('never reads before a configured startDate, even to re-read revisions (days before it may be the owner’s own data)', () => {
+		// A second CHIRPS fetch would otherwise re-read 50 days back, into August.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-09-01' }, '2026-09-22', '2026-09-25')).toEqual({ start: '2026-09-01', end: '2026-09-24' });
+		// Far enough past startDate, the revision window is unchanged.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2026-01-01' }, '2026-09-20', '2026-09-25')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		// DWS re-reads a year, but not across startDate.
+		expect(fetchWindow('dws', { station: 'X0H000', startDate: '2026-03-01' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2026-03-01', end: '2026-09-25' });
+		expect(fetchWindow('dws', { station: 'X0H000', startDate: '2020-03-01' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
+	});
+
+	it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'America/St_Johns'])('counts calendar days the same in any machine zone, across a leap day (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		expect(fetchWindow('chirps', grid, '2024-02-27', '2024-03-02')).toEqual({ start: '2024-01-08', end: '2024-03-01' });
+		expect(fetchWindow('chirps_gefs', grid, null, '2024-02-20')).toEqual({ start: '2024-02-20', end: '2024-03-06' });
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2024-02-29', '2024-03-10')).toEqual({ start: '2023-03-01', end: '2024-03-10' });
+	});
+
 	it('GEFS: the 16 days from today', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});

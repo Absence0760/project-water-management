@@ -43,19 +43,27 @@ export interface FetchRequest {
 	today: string;
 }
 
-/** The days to ask for, from what the feed already has. */
+/**
+ * The days to ask for, from what the feed already has. A configured startDate
+ * is a floor for every fetch, not just the first: the revision re-read never
+ * reaches before it, where the target series may hold the owner's own data.
+ */
 export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate: string | null, today: string): { start: string; end: string } {
+	const from = (revisionDays: number, firstDays: number) => {
+		const start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
+		return config.startDate && start < config.startDate ? config.startDate : start;
+	};
 	switch (source) {
 		case 'chirps': {
 			const end = addDays(today, -1);
-			const start = lastDataDate ? addDays(lastDataDate, -CHIRPS_REVISION_DAYS) : (config.startDate ?? addDays(today, -CHIRPS_FIRST_DAYS));
+			const start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS);
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > CHIRPS_MAX_DAYS ? addDays(start, CHIRPS_MAX_DAYS - 1) : end;
 			return { start, end: capped };
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
 		case 'dws': {
-			const start = lastDataDate ? addDays(lastDataDate, -DWS_REVISION_DAYS) : (config.startDate ?? addDays(today, -365 * DWS_FIRST_YEARS));
+			const start = from(DWS_REVISION_DAYS, 365 * DWS_FIRST_YEARS);
 			const limit = addDays(start, 365 * DWS_MAX_YEARS - 1);
 			return { start, end: limit < today ? limit : today };
 		}

@@ -193,6 +193,24 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
 	});
 
+	it('a later fetch never re-reads before the feed’s startDate, where the series holds the owner’s own days', async () => {
+		const owner = await signUp('Floor');
+		const pid = await project(owner);
+		// The owner's own rainfall before the feed takes over.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-30), values: [7, 7] })).status).toBe(200);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		for (let i = 0; i < 2; i++) {
+			// The second fetch has a newest day, so it re-reads revisions: not across startDate.
+			await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+			expect((await tick()).done).toBe(1);
+		}
+		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(addDays(-30));
+		expect(s.values.slice(0, 2)).toEqual([7, 7]);
+		expect(s.values[10]).not.toBeNull(); // startDate (day -20) on is the feed's
+	});
+
 	it('a failed fetch records the reason, writes nothing, and the feed shows failing', async () => {
 		const owner = await signUp('Failer');
 		const pid = await project(owner);
@@ -209,6 +227,8 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		// Fixing the cell clears the failure (a new place) and the next fetch succeeds.
 		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()] } });
 		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null });
+		// The old place's fetch says nothing about the new one: waiting, not "ok, no data".
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health).toMatchObject({ state: 'pending', message: 'Waiting for its first fetch.' });
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		await tick();
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health.state).toBe('ok');
@@ -241,6 +261,60 @@ describe('the scheduler', () => {
 		await asOwner(`UPDATE data_feed SET consecutive_failures = 1, last_scheduled_at = now() - interval '16 minutes' WHERE id = $1`, [on]);
 		expect((await withoutUser((db) => claimDueFeeds(db, 50))).map((f) => f.id)).toEqual([on]);
 		await expect(withoutUser((db) => claimDueFeeds(db, 0))).rejects.toMatchObject({ code: '22023' });
+	});
+
+	it('two ticks at once never claim the same feed (FOR UPDATE SKIP LOCKED), and a feed idle for days is claimed once, not once per missed day', async () => {
+		const owner = await signUp('Racer');
+		const pid = await project(owner);
+		const ids: string[] = [];
+		for (let i = 0; i < 6; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id);
+		// The worker was down for five days.
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '5 days' WHERE project_id = $1`, [pid]);
+		const [a, b] = await Promise.all([withoutUser((db) => claimDueFeeds(db, 50)), withoutUser((db) => claimDueFeeds(db, 50))]);
+		const claimed = [...a, ...b].map((f) => f.id);
+		expect(claimed.sort()).toEqual([...ids].sort());
+		expect(await withoutUser((db) => claimDueFeeds(db, 50))).toEqual([]);
+	});
+
+	it('the oldest-scheduled feeds go first when more are due than a tick takes', async () => {
+		const owner = await signUp('Queue');
+		const pid = await project(owner);
+		const ids: string[] = [];
+		for (let i = 0; i < 3; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id);
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [ids[0]]);
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '3 days' WHERE id = $1`, [ids[1]]);
+		// ids[2] was never scheduled: first of all.
+		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[2], ids[1]]);
+		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[0]]);
+	});
+
+	it('a failing feed backs off 15 min × 2^(failures − 1), never beyond its own interval', async () => {
+		const owner = await signUp('Backoff');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const dueAfter = async (failures: number, minutesAgo: number) => {
+			await asOwner(`UPDATE data_feed SET consecutive_failures = $2, last_scheduled_at = now() - make_interval(mins => $3) WHERE id = $1`, [id, failures, minutesAgo]);
+			return (await withoutUser((db) => claimDueFeeds(db, 50))).length === 1;
+		};
+		// Three failures: an hour (a minute's slack for the tick).
+		expect(await dueAfter(3, 55)).toBe(false);
+		expect(await dueAfter(3, 60)).toBe(true);
+		// Eight failures would be 32 h: capped at the day.
+		expect(await dueAfter(8, 23 * 60)).toBe(false);
+		expect(await dueAfter(8, 24 * 60)).toBe(true);
+		// An hourly feed's cap is its hour.
+		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' });
+		expect(await dueAfter(5, 50)).toBe(false);
+		expect(await dueAfter(5, 60)).toBe(true);
+	});
+
+	it('scheduling a feed whose fetch is already waiting ("Run now") adds no second job', async () => {
+		const owner = await signUp('Dedupe');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		expect((await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(202);
+		expect(await scheduleDueFeeds()).toEqual({ queued: 1, refused: 0 });
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]))[0].n).toBe(1);
 	});
 
 	it('a tick queues and runs due feeds end to end (dev:feeds:run is this with every feed)', async () => {
