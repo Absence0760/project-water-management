@@ -635,6 +635,17 @@
 //             merges since the entry above; issue #17 step 4 adds the farm
 //             drawer (its own chunk), the Dialog side variant and the entry
 //             links on the Summary and the Network: 945 → 948. Headroom ~5 KB.
+// 2026-09-26  total 945 → 948 KB. Issue #45, series import formats: the
+//             per-file delimiter and decimal-separator reader (semicolon and
+//             tab files with decimal commas, quoted fields, thousands
+//             separators) and the DWS export reader, on the engine's DWS row
+//             parser shared with the feed, plus the upload summary's DWS
+//             lines. Measured 945 → 948 (+3.0 KB, 966 406 → 969 461 bytes)
+//             over main @ 7f49dd4, all in the lazy upload-form chunk (+2.9 KB)
+//             and the help guide; largest chunk unchanged. No headroom left.
+// 2026-09-26  total 953 → 957 KB (measured 952). Merging #17 step 4's farm
+//             drawer (948) with #45's import formats (+3, lazy upload chunk)
+//             and main since. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -645,7 +656,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 953,
+	totalCodeKb: 957,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

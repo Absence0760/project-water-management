@@ -300,3 +300,51 @@ test('an hourly file is added up into 08:00 days, or midnight days, and the seri
 	expect(s.startDate).toBe('2020-03-04');
 	expect(s.values).toEqual([0, 16, 0]);
 });
+
+// Issue #45: a DWS hydrology export loads as it is. The synthetic fixture is the
+// one the feed's and the import's unit tests read (packages/engine/fixtures).
+test('a DWS export loads with its missing-data codes and -999 as gaps, and the summary says why', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series DWS export');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
+	await form.getByLabel('CSV file').setInputFiles(fileURLToPath(new URL('../../packages/engine/fixtures/dws-daily-export.txt', import.meta.url)));
+	const summary = form.getByRole('definition');
+	await expect(summary.nth(0)).toHaveText('2021-01-01 → 2021-01-11');
+	await expect(summary.nth(1)).toHaveText('11');
+	await expect(summary.nth(2)).toHaveText('7');
+	await expect(summary.nth(3)).toHaveText('4');
+	await expect(form.getByTestId('dws-summary')).toHaveText(
+		'10 rows, Daily avg flow rate in cubic metres/sec 99999.999. 3 read as gaps: 2 rows with a missing-data quality code (170, 255); 1 negative value (a placeholder such as -999).'
+	);
+	await expect(form.getByTestId('dws-quality')).toHaveText('1 × 6, 2 × 1, 60 × 1, 170 × 1, 255 × 1');
+	await form.getByLabel(/^Name/).fill('Weir X0H000');
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toHaveText('Uploaded 11 days to “Weir X0H000”.');
+
+	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()) as { startDate: string; values: (number | null)[] };
+	expect(stored.startDate).toBe('2021-01-01');
+	expect(stored.values).toEqual([0.412, 0.398, 1.897, null, null, null, 12.5, 0.371, null, 0.355, 0.349]);
+});
+
+test('a semicolon file with decimal commas loads; one that mixes decimal points in is refused with the reason', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series semicolons');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('CSV file').setInputFiles({ name: 'mixed.csv', mimeType: 'text/csv', buffer: Buffer.from('datum;reën\n2021-10-01;12,5\n2021-10-02;3.25\n') });
+	await expect(form.getByRole('alert')).toHaveText(
+		'mixed.csv: the file mixes decimal points ("3.25", line 3) and decimal commas ("12,5", line 2); use one throughout'
+	);
+	await form.getByLabel('CSV file').setInputFiles({ name: 'rain.csv', mimeType: 'text/csv', buffer: Buffer.from('datum;reën\n2021-10-01;12,5\n2021-10-02;"1 234,5"\n2021-10-03;0\n') });
+	const summary = form.getByRole('definition');
+	await expect(summary.nth(0)).toHaveText('2021-10-01 → 2021-10-03');
+	await expect(summary.nth(2)).toHaveText('3');
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toContainText('Uploaded 3 days');
+	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()) as { values: (number | null)[] };
+	expect(stored.values).toEqual([12.5, 1234.5, 0]);
+});

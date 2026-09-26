@@ -159,7 +159,11 @@ shorter than the cap looks as before.
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
-  Dropping a CSV anywhere on the page opens it with that file.
+  Dropping a CSV anywhere on the page opens it with that file. It reads a
+  date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
+  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
+  rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -833,7 +837,26 @@ reference (wide screens still show it on the right); the empty state points at
 it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
-summary says so). In number fields, a comma is a thousands separator only in a
+summary says so), and YYYYMMDD. The delimiter (comma, semicolon or tab) is
+worked out from the file's rows, outside double quotes, and quoted fields may
+hold it. The decimal separator is decided once per file (`lib/series/csv.ts`,
+issue #45): a value that settles it (12,5 · 0,359 · 1.234,5 say decimal comma;
+2.5 · 1,234.5 say decimal point) sets it, thousands separators (spaces, or
+commas or dots in valid groups) are dropped, a file mixing both conventions is
+refused naming a line of each, and in a semicolon or tab file with nothing to
+settle it a value that reads either way (1,234) is refused rather than guessed
+(a comma file defaults to the decimal point, since its unquoted values can't
+hold a decimal comma). A row split by another delimiter than the file's is
+reported as that, not as a bad date. **DWS hydrology exports** load as they
+are (`lib/series/dws.ts`, picked by `lib/series/file.ts`): the fixed-width
+daily table HyData.aspx prints (`DATE D AVG F/R QUAL`, YYYYMMDD), as text or
+the saved page, or headerless `YYYYMMDD value [quality]` rows. Rows are read by
+the automatic DWS feed's own code (`@water-management/engine/dws`), so a
+missing-data quality code (151, 165, 170, 172, 246, 247, 255), a blank value or
+a negative placeholder such as -999 is a gap, never a value. The summary adds a
+*DWS export* line (rows, the value column as the file's format block describes
+it, and how many rows were read as gaps and why) and the quality codes met; a
+sub-daily DWS export (a TIME column) is refused. In number fields, a comma is a thousands separator only in a
 valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
