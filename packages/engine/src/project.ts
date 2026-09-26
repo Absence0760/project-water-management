@@ -1613,7 +1613,7 @@ export interface RunSummary {
 	/** Where the water went, per water year and over the run (engine ≥ 0.12.0). Absent on older runs. */
 	waterBalance?: WaterBalance;
 	/**
-	 * The forecast days of a forecast-mode run (engine ≥ 0.36.0, WP-2.12,
+	 * The forecast days of a forecast-mode run (engine ≥ 0.37.0, WP-2.12,
 	 * ./forecast.ts runForecastChecked): every other figure in this summary covers the days
 	 * before `forecast.from` only. Absent on ordinary runs and older runs.
 	 */
@@ -1723,7 +1723,7 @@ export interface ModelOutput {
 	series: RunSeries[];
 	summary: RunSummary;
 	/**
-	 * Forecast mode only (engine ≥ 0.36.0, WP-2.12, ./forecast.ts): the first day whose rain
+	 * Forecast mode only (engine ≥ 0.37.0, WP-2.12, ./forecast.ts): the first day whose rain
 	 * came from the forecast after the last observed rain day, null when the
 	 * run has no forecast tail. Absent on ordinary runs.
 	 */

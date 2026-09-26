@@ -310,7 +310,7 @@ cheap. `pinned` is on every run's metadata (`RunMeta`), so a feature that needs
 a kept base run (scenarios, issue #18) can read it from the run list.
 
 **Forecast runs (`trigger = 'forecast'`, 042_auto_rerun.sql, WP-2.12,
-[model.md §2.4f](./model.md#24f-forecast-mode-engine--0360-roadmap-wp-212)).** Capped like
+[model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).** Capped like
 any automatic trigger (above): the newest unkept forecast run replaces the
 one before. A forecast run's input snapshot holds the forecast tail; every
 other run's doesn't (the backend stores the input it ran on, cut at the
