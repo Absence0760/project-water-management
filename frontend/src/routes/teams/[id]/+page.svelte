@@ -1,4 +1,11 @@
 <script lang="ts">
+	// A team's page (docs/ui.md § Teams): outcomes first. A header (the name, a
+	// one-line summary, and the actions: Portfolio, Team settings, Add member,
+	// New project), then the team's projects with their EWR traffic lights as
+	// the main column (from the portfolio, GET /teams/:id/portfolio) and the
+	// members beside them. The name, the thresholds and leave/delete sit in the
+	// settings sheet (`?settings=1`, lib/components/teams/TeamSettings.svelte),
+	// out of the reading path.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -9,7 +16,8 @@
 		hasTeamRole,
 		TEAM_ROLES,
 		type Invite,
-		type ProjectSummary,
+		type Portfolio,
+		type PortfolioProject,
 		type Team,
 		type TeamMember,
 		type TeamRole
@@ -20,42 +28,51 @@
 	import { upsertInvite } from '$lib/components/auth-extras/invites';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fmtDate } from '$lib/format/number';
 	import EmailText from '$lib/components/common/EmailText.svelte';
-	import { thresholdsError, thresholdsRule, thresholdsSource } from '$lib/components/portfolio/portfolio';
+	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
+	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	import {
+		ageText,
+		alertsText,
+		curtailmentHref,
+		damText,
+		DEFAULT_SORT,
+		farmsShortText,
+		farmsShortTotalText,
+		farmsUnknownText,
+		portfolioTotals,
+		sortPortfolio,
+		sourceText,
+		statusSummary,
+		thresholdsRule
+	} from '$lib/components/portfolio/portfolio';
+	import TeamSettings from '$lib/components/teams/TeamSettings.svelte';
+	import { withParam, withoutParam } from '$lib/workspace/overlays';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	const teamId = $derived(page.params.id ?? '');
 	const me = $derived(session.user?.id ?? '');
 
 	let team = $state<Team | null>(null);
 	let members = $state<TeamMember[]>([]);
-	let projects = $state<ProjectSummary[]>([]);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
 	let notFound = $state(false);
 	let error = $state<string | null>(null);
 	let busy = $state<string | null>(null);
 
-	let newName = $state('');
-	let renaming = $state(false);
-	let renamed = $state(false);
-
-	// The portfolio's traffic-light cut-offs (D11), in percent; admins edit them.
-	let green = $state(5);
-	let amber = $state(20);
-	let savingThresholds = $state(false);
-	let thresholdsSaved = $state<string | null>(null);
-	let thresholdsFailed = $state<string | null>(null);
-	const thresholdsInvalid = $derived(thresholdsError(green, amber));
-	const thresholdsUnchanged = $derived(
-		!!team && team.portfolioThresholds.green === green && team.portfolioThresholds.amber === amber
-	);
+	// The team's projects with their traffic lights: the portfolio's rows, worst first.
+	let portfolio = $state<Portfolio | null>(null);
+	let portfolioError = $state<string | null>(null);
+	const rows = $derived(portfolio ? sortPortfolio(portfolio.projects, DEFAULT_SORT) : []);
+	const totals = $derived(portfolio ? portfolioTotals(portfolio.projects) : null);
 
 	let email = $state('');
 	let role = $state<TeamRole>('member');
 	let adding = $state(false);
 	let addError = $state<string | null>(null);
 	let added = $state<string | null>(null);
+	let emailInput: HTMLInputElement | undefined = $state();
 
 	const invitesApi = emailAuthApi(api).teamInvites;
 	let invites = $state<Invite[]>([]);
@@ -75,20 +92,37 @@
 	const adminCount = $derived(members.filter((m) => m.role === 'admin').length);
 	const soleAdmin = (m: TeamMember) => m.role === 'admin' && adminCount <= 1;
 
+	// --- the settings sheet: open while the URL says `settings` (Back closes it) ---
+	const settingsParam = $derived(page.url.searchParams.has('settings'));
+	let settingsOpen = $state(false);
+	$effect(() => {
+		settingsOpen = settingsParam;
+	});
+	$effect(() => {
+		// Closed (Done, Esc, the ✕): drop `settings` in place.
+		if (!settingsOpen && untrack(() => settingsParam)) void goto(withoutParam(page.url, 'settings'), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+	const settingsHref = $derived(withParam(page.url, 'settings', '1'));
+
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+	async function loadPortfolio() {
+		portfolioError = null;
+		try {
+			portfolio = await api.teams.portfolio(teamId);
+		} catch (e) {
+			portfolioError = msg(e);
+		}
+	}
 
 	async function load() {
 		loading = true;
 		loadError = null;
 		notFound = false;
 		try {
-			const [detail, list] = await Promise.all([api.teams.get(teamId), api.projects.list()]);
+			const [detail] = await Promise.all([api.teams.get(teamId), loadPortfolio()]);
 			team = detail.team;
 			members = detail.members;
-			newName = detail.team.name;
-			green = detail.team.portfolioThresholds.green;
-			amber = detail.team.portfolioThresholds.amber;
-			projects = list.filter((p) => p.team?.id === teamId);
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else loadError = msg(e);
@@ -100,44 +134,6 @@
 		void teamId;
 		untrack(load);
 	});
-
-	async function rename(e: SubmitEvent) {
-		e.preventDefault();
-		if (!team) return;
-		renaming = true;
-		error = null;
-		try {
-			team = await api.teams.rename(team.id, newName.trim());
-			newName = team.name;
-			renamed = true;
-		} catch (err) {
-			error = msg(err);
-		} finally {
-			renaming = false;
-		}
-	}
-
-	async function saveThresholds(next: { green: number; amber: number } | null) {
-		if (!team) return;
-		savingThresholds = true;
-		thresholdsFailed = null;
-		thresholdsSaved = null;
-		try {
-			team = await api.teams.setThresholds(team.id, next);
-			green = team.portfolioThresholds.green;
-			amber = team.portfolioThresholds.amber;
-			thresholdsSaved = next ? 'Saved. The portfolio now uses these thresholds.' : 'Saved. The portfolio uses the default thresholds again.';
-		} catch (err) {
-			thresholdsFailed = msg(err);
-		} finally {
-			savingThresholds = false;
-		}
-	}
-
-	function submitThresholds(e: SubmitEvent) {
-		e.preventDefault();
-		if (!thresholdsInvalid) void saveThresholds({ green, amber });
-	}
 
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
@@ -161,6 +157,11 @@
 		} finally {
 			adding = false;
 		}
+	}
+
+	function focusAddMember() {
+		emailInput?.scrollIntoView({ block: 'center' });
+		emailInput?.focus();
 	}
 
 	async function setRole(m: TeamMember, next: TeamRole) {
@@ -205,6 +206,12 @@
 		}
 	}
 
+	/** From the settings sheet: close it, then ask in the confirm dialog (never two modals stacked). */
+	function askDelete() {
+		settingsOpen = false;
+		deleteOpen = true;
+	}
+
 	async function deleteTeam() {
 		if (!team) return;
 		deleting = true;
@@ -222,9 +229,48 @@
 	}
 
 	const self = $derived(members.find((m) => m.userId === me));
+	const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+	// Viewers can't run or publish; "publish a run" is advice for the project's editors.
+	const canPublish = (p: PortfolioProject) => p.role === 'editor' || p.role === 'owner';
 </script>
 
 <svelte:head><title>{team ? `${team.name} · ` : ''}Teams · Water Management</title></svelte:head>
+
+{#snippet projectRow(p: PortfolioProject)}
+	{@const age = ageText(p)}
+	{@const short = farmsShortText(p)}
+	<li class="prow">
+		<div class="p-name">
+			<a class="name" href="{base}/projects/{p.id}">{p.name}</a>
+			<span class="sub">
+				{sourceText(p)}{#if p.source === null && canPublish(p)}{' '}· run the model to see figures{/if}
+			</span>
+		</div>
+		<div class="p-ewr">
+			<StatusPill {p} />
+			{#if age}<span class="sub">Figures {age}</span>{/if}
+			{#if p.stale}<span class="badge badge-warn flag">Stale: over 7 days old</span>{/if}
+		</div>
+		<dl class="p-facts">
+			<div>
+				<dt>Farms short</dt>
+				<dd>
+					{#if short}
+						{#if p.farmsShort7 && p.sourceRunId}<a href={curtailmentHref(p, base)}>{short}</a>{:else}{short}{/if}
+					{:else}<span class="muted">{farmsUnknownText(p)}</span>{/if}
+				</dd>
+			</div>
+			<div>
+				<dt>Lowest dam</dt>
+				<dd class:muted={!p.damsKnown || !p.lowestDamPct}>{damText(p)}</dd>
+			</div>
+			<div>
+				<dt>Alerts</dt>
+				<dd>{#if p.alertsFiring > 0}<span class="badge badge-warn">{alertsText(p)}</span>{:else}<span class="muted">{alertsText(p)}</span>{/if}</dd>
+			</div>
+		</dl>
+	</li>
+{/snippet}
 
 <main class="page">
 	<LoadState {loading} error={loadError} retry={load}>
@@ -234,254 +280,186 @@
 			</div>
 		{:else}
 			<nav class="crumbs" aria-label="Breadcrumb"><a href="{base}/teams">Teams</a> <span aria-hidden="true">/</span></nav>
-			<div class="head">
-				<h1>{team.name}</h1>
-				<span class="badge" class:badge-owner={isAdmin}>{team.role}</span>
-			</div>
-			<p class="muted facts">
-				{team.projectCount} project{team.projectCount === 1 ? '' : 's'} · {team.memberCount} member{team.memberCount === 1 ? '' : 's'} ·
-				created {fmtDate(team.createdAt)}
-			</p>
-			<p class="portfolio-link"><a href="{base}/teams/{team.id}/portfolio">Portfolio: every catchment's EWR status, farms and dams</a></p>
-
-			{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-
-			<div class="grid">
-				<section class="panel members" aria-labelledby="members-h">
-					<div class="panel-head">
-						<h2 id="members-h">Members</h2>
-						{#if !isAdmin}<span class="muted small">Only admins can manage members.</span>{/if}
+			<header class="page-head">
+				<div class="title">
+					<div class="head">
+						<h1>{team.name}</h1>
+						<span class="badge" class:badge-owner={isAdmin}>{team.role}</span>
 					</div>
-					<div class="table-wrap">
-						<table class="data">
-							<thead>
-								<tr>
-									<th scope="col">Name</th>
-									<th scope="col" class="email">Email</th>
-									<th scope="col">Role</th>
-									<th scope="col"><span class="visually-hidden">Actions</span></th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each members as m (m.userId)}
-									<tr>
-										<th scope="row">
-											{m.displayName}{#if m.userId === me}&nbsp;<span class="muted">(you)</span>{/if}
-											<span class="sub-email"><EmailText email={m.email} /></span>
-										</th>
-										<td class="email"><EmailText email={m.email} /></td>
-										<td>
-											{#if isAdmin}
-												<select
-													aria-label="Team role for {m.displayName}"
-													value={m.role}
-													disabled={busy === m.userId}
-													onchange={(e) => setRole(m, e.currentTarget.value as TeamRole)}
-												>
-													{#each TEAM_ROLES as r (r)}
-														<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{r}</option>
-													{/each}
-												</select>
-											{:else}
-												<span class="badge" class:badge-owner={m.role === 'admin'}>{m.role}</span>
-											{/if}
-										</td>
-										<td class="act">
-											{#if isAdmin && m.userId !== me}
-												<button
-													type="button"
-													class="btn btn-sm btn-danger"
-													disabled={busy === m.userId}
-													onclick={() => remove(m)}
-													aria-label="Remove {m.displayName}"
-												>
-													Remove
-												</button>
-											{/if}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<p class="muted facts">
+						{plural(team.projectCount, 'project')}{#if totals && totals.catchments}{' '}({statusSummary(totals.counts)}){/if} ·
+						{plural(team.memberCount, 'member')} · created {fmtDay(fmtDate(team.createdAt))}
+					</p>
+				</div>
+				<div class="head-actions">
+					<a class="btn" href="{base}/teams/{team.id}/portfolio">Portfolio</a>
+					<a class="btn" href={settingsHref} data-sveltekit-noscroll>Team settings</a>
+					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
+					{#if canAddProjects}<a class="btn btn-primary" href="{base}/?owner=team:{team.id}&new=1">New project</a>{/if}
+				</div>
+			</header>
 
-					{#if isAdmin}
-						<form class="add" onsubmit={add}>
-							{#if addError}<div class="alert alert-error" role="alert">{addError}</div>{/if}
-							<div class="form-row">
-								<div class="field grow">
-									<label for="tm-email">Add member by email</label>
-									<input id="tm-email" type="email" required placeholder="colleague@example.com" bind:value={email} />
-								</div>
-								<div class="field">
-									<label for="tm-role">Role</label>
-									<select id="tm-role" bind:value={role}>
-										{#each TEAM_ROLES as r (r)}<option value={r}>{r}</option>{/each}
-									</select>
-								</div>
-								<div class="field">
-									<button class="btn btn-primary" type="submit" disabled={adding || !email.trim()}>
-										{adding ? 'Adding…' : 'Add'}
-									</button>
-								</div>
-							</div>
-						</form>
-						<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
-						{#key teamId}
-							<PendingInvites
-								bind:invites
-								idPrefix="team"
-								load={() => invitesApi.list(teamId)}
-								resend={async (inv) => {
-									const r = await invitesApi.add(teamId, inv.email, inv.role as TeamRole);
-									if (r.invited) return r.invite;
-									addToMembers(r.member);
-									return null;
-								}}
-								revoke={(inv) => invitesApi.revoke(teamId, inv.id)}
-							/>
-						{/key}
-					{/if}
-					<dl class="roles">
-						<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
-						<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
-						<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
-					</dl>
-					<p class="muted small">Anyone without an account gets an email invitation to sign up.</p>
-				</section>
+			{#if error && !settingsOpen}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
-				<div class="side">
-					<section class="panel" aria-labelledby="tp-h">
+			<div class="team-body">
+				<div class="cols">
+					<section class="panel projects" aria-labelledby="tp-h">
 						<div class="panel-head">
 							<h2 id="tp-h">Projects</h2>
-							{#if canAddProjects}
-								<a class="small" href="{base}/?owner=team:{team.id}&new=1">New project in this team</a>
-							{/if}
+							<span class="muted small">EWR over the last 30 days of each project's figures, worst first</span>
 						</div>
-						{#if projects.length}
-							<ul class="plist">
-								{#each projects as p (p.id)}
-									<li>
-										<a href="{base}/projects/{p.id}">{p.name}</a>
-										<span class="muted small">updated {fmtDate(p.updatedAt)}</span>
-									</li>
-								{/each}
+						{#if portfolioError}
+							<div class="alert alert-error" role="alert">
+								The projects couldn't be loaded: {portfolioError}
+								<button type="button" class="btn btn-sm" onclick={loadPortfolio}>Try again</button>
+							</div>
+						{:else if totals && rows.length}
+							<dl class="kpis">
+								<div class="kpi">
+									<dt>EWR, last 30 days</dt>
+									<dd><StatusBar counts={totals.counts} /></dd>
+								</div>
+								<div class="kpi">
+									<dt>Farms short this week</dt>
+									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
+								</div>
+								<div class="kpi">
+									<dt>Alerts firing</dt>
+									<dd>{totals.alertsFiring}</dd>
+								</div>
+								<div class="kpi">
+									<dt>Last run</dt>
+									<dd>{totals.lastRunAt ? fmtDay(fmtDate(totals.lastRunAt)) : 'None yet'}</dd>
+								</div>
+							</dl>
+							<ul class="plist" aria-label="Projects of {team.name}">
+								{#each rows as p (p.id)}{@render projectRow(p)}{/each}
 							</ul>
-						{:else}
+							<p class="rule muted small">
+								Traffic lights: {thresholdsRule(team.portfolioThresholds)}.
+								<a href={settingsHref} data-sveltekit-noscroll>{isAdmin ? 'Change them' : 'Which apply'}</a> in the team settings.
+							</p>
+						{:else if totals}
 							<p class="muted">
 								{canAddProjects
 									? 'No projects yet. Create one here, or move an existing project into the team from its Summary tab.'
 									: 'No projects yet.'}
 							</p>
-						{/if}
-					</section>
-
-					<section class="panel" aria-labelledby="pt-h">
-						<div class="panel-head"><h2 id="pt-h">Portfolio traffic lights</h2></div>
-						<p class="small rule">
-							A catchment's EWR status on the <a href="{base}/teams/{team.id}/portfolio">portfolio</a> counts the days
-							in the last 30 its outlet EWR was not met: {thresholdsRule(team.portfolioThresholds)}.
-						</p>
-						<p class="muted small">{thresholdsSource(team.portfolioThresholds)}</p>
-						{#if isAdmin}
-							<form onsubmit={submitThresholds} novalidate>
-								{#if thresholdsFailed}<div class="alert alert-error" role="alert">{thresholdsFailed}</div>{/if}
-								<div class="form-row">
-									<div class="field">
-										<label for="pt-green">Green below (%)</label>
-										<input
-											id="pt-green"
-											type="number"
-											min="0"
-											max="100"
-											step="any"
-											inputmode="decimal"
-											required
-											aria-describedby={thresholdsInvalid ? 'pt-error' : undefined}
-											aria-invalid={thresholdsInvalid ? 'true' : undefined}
-											bind:value={green}
-											oninput={() => (thresholdsSaved = null)}
-										/>
-									</div>
-									<div class="field">
-										<label for="pt-amber">Amber below (%)</label>
-										<input
-											id="pt-amber"
-											type="number"
-											min="0"
-											max="100"
-											step="any"
-											inputmode="decimal"
-											required
-											aria-describedby={thresholdsInvalid ? 'pt-error' : undefined}
-											aria-invalid={thresholdsInvalid ? 'true' : undefined}
-											bind:value={amber}
-											oninput={() => (thresholdsSaved = null)}
-										/>
-									</div>
-								</div>
-								{#if thresholdsInvalid}<p id="pt-error" class="field-error small" role="alert">{thresholdsInvalid}</p>{/if}
-								<div class="t-actions">
-									<button class="btn" type="submit" disabled={savingThresholds || !!thresholdsInvalid || thresholdsUnchanged}>
-										{savingThresholds ? 'Saving…' : 'Save thresholds'}
-									</button>
-									{#if team.portfolioThresholds.source === 'team'}
-										<button type="button" class="btn btn-sm" disabled={savingThresholds} onclick={() => saveThresholds(null)}>
-											Use the defaults
-										</button>
-									{/if}
-								</div>
-								<p class="muted small" role="status">{thresholdsSaved ?? ''}</p>
-							</form>
 						{:else}
-							<p class="muted small">Only admins can change them.</p>
+							<p class="muted">Loading…</p>
 						{/if}
 					</section>
 
-					{#if isAdmin}
-						<section class="panel" aria-labelledby="ts-h">
-							<div class="panel-head"><h2 id="ts-h">Team name</h2></div>
-							<form onsubmit={rename}>
-								<div class="form-row">
-									<div class="field grow">
-										<label class="visually-hidden" for="tm-name">Team name</label>
-										<input id="tm-name" required maxlength="200" bind:value={newName} oninput={() => (renamed = false)} />
-									</div>
-									<div class="field">
-										<button class="btn" type="submit" disabled={renaming || !newName.trim() || newName.trim() === team.name}>
-											{renaming ? 'Saving…' : 'Rename'}
-										</button>
-									</div>
-								</div>
-								{#if renamed}<p class="muted small" role="status">Saved.</p>{/if}
-							</form>
-						</section>
-					{/if}
+					<section class="panel members" aria-labelledby="members-h">
+						<div class="panel-head">
+							<h2 id="members-h">Members</h2>
+							{#if !isAdmin}<span class="muted small">Only admins can manage members.</span>{/if}
+						</div>
+						<div class="table-wrap">
+							<table class="data">
+								<thead>
+									<tr>
+										<th scope="col">Name</th>
+										<th scope="col">Role</th>
+										<th scope="col"><span class="visually-hidden">Actions</span></th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each members as m (m.userId)}
+										<tr>
+											<th scope="row">
+												{m.displayName}{#if m.userId === me}&nbsp;<span class="muted">(you)</span>{/if}
+												<span class="sub-email"><EmailText email={m.email} /></span>
+											</th>
+											<td>
+												{#if isAdmin}
+													<select
+														aria-label="Team role for {m.displayName}"
+														value={m.role}
+														disabled={busy === m.userId}
+														onchange={(e) => setRole(m, e.currentTarget.value as TeamRole)}
+													>
+														{#each TEAM_ROLES as r (r)}
+															<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{r}</option>
+														{/each}
+													</select>
+												{:else}
+													<span class="badge" class:badge-owner={m.role === 'admin'}>{m.role}</span>
+												{/if}
+											</td>
+											<td class="act">
+												{#if isAdmin && m.userId !== me}
+													<button
+														type="button"
+														class="btn btn-sm btn-danger"
+														disabled={busy === m.userId}
+														onclick={() => remove(m)}
+														aria-label="Remove {m.displayName}"
+													>
+														Remove
+													</button>
+												{/if}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
 
-					<section class="panel danger" aria-labelledby="dz-h">
-						<div class="panel-head"><h2 id="dz-h">Leave or delete</h2></div>
-						{#if self}
-							<div class="dz-row">
-								<p class="small">
-									Leave the team. You keep projects that are also shared with you directly.
-								</p>
-								<button type="button" class="btn btn-danger" disabled={busy === self.userId} onclick={() => remove(self)}>
-									Leave team
-								</button>
-							</div>
-						{/if}
 						{#if isAdmin}
-							<div class="dz-row">
-								<p class="small">
-									Delete the team. Its projects are <strong>not</strong> deleted: they stay with the people they're
-									shared with directly.
-								</p>
-								<button type="button" class="btn btn-danger" onclick={() => (deleteOpen = true)}>Delete team</button>
-							</div>
+							<form class="add" onsubmit={add}>
+								{#if addError}<div class="alert alert-error" role="alert">{addError}</div>{/if}
+								<div class="field">
+									<label for="tm-email">Add member by email</label>
+									<input id="tm-email" type="email" required placeholder="colleague@example.com" bind:value={email} bind:this={emailInput} />
+								</div>
+								<div class="add-row">
+									<div class="field">
+										<label for="tm-role">Role</label>
+										<select id="tm-role" bind:value={role}>
+											{#each TEAM_ROLES as r (r)}<option value={r}>{r}</option>{/each}
+										</select>
+									</div>
+									<button class="btn btn-primary" type="submit" disabled={adding || !email.trim()}>
+										{adding ? 'Adding…' : 'Add'}
+									</button>
+								</div>
+							</form>
+							<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
+							{#key teamId}
+								<PendingInvites
+									bind:invites
+									idPrefix="team"
+									load={() => invitesApi.list(teamId)}
+									resend={async (inv) => {
+										const r = await invitesApi.add(teamId, inv.email, inv.role as TeamRole);
+										if (r.invited) return r.invite;
+										addToMembers(r.member);
+										return null;
+									}}
+									revoke={(inv) => invitesApi.revoke(teamId, inv.id)}
+								/>
+							{/key}
 						{/if}
+						<dl class="roles">
+							<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
+							<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
+							<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
+						</dl>
+						<p class="muted small">Anyone without an account gets an email invitation to sign up.</p>
 					</section>
 				</div>
 			</div>
+
+			<TeamSettings
+				bind:open={settingsOpen}
+				bind:team
+				error={settingsOpen ? error : null}
+				canLeave={!!self}
+				leaving={!!self && busy === self.userId}
+				onleave={() => self && remove(self)}
+				ondelete={askDelete}
+			/>
 		{/if}
 	</LoadState>
 </main>
@@ -504,6 +482,17 @@
 		color: var(--text-muted);
 		margin-bottom: 0.25rem;
 	}
+	.page-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem 1.5rem;
+		flex-wrap: wrap;
+		margin-bottom: 1.1rem;
+	}
+	.title {
+		min-width: 0;
+	}
 	.head {
 		display: flex;
 		align-items: center;
@@ -512,39 +501,154 @@
 	}
 	.head h1 {
 		margin: 0;
+		overflow-wrap: anywhere;
 	}
 	.facts {
-		margin: 0.25rem 0 0.5rem;
+		margin: 0.25rem 0 0;
 	}
-	.portfolio-link {
-		margin: 0 0 1.25rem;
+	.head-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
-	.grid {
+	/* The columns answer to the page's own width (the sidebar takes 240 px), not the window's. */
+	.team-body {
+		container: team-page / inline-size;
+	}
+	.cols {
 		display: grid;
-		grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
+	}
+	@container team-page (min-width: 56rem) {
+		.cols {
+			grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+		}
+	}
+	.cols > .panel {
+		margin: 0;
+		min-width: 0;
+	}
+	.projects {
+		container: team-projects / inline-size;
 	}
 	.small {
 		font-size: 0.85rem;
 	}
-	.add {
-		margin-top: 1rem;
+	.sub {
+		display: block;
+		margin-top: 0.15rem;
+		font-size: 0.8rem;
+		font-weight: 400;
+		color: var(--text-muted);
 	}
-	.added {
-		margin: 0.5rem 0 0;
+	.flag {
+		display: inline-block;
+		margin-top: 0.25rem;
+		text-transform: none;
+	}
+	/* The numbers across the top of the projects. */
+	.kpis {
+		margin: 0 0 0.75rem;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+		gap: 0.6rem;
+	}
+	.kpi {
+		min-width: 0;
+		background: var(--surface-2);
+		border-radius: var(--radius);
+		padding: 0.55rem 0.75rem;
+	}
+	.kpi dt {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin-bottom: 0.2rem;
+	}
+	.kpi dd {
+		margin: 0;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.plist {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	/* One project: stacked on a narrow column; name | status over the facts on a
+	   middling one; name | status | facts across a wide one. */
+	.prow {
+		display: grid;
+		gap: 0.5rem;
+		padding: 0.75rem 0;
+		border-top: 1px solid var(--border);
+	}
+	@container team-projects (min-width: 30rem) {
+		.prow {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			gap: 0.5rem 1rem;
+		}
+		.p-facts {
+			grid-column: 1 / -1;
+		}
+	}
+	@container team-projects (min-width: 46rem) {
+		.p-facts {
+			grid-column: auto;
+		}
+		.prow {
+			grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.9fr);
+			gap: 1rem;
+			align-items: start;
+		}
+	}
+	.name {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.p-facts {
+		margin: 0;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
 		font-size: 0.85rem;
-		color: var(--text-2);
 	}
-	.added:empty {
+	@container team-projects (max-width: 26rem) {
+		.p-facts {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0.25rem;
+		}
+		.p-facts div {
+			display: flex;
+			gap: 0.5rem;
+		}
+		.p-facts dt {
+			flex: none;
+			width: 6rem;
+		}
+	}
+	.p-facts dt {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.p-facts dd {
 		margin: 0;
 	}
-	.add .field {
-		margin-bottom: 0;
+	.rule {
+		margin: 0.5rem 0 0;
+		padding-top: 0.6rem;
+		border-top: 1px solid var(--border);
 	}
-	.grow {
-		flex: 1;
-		min-width: 200px;
+	/* Members: a narrow column, so the email sits under the name. */
+	.members .table-wrap {
+		max-height: none;
+	}
+	.sub-email {
+		display: block;
+		font-weight: 400;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
 	}
 	.act {
 		text-align: right;
@@ -555,11 +659,31 @@
 		text-transform: capitalize;
 		min-width: 6.5rem;
 	}
-	.sub-email {
-		display: none;
-		font-weight: 400;
-		font-size: 0.8rem;
-		color: var(--text-muted);
+	.add {
+		margin-top: 1rem;
+	}
+	.add .field {
+		margin-bottom: 0.5rem;
+	}
+	.add-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 0.75rem;
+	}
+	.add-row .field {
+		margin-bottom: 0;
+		flex: 1;
+	}
+	.add-row select {
+		width: 100%;
+	}
+	.added {
+		margin: 0.5rem 0 0;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.added:empty {
+		margin: 0;
 	}
 	.roles {
 		margin: 1rem 0 0.5rem;
@@ -580,57 +704,6 @@
 		margin: 0;
 		color: var(--text-2);
 	}
-	.plist {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.plist li {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		gap: 0.75rem;
-		padding: 0.45rem 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.plist li:last-child {
-		border-bottom: none;
-	}
-	.plist .muted {
-		flex: none;
-	}
-	.rule {
-		margin: 0 0 0.35rem;
-	}
-	.field-error {
-		margin: 0.25rem 0 0;
-		color: var(--danger);
-	}
-	.t-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		align-items: center;
-		margin-top: 0.5rem;
-	}
-	.danger {
-		border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
-	}
-	.dz-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.dz-row + .dz-row {
-		margin-top: 0.75rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
-	}
-	.dz-row p {
-		margin: 0;
-		color: var(--text-2);
-	}
 	.danger-btn {
 		background: var(--danger);
 		border-color: var(--danger);
@@ -645,23 +718,12 @@
 			color: #1a0a08;
 		}
 	}
-	@media (max-width: 900px) {
-		.grid {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
 	@media (max-width: 560px) {
-		.email {
-			display: none;
+		.head-actions {
+			width: 100%;
 		}
-		.sub-email {
-			display: block;
-		}
-		.dz-row {
-			flex-direction: column;
-			align-items: stretch;
-		}
-		.dz-row .btn {
+		.head-actions > * {
+			flex: 1 1 auto;
 			justify-content: center;
 		}
 	}

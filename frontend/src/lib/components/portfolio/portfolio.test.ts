@@ -8,7 +8,9 @@ import {
 	DEFAULT_SORT,
 	ewrText,
 	farmsShortText,
+	farmsShortTotalText,
 	farmsUnknownText,
+	portfolioTotals,
 	feedsText,
 	nextSort,
 	parseSort,
@@ -16,6 +18,7 @@ import {
 	sortPortfolio,
 	sourceText,
 	statusCounts,
+	statusSummary,
 	thresholdsError,
 	thresholdsRule,
 	thresholdsSource
@@ -165,5 +168,39 @@ describe('the thresholds (D11)', () => {
 		expect(thresholdsError(5, 101)).toBe('Each cut-off is a percentage from 0 to 100.');
 		expect(thresholdsError(20, 20)).toBe('The green cut-off must be below the amber one.');
 		expect(thresholdsError(30, 20)).toBe('The green cut-off must be below the amber one.');
+	});
+});
+
+describe('totals (the teams list, the team page and the portfolio header)', () => {
+	it('lists the statuses worst first, leaving out the empty ones', () => {
+		expect(statusSummary({ red: 1, amber: 0, unknown: 2, green: 4 })).toBe('1 red, 2 unknown, 4 green');
+		expect(statusSummary({ red: 0, amber: 0, unknown: 0, green: 0 })).toBe('');
+	});
+
+	it('adds up farms short only over known counts, and finds the newest run', () => {
+		const t = portfolioTotals([
+			row({ id: 'a', farmsShort7: 2, farmCount: 5, alertsFiring: 1, stale: true, lastRunAt: '2026-09-20T06:00:00.000Z' }),
+			row({ id: 'b', farmsShort7: null, farmCount: 9, lastRunAt: '2026-09-24T06:00:00.000Z', ewr: { status: 'green', daysNotMet30: 0, days30: 30, fraction30: 0 } }),
+			row({ id: 'c', farmsShort7: 0, farmCount: 3, alertsFiring: 2, lastRunAt: null, ewr: unknown('no-figures') })
+		]);
+		expect(t).toEqual({
+			catchments: 3,
+			counts: { red: 1, amber: 0, green: 1, unknown: 1 },
+			farmsShort7: 2,
+			farmsCounted: 8,
+			alertsFiring: 3,
+			stale: 1,
+			lastRunAt: '2026-09-24T06:00:00.000Z'
+		});
+		expect(farmsShortTotalText(t)).toBe('2 of 8 farms');
+	});
+
+	it('says nothing is known rather than zero when no catchment has a count', () => {
+		const t = portfolioTotals([row({ farmsShort7: null, lastRunAt: null })]);
+		expect(t.farmsShort7).toBeNull();
+		expect(farmsShortTotalText(t)).toBeNull();
+		expect(portfolioTotals([])).toMatchObject({ catchments: 0, farmsShort7: null, lastRunAt: null, alertsFiring: 0, stale: 0 });
+		expect(farmsShortTotalText({ farmsShort7: 0, farmsCounted: 0 })).toBe('No farms');
+		expect(farmsShortTotalText({ farmsShort7: 1, farmsCounted: 1 })).toBe('1 of 1 farm');
 	});
 });

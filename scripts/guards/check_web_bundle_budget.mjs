@@ -786,6 +786,14 @@
 //             cards, Supply by farm in its own lazy chunk) adds 5. The largest
 //             chunk stays under 42 KB because Supply by farm was split out.
 //             Headroom ~4 KB; the next page needs a trim (the i18n catalogue).
+// 2026-09-26  total 935 → 941 KB (measured 937). Issue #17's Teams pages
+//             (7 KB in their branch, measured from 913): the teams list's cards
+//             (numbers and traffic lights from each team's portfolio), the team
+//             page's projects-first layout with its settings sheet
+//             (teams/TeamSettings), the window-fitting portfolio with its
+//             summary tiles, and the shared StatusPill / StatusBar and
+//             portfolio totals. Route chunks only; no new dependency.
+//             Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -796,7 +804,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 935,
+	totalCodeKb: 941,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
