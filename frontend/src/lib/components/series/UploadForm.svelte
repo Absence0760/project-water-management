@@ -17,7 +17,7 @@
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
 	import { inStoredUnit, type UploadResult } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
-	import { valuesCache } from './valuesCache';
+	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 
 	let {
 		projectId,
@@ -113,9 +113,8 @@
 			targetValues = null;
 			return;
 		}
-		const key = `${projectId}/${t.id}`;
-		const hit = valuesCache.get(key);
-		if (hit && hit.startDate === t.startDate && hit.values.length === t.length) {
+		const hit = cachedValues(projectId, t);
+		if (hit) {
 			targetValues = hit;
 			return;
 		}
@@ -123,8 +122,7 @@
 		api.series
 			.get(projectId, t.id)
 			.then((d) => {
-				const v = { startDate: d.startDate, values: d.values };
-				valuesCache.set(key, v);
+				const v = cacheValues(projectId, d);
 				if (target?.id === t.id) targetValues = v;
 			})
 			.catch(() => {});
@@ -227,7 +225,7 @@
 				});
 				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${fmtNum(meta.length)} days to “${meta.name || label}”.` };
 			}
-			valuesCache.delete(`${projectId}/${result.meta.id}`);
+			forgetValues(projectId, result.meta.id);
 			uploadDone = result.message;
 			parsed = null;
 			fileName = '';

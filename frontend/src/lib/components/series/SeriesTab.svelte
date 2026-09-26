@@ -43,7 +43,7 @@
 	import type { UploadResult } from './upload';
 	import { isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
 	import { isRecordedRain } from './freshness';
-	import { valuesCache } from './valuesCache';
+	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 
 	let {
@@ -140,16 +140,13 @@
 	async function loadValues() {
 		await Promise.all(
 			list.map(async (s) => {
-				const key = `${projectId}/${s.id}`;
-				const hit = valuesCache.get(key);
-				if (hit && hit.startDate === s.startDate && hit.values.length === s.length) {
+				const hit = cachedValues(projectId, s);
+				if (hit) {
 					values = { ...values, [s.id]: hit };
 					return;
 				}
 				try {
-					const d = await api.series.get(projectId, s.id);
-					const v = { startDate: d.startDate, values: d.values };
-					valuesCache.set(key, v);
+					const v = cacheValues(projectId, await api.series.get(projectId, s.id));
 					values = { ...values, [s.id]: v };
 				} catch {
 					/* coverage cells stay "–" */

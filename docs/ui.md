@@ -178,7 +178,11 @@ shorter than the cap looks as before.
   (`series/upload.ts` `inStoredUnit`), so an l/s file that repeats stored
   days counts them as unchanged. The file is sent as it is: the server keeps
   the stored value of a day the file leaves blank, under the row lock, so a
-  stale copy in the browser can never write old values back.
+  stale copy in the browser can never write old values back. The Data tab,
+  the preview and the fit-period proposal share one cache of stored values
+  (`series/valuesCache.ts`), used only while the series' start, length and
+  `updatedAt` still match, so a same-length change (a restore, a feed
+  correction) is fetched again.
 - After an upload a banner offers **Re-run model**. Every tab notes new data
   since the last run: a rainfall series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
