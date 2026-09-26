@@ -19,8 +19,9 @@
 # send wake-ups.
 #
 # The data feeds' queues and the fetcher Lambda outside the VPC are in
-# feeds.tf (WP-2.10); the worker reaches them through the same endpoint.
-# NOT here yet: WP-2.13 gives the worker SES.
+# feeds.tf (WP-2.10), and the report renderer's in reports.tf (WP-2.15); the
+# worker reaches their queues through the same endpoint. reports.tf also gives
+# the worker SES (the report emails), through ses.tf's endpoint.
 # ----------------------------------------------------------------------------
 
 locals {
@@ -162,6 +163,16 @@ resource "aws_lambda_function" "worker" {
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
+      # Server-side reports (reports.tf): no Chromium here, so renders go to
+      # the renderer; the worker records them and emails the link (SES).
+      REPORT_RENDERER           = "sqs"
+      RENDER_REQUESTS_QUEUE_URL = aws_sqs_queue.render_requests.url
+      STORAGE                   = "s3"
+      REPORTS_BUCKET            = aws_s3_bucket.reports.bucket
+      MAIL_TRANSPORT            = "ses"
+      MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
+      SITE_URL                  = local.site_origin
+      SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
     }
   }
 
@@ -313,6 +324,25 @@ data "aws_iam_policy_document" "sqs_endpoint" {
     sid       = "WorkerUsesJobsQueue"
     actions   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
     resources = [aws_sqs_queue.jobs.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  # Reports (reports.tf): the worker asks the renderer and reads its answers.
+  statement {
+    sid       = "WorkerSendsRenderRequests"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.render_requests.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  statement {
+    sid       = "WorkerConsumesRenderResults"
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    resources = [aws_sqs_queue.render_results.arn]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]
