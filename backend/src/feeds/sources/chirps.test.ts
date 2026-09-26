@@ -43,6 +43,11 @@ describe('gridMean', () => {
 		expect(await gridMean(served({ [url]: grid([1 / 3, 0, 0, 0, 0, 0, 0, 0]) }), url, [cell(0, 0)])).toBe(0.33);
 	});
 
+	it('reads a cell on the grid’s south-east corner (the CHC grid’s is 60° S, 180° E, which config accepts)', async () => {
+		const http = served({ [url]: grid([1, 2, 3, 4, 10, 20, 30, 40]) });
+		expect(await gridMean(http, url, [{ lat: -20.1, lon: 25.2, weight: 1 }])).toBe(40);
+	});
+
 	it('is null when the file is not published', async () => {
 		expect(await gridMean(served({}), url, [cell(0, 0)])).toBeNull();
 	});

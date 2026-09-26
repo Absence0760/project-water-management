@@ -240,9 +240,16 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 
 /** The pixel (row, col) holding a point, or null outside the grid. */
 export function pixelOf(g: Pick<GridInfo, 'width' | 'height' | 'originLon' | 'originLat' | 'scaleLon' | 'scaleLat'>, lat: number, lon: number) {
-	// A point on a pixel edge belongs to the pixel east / south of it.
-	const col = Math.floor((lon - g.originLon) / g.scaleLon + 1e-6);
-	const row = Math.floor((g.originLat - lat) / g.scaleLat + 1e-6);
+	// A point on a pixel edge belongs to the pixel east / south of it, except
+	// on the grid's own east / south edge, where there is no such pixel: the
+	// CHC grid ends at 180° E and 60° S, both of which a feed may name.
+	const EPS = 1e-6;
+	const index = (x: number, n: number) => {
+		const i = Math.floor(x + EPS);
+		return i === n && x - n < EPS ? n - 1 : i;
+	};
+	const col = index((lon - g.originLon) / g.scaleLon, g.width);
+	const row = index((g.originLat - lat) / g.scaleLat, g.height);
 	if (row < 0 || col < 0 || row >= g.height || col >= g.width) return null;
 	return { row, col };
 }

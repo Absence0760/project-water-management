@@ -93,8 +93,24 @@ describe('openGrid + readPoints', () => {
 		const grid = (await openGrid(r.read))!;
 		expect(pixelOf(grid, -20.05, 25.05)).toEqual({ row: 1, col: 1 });
 		expect(pixelOf(grid, -19.99, 25.1)).toBeNull();
-		expect(pixelOf(grid, -20.1, 25.4)).toBeNull();
+		expect(pixelOf(grid, -20.1, 25.41)).toBeNull();
+		expect(pixelOf(grid, -20.31, 25.1)).toBeNull();
 		await expect(readPoints(r.read, grid, [{ lat: -21, lon: 25.1 }])).rejects.toThrow(/outside the grid/);
+	});
+
+	it('puts a point on the grid’s own east or south edge in the edge pixel, as there is none beyond it', async () => {
+		const r = reader(writeGrid(spec()));
+		const grid = (await openGrid(r.read))!;
+		expect(pixelOf(grid, -20.1, 25.4)).toEqual({ row: 2, col: 7 });
+		expect(pixelOf(grid, -20.3, 25.1)).toEqual({ row: 5, col: 2 });
+		expect(await readPoints(r.read, grid, [{ lat: -20.3, lon: 25.4 }])).toEqual([57.5]);
+		// The CHC grid: config accepts latitudes -60…60 and longitudes -180…180 (feeds/config.ts), so all four corners read.
+		const chc = { width: 7200, height: 2400, originLon: -180, originLat: 60, scaleLon: 0.05, scaleLat: 0.05 };
+		expect(pixelOf(chc, 60, -180)).toEqual({ row: 0, col: 0 });
+		expect(pixelOf(chc, -60, 180)).toEqual({ row: 2399, col: 7199 });
+		expect(pixelOf(chc, 60, 180)).toEqual({ row: 0, col: 7199 });
+		expect(pixelOf(chc, -60, -180)).toEqual({ row: 2399, col: 0 });
+		expect(pixelOf(chc, -60.001, 0)).toBeNull();
 	});
 
 	it('reads -9999, NaN and the GDAL_NODATA value as no data', async () => {
