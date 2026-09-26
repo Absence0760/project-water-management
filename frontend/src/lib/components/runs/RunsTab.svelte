@@ -20,6 +20,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun } from './cache';
 	import { runDamCapacity } from './results';
+	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
@@ -488,7 +489,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		</section>
 		{#if sections.length}
 			<nav class="panel sections" aria-label="Result sections">
-				<h2 class="rail-h">On this page</h2>
+				<!-- Screen readers only: the group names label the menu visibly, and the room goes to its entries (a 768px laptop window). -->
+				<h2 class="visually-hidden">On this page</h2>
 				<ul class="groups">
 					{#each groups as g, gi (gi)}
 						<li>
@@ -537,6 +539,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{/if}
 						{#if detail.run.id === currentPublishedRunId}<a class="badge badge-owner" href="#res-publication">Published</a>{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
+						<!-- The note leads the reader to the Record group, below the results (sections.ts). -->
+						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
 							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}{detail.run.createdBy ? ` by ${detail.run.createdBy}` : ''} · engine {detail.run.engineVersion}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
@@ -555,46 +559,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
-			</section>
-			<section class="panel" id="res-notes">
-				{#key shownRunId}
-					<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
-				{/key}
-				<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
-				<div class="evidence" id="res-evidence">
-					{#key shownRunId}
-						<Lazy load={loadEvidencePanel}>
-							{#snippet children(EvidencePanel)}
-								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-							{/snippet}
-						</Lazy>
-					{/key}
-				</div>
-				{#key shownRunId}
-					<Lazy load={loadRunInputsPanel}>
-						{#snippet children(RunInputsPanel)}
-							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
-						{/snippet}
-					</Lazy>
-				{/key}
-			</section>
-			<section class="panel" id="res-publication">
-				{#if publicationError}
-					<div class="alert alert-error" role="alert">
-						Couldn’t load the publication: {publicationError}
-						<button type="button" class="btn btn-sm" onclick={loadPublication}>Try again</button>
-					</div>
-				{:else if publication}
-					{#key shownRunId}
-						<Lazy load={loadPublicationPanel}>
-							{#snippet children(PublicationPanel)}
-								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
-							{/snippet}
-						</Lazy>
-					{/key}
-				{:else}
-					<p class="muted" role="status">Loading the publication…</p>
-				{/if}
 			</section>
 			<RunCharts
 				{projectId}
@@ -625,6 +589,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 						{/if}
 					</div>
+					<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify. -->
+					<div class="panel" id="res-uncertainty">
+						<Lazy load={loadUncertaintyPanel}>
+							{#snippet children(UncertaintyPanel)}
+								{#key shownRunId}
+									<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
+								{/key}
+							{/snippet}
+						</Lazy>
+					</div>
 				{/snippet}
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
@@ -646,16 +620,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
-						<!-- Uncertainty bands (issue #4 phase 9): with the calibration they come from, one menu entry. -->
-						<div class="uncertainty" id="res-uncertainty">
-							<Lazy load={loadUncertaintyPanel}>
-								{#snippet children(UncertaintyPanel)}
-									{#key shownRunId}
-										<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
-									{/key}
-								{/snippet}
-							</Lazy>
-						</div>
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
@@ -683,6 +647,48 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							</Lazy>
 						</div>
 					{/if}
+				{/snippet}
+				{#snippet record()}
+					<section class="panel" id="res-notes">
+						{#key shownRunId}
+							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
+						{/key}
+						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
+						<div class="evidence" id="res-evidence">
+							{#key shownRunId}
+								<Lazy load={loadEvidencePanel}>
+									{#snippet children(EvidencePanel)}
+										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+									{/snippet}
+								</Lazy>
+							{/key}
+						</div>
+						{#key shownRunId}
+							<Lazy load={loadRunInputsPanel}>
+								{#snippet children(RunInputsPanel)}
+									<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
+								{/snippet}
+							</Lazy>
+						{/key}
+					</section>
+					<section class="panel" id="res-publication">
+						{#if publicationError}
+							<div class="alert alert-error" role="alert">
+								Couldn’t load the publication: {publicationError}
+								<button type="button" class="btn btn-sm" onclick={loadPublication}>Try again</button>
+							</div>
+						{:else if publication}
+							{#key shownRunId}
+								<Lazy load={loadPublicationPanel}>
+									{#snippet children(PublicationPanel)}
+										<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
+									{/snippet}
+								</Lazy>
+							{/key}
+						{:else}
+							<p class="muted" role="status">Loading the publication…</p>
+						{/if}
+					</section>
 				{/snippet}
 				{#snippet deeperLead()}
 					<section class="panel" id="res-checks">
@@ -742,8 +748,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
-	.provenance,
-	.uncertainty {
+	.provenance {
 		margin-top: 1rem;
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
@@ -848,14 +853,20 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			display: flex;
 			flex-direction: column;
 		}
+		/* The list's panel shrinks first (its list scrolls inside, from a 7.5rem
+		   floor), and clips rather than spills: when it spilled, the runs slid
+		   under the menu, which then took their clicks. */
 		.rail .list {
 			flex: 0 1 auto;
 			min-height: 0;
+			overflow: hidden;
 			display: flex;
 			flex-direction: column;
 		}
+		/* A little less padding than a panel: the whole menu fits a 768px window beside a full runs list. */
 		.rail .sections {
 			flex: none;
+			padding-block: 0.5rem;
 		}
 		.rail .runs {
 			flex: 0 1 auto;
@@ -985,14 +996,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	}
 	/* In-page menu: the results run to about fifteen panels. A vertical list in
 	   the rail on wide screens, wrapping chips above the results on narrow ones. */
-	.rail-h {
-		font-size: 0.8rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted);
-		margin: 0 0 0.4rem;
-	}
 	.sections ul {
 		list-style: none;
 		margin: 0;
@@ -1001,8 +1004,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	/* A group's name above its links (sections.ts), quieter than the links. */
 	.grp-h {
 		display: block;
-		margin: 0.4rem 0 0.05rem;
+		margin: 0.15rem 0 0;
 		font-size: 0.7rem;
+		line-height: 1.3;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;

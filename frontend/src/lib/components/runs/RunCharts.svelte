@@ -29,6 +29,7 @@
 		riverTail,
 		farmsLead,
 		modelTail,
+		record,
 		deeperLead
 	}: {
 		projectId: string;
@@ -39,14 +40,16 @@
 		nodeOrder: ReadonlyMap<string, number>;
 		/** nodeId → dam capacity (m³) from the current model. */
 		damCapacity: ReadonlyMap<string, number>;
-		/** Full-width panels opening River & Reserve, before the EWR / flow-duration pair (Reserve compliance). */
+		/** Full-width panels opening River & Reserve, before EWR vs outflow (Reserve compliance). */
 		riverLead?: Snippet;
-		/** …and after the pair (EWR by month). */
+		/** …and after it (EWR by month, the uncertainty bands). */
 		riverTail?: Snippet;
 		/** Opening Farms & users, before farm detail (curtailment). */
 		farmsLead?: Snippet;
-		/** Model quality, after the hydrograph (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
+		/** Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
 		modelTail?: Snippet;
+		/** The Record group: notes, evidence and publication (sign-off, after the results). */
+		record?: Snippet;
 		/** Opening Dig deeper, before the explorer (self-checks). */
 		deeperLead?: Snippet;
 	} = $props();
@@ -182,7 +185,7 @@
 	<h2 class="group-h wide">River &amp; Reserve</h2>
 	{#if riverLead}<div class="wide slot">{@render riverLead()}</div>{/if}
 
-	<section class="panel" id="res-ewr" aria-labelledby="ewr-h">
+	<section class="panel wide" id="res-ewr" aria-labelledby="ewr-h">
 		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
 		{#if catchLoading && !ewrSeries.length}
 			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
@@ -202,60 +205,6 @@
 		{/if}
 	</section>
 
-	<section class="panel" id="res-fdc" aria-labelledby="fdc-h">
-		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
-		{#if catchLoading && !fdc.series.length}
-			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
-		{:else}
-			<LineChart
-				title="Flow-duration curve"
-				unit={flowUnit}
-				height={260}
-				series={fdc.series}
-				xy={fdc.xy}
-				xLabel="Time flow is equalled or exceeded (%)"
-				xFormat={(v) => `${fmtNum(v, v < 1 ? 2 : 0, true)}%`}
-				toolbar={unitToggle}
-				logToggle
-				bind:log={fdcLog}
-				caption={fdc.onObserved
-					? `Every curve ranks the ${fmtNum(fdc.obsDays)} days with an observed reading, so they compare like with like.`
-					: fdc.partial
-						? `Natural and simulated flow rank all ${fmtNum(fdc.runDays)} days of the run; observed flow only its ${fmtNum(fdc.obsDays)} days with a reading.`
-						: undefined}
-			/>
-			{#if fdc.partial}
-				<span class="seg days" role="group" aria-label="Days the curves rank">
-					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'observed'} onclick={() => (fdcDays = 'observed')}>Observed days</button>
-					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'all'} onclick={() => (fdcDays = 'all')}>Whole run</button>
-				</span>
-			{/if}
-			{#if fdc.q.length}
-				<table class="data compact q">
-					<thead>
-						<tr>
-							<th scope="col"><span class="visually-hidden">Flow record</span></th>
-							<th scope="col" class="num">Q10</th>
-							<th scope="col" class="num">Q50</th>
-							<th scope="col" class="num">Q90</th>
-							<th scope="col" class="num">Q95</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each fdc.q as q (q.label)}
-							<tr>
-								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
-								<td class="num">{fmtNum(q.q10, 3)}</td>
-								<td class="num">{fmtNum(q.q50, 3)}</td>
-								<td class="num">{fmtNum(q.q90, 3)}</td>
-								<td class="num">{fmtNum(q.q95, 3)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{/if}
-		{/if}
-	</section>
 
 	{#if riverTail}<div class="wide slot">{@render riverTail()}</div>{/if}
 
@@ -328,7 +277,67 @@
 		{/if}
 	</section>
 
+	<section class="panel wide" id="res-fdc" aria-labelledby="fdc-h">
+		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
+		{#if catchLoading && !fdc.series.length}
+			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
+		{:else}
+			<LineChart
+				title="Flow-duration curve"
+				unit={flowUnit}
+				height={260}
+				series={fdc.series}
+				xy={fdc.xy}
+				xLabel="Time flow is equalled or exceeded (%)"
+				xFormat={(v) => `${fmtNum(v, v < 1 ? 2 : 0, true)}%`}
+				toolbar={unitToggle}
+				logToggle
+				bind:log={fdcLog}
+				caption={fdc.onObserved
+					? `Every curve ranks the ${fmtNum(fdc.obsDays)} days with an observed reading, so they compare like with like.`
+					: fdc.partial
+						? `Natural and simulated flow rank all ${fmtNum(fdc.runDays)} days of the run; observed flow only its ${fmtNum(fdc.obsDays)} days with a reading.`
+						: undefined}
+			/>
+			{#if fdc.partial}
+				<span class="seg days" role="group" aria-label="Days the curves rank">
+					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'observed'} onclick={() => (fdcDays = 'observed')}>Observed days</button>
+					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'all'} onclick={() => (fdcDays = 'all')}>Whole run</button>
+				</span>
+			{/if}
+			{#if fdc.q.length}
+				<table class="data compact q">
+					<thead>
+						<tr>
+							<th scope="col"><span class="visually-hidden">Flow record</span></th>
+							<th scope="col" class="num">Q10</th>
+							<th scope="col" class="num">Q50</th>
+							<th scope="col" class="num">Q90</th>
+							<th scope="col" class="num">Q95</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each fdc.q as q (q.label)}
+							<tr>
+								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
+								<td class="num">{fmtNum(q.q10, 3)}</td>
+								<td class="num">{fmtNum(q.q50, 3)}</td>
+								<td class="num">{fmtNum(q.q90, 3)}</td>
+								<td class="num">{fmtNum(q.q95, 3)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		{/if}
+	</section>
+
 	{#if modelTail}<div class="wide slot">{@render modelTail()}</div>{/if}
+
+	{#if record}
+		<h2 class="group-h wide">Record</h2>
+		<div class="wide slot">{@render record()}</div>
+	{/if}
 
 	<h2 class="group-h wide">Dig deeper</h2>
 	{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}

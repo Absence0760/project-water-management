@@ -348,6 +348,20 @@ Tick items off (or move them into an issue) as they are done.
       (`time_series.day_boundary`, 033) and guarded against merging the
       other window
       ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+- [x] **A separate PE input for GR4J (done, engine 0.31.0, issue #39).**
+      One A-pan row drove crop demand, dam evaporation and GR4J's PE.
+      `settings.pe` now picks GR4J's PE: `{ kind: 'pan' }` (pan coefficient
+      × A-pan, the default and what every earlier run did, byte-identical)
+      or `{ kind: 'monthly', mm, source }` (12 water-year values entered
+      directly, e.g. a station FAO-56 ET₀, with a required source). Demand
+      and dam evaporation still read A-pan. Fit provenance
+      (`forcing.pe`, "Forcing changed since fit"), run comparison, scenarios
+      (`settings.set` `pe`), the ensemble (no pan shift under a monthly PE)
+      and `pnpm pan-sensitivity` (refuses a monthly PE) follow it. Settings
+      → Flow calibration also has an FAO-56 Table 5 helper that suggests the
+      pan-coefficient row from monthly RH, wind, siting and fetch; it only
+      fills the form
+      ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
 - [ ] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*).** A rain-source
       period scales the alternative gauge by a monthly factor, which keeps
@@ -547,7 +561,8 @@ the reports):
   - [ ] **Gap:** development (dams, abstraction) can't vary over time within
         a run.
 - **Q4: pan and lake factors.** These are two separate settings. PET uses a
-  monthly A-pan coefficient (FAO-56 range 0.35–0.85). Dams use WR90 lake
+  monthly A-pan coefficient (FAO-56 range 0.35–0.85), or from engine 0.31.0
+  a monthly PE row entered directly (`settings.pe`, model.md §2.4a). Dams use WR90 lake
   factors, which are **S-pan** based; the roadmap WP-1.21 spec is now
   corrected. The actual WR90 values for the evaporation zone haven't been
   read yet.

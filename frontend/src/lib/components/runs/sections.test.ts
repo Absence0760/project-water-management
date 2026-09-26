@@ -6,10 +6,11 @@ describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
-			[null, ['res-summary', 'res-notes', 'res-publication']],
-			['River & Reserve', ['res-ewr', 'res-ewr-grid']],
+			[null, ['res-summary']],
+			['River & Reserve', ['res-ewr', 'res-ewr-grid', 'res-uncertainty']],
 			['Farms & users', ['res-curtailment', 'res-farm']],
-			['Model quality', ['res-hydrograph', 'res-calibration', 'res-ewr-agreement']],
+			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
+			['Record', ['res-notes', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
 		]);
 	});
@@ -35,16 +36,15 @@ describe('resultGroups', () => {
 				wr2012: {} as RunSummary['wr2012'],
 				plausibility: {} as RunSummary['plausibility']
 			})
-		).toEqual(['res-hydrograph', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
+		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
-	it('names the entries that cover two panels', () => {
-		const all = resultSections({ farms: [] });
-		expect(all.find((s) => s.id === 'res-calibration')?.label).toBe('Calibration & uncertainty');
-		expect(all.find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
-		// The flow-duration curve sits beside EWR vs outflow, so it has no entry of its own.
-		expect(all.find((s) => s.id === 'res-ewr')?.label).toBe('EWR & flow duration');
-		expect(all.map((s) => s.id)).not.toContain('res-fdc');
+	it('puts the flow-duration curve with the hydrograph and the uncertainty bands with the river findings', () => {
+		const groups = resultGroups({ farms: [] });
+		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
+		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
+		expect(groups.find((g) => g.label === 'River & Reserve')!.sections.find((s) => s.id === 'res-uncertainty')?.label).toBe('Uncertainty bands');
+		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
 	});
 
 	it('uses unique ids', () => {

@@ -95,13 +95,19 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `calibration.baseFlowInitial`, `calibration.catchmentAreaKm2`,
 `calibration.summerMonths`, `simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
-`calibrationFlowKind`. Ranges follow `backend/src/projects/settings.ts`.
+`calibrationFlowKind`, `pe`. Ranges follow `backend/src/projects/settings.ts`.
+`pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
+of potential evaporation: `{ kind: 'pan' }` with no other key, or
+`{ kind: 'monthly', mm, source }` with 12 finite values of 0–10 000 mm and
+a source that is not blank when trimmed, at most 600 characters. Like every
+`settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
 
 **Which series scale.** Only the rain drivers: `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`.
 - Evaporation is not a series. It is the monthly A-pan setting `apanMm`
-  (and `panCoefficient` for GR4J), changed with `settings.set`.
+  (and, for GR4J, `panCoefficient` or a monthly `pe` row), changed with
+  `settings.set`.
 - Observed and logger flow are measurements the run is *scored against*,
   not drivers: scaling them would change the calibration statistics and the
   EWR agreement, never the simulated water. Not scalable.

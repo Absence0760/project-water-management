@@ -17,11 +17,13 @@ import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection }
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
+	resolvePe,
 	upgradeLegacyModel,
 	type CalibrationStats,
 	type CropDef,
 	type FarmSummary,
 	type NetworkNode,
+	type PeInput,
 	type ProjectModel,
 	type ProjectSettings,
 	type RunSummary,
@@ -522,6 +524,38 @@ function arrayChange(a: unknown, b: unknown): string {
 	return `${n} value${n === 1 ? '' : 's'} changed${len}`;
 }
 
+/**
+ * GR4J's potential-evaporation input in words (engine ≥ 0.31.0, issue #39):
+ * "pan coefficient × A-pan", or "monthly PE, 1,234 mm/yr (source: …)".
+ */
+export function peText(pe: PeInput): string {
+	if (pe.kind !== 'monthly') return 'pan coefficient × A-pan';
+	const total = pe.mm.reduce((a, v) => a + v, 0);
+	const source = pe.source.trim();
+	return `monthly PE, ${fmtValue(total, 0)} mm/yr (${source ? `source: ${source}` : 'no source given'})`;
+}
+
+/**
+ * The change of settings.pe between two runs, or null. A run saved without
+ * one (engine < 0.31.0) ran pan coefficient × A-pan. Two monthly rows name the
+ * months that changed (or how many) and the annual totals; a reworded source
+ * note is listed too, since it is part of the run's record.
+ */
+function peChange(ra: unknown, rb: unknown): string | null {
+	const a = resolvePe(ra, []);
+	const b = resolvePe(rb, []);
+	if (same(a, b)) return null;
+	if (a.kind !== 'monthly' || b.kind !== 'monthly') return `${peText(a)} → ${peText(b)}`;
+	const parts: string[] = [];
+	const rows = monthlyChange(a.mm, b.mm, 'mm');
+	if (rows) {
+		const total = (x: readonly number[]) => fmtValue(x.reduce((s, v) => s + v, 0), 0);
+		parts.push(`monthly PE ${rows} (${total(a.mm)} → ${total(b.mm)} mm/yr)`);
+	}
+	if (a.source.trim() !== b.source.trim()) parts.push(`source "${a.source.trim()}" → "${b.source.trim()}"`);
+	return parts.length ? parts.join('; ') : null;
+}
+
 type Fmt = (v: unknown) => string;
 const withUnit = (unit: string, digits = 3): Fmt => (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v, digits)} ${unit}`);
 const plain: Fmt = (v) => fmtValue(v);
@@ -554,6 +588,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
 	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') }
 };
+/** Engine ≥ 0.31.0; a snapshot without settings.pe ran pan coefficient × A-pan. */
+const PE_LABEL = 'Potential evaporation (GR4J)';
 const DATA_QUALITY_FIELDS: Record<string, ScalarField> = {
 	agreementMinRatio: { label: 'gauge/logger lowest ratio', fmt: pct },
 	agreementMaxRatio: { label: 'gauge/logger highest ratio', fmt: pct },
@@ -648,6 +684,8 @@ function diffSettings(
 		const c = monthlyChange(a[k], b[k], f.unit);
 		if (c) push(f.label, `${f.label}: ${c}`);
 	}
+	const pe = peChange(a.pe, b.pe);
+	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
@@ -706,7 +744,8 @@ function diffSettings(
 		'ewrRules',
 		'calibrationExclusions',
 		'zeroRainRuns',
-		'fitRecord'
+		'fitRecord',
+		'pe'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);

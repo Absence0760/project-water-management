@@ -13,7 +13,7 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${baseline}`);
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Calibration & uncertainty' }).click();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Uncertainty bands' }).click();
 	const panel = page.getByTestId('uncertainty-panel');
 	await expect(panel.getByText('No uncertainty ensemble has been stored for this run.')).toBeVisible();
 

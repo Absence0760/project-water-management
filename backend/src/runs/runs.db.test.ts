@@ -283,3 +283,55 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 		expect(rows).toEqual([{ seed: '42' }]);
 	});
 });
+
+describe('settings.pe (engine ≥ 0.31.0, issue #39)', () => {
+	const pe = { kind: 'monthly', mm: [90, 120, 150, 170, 150, 130, 90, 60, 45, 45, 55, 70], source: 'Station FAO-56 ET₀ × 1.0' };
+
+	it('stores a monthly PE, reads it back, and runs GR4J on it; the run records it', async () => {
+		const u = await signUp('Pe');
+		const projectId = await runnable(u);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.pe).toEqual({ kind: 'pan' });
+		const panRun = await u.call('POST', `/projects/${projectId}/runs`, { label: 'pan' });
+		expect(panRun.status).toBe(201);
+
+		const patched = await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: { ...pe, source: `  ${pe.source} ` } } });
+		expect(patched.status).toBe(200);
+		expect(patched.body.project.settings.pe).toEqual(pe);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.pe).toEqual(pe);
+
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'monthly PE' });
+		expect(res.status).toBe(201);
+		const run = (await u.call('GET', `/projects/${projectId}/runs/${res.body.run.id}`)).body.run;
+		expect(run.settings.pe).toEqual(pe);
+		expect((await u.call('GET', `/projects/${projectId}/runs/${panRun.body.run.id}`)).body.run.settings.pe).toEqual({ kind: 'pan' });
+
+		// Back to pan: replaced whole, the monthly row doesn't linger.
+		const back = await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: { kind: 'pan' } } });
+		expect(back.status).toBe(200);
+		expect(back.body.project.settings.pe).toEqual({ kind: 'pan' });
+	});
+
+	it('rejects an invalid PE with a 400 and no raw DB error text, and leaves the stored one alone', async () => {
+		const u = await signUp('Pebad');
+		const projectId = await runnable(u);
+		for (const bad of [{ kind: 'et0' }, { ...pe, mm: pe.mm.slice(1) }, { ...pe, mm: [...pe.mm.slice(1), -5] }, { ...pe, source: '' }, { ...pe, extra: 1 }]) {
+			const res = await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: bad } });
+			expect(res.status, JSON.stringify(bad)).toBe(400);
+			expect(JSON.stringify(res.body)).not.toMatch(/violates|constraint|relation|syntax error|column|pg_|SQLSTATE/i);
+		}
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.pe).toEqual({ kind: 'pan' });
+	});
+
+	it('refuses GR4J on a monthly PE of zeros with GR4J_NO_PET, even with A-pan set; legacy still runs', async () => {
+		const u = await signUp('Pezero');
+		const projectId = await runnable(u); // A-pan 150 mm every month
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: { ...pe, mm: monthly(0) } } })).status).toBe(200);
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'zero PE' });
+		expect(res.status).toBe(400);
+		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Settings → Demand/);
+		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
+		// Positive control: a non-zero monthly row runs.
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { pe } })).status).toBe(200);
+		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'PE' })).status).toBe(201);
+	});
+});

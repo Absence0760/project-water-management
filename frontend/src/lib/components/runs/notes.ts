@@ -18,3 +18,18 @@ export function explanationPrompt(level: Wr2012FlagLevel | null | undefined, not
 	if (level === 'unusable') return 'The WR2012 check marks this run not usable for EWR findings until it is explained. Say why the difference stands.';
 	return null;
 }
+
+/**
+ * The note's first line for the run header, cut at a word near `max`
+ * characters with an ellipsis; null without a note. The whole note sits in
+ * the Record group, which the header links to.
+ */
+export function notesPreview(notes: string | undefined, max = 140): string | null {
+	const first = normaliseNotes(notes ?? '').split(/\r?\n/)[0]!.trim();
+	if (!first) return null;
+	const more = first.length > max || normaliseNotes(notes ?? '').includes('\n');
+	if (first.length <= max) return more ? `${first} …` : first;
+	const cut = first.slice(0, max);
+	const at = cut.lastIndexOf(' ');
+	return `${(at > max * 0.6 ? cut.slice(0, at) : cut).trimEnd()} …`;
+}

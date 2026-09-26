@@ -371,7 +371,8 @@ function storeFit(ex: ExampleProject, fit: { budget: number; seed: number }) {
 			panCoefficient: s.panCoefficient,
 			apanMm: s.apanMm,
 			chirpsBiasCorrection: s.chirpsBiasCorrection,
-			zeroRainRuns: s.zeroRainRuns
+			zeroRainRuns: s.zeroRainRuns,
+			pe: s.pe
 		},
 		validate: true,
 		validationRecord: null,

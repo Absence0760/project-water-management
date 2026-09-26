@@ -401,11 +401,21 @@
 //             and the report's inputs row. No new dependency; the largest
 //             page chunk is unchanged (39 KB). Headroom ~6 KB on the total.
 //             Issue #9 still stands.
-// 2026-09-26  total 774 → 801 KB; other ceilings unchanged. The Scenarios
+// 2026-09-26  total 774 → 782 KB; other ceilings unchanged. A separate GR4J
+//             PE input and the FAO-56 Table 5 helper (issue #39, engine
+//             0.31.0). The branch measured 776 KB. The engine's PE resolver,
+//             provenance, compare and ensemble wording sit in the shared
+//             engine chunks; the Table 5 lookup (96 cells) and its Settings
+//             panel (PanCoefficientHelper) load only when Settings shows
+//             the pan coefficient, as a code-split chunk; the rest is the
+//             PE control in the lazy Settings chunk (settings/peInput.ts),
+//             help entries, and the fit provenance and report rows. No new
+//             dependency; the largest page chunk is 40 KB. Headroom ~6 KB.
+// 2026-09-26  total 782 → 809 KB; other ceilings unchanged. The Scenarios
 //             tab (issue #18 stage D): the list, the override editor and its
 //             "Add a change" form for every ScenarioOp, the op list with the
 //             baseline callout, and the scenario-vs-base compare section.
-//             Measured on the branch (off main 0b3f51c): 795 KB, of which
+//             Measured on the branch (off main 0b3f51c) at 795 KB, over a 774 KB base, of which
 //             the two new lazy chunks are ~24 KB gzip (the tab, editor, form
 //             and compare section ~13 KB; the op list with the field specs,
 //             op descriptions and op builder, scenarios/fields.ts + ops.ts,
@@ -424,7 +434,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 801,
+	totalCodeKb: 809,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,

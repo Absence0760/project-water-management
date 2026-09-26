@@ -7,11 +7,13 @@
 		PAN_COEFFICIENT_PRESETS,
 		PAN_COEFFICIENT_TYPICAL_MAX,
 		PAN_COEFFICIENT_TYPICAL_MIN,
+		PE_SOURCE_MAX,
 		panCoefficientOutOfRange,
 		type CalibrationParams,
 		type CalibrationReport,
 		type FitRecord,
 		type FlowShareMethod,
+		type PeInput,
 		type ProjectSettings,
 		type SeriesProvenance
 	} from '@water-management/engine';
@@ -50,11 +52,13 @@
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
+	import { annualGr4jPeMm, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
 	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
+	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 
 	let {
@@ -76,11 +80,13 @@
 	} = $props();
 
 	// Mutable view of the settings (the engine's Monthly type is a readonly tuple).
-	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration'> & {
+	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration' | 'pe'> & {
 		apanMm: number[];
 		ewrPragmaticM3PerDay: number[];
 		panCoefficient: number[];
 		calibration: CalibrationParams & Record<string, unknown>;
+		/** Absent on settings saved before engine 0.31.0: pan coefficient × A-pan. */
+		pe?: EditablePe;
 	};
 	const clone = (v: ProjectSettings): Editable => JSON.parse(JSON.stringify(v));
 
@@ -113,6 +119,13 @@
 	let zeroRainError = $state<string | null>(null);
 	let fitPeriodError = $state<string | null>(null);
 	let rainSourceError = $state<string | null>(null);
+	// GR4J's PE input (issue #39): only checked while GR4J is the runoff model, the only reader.
+	const pe = $derived(peOf(s));
+	const peError = $derived(s.runoffModel === 'gr4j' ? peFormError(pe) : null);
+	const peAnnual = $derived(annualGr4jPeMm(s));
+	const peSourceBad = $derived(pe.kind === 'monthly' && (!pe.source.trim() || pe.source.length > PE_SOURCE_MAX));
+	// A monthly row the form had before switching to pan, so switching back brings it back (unsaved).
+	let lastMonthlyPe = $state<EditablePe | null>(null);
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
@@ -120,7 +133,7 @@
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -130,6 +143,7 @@
 			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-rain', message: rainSourceError },
+			{ id: 'set-flow', message: peError },
 			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
@@ -173,6 +187,12 @@
 		panPreset = '';
 	}
 
+	/** Choose where GR4J's PE comes from; a monthly row switched away from is remembered until saved or discarded. */
+	function setPeKind(kind: EditablePe['kind']) {
+		if (pe.kind === 'monthly') lastMonthlyPe = $state.snapshot(pe) as EditablePe;
+		s.pe = withPeKind(s, kind, lastMonthlyPe);
+	}
+
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
 	function applyFit(report: CalibrationReport, record: FitRecord) {
 		s = { ...applyReport(s, report), fitRecord: record };
@@ -183,6 +203,7 @@
 		s = clone(JSON.parse(saved));
 		x2Open = s.gr4j.x2 !== 0;
 		resetListText();
+		lastMonthlyPe = null;
 		error = null;
 		reason = '';
 	}
@@ -227,7 +248,7 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	const isGr4j = $derived(s.runoffModel === 'gr4j');
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
-	const petMissing = $derived(!hasPotentialEvaporation(s));
+	const petMissing = $derived(!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }));
 	const num = (k: string) => cal[k] as number;
 
 	// The sticky in-page menu, and which group is being read (scroll spy, as on
@@ -400,8 +421,13 @@
 		{#if isGr4j}
 			{#if petMissing}
 				<p class="alert alert-warning" role="status">
-					GR4J needs A-pan evaporation (Demand, above) and a pan coefficient above 0 (below). Without them the catchment would never dry
-					out, so runs and fits are refused.
+					{#if pe.kind === 'monthly'}
+						GR4J needs potential evaporation, and the monthly PE row (below) is 0 in every month. Without it the catchment would never dry out,
+						so runs and fits are refused.
+					{:else}
+						GR4J needs A-pan evaporation (Demand, above) and a pan coefficient above 0 (below). Without them the catchment would never dry
+						out, so runs and fits are refused.
+					{/if}
 				</p>
 			{/if}
 			<div class="fields">
@@ -438,38 +464,122 @@
 				{/if}
 				<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 			</fieldset>
-			<div class="field pan-preset">
-				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
-				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => applyPanPreset(e.currentTarget.value)} aria-describedby="st-pan-preset-h">
-					<option value="">Choose a preset…</option>
-					{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-				</select>
-				<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; nothing is stored about which preset was picked. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
-			</div>
-			<div class="table-wrap">
-				<table class="data compact monthly">
-					<thead>
-						<tr>
-							<th scope="col" class="sticky">Month</th>
-							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" /></th>
-							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
-							{/each}
-						</tr>
-					</tbody>
-				</table>
-			</div>
-			<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
-			{#if panOutOfRange.length}
-				<p class="alert alert-warning small" role="status">
-					Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
-					{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
+			<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
+			     demand and dam evaporation read the A-pan row whichever is chosen. -->
+			<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
+				<legend>GR4J potential evaporation <HelpTip key="settings.pe" /></legend>
+				{#each PE_KIND_OPTIONS as o (o.value)}
+					<label class="check">
+						<input type="radio" name="st-pe-kind" value={o.value} checked={pe.kind === o.value} disabled={readonly} onchange={() => setPeKind(o.value)} />
+						{o.label}
+					</label>
+				{/each}
+				<p class="pe-annual" id="st-pe-annual" data-testid="gr4j-pe-annual">
+					Annual GR4J PE: <strong>{fmtNum(peAnnual)} mm</strong>
+					<span class="muted">{pe.kind === 'monthly' ? '(the monthly PE row below)' : `(pan coefficient × A-pan; A-pan ${fmtNum(apanAnnual)} mm a year)`}</span>
 				</p>
+				<span class="hint" id="st-pe-h">
+					{#if pe.kind === 'monthly'}
+						GR4J runs on the monthly PE row below. Irrigation demand and dam evaporation still use the A-pan row (Demand, above), and GR4J
+						doesn’t use the pan coefficient.
+					{:else}
+						GR4J runs on pan coefficient × A-pan. The A-pan row (Demand, above) also drives irrigation demand and dam evaporation, so changing
+						it moves all three; to change GR4J’s PE alone, enter a monthly PE.
+					{/if}
+				</span>
+			</fieldset>
+			{#if pe.kind === 'monthly'}
+				<div class="table-wrap">
+					<table class="data compact monthly">
+						<thead>
+							<tr>
+								<th scope="col" class="sticky">Month</th>
+								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+								<th scope="col" class="num">Year</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<th scope="row" class="sticky">Monthly PE <span class="u">mm</span> <HelpTip key="settings.pe" /></th>
+								{#each WATER_YEAR_MONTHS as m, i (m)}
+									<td>
+										<NumberInput
+											label="Monthly PE, {m}, mm"
+											min={0}
+											max={PE_MONTH_MAX_MM}
+											disabled={readonly}
+											value={pe.mm[i] ?? 0}
+											onchange={(v) => {
+												if (v !== null && s.pe?.kind === 'monthly') s.pe.mm[i] = v;
+											}}
+										/>
+									</td>
+								{/each}
+								<td class="num muted">{fmtNum(peAnnual)}</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="field pe-source">
+					<span class="lbl"><label for="st-pe-source">Source</label></span>
+					<input
+						id="st-pe-source"
+						readonly={readonly}
+						required
+						value={pe.source}
+						placeholder="e.g. station FAO-56 ET₀ × 1.0, 2015–2020"
+						aria-invalid={peSourceBad || undefined}
+						class:invalid={peSourceBad}
+						aria-describedby="st-pe-source-h"
+						oninput={(e) => {
+							if (s.pe?.kind === 'monthly') s.pe.source = e.currentTarget.value;
+						}}
+					/>
+					<span class="hint" id="st-pe-source-h">Required: where the values come from, e.g. the station, the method, any factor applied and the years.</span>
+					{#if peError}<span class="err" role="status">{peError}</span>{/if}
+				</div>
+			{:else}
+				<div class="field pan-preset">
+					<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
+					<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => applyPanPreset(e.currentTarget.value)} aria-describedby="st-pan-preset-h">
+						<option value="">Choose a preset…</option>
+						{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+					</select>
+					<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; nothing is stored about which preset was picked. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
+				</div>
+				{#if !readonly}
+					<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; code-split, it is collapsed until opened. -->
+					<Lazy load={loadPanHelper}>
+						{#snippet children(PanCoefficientHelper)}
+							<PanCoefficientHelper onapply={(v: number[]) => (s.panCoefficient = [...v] as typeof s.panCoefficient)} />
+						{/snippet}
+					</Lazy>
+				{/if}
+				<div class="table-wrap">
+					<table class="data compact monthly">
+						<thead>
+							<tr>
+								<th scope="col" class="sticky">Month</th>
+								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" /></th>
+								{#each WATER_YEAR_MONTHS as m, i (m)}
+									<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
+								{/each}
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
+				{#if panOutOfRange.length}
+					<p class="alert alert-warning small" role="status">
+						Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
+						{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
+					</p>
+				{/if}
 			{/if}
 		{:else}
 			<div class="fields">
@@ -1001,6 +1111,24 @@
 	}
 	.x2 .field {
 		max-width: 240px;
+	}
+	/* GR4J's PE source (issue #39): the choice, the annual total and what the A-pan row drives. */
+	.pe {
+		display: grid;
+		justify-items: start;
+		gap: 0.2rem;
+		margin: 0.25rem 0 0.75rem;
+		max-width: 75ch;
+	}
+	.pe-annual {
+		margin: 0.3rem 0 0;
+	}
+	.pe-source {
+		max-width: 40rem;
+		margin-top: 0.5rem;
+	}
+	.pe-source input {
+		width: 100%;
 	}
 	.check {
 		display: inline-flex;

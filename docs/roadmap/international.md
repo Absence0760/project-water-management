@@ -400,6 +400,9 @@ rather than add a dependency:
   - Hargreaves (Eq. 52) is the fallback when only temperature exists.
   - Audit N3 already asks whether the b023 crop factors are A-pan based
     ([engine-audit.md](../engine-audit.md)).
+  - GR4J already has its own PE input (`settings.pe`, engine 0.31.0, issue
+    #39: pan coefficient × A-pan, or a monthly row such as an ET0). This
+    package is about the demand and dam side, which still read A-pan.
 - **Changes (engine):**
   - `ProjectSettings.evaporation` is a union:
     - `{ kind: 'apan', apanMm: Monthly, kp?: Monthly }` (today; `apanMm` stays
@@ -474,7 +477,8 @@ rather than add a dependency:
     ([NOAA-OWP](https://github.com/NOAA-OWP/sac-sma); licence **(verify)**).
   - `ProjectSettings.flowGenerator: { id: 'b023' | 'gr4j' | 'awbm'; params }`.
     `settings.calibration` stays the b023 params (expand/contract).
-  - GR4J needs PET, which comes from WP-I.5's evaporation input.
+  - GR4J needs PET: `settings.pe` today (pan coefficient × A-pan, or a
+    monthly row, engine 0.31.0), or WP-I.5's evaporation input once it lands.
   - `ENGINE_VERSION` minor bump.
 - **Relation to Step 4:** Step 4 owns the DEV 003 bucket module (model.md §5).
   One interface serves both. The first to land writes `types.ts`, and the other

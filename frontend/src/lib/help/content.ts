@@ -779,12 +779,24 @@ export const HELP: HelpEntry[] = [
 		id: 'pan-coefficient',
 		term: 'Pan coefficient',
 		short: 'Potential evaporation = pan coefficient × A-pan evaporation, per month. Drives GR4J; default 0.7.',
-		long: 'A Class-A pan evaporates more than a catchment’s soils and plants could, so conceptual runoff models scale it down. 0.7 is a common flat value. Monthly values (for example the WR90 or Midgley factors) can be entered instead. The coefficient does not affect irrigation demand, which uses crop factors on the A-pan directly.\n\nThree presets fill the row as a starting point (still editable, and nothing records which one, or whether one, was picked): Generic (flat 0.70), Winter rainfall (e.g. Western Cape) and Summer rainfall. They are indicative, from FAO-56 Table 5 climate classes (Allen et al. 1998) — confirm against local humidity and wind. A run warns, and Settings hints, when a month sits outside FAO-56’s usual 0.6–0.85 range for a Class A pan; that is a plausibility check, not a hard limit, so a value further out still saves and runs.\n\nBecause GR4J’s parameters trade off against evaporation, the coefficient is held fixed and never calibrated: a fit records the coefficient it ran under, and changing it afterwards marks the fit record “Forcing changed since fit”.',
+		long: 'A Class-A pan evaporates more than a catchment’s soils and plants could, so conceptual runoff models scale it down. 0.7 is a common flat value. Monthly values (for example the WR90 or Midgley factors) can be entered instead. The coefficient does not affect irrigation demand, which uses crop factors on the A-pan directly. It is used only while GR4J’s potential evaporation is set to pan coefficient × A-pan; with a monthly PE row entered directly GR4J ignores it.\n\nThree presets fill the row as a starting point (still editable, and nothing records which one, or whether one, was picked): Generic (flat 0.70), Winter rainfall (e.g. Western Cape) and Summer rainfall. They are indicative, from FAO-56 Table 5 climate classes (Allen et al. 1998) — confirm against local humidity and wind. A run warns, and Settings hints, when a month sits outside FAO-56’s usual 0.6–0.85 range for a Class A pan; that is a plausibility check, not a hard limit, so a value further out still saves and runs.\n\nBecause GR4J’s parameters trade off against evaporation, the coefficient is held fixed and never calibrated: a fit records the coefficient it ran under, and changing it afterwards marks the fit record “Forcing changed since fit”.',
 		category: 'flow',
 		aliases: ['PET', 'potential evaporation', 'k pan', 'pan coefficient preset', 'FAO-56'],
 		fields: ['settings.panCoefficient', 'run.pet'],
 		related: ['gr4j', 'apan', 'auto-calibration'],
 		source: 'Issue #4 §1 (forcing); FAO-56 Table 5 (Allen et al. 1998); docs/model.md §2.4a'
+	},
+	{
+		id: 'gr4j-pe',
+		term: 'GR4J potential evaporation (source)',
+		short: 'Where GR4J’s potential evaporation comes from: pan coefficient × A-pan (default), or a monthly PE row entered directly.',
+		long: 'One A-pan row drives three things: GR4J’s potential evaporation (× the pan coefficient), irrigation demand (× the crop factors) and dam evaporation (× the dam evaporation factor). With **Pan coefficient × A-pan**, the default and what every earlier run did, changing the A-pan row moves all three.\n\n**Monthly PE, entered directly** gives GR4J its own 12 values in mm (Oct … Sep), for example a station’s FAO-56 reference evapotranspiration (ET₀) × a stated factor, with a required note of the source. GR4J then runs on that row alone; the pan coefficient is not used, and irrigation demand and dam evaporation still read the A-pan row, so a PE change moves the runoff model and nothing else. A row of zeros is refused, as a zero A-pan row is.\n\nSettings shows the annual PE GR4J runs on under either choice. A fit records the PE input it ran under, so changing it marks the fit record “Forcing changed since fit”.',
+		units: 'mm per month',
+		category: 'flow',
+		aliases: ['PE', 'PET', 'ET0', 'ET₀', 'reference evapotranspiration', 'monthly PE', 'evaporation source'],
+		fields: ['settings.pe'],
+		related: ['pan-coefficient', 'apan', 'gr4j'],
+		source: 'Issue #39; FAO-56 (Allen et al. 1998); docs/model.md §2.4a'
 	},
 	{
 		id: 'actual-evaporation',

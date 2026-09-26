@@ -177,6 +177,16 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 			});
 
+			// GR4J's PE as a monthly row with its source (issue #39), in place of the pan coefficient.
+			test('GR4J settings with a monthly PE have no violations', async ({ page, owner }) => {
+				void owner;
+				const project = await seedRunnableProject(page.request, 'A11y GR4J monthly PE');
+				await updateSettings(page.request, project.id, { ...GR4J, pe: { kind: 'monthly', mm: new Array(12).fill(90), source: 'Synthetic station ET₀' } });
+				await page.goto(`/projects/${project.id}?tab=settings`);
+				await expect(page.getByLabel('Monthly PE, Oct, mm')).toHaveValue('90');
+				await expectNoViolations(page);
+			});
+
 			test('a GR4J run has no violations', async ({ page, owner }) => {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y GR4J run');

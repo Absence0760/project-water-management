@@ -93,7 +93,7 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(report.getByText('Monthly pattern correlation')).toBeVisible();
 	await expectNoViolations(page);
 	// The same plain-language flag is a run warning.
-	await expect(page.getByRole('status').filter({ hasText: /warnings? from this run/ })).toContainText('WR2012 naturalised MAR for Z99A');
+	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('WR2012 naturalised MAR for Z99A');
 });
 
 test('run comparison lists the WR2012 inputs that changed and compares the ratios', async ({ page, owner }) => {
