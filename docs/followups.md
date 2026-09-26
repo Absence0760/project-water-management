@@ -928,25 +928,32 @@ the suggested order (the IDs carry the detail):
       statement in `packages/engine/src`). First loads: farm pages −13 KB,
       share −13, home −9, a catchment −8 (that code now loads with the Data,
       Settings and Runs tabs, +6 each). The total stays 815 KB.
-- [ ] **Stop shipping the engine twice** (issue #9, measured 2026-09-26; the
-      numbers are in the bundle guard's change log). The calibration worker
-      bundles its own engine copy (57 KB gzip), ~130 KB raw of which the pages
-      ship too. Emitting the worker as a chunk of the page build (a Vite
-      plugin: `this.emitFile({ type: 'chunk' })` for `autocal.worker.ts`, the
-      page reading its URL from a virtual module) takes the total 815 → 794 KB,
-      but a chunk holds whole modules, and pages import small things from
-      modules that also hold the fit and run code: `ENGINE_VERSION`,
-      `prepareRun` and `mergeSettings` from `run.ts`; `CALIBRATION_PARAMS`,
-      `CALIBRATION_BOUNDS`, `MAX_STARTS` and `DEFAULT_STARTS` from
-      `calibrate/calibrate.ts`; the param tables from `runoff/gr4j.ts` and
-      `runoff/legacy.ts`; the check helpers in `reference/wr2012.ts`; the labels in
-      `calibrate/objective.ts`. So the Runs tab grows 27 KB and compare 32 KB.
-      **Durable fix:** move those page-side exports to modules of their own
-      (a throwaway split of the first two files alone gave 798 KB with compare
-      −9 KB and Runs −2, but a catchment +4 and Data +6 until the rest move too),
-      then land the worker plugin. **Trigger:** when no engine branch is open
-      (it moves `prepareRun` and `mergeSettings`, which most engine changes
-      edit), and before the next ceiling raise.
+- [x] **Stop shipping the engine twice** (issue #9, done 2026-09-26; numbers
+      in the bundle guard's change log). The calibration worker is an entry
+      of the page build (`frontend/vite.config.ts`, `autocalWorkerChunk`; the
+      page takes its URL from `virtual:autocal-worker-url`), so it imports the
+      engine code it shares with pages from shared chunks instead of carrying
+      a 62 KB copy. First, the small things pages read moved out of the
+      modules that hold the run, fit and ensemble code, since a chunk holds
+      whole modules: `version.ts`, `prepare.ts`, `calibrate/params.ts`,
+      `calibrate/objectives.ts`, `runoff/params.ts`, `runoff/pet.ts`,
+      `reference/wr2012Settings.ts` (+ `wr2012Resolve.ts`),
+      `uncertainty/options.ts`, `network/damCurve.ts`, and `waterYearOf` /
+      `waterYearLabel` into `calendar.ts` (docs/architecture.md § Code
+      splitting; `frontend/src/lib/engineSplit.test.ts` keeps them apart).
+      Measured against main @ e9c88b2, gzip: total 919 → 899 KB; compare
+      114 → 92; a catchment on Runs 256 → 249; report 192 → 187; Settings
+      212 → 211; home, farm, share and the other tabs within ±0.6 KB. The
+      trade-off: the Data tab 195 → 197 and its series preview 210 → 214,
+      where engine code the worker also runs is now several small shared
+      chunks. A fit started from Settings fetches 45 KB of worker code (was
+      62); a cold worker with nothing cached is 74 KB over 23 files. The
+      guard's worker ceiling is now 35 KB (the worker's own code, 33), and it
+      fails if the worker stops importing from `chunks/`. The spreadsheet
+      workers stay separate bundles: the export worker imports only engine
+      types, and the import worker's engine code (date helpers,
+      `zeroRainRuns`, two farm constants) is ≤ 6 KB gzip, where sharing would
+      bring whole engine modules and more requests into a one-off download.
 - [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
       gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
       `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the

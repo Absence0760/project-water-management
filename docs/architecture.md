@@ -141,21 +141,42 @@ down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 K
 across the bundle). The app already needs newer browsers than ES2022 does
 (HelpTip's popover needs Chrome 114, Safari 17, Firefox 125).
 
-The calibration worker (`lib/calibration/autocal.worker.ts`) bundles its own copy
-of the engine, about 25 KB (50 KB from engine 0.26.0: the uncertainty ensemble
-runs full model runs in it, so it carries the run's whole output side; the
-bundle guard gives workers their own ceiling). It was measured sharing the page's engine chunks
-instead (issue #9): that only works if engine code sits in chunks of its own,
-and then a catchment’s cold open grows by about 23 KB, because a shared
-chunk carries the code of all its importers. A one-off download when a fit
-starts costs less than that on every open. A second try (2026-09-26) emitted
-the worker as an entry of the page build, so Rollup groups engine code by
-exactly who needs it: the total drops 21 KB, but a chunk holds whole modules,
-and the pages' small imports from `run.ts` and `calibrate/calibrate.ts`
-(`prepareRun`, `ENGINE_VERSION`, the calibration constants) then bring the fit
-and run code into the Runs tab (+27 KB) and compare (+32 KB). It becomes a win
-once those exports live in modules of their own ([followups.md](./followups.md),
-"Stop shipping the engine twice").
+The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
+page build, so the engine ships once (issue #9). Vite builds a
+`new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
+the engine (62 KB gzip), most of which the pages load too. Instead,
+`lib/calibration/runner.ts` takes the worker's URL from a virtual module,
+`virtual:autocal-worker-url`, and `autocalWorkerChunk` in
+`frontend/vite.config.ts` emits the worker as one more entry of the client
+build (`_app/immutable/workers/autocal.worker-<hash>.js`). Rollup then puts the
+engine code the worker shares with pages in shared chunks, which the worker
+imports as ES modules (it is a module worker, same-origin, so the CSP's
+`worker-src 'self'` and `script-src 'self'` cover it). In dev the virtual
+module returns Vite's own worker URL for the source file. The worker's file
+holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
+a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
+the total bundle dropped 919 → 899 KB.
+
+That only pays because a chunk holds whole modules. A module a page and the
+worker both use carries everything either of them calls, with its imports, so
+the small things pages read must not live beside the run, fit or ensemble code.
+They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
+(`prepareRun`: settings, run window and aligned inputs, for the Data tab's
+series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
+`calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
+GR4J and legacy parameter tables), `runoff/pet.ts`
+(`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012
+settings, defaults and checks; `wr2012Resolve.ts` is the run's merge),
+`uncertainty/options.ts` (ensemble options, labels and their diff),
+`network/damCurve.ts` (the survey-curve check), and `waterYearOf` /
+`waterYearLabel` in `calendar.ts`. Without the split, sharing grew the Runs tab
+by 27 KB and compare by 32 KB; with it, compare's first load is 22 KB lighter
+and a catchment on Runs 7 KB lighter. `frontend/src/lib/engineSplit.test.ts`
+fails if one of those modules reaches the model code through a value import,
+and the bundle guard fails if the worker stops importing from `chunks/`. The
+cost: the Data tab loads the engine code it shares with the worker as several
+small chunks, which compress worse (+2.7 KB, +4.3 KB with the series preview
+open).
 
 Rollup treats the engine as side-effect free (`treeshake.moduleSideEffects`
 in `frontend/vite.config.ts`). Otherwise every engine module a page reaches
