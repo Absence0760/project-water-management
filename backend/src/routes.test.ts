@@ -148,6 +148,12 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The team portfolio (WP-2.14): team members only (portfolio/portfolio.db.test.ts, a farmer gets 404).
+	it('inventories the portfolio route as auth-gated', () => {
+		expect(routes).toContain('GET /teams/:id/portfolio');
+		expect(PUBLIC.has('GET /teams/:id/portfolio')).toBe(false);
+	});
+
 	// The change history (WP-2.4): auth-gated like every project route.
 	it('inventories the history routes as auth-gated', () => {
 		const history = [

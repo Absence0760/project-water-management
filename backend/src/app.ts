@@ -19,6 +19,7 @@ import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
+import { portfolioRoutes } from './portfolio/routes.js';
 import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
@@ -127,6 +128,7 @@ export function createApp() {
 	teams.use('*', requireUser);
 	teams.route('/', teamRoutes);
 	teams.route('/', teamInviteRoutes);
+	teams.route('/', portfolioRoutes);
 	app.route('/teams', teams);
 
 	const compare = new Hono<AuthEnv>();

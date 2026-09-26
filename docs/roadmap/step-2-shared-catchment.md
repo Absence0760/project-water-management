@@ -1750,6 +1750,27 @@ the forecast kinds.
 
 ### WP-2.14 Portfolio dashboard for a WUA
 
+> **Status: built** (2026-09-26; `backend/src/portfolio/`,
+> `frontend/src/routes/teams/[id]/portfolio/`, no migration;
+> [api.md § Portfolio](../api.md#portfolio), [ui.md § Portfolio](../ui.md#portfolio-teamsidportfolio)).
+> Departures from the plan below: figures come from the current publication,
+> or, when nothing is published, the newest baseline run (its outlet EWR
+> only, counted in SQL from one series per project; farms and dams stay
+> "unknown until a run is published"), because WP-2.11's auto runs aren't
+> merged yet; `unknown` carries a reason (no run, no EWR set, no series) so
+> it is never a false green; farm counts are stored at publish time as
+> `catchment_view.recent` (farms short in 7 / 30 days) and kept out of a
+> farmer's publication response; `alertsFiring` is always `null`, a marked
+> hook for WP-2.13; the D11 thresholds are fixed defaults, not yet a team
+> setting (followups.md); "farms short this week" links to the Runs tab's
+> Curtailment section of the run, which covers the run's report window, not
+> a 7-day filter; `seed:examples` still puts two of its three catchments in
+> the demo team (Sandspruit stays the analyst's own, which the e2e uses as
+> the negative control). Measured locally: 10 published catchments × 60
+> farms (10-year runs) answer in a median 51 ms of API time (7 calls), well
+> inside the 500 ms criterion; there is no DB perf guard for it yet
+> (followups.md).
+
 **Goal.** All of a team's catchments on one screen: is anything wrong, is
 the data current, who is short this week?
 

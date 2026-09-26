@@ -1739,6 +1739,37 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Portfolio dashboard (WP-2.14)
+
+- [ ] **Traffic-light thresholds per team (D11).** Green < 5 %, amber < 20 %
+      of the last 30 days with the outlet EWR not met are fixed defaults
+      (`backend/src/portfolio/status.ts` `EWR_THRESHOLDS`; the API returns
+      them, the page states them). Durable fix: a `team.settings` column
+      (next free migration) with a validated `portfolio.thresholds`, edited by
+      team admins on the team page, passed to `ewrStatus`. Trigger: the
+      hydrologist confirms or changes the defaults (plan.md D11), or a second
+      team wants different ones.
+- [ ] **Alerts column.** `alertsFiring` is `null` and the page shows no
+      Alerts column; both carry a marked WP-2.13 hook. Trigger: WP-2.13
+      (alert_event) lands: count firing events per project in the portfolio
+      query and render the column.
+- [ ] **"Farms short this week" lands at the top of the Runs tab.** The link
+      is `?tab=runs&run=…#res-curtailment`, but the Runs tab renders its
+      results after loading, so the browser can't scroll to the fragment,
+      and the curtailment table covers the run's report window rather than
+      the last 7 days. Durable fix: RunsTab scrolls to a `#res-*` fragment
+      once its results render (a Runs-tab change, so coordinate with whoever
+      owns `components/runs/`), and a 7-day window option on the curtailment
+      table. Trigger: the WUA persona or a user reports it, or the next
+      Runs-tab round.
+- [ ] **No perf guard on the portfolio query.** Measured once at a median
+      51 ms for 10 × 60-farm catchments (roadmap WP-2.14 status); the
+      backend `perf` vitest project has no database, so it can't hold a
+      budget on it. Durable fix: a `perf-db` project with the db project's
+      global setup and a `portfolio.perf.test.ts` (10 × 60, budget 500 ms,
+      median of 7). Trigger: the next query that needs a DB timing budget, or
+      the portfolio growing a new join.
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue

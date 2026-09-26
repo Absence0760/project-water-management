@@ -910,6 +910,11 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   the reserve was not met at each EWR site over the run, the season and 30
   days; the farm count). No flow volume and no total of farm quantities,
   because every member, farmers included, reads it (design §10.3).
+  Since WP-2.14 it also holds `recent`: the number of farms short at least
+  one day in the 7 and 30 days to `dataUntil` (`publish/recent.ts`), for the
+  team portfolio. The API strips `recent` from a farmer's publication
+  response (with few farms a count identifies a neighbour); the share
+  function copies an allowlist that doesn't include it.
 - **The season.** Every projection figure is over 1 October (the water
   year's start) to the run's last day (`dataUntil`), and the curtailment
   row is `computeCurtailment` over that season, not the modeller's report
