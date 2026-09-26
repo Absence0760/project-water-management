@@ -779,8 +779,8 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
-// 2026-09-26  total 924 → 937 KB (measured 932: 954 241 bytes, from 921 on
-//             main @ 6b0d3ab). Issue #53 R5's seasonal outlook screen: the
+// 2026-09-26  total 924 → 939 KB (measured 934: 955 896 bytes, from 923 on
+//             main @ 6380d36, R6's engine half merged). Issue #53 R5's seasonal outlook screen: the
 //             Runs tab's panel (outlook/OutlookPanel.svelte with its view
 //             model: the demand levels and the monthly plan, the table of
 //             medians and 10–90 % ranges, every analogue year, the planning
@@ -805,7 +805,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 937,
+	totalCodeKb: 939,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

@@ -200,8 +200,9 @@ level (anything else would change the history the season starts from).
   flow reaches the river, and the draft disclaimer (D10).
 - **Still to build**: the farmer view E3 (the published level's outcome
   per farm, once the WUA publishes it; O5 decides whether farmers see it,
-  and in Afrikaans), and R6's review triggers, which re-run this from
-  storage bands at the review date.
+  and in Afrikaans), and R6's review triggers beyond their engine half
+  (§3.6: the job and the screen that re-run this from storage bands at the
+  review date).
 
 - **Method:** ESP from the run's state on a decision date (a project
   setting, default the start of the irrigation season). For each historical
