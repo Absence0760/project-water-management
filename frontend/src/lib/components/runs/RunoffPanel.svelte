@@ -48,7 +48,7 @@
 				<caption id="{uid}-t">Where the rain went over the run</caption>
 				<thead>
 					<tr>
-						<th scope="col"></th>
+						<th scope="col"><span class="visually-hidden">Term</span></th>
 						<th scope="col" class="num">mm</th>
 						<th scope="col" class="num">Share of rain</th>
 					</tr>

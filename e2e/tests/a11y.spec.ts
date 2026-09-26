@@ -12,6 +12,11 @@ import { expect, test } from '../support/fixtures.ts';
 
 const DEAD_TOKEN = 'q'.repeat(43);
 
+// Two of axe's best-practice rules the WCAG tags leave out, held to anyway on
+// the workspace: an empty table header is an unnamed column to a screen
+// reader, and two landmarks with one name can't be told apart.
+const BEST_PRACTICE = { rules: ['empty-table-header', 'landmark-unique'] };
+
 // Each tab waits for the content axe should see, not just the tab shell.
 const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	// (The Email column folds into the name cell on a phone, so wait on a member row.)
@@ -119,6 +124,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 					await page.goto(`/projects/${project.id}?tab=${t.id}`);
 					await t.ready(page);
 					await expectNoViolations(page);
+					await expectNoViolations(page, BEST_PRACTICE);
 				});
 			}
 
@@ -181,6 +187,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expect(runoff.getByRole('rowheader', { name: /Groundwater exchange/ })).toBeVisible();
 				await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
 				await expectNoViolations(page);
+				await expectNoViolations(page, BEST_PRACTICE);
 			});
 
 			test('an automatic calibration result has no violations', async ({ page, owner }) => {
@@ -320,6 +327,7 @@ test.describe('phone', () => {
 			await page.goto(`/projects/${project.id}?tab=${t.id}`);
 			await t.ready(page);
 			await expectNoViolations(page);
+			await expectNoViolations(page, BEST_PRACTICE);
 		});
 	}
 });

@@ -25,7 +25,7 @@
 		</caption>
 		<thead>
 			<tr>
-				<th scope="col"></th>
+				<th scope="col"><span class="visually-hidden">Measure</span></th>
 				<th scope="col" class="num">With the penalty</th>
 				<th scope="col" class="num">Without it</th>
 			</tr>

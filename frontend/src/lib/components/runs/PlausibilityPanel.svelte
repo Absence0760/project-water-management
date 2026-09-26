@@ -294,7 +294,7 @@
 				<caption class="visually-hidden">Dry-season Q70, Q90 and Q95 of each curve (m³/s)</caption>
 				<thead>
 					<tr>
-						<th scope="col"></th>
+						<th scope="col"><span class="visually-hidden">Curve</span></th>
 						<th scope="col" class="num">Days</th>
 						<th scope="col" class="num">Q70</th>
 						<th scope="col" class="num">Q90</th>
