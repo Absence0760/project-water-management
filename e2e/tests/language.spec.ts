@@ -7,21 +7,32 @@
 // so the words stay English and <html lang> stays "en": the page never claims
 // to be Afrikaans while its words are English. The emails are covered by
 // backend/src/auth/locale.db.test.ts (e2e mail goes to the server log).
-import type { APIRequestContext, Page } from '@playwright/test';
-import { register } from '../support/api.ts';
+import type { APIRequest, APIRequestContext, Page } from '@playwright/test';
+import { createRun, putSeries, register, seedRunnableProject, syntheticRain } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
-import { ANALYST, FARMER1, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
 
-test.beforeAll(async ({ playwright }) => {
-	test.setTimeout(90_000);
-	const api = await playwright.request.newContext();
-	await seedExamplesOnce(api);
-	await api.dispose();
-});
+/**
+ * A new owner's catchment with a published run over a year and a half, and
+ * `email` as the farmer on its first farm. Returns the project id.
+ */
+async function publishedCatchmentWithFarmer(requests: APIRequest, email: string): Promise<string> {
+	const staff = await requests.newContext();
+	await register(staff, 'Taal owner');
+	const project = await seedRunnableProject(staff, 'Taal catchment');
+	await putSeries(staff, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(540) });
+	const runId = await createRun(staff, project.id, 'Season');
+	const pub = await staff.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmId = project.model.nodes.find((n) => n.kind === 'farm')!.id as string;
+	const added = await staff.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email, nodeIds: [farmId] } });
+	expect(added.status(), await added.text()).toBe(201);
+	await staff.dispose();
+	return project.id;
+}
 
 const me = async (request: APIRequestContext) => ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { locale: string | null; volumeUnit: string } }).user;
 const switchIn = (page: Page) => page.getByRole('group', { name: 'Language' }).first();
@@ -45,17 +56,10 @@ test('the sign-in page switches language, marks each option with its own lang, a
 
 test('a farmer’s choice of language and unit is saved to the account, and the farm view writes a decimal comma in Afrikaans', async ({ page, playwright }) => {
 	await page.setViewportSize(PHONE);
-	// A fresh farmer on Vaalbank, so the seeded farmers' own preferences stay as they are for other specs.
+	// A fresh farmer on a catchment of its own. Not the seeded Sandspruit:
+	// examples.spec.ts counts Sandspruit's farmers while this runs beside it.
 	const farmer = await register(page.context().request, 'Taal Farmer');
-	const staff = await playwright.request.newContext();
-	expect((await staff.post(`${API_URL}/auth/login`, { data: FARMER1 })).ok()).toBe(true);
-	const { projects } = (await (await staff.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
-	const projectId = projects.find((p) => p.role === 'farmer')!.id;
-	const { farms } = (await (await staff.get(`${API_URL}/projects/${projectId}/farm`)).json()) as { farms: { nodeId: string }[] };
-	expect((await staff.post(`${API_URL}/auth/login`, { data: ANALYST })).ok()).toBe(true);
-	const added = await staff.post(`${API_URL}/projects/${projectId}/farmers`, { data: { email: farmer.email, nodeIds: [farms[0]!.nodeId] } });
-	expect(added.status(), await added.text()).toBe(201);
-	await staff.dispose();
+	const projectId = await publishedCatchmentWithFarmer(playwright.request, farmer.email);
 
 	await page.goto('/farm');
 	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
