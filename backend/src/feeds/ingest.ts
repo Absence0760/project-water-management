@@ -10,8 +10,8 @@
 // start on that date and number at most GEFS_DAYS. The newest issue merged
 // wins: an older one (the ingest-results queue does not keep order, and a
 // fetch before ~08:30 UTC reads yesterday's issue) is dropped without
-// touching the series or the feed's health, so it never overwrites a newer
-// forecast's days.
+// touching the series, so it never overwrites a newer forecast's days; the
+// feed records only that it was checked (last_attempt_at).
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -19,7 +19,7 @@ import { mergeInto, SeriesBody } from '../series/merge.js';
 import { type FeedSource, SOURCES } from './config.js';
 import { FetchResult, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
-import { type FeedRow, lockFeedIssued, recordFeedResult } from './store.js';
+import { type FeedRow, lockFeedIssued, recordFeedChecked, recordFeedResult } from './store.js';
 
 /** The newest day a source can have on `today` (UTC): a forecast's 16th day, else today. */
 export function latestDay(source: FeedSource, today: string): string {
@@ -60,7 +60,10 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise
 	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
 		// ISO calendar dates compare as strings (startDate is checked; meta.issued equals it).
 		const newest = await lockFeedIssued(db, feed.id);
-		if (newest !== null && result.startDate < newest) return { merged: 0, lastDate: null };
+		if (newest !== null && result.startDate < newest) {
+			await recordFeedChecked(db, feed.id);
+			return { merged: 0, lastDate: null };
+		}
 	}
 
 	let lastDate: string | null = null;
