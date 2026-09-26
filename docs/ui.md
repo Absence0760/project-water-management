@@ -2080,7 +2080,7 @@ run's report to chosen members every week or month.
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
   option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
-  its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
+  in the Runs chunk, helpers in `runs/publication.ts`; `#res-publication`,
   menu entry **Publication**). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
@@ -2424,8 +2424,8 @@ run's report to chosen members every week or month.
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch.
-  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
-  chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
+  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, in the
+  Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
   inputs, **Check reproduction** (viewers too) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
@@ -2508,7 +2508,7 @@ run's report to chosen members every week or month.
   monthly factors.
 - **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
   curtailment table; `reliability/AssurancePanel.svelte`, helpers in
-  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  `reliability/reliability.ts`, in the Runs chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, water years met against the annual threshold (Settings), the
@@ -2524,7 +2524,7 @@ run's report to chosen members every week or month.
   the run's inputs at a few demand levels by class of water year, described
   in [§ Outcome matrix](#outcome-matrix) below.
 - **Water account** (`#res-water-account`, last under *River & Reserve*;
-  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  `reliability/WaterAccountPanel.svelte`, in the Runs chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
