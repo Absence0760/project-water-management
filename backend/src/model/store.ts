@@ -41,7 +41,21 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 		 FROM land_cover WHERE project_id = $1 ORDER BY node_id, cover_class, id`,
 		[projectId]
 	);
-	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows, landCover: landCover.rows };
+	// Individual boreholes (WP-3.9); in the document only when there are any, so older documents read back unchanged.
+	const boreholes = await db.query(
+		`SELECT id, node_id AS "nodeId", name, capacity_m3_day AS "capacityM3Day", annual_cap_m3 AS "annualCapM3", mode,
+			emergency_below_pct AS "emergencyBelowPct", target, depletion_factor AS "depletionFactor"
+		 FROM borehole WHERE project_id = $1 ORDER BY node_id, name, id`,
+		[projectId]
+	);
+	return {
+		nodes: nodes.rows,
+		crops: crops.rows,
+		cropAreas: cropAreas.rows,
+		transfers: transfers.rows,
+		landCover: landCover.rows,
+		...(boreholes.rows.length ? { boreholes: boreholes.rows } : {})
+	};
 }
 
 /**
@@ -58,6 +72,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	await db.query('DELETE FROM transfer WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, transferIds]);
 	// Land cover (WP-1.35) is rewritten whole, like crop areas; nothing references its rows.
 	await db.query('DELETE FROM land_cover WHERE project_id = $1', [projectId]);
+	// So are individual boreholes (WP-3.9).
+	await db.query('DELETE FROM borehole WHERE project_id = $1', [projectId]);
 	await db.query('DELETE FROM crop_area WHERE project_id = $1', [projectId]);
 	await db.query('DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, cropIds]);
 	// Clear topology first so node renames/reorders can't trip uniqueness or
@@ -156,6 +172,15 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			 ON CONFLICT (id) DO NOTHING`,
 			[p.id, projectId, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors === null ? null : JSON.stringify(p.factors)],
 			'land cover'
+		);
+	}
+	for (const b of m.boreholes ?? []) {
+		await upserted(
+			`INSERT INTO borehole (id, project_id, node_id, name, capacity_m3_day, annual_cap_m3, mode, emergency_below_pct, target, depletion_factor)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 ON CONFLICT (id) DO NOTHING`,
+			[b.id, projectId, b.nodeId, b.name, b.capacityM3Day, b.annualCapM3, b.mode, b.emergencyBelowPct, b.target, b.depletionFactor],
+			'borehole'
 		);
 	}
 	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);

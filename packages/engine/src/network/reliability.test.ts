@@ -248,6 +248,19 @@ describe('the water account (hand-worked)', () => {
 		expect(Math.abs(back.residualM3)).toBeLessThanOrEqual(1e-10 * back.scaleM3);
 	});
 
+	it('groundwater pumped into the dam (WP-3.9) comes in with the groundwater, and the account closes', () => {
+		const i = input([node('G', 'gauge', null), node('A', 'farm', 'G', { damCapacityM3: 5000, damMinPct: 0.2 })]);
+		i.model.boreholes = [{ id: 'b1', nodeId: 'A', name: 'BH-1', capacityM3Day: 400, annualCapM3: null, mode: 'primary', emergencyBelowPct: 0.3, target: 'dam', depletionFactor: 0 }];
+		const o = run(i);
+		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+		const toDam = o.summary.groundwaterAnnualUse!.reduce((s, y) => s + y.toDamM3, 0);
+		expect(toDam).toBeGreaterThan(0);
+		const t = o.summary.supplyAssurance!.waterAccount.total;
+		expect(t.groundwaterM3).toBeCloseTo(o.summary.groundwaterAnnualUse!.reduce((s, y) => s + y.abstractionM3, 0), 6);
+		expect(Math.abs(t.residualM3)).toBeLessThanOrEqual(1e-10 * t.scaleM3);
+		expect(checkWaterAccount(o)).toBeNull();
+	});
+
 	it('settings.assuranceAnnualThreshold sets the annual test; a bad value warns and falls back to 0.9', () => {
 		const nodes = [node('G', 'gauge', null), node('A', 'farm', 'G', { damCapacityM3: 5000 })];
 		// Volumetric 0.875: met at 0.85, not at the default 0.9.

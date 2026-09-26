@@ -139,7 +139,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says a nomination can be replaced but not withdrawn; `evidenceRun` is `null` only when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
-| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
+| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
 - `dataUntil` — the last day of the project's **recorded rain**
@@ -465,8 +465,12 @@ last direct owner (including the last owner leaving).
 
 These are **direct** members only. People who reach a team project through the
 team are listed by `GET /teams/:id`, not here. The list includes farmers
-(`role: "farmer"`); `role` in `POST`/`PATCH` is `viewer`, `editor` or `owner`
-only, farmers are added below.
+(`role: "farmer"`); `role` in `POST`/`PATCH` is `contributor`, `viewer`,
+`editor` or `owner`, farmers are added below. A **contributor** is a licence
+applicant or their consultant (WP-3.3; the UI says "Applicant"): below viewer,
+they reach only the farm view, the publication and their own applications
+([Applications](#applications)); every other project route answers them
+`403`. The invite flow is the same for every role.
 
 ### Farmers
 
@@ -483,10 +487,11 @@ the invite will link; revoke a pending one with
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
 | POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: 'en' \| 'af' }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
 | POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
-| PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer here | owner |
+| PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
-  displayName, nodeIds }` or an `InvitedFarmer = { status: 'invited' |
+  displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
+  applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
   'expired', inviteId, email, nodeIds, invitedBy, expiresAt, locale }`. An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
   farm; it never gains one.
@@ -667,6 +672,15 @@ below 1, `dam_seepage_lost`; `summary.waterBalance` rows gain
 `damReleaseM3` and `damSeepageLostM3` when present (the residual subtracts
 the lost seepage), and `summary.csv` the same two columns.
 
+`ProjectModel.boreholes` (engine ≥ 0.36.0, WP-3.9; optional, and absent from
+`GET` when the project has none) is `{ id, nodeId, name, capacityM3Day,
+annualCapM3 (null = no cap), mode ('none' | 'supplemental' | 'primary' |
+'emergency'), emergencyBelowPct (0–1), target ('direct' | 'dam'),
+depletionFactor (0–1) }[]`, at most 5 000. `PUT` refuses a borehole on a gauge
+or an unknown node, and an emergency or dam-target borehole on a node without a
+farm dam; `mode`, `emergencyBelowPct`, `target` and `depletionFactor` default
+to supplemental, 0.3, direct and 0.
+
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
@@ -774,7 +788,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
+| POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it) | viewer |
@@ -785,7 +799,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, `[]` when none | viewer |
-| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, or a project at its limit of 50 nominations | editor |
+| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, a forecast run (WP-2.12: evidence is judged on the record, and a forecast run's last days are modelled on forecast rain), or a project at its limit of 50 nominations | editor |
 | GET | `/projects/:id/runs/:runId/reproduce` | – | `200 Reproduction`: the run re-run on the server from its stored inputs (`loadRunInput`) with the current engine, its summary and every daily output compared with what was stored (WP-3.1). `{ status, identical, engineVersionThen, engineVersionNow, differences, truncated, message? }`: `status` is `identical`, `differs` (`differences` lists up to 50: `{ kind: 'summary', path }`, `{ kind: 'series', key, nodeId, label, days, firstDate, maxAbsDiff }`, `{ kind: 'series_missing' \| 'series_extra', key, nodeId, label }`; `truncated` counts the rest), `not_reproducible` (a run from before stored inputs, `message` says so), `inconsistent` (a stored input fails its check against the run's record: never presented as the run) or `failed` (today's engine refuses the stored input, `message` has its reason). `404` for a run not in this project | viewer |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -800,9 +814,32 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   history names, runs a publication holds (at most 12, [Publication](#publication))
   and cited runs (a scenario's base) are exempt and don't count against the
   20. A scenario's runs count like any other. **Automatic runs**
-  (`trigger: 'auto'`, WP-2.11) are capped apart: only the newest unkept auto
-  run is kept, and auto runs never count against, or push out, the 20.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger }` —
+  (`trigger: 'auto'`, WP-2.11, and `'forecast'`, WP-2.12) are capped apart,
+  per trigger: only the newest unkept auto run and the newest unkept forecast
+  run are kept, and neither counts against, or pushes out, the 20.
+- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
+  An ordinary run (`forecast` absent or `false`) leaves out any forecast rain
+  after the last observed rain day: it ends the day before the forecast
+  tail, and stores that input, so forecast rain never reaches its figures.
+  `forecast: true` runs the engine's forecast mode: `trigger: 'forecast'`,
+  the run's end is the forecast's last day, every summary figure and every
+  series before `summary.forecast.from` is exactly what the ordinary run
+  would give, and `summary.forecast = { from, to, days, lastObserved,
+  rainMm, perFarm: { nodeId, name, minDamPct, minDamDate, deficitDays,
+  demandM3, suppliedM3, suppliedFraction }[], outletEwrDaysAtRisk }` covers
+  the days from `from` (fractions 0–1; `minDamPct`/`minDamDate` null
+  without a dam, `suppliedFraction` null without demand). It also stores the
+  catchment series `rain_source` (0 catchment, 1 alternative gauge, 2 CHIRPS,
+  3 reanalysis, 4 forecast, `null` none) when the run has no rain-source
+  periods. A forecast run is reproduced by `runForecastChecked(loadRunInput(run))`;
+  it can't be a scenario's base, nominated as evidence or signed off (each
+  `409`: all three are judged on the record), and its uncertainty bands run on
+  its input without the tail. The worker doesn't schedule forecast runs:
+  they are made on request (WP-2.11's re-run job makes ordinary runs).
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
+  `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
+  or `forecast`; `forecastFrom` a forecast run's first forecast day
+  (`summary.forecast.from`), else `null`.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
   fetch (audit H1, workbook comparison only — not evidence). `notes` is the
@@ -828,7 +865,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   before stored inputs. `trigger` is what made the run:
   `'manual'` (a person: Run, a queued re-run, an import, a scenario) or
   `'auto'` (the re-run after new data, labelled `Auto · data to <day>`, made
-  as the person whose data queued it); `'forecast'` is reserved (WP-2.12).
+  as the person whose data queued it) or `'forecast'` (a forecast run, WP-2.12, below).
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
@@ -865,6 +902,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- `summary.groundwaterAnnualUse` (engine ≥ 0.36.0, WP-3.9; only with
+  boreholes) is one row per farm or user with boreholes (node-id order) per
+  water year the run touches: `{ nodeId, name, kind, waterYear (start year),
+  label ('2003/04'), days, abstractionM3 (pumped to the crop + into the dam),
+  toDamM3, streamDepletionM3, annualCapM3 (Σ caps, null if any borehole can
+  pump uncapped), gaLimitM3 (40 000, the GN 538 ceiling per property, context
+  only), boreholes: [{ id (null = the combined capacity), name, abstractionM3,
+  annualCapM3, capReached }] }`. It is the modelled groundwater abstraction per
+  farm per water year that licensing comparisons (WARMS, WP-3.10) read. A node
+  with a dam-target borehole has the run series `groundwater_to_dam`, and its
+  farm summary `avgGroundwaterToDamM3Day`. The summary CSV adds a
+  "Groundwater abstraction by water year" block.
 - `summary.landCover` (engine ≥ 0.24.0; only with land cover) is
   `{ lowFlowThresholdM3Day, reductionM3Day, fractionOfNatural, byClass:
   { coverClass, condensedKm2, reductionM3Day, mmPerYear }[] }`; farms with
@@ -1100,7 +1149,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | `{ scenarios: Scenario[] }`, newest first | viewer |
-| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`. `409 this project already has a scenario with that name` (names are unique per project, ignoring case) | editor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (names are unique per project, ignoring case) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
@@ -1128,6 +1177,53 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   ops and base name every farm. A scenario's base run is **cited**: it can't
   be deleted, trimmed or unpinned while the scenario exists
   ([Runs](#runs)).
+- The **Min role** column above is for a team scenario. A contributor may call
+  the scenario routes too, for applications ([Applications](#applications)).
+- Since 045 `Scenario` also has `origin: 'team' | 'applicant'`,
+  `submittedAt`, `decidedAt`, `decidedBy` (a display name), `outcome:
+  'approved' | 'approved_with_conditions' | 'refused' | null`,
+  `decisionNote` and `members: { userId, displayName }[]`; `baseRun.label` is
+  `''` and `baseRun.createdAt` `null` for a caller who can't read the run.
+- `GET /projects/:id/scenarios/:sid/base` → `{ baseRunId, settings, model,
+  anonymisedNodeIds }`: the base run's settings and model as the caller may
+  see them, for the op editor. For a viewer and above, as stored
+  (`anonymisedNodeIds: []`); for a contributor, the applicant projection
+  below. Min role: contributor (any reader of the scenario).
+
+### Applications
+
+An **application** is a scenario made by a **contributor** (WP-3.3,
+migrations 044/045, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+`origin: 'applicant'`, on a **published** run, read by its owner and the
+people they share it with, by editors once submitted and by viewers once
+decided. A team scenario (an editor's) is unchanged, and the workflow routes
+below work on it too, for an editor.
+
+| Method | Path | Body | Response | Who |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/scenarios` | – | as above; a contributor gets their own applications and those shared with them | contributor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops? }` | as above. A contributor's `baseRunId` must be a published run (current or in the history): `404 published run not found` otherwise, as if it didn't exist; `409` when that published run is a forecast run (as for a team scenario). `ownedNodeIds` are their farm links (sending any is `403`) | contributor (a viewer: `403`) |
+| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
+| DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
+| POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
+| POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
+| POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
+| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted | editor |
+| POST | `/projects/:id/scenarios/:sid/members` | `{ email }` | `201 { members }` (`200` if already shared). `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike; `409` for a team scenario or yourself | owner of the application |
+| DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
+| GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
+
+- **What a contributor sees of the base** (`…/base`, and the check's
+  messages): the settings, their own farms and the gauges in full, every
+  other node by kind and place under an anonymous name ("Farm 3") with its
+  values blanked, and only their own farms' crops, crop areas, transfers and
+  land cover (D2's recommended default, pending the client). They never
+  receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
+  answer them `403`.
+- A contributor linked to a farm also reads its farm view
+  (`GET /projects/:id/farm…`) as a farmer would.
 
 ## Sign-offs
 
@@ -1136,8 +1232,8 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (workbook comparison only, audit H1) | editor |
+| GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12), `null` when they can | viewer |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
@@ -1209,7 +1305,9 @@ modeller's report window (design [farmer-view.md §2](./design/farmer-view.md#2-
 `dataUntil` is the last day of observed rain in the run's input snapshot
 (the catchment gauge or CHIRPS): a run that goes on past it on forecast
 rain is projected only to there, so forecast days never count as water
-received (they come as their own block with WP-2.12).
+received. For a **forecast run** (WP-2.12) it is the day before
+`summary.forecast.from`, and each farm's projection gains `forecast` (below).
+(An ordinary run no longer goes past the record at all: [Runs](#runs).)
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -1411,6 +1509,10 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
   D2), and `cutBeyondShare` is `false` (it is measured against the even
   share, so it would bound it); the stored projection keeps them.
+  `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
+  deficitDays, suppliedFraction }` only when the published run is a forecast
+  run (WP-2.12): that farm's forecast days from the run's `summary.forecast`,
+  `madeOn` the day the run was made (UTC); nothing about any other farm.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice, noticeLang? }, nextExpectedOn }`.
@@ -1740,9 +1842,9 @@ ahead of the usual header row.
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain). A **forecast run** (WP-2.12) leads with `forecast (F = modelled on forecast rain)` after `date`: `F` on each day from `summary.forecast.from`, empty before; its catchment file also has the `Rain source` column. So does `farms.csv`, and the `.xlsx` workbook's daily sheets lead with `forecast (1 = modelled on forecast rain)`, 1 or 0 |
 | `/projects/:id/runs/:runId/export/farms.csv` | `key`, `from?`, `to?` | `date` + one column per farm of the run, in the run's farm order (upstream first, the order of `RunSummary.farms`), for one farm series `key` (any key of `FARM_COLUMNS`, the optional ones included, e.g. `landcover_reduction`; `400` otherwise). `key=runoff` is the workbook's `[Fragmented flow]` sheet (column I), `key=ewr` its `[Fragmented EWR]` sheet (column Y). Each header is the farm's current name, then the letter and unit (`Farm A [I] (m³/day)`); a farm deleted from the model since the run keeps its column under the name the run knew (a run keeps all its series, migration 024), and a farm without that series (a dam column on a farm with no dam) is left out. `404` when no farm has the series |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run, then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run, then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, a forecast run's forecast days (WP-2.12, only on a forecast run: first and last forecast day, days, last observed rain, forecast rain, outlet EWR days at risk, then per farm the lowest dam level expected (%), days short, demand, supplied and supplied % of demand; every other block covers the days before them), the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 
@@ -1823,9 +1925,15 @@ round-trips export → import:
   "name": "…", "description": "…",
   "settings": { /* stored settings merged over the defaults */ },
   "model": { "nodes": [], "crops": [], "cropAreas": [], "transfers": [] },
-  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "2001-10-01", "values": [0.4, null] }]
+  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "2001-10-01", "values": [0.4, null] }],
+  "notes": [{ "body": "…", "author": "…", "createdAt": "…", "editedAt": null, "target": "node", "nodeId": "…", "nodeName": "…",
+              "runId": null, "runLabel": null, "settingKey": null, "visibility": "farm" }]   // informational; ignored on import
 }
 ```
+
+`notes` are the project's notes the exporter can read, oldest first, never a
+deleted one ([data-model.md § Notes](./data-model.md#notes-037_notessql)):
+a record, not imported, since a note can only be written as its author.
 
 Runs are not included (re-run after importing, or pass `run=1` / `--run`),
 nor is the import report ([why](#import-report)). The importer gives every row

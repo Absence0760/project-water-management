@@ -44,6 +44,13 @@ function opIds(op: ScenarioOp): [string, unknown][] {
 			];
 		case 'landCover.remove':
 			return [['patchId', op.patchId]];
+		case 'borehole.add':
+			return [
+				['borehole.id', op.borehole.id],
+				['borehole.nodeId', op.borehole.nodeId]
+			];
+		case 'borehole.remove':
+			return [['boreholeId', op.boreholeId]];
 		case 'settings.set':
 		case 'series.scale':
 			return [];
@@ -92,7 +99,12 @@ const ownedNodeIds = z
 export const SCENARIO_STATUSES = ['draft', 'submitted', 'withdrawn', 'decided'] as const;
 export type ScenarioStatus = (typeof SCENARIO_STATUSES)[number];
 
-/** Status changes the API (and the scenario_guard trigger) allow. WP-3.3 narrows who may make them. */
+/**
+ * Status changes the API (and the scenario_guard trigger) allow. Who may make
+ * them (045_contributor_scope): on a team scenario an editor; on an
+ * application its owner, except `decided`, which only an editor who isn't
+ * its owner makes (POST …/decide).
+ */
 export const STATUS_MOVES: Record<ScenarioStatus, readonly ScenarioStatus[]> = {
 	draft: ['submitted'],
 	submitted: ['withdrawn', 'decided'],
@@ -113,3 +125,13 @@ export const PatchScenarioBody = z
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();
 
 export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).optional() }).strict();
+
+/** An assessor's decision on an application (045_contributor_scope; the words are pending the licensing authority). */
+export const SCENARIO_OUTCOMES = ['approved', 'approved_with_conditions', 'refused'] as const;
+export type ScenarioOutcome = (typeof SCENARIO_OUTCOMES)[number];
+
+/** POST …/decide: the outcome and the assessor's reasons (scenario.decision_note, ≤ 4000 characters). */
+export const DecideBody = z.object({ outcome: z.enum(SCENARIO_OUTCOMES), note: description.default('') }).strict();
+
+/** POST …/members: the project member to share an application with, by email. */
+export const ShareBody = z.object({ email: z.string().trim().toLowerCase().email().max(254) }).strict();

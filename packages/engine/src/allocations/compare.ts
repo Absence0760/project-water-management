@@ -42,6 +42,14 @@ export interface AllocationUseNode {
 	supplied: readonly (number | null)[];
 	/** Daily groundwater pumped (m³/day, part of supplied): the run's `groundwater_used` series; absent without boreholes. */
 	groundwater?: readonly (number | null)[] | null;
+	/**
+	 * Daily groundwater pumped into the farm dam (m³/day; WP-3.9, engine ≥
+	 * 0.36.0): the run's `groundwater_to_dam` series; absent without dam-target
+	 * boreholes. Not part of supplied. It counts as groundwater use when pumped,
+	 * so the groundwater side per water year equals RunSummary.groundwaterAnnualUse's
+	 * abstraction (to the crop + into the dam).
+	 */
+	groundwaterToDam?: readonly (number | null)[] | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }
@@ -188,6 +196,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 	const nodes = input.nodes.map((n): AllocationNodeComparison => {
 		const allocs = byNode.get(n.nodeId) ?? [];
 		const gw = n.groundwater ?? null;
+		const gd = n.groundwaterToDam ?? null;
 		const side = (source: AllocationWaterSource): AllocationSourceComparison => {
 			const own = allocs.filter((a) => a.waterSource === source);
 			const years = spans.map((s): AllocationYear => {
@@ -195,7 +204,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				for (let d = s.from; d <= s.to; d++) {
 					const t = d - start;
 					const g = gw ? finite(gw[t]) : 0;
-					modelled += source === 'groundwater' ? g : finite(n.supplied[t]) - g;
+					modelled += source === 'groundwater' ? g + (gd ? finite(gd[t]) : 0) : finite(n.supplied[t]) - g;
 				}
 				const reg = registered(own, s.from, s.to, s.yearDays);
 				const covered = s.to - s.from + 1;

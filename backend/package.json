@@ -15,6 +15,7 @@
 		"test:watch": "vitest",
 		"test:db": "vitest run --project db",
 		"test:perf": "vitest run --project perf",
+		"test:perf:db": "vitest run --project perf-db",
 		"db:migrate": "tsx scripts/migrate.ts",
 		"import:project": "tsx scripts/import-project.ts",
 		"seed:examples": "tsx scripts/seed-examples.ts",

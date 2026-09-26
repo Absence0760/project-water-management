@@ -3,7 +3,9 @@
 	// docs/scenarios.md): the project's scenarios, a form to start one on a
 	// run, and the chosen one (?scenario=<id>) in the editor. Viewers read
 	// every scenario; farmers never reach the workspace (their view is the
-	// farm page), and the API refuses them scenarios anyway.
+	// farm page), and the API refuses them scenarios anyway. An applicant (the
+	// contributor role, WP-3.3) gets the same tab in the Applicant view: their
+	// own applications, and a new one always starts on the published baseline.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -16,11 +18,17 @@
 		projectId,
 		runs,
 		canEdit,
+		applicant = false,
+		publishedRunId = null,
 		onRunsChange
 	}: {
 		projectId: string;
 		runs: RunMeta[] | null;
 		canEdit: boolean;
+		/** The caller is an applicant: applications only, on the published run. */
+		applicant?: boolean;
+		/** The current publication's run: an applicant's base. */
+		publishedRunId?: string | null;
 		onRunsChange: (runs: RunMeta[]) => void;
 	} = $props();
 
@@ -95,6 +103,8 @@
 	 * refuses to delete a cited run.
 	 */
 	async function refreshRuns() {
+		// An applicant has no run list (the workspace's routes refuse them).
+		if (applicant) return;
 		try {
 			onRunsChange(await api.runs.list(projectId));
 		} catch {
@@ -117,7 +127,7 @@
 	}
 	async function ran(run: Run, removedRunIds: string[]) {
 		const { summary: _s, ...meta } = run;
-		onRunsChange([meta, ...(runs ?? []).filter((x) => x.id !== run.id && !removedRunIds.includes(x.id))]);
+		if (!applicant) onRunsChange([meta, ...(runs ?? []).filter((x) => x.id !== run.id && !removedRunIds.includes(x.id))]);
 		// The scenario's run count and latest run come from the server.
 		if (detail) await loadDetail(detail.scenario.id);
 		if (detail) changed(detail);
@@ -134,7 +144,7 @@
 	let createError = $state<string | null>(null);
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
-		const baseRunId = newBase || defaultBase;
+		const baseRunId = applicant ? (publishedRunId ?? '') : newBase || defaultBase;
 		if (!newName.trim() || !baseRunId) return;
 		creating = true;
 		createError = null;
@@ -158,7 +168,7 @@
 
 <div class="layout">
 	<section class="panel rail" aria-labelledby="scenarios-h">
-		<div class="panel-head"><h2 id="scenarios-h">Scenarios</h2></div>
+		<div class="panel-head"><h2 id="scenarios-h">{applicant ? 'Your applications' : 'Scenarios'}</h2></div>
 		<LoadState {loading} {error} retry={loadList}>
 			{#if scenarios?.length}
 				<ul class="list">
@@ -167,18 +177,37 @@
 							<button type="button" class="pick" aria-current={sc.id === selectedId || undefined} onclick={() => select(sc.id)}>
 								<span class="name">{sc.name}</span>
 								<span class="meta">
-									{STATUS[sc.status]} · {sc.ops.length} change{sc.ops.length === 1 ? '' : 's'} · on {sc.baseRun.label || 'Untitled run'}{sc.lastRun ? ` · run ${fmtDate(sc.lastRun.createdAt, true)}` : ''}
+									{STATUS[sc.status]}{sc.origin === 'applicant' && !applicant ? ` application by ${sc.owner ?? 'an applicant'}` : ''} · {sc.ops.length} change{sc.ops.length === 1 ? '' : 's'} · on {sc.baseRun.label || 'Untitled run'}{sc.lastRun ? ` · run ${fmtDate(sc.lastRun.createdAt, true)}` : ''}
 								</span>
 							</button>
 						</li>
 					{/each}
 				</ul>
 			{:else}
-				<p class="empty" data-testid="scenarios-empty">No scenarios yet. A scenario changes the published baseline without copying it.</p>
+				<p class="empty" data-testid="scenarios-empty">
+					{applicant
+						? 'No applications yet. An application is a set of changes to the published baseline (a bigger dam, a new crop) that you run and then submit to the assessors.'
+						: 'No scenarios yet. A scenario changes the published baseline without copying it.'}
+				</p>
 			{/if}
 		</LoadState>
 
-		{#if canEdit}
+		{#if applicant}
+			<form class="create" onsubmit={create} aria-labelledby="new-scenario-h">
+				<h3 id="new-scenario-h">New application</h3>
+				{#if publishedRunId}
+					<div class="field">
+						<label for="new-scenario-name">Name</label>
+						<input id="new-scenario-name" type="text" maxlength="100" placeholder="e.g. Raise my dam to 120 000 m³" bind:value={newName} />
+						<span class="hint">It starts on the published baseline, and only you (and whoever you share it with) see it until you submit it.</span>
+					</div>
+					<button type="submit" class="btn btn-primary" disabled={creating || !newName.trim()}>{creating ? 'Creating…' : 'Create application'}</button>
+					{#if createError}<p class="err" role="alert">{createError}</p>{/if}
+				{:else}
+					<p class="muted">Nothing is published yet: an application starts on the published baseline.</p>
+				{/if}
+			</form>
+		{:else if canEdit}
 			<form class="create" onsubmit={create} aria-labelledby="new-scenario-h">
 				<h3 id="new-scenario-h">New scenario</h3>
 				{#if bases.length}
@@ -206,11 +235,11 @@
 		{#if selectedId}
 			<LoadState loading={detailLoading && !detail} error={detailError} retry={() => selectedId && loadDetail(selectedId)}>
 				{#if detail}
-					<ScenarioEditor {projectId} data={detail} runs={runs ?? []} {canEdit} onchange={changed} ondeleted={deleted} onran={ran} />
+					<ScenarioEditor {projectId} data={detail} runs={runs ?? []} {canEdit} {applicant} onchange={changed} ondeleted={deleted} onran={ran} />
 				{/if}
 			</LoadState>
 		{:else if scenarios?.length}
-			<p class="panel muted pick-one">Pick a scenario to see its changes and results.</p>
+			<p class="panel muted pick-one">Pick {applicant ? 'an application' : 'a scenario'} to see its changes{applicant ? '' : ' and results'}.</p>
 		{/if}
 	</div>
 </div>

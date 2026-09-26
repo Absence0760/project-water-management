@@ -7,6 +7,7 @@ import type { FarmView } from '@water-management/engine';
 import * as cards from './cards';
 import * as chart from './chart';
 import * as dam from './dam';
+import { forecastCard } from './forecastCard';
 import { vaalbankFixture } from './fixture';
 import * as why from './why';
 
@@ -44,7 +45,8 @@ function everything(v: FarmView): string[] {
 		dam.damPage(f, 'ML'),
 		dam.damSource(),
 		chart.supplySummary(f.monthly, f.dataUntil),
-		chart.damSummary(f.monthly, f.dataUntil)
+		chart.damSummary(f.monthly, f.dataUntil),
+		forecastCard(f, '2024-01-20')
 	]);
 }
 
@@ -56,7 +58,12 @@ const variants: [string, (v: FarmView) => void][] = [
 	['only low rain', (v) => v.farm.river.sites.forEach((s) => (s.daysOnlyNatural = s.daysNotMet))],
 	['never asked', (v) => ((v.farm.river.chargedDays = 0), (v.farm.river.sites = []))],
 	['no headline', (v) => ((v.farm.river.headline = null), (v.farm.river.band = null), (v.farm.season.fraction = null))],
-	['restricted', (v) => (v.publication.restriction = { level: 'restricted', pct: 20, notice: null })]
+	['restricted', (v) => (v.publication.restriction = { level: 'restricted', pct: 20, notice: null })],
+	[
+		'with a forecast (WP-2.12)',
+		(v) =>
+			(v.farm.forecast = { from: '2024-01-11', to: '2024-01-24', days: 14, madeOn: '2024-01-11', minDamPct: 0.38, minDamDate: '2024-01-20', deficitDays: 3, suppliedFraction: 0.8 })
+	]
 ];
 
 describe('the farmer view never uses the modeller’s words', () => {

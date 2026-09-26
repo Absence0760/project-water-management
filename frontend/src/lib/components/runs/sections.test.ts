@@ -47,6 +47,12 @@ describe('resultGroups', () => {
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
 	});
 
+	it('lists a forecast run’s forecast panel right after the summary, and only for a forecast run (WP-2.12)', () => {
+		const opening = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary)[0]!.sections.map((s) => s.id);
+		expect(opening({ farms: [] })).toEqual(['res-summary']);
+		expect(opening({ farms: [], forecast: {} as RunSummary['forecast'] })).toEqual(['res-summary', 'res-forecast']);
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);

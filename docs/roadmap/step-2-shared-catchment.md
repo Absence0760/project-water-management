@@ -1599,6 +1599,47 @@ in dev.
 
 ### WP-2.12 Forecast mode and forecast-day flags
 
+> **Status: built** (`packages/engine/src/forecast.ts`, `model_run.trigger` from WP-2.11's `042_auto_rerun.sql`,
+> `POST /runs { forecast }`, `forecast/ForecastPanel.svelte`, the `LineChart`
+> band, `farm/ForecastCard.svelte`; [model.md §2.4f](../model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
+> Where the build departs from the plan below, and why:
+> - **The simulation is not causal**, so prefix stability can't rest on it
+>   (engine-audit.md K1: the land-cover Q75, EWR rule tables and GR4J's
+>   warm-up read the whole record). A forecast run takes every summary and
+>   every series before `forecastFrom` from a second run without the tail,
+>   so the historical figures are bit-identical by construction; the
+>   invariant (`testing/forecastInvariants.ts`, not `invariants.ts`) asserts
+>   it on random networks and the three examples, with a 20 000-case soak.
+> - **`runModel` is unchanged.** Forecast mode is a separate entry point
+>   (`runForecastChecked`), and an ordinary run's input is cut at the tail by
+>   the backend (`withoutForecastTail`), so no existing engine result moves
+>   and the regression suite is untouched. `ENGINE_VERSION` moved 0.35.0 →
+>   0.37.0 (not the plan's 0.5.0; the engine had moved on) for the new
+>   output fields.
+> - **`rain_source` keeps engine 0.30.0's codes** (0 catchment, 1 alternative
+>   gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank none), not the plan's
+>   0–3, and is stored only on forecast runs (and runs with rain-source
+>   periods, as before): adding a series to every run would change every run.
+> - **`summary.forecast.perFarm`** also carries `name`, `minDamDate` (the
+>   design's `damPctMinDate`), `demandM3` and `suppliedM3`, and the summary
+>   `lastObserved` and `rainMm`. `minDamPct` is a 0–1 fraction like the rest
+>   of the farm view.
+> - **The GEFS feed isn't changed to a whole-series `PUT`.** WP-2.10 built
+>   issue-keyed replacement (each issue replaces the last from its issue
+>   date on; an older issue never overwrites a newer one), which leaves an
+>   older issue's first day before today's. Those days fall after the last
+>   observed rain, so forecast mode labels them forecast, never observed,
+>   which was the reason for the `PUT`.
+> - **Publication carries the forecast when the published run is a forecast
+>   run**, rather than splicing the latest forecast run into another run's
+>   projection: the forecast then always comes from the same model snapshot
+>   as the figures beside it. The farm view reads `farm.forecast` (not a
+>   top-level `forecast`), with the day the forecast was made.
+> - **Not built here:** scheduled forecast runs. WP-2.11 owns re-run
+>   enqueueing; its re-run job makes ordinary runs. A nightly forecast run
+>   after each GEFS ingest is the natural hand-off (`executeRun(…, 'forecast')`
+>   then `trimRuns`, whose per-trigger cap keeps the newest unkept forecast run).
+
 **Goal.** Show the next 7–14 days distinctly, with early warnings. Forecast
 rain must never change the historical figures farmers and regulators rely on.
 
@@ -1840,8 +1881,8 @@ the forecast kinds.
 > the demo team (Sandspruit stays the analyst's own, which the e2e uses as
 > the negative control). Measured locally: 10 published catchments × 60
 > farms (10-year runs) answer in a median 51 ms of API time (7 calls), well
-> inside the 500 ms criterion; there is no DB perf guard for it yet
-> (followups.md).
+> inside the 500 ms criterion; `pnpm test:backend:perf:db` holds that
+> budget (`portfolio.db.perf.test.ts`, median 41 ms when added).
 
 **Goal.** All of a team's catchments on one screen: is anything wrong, is
 the data current, who is short this week?

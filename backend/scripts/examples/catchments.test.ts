@@ -5,12 +5,14 @@
 // passing, and warns only about what it was built to show. Together they must
 // showcase the engine's features (docs/run-locally.md § Example catchments).
 import {
+	forecastSplit,
 	fitRecordStatus,
 	resolveFitRecord,
 	runModelChecked,
 	upgradeLegacyModel,
 	type ModelOutput
 } from '@water-management/engine';
+import { checkForecastPrefix, withForecastTail } from '@water-management/engine/testing';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { modelProblems } from '../../src/model/validate.js';
 import { ProjectFile } from '../../src/projects/document.js';
@@ -172,4 +174,14 @@ describe('example catchments: showcase the current features', () => {
 		expect(out.endDate).toBe('2025-01-10');
 		expect(out.summary.wr2012?.quaternary).toBe('X99Z');
 	});
+
+	it('forecast mode keeps each example\'s history to the bit (WP-2.12 prefix stability)', () => {
+		// Sandspruit's own 10-day forecast tail; the other two get a synthetic one.
+		expect(forecastSplit(inputOf(byName('Sandspruit')))).toMatchObject({ forecastFrom: '2025-01-01', lastObserved: '2024-12-31' });
+		for (const ex of examples) {
+			const input = ex.name.includes('Sandspruit') ? inputOf(ex) : withForecastTail(inputOf(ex), 1);
+			expect(forecastSplit(input).forecastFrom, ex.name).not.toBeNull();
+			expect(checkForecastPrefix(input), ex.name).toBeNull();
+		}
+	}, 120_000);
 });

@@ -322,7 +322,8 @@ and nothing else.
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
 In short:
 
-- Roles are **viewer < editor < owner**, per project. A team grants one of
+- Roles are **viewer < editor < owner**, per project (with `farmer` and
+  `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of
   them on every team project: team **viewer → viewer**, **member → editor**,
   **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
   explicit and an unrecognised team role grants nothing, in SQL
@@ -399,7 +400,11 @@ In short:
   note or a run, settings, project or other farm's note. Only the author
   edits a body (`note_guard`); a delete is soft, the body kept for editors'
   audit trail and hidden from everyone else. Bodies are plain text, rendered
-  with Svelte's escaping (no `{@html}`, no markdown). Tests:
+  with Svelte's escaping (no `{@html}`, no markdown). The project export
+  (`export.json`, viewers and above) carries the undeleted notes the
+  exporter can read and never a deleted body, even to an editor; the import
+  ignores them and a copy takes none, so a note is never re-authored under
+  someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
   `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
   the note routes among the farmer-allowed ones.
 - **Same-project triggers** reject references to another project's nodes or
@@ -524,7 +529,7 @@ In short:
     `run_input_series` row the user can see, and that table's needs a
     `model_run` the user can see; both subqueries are themselves under RLS. So
     blobs follow `model_run`'s policy (viewer today), and narrow with it if
-    run visibility ever does (applicants, WP-3.3). Knowing a hash gives
+    run visibility does (045: an application's runs follow the application). Knowing a hash gives
     nothing: another project's member reads no row, by hash or at all
     (`reproducible.db.test.ts`, with the owner and a viewer as positive
     controls), and can't point a run of theirs at it (the composite foreign
@@ -562,6 +567,67 @@ In short:
   stored. A run series can name only a node of its own run's snapshot
   (`run_series_nodes_in_run`), so no run can be given series for another
   project's node.
+- **Applicants: the contributor role** (WP-3.3, 044/045,
+  [data-model.md § Applicants](./data-model.md#applicants-044045),
+  [scenarios.md § Applications](./scenarios.md#applications-wp-33)). A new
+  trust boundary *inside* a project: an applicant works on the assessor's
+  published baseline without seeing other applicants' drafts, other farms'
+  inputs or anything unpublished.
+  - **Fail closed.** `contributor` ranks below `viewer`, so every existing
+    policy and every `requireRole(…, 'viewer')` route refuses it untouched;
+    `scenarios/applications.db.test.ts` calls every `/projects/:id` route as
+    a contributor and requires `400`/`403` except the listed ones (the
+    farmer's, and the scenario routes, where RLS and the route's own rules
+    decide), and the route inventory (`routes.test.ts`) lists every new
+    route as auth-gated.
+  - **The published run stays on the server.** A contributor can't read any
+    run's row (its `inputs` and `summary` hold every farm), `/runs/*` and
+    `/compare/runs` refuse them, and a scenario run answers them with its
+    metadata only. The base reaches the server through
+    `SECURITY DEFINER` `app_published_run_input` / `app_published_run_series`
+    (only a run a publication names, only to a contributor or above); what
+    leaves is the applicant projection (`scenarios/applicant.ts`: their own
+    farms and the gauges in full, every other node anonymised and blanked,
+    engine messages renamed). The DB test scans everything the applicant
+    received for another farm's name. RLS gives a contributor no run row
+    at all, their own application's included (046_contributor_runs), since
+    its `inputs` snapshot is the whole base with the ops applied: the run
+    count, last run and a new run's metadata come through the `SECURITY
+    DEFINER` `app_scenario_run_meta` (never `inputs` or `summary`), and the
+    owner's run cap through `app_trim_application_runs`. Of an application
+    run's series they read its own nodes' and the catchment allowlist
+    (under the share links' k), never another farm's. The one deliberate
+    path to a full input in a contributor's transaction is
+    `app_published_run_input` / `app_published_run_series`, which the
+    server needs to run the application and projects before anything
+    leaves.
+  - **Drafts are private, even from the assessors.** Who reads an
+    application is one function (`app_scenario_visible`), and its runs and
+    their series follow it; editors see it once submitted, viewers once
+    decided. The project's log names an application only once it is decided.
+    Notes on its runs, sign-offs of them and yields of it or its runs follow
+    it too (045 rewrote `note_select`, `signoff_select` and
+    `yield_result_select`, which had checked the project role only).
+  - **Tables added alongside it** (sign-offs, notes, allocations, API keys,
+    yields and jobs, dam curves, boreholes) were audited at the merge: a
+    contributor reads only their own linked farm's farm-scoped rows (as a
+    farmer does) and none of the viewer or owner tables
+    (`scenarios/contributor-tables.db.test.ts`, each with a positive
+    control). The notes route treats a contributor as a farmer (a farm note
+    on their own farm only), and the team portfolio query now requires
+    `role >= 'viewer'` rather than `role <> 'farmer'`, which a contributor
+    passed.
+  - **No one decides their own application**: the trigger refuses a decision
+    by the owner, whatever their role by then.
+  - **Known oracles, accepted for now.** Sharing an application by email
+    answers the same `404` for an unknown address and a non-member, but a
+    success tells the applicant that address is a contributor-or-above
+    member. Renaming their own farm to a neighbour's name gets the engine's
+    duplicate-name problem, which says a node of that name exists (the name
+    itself comes back anonymised). Both are in followups.md.
+  - **D1**: a team member who is also a contributor is an editor (the
+    effective role is the max), so a consultancy mustn't host the baseline in
+    its own team while its staff act for applicants.
 - **Data feeds run as the owner who configured them** (018_feeds,
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Owners
   attach and change feeds (RLS); saving stamps the saver as the feed's acting

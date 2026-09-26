@@ -828,7 +828,9 @@ to the run's end. So the run records the days that used forecast rain
 many fall in the reporting window, and the last day of recorded rain) and
 warns: *3 days (… to …) of this run use forecast rain, not recorded rain
 (catchment or CHIRPS); all of them fall in the reporting window (…), so
-curtailment and the EWR sites cover forecast days*. Because the feed
+curtailment and the EWR sites cover forecast days*. That is `runModel` on
+its own. A saved run never does it any more: an ordinary run leaves the
+forecast tail out, and a forecast run keeps it apart (§2.4f). Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
@@ -1164,6 +1166,93 @@ daily intensities (calibration-research.md §4) is not applied: a factor
 keeps the gauge's own wet-day distribution. A replacement from a gridded
 product alone (no gauge) is still a `missing` period (§2.4c) filled from
 CHIRPS.
+
+### 2.4f Forecast mode (engine ≥ 0.37.0, roadmap WP-2.12)
+
+The workbook marks the rows after the last observed rain "F": they run on
+forecast rain. Left to `runModel`, a forecast tail flows into every summary
+(the curtailment window, the EWR days not met, the farm averages,
+calibration, the compliance grid), so yesterday's forecast would change the
+figures farmers and regulators rely on. Forecast mode
+(`packages/engine/src/forecast.ts`) keeps the two apart. It adds no step to
+`runModel`, whose output is unchanged: the version moved to 0.37.0 for the
+new output fields (`forecastFrom`, `summary.forecast`) forecast runs carry.
+
+**Where the forecast starts.** `forecastSplit` reads the rain exactly as the
+run does (`prepareRun`: zero runs set aside, accumulations spread, rain-source
+periods, CHIRPS blocked where it may not fill) and labels each day with the
+source of its rain, in the codes of the `rain_source` column (§2.4e): 0
+catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank for
+none. `forecastFrom` is the first forecast-sourced day **after** the last day
+whose rain came from any other source. So:
+- a forecast that overlaps the record changes nothing on the record's days
+  (the record wins there) and starts the tail the day after it;
+- forecast rain that fills a gap *inside* the record is history, filled like
+  any gap, not the tail;
+- dry days between the last observed rain and the first forecast day (a
+  logger's padded tail, CHIRPS still to come) are history too: they run as
+  0 mm in both runs;
+- with no observed rain at all, or a simulation end before the forecast,
+  there is no tail (`forecastFrom = null`).
+
+**The run without the tail.** `withoutForecastTail` cuts the forecast series
+to end the day before `forecastFrom` (dropping it when nothing is left) and
+sets `simulationEnd` to that day. This is what every ordinary saved run uses
+(`POST /runs`, the re-run job, imports), so forecast rain past the record
+never reaches an ordinary run. It stores that input, so
+`runModel(loadRunInput(run))` still reproduces it.
+
+**A forecast run.** `runForecastChecked` runs the model twice: without the
+tail and with it. Its output is
+- every summary (farms, curtailment, EWR days, calibration, compliance,
+  assurance, water balance, self-checks, warnings) of the run **without**
+  the tail;
+- every daily series of the run without the tail up to `forecastFrom − 1`,
+  and of the run with it from `forecastFrom` on, plus the `rain_source`
+  column when the run has none (so charts and exports can mark the days);
+- `ModelOutput.forecastFrom` and `summary.forecast`: over the tail days, per
+  farm the lowest dam level (storage ÷ capacity, and the first day at it),
+  the days with a deficit, demand, supply and supplied ÷ demand, and at the
+  outlet the days the EWR is not met (`outletEwrDaysAtRisk`, the outlet test
+  of `ewrDaysNotMet`), with the forecast rain used;
+- `summary.forecastRain` of the run with the tail (it names the forecast
+  days), but not its warning (the summaries no longer cover them);
+- a self-check the run with the tail fails, added to the warnings as *self-check
+  failed on the run with the forecast tail (…)*.
+
+**Why two runs: the model is not causal.** The plan assumed a run with a
+tail and one without agree on every shared day because the simulation is
+causal. It isn't quite: a few figures are record-wide statistics, so a day at
+the end of the record moves values at its start. The land-cover low-flow
+threshold is the natural flow's Q75 over the record (§2.5a); EWR rule tables
+are read against the record's flow-duration curve (§2.9c); GR4J's warm-up
+cycles the forcing when the record is shorter than the warm-up (§2.4a). A
+14-day tail on a 900-day random network moved historical values by about
+1e-8 relative; on a short record, by more. Taking the history from the run
+without the tail makes it an ordinary run's **to the bit**, by construction.
+The forecast days carry on from the run with the tail, so the join between
+the two is continuous only up to that noise: the water balance of each run
+closes (both are self-checked), the spliced series across the join to within
+it. Making those statistics causal (fitting them on a fixed window) would let
+one run do; that is an engine decision, not forecast mode's.
+
+**The invariant.** `checkForecastPrefix` (`testing/forecastInvariants.ts`)
+asserts, on random networks with a synthetic tail (after the record, overlapping
+it, or after a gap) and on the three example catchments: without a tail a
+forecast run is `runModelChecked`'s output; with one, `forecastFrom` is a
+forecast-rain day with no observed rain after it, every series of the run
+without the tail equals the forecast run's up to `forecastFrom − 1` bit for
+bit, every summary figure but `forecast`, `forecastRain` and `warnings` is
+the same, and `summary.forecast`'s counts fit its days and its fractions are
+in range. Soak: `FORECAST_FUZZ_CASES=20000 pnpm -C packages/engine exec vitest
+run src/forecast.invariants.test.ts`.
+
+**What the forecast rain is.** Whatever `rain_forecast_mm` holds: uploaded,
+or the CHIRPS-GEFS feed (WP-2.10). Forecast rain is not bias-corrected (§2.4b).
+Each GEFS issue replaces the one before from its issue date on, so the series
+may keep an older issue's first day before today's; after the last observed
+rain those days are forecast-sourced and so in the tail, never read as
+observed.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -1921,6 +2010,118 @@ share (§2.11) and the curtailment supply cut count it too.
 `FarmSummary` / `UserSummary` `avgGroundwaterM3Day` and
 `avgBaseflowDepletionM3Day`; the water balance's `groundwaterM3` and
 `streamDepletionM3`.
+
+#### Individual boreholes, annual caps and the dam target (engine ≥ 0.36.0, roadmap WP-3.9)
+
+**Why.** A licence application or an assessor's check is about named
+boreholes: each has its own tested yield, its own annual volume (a licence
+condition, or the general authorisation's limit), and a use (pumped straight
+to irrigation, or into a dam to keep it up). WP-1.34's single combined
+capacity per node can't say any of that. **Off by default**: a model without
+`boreholes` (and nodes with only `mode: 'none'` boreholes) runs to the bit as
+before, a test asserts it.
+
+**Fields** (`ProjectModel.boreholes`, migration 043; farms and other users):
+
+| Field | Meaning |
+| --- | --- |
+| `capacityM3Day` | most it pumps per day (the specialist's sustainable yield) |
+| `annualCapM3` | most it pumps per water year (1 October – 30 September), m³; null = no cap |
+| `mode` | `none` (on record, never pumps), `supplemental`, `primary`, `emergency` (supplemental while the dam held less than `emergencyBelowPct` × capacity at the start of the day; farms with a dam only) |
+| `emergencyBelowPct` | the emergency level, 0–1 of dam capacity (default 0.3) |
+| `target` | `direct` (to the crop or user, part of supplied) or `dam` (into the farm dam; farms with a dam only) |
+| `depletionFactor` | its share d of what it pumps that the river eventually loses (0–1) |
+
+The node's combined capacity (WP-1.34) still runs, as one more pumping unit
+with no annual cap and target `direct`; it goes first, then the boreholes in
+id order. The node's `streamDepletionLagDays` k applies to all of them: one
+lag store per node, fed Σ d_i × pumped_i. Individual lags are a followup, if a
+geohydrology report ever gives different response times for boreholes on one
+farm.
+
+**Supply order each day**, each unit pumping at most its *room* =
+MAX(0, MIN(capacity, annual cap − pumped since 1 October)). A dam release
+(WP-3.5, §2.7a) is taken first, so below S0 + M + O + K + J stands for what
+the dam holds after it (engine ≥ 0.36.0): a dam-target borehole tops up what
+the release left, and the farm balance also subtracts the seepage lost:
+
+```
+1. primary, direct:        GWp += MIN(room, D − GWp)                 (in unit order)
+2. target dam (before irrigation; room in the dam H = cap − (S0 + M + O + K + J) − pumped into it so far):
+     primary:              MIN(room, H)                               (keeps the dam topped up)
+     supplemental:         MIN(room, H, D − GWp − (S0 + M + O + K + J + GWd − dead storage))
+     emergency:            MIN(room, H) while Q[t−1] < level × cap    (refills a low dam)
+3. surface:                Gs = MIN(MAX(S0 + M + O + K + J + GWd − dead storage, 0), D − GWp)
+4. supplemental, direct:   MIN(room, D − Gs − GW)                     then emergency, direct, while Q[t−1] < level × cap
+```
+
+GW (`groundwater_used`) is what went straight to the crop (part of G); GWd
+(`groundwater_to_dam`) went into the dam, so P = S0 + M + O + K + J + GWd − Gs.
+Because GWd never exceeds the room in the dam, pumped water never makes the
+dam spill. A supplemental dam-target borehole lifts a dam below its dead
+storage up to it first, since the water can't be drawn otherwise. The farm
+balance gains GWd beside GW: `(H + I + J + Pd + GW + GWd) − (G − T) − E − ΔQ −
+U − Dep − seepage lost = 0`. With one combined unit this reduces exactly to WP-1.34's
+formulas (a test runs a node's combined capacity and one uncapped
+individual borehole with the same values and compares every series).
+
+On a node without a dam, an emergency borehole runs as supplemental and a
+dam-target one pumps direct, each with a warning; the backend refuses both on
+save (`modelRuleIssues`, like the drought rule), as it refuses a borehole on a
+gauge.
+
+**Annual caps.** Each unit's volume resets on the first day of each water
+year (and on the run's first day, so a run starting mid-year gives its first
+partial year the whole cap). Once a unit reaches its cap it pumps nothing until
+1 October and its demand falls to the next unit, the dam and river; the run
+warns, naming the boreholes that reached a cap.
+
+**Depletion.** Unchanged in method: Σ d × pumped enters the node's lag store
+and is taken from the flow leaving the node, capped at that flow, the unmet
+part reported (`depletion_unmet`) and warned about. Water pumped into the dam
+depletes the river like any other pumping.
+
+**Annual use, the caps and GN 538.** `RunSummary.groundwaterAnnualUse` holds,
+per node with boreholes (node-id order) and per water year the run touches: the
+days of that year in the run, `abstractionM3` (GW + GWd), `toDamM3`,
+`streamDepletionM3` (taken that year, which can include earlier years'
+pumping through the lag), `annualCapM3` (Σ of the caps, null when any unit
+can pump without one), `gaLimitM3` and each unit's volume, cap and whether it
+reached the cap. **This is the field the licensing comparisons read** (WARMS
+registered volumes, WP-3.10): modelled groundwater abstraction per farm per
+water year, m³. `gaLimitM3` is `GA538_GROUNDWATER_LIMIT_M3_YEAR` = 40 000 m³/a,
+the GN 538 (2016) general authorisation's ceiling per property; what a
+property may take under the GA depends on its size and where it is, so it is
+context only. The app shows modelled use against the caps and the ceiling and
+**never decides whether a use is lawful**. Pending the hydrologist: whether a
+project should carry each property's own GA volume (area × the schedule's
+rate) instead of the ceiling.
+
+**Output keys.** The roadmap names `groundwater_abstraction` and
+`streamflow_depletion`; they are WP-1.34's `groundwater_used` (+
+`groundwater_to_dam` when a borehole pumps into the dam) and
+`baseflow_depletion`, kept under those names so stored runs, the exports and
+the day trace keep reading. New: `groundwater_to_dam` (series, only on a node
+with a dam-target borehole), `FarmSummary.avgGroundwaterToDamM3Day`,
+`RunSummary.groundwaterAnnualUse`; the water balance's `groundwaterM3`
+includes GWd.
+
+**Checks.** `checkWorkings` and the user-day check replay the supply order
+above per unit, with the caps, from the published columns;
+`checkGroundwater` checks the daily bounds (GW ≤ supplied, GW + GWd ≤ Σ
+capacities), the lag store and its volume, and that `groundwaterAnnualUse`
+has one row per water year, adds up to the daily columns and over its
+boreholes, keeps every borehole within its cap and its capacity × days, and
+that Σ d_i × each borehole's volume is what entered the lag store. The fuzz
+generator gives 25 % of networks up to three boreholes per node, every mode
+and target, caps that bind within weeks, and some on gauges and dam-less
+nodes; `droughtBoreholesAsSupplemental` also runs emergency boreholes as
+supplemental for the doubled-crop-area law. Scenario ops `borehole.add` /
+`borehole.remove` (docs/scenarios.md) and the run comparison's input diff
+cover them.
+
+**Low confidence.** The form and the results always say so: depletion is a
+fixed fraction, not an aquifer model; attach the geohydrology report.
 
 ### 2.8 Outputs
 
@@ -3319,7 +3520,8 @@ the annual measure; the v004 thresholds as they stand.
 `RunSummary.supplyAssurance.waterAccount`: one row per water year and one for
 the run, volumes in m³, summed over every node per day in node-id order.
 
-- **In:** natural flow, rain on the dams (§2.7a), groundwater pumped (§2.7d),
+- **In:** natural flow, rain on the dams (§2.7a), groundwater pumped (§2.7d;
+  to the crops and users, and from engine 0.36.0 into the dams, WP-3.9),
   net transfers (0 up to float noise).
 - **Out:** runoff removed by land cover (§2.5a); natural flow not allocated to
   any farm (natural − Σ farm runoff − land cover, non-zero only when the flow
@@ -3359,10 +3561,12 @@ For each farm or water user *n*, water source *s* and water year *y*
 (October–September, labelled by the year it starts in; `waterYearOf`), over
 the days *D(y)* of *y* inside the run:
 
-- modelled use *M(n,s,y)* = Σ over *D(y)* of `groundwater_used` for
-  *s* = groundwater, and of `supplied` − `groundwater_used` for *s* = surface
-  (0 for a node without boreholes, §2.7d). `supplied` includes what the farm
-  draws from its own dam.
+- modelled use *M(n,s,y)* = Σ over *D(y)* of `groundwater_used` +
+  `groundwater_to_dam` (WP-3.9: pumped into the farm dam, counted when
+  pumped) for *s* = groundwater, and of `supplied` − `groundwater_used` for
+  *s* = surface (both 0 for a node without boreholes, §2.7d). `supplied`
+  includes what the farm draws from its own dam, groundwater pumped into it
+  included (pending the hydrologist: whether to net that out of surface).
 - registered volume *R(n,s,y)* = Σ over the node's allocations *a* of source
   *s*: *V(a)* × |*D(y)* ∩ [validFrom(a), validTo(a)]| ÷ *L(y)*, with *L(y)*
   = 365 or 366, the days of the whole water year. A whole year in force gives
@@ -3380,7 +3584,7 @@ the days *D(y)* of *y* inside the run:
   states one) beside the run's `damCapacityM3` for a farm.
 
 Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
-of *M(n,s,y)* equals Σ of the node's `supplied` series, and every run day falls
+of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ `groundwater_to_dam`, and every run day falls
 in exactly one water year; the result is the same at UTC+14 and UTC−11.
 
 Not built yet: the engine settings `allocationMode` = `cap` (supply limited
@@ -3421,7 +3625,8 @@ project's runoff model, and the network plan (`buildNetworkPlan`, as
 calibration reuses it). A probe replaces the dam node's crop requirement
 with *F*(*t*) = *x* × *p*(*t*) × *e*, so its abstraction demand D = F / e is
 the draft, and runs `simulateNetwork` on it. Other nodes keep their own
-demand. The dam's **boreholes are removed** for the search: the yield is
+demand. The dam's **boreholes are removed** for the search, those that pump
+into the dam (WP-3.9) included, pending the hydrologist: the yield is
 the dam's, not the dam's plus groundwater. When no transfer touches the dam
 or anything upstream of it, a probe simulates only the dam and the nodes
 upstream of it: nothing below the dam changes what reaches it, and nothing
@@ -3545,6 +3750,8 @@ general enough to hold these nodes.
   storage), *Run-of-river* (no storage). These are planned: seasonal
   river-first, no river pumping, drought-saving, opportunistic pumping, and
   groundwater (none / supplemental / primary / emergency; direct or to-dam).
+  The groundwater modes and targets are ported (engine ≥ 0.36.0, §2.7d
+  "Individual boreholes"), with annual caps per water year added.
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, reported per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
@@ -3665,8 +3872,8 @@ text:
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
-| `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
+| `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |

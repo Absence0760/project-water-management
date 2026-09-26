@@ -287,3 +287,21 @@ describe('the history limit', () => {
 		await expect(sql(owner, `INSERT INTO run_nomination (project_id, run_id, reason) VALUES ($1, $2, 'sql')`, [pid, x])).rejects.toMatchObject({ code: '23514' });
 	});
 });
+
+describe('forecast runs (WP-2.12)', () => {
+	it('refuses to nominate a forecast run (409); an ordinary run of the same data is nominated', async () => {
+		const pid = await runnableProject(owner, 'Evidence forecast');
+		const forecast = Array.from({ length: 14 }, (_, i) => (i % 4 === 0 ? 8 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2020-01-31', values: forecast })).status).toBe(200);
+		const f = await owner.call('POST', `/projects/${pid}/runs`, { label: 'forecast', forecast: true });
+		expect(f.status).toBe(201);
+		const refused = await nominate(owner, f.body.run.id, 'the forecast', pid);
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/^a forecast run cannot be nominated as evidence/);
+		expect(await history(owner, pid)).toEqual([]);
+		// Positive control: the ordinary run is nominated.
+		const ordinary = await newRun(owner, pid, 'ordinary');
+		expect((await nominate(owner, ordinary, 'the record', pid)).status).toBe(201);
+		expect((await history(owner, pid)).map((n) => n.runId)).toEqual([ordinary]);
+	});
+});
