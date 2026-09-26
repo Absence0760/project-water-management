@@ -248,11 +248,14 @@ put the results first. Top to bottom:
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): one sentence and one link per item, hidden when
   there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
-  worst named, links to the run), the latest run's warnings, rainfall the
-  latest run hasn't used (`newDataSinceRun`, links to Runs to re-run), input
-  data older than `STALE_DAYS` (`freshness`, links to Data), and farms with no
-  planted area once anything is planted (links to Crops; before that the
-  checklist's crops step covers it). Run items wait for the run's summary.
+  worst named, links to the run, and, while it is still a farm in the model,
+  a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
+  the latest run's warnings, rainfall the latest run hasn't used
+  (`newDataSinceRun`, links to Runs to re-run), input data older than
+  `STALE_DAYS` (`freshness`, links to Data), and farms with no planted area
+  once anything is planted (one farm: **Set its planted areas**, the farm
+  drawer; several: Crops; before anything is planted the checklist's crops
+  step covers it). Run items wait for the run's summary.
 
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to
@@ -729,6 +732,38 @@ with more than six crops the five largest by annual demand keep a colour and
 the rest are grouped as "Other" in grey. The chart is an image whose label
 names the crops and the peak month; the table stays the accessible data
 source. It is hidden while there is no demand (no A-pan, crops or areas).
+
+### Farm drawer
+
+One farm's planted areas in a side sheet over whichever tab is open
+(`crops/FarmCropsDrawer.svelte`, helpers in `crops/farmDrawer.ts`; issue #17,
+option A step 4). The grids stay full pages; the drawer is for a quick edit in
+context. It opens while the workspace URL has `farm=<nodeId>`
+(`farmDrawerHref(tab, nodeId)`: `?tab=network&farm=…`, or `?farm=…` over the
+Summary), so it can be linked and Back works; Done, Esc or the ✕ drop `farm`
+from the URL in place (`withoutFarm`), so Back then goes to where it was
+opened from. It is its own chunk, fetched when a URL names a farm.
+
+- **From:** the Summary's Needs attention (a farm below the supply target, a
+  single farm with nothing planted) and the Network: selecting a farm on the
+  schematic or in the table shows "*Farm*: 20.00 ha planted, 1 crop."
+  under the schematic with a **Planted areas** link (`farmPlanting`).
+- **Content:** every crop in the model with this farm's area (ha, the same
+  inputs and labels as the Crops tab's row, "Orchard on Upper farm, ha"), the
+  total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
+  the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
+  and a farm that is no longer in the model each say so.
+- **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
+  tab at once and the other way round. The sheet is modal, which makes the
+  page's save bar unreachable, so it repeats the save row: status (unsaved,
+  problems to fix, saving, save failed), the optional reason (the same value
+  as the save bar's) and **Save changes**, which runs the page's save;
+  **Done** closes and leaves the edit unsaved for the save bar. A viewer
+  gets the values read-only and a Close button.
+- **Layout:** the `Dialog` component's `side` variant: full height down the
+  right edge, 480 px wide, the whole width on a phone. The note linking to
+  Crops & demand sits under the table, so opening the sheet focuses the first
+  area.
 
 On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
