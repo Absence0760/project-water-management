@@ -280,9 +280,20 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all' });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
+	});
+
+	it('records the CHIRPS fit period the fit ran under, copied, and the factor sets from the report (engine ≥ 0.29.0)', () => {
+		const ranges = [{ fromWaterYear: 1990, toWaterYear: 2004, reason: 'old network' }];
+		const form = { ...defaultProjectSettings(), chirpsFitPeriod: ranges };
+		const sets = [{ label: 'listed range 1990/91–2004/05 (old network), filling every year', factors: new Array(12).fill(1.4) }];
+		const rec = fitRecordFor(report({ chirpsFactors: sets }), form, { validate: false, validationRecord: null });
+		expect(rec.forcing!.chirpsFitPeriod).toEqual(ranges);
+		expect(rec.forcing!.chirpsFactors).toEqual(sets);
+		ranges[0]!.toWaterYear = 2010;
+		expect((rec.forcing!.chirpsFitPeriod as typeof ranges)[0]!.toWaterYear).toBe(2004);
 	});
 
 	it('records the CHIRPS bias correction mode the fit ran under too', () => {

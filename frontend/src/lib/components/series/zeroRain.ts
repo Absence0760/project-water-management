@@ -10,6 +10,7 @@ import {
 	toEpochDay,
 	zeroRainMask,
 	type ChirpsBiasMode,
+	type ChirpsFitOptions,
 	type DailySeries,
 	type ZeroRainSettings
 } from '@water-management/engine';
@@ -29,13 +30,16 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 /**
  * `chirps` is the CHIRPS series a run reads (null without one: no
- * accumulation can be detected then), `chirpsMode` the CHIRPS bias setting.
+ * accumulation can be detected then), `chirpsMode` the CHIRPS bias setting,
+ * `fit` the CHIRPS fit period and the double-mass result it splits on
+ * (engine ≥ 0.29.0), as a run judges accumulations with them.
  */
 export function zeroRainShading(
 	series: DailySeries,
 	settings: ZeroRainSettings,
 	chirps: DailySeries | null = null,
-	chirpsMode: ChirpsBiasMode = 'monthly'
+	chirpsMode: ChirpsBiasMode = 'monthly',
+	fit: ChirpsFitOptions = {}
 ): ZeroRainShading {
 	const first = series.startDate;
 	const d0 = toEpochDay(first);
@@ -43,7 +47,7 @@ export function zeroRainShading(
 	const lastDate = new Date((d0 + n - 1) * 86_400_000).toISOString().slice(0, 10);
 	const clip = (p: { start: string; end: string }) => ({ start: p.start < first ? first : p.start, end: p.end > lastDate ? lastDate : p.end });
 
-	const acc = rainAccumulations({ rain_catchment_mm: series, ...(chirps ? { rain_chirps_mm: chirps } : {}) }, settings, chirpsMode);
+	const acc = rainAccumulations({ rain_catchment_mm: series, ...(chirps ? { rain_chirps_mm: chirps } : {}) }, settings, chirpsMode, fit);
 	const windows = (acc?.windows ?? []).filter((w) => claimsDays(w.status));
 	const claimed = new Set<number>();
 	for (const w of windows) for (let d = w.from; d <= w.to; d++) if (d >= d0 && d < d0 + n) claimed.add(d);

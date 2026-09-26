@@ -1245,17 +1245,28 @@ export const HELP: HelpEntry[] = [
 		category: 'data',
 		aliases: ['bias correction', 'CHIRPS factor', 'rain scaling'],
 		fields: ['settings.chirpsBiasCorrection', 'run.rain_chirps_corrected', 'run.chirps_factor'],
-		related: ['chirps', 'rain-catchment'],
+		related: ['chirps', 'rain-catchment', 'chirps-fit-period'],
 		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
+	},
+	{
+		id: 'chirps-fit-period',
+		term: 'CHIRPS fit period',
+		short: 'Which years the CHIRPS factors are fitted on: the whole record, each double-mass segment, or water-year ranges you list.',
+		long: 'When the double-mass check finds that the catchment / CHIRPS ratio changed part-way through the record, one set of factors fitted over every year is a blend of the eras, so a gap in one era is filled at the wrong ratio. The fit period decides which years the factors come from.\n\n**Whole record** (the default) fits one set over every year, as before. **Per double-mass segment** fits one set per segment the check finds and fills each gap with its own segment\'s factors; a gap before the first or after the last judged year takes the nearest segment. **Listed water years** fits one set per range you list, each only on its own years, each with a reason; years outside every range are left out of every fit, and a gap there takes the nearest range (the later one on a tie).\n\nWithin each segment the usual rules hold: a month needs 90 shared days and 50 mm of CHIRPS, else it takes its segment\'s pooled factor, else the factor over the whole record (or all the listed ranges together); factors stay between 0.25 and 4. Periods listed as missing under Zero-rain runs stay out of every fit.\n\nPrefer listed ranges when you know when the network changed, and when the break may be CHIRPS\'s rather than the catchment\'s (a CHIRPS version change, or drift against other products): the automatic segments put the break where the check estimates it, which can be a few years off. Split only when the change is large against the standard error of the ratio in each era (or a Pettitt or Buishand test calls it), not merely against the year-to-year scatter. Each run names the segment whose factors filled each gap, the summary CSV lists every segment\'s factors, and a fit record flags "Forcing changed since fit" when the fit period changes. Not in the workbook.',
+		category: 'data',
+		aliases: ['per-segment factors', 'fit period', 'CHIRPS segments', 'rain homogenisation'],
+		fields: ['settings.chirpsFitPeriod'],
+		related: ['chirps-bias', 'double-mass'],
+		source: 'Not in the workbook; docs/model.md §2.4b, §2.10a; calibration-research.md § Rain forcing; issue #40'
 	},
 	{
 		id: 'double-mass',
 		term: 'Double mass: catchment rain vs CHIRPS',
 		short: 'Cumulative catchment rain against cumulative CHIRPS: a kink means one record changed, e.g. a station opened, closed or moved.',
-		long: 'Two records of the same rain should keep a steady ratio, so cumulative catchment rain plotted against cumulative CHIRPS is a straight line. A kink means one of them changed: a rain gauge opened, closed or moved, the catchment average was built differently, or CHIRPS changed. The check adds up each water year on the days both have a reading (leaving out zero runs treated as missing and periods listed as missing), and needs 10 years with at least 300 such days and 100 mm of CHIRPS. It fits up to two breaks, each segment at least 5 years long, and reports a break only when the slope changes by 20 % or more and a statistical test (Pettitt, or the gain in fit) says it is more than one odd year.\n\nThe chart shows the curve, the whole-record line (dashed) and the segments (solid), with each segment\'s slope, and below it how far the curve departs from the whole-record line each year. The check only warns: a break doesn\'t say which record is wrong, so the CHIRPS factors are still fitted over the whole record. A run also warns when CHIRPS fills gaps in a segment whose ratio differs by 20 % or more from the ratio the factors were fitted on, because those days may then run too wet or too dry. The run\'s summary CSV has the table.',
+		long: 'Two records of the same rain should keep a steady ratio, so cumulative catchment rain plotted against cumulative CHIRPS is a straight line. A kink means one of them changed: a rain gauge opened, closed or moved, the catchment average was built differently, or CHIRPS changed. The check adds up each water year on the days both have a reading (leaving out zero runs treated as missing and periods listed as missing), and needs 10 years with at least 300 such days and 100 mm of CHIRPS. It fits up to two breaks, each segment at least 5 years long, and reports a break only when the slope changes by 20 % or more and a statistical test (Pettitt, or the gain in fit) says it is more than one odd year.\n\nThe chart shows the curve, the whole-record line (dashed) and the segments (solid), with each segment\'s slope, and below it how far the curve departs from the whole-record line each year. The check alone changes nothing: a break doesn\'t say which record is wrong, so the CHIRPS factors are fitted over the whole record unless Settings → CHIRPS fit period says to fit them per segment or per listed range. A run warns when CHIRPS fills gaps in a segment whose ratio differs by 20 % or more from the ratio of the factors that filled them, because those days may then run too wet or too dry; with a fit period it names the segment whose factors filled each gap. The run\'s summary CSV has the table.',
 		category: 'data',
 		aliases: ['double mass curve', 'homogeneity', 'rain gauge change', 'station change', 'CHIRPS ratio drift'],
-		related: ['chirps-bias', 'chirps', 'rain-catchment'],
+		related: ['chirps-bias', 'chirps', 'rain-catchment', 'chirps-fit-period'],
 		source: 'Not in the workbook; Searcy & Hardison 1960; docs/model.md §2.10a; calibration-research.md CR-20'
 	},
 	{

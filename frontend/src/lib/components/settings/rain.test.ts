@@ -1,12 +1,33 @@
 import { ACCUMULATION_MODES, CHIRPS_BIAS_MODES, defaultProjectSettings, ZERO_RAIN_MODES } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, describeZeroRain, ZERO_RAIN_OPTIONS } from './rain';
+import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, describeZeroRain, ZERO_RAIN_OPTIONS } from './rain';
 
 describe('CHIRPS_BIAS_OPTIONS', () => {
 	it('offers every engine mode once, default first', () => {
 		expect(CHIRPS_BIAS_OPTIONS.map((o) => o.value)).toEqual([...CHIRPS_BIAS_MODES]);
 		expect(CHIRPS_BIAS_OPTIONS[0]!.value).toBe(defaultProjectSettings().chirpsBiasCorrection);
 		for (const o of CHIRPS_BIAS_OPTIONS) expect(o.help.length).toBeGreaterThan(20);
+	});
+});
+
+describe('CHIRPS_FIT_OPTIONS', () => {
+	it('offers the whole record (the default) first, then segments and listed ranges; the segments help steers to ranges when CHIRPS is suspect', () => {
+		expect(CHIRPS_FIT_OPTIONS.map((o) => o.value)).toEqual(['all', 'segments', 'ranges']);
+		expect(chirpsFitChoice(defaultProjectSettings().chirpsFitPeriod)).toBe('all');
+		expect(chirpsFitChoice('segments')).toBe('segments');
+		expect(chirpsFitChoice([{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'a' }])).toBe('ranges');
+		expect(CHIRPS_FIT_OPTIONS[1]!.help).toMatch(/suspect CHIRPS, list the water years instead/);
+	});
+});
+
+describe('chirpsFitRangesError', () => {
+	const r = (fromWaterYear: number, toWaterYear: number, reason = 'x') => ({ fromWaterYear, toWaterYear, reason });
+	it('accepts valid ranges and names the first problem otherwise', () => {
+		expect(chirpsFitRangesError([r(1990, 1999), r(2005, 2019)])).toBeNull();
+		expect(chirpsFitRangesError([])).toMatch(/at least one/);
+		expect(chirpsFitRangesError([r(1990, 1999), r(2005, 2001)])).toBe('Fit range 2: ends before it starts');
+		expect(chirpsFitRangesError([r(1990, 1999, '  ')])).toBe('Fit range 1: needs a reason');
+		expect(chirpsFitRangesError([r(1990, 1999), r(1995, 2005)])).toBe('Fit ranges overlap: 1995/96–2005/06 overlaps 1990/91–1999/00');
 	});
 });
 

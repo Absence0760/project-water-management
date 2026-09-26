@@ -2,7 +2,7 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { defaultProjectSettings, fromEpochDay, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, fitPeriodText, fromEpochDay, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
@@ -34,7 +34,7 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
 		['Calibration record', s.calibrationFlowKind ? (FLOW_KIND_LABEL[s.calibrationFlowKind] ?? s.calibrationFlowKind) : 'observed gauge flow, else logger'],
 		['Reporting window (curtailment)', describeWindow(s.reportStart, s.reportEnd)],
-		['CHIRPS bias correction', s.chirpsBiasCorrection === 'none' ? 'none (raw CHIRPS)' : 'monthly factors'],
+		['CHIRPS bias correction', s.chirpsBiasCorrection === 'none' ? 'none (raw CHIRPS)' : `monthly factors, fit period: ${fitPeriodText(s.chirpsFitPeriod)}`],
 		['Effective rainfall', `${fmtPct(s.effectiveRainFraction, 0)} of rain, soil-water store ${fmtNum(s.effectiveRainStoreMm, 1, true)} mm`],
 		['Dam evaporation factor', fmtNum(s.lakeEvapFactor, 2, true)]
 	);

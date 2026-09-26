@@ -688,7 +688,16 @@ value such as 250000.
   per month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
-  days in its warnings. Below it, **Zero-rain runs in the catchment rain**
+  days in its warnings. With bias correction on, **CHIRPS fit period**
+  (`settings/ChirpsFitPeriodSection.svelte`, `settings.chirpsFitPeriod`,
+  engine ≥ 0.29.0): "Whole record (default)", "Per double-mass segment" or
+  "Listed water years", the last with rows of from / to water year and a
+  required reason (overlapping or reasonless ranges block Save). The hint
+  under the segments option steers to listed ranges when the break years are
+  known or CHIRPS is suspect, since the automatic break can be a few years
+  off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-segment-factors-engine--0290-issue-40)).
+  Fit provenance shows the fit period and the factors per segment the fit
+  ran under. Below it, **Zero-rain runs in the catchment rain**
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
   **Flagged zero runs** picker ("Treat as missing (default)" or "Run as
