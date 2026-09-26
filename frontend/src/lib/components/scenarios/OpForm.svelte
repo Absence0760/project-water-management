@@ -5,9 +5,10 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
-	import { LAND_COVER_CLASSES, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
-	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, settingsValue, valueText, type ValueSpec } from './fields';
+	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
 	import { OP_LABEL, buildOp, draftSpec, emptyDraft, type OpDraft } from './ops';
 
 	let {
@@ -56,6 +57,11 @@
 		const s = draftSpec(d);
 		d.value = s ? valueText(s, current) : '';
 		d.months = s?.t === 'months' && Array.isArray(current) ? [...(current as number[])] : [];
+		if (s?.t === 'pe') d.pe = peDraftOf(current, input.settings);
+	}
+	/** Switch the PE input's kind: a new monthly row starts from the PE GR4J runs on now (the Settings form's rule). */
+	function pickPeKind(kind: PeKind) {
+		d.pe = kind === d.pe.kind ? d.pe : peDraftOf(current, input.settings, kind);
 	}
 	function pickKind(kind: ScenarioOpName) {
 		d = emptyDraft(kind);
@@ -95,7 +101,34 @@
 </script>
 
 {#snippet valueField(s: ValueSpec, label: string)}
-	{#if s.t === 'months'}
+	{#if s.t === 'pe'}
+		<fieldset class="pe">
+			<legend>{label}</legend>
+			<div class="form-row">
+				<div class="field">
+					<label for="op-pe-kind">PE comes from</label>
+					<select id="op-pe-kind" value={d.pe.kind} onchange={(e) => pickPeKind(e.currentTarget.value as PeKind)}>
+						{#each PE_KIND_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					</select>
+				</div>
+				{#if d.pe.kind === 'monthly'}
+					<div class="field grow">
+						<label for="op-pe-mm">Monthly PE (mm, Oct to Sep)</label>
+						<input id="op-pe-mm" type="text" placeholder="12 values, or one for every month" bind:value={d.pe.mm} />
+					</div>
+				{/if}
+			</div>
+			{#if d.pe.kind === 'monthly'}
+				<div class="field">
+					<label for="op-pe-source">Source of the monthly PE (required)</label>
+					<textarea id="op-pe-source" rows="2" maxlength={PE_SOURCE_MAX} bind:value={d.pe.source}></textarea>
+					<span class="hint">Where the values come from, e.g. a station's FAO-56 ET₀ and its years. At most {PE_SOURCE_MAX} characters.</span>
+				</div>
+			{/if}
+			<!-- Unset is pan × A-pan (a project saved before engine 0.31.0), so there is always a "now". -->
+			<span class="hint" data-testid="op-current">{nowText(s, current ?? null)}</span>
+		</fieldset>
+	{:else if s.t === 'months'}
 		<fieldset class="months">
 			<legend>{label}</legend>
 			{#each MONTH_NAMES as name, i (name)}
@@ -393,6 +426,14 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 	}
+	.pe {
+		flex: 1 1 100%;
+		margin: 0 0 0.75rem;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	.pe legend,
 	.months legend {
 		font-weight: 500;
 		font-size: 0.85rem;

@@ -1,4 +1,4 @@
-import { NODE_SET_FIELDS, SETTINGS_PATHS, TRANSFER_SET_FIELDS, nodeFieldError, settingsValueError, transferFieldError } from '@water-management/engine';
+import { NODE_SET_FIELDS, PE_SOURCE_MAX, SETTINGS_PATHS, TRANSFER_SET_FIELDS, nodeFieldError, settingsValueError, transferFieldError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	NODE_FIELD_SPECS,
@@ -8,6 +8,7 @@ import {
 	monthsText,
 	nodeFields,
 	parseValue,
+	peDraftOf,
 	percentMessage,
 	settingsValue,
 	valueText,
@@ -48,13 +49,15 @@ describe('field specs cover the engine’s op catalogue', () => {
 					return '2022-03-01';
 				case 'node':
 					return 'n1';
+				case 'pe':
+					return { kind: 'monthly', mm: [90, 110, 140, 160, 150, 120, 80, 50, 35, 30, 40, 60], source: 'Station FAO-56 ET₀, 2015–2020' };
 			}
 		};
 		const check = (table: Record<string, { spec: ValueSpec }>, err: (k: string, v: unknown) => string | null, skip: string[] = []) => {
 			for (const [k, { spec }] of Object.entries(table)) {
 				if (skip.includes(k)) continue;
 				const v = sample(spec);
-				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : valueText(spec, v));
+				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : spec.t === 'pe' ? peDraftOf(v, undefined) : valueText(spec, v));
 				expect(back, k).toEqual({ ok: true, value: v });
 				expect(err(k, v), k).toBeNull();
 			}
@@ -131,4 +134,41 @@ it('puts an engine range message in the percent that was typed', () => {
 	expect(percentMessage(pct, 'must be at most 1')).toBe('must be at most 100 %');
 	expect(percentMessage(pct, 'must be above 0')).toBe('must be above 0 %');
 	expect(percentMessage(NODE_FIELD_SPECS.damCapacityM3.spec, 'must be at least 0')).toBe('must be at least 0');
+});
+
+describe('the GR4J PE input (settings.pe, issue #39)', () => {
+	const spec = SETTINGS_SPECS.pe.spec;
+	const monthly = { kind: 'monthly' as const, mm: [90, 110, 140, 160, 150, 120, 80, 50, 35, 30, 40, 60], source: 'Station ET₀' };
+
+	it('round-trips both kinds through the form draft, each one the engine accepts', () => {
+		for (const v of [{ kind: 'pan' as const }, monthly]) {
+			const draft = peDraftOf(v, undefined);
+			expect(parseValue(spec, draft)).toEqual({ ok: true, value: v });
+			expect(settingsValueError('pe', v)).toBeNull();
+		}
+		expect(peDraftOf({ kind: 'pan' }, undefined)).toEqual({ kind: 'pan', mm: '', source: '' });
+		expect(valueText(spec, monthly)).toBe('90 110 140 160 150 120 80 50 35 30 40 60');
+	});
+
+	it('reads an unset input as pan × A-pan, as the engine runs it', () => {
+		expect(peDraftOf(undefined, undefined)).toEqual({ kind: 'pan', mm: '', source: '' });
+		expect(formatValue(spec, null)).toBe('pan coefficient × A-pan');
+		expect(formatValue(spec, monthly)).toBe('monthly, entered directly: 1,065 mm a year (Station ET₀)');
+	});
+
+	it('starts a new monthly row from the PE GR4J runs on now, with the source blank', () => {
+		const settings = { apanMm: new Array(12).fill(200), panCoefficient: new Array(12).fill(0.75) };
+		expect(peDraftOf({ kind: 'pan' }, settings, 'monthly')).toEqual({ kind: 'monthly', mm: new Array(12).fill(150).join(' '), source: '' });
+		// Already monthly: kept as it is.
+		expect(peDraftOf(monthly, settings, 'monthly').source).toBe('Station ET₀');
+		expect(peDraftOf(monthly, settings, 'pan')).toEqual({ kind: 'pan', mm: '', source: '' });
+	});
+
+	it('refuses a monthly row without a source, with a bad value, or with too long a source (the Settings form’s rules)', () => {
+		expect(parseValue(spec, { kind: 'monthly', mm: '100', source: '  ' })).toEqual({ ok: false, error: 'say where the monthly PE comes from: its source is required' });
+		expect(parseValue(spec, { kind: 'monthly', mm: '1 2 3', source: 'x' })).toEqual({ ok: false, error: 'enter 12 values, Oct to Sep (got 3)' });
+		expect(parseValue(spec, { kind: 'monthly', mm: '20000', source: 'x' })).toMatchObject({ ok: false, error: expect.stringMatching(/^monthly PE must be 0 to 10,000 mm in every month/) });
+		expect(parseValue(spec, { kind: 'monthly', mm: '100', source: 'x'.repeat(PE_SOURCE_MAX + 1) })).toMatchObject({ ok: false, error: expect.stringMatching(/^the PE source is at most/) });
+		expect(parseValue(spec, 'pan')).toEqual({ ok: false, error: 'pick where the PE comes from' });
+	});
 });

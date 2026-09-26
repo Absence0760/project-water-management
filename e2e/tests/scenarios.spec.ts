@@ -81,6 +81,25 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
 	await expect(changes(page).getByRole('listitem')).toContainText(RAISE);
 
+	// GR4J's PE input (issue #39): a monthly row needs its source; the change is a baseline assumption.
+	await form.getByLabel('Kind of change').selectOption({ label: 'Change a setting' });
+	await form.getByLabel('Setting').selectOption({ label: 'GR4J potential evaporation' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: pan coefficient × A-pan');
+	await form.getByLabel('PE comes from').selectOption('monthly');
+	await form.getByLabel('Monthly PE (mm, Oct to Sep)').fill('100');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(form.getByRole('alert')).toHaveText('GR4J potential evaporation: say where the monthly PE comes from: its source is required');
+	await form.getByLabel('Source of the monthly PE (required)').fill('Invented station ET₀');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(changes(page).getByRole('listitem')).toHaveCount(2);
+	const pe = changes(page).getByRole('listitem').nth(1);
+	await expect(pe).toContainText('GR4J potential evaporation: pan coefficient × A-pan → monthly, entered directly: 1,200 mm a year (Invented station ET₀)');
+	await expect(pe).toContainText('Baseline assumption');
+	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
+	await page.getByRole('button', { name: 'Undo', exact: true }).click();
+	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
+
 	// A bad value is refused in the form, in the units typed, before anything is saved.
 	await form.getByLabel('Kind of change').selectOption({ label: "Change a node's value" });
 	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
