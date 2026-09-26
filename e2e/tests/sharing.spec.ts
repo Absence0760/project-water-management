@@ -3,6 +3,7 @@ import { addMember, createProject, PASSWORD, putModel, register, sampleModel, un
 import { plantEmailToken, plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
@@ -52,8 +53,12 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	await closeModal(v);
 
 	await v.getByRole('link', { name: 'Crops' }).click();
-	await expect(v.getByLabel('Orchard crop factor, Oct')).not.toBeEditable();
 	await expect(v.getByRole('button', { name: '+ Add crop' })).toHaveCount(0);
+	// A crop card's View opens its factors read-only.
+	const sheet = await openCropSheet(v, 'Orchard');
+	await expect(sheet.getByLabel('Orchard crop factor, Oct')).not.toBeEditable();
+	await expect(sheet.getByRole('button', { name: 'Remove Orchard' })).toHaveCount(0);
+	await closeModal(v);
 
 	await v.getByRole('link', { name: 'Transfers' }).click();
 	await expect(v.getByLabel('Source of transfer 1')).toBeDisabled();

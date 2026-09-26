@@ -1,9 +1,12 @@
-// Crops & demand and Transfers at phone width: each table row becomes a card
-// with visible field labels, so every field is on screen without scrolling the
-// table sideways (the sticky name column used to leave room for one month).
+// The crop grids (in the grid modal, full screen on a phone) and Transfers at
+// phone width: each table row becomes a card with visible field labels, so
+// every field is on screen without scrolling the table sideways (the sticky
+// name column used to leave room for one month).
 import type { Locator, Page } from '@playwright/test';
 import { createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
+import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal } from '../support/network.ts';
 
 const PHONE = { width: 390, height: 844 };
 
@@ -35,22 +38,25 @@ test.describe('phone', () => {
 		const project = await createProject(page.request, 'Phone crops');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=crops`);
-		await expect(page.getByRole('heading', { name: 'Planted areas' })).toBeVisible();
+		const factors = await openCropGrid(page, 'crop-factors');
 
 		// Every month of the crop, and the last one especially, is on screen.
-		for (const m of ['Oct', 'Jan', 'Sep']) await expectOnScreen(page.getByLabel(`Orchard crop factor, ${m}`), page);
-		await expect(page.getByRole('cell', { name: /^Mean 0\.62$/ })).toBeVisible();
-		await expectOnScreen(page.getByRole('button', { name: 'Remove Orchard' }), page);
+		for (const m of ['Oct', 'Jan', 'Sep']) await expectOnScreen(factors.getByLabel(`Orchard crop factor, ${m}`), page);
+		await expect(factors.getByRole('cell', { name: /^Mean 0\.62$/ })).toBeVisible();
+		await expectOnScreen(factors.getByRole('button', { name: 'Remove Orchard' }), page);
+		await expectNoSidewaysScroll(page);
+		await closeModal(page);
 
 		// Planted areas: each farm's crops, with the farm total labelled.
-		await expectOnScreen(page.getByLabel('Orchard on Lower farm, ha'), page);
-		await expect(page.getByRole('cell', { name: 'Total 20.00 ha' })).toBeVisible();
-		await expect(page.getByRole('cell', { name: 'All crops 32.00 ha' })).toBeVisible();
+		const areas = await openCropGrid(page, 'planted-areas');
+		await expectOnScreen(areas.getByLabel('Orchard on Lower farm, ha'), page);
+		await expect(areas.getByRole('cell', { name: 'Total 20.00 ha' })).toBeVisible();
+		await expect(areas.getByRole('cell', { name: 'All crops 32.00 ha' })).toBeVisible();
 
 		await expectNoSidewaysScroll(page);
 	});
 
-	test('the stacked demand chart sits above the demand table and fits the screen', async ({ page, owner }) => {
+	test('the stacked demand chart sits above the demand table (behind Show table) and fits the screen', async ({ page, owner }) => {
 		void owner;
 		const project = await createProject(page.request, 'Phone demand chart');
 		await putModel(page.request, project.id, sampleModel());
@@ -61,8 +67,10 @@ test.describe('phone', () => {
 		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Orchard\)\. Peak in Jan at 1,899 m³\/day\./ });
 		await expect(chart).toBeVisible();
 		await expectOnScreen(chart, page);
-		// The table stays the data source, below the chart.
+		// The table stays the data source, below the chart, one click away.
+		await page.getByText('Show table', { exact: true }).click();
 		const table = page.locator('table.demand');
+		await expect(table).toBeVisible();
 		expect((await chart.boundingBox())!.y).toBeLessThan((await table.boundingBox())!.y);
 		await expectNoSidewaysScroll(page);
 	});
@@ -105,9 +113,10 @@ test('on a desktop the crop and transfer tables keep their column headers', asyn
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await createProject(page.request, 'Desktop tables');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=crops`);
-	await expect(page.getByRole('columnheader', { name: 'Sep', exact: true }).first()).toBeVisible();
-	await expect(page.getByText('Mean', { exact: true }).first()).toBeVisible();
+	await page.goto(`/projects/${project.id}?tab=crops&grid=crop-factors`);
+	const factors = page.getByRole('dialog', { name: 'Crop factors' });
+	await expect(factors.getByRole('columnheader', { name: 'Sep', exact: true }).first()).toBeVisible();
+	await expect(factors.getByText('Mean', { exact: true }).first()).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=transfers`);
 	await expect(page.getByRole('columnheader', { name: /^Min storage/ })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: '1', exact: true })).toBeVisible();

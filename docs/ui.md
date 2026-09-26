@@ -1053,38 +1053,93 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 
 ## Crops & demand
 
-Crop factors run October to September and are reorderable. Planted areas
-are entered in **ha** (stored as m²), with farm rows in network order and
-reorderable. A **demand preview** uses the engine's
-`grossFarmDemandM3PerDay`: m³/day per month, the mean, and Mm³/a per farm and
-for the catchment. It is gross demand, before the daily effective-rain
-reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0).
-The crop-factor intro says the factors are **× A-pan, not an FAO Kc** (FAO-56 Kc
-multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
-every crop and month with a factor above 1.0: a hint to check for an FAO Kc
-entered as it is, never a block on saving (`highCropFactors` in
-`components/crops/demand.ts`).
+A page of pictures over the crop grids (issue #17, option A · A3;
+`components/crops/CropsTab.svelte`). Like the Network it answers first and
+keeps every grid one click away:
 
-Under Planted areas, a muted note names every farm whose planted area adds up
-to zero ("Farm 5, Farm 6 and Farm 8 have no planted area, so their irrigation
-demand counts as zero."), at most five names then "and N more"
-(`noPlantedAreaNote`). Like the rest of the tab it follows unsaved edits.
+- **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
+  farms · water year October to September", `cropsSummary`), and on the right
+  a **Grids** menu (Crop factors, Planted areas, Irrigation demand → the
+  [grid modal](#grid-modal), `grid=crop-factors|planted-areas|demand`; Escape
+  or a click outside closes it) and **+ Add crop** for editors. The header
+  shows with no crops too, over an "Add crop" prompt.
+- **Crop cards**, four to a row where they fit (one column on a phone): the
+  crop's colour key and name, its planted area on the farms shown and the
+  month of its **peak need** (A-pan × factor; the factor alone while A-pan is
+  unset; "no crop factors yet" when every factor is 0), and a sparkline of its
+  12 factors, Oct → Sep, an image whose name gives the range and highest
+  month (`cropCards` in `crops/cards.ts`). A crop with a factor above 1.0
+  says so on its card ("Factor above 1.0 in Jan: check it isn't an FAO Kc").
+  **Edit** (viewers: **View**) opens the **crop sheet**.
+- **Irrigation demand by month:** the catchment's gross demand per
+  water-year month, stacked by crop (`MonthlyBars` in stacked mode, drawn at
+  the card's measured size so its text isn't scaled), with the annual volume,
+  mean m³/s and peak month under it. **Show table** opens the demand table
+  (`crops/DemandTable.svelte`: the formula, m³/day per month, the mean and
+  Mm³/a per farm and for the catchment) in place. An alert says when A-pan
+  isn't set (demand is then zero).
+- **Planted area by farm:** one stacked bar per farm with something planted,
+  split by crop in the chart's colours, scaled to the largest farm, with its
+  total ha (`farmBars`). Each bar is an image named with its parts
+  ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha"); a legend line follows.
+  A farm's name opens the [farm drawer](#farm-drawer) (`farm=<nodeId>`,
+  keeping the page's other parameters). **Edit areas** (viewers: **Areas
+  table**) opens the planted-areas grid. Under the bars, a muted note names
+  every farm whose planted area adds up to zero ("Farm 5, Farm 6 and Farm 8
+  have no planted area, so their irrigation demand counts as zero."), at
+  most five names then "and N more" (`noPlantedAreaNote`).
+- **Layout:** from 1100 px the demand chart and the farm bars sit side by
+  side and that row reaches the window's bottom (its top and the room the
+  page keeps below it are measured, as the Network's map); the chart grows
+  with it (240–480 px). Below that they stack, and the page scrolls (it isn't a
+  dashboard). On a phone the bars put the farm and total above a full-width
+  bar.
 
-Above the demand table, a compact stacked bar chart shows the catchment's
-gross demand per water-year month (Oct → Sep, m³/day), one part per crop
-(`MonthlyBars` in stacked mode). The parts come from the same per-farm
-computation as the table: `farmDemands` splits each farm's engine demand by
-crop, `catchmentDemand` gives the footer totals and `cropStacks` the chart's
-parts, which sum to them. Colours are theme tokens (`--series-1…3`,
-`--brand-node`, `--warning`, `--accent`), so they follow light and dark mode;
-with more than six crops the five largest by annual demand keep a colour and
-the rest are grouped as "Other" in grey. The chart is an image whose label
-names the crops and the peak month; the table stays the accessible data
-source. It is hidden while there is no demand (no A-pan, crops or areas).
+Everything follows unsaved edits, and one set of crop colours serves the
+chart, the bars and the cards' keys: theme tokens (`--series-1…3`,
+`--brand-node`, `--warning`, `--accent`), so light and dark mode both work.
+A crop with its own part in the chart keeps that part's colour; with more
+than six crops the five largest by annual demand keep a colour and the rest
+are grouped as "Other" in grey; a crop with no demand yet takes the next
+unused colour (`cropColours`). The chart's parts come from the same per-farm
+computation as the table: `farmDemands` splits each farm's engine demand
+(`grossFarmDemandM3PerDay`) by crop, `catchmentDemand` gives the totals and
+`cropStacks` the parts, which sum to them. It is gross demand, before the
+daily effective-rain reduction (and the soil-water store that carries rain
+over, engine ≥ 0.14.0).
+
+### Crop sheet
+
+One crop's name and 12 monthly factors in a side sheet over the page
+(`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
+linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
+(`withoutParam`). **+ Add crop** adds "Crop N" and opens its sheet with the
+name focused. The sheet shows the factors four to a row (labelled "Orchard
+crop factor, Jan", as in the grid), the mean, the high-factor warning for
+this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
+much. **Remove crop** asks first when the crop is planted anywhere, removes
+it with its areas, and closes the sheet. It edits the shared `ModelEditor`
+and, being modal, carries the save row (`ModelSaveRow`); a viewer gets the
+values read-only and Close. `Dialog` `side`, full width on a phone.
+
+### Crop grids
+
+The old tab body, unchanged, is `crops/CropGrids.svelte`: crop factors
+(reorderable, the × A-pan intro, the warning naming every crop and month
+above 1.0: `highCropFactors`, a hint, never a block on saving), planted areas
+in **ha** (stored as m²; farm rows in network order, reorderable; the
+no-planted-area note) and the demand preview (chart and `DemandTable`).
+`CropsTab` with a `sections` prop renders it: the grid modal passes one
+section, scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
+inline, on the scenario's model, so neither the crop sheet nor the page's
+overlays ever edit the catchment from there.
 
 ### Load crop factors
 
-**Load crop factors…**, under the crop table (editors only), opens a dialog
+**Load crop factors…**, under the crop-factor table of the [crop
+grids](#crop-grids) (editors only: Crops & demand's **Grids › Crop
+factors**, the grid modal from any tab, and scenario override mode, where it
+fills the scenario's crops), opens a dialog over it
 that fills the project's crop factors from a source, shows what changes and
 what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
 `crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
@@ -1133,8 +1188,8 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
 One farm's planted areas in a side sheet over whichever tab is open
 (`crops/FarmCropsDrawer.svelte`, helpers in `crops/farmDrawer.ts`; issue #17,
-option A step 4). The grids stay full pages; the drawer is for a quick edit in
-context. It opens while the workspace URL has `farm=<nodeId>`
+option A step 4). The drawer is for a quick edit in context; the full grid is
+the planted-areas [grid modal](#grid-modal). It opens while the workspace URL has `farm=<nodeId>`
 (`farmDrawerHref(tab, nodeId)`: `?tab=network&farm=…`, or `?farm=…` over the
 Summary), so it can be linked and Back works; Done, Esc or the ✕ drop `farm`
 from the URL in place (`withoutFarm`), so Back then goes to where it was
@@ -1144,8 +1199,9 @@ saves the catchment's model, and override mode there edits the scenario's
 ([§ Scenarios](#scenarios-tabscenarios)).
 
 - **From:** the Summary's Needs attention (a farm below the supply target, a
-  single farm with nothing planted) and the Network: on the Map, a farm's
-  card links its irrigated area ("20.00 ha, 1 crop", `farmPlanting`). The
+  single farm with nothing planted), the Network (on the Map, a farm's card
+  links its irrigated area, "20.00 ha, 1 crop", `farmPlanting`) and Crops &
+  demand (a farm's name beside its planted-area bar). The
   link keeps the page's other parameters (`withParam`), so closing the drawer
   comes back to exactly where it was opened.
 - **Content:** every crop in the model with this farm's area (ha, the same
@@ -1174,17 +1230,20 @@ click away). It opens while the workspace URL has `grid=<id>`
 (`lib/workspace/overlays.ts`): `nodes` (the Network's node table, `NetworkTab`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
-outflow gauge**), `crop-factors`, `planted-areas` and `demand` (the Crops tab's
-sections, through its `sections` prop) and `transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
+outflow gauge**), `crop-factors`, `planted-areas` and `demand` (the
+[crop grids](#crop-grids), through `CropsTab`'s `sections` prop) and
+`transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
-The node table has no such tab (`GRID_TAB.nodes` is null), so it opens anywhere
+The node table and the crop grids have no such tab (`GRID_TAB` null: the
+Network is a map and Crops & demand cards and bars), so they open anywhere
 but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 
-- **From:** the Network's **Grids** menu. More screens will link to
-  it as they simplify (the #17 checklist).
+- **From:** the Network's and Crops & demand's **Grids** menus, and Crops &
+  demand's **Edit areas**. More screens will link to it as they simplify
+  (the #17 checklist).
 - **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
   the tab it comes from and the other way round, and the tab's problems list
   shows above it (`IssueList`). The modal hides the save bar, so it carries
@@ -1197,7 +1256,8 @@ the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
   put. On a phone (≤ 640 px) a `full` dialog takes the whole screen, and the
   grid shows its phone layout (cards).
 
-On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
+On a phone (≤ 640 px) the crop-factor and planted-area grids (in the grid
+modal and override mode) turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
 top, the twelve factors four to a row and the mean below; each farm's crops two
 to a row with its total, and a totals card last. Every field is on screen

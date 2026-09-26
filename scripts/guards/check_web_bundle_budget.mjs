@@ -794,6 +794,16 @@
 //             summary tiles, and the shared StatusPill / StatusBar and
 //             portfolio totals. Route chunks only; no new dependency.
 //             Headroom ~4 KB.
+// 2026-09-26  total 941 → 949 KB (measured 945; the Crops branch measured
+//             938 from 931 on main @ a2013049, +7). Issue #17 A3: Crops &
+//             demand becomes a page of crop cards (factor sparklines), the demand chart and per-farm
+//             stacked bars, with a crop sheet (crops/CropsTab, CropSheet,
+//             cards.ts); the old tab body moved unchanged to CropGrids (the
+//             grid modal and override mode, now with #54's Load crop factors
+//             trigger), the demand table to DemandTable. All in the lazy
+//             Crops chunk; the largest chunk is unchanged (41.7 KB, the
+//             workspace page). No new dependency. Headroom ~4 KB; the i18n
+//             catalogue trim is still the next saving.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -804,7 +814,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 941,
+	totalCodeKb: 949,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
