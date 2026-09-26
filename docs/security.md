@@ -187,6 +187,15 @@ In short:
   project_id = …` therefore returns nothing rather than someone else's data.
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
+- **`SECURITY DEFINER` functions are executable by `water_app` only**
+  (027_definer_grants, issue #37). They run as the owner, so Postgres's default
+  `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
+  connect. Every one has `PUBLIC` revoked; the non-trigger ones are granted to
+  `water_app` (routes and RLS policy expressions call them as it); trigger
+  functions get no grant (Postgres checks `EXECUTE` only at `CREATE TRIGGER`).
+  The owner's default privileges close future functions the same way, and a
+  catalogue guard (`catalogue.db.test.ts`) fails if any `SECURITY DEFINER`
+  function is executable by a role other than the owner and `water_app`.
 - **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
   existing policy and every `requireRole(…, 'viewer')` refuses them (fail
   closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
