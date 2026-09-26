@@ -19,7 +19,7 @@ test('Compare runs opens on the latest run against the one before, and keeps its
 	await page.getByRole('region', { name: 'Runs', exact: true }).getByRole('link', { name: 'Compare runs' }).click();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=compare&a=${project.id}%3A${first}&b=${project.id}%3A${second}$`));
 	await expect(nav(page).getByRole('link', { name: 'Compare runs' })).toHaveAttribute('aria-current', 'page');
-	await expect(page.getByRole('heading', { level: 1, name: 'Compare tab' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Compare tab' })).toBeVisible();
 	await expect(runPicker(page, 'A — baseline')).toHaveValue(first);
 	await expect(runPicker(page, 'B — changed')).toHaveValue(second);
 	await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();

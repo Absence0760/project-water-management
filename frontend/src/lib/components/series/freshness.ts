@@ -31,7 +31,17 @@ export interface Freshness {
 	stale: boolean;
 	/** Every series, newest end first. */
 	perSeries: { id: string; kind: string; name: string; end: string; age: number }[];
+	/**
+	 * The series behind: those a run is driven by (recorded rain, A-pan
+	 * evaporation) ending more than the limit ago. A forecast runs ahead and
+	 * observed flow only scores a run, so neither counts. The count is the
+	 * badge on Data in the workspace's sections.
+	 */
+	behind: { id: string; kind: string; name: string; end: string; age: number }[];
 }
+
+/** Driver series that can fall behind today (a forecast runs into the future). */
+const canFallBehind = (kind: string) => isDriver(kind) && kind !== 'rain_forecast_mm';
 
 export function freshness(list: readonly SeriesMeta[], today: string, staleDays = STALE_DAYS): Freshness | null {
 	if (!list.length) return null;
@@ -41,9 +51,10 @@ export function freshness(list: readonly SeriesMeta[], today: string, staleDays 
 			return { id: s.id, kind: s.kind, name: s.name, end, age: toEpochDay(today) - toEpochDay(end) };
 		})
 		.sort((a, b) => b.end.localeCompare(a.end));
+	const behind = perSeries.filter((p) => canFallBehind(p.kind) && p.age > staleDays);
 	const top = perSeries.find((p) => isRecordedRain(p.kind));
-	if (!top) return { latest: null, age: null, stale: true, perSeries };
-	return { latest: top.end, age: top.age, stale: top.age > staleDays, perSeries };
+	if (!top) return { latest: null, age: null, stale: true, perSeries, behind };
+	return { latest: top.end, age: top.age, stale: top.age > staleDays, perSeries, behind };
 }
 
 /**

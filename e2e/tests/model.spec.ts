@@ -183,7 +183,7 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	});
 	await projectsLink.click();
 	await expect.poll(() => asked).toBe('You have unsaved model changes. Leave without saving?');
-	await expect(page.getByRole('heading', { level: 1, name: 'Unsaved guard' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Unsaved guard' })).toBeVisible();
 	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
 
 	page.once('dialog', (d) => void d.accept());

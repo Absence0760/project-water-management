@@ -30,6 +30,7 @@
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 
 	// The Yield panel (WP-3.6) and its chart load only when a farm is focused.
 	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
@@ -394,7 +395,22 @@
 	});
 	const totalArea = $derived(nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 	const farmArea = $derived(farms.reduce((s, n) => s + (n.areaKm2 || 0), 0));
+	// The page's section header shows the map's summary line and actions (not the grid modal's table).
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, view === 'map'));
 </script>
+
+{#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</span>{/snippet}
+{#snippet headerActions()}
+	<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
+		<summary class="btn">Grids <span aria-hidden="true">▾</span></summary>
+		<div class="grids-pop" role="group" aria-label="Open as a grid">
+			{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+		</div>
+	</details>
+	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add node</button>{/if}
+{/snippet}
 
 {#snippet colourByControl()}
 	{#if farms.length}
@@ -625,26 +641,10 @@
 	</section>
 {/if}
 {:else}
-	<!-- The map (issue #17, option A · A2): a page of its own. The header names
-	     it and holds its actions (with no nodes yet too); the map card fills
-	     the width beside the picked node and the node list. -->
-	<div class="net-head">
-		<div class="net-title">
-			<h2 id="net-map-h">Network</h2>
-			<p class="muted" data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</p>
-		</div>
-		<div class="net-actions">
-			<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
-				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
-				<div class="grids-pop" role="group" aria-label="Open as a grid">
-					{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
-				</div>
-			</details>
-			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add node</button>{/if}
-		</div>
-	</div>
+	<!-- The map (issue #17, option A · A2): a page of its own. Its summary,
+	     Grids and Add node sit in the workspace's section header (headerParts
+	     below, with no nodes yet too); the map card fills the width beside the
+	     picked node and the node list. -->
 	{#if nodes.length === 0}
 		<section class="panel" aria-label="No nodes yet">
 			<div class="empty">
@@ -1033,28 +1033,6 @@
 		border-radius: var(--radius);
 	}
 	/* Map layout (issue #17, A2): a header, then the map card beside the picked node and the node list. */
-	.net-head {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.75rem 1.5rem;
-		margin: 0 0 1rem;
-	}
-	.net-title h2 {
-		margin: 0;
-		font-size: 1.6rem;
-	}
-	.net-title p {
-		margin: 0.2rem 0 0;
-		font-size: 0.9rem;
-	}
-	.net-actions {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
 	.grids-menu {
 		position: relative;
 	}

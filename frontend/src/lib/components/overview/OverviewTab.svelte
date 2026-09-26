@@ -6,22 +6,22 @@
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { downloads } from '$lib/export';
-	import { fmtNum, localIsoDate } from '$lib/format/number';
+	import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { attention } from './attention';
+	import { attention, runHref } from './attention';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
-	import { pickRuns, type DamsState } from './latestRun';
+	import { pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import MembersPanel from './MembersPanel.svelte';
-	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
+	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
-	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 
 	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
@@ -30,6 +30,9 @@
 	const loadDamTable = () => import('./DamLevels.svelte');
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
 	const loadSupply = () => import('./SupplyByFarm.svelte');
+	// The share links (owners only) sit far below the first screen and load their own data: their own
+	// chunk keeps the page's first chunk under its budget (room the section header, issue #17, needed).
+	const loadShareLinks = () => import('./ShareLinksPanel.svelte');
 
 	let {
 		project,
@@ -284,6 +287,11 @@
 		}
 	]);
 
+	// The section header's context line: which run the Summary shows (issue #17 A1).
+	$effect(() => fillHeader({ context: runContext }, !!pick));
+	const LEGACY_TITLE =
+		'Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
+
 	async function saveDetails(e: SubmitEvent) {
 		e.preventDefault();
 		saving = true;
@@ -307,6 +315,19 @@
 		}
 	}
 </script>
+
+{#snippet runContext()}
+	{#if pick}
+		{@const meta = pick.latest}
+		<strong class="run-lbl">{meta.label || 'Untitled run'}</strong>
+		{#if meta.legacy}<span class="badge badge-warn" title={LEGACY_TITLE}>Workbook comparison</span>{/if}
+		{#if meta.evidence === 'current'}<span class="badge badge-owner">Evidence</span>{/if}
+		<span>· {fmtDay(meta.startDate)} – {fmtDay(meta.endDate)}</span>
+		<span>· engine {meta.engineVersion}</span>
+		<span>· ran {ranAgo(meta.createdAt)}</span>
+		<span>· <a href={runHref(meta.id)}>Open in Runs</a></span>
+	{/if}
+{/snippet}
 
 <!-- Summary (issue #17, option A, board A1): the results first. Before the
      first run there are none, so the setup checklist leads instead. -->
@@ -434,11 +455,18 @@
 		<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
 		<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 		<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
-		{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
+		{#if isOwner}
+			<Lazy load={loadShareLinks}>
+				{#snippet children(ShareLinksPanel)}<ShareLinksPanel projectId={project.id} />{/snippet}
+			</Lazy>
+		{/if}
 	</div>
 </div>
 
 <style>
+	.run-lbl {
+		color: var(--text);
+	}
 	.first {
 		display: grid;
 		gap: 1rem;

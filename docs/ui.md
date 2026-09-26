@@ -105,14 +105,21 @@ the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
-  under a "Catchment" label and the project's name (a link to its Summary),
-  the section labels shown, with a viewer's **Show model inputs** at the end.
+  under a "Catchment" label, the project's name (a link to its Summary) and
+  your role badge (owner, editor, viewer), the section labels shown, with a
+  viewer's **Show model inputs** at the end. **Data** carries an amber badge
+  counting the series behind: the series a run is driven by (recorded rain,
+  A-pan evaporation; never a forecast or a flow) ending more than
+  `STALE_DAYS` ago (`freshness().behind` in `series/freshness.ts`, the same
+  measure as the "Rain up to" pill and Needs attention's stale item). Its
+  accessible name says it: "Data (2 series behind)".
   The sidebar's **Projects** link replaces the old "Projects / *name*"
   breadcrumb row. The content column keeps its usual 1480 px maximum beside
   the sidebar; narrower, the widest grids scroll inside their own box: the
   network's node table fits from about 1700 px and scrolls below that, its
   name and remove columns kept in view (`model.spec.ts`).
-- **Below 900 px (phones):** a full-width **Sections** button naming the open
+- **Below 900 px (phones):** a compact line with the project's name and your
+  role, then a full-width **Sections** button naming the open
   tab (its accessible name is "Project sections: *Tab*", with the problems dot
   when a model tab has one) opens the same grouped list in the page, the
   section labels shown and the open tab marked, with a viewer's **Show model
@@ -213,6 +220,46 @@ nodes, the curtailment table). The whole header sticks, not each cell, so a
 two-row header (group labels over the column names) stays stacked. A table
 shorter than the cap looks as before.
 
+## Section header
+
+Every section has **one header** (issue #17, option A; `workspace/SectionHeader.svelte`),
+drawn by the page above the open tab, in place of the old project row (name,
+role, freshness, Add data) and each tab's own header:
+
+- **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
+  **Unsaved changes** shows beside it while the model has edits (editors).
+- **A one-line context** under it. A tab gives its own through
+  `fillHeader({ context, actions })` (`workspace/sectionHeader.svelte.ts`,
+  called from an `$effect`, like the sidebar's slot): the Summary names the
+  run it shows (label, workbook-comparison and evidence badges, period,
+  engine, "ran N days ago", **Open in Runs**); the Network its summary
+  ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
+  line ("3 crops · 675 ha irrigated on 8 farms · …"); History what it holds.
+  The others count what they hold (`workspace/context.ts`): "2 runs",
+  "4 input series · 1 behind", "3 transfer rules · 2 active", "No runs yet"
+  on a Summary before the first run.
+- **The actions on the right**, in this order: the **Rain up to** pill
+  (below), the section's own (the Network's **Grids** and **+ Add node**,
+  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  model** (editors; on the Summary, Network, Crops, Transfers and Settings).
+  Run model starts a run with no label and opens it in Runs, through the
+  same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
+  own form (with a label and Run forecast), so the header doesn't repeat it
+  there, and on Data **Add data** is the main (primary) action. Run model is
+  disabled until there is a network and a rainfall series, and its
+  accessible description says which is missing. A tab shown inside the grid
+  modal or scenario override mode fills nothing.
+- **Notices, one slim line** under the title row, instead of full-width
+  banners: the viewer's **View only** note (every section), the upload
+  result with **Re-run model** / **Dismiss**, **New data since the last
+  run** with **Re-run model** (not on Runs or Data, which say it in their
+  own way), and a run that didn't start. Every message and action of the
+  old banners is kept. The model save bar stays the dock at the bottom
+  (Save changes, Discard, the reason), and the grid modal and sheets keep
+  their own `ModelSaveRow`.
+- **Phones:** the same header after the Sections button; the actions wrap
+  under the title at full width, with 44 px targets.
+
 ## Header: data freshness and "Add data"
 
 - **Rain up to 14 Jun 2026 · 12 days ago**: the latest end of the
@@ -263,12 +310,13 @@ shorter than the cap looks as before.
   (`series/valuesCache.ts`), used only while the series' start, length and
   `updatedAt` still match, so a same-length change (a restore, a feed
   correction) is fetched again.
-- After an upload a banner offers **Re-run model**. Every tab notes new data
-  since the last run: a rainfall series that reaches past the
-  latest run's end, or was updated after it (`newDataSinceRun`).
+- After an upload the header's notice line offers **Re-run model**. Every tab
+  but Runs and Data notes new data since the last run there: a rainfall series
+  that reaches past the latest run's end, or was updated after it
+  (`newDataSinceRun`).
 - **Automatic runs** (WP-2.11): when the project has them on and a re-run is
   queued (`project.rerunQueuedFor`, and the upload's own answer), both
-  banners say "An automatic re-run is queued for 14:05." (the viewer's local
+  notices say "An automatic re-run is queued for 14:05." (the viewer's local
   time; "… for 27 Sep 00:05" on another day; "… is due now." once its time
   has passed) instead of offering **Re-run model**
   (`autorun/autoRun.ts` `rerunQueuedText`). The page doesn't poll: the run
@@ -3420,9 +3468,10 @@ signed in or out, for someone outside the project, on a phone first.
 
 ## Viewers
 
-Viewers see a "View only" note. Inputs render as plain values instead of
-greyed-out fields. There are no move handles, drag targets, Add data button
-or Run button.
+Viewers see a "View only" note in the section header's notice line, on every
+section, and their role badge in the sidebar. Inputs render as plain values
+instead of greyed-out fields. There are no move handles, drag targets, Add
+data button or Run button.
 
 ## Accessibility
 

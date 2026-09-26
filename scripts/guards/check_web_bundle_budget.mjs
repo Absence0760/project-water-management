@@ -804,6 +804,18 @@
 //             Crops chunk; the largest chunk is unchanged (41.7 KB, the
 //             workspace page). No new dependency. Headroom ~4 KB; the i18n
 //             catalogue trim is still the next saving.
+// 2026-09-26  total 949 → 952 KB (measured 948, 947.3 exact, from 944.2 on
+//             main @ da785083, +3). Issue #17 shell: one section header per
+//             workspace section (workspace/SectionHeader, the header slot
+//             tabs fill, context.ts), the notices as one slim line, the
+//             role badge in the sidebar and the Data "series behind" badge,
+//             and the help guide's new paragraph. The workspace chunk went
+//             41.6 → 41.2 KB: the Overview's Share links panel became its
+//             own lazy chunk (owners only, far below the first screen) to
+//             pay for the header; splitting the Farmers panel too added ~3 KB
+//             to the total and wasn't needed, so it stays in the page. Largest
+//             chunk is still 41.7 KB (unchanged). No new dependency.
+//             Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -814,7 +826,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 949,
+	totalCodeKb: 952,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

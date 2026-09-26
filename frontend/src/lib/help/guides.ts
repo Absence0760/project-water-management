@@ -147,7 +147,11 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'On a wide screen the sections are in the sidebar down the left, under the catchment’s name; **Projects**, **Teams** and **Help** are at the top of it, and your account at the foot. On a phone, the **Menu** button in the bar at the top opens Projects, Teams and Help, and the project’s sections sit behind a **Sections** button that names the tab you are on. The arrow keys move from one tab to the next.'
+						text: 'On a wide screen the sections are in the sidebar down the left, under the catchment’s name and your role (owner, editor or viewer); **Projects**, **Teams** and **Help** are at the top of it, and your account at the foot. A number beside **Data** counts the rainfall and evaporation series that are more than a week behind. On a phone, the **Menu** button in the bar at the top opens Projects, Teams and Help, and the project’s sections sit behind a **Sections** button that names the tab you are on, under the catchment’s name. The arrow keys move from one tab to the next.'
+					},
+					{
+						type: 'p',
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary, the farms and dams on the Network), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series), **Add data** uploads a file, and **Run model** runs the saved model and opens the run in Runs & results. The Network adds **Grids** and **+ Add node**, Crops & demand **Grids** and **+ Add crop**. Notices sit in one line under the header: that you can only view the project, or that new data has arrived since the last run, with **Re-run model**.'
 					},
 					{
 						type: 'note',

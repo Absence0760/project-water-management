@@ -46,11 +46,13 @@ test('the latest run: its headline figures, the change from the run before, and 
 	const second = await createRun(page.request, project.id, 'Second');
 	await page.goto(`/projects/${project.id}`);
 
+	// Which run it is: the section header's context line (issue #17), under the Summary title.
+	const context = page.getByTestId('section-context');
+	await expect(context).toContainText('Second');
+	await expect(context).toContainText(/\d{1,2} [A-Z][a-z]{2} \d{4} – \d{1,2} [A-Z][a-z]{2} \d{4}/);
+	await expect(context).toContainText(/engine \d+\.\d+\.\d+/);
+	await expect(context).toContainText('ran today');
 	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
-	await expect(latest).toContainText('Second');
-	await expect(latest).toContainText(/\d{1,2} [A-Z][a-z]{2} \d{4} – \d{1,2} [A-Z][a-z]{2} \d{4}/);
-	await expect(latest).toContainText(/engine \d+\.\d+\.\d+/);
-	await expect(latest).toContainText('ran today');
 	const card = (term: string) => latest.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
 	await expect(card('EWR not met')).toContainText('of days');
 	await expect(card('Irrigation supplied')).toContainText('of demand');
@@ -63,7 +65,7 @@ test('the latest run: its headline figures, the change from the run before, and 
 	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
 
-	await latest.getByRole('link', { name: 'Open in Runs' }).click();
+	await context.getByRole('link', { name: 'Open in Runs' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]run=${second}`));
 	await expect(page.getByRole('heading', { level: 2, name: 'Second' })).toBeVisible();
 });

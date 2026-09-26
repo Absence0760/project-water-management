@@ -20,7 +20,7 @@ test('the "Rain up to" dropdown closes on Escape and on an outside click', async
 
 	await summary.click();
 	await expect(panel).toBeVisible();
-	await page.getByRole('heading', { level: 1, name: 'Escape freshness' }).click();
+	await page.getByRole('heading', { level: 1, name: 'Summary' }).click();
 	await expect(panel).toBeHidden();
 });
 

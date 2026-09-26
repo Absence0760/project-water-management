@@ -13,6 +13,7 @@
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 	import { filterEntries, groupByChangeSet, groupByDay, itemLines, KIND_FILTERS, localDay, localTime, revisionTitle, seriesRestore } from './timeline';
 
 	let {
@@ -157,19 +158,18 @@
 			seriesRestoring = false;
 		}
 	}
+	// What the history holds: the section header's context line (issue #17), not a second "History" heading.
+	$effect(() => fillHeader({ context: headerContext }));
 </script>
+
+{#snippet headerContext()}
+	Every change to the model, settings, data, members and publication, with who made it and why.
+	{#if canEdit}Restoring a version saves it as a new change: nothing is ever erased.{/if}
+{/snippet}
 
 <!-- A plain panel, not a second region: the tab body is already the region
      named "History" (a same-named landmark inside it is axe landmark-unique). -->
 <div class="panel">
-	<div class="head">
-		<h2 id="{uid}-h">History</h2>
-		<p class="muted small">
-			Every change to the model, settings, data, members and publication, with who made it and why.
-			{#if canEdit}Restoring a version saves it as a new change: nothing is ever erased.{/if}
-		</p>
-	</div>
-
 	<div class="filters" role="group" aria-label="Filter the history">
 		<div class="field">
 			<label for="{uid}-farm">Farm</label>
@@ -325,12 +325,6 @@
 </Dialog>
 
 <style>
-	.head h2 {
-		margin: 0 0 0.25rem;
-	}
-	.head p {
-		margin: 0 0 0.75rem;
-	}
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
