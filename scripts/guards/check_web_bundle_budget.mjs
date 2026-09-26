@@ -340,6 +340,21 @@
 //             server-side PDF reports (the 665 → 673 entry above, +8.7 KB,
 //             all lazy) with the farmer view and Publication panel (707).
 //             Measured merged: 713 KB. Headroom ~6 KB.
+// 2026-09-26  total 719 → 731 KB; other ceilings unchanged. The CHIRPS fit
+//             period (issue #40 (a), engine 0.29.0). Measured on the base
+//             af9dac3 → this change: 733.1 → 741.8 KB of gzip bytes
+//             (716 → 725 KB as the guard rounds), +8.7 KB. Chunks +6.3 KB:
+//             the engine's per-range fit, proposal, reference windows and
+//             their warning/CSV/compare wording (rain.ts, doublemass.ts,
+//             compare.ts, in the shared engine chunks), the Settings control
+//             (ChirpsFitPeriodSection, the proposal loader), fit provenance
+//             and compare-note lines, and the CHIRPS fit period help entry.
+//             The autocal worker +2.1 KB: it bundles its own copy of the
+//             engine's rain code, so the same additions count twice. CSS
+//             +0.2 KB. Nothing is a new dependency; the Settings tab and the
+//             worker are lazy, so no page's first load grows by more than the
+//             shared engine share. Headroom ~6 KB. Issue #9 (bring the bundle
+//             down) still stands.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -350,7 +365,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 719,
+	totalCodeKb: 731,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,
