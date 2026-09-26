@@ -1800,21 +1800,27 @@ role and not before it.
       `0px` and the unstyled entries ~3,000 px taller, landing at the page
       end; the body's resize when the CSS lands is what `holdAnchor` catches.
       Why the page renders before its CSS: the next entry.
-- [ ] **A client navigation can render its page before the page's CSS has
-      loaded** (found tracing the entry above). SvelteKit calls each route
-      node's loader twice per navigation (a warm-up in `load_route`, then
-      the real call in `load_node`), and Vite's preload helper awaits a
-      chunk's CSS only on the first call (the second finds it in its `seen`
-      map and returns at once; unchanged on Vite main). So when a page's
-      stylesheet is slower than its JavaScript (a loaded machine, a slow
-      link), the page paints unstyled for a moment, and anything measured
-      then is wrong. Durable fix: in the root layout,
-      `onNavigate(() => stylesheetsReady())`, where `stylesheetsReady()`
-      resolves once every `<link rel="stylesheet">` without a `.sheet` has
-      fired `load` or `error` (SvelteKit awaits `onNavigate` before the DOM
-      update); with a prototype, two loaded runs of help.spec.ts (1,440
-      tests) had no failures where the unpatched build failed 2–6 a run. Worth reporting upstream (SvelteKit or Vite). Trigger: an
-      unstyled flash reported, or the next change to the root layout.
+- [x] **A client navigation could render its page before the page's CSS
+      had loaded** (found tracing the entry above; fixed 2026-09-26).
+      SvelteKit calls each route node's loader twice per navigation (a
+      warm-up in `load_route`, then the real call in `load_node`), and Vite's
+      preload helper awaits a chunk's CSS only on the first call (the second
+      finds it in its `seen` map and returns at once; unchanged on Vite
+      main). So when a page's stylesheet was slower than its JavaScript, the
+      page painted unstyled for a moment and anything measured then was
+      wrong. The root layout now has `onNavigate(() => stylesheetsReady())`
+      (`lib/nav/stylesheets.ts`): SvelteKit awaits it before the DOM update,
+      and it resolves once every `<link rel="stylesheet">` without a
+      `.sheet` has fired `load` or `error`. A link that fires neither within
+      10 s is logged (`console.error`, with its address) and the page renders
+      without it, so a broken stylesheet can't hang navigation. A first load
+      has no `onNavigate`; the glossary's `holdAnchor` still covers that
+      case. Evidence (loaded batch, help + portfolio at `--repeat-each=40`,
+      12 workers): the glossary's first render had its CSS 39/40 times
+      before the fix and 40/40 after; waits under load were a few ms, and
+      none reached 1 s in 1,840 tests. Unloaded click → glossary on screen:
+      median 59.5 ms before, 58.9 ms after (25 runs each). Tests:
+      `stylesheets.test.ts`. Not yet reported upstream (SvelteKit / Vite).
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
