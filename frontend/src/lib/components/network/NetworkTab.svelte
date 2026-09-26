@@ -20,6 +20,10 @@
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { formOffScreen } from './scroll';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+
+	// The Yield panel (WP-3.6) and its chart load only when a farm is focused.
+	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
 
 	let {
 		editor,
@@ -457,6 +461,13 @@
 				onaddcover={() => editor.addLandCover(selected.id)}
 				onremovecover={(id) => editor.removeLandCover(id)}
 			/>
+			{#if selected.kind === 'farm' && projectId}
+				<Lazy load={loadYield}>
+					{#snippet children(YieldPanel)}
+						<YieldPanel {projectId} nodeId={selected.id} nodeName={selected.name} {runs} canEdit={!readonly} hasDam={selected.damCapacityM3 > 0} />
+					{/snippet}
+				</Lazy>
+			{/if}
 		{/key}
 	{/if}
 </section>
