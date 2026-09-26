@@ -25,6 +25,8 @@ import type {
 	AllocationList,
 	AllocationPreview,
 	AllocationSource,
+	ApiKey,
+	ApiKeyCreate,
 	Ensemble,
 	ImportReport,
 	ImportResult,
@@ -465,6 +467,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ note: Note }>('PATCH', `${p(id)}/notes/${enc(noteId)}`, { body }).then((r) => r.note),
 			/** Soft delete (the author or an editor): hidden, kept for the audit trail. */
 			remove: (id: string, noteId: string) => request<void>('DELETE', `${p(id)}/notes/${enc(noteId)}`)
+		},
+		apiKeys: {
+			/** The project's API keys, newest first, revoked and expired ones included (owner). */
+			list: (id: string) => request<{ keys: ApiKey[] }>('GET', `${p(id)}/api-keys`).then((r) => r.keys),
+			/** Make a key (owner). `secret` is the key itself: this is the only time it is shown. */
+			create: (id: string, body: ApiKeyCreate) => request<{ key: ApiKey; secret: string }>('POST', `${p(id)}/api-keys`, body),
+			/** Revoke a key (owner): the next request with it is refused. */
+			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */

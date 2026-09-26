@@ -172,6 +172,20 @@ describe('createApi', () => {
 		expect(JSON.parse((series.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ token: 'tok', key: 'ewr' });
 	});
 
+	it('lists, makes and revokes API keys (the secret comes back once, from the create)', async () => {
+		const key = { id: 'k1', name: 'Gateway', prefix: 'k1k1k1k1' };
+		const list = mockFetch(200, { keys: [key] });
+		await expect(createApi('', list).apiKeys.list('p/1')).resolves.toEqual([key]);
+		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/api-keys');
+		const post = mockFetch(201, { key, secret: 'wm_k1k1k1k1_x' });
+		await expect(createApi('', post).apiKeys.create('p1', { name: 'Gateway', expiresInDays: null })).resolves.toEqual({ key, secret: 'wm_k1k1k1k1_x' });
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/api-keys', 'POST', { name: 'Gateway', expiresInDays: null }]);
+		const del = mockFetch(204);
+		await expect(createApi('', del).apiKeys.revoke('p1', 'k/1')).resolves.toBeUndefined();
+		expect((del.mock.calls[0] as unknown as [string, RequestInit])[0]).toBe('/projects/p1/api-keys/k%2F1');
+	});
+
 	it('returns undefined for 204', async () => {
 		const api = createApi('', mockFetch(204));
 		await expect(api.projects.remove('p1')).resolves.toBeUndefined();

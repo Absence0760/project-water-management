@@ -1204,6 +1204,33 @@ section), deployment.md (queues, the worker, alarms), run-locally.md
 
 ### WP-2.9 Per-project API keys and the ingest endpoint
 
+> **Status: built** (`039_api_keys.sql`, `backend/src/ingest/`,
+> `series/merge.ts` `mergeInto`, Settings → API keys,
+> `scripts/ingest/push-fixture.mjs` / `pnpm dev:ingest:push`;
+> [api.md § Ingest](../api.md#ingest), [security.md § API keys](../security.md#api-keys)).
+> Where the build departs from the design below, and why:
+> - **A key is found by its prefix, then its hash is compared in constant
+>   time** (`crypto.timingSafeEqual`, `app_api_key_lookup`), rather than
+>   looked up by hash in SQL: the comparison is then visibly constant-time,
+>   and `prefix` (a generated column, `UNIQUE`) is the row's handle. The
+>   hash is still `UNIQUE`.
+> - **No event for a no-op push.** Re-sending the same days records nothing
+>   (as the UI's merge does), not `series.merged` with `daysChanged = 0`: a
+>   gateway re-sending every few minutes would bury the History. The
+>   response says `daysChanged: 0`, and `lastUsedAt` shows the key is alive.
+> - **No series revision for a key's merge**, like a data feed's (the
+>   series_revision insert policy needs an editor anyway).
+> - **Re-run.** WP-2.8's enqueue doesn't exist yet: `mergeInto` calls a
+>   named no-op hook, `series/newData.ts` `onSeriesDaysChanged`, on every
+>   merge that changed days (the UI's and the ingest's), and the ingest
+>   returns its answer as `rerunQueuedFor` (always `null` for now). WP-2.11
+>   fills the hook (and adds the data feeds' ingest as a caller). The job
+>   table has **no key policy**: an enqueue from a key's transaction needs
+>   an acting user (`job.acting_user_id`) or a `SECURITY DEFINER` enqueue,
+>   which is WP-2.11's to decide.
+> - `expiresInDays` is 1–3650 or absent (until revoked); `scopes` may be
+>   sent (only `series:write` exists).
+
 **Goal.** A logger gateway or a script pushes daily readings without a user
 session. The key can write series to one project, and nothing else.
 

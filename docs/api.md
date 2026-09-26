@@ -1206,6 +1206,74 @@ reads and writes only `farm` notes on their linked farms, and never sees a
   it (and may edit it); `canDelete` = the author or an editor.
 - `body` is plain text. Clients render it escaped, never as HTML or markdown.
 
+## Ingest
+
+Per-project API keys, and the endpoint a logger gateway or a script pushes
+daily readings to without a session (roadmap WP-2.9; `039_api_keys.sql`,
+[security.md § API keys](./security.md#api-keys),
+[data-model.md § API keys](./data-model.md#api-keys-039_api_keyssql)). A key
+belongs to one project and can merge days into that project's series
+(optionally only some of them), and nothing else.
+
+### Managing keys (owner, session)
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/api-keys` | – | `{ keys: ApiKey[] }`, newest first, revoked and expired ones included | owner |
+| POST | `/projects/:id/api-keys` | `{ name: 1–100 chars, scopes?: ["series:write"], allowedSeries?: { kind, name }[] (1–50) \| null, expiresInDays?: 1–3650 (whole) \| null }` | `201 { key: ApiKey, secret: "wm_…" }`, `Cache-Control: no-store`. `secret` is the key: the **only** time it is sent; only its SHA-256 is stored, so it can't be shown again | owner |
+| DELETE | `/projects/:id/api-keys/:keyId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too; another project's key `404`). A key is never deleted (audit events name it) | owner |
+
+- `ApiKey = { id, name, prefix, scopes, allowedSeries, createdAt, createdBy, lastUsedAt, expiresAt, revokedAt, revokedBy }`.
+  `prefix` is the first 8 characters of `id`, the `wm_<prefix>_…` part of
+  the key. `allowedSeries` `null` = any series of the project; `expiresAt`
+  `null` = until revoked. `createdBy` / `revokedBy` are display names.
+  `lastUsedAt` moves at most once a minute. Never the key or its hash.
+- A repeated `{ kind, name }` in `allowedSeries` counts once. Unknown fields
+  are `400`.
+- Recorded as `api_key.created` / `api_key.revoked` in the History (id,
+  name, prefix, scopes, allowed series, lifetime).
+
+### The ingest endpoint (API key)
+
+Send the key as `Authorization: Bearer wm_<prefix>_<secret>`. No cookie, no
+CORS (gateways aren't browsers), JSON bodies only.
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null }`, `Cache-Control: no-store` |
+
+- **The merge** is the same sequence as the UI's (`series/merge.ts`
+  `mergeInto`): the series is created if it doesn't exist, only the days sent
+  are touched (a `null` clears a day), units are converted to the kind's
+  canonical unit, and the version and day-boundary guards answer `409` as
+  they do there. It is recorded as `series.created` / `series.merged` by the
+  key (`actor_label` `API key “<name>”`); unlike a person's merge it keeps no
+  series revision (a logger's merges are append-mostly, like a data feed's).
+- **Idempotent.** Re-sending the same days and values changes nothing,
+  answers `daysChanged: 0` and records nothing.
+- `rerunQueuedFor`: when an automatic re-run is queued for. Always `null`
+  until auto re-runs are built (WP-2.11, `series/newData.ts`).
+- **Errors.** `401 { error: "invalid or missing API key" }` (with
+  `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
+  revoked or expired key, one message for all; `403` for a series not in
+  `allowedSeries`, or a scope the key lacks; `429` with `Retry-After`
+  (seconds) past the rate limit; `400` for a body that isn't valid; `413`
+  when the series would pass 60 000 days.
+- **Rate limit.** A token bucket per key: 60 requests, refilled at 60 a
+  minute. Every authenticated request counts, failed ones included.
+- **Revocation** applies to the next request: the key is checked on every
+  request, and again by RLS on every statement.
+
+Push one day with `curl` (the Settings panel shows the same example):
+
+```bash
+curl -X POST https://<host>/api/ingest/v1/series/merge \
+  -H "Authorization: Bearer $WM_INGEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"kind":"flow_logger_m3s","name":"Weir","unit":"m3/s","startDate":"2026-09-25","values":[0.42]}'
+```
+
 ## Farm
 
 The farmer's farm view (roadmap WP-2.6 API; design
