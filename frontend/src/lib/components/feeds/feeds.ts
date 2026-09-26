@@ -152,6 +152,16 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 
 export const describeTarget = (f: Pick<FeedMeta, 'targetKind' | 'targetName'>) => `${kindLabel(f.targetKind)}${f.targetName ? ` · ${f.targetName}` : ''}`;
 
+/**
+ * Who the feed's fetches run as, after the schedule (" · runs as Ann"). With
+ * no acting owner (that account was deleted) the scheduler skips the feed
+ * until an owner saves it; the panel has no edit form, so the way to save it
+ * is to switch it off and on again (each save makes the saver the acting
+ * owner: 018_feeds.sql data_feed_stamp).
+ */
+export const describeRunsAs = (f: Pick<FeedMeta, 'actingUser'>) =>
+	f.actingUser ? ` · runs as ${f.actingUser}` : ' · no acting owner: scheduled fetches are skipped until an owner switches it off and on again';
+
 export const STATE_LABELS: Record<FeedState, string> = {
 	ok: 'OK',
 	stale: 'Stale',

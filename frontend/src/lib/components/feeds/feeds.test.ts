@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, errorText, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
+import { describePlace, describeRunsAs, describeTarget, describeTimes, draftToBody, emptyDraft, errorText, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
 
 describe('parseCells', () => {
 	it('reads one cell per line (or ;), with an optional weight', () => {
@@ -71,6 +71,11 @@ describe('descriptions', () => {
 		expect(healthMessage('Switched off; no data yet.')).toBe('Switched off; no data yet.');
 		expect(healthMessage('the grid has no data at -20.27, 25.37')).toBe('the grid has no data at -20.27, 25.37');
 		expect(healthMessage('at 2026-09-24T06:00:00Z')).toBe('at 2026-09-24T06:00:00Z');
+	});
+
+	it('say who the fetches run as, and how to give an orphaned feed an owner again', () => {
+		expect(describeRunsAs({ actingUser: 'Ann' })).toBe(' · runs as Ann');
+		expect(describeRunsAs({ actingUser: null })).toMatch(/no acting owner: .*switches it off and on again/);
 	});
 
 	it('count the feeds that need attention', () => {
