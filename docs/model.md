@@ -287,6 +287,56 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    row that isn't 12 numbers in 0–1 is ignored with a warning (the annual
    fraction is used).
 
+8. **Reference crop library (issue #54 item 1).** Reference data for the
+   Crops tab's *Load crop factors* dialog (docs/ui.md § Crops tab), in
+   `frontend/src/lib/components/crops/library.ts`. It is not part of the
+   engine and changes no project on its own: a modeller loads it into the
+   crop table, sees the diff and the demand change, and saves (History records
+   it). **Which crop set a catchment uses stays the hydrologist's decision**
+   (issue #54 Q9/Q10; the decision and evidence go in `docs/engine-audit.md`
+   once made).
+
+   - **Crop factors**: the A-pan design crop factors (f = kp × kc, eq. 4.7)
+     of the [ARC/SABI Irrigation Design Manual, ch. 4](https://sabi.co.za/wp-content/uploads/2025/04/Chapter-4-Crop-water-requirements.pdf),
+     winter rainfall area (June 1990): Table 4.13 perennial crops (citrus,
+     table grapes, deciduous fruit late / medium / early, wine grapes, pasture
+     mixed and kikuyu, alfalfa, guavas; p. 4.50), Table 4.14 agronomic crops
+     (mealies, wheat, soya beans, potatoes at four planting dates; p. 4.51),
+     Table 4.15 vegetables (beans, brassicas, cucurbits, peas, onions,
+     tomatoes; p. 4.51), and pecan from the summer-rainfall Table 4.10
+     (p. 4.47), since the winter table has none. Every value is copied as
+     printed and pinned by `library.test.ts` against an independent
+     transcription.
+   - **Conversions**, both reproducible and tested: the tables' Jan–Dec to
+     the model's Oct–Sep; a blank Table 4.14 cell is 0 (not in the ground),
+     and a part month at planting or harvest keeps its printed factor
+     (not prorated). Table 4.15 gives a factor per fifth of the growing
+     season, so a vegetable needs a planting date and a season length, which
+     the modeller gives (the dialog offers Table 4.7's season lengths, e.g.
+     onions, autumn transplant, 160 days; it assumes no planting date). Day
+     *k* of the season takes the factor of its fifth, `stages[⌊5k ÷ days⌋]`,
+     and a month's factor is the sum over its days ÷ its days (days outside
+     the season 0), rounded to 3 decimals, so area × factor × A-pan gives the
+     month's requirement.
+   - **Irrigation systems**: efficiency ranges from the [SABI Agricultural
+     Design Norms 2021](https://sabi.co.za/wp-content/uploads/2023/02/SABI-Norms-Agricultural-2021.pdf),
+     Table 4 (drip 90–95 %, micro-sprinkler 80–85 %, centre pivot / linear
+     80–90 %, permanent sprinkler 75–90 %, movable sprinkler 70–83 %,
+     surface 60–95 % across its piped, lined and earth canal rows). The
+     dialog offers issue #54 Q10's values (0.90, 0.82, 0.85, 0.80, 0.75,
+     0.70), each inside its range but not always the midpoint. Each library
+     crop names a typical system as a hint only; a crop's efficiency changes
+     only when the modeller picks a system.
+   - **Pan coefficient**: the dialog multiplies the source factors by an
+     optional Kp (default 1). A-pan tables and b023 factors already multiply
+     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀, such as
+     the AI workbook v004's) needs about 0.75 (issue #54).
+   - **Caveats** (issue #54): A-pan factors are site-specific design values
+     from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
+     WRC orchard studies should be checked. The engine's maths is unchanged
+     (no `ENGINE_VERSION` bump): the dialog's demand difference uses the
+     same `grossFarmDemandM3PerDay` and `farmIrrigationEfficiency` a run uses.
+
 ### 2.3a Daily A-pan evaporation (engine ≥ 0.38.0, issue #45)
 
 `settings.apanMm` holds 12 monthly means (WR90 / WR2012). A hydrologist often
