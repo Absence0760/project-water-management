@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PortfolioProject } from '$lib/api/types';
 import {
 	ageText,
+	curtailmentHref,
 	damText,
 	DEFAULT_SORT,
 	ewrText,
@@ -122,5 +123,11 @@ describe('sorting', () => {
 	});
 	it('counts statuses for the summary line', () => {
 		expect(statusCounts(all)).toEqual({ red: 2, amber: 1, green: 1, unknown: 1 });
+	});
+});
+
+describe('curtailmentHref', () => {
+	it('opens the run on the Runs tab with the last 7 days as its reporting window', () => {
+		expect(curtailmentHref({ id: 'p1', sourceRunId: 'r1' }, '/app')).toBe('/app/projects/p1?tab=runs&run=r1&window=last7#res-curtailment');
 	});
 });

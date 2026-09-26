@@ -64,8 +64,6 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(pr).toContainText('Stale: over 7 days old');
 	await expect(pr).toContainText('Advisory · 15 %');
 	await expect(pr).toContainText(/\d+ of \d+ farms? short this week/);
-	// It opens the run's curtailment over the last 7 days (the reporting-window picker, #44).
-	await expect(pr.getByRole('link', { name: /farms? short this week/ })).toHaveAttribute('href', /[?&]window=last7(&|#|$)/);
 
 	// Run only: the EWR from the run, farms and dams honestly unknown.
 	const rr = tableRow(page, 'Pf run only A');

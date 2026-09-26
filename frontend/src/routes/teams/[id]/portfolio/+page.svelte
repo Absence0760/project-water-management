@@ -13,6 +13,7 @@
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import {
 		ageText,
+		curtailmentHref as curtailmentLink,
 		damText,
 		ewrText,
 		farmsShortText,
@@ -86,7 +87,7 @@
 
 	const projectHref = (p: PortfolioProject) => `${base}/projects/${p.id}`;
 	// The farms' supply and curtailment on the Runs tab, for the run the figures come from.
-	const curtailmentHref = (p: PortfolioProject) => `${base}/projects/${p.id}?tab=runs&run=${p.sourceRunId}&window=last7#res-curtailment`;
+	const curtailmentHref = (p: PortfolioProject) => curtailmentLink(p, base);
 	// Viewers can't run or publish; "publish a run" is advice for the project's editors.
 	const canPublish = (p: PortfolioProject) => hasRole(p.role, 'editor');
 </script>
