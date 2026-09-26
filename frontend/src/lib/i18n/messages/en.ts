@@ -279,6 +279,16 @@ export const en = {
 	'farm.back.notAsked': "The river didn't need you to pump less this season. You had about **{pct}** of the water you needed.",
 	'farm.back.short': 'The model’s look back and what you can do',
 
+	'farm.forecast.kicker': 'Forecast',
+	'farm.forecast.title': 'Next {days}',
+	'farm.forecast.dam': 'Lowest dam level expected: about {pct}',
+	'farm.forecast.damAround': 'Lowest dam level expected: about {pct} around {date}',
+	'farm.forecast.noShort': 'The model doesn’t expect you to be short on any of these {days} days.',
+	'farm.forecast.short': 'You may be short on {n} of the {days} days.',
+	'farm.forecast.from': 'From the rain forecast of {made}, for {from} to {to}.',
+	'farm.forecast.fine': 'Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction.',
+	'farm.forecast.old': 'This forecast is {age} old. Your WUA may publish a newer one.',
+
 	'farm.compare.title': 'Compared with last season',
 	'farm.compare.unavailable': 'Not available: the model’s data doesn’t reach back to the same dates last season.',
 	'farm.compare.littleNeeded': 'very little needed',
@@ -461,6 +471,7 @@ export const sections: Record<string, string> = {
 	'farm.dam': 'Farm view: the “Your dam” card.',
 	'farm.band': 'Farm view: the model’s own rating chip on the look-back card (not a restriction).',
 	'farm.back': 'Farm view: the “Looking back” card (the model’s estimate, not a restriction).',
+	'farm.forecast': 'Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.',
 	'farm.compare': 'Farm view: the “Compared with last season” card.',
 	'farm.river': 'Farm view: the “Your farm on the river” card. Counts only, never a neighbour’s name.',
 	'farm.who': 'Farm view: “Who can see my farm” on the river card.',
@@ -497,5 +508,7 @@ export const notes: Partial<Record<MessageKey, string>> = {
 	'farm.why.site': 'One gauge in the list after “below its reserve”; several are joined with “, ” and “ and ”.',
 	'farm.why.rainSite': 'One item of {list} in the mixed-reason sentence.',
 	'farm.why.pump': '{amount} is a number of m³; {ls} is empty or “ (2.3 l/s)”; {days} is “102 days”; {average} is “12 m³ a day”.',
-	'farm.why.sum': '{leaves} and {need} are numbers of m³ a day.'
+	'farm.why.sum': '{leaves} and {need} are numbers of m³ a day.',
+	'farm.forecast.title': '{days} is “14 days”.',
+	'farm.forecast.old': '{age} is “5 days”.'
 };

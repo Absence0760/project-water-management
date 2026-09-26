@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { vaalbankFixture } from './fixture';
-import { FORECAST_FINE, forecastCard } from './forecastCard';
+import { forecastCard, forecastFine } from './forecastCard';
 import { NBSP } from './format';
 
 const sp = (s: string | null) => s?.replaceAll(NBSP, ' ') ?? null;
@@ -20,7 +20,7 @@ describe('forecastCard (Next 14 days, WP-2.12)', () => {
 		expect(sp(vm.title)).toBe('Next 14 days');
 		expect(sp(vm.dam)).toBe('Lowest dam level expected: about 38 % around 20 Jan');
 		expect(vm.short).toBe('You may be short on 3 of the 14 days.');
-		expect(vm.fine).toBe(`From the rain forecast of 11 Jan, for 11 Jan to 24 Jan. ${FORECAST_FINE}`);
+		expect(vm.fine).toBe(`From the rain forecast of 11 Jan, for 11 Jan to 24 Jan. ${forecastFine()}`);
 		expect(vm.old).toBeNull();
 	});
 

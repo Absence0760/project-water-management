@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-423 strings: 371 on the site, 28 in emails, 24 in the glossary.
+432 strings: 380 on the site, 28 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -427,6 +427,22 @@ Farm view: the “Looking back” card (the model’s estimate, not a restrictio
 | `farm.back.pumpLess` | If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed. | Keep: {pct} |  |
 | `farm.back.notAsked` | The river didn't need you to pump less this season. You had about **{pct}** of the water you needed. | Keep: {pct} |  |
 | `farm.back.short` | The model’s look back and what you can do |  |  |
+
+### farm.forecast
+
+Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `farm.forecast.kicker` | Forecast |  |  |
+| `farm.forecast.title` | Next {days} | {days} is “14 days”. Keep: {days} |  |
+| `farm.forecast.dam` | Lowest dam level expected: about {pct} | Keep: {pct} |  |
+| `farm.forecast.damAround` | Lowest dam level expected: about {pct} around {date} | Keep: {date}, {pct} |  |
+| `farm.forecast.noShort` | The model doesn’t expect you to be short on any of these {days} days. | Keep: {days} |  |
+| `farm.forecast.short` | You may be short on {n} of the {days} days. | Keep: {days}, {n} |  |
+| `farm.forecast.from` | From the rain forecast of {made}, for {from} to {to}. | Keep: {from}, {made}, {to} |  |
+| `farm.forecast.fine` | Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction. |  |  |
+| `farm.forecast.old` | This forecast is {age} old. Your WUA may publish a newer one. | {age} is “5 days”. Keep: {age} |  |
 
 ### farm.compare
 
