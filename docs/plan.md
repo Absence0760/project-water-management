@@ -271,8 +271,10 @@ writing, or gives a ranked change list.
   met, and annual water balance (observed vs simulated MAR per year). Built:
   the EWR compliance grid (`EwrHeatmap`, outlet and per farm, engine
   `EwrCompliance`) and the annual water balance table in the calibration
-  panel. A printable catchment report is
-  [#19](https://github.com/Absence0760/project-water-management/issues/19).
+  panel. The printable catchment report
+  ([#19](https://github.com/Absence0760/project-water-management/issues/19),
+  WP-2.15 Phase A) puts them, with the rest of a run's results, on A4
+  ([ui.md § Report](./ui.md#report)).
 - 🚧 **Calibration workbench:** plot observed vs simulated, adjust the rain→flow
   parameters with live NSE/PBIAS, and save a calibration version (the
   workbook's "Calibration" button and `[Log]`). Built: the calibration panel,

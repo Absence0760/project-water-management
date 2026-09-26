@@ -277,6 +277,26 @@
 //             loaded only on the Settings tab; SettingsTab grows by the
 //             loader. No dependency. Measures 646 KB merged with the entries above;
 //             headroom ~6 KB.
+// 2026-09-25  total 652 → 665 KB; largest chunk down 39 → 35 KB (ceiling
+//             unchanged). The printable catchment report (WP-2.15 Phase A,
+//             issue #19): a new lazy route, routes/projects/[id]/report,
+//             loaded only when someone opens a report. Measured on the base
+//             acb09ad → this change: 645.3 → 658.7 KB (+13.4). The route's
+//             own chunk is 6.8 KB (the page, its data-driven section list and
+//             the Inputs tables, lib/components/report/) plus ~1.8 KB of CSS
+//             (its print styles, and the component CSS that now sits in
+//             shared files). The rest, ~4 KB, is chunking, not new code: the
+//             report reuses the Runs tab's panels (summary, calibration,
+//             curtailment, EWR grid, self-checks, Reserve compliance) and the
+//             Network tab's schematic rather than copying them, so Rollup
+//             moves them out of those tabs' chunks into chunks shared with
+//             the report, and separate chunks compress worse. It is also why
+//             the Runs tab's own chunk shrank, 39 → 16 KB (the largest chunk
+//             is now another, 35 KB).
+//             LineChart's print mode (fixed box at 2 device px per CSS px,
+//             plain legend, synchronous light redraw on beforeprint) and the
+//             panels' print props are ~0.5 KB. No new dependency; no page's
+//             first load grows. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -288,7 +308,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 652,
+	totalCodeKb: 665,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

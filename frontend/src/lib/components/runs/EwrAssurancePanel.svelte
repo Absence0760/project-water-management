@@ -11,7 +11,14 @@
 	import { monthName } from '$lib/format/months';
 	import { conditionText, describeMethod, fdcText, fewYears, fmtFlow, fmtMm3, monthLabel, shareOfRequired, UNIT_LABEL, verdict } from './ewrAssurance';
 
-	let { sites }: { sites: EwrAssuranceSite[] } = $props();
+	let {
+		sites,
+		print = false
+	}: {
+		sites: EwrAssuranceSite[];
+		/** The printable report: Month by month opens (the report shows each site in its own panel). */
+		print?: boolean;
+	} = $props();
 
 	const uid = $props.id();
 	let chosen = $state(0);
@@ -129,7 +136,7 @@
 		</table>
 	</div>
 
-	<details>
+	<details open={print}>
 		<summary>Month by month ({fmtNum(site.months.length)} months)</summary>
 		<div class="table-wrap months">
 			<table class="data compact" aria-labelledby="{uid}-each">
