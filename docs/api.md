@@ -1027,8 +1027,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
   - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
     1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
-    `{ station }`, a code like `A2H012` (letter, digit, letter, three digits;
-    upper-cased). Both take optional `startDate` (the first fetch's first day,
+    `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
+    three digits; upper-cased; a reservoir `R`, weather `E` or other station
+    is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,
     and a floor no later fetch reads before; for `chirps`, not before
     `1981-01-01`, where CHIRPS begins) and `staleAfterDays` (overrides the source's staleness threshold);
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
@@ -1042,12 +1043,25 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `actingUser` is the display name fetches run as (null once that account is
   deleted: save the feed again). `lastDataDate` is a calendar day
   (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
-  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`).
-- `health = { state, stale, staleAfterDays, message }`, `state` ∈ `ok`,
-  `stale`, `failing`, `pending`, `disabled`; `message` is a sentence for the
-  panel. `lastError` and `message` are written by the server, never an
-  upstream body or database text, e.g. `the source is unreachable: HTTP 503`
-  or `the source’s data could not be read: the grid has no data at …`.
+  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`,
+  and `through`, the last day the fetch asked for).
+- `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
+  `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
+  and its facts; the client writes the sentence and formats the days (all
+  `YYYY-MM-DD`, UTC), so no date is baked into server text:
+  - `{ code: "off", newest }` (switched off; `newest` is the newest day or null),
+  - `{ code: "failing", failures, error, newest }` (`failures` fetches in a row failed, the last with `error`, which is `lastError`),
+  - `{ code: "old-forecast", newest }` (the forecast reaches fewer than `-staleAfterDays` days ahead),
+  - `{ code: "old-data", newest }` (the newest day is more than `staleAfterDays` old),
+  - `{ code: "no-data" }` (fetches succeed but have found nothing yet),
+  - `{ code: "not-fetched", since, after }` (not fetched since it was `attached` / `changed` on `since`: is the worker running?),
+  - `{ code: "waiting" }` (waiting for its first fetch),
+  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day).
+
+  A client should fall back to the `state` for a code it doesn't know.
+  `lastError` is written by the server, never an upstream body or database
+  text, e.g. `the source is unreachable: HTTP 503` or `the source’s data could
+  not be read: the grid has no data at …`.
 - Strangers get `404`; a viewer's writes and an editor's attach / change /
   remove get `403`.
 

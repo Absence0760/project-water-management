@@ -8,7 +8,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 ## Authentication
 
 - **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12) and are 8–200 characters. Emails are `citext`, so
+  (`bcryptjs`, cost 12; 4 under vitest only, `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
@@ -251,13 +251,22 @@ In short:
   project_id = …` therefore returns nothing rather than someone else's data.
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
-- **Change history and audit log (WP-2.4, 027).** `model_revision`,
+- **Change history and audit log (WP-2.4, 030).** `model_revision`,
   `series_revision` and `audit_event` are append-only for `water_app`
   (`SELECT` and `INSERT` grants, no `UPDATE` or `DELETE` policy); only the
   `series_revision` retention trigger deletes, and only that series' old
   rows. An audit row must name the caller as its actor. Viewers and above
   read history; farmers and strangers see nothing. Invite emails in events
-  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-027_historysql).
+  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
+- **`SECURITY DEFINER` functions are executable by `water_app` only**
+  (028_definer_grants, issue #37). They run as the owner, so Postgres's default
+  `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
+  connect. Every one has `PUBLIC` revoked; the non-trigger ones are granted to
+  `water_app` (routes and RLS policy expressions call them as it); trigger
+  functions get no grant (Postgres checks `EXECUTE` only at `CREATE TRIGGER`).
+  The owner's default privileges close future functions the same way, and a
+  catalogue guard (`catalogue.db.test.ts`) fails if any `SECURITY DEFINER`
+  function is executable by a role other than the owner and `water_app`.
 - **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
   existing policy and every `requireRole(…, 'viewer')` refuses them (fail
   closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
@@ -551,9 +560,12 @@ In short:
     byte budget, no U+0000, so nothing it accepts can fail the database after
     the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
-    as the feed's acting user. A compromised fetcher could at worst send wrong
-    numbers for feeds that asked it, into the series those feeds already
-    target.
+    as the feed's acting user. It applies only the answer to the feed's newest
+    fetch, once, and refuses one with a day outside the window that fetch
+    recorded on the feed (`029_feed_fetch`; the window comes from the worker,
+    never the answer). A compromised fetcher could at worst send wrong
+    numbers for the days feeds asked it for, into the series those feeds
+    already target.
 - Svelte escapes output by default. Don't use `{@html}` with user-supplied names
   (farms, crops, projects).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are

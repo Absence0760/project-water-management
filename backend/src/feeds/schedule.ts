@@ -1,9 +1,11 @@
 // The feed side of the job queue, both run with no user context and both
-// crossing projects only through SECURITY DEFINER functions (018_feeds.sql):
+// crossing projects only through SECURITY DEFINER functions (018_feeds.sql,
+// 027_feed_schedule.sql):
 //
-//   scheduleDueFeeds   every tick (jobs/runner.ts): claim the feeds that are
-//                      due and queue a `feed_fetch` job for each, as the
-//                      feed's acting user, under RLS.
+//   scheduleDueFeeds   every tick (jobs/runner.ts): list the feeds that are
+//                      due, then for each one claim it and queue its
+//                      `feed_fetch` job in one transaction as the feed's
+//                      acting user, under RLS (027_feed_schedule.sql).
 //   acceptIngestResult the production worker, for each `ingest-results`
 //                      message (lambda-worker.ts): find the fetch job it
 //                      answers and queue a `feed_ingest` job as that job's
@@ -12,7 +14,7 @@ import { withoutUser, withUser } from '../db/tx.js';
 import { feedFetchDedupeKey } from '../jobs/handlers/feed-fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import type { IngestResultMessage } from '../jobs/transport.js';
-import { claimDueFeeds, markScheduleFailed } from './store.js';
+import { claimFeed, listDueFeeds, markScheduleFailed } from './store.js';
 
 /** Most feeds scheduled per tick; the rest wait for the next one. */
 export const FEEDS_PER_TICK = 50;
@@ -23,23 +25,44 @@ export interface ScheduleResult {
 	refused: number;
 }
 
-/** Queue a fetch for each due feed (`all`: every enabled feed, for `pnpm dev:feeds:run`). */
+/**
+ * Queue a fetch for each due feed (`all`: every enabled feed, for `pnpm dev:feeds:run`).
+ *
+ * Each feed's claim (stamping its schedule) and its enqueue share one
+ * transaction, so a failure between them can't leave a feed claimed with no
+ * job until its next interval (#32): the rollback releases the claim and the
+ * next tick tries again. One feed's failure doesn't hold up the others; the
+ * first error is rethrown once every feed has had its turn.
+ */
 export async function scheduleDueFeeds({ limit = FEEDS_PER_TICK, all = false }: { limit?: number; all?: boolean } = {}): Promise<ScheduleResult> {
-	const due = await withoutUser((db) => claimDueFeeds(db, limit, all));
+	const due = await withoutUser((db) => listDueFeeds(db, limit, all));
 	const out: ScheduleResult = { queued: 0, refused: 0 };
+	let failure: unknown = null;
 	for (const f of due) {
 		try {
-			await withUser(f.actingUserId, (db) =>
-				enqueueJob(db, { projectId: f.projectId, kind: 'feed_fetch', payload: { feedId: f.id }, dedupeKey: feedFetchDedupeKey(f.id) })
-			);
-			out.queued++;
+			const outcome = await withUser(f.actingUserId, async (db) => {
+				// Another tick took it, or it changed since the listing.
+				if (!(await claimFeed(db, f.id, all))) return 'skipped' as const;
+				await db.query('SAVEPOINT feed_enqueue');
+				try {
+					await enqueueJob(db, { projectId: f.projectId, kind: 'feed_fetch', payload: { feedId: f.id }, dedupeKey: feedFetchDedupeKey(f.id) });
+					return 'queued' as const;
+				} catch (err) {
+					// RLS refused the enqueue: the acting user is no longer an
+					// editor. Keep the claim (the failure backs the feed off) and
+					// record why, in the same transaction.
+					if ((err as { code?: string }).code !== '42501') throw err;
+					await db.query('ROLLBACK TO SAVEPOINT feed_enqueue');
+					await markScheduleFailed(db, f.id);
+					return 'refused' as const;
+				}
+			});
+			if (outcome !== 'skipped') out[outcome]++;
 		} catch (err) {
-			// RLS refused the enqueue: the acting user is no longer an editor.
-			if ((err as { code?: string }).code !== '42501') throw err;
-			await withoutUser((db) => markScheduleFailed(db, f.id));
-			out.refused++;
+			failure ??= err;
 		}
 	}
+	if (failure !== null) throw failure;
 	return out;
 }
 

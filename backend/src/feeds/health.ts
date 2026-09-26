@@ -1,5 +1,7 @@
-// A feed's health, as the status panel shows it: one state and a sentence.
-// Pure, from the feed's health columns and today's UTC date.
+// A feed's health, as the status panel shows it: one state and the reason for
+// it, a code with its facts (the client writes the sentence and formats the
+// days, so no date is baked into server text). Pure, from the feed's health
+// columns and today's UTC date.
 //
 //   disabled  switched off by an owner
 //   failing   the last fetch failed (consecutive_failures > 0)
@@ -19,11 +21,34 @@ import { type FeedConfig, type FeedSource, SOURCES } from './config.js';
 export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled'] as const;
 export type FeedState = (typeof FEED_STATES)[number];
 
+/**
+ * Why the feed is in its state. Days are calendar days (YYYY-MM-DD, UTC).
+ *
+ *   off           switched off; `newest` is the newest day, or null
+ *   failing       `failures` fetches in a row failed, the last with `error`
+ *   old-forecast  the forecast reaches only `newest`, fewer than
+ *                 -staleAfterDays days ahead
+ *   old-data      the newest day, `newest`, is more than staleAfterDays old
+ *   no-data       fetches succeed but have found nothing yet
+ *   not-fetched   not fetched since it was attached / changed on `since`
+ *   waiting       waiting for its first fetch
+ *   ok            `newest` (or null), last checked on `checked`
+ */
+export type HealthReason =
+	| { code: 'off'; newest: string | null }
+	| { code: 'failing'; failures: number; error: string | null; newest: string | null }
+	| { code: 'old-forecast'; newest: string }
+	| { code: 'old-data'; newest: string }
+	| { code: 'no-data' }
+	| { code: 'not-fetched'; since: string; after: 'attached' | 'changed' }
+	| { code: 'waiting' }
+	| { code: 'ok'; newest: string | null; checked: string };
+
 export interface FeedHealth {
 	state: FeedState;
 	stale: boolean;
 	staleAfterDays: number;
-	message: string;
+	reason: HealthReason;
 }
 
 export interface HealthInput {
@@ -54,33 +79,15 @@ export function feedHealth(f: HealthInput, today: string): FeedHealth {
 	const stale = f.lastDataDate
 		? t - toEpochDay(f.lastDataDate) > staleAfterDays
 		: t - toEpochDay(iso(since)) > FIRST_DATA_GRACE_DAYS;
-	const newest = f.lastDataDate ? `newest data ${f.lastDataDate}` : 'no data yet';
-	if (!f.enabled) return { state: 'disabled', stale, staleAfterDays, message: `Switched off; ${newest}.` };
-	if (f.consecutiveFailures > 0) {
-		const n = f.consecutiveFailures;
-		return {
-			state: 'failing',
-			stale,
-			staleAfterDays,
-			message: `${n === 1 ? 'The last fetch failed' : `The last ${n} fetches failed`}: ${f.lastError ?? 'unknown error'}. ${cap(newest)}.`
-		};
-	}
+	const newest = f.lastDataDate;
+	const out = (state: FeedState, reason: HealthReason): FeedHealth => ({ state, stale, staleAfterDays, reason });
+	if (!f.enabled) return out('disabled', { code: 'off', newest });
+	if (f.consecutiveFailures > 0) return out('failing', { code: 'failing', failures: f.consecutiveFailures, error: f.lastError, newest });
 	if (stale) {
-		return {
-			state: 'stale',
-			stale,
-			staleAfterDays,
-			message: f.lastDataDate
-				? staleAfterDays < 0
-					? `No new forecast: it reaches only ${f.lastDataDate}, less than ${-staleAfterDays} days ahead.`
-					: `No new data: the newest day, ${f.lastDataDate}, is more than ${staleAfterDays} days old.`
-				: !unfetched
-					? 'Fetches succeed but have found no data yet: check the cells or station.'
-					: `Not fetched since it was ${iso(since) === iso(f.createdAt) ? 'attached' : 'changed'} on ${iso(since)}: the background worker may not be running.`
-		};
+		if (newest) return out('stale', staleAfterDays < 0 ? { code: 'old-forecast', newest } : { code: 'old-data', newest });
+		if (!unfetched) return out('stale', { code: 'no-data' });
+		return out('stale', { code: 'not-fetched', since: iso(since), after: iso(since) === iso(f.createdAt) ? 'attached' : 'changed' });
 	}
-	if (unfetched || !f.lastAttemptAt) return { state: 'pending', stale, staleAfterDays, message: 'Waiting for its first fetch.' };
-	return { state: 'ok', stale, staleAfterDays, message: `OK; ${newest}, checked ${iso(f.lastSuccessAt ?? f.lastAttemptAt)}.` };
+	if (unfetched || !f.lastAttemptAt) return out('pending', { code: 'waiting' });
+	return out('ok', { code: 'ok', newest, checked: iso(f.lastSuccessAt ?? f.lastAttemptAt) });
 }
-
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

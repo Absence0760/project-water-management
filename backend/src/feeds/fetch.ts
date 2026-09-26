@@ -43,27 +43,44 @@ export interface FetchRequest {
 	today: string;
 }
 
+/** The inclusive days one fetch asks for (FetchRequest's start and end). */
+export interface FetchWindow {
+	start: string;
+	end: string;
+}
+
 /**
  * The days to ask for, from what the feed already has. A configured startDate
  * is a floor for every fetch, not just the first: the revision re-read never
  * reaches before it, where the target series may hold the owner's own data.
+ *
+ * `readThrough` is the last day the feed's previous successful fetch asked
+ * for (data_feed.last_meta.through, written by the ingest from the window it
+ * checked the answer against). The newest date alone can't mark progress
+ * through days that have no data: a backfill starting before the station's
+ * record, or a gap longer than one window, would ask for the same empty
+ * window forever (issue #29). So when the window would end without reaching
+ * a day after readThrough, it starts from readThrough instead (less the
+ * revision re-read, as it would from the newest date). A caught-up feed,
+ * whose window reaches past readThrough anyway, is unchanged.
  */
-export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate: string | null, today: string): { start: string; end: string } {
-	const from = (revisionDays: number, firstDays: number) => {
-		const start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
+export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate: string | null, today: string, readThrough: string | null = null): FetchWindow {
+	const from = (revisionDays: number, firstDays: number, maxDays: number, newest: string) => {
+		let start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
+		if (readThrough && readThrough < newest && addDays(start, maxDays - 1) <= readThrough) start = addDays(readThrough, 1 - revisionDays);
 		return config.startDate && start < config.startDate ? config.startDate : start;
 	};
 	switch (source) {
 		case 'chirps': {
 			const end = addDays(today, -1);
-			const start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS);
+			const start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS, CHIRPS_MAX_DAYS, end);
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > CHIRPS_MAX_DAYS ? addDays(start, CHIRPS_MAX_DAYS - 1) : end;
 			return { start, end: capped };
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
 		case 'dws': {
-			const start = from(DWS_REVISION_DAYS, 365 * DWS_FIRST_YEARS);
+			const start = from(DWS_REVISION_DAYS, 365 * DWS_FIRST_YEARS, 365 * DWS_MAX_YEARS, today);
 			const limit = addDays(start, 365 * DWS_MAX_YEARS - 1);
 			return { start, end: limit < today ? limit : today };
 		}
@@ -74,7 +91,7 @@ export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate
 const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
 /**
  * The most bytes of meta JSON a result may carry: data_feed.last_meta holds at
- * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and jsonb's
+ * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and `through`, and jsonb's
  * text form adds a space after each colon and comma. The per-field limits
  * alone allow ~8.5 KB of multi-byte characters.
  */

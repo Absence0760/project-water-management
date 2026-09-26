@@ -265,7 +265,7 @@ auto re-runs and alerts plug in as further kinds.
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
   last error. A transport only wakes a worker ("look at the table now"), so a
   lost wake-up delays a job by one poll or tick and never loses it.
-- **Transports** (`JOB_TRANSPORT`, `jobs/transport.ts`):
+- **Transports** (`JOB_TRANSPORT`, `jobs/wake.ts` `wakeWorker`):
   - `inprocess`, the default: the local worker process
     (`pnpm dev:run:worker`, or `pnpm dev:full` with the app) ticks every
     `JOB_POLL_SECONDS` (15) and at once on `LISTEN job_queued`, which the
@@ -275,6 +275,12 @@ auto re-runs and alerts plug in as further kinds.
   - `sqs`, production: the API sends a wake message to the `jobs` queue,
     which triggers the worker Lambda; an EventBridge schedule also ticks it
     every 5 minutes (infra/jobs.tf).
+  The queue messages and the SQS sender live apart in `jobs/transport.ts`,
+  which the fetcher and renderer Lambdas import: `wake.ts`'s `memory`
+  transport reaches the runner, and so `pg`, every handler and the engine,
+  which Lambdas without a database must not carry (`lambda-fetcher.test.ts`
+  checks the fetcher's import graph; `package-lambdas.sh` refuses either
+  bundle if esbuild's metafile lists a `pg` input).
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.
@@ -322,7 +328,7 @@ merges into:
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
-| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
+| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
@@ -349,6 +355,11 @@ merges into:
   dates outside that window, or after today, are dropped (`outside`).
   A feed's `startDate` is a floor for every fetch, not just the first: the re-read
   never reaches before it, where the series may hold the owner's own data.
+  Each successful answer records the last day it asked for (`last_meta.through`):
+  when the next window would end without reaching a day after it (a backfill
+  starting before the station's record, or a gap longer than one window), the
+  window starts from there instead, less the re-read, so it moves past days
+  with no data rather than asking for the same empty window forever (#29).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed owns the days it
@@ -361,21 +372,29 @@ merges into:
   commit in the job's transaction, as the job's acting user. A forecast
   result is keyed by its issue date (`meta.issued`, which its days must start
   on, 16 at most); one older than the issue the feed last merged (the
-  `ingest-results` queue does not keep order) is dropped, series and health
-  untouched, so an older forecast never overwrites a newer one. Re-reading an
+  `ingest-results` queue does not keep order) is dropped, series untouched
+  and only its check time (`last_attempt_at`) recorded, so an older forecast
+  never overwrites a newer one. Re-reading an
   unchanged window (CHIRPS does, every day) leaves the series row alone, so
   its `updatedAt` ("new data since the last run") moves only when a value
   does. An answer with a day after the newest the source can have (today, or
   a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
   would otherwise pin the feed's newest date, which only moves forward, in
   the future.
-- **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
-  the enabled feeds not scheduled within a day (or an hour), and the tick
-  queues a `feed_fetch` for each **as the feed's acting user** (the owner who
-  last saved it), under RLS. A failing feed retries sooner: 15 minutes after
-  one failure, doubling up to its interval. If the acting user is no longer an
-  editor, the enqueue is refused, the feed records it
-  (`app_feed_schedule_failed`), and it shows failing until an owner saves it.
+- **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
+  `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
+  A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
+  passed since it was last scheduled, since CHC publishes each issue around
+  08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
+  tick opens one transaction **as the feed's acting user** (the owner who
+  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`)
+  and queues its `feed_fetch` under RLS, so the claim and the job commit
+  together: a failure between them rolls the claim back and the next tick
+  tries again, and one feed's failure doesn't hold up the rest (#32). A
+  failing feed retries sooner: 15 minutes after one failure, doubling up to
+  its interval. If the acting user is no longer an editor, the enqueue is
+  refused, the feed records it (`app_feed_schedule_failed`, keeping the
+  claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
   source normally lags: 12 days for CHIRPS, under 12 days ahead for the
@@ -402,7 +421,15 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   of that feed (`app_feed_fetch_job`), queues a `feed_ingest` job as that
   job's user, and the job validates the result (`FetchResult`) before
   merging. A result for a feed saved with new settings since the fetch is
-  dropped.
+  dropped. The queue can redeliver and reorder, so before sending, the
+  `feed_fetch` job records itself and its window on the feed
+  (`app_begin_feed_fetch`, `029_feed_fetch.sql`), and the `feed_ingest` job
+  claims and clears that record (`app_take_feed_fetch`): only the newest
+  fetch's answer applies, once, and an older fetch's late answer or a
+  redelivery is dropped with the series and health untouched (#31). Every
+  answer (inline too) is checked against the window it asked for, which comes
+  from our side, never from the answer: a day outside it (the forecast aside,
+  keyed by its issue) refuses the answer whole as a failed fetch.
 
 Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
 audit event per merge (WP-2.4), the debounced re-run after new data (WP-2.11),

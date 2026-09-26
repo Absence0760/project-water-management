@@ -8,7 +8,7 @@ import { ApiError } from '../http/errors.js';
 import { readJson } from '../http/body.js';
 import { feedFetchDedupeKey } from '../jobs/handlers/feed-fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
-import { wakeWorker } from '../jobs/transport.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { FEED_SCHEDULES, FEED_SOURCES, FeedInput, FeedPatch, SOURCES } from './config.js';

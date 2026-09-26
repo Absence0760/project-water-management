@@ -16,7 +16,7 @@ import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
-import { wakeWorker } from '../jobs/transport.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isValidTimeZone, nextFireAt } from './due.js';
 import { downloadUrl, reportFileName } from './storage.js';

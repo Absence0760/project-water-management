@@ -5,7 +5,10 @@
 // open-source clients make (RivRetrieve-Python, rivretrieve/southafrica.py;
 // aquascope, collectors/south_africa_dws.py, checked 2026-09); the page layout
 // is from an archived daily page (web.archive.org, HyData.aspx DataType=Daily,
-// captured 2024-05), since the site answers our network with HTTP 403:
+// captured 2024-05), since the site answers our network with HTTP 403.
+// Only river gauges (H codes) are read, with SiteType=RIV (dwsSiteType): an
+// archived reservoir page (SiteType=RES, captured 2024-05) has the same
+// layout, but its daily "flow" is the spillway discharge, not the river's.
 //
 //   GET https://www.dws.gov.za/Hydrology/Verified/HyData.aspx
 //         ?Station=<code>100.00&DataType=Daily&StartDT=YYYY-MM-DD&EndDT=YYYY-MM-DD&SiteType=RIV
@@ -32,6 +35,7 @@
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
 import { FeedFormatError } from '../errors.js';
 
 export const DWS_BASE = 'https://www.dws.gov.za/Hydrology/Verified/HyData.aspx';
@@ -39,8 +43,20 @@ export const DWS_BASE = 'https://www.dws.gov.za/Hydrology/Verified/HyData.aspx';
 /** The most one DWS request may span (the site's limit for daily data). */
 export const DWS_MAX_YEARS = 20;
 
+/**
+ * The HyData.aspx SiteType for a station, from its code's third letter. Only
+ * a river gauge (H → RIV) is fed (DWS_RIVER_GAUGE, config.ts); archived pages
+ * ask for a reservoir (R) with RES and a weather station (E) with MET, so
+ * sending RIV for those would ask the wrong question. The config schema
+ * refuses them first; this refuses them again rather than guess.
+ */
+export function dwsSiteType(station: string): 'RIV' {
+	if (DWS_RIVER_GAUGE.test(station)) return 'RIV';
+	throw new RangeError(`${station} is not a DWS river gauge (an H code): ${DWS_RIVER_GAUGE_MESSAGE}`);
+}
+
 export function dwsUrl(station: string, start: string, end: string): string {
-	const q = new URLSearchParams({ Station: `${station}100.00`, DataType: 'Daily', StartDT: start, EndDT: end, SiteType: 'RIV' });
+	const q = new URLSearchParams({ Station: `${station}100.00`, DataType: 'Daily', StartDT: start, EndDT: end, SiteType: dwsSiteType(station) });
 	return `${DWS_BASE}?${q}`;
 }
 

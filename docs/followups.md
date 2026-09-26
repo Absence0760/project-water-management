@@ -1201,6 +1201,12 @@ role and not before it.
         the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
         the rest are counted: agree with the hydrologist whether flagged flows
         (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
+        Only H (river gauge) codes are accepted, sent as `SiteType=RIV`
+        (#35). Also check a gauge that belongs to a dam: archived pages ask
+        for some H stations (a dam's canals and downstream river gauge, e.g.
+        those listed under a reservoir's HyDataSets page) with
+        `SiteType=DC`; if RIV fails for one, derive DC from the catalogue
+        rather than the code letter, which can't tell them apart.
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.
@@ -1218,15 +1224,13 @@ role and not before it.
         CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
         once per tick and share it between feeds, or keep a per-day
         preliminary/final marker so final days aren't re-read.
-  - [ ] **Ingest doesn't check a result's dates against the window asked
-        for.** A result off the `ingest-results` queue is validated for shape
-        and size, but its `startDate` can be any day, so a compromised
-        fetcher could write days far outside the fetch (still only into the
-        series that feed targets, as security.md accepts). Durable fix: put
-        the window in the `feed_fetch` job's payload (jobs/handlers, owned by
-        the jobs branches today) and have `ingestResult` refuse days outside
-        it. Trigger: before the first production deploy of the fetcher.
-        Related: "Run now" is deduped per feed but not rate-limited, and an
+  - [x] ~~**Ingest doesn't check a result's dates against the window asked
+        for.**~~ **Fixed (#31, `029_feed_fetch`):** the `feed_fetch` job
+        records its window on the feed before sending, and the ingest
+        refuses an answer with a day outside it, and drops any answer but
+        the newest fetch's (late or redelivered). A DWS backfill through an
+        empty stretch now moves on too (#29, `last_meta.through`).
+  - [ ] Related: "Run now" is deduped per feed but not rate-limited, and an
         hourly schedule re-reads CHIRPS (published daily) 24 times a day; cap
         both when the request volume item above is done.
 
@@ -1474,6 +1478,15 @@ role and not before it.
       Trigger: WP-2.9.
 
 ## Housekeeping
+
+- `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
+  guard now fails any `SECURITY DEFINER` function executable by a role other
+  than the owner and `water_app`. The in-flight `025_share_links.sql` branch
+  may add such functions; when it merges, run `pnpm test:backend:db` and make
+  sure its functions revoke `PUBLIC` (the owner's default privileges already
+  close them if 028 has applied first, but a database migrated in file order
+  applies 025 before 028's default-privilege change, so 025 needs its own
+  `REVOKE`).
 
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.

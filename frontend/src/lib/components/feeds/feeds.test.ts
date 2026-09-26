@@ -1,6 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import { describePlace, describeRunsAs, describeTarget, describeTimes, draftToBody, emptyDraft, errorText, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
+import {
+	describePlace,
+	describeRunsAs,
+	describeTarget,
+	describeTimes,
+	draftToBody,
+	emptyDraft,
+	errorText,
+	type FeedHealth,
+	feedsApi,
+	type FeedState,
+	type HealthReason,
+	healthMessage,
+	needsAttention,
+	parseCells,
+	separateName,
+	takeoverOf
+} from './feeds';
 
 describe('parseCells', () => {
 	it('reads one cell per line (or ;), with an optional weight', () => {
@@ -43,6 +60,7 @@ describe('draftToBody', () => {
 
 	it('explains a bad station or cells', () => {
 		expect(draftToBody({ ...emptyDraft('dws'), station: 'X0H00' })).toEqual({ error: expect.stringMatching(/looks like A2H012/), field: 'station' });
+		expect(draftToBody({ ...emptyDraft('dws'), station: 'x0r000' })).toEqual({ error: expect.stringMatching(/river gauge.*H code/), field: 'station' });
 		expect(draftToBody({ ...emptyDraft('chirps_gefs'), cells: '' })).toEqual({ error: expect.stringMatching(/at least one/), field: 'cells' });
 	});
 });
@@ -61,16 +79,37 @@ describe('descriptions', () => {
 		expect(describeTimes({ lastDataDate: null, lastAttemptAt: '2026-09-24T06:00:00Z' })).toMatch(/^No data yet · checked 2026-09-2\d \d\d:\d\d$/);
 	});
 
-	it('write the health sentence’s calendar days as "1 Sep 2026", leaving other numbers alone', () => {
-		// The shapes backend/src/feeds/health.ts produces.
-		expect(healthMessage('OK; newest data 2026-10-10, checked 2026-09-25.')).toBe('OK; newest data 10 Oct 2026, checked 25 Sep 2026.');
-		expect(healthMessage('The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 2026-09-01.')).toBe(
-			'The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.'
-		);
-		expect(healthMessage('No new data: the newest day, 2026-01-31, is more than 240 days old.')).toBe('No new data: the newest day, 31 Jan 2026, is more than 240 days old.');
-		expect(healthMessage('Switched off; no data yet.')).toBe('Switched off; no data yet.');
-		expect(healthMessage('the grid has no data at -20.27, 25.37')).toBe('the grid has no data at -20.27, 25.37');
-		expect(healthMessage('at 2026-09-24T06:00:00Z')).toBe('at 2026-09-24T06:00:00Z');
+	describe('the health sentence, written from the server’s reason code with its days as "1 Sep 2026"', () => {
+		// Rule 7: the days are calendar days and must not move with the viewer's zone.
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		const h = (reason: HealthReason, staleAfterDays = 12, state: FeedState = 'ok'): FeedHealth => ({ state, stale: false, staleAfterDays, reason });
+
+		it.each(['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])('for every code (TZ %s)', (zone) => {
+			process.env.TZ = zone;
+			expect(healthMessage(h({ code: 'ok', newest: '2026-10-10', checked: '2026-09-25' }))).toBe('OK; newest data 10 Oct 2026, checked 25 Sep 2026.');
+			expect(healthMessage(h({ code: 'ok', newest: null, checked: '2026-09-01' }))).toBe('OK; no data yet, checked 1 Sep 2026.');
+			expect(healthMessage(h({ code: 'failing', failures: 2, error: 'the source is unreachable: HTTP 503', newest: '2026-09-01' }))).toBe(
+				'The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.'
+			);
+			expect(healthMessage(h({ code: 'failing', failures: 1, error: null, newest: null }))).toBe('The last fetch failed: unknown error. No data yet.');
+			// An error that reads like a date is the server's text, left as it is.
+			expect(healthMessage(h({ code: 'failing', failures: 1, error: 'no data at 2026-09-24', newest: null }))).toBe('The last fetch failed: no data at 2026-09-24. No data yet.');
+			expect(healthMessage(h({ code: 'old-data', newest: '2026-01-31' }, 240))).toBe('No new data: the newest day, 31 Jan 2026, is more than 240 days old.');
+			expect(healthMessage(h({ code: 'old-forecast', newest: '2026-10-06' }, -12))).toBe('No new forecast: it reaches only 6 Oct 2026, less than 12 days ahead.');
+			expect(healthMessage(h({ code: 'no-data' }))).toBe('Fetches succeed but have found no data yet: check the cells or station.');
+			expect(healthMessage(h({ code: 'not-fetched', since: '2026-09-20', after: 'attached' }))).toBe('Not fetched since it was attached on 20 Sep 2026: the background worker may not be running.');
+			expect(healthMessage(h({ code: 'not-fetched', since: '2026-09-25', after: 'changed' }))).toBe('Not fetched since it was changed on 25 Sep 2026: the background worker may not be running.');
+			expect(healthMessage(h({ code: 'waiting' }))).toBe('Waiting for its first fetch.');
+			expect(healthMessage(h({ code: 'off', newest: null }))).toBe('Switched off; no data yet.');
+			expect(healthMessage(h({ code: 'off', newest: '2026-09-20' }))).toBe('Switched off; newest data 20 Sep 2026.');
+		});
+
+		it('falls back to the state for a code this client does not know (a newer server)', () => {
+			expect(healthMessage(h({ code: 'something-new' } as never, 12, 'stale'))).toBe('Stale.');
+		});
 	});
 
 	it('say who the fetches run as, and how to give an orphaned feed an owner again', () => {
@@ -79,8 +118,36 @@ describe('descriptions', () => {
 	});
 
 	it('count the feeds that need attention', () => {
-		const h = (state: string) => ({ health: { state, stale: false, staleAfterDays: 1, message: '' } }) as never;
+		const h = (state: string) => ({ health: { state, stale: false, staleAfterDays: 1, reason: { code: 'waiting' } } }) as never;
 		expect(needsAttention([h('ok'), h('stale'), h('failing'), h('pending'), h('disabled')])).toBe(2);
+	});
+});
+
+describe('taking over an existing series (issue #30)', () => {
+	const s = (kind: string, name: string, length = 10) => ({ kind, name, length });
+	const target = { targetKind: 'rain_catchment_mm', targetName: '' };
+
+	it('finds the target series when it already holds data', () => {
+		expect(takeoverOf([s('rain_chirps_mm', ''), s('rain_catchment_mm', '', 365)], [], target)).toEqual(s('rain_catchment_mm', '', 365));
+		// Matched by kind and exact name.
+		expect(takeoverOf([s('rain_catchment_mm', 'Gauge')], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', 'Gauge')], [], { ...target, targetName: 'Gauge' })).toEqual(s('rain_catchment_mm', 'Gauge'));
+	});
+
+	it('is no takeover for a missing or empty series, or one another feed already writes (the server refuses that)', () => {
+		expect(takeoverOf([], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', '', 0)], [], target)).toBeNull();
+		expect(takeoverOf([s('rain_catchment_mm', '')], [target], target)).toBeNull();
+	});
+
+	it('suggests a separate name no series or feed of that kind uses', () => {
+		const chirps = { source: 'chirps' as const, config: { cells: [{ lat: 1, lon: 2 }] }, targetKind: 'rain_catchment_mm' };
+		expect(separateName(chirps, [s('rain_catchment_mm', '')], [])).toBe('CHIRPS');
+		// Another kind's "CHIRPS" is no clash; this kind's series and feed names are.
+		expect(separateName(chirps, [s('rain_chirps_mm', 'CHIRPS')], [])).toBe('CHIRPS');
+		expect(separateName(chirps, [s('rain_catchment_mm', 'CHIRPS')], [{ targetKind: 'rain_catchment_mm', targetName: 'CHIRPS 2' }])).toBe('CHIRPS 3');
+		expect(separateName({ ...chirps, source: 'chirps_gefs' }, [], [])).toBe('CHIRPS-GEFS');
+		expect(separateName({ source: 'dws', config: { station: 'A2H012' }, targetKind: 'flow_observed_m3s' }, [], [])).toBe('DWS A2H012');
 	});
 });
 

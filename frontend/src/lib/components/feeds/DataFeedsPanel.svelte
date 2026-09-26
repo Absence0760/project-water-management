@@ -8,8 +8,26 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
+	import { fmtNum } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
-	import { describePlace, describeRunsAs, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, errorText, feedsApi, healthMessage, needsAttention, STATE_LABELS } from './feeds';
+	import {
+		describePlace,
+		describeRunsAs,
+		describeTarget,
+		describeTimes,
+		draftToBody,
+		emptyDraft,
+		type FeedDraft,
+		type FeedList,
+		type FeedMeta,
+		errorText,
+		feedsApi,
+		healthMessage,
+		needsAttention,
+		separateName,
+		STATE_LABELS,
+		takeoverOf
+	} from './feeds';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -29,6 +47,14 @@
 	let formField = $state<'cells' | 'station' | null>(null);
 	let heading = $state<HTMLElement>();
 	let attachButton = $state<HTMLButtonElement>();
+	/**
+	 * The target already holds data (issue #30): the feed would replace its
+	 * values on the days it fetches, so the form asks first. Shown only while
+	 * the form still names that series; changing it drops the question.
+	 */
+	let takeover = $state<{ kind: string; name: string; days: number; suggestion: string } | null>(null);
+	const asking = $derived(takeover && takeover.kind === draft.targetKind && takeover.name === draft.targetName.trim() ? takeover : null);
+	let separateButton = $state<HTMLButtonElement>();
 
 	const source = $derived(data?.sources.find((s) => s.source === draft.source));
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
@@ -67,7 +93,7 @@
 	// when it closes, so a keyboard user is never dropped on the page body.
 	async function startAdding() {
 		draft = emptyDraft('chirps', data?.sources.find((s) => s.source === 'chirps')?.kinds);
-		formError = formField = null;
+		formError = formField = takeover = null;
 		adding = true;
 		await tick();
 		document.getElementById(`${uid}-src`)?.focus();
@@ -82,12 +108,13 @@
 	function pickSource(s: FeedDraft['source']) {
 		draft.source = s;
 		draft.targetKind = data?.sources.find((x) => x.source === s)?.kinds[0] ?? '';
-		// A problem with the other source's field no longer applies.
-		formError = formField = null;
+		// A problem with the other source's field (or series) no longer applies.
+		formError = formField = takeover = null;
 	}
 
-	async function add(e: SubmitEvent) {
-		e.preventDefault();
+	/** Submit the form; `confirmed` once the owner chose to take over the existing series. */
+	async function add(e: SubmitEvent | null, confirmed = false) {
+		e?.preventDefault();
 		if (busy) return;
 		const parsed = draftToBody(draft);
 		if ('error' in parsed) {
@@ -99,6 +126,26 @@
 		}
 		busy = 'add';
 		formError = formField = message = error = null;
+		if (!confirmed && data) {
+			// Ask before a feed takes over a series that already holds data.
+			let series;
+			try {
+				series = await api.series.list(projectId);
+			} catch (err) {
+				formError = `Couldn’t check whether that series already has data: ${errorText(err)}`;
+				busy = null;
+				return;
+			}
+			const hit = takeoverOf(series, data.feeds, parsed.body);
+			if (hit) {
+				takeover = { kind: hit.kind, name: hit.name, days: hit.length, suggestion: separateName(parsed.body, series, data.feeds) };
+				busy = null;
+				await tick();
+				separateButton?.focus();
+				return;
+			}
+		}
+		takeover = null;
 		let attached = false;
 		try {
 			const feed = await feeds.create(parsed.body);
@@ -111,6 +158,14 @@
 		await reload();
 		busy = null;
 		if (attached) await closeForm();
+	}
+
+	/** Leave the question: with `name`, into that separate series. Focus goes to the name field either way. */
+	async function answerTakeover(name?: string) {
+		if (name !== undefined) draft.targetName = name;
+		takeover = null;
+		await tick();
+		document.getElementById(`${uid}-name`)?.focus();
 	}
 
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove') {
@@ -178,7 +233,7 @@
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)} · {f.schedule}{describeRunsAs(f)}</p>
-						<p class="health">{healthMessage(f.health.message)}</p>
+						<p class="health">{healthMessage(f.health)}</p>
 						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
@@ -272,6 +327,35 @@
 					</div>
 				{/if}
 				{#if formError}<p class="err" id="{uid}-err" role="alert">{formError}</p>{/if}
+				{#if asking}
+					{@const q = asking}
+					<!-- An inline, non-modal question (issue #30): focus lands on the safe choice; Escape goes back to the name field. -->
+					<div
+						class="alert alert-warning takeover"
+						role="alertdialog"
+						aria-labelledby="{uid}-to-h"
+						aria-describedby="{uid}-to-d"
+						tabindex="-1"
+						onkeydown={(e) => {
+							if (e.key === 'Escape') {
+								e.preventDefault();
+								e.stopPropagation();
+								void answerTakeover();
+							}
+						}}
+					>
+						<p id="{uid}-to-h"><strong>“{describeTarget({ targetKind: q.kind, targetName: q.name })}” already has data ({fmtNum(q.days)} days).</strong></p>
+						<p id="{uid}-to-d">
+							The feed will replace its values on every day it fetches, including values you uploaded or imported (a day the source has no
+							value for keeps what is there). To keep this record as it is, send the feed to a separate series, such as “{q.suggestion}”, and
+							compare the two.
+						</p>
+						<div class="row">
+							<button type="button" class="btn btn-sm btn-primary" bind:this={separateButton} onclick={() => answerTakeover(q.suggestion)}>Use a separate series: {q.suggestion}</button>
+							<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Replace its values</button>
+						</div>
+					</div>
+				{/if}
 				<div class="row">
 					<button type="submit" class="btn btn-primary btn-sm" aria-disabled={busy === 'add'}>{busy === 'add' ? 'Attaching…' : 'Attach feed'}</button>
 					<button type="button" class="btn btn-sm" onclick={closeForm}>Cancel</button>
@@ -349,6 +433,10 @@
 	.add h3 {
 		margin: 0 0 0.5rem;
 		font-size: 1rem;
+	}
+	.takeover p {
+		margin: 0 0 0.4rem;
+		max-width: 75ch;
 	}
 	.err {
 		color: var(--danger);

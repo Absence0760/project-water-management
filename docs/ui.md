@@ -657,6 +657,10 @@ The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
 sideways scrolling: each month cell is at least 78px, room for a six-digit
 value such as 250000.
+At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
+selects and period lists shrink to the screen, and only the section menu and
+the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
+which checks every catchment tab).
 
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
@@ -866,9 +870,10 @@ its own chunk loaded with the tab; WP-2.10,
   **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
   card carries `data-state`), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
-  schedule and who it runs as, the server's health sentence ("The last fetch
-  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.", its
-  days written like the rest of the app's calendar days), and
+  schedule and who it runs as, the health sentence ("The last fetch
+  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.",
+  written by the panel from the server's reason code and days, `healthMessage`
+  in `feeds.ts`, its days like the rest of the app's calendar days), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
@@ -881,9 +886,20 @@ its own chunk loaded with the tab; WP-2.10,
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write), an optional series name, the schedule, and either **Grid cells**
   (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
-  their weighted mean) or a **DWS station** code (checked as `A2H012`). The
+  their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
+- **Taking over a series.** A feed replaces its series' values on every day
+  it fetches, uploaded or imported ones included ([architecture.md § Data
+  feeds](./architecture.md#data-feeds)). So when the chosen series already
+  holds data (read from the project's series list), **Attach feed** first
+  asks, inline (`role="alertdialog"`, named and described by its text):
+  "“Rainfall — catchment” already has data (1,200 days)", why, and a
+  suggested separate series name no series or feed of that kind uses
+  ("CHIRPS", "CHIRPS 2", "DWS A2H012"). Focus lands on **Use a separate
+  series: CHIRPS**, which fills the name and focuses the name field;
+  **Replace its values** attaches into the existing series; Escape backs out
+  to the name field. Changing the series drops the question.
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by

@@ -72,6 +72,47 @@ describe('fetchWindow', () => {
 		// 365 × 20 days, inclusive: inside the site's 20-year limit.
 		expect(w).toEqual({ start: '1980-01-01', end: '1999-12-26' });
 	});
+
+	// Issue #29: the newest date is the only other progress marker, so a
+	// window with no data in it (before the station's record, or a gap longer
+	// than one window) came round again every fetch, forever.
+	it.each(['Pacific/Kiritimati', 'America/St_Johns'])('moves past a stretch it read and found empty, until it reaches the data (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		const today = '2026-09-25';
+		const config = { station: 'X0H000', startDate: '1960-01-01' };
+		// The station's record starts in 1985: every window before that comes back empty.
+		let last: string | null = null;
+		let through: string | null = null;
+		const windows: { start: string; end: string }[] = [];
+		for (let i = 0; i < 4; i++) {
+			const w = fetchWindow('dws', config, last, today, through);
+			windows.push(w);
+			through = w.end;
+			if (w.end >= '1985-01-01') last = w.end; // data all the way through the window from 1985 on
+		}
+		expect(windows[0]).toEqual({ start: '1960-01-01', end: '1979-12-26' });
+		// The next window starts a revision year before the last day read, not back at 1960.
+		expect(windows[1]).toEqual({ start: '1978-12-27', end: '1998-12-21' });
+		// Then it runs on the data as before: a year of revisions before the newest day.
+		expect(windows[2]!.start).toBe('1997-12-21');
+		expect(windows[3]!.start > windows[2]!.start).toBe(true);
+
+		// A gap longer than one window: the newest day is from 1990, the last read ended in 2009.
+		expect(fetchWindow('dws', config, '1990-06-30', today, '2009-06-26')).toEqual({ start: '2008-06-27', end: today });
+		// CHIRPS the same, with its own revision and cap.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2020-01-01' }, null, today, '2020-04-29')).toEqual({ start: '2020-03-11', end: '2020-07-08' });
+	});
+
+	it('a caught-up feed keeps its revision window: the last read reaching past the newest day moves nothing', () => {
+		// DWS lags months behind today; every daily fetch reads to today.
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2026-06-01', '2026-09-25', '2026-09-24')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2026-06-01', '2026-09-25', '2026-09-25')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
+		expect(fetchWindow('chirps', grid, '2026-09-20', '2026-09-25', '2026-09-24')).toEqual({ start: '2026-08-01', end: '2026-09-24' });
+		// A catch-up that is finding data moves on through the newest date as before.
+		expect(fetchWindow('chirps', { ...grid, startDate: '2020-01-01' }, '2020-04-29', '2026-09-25', '2020-04-29')).toEqual({ start: '2020-03-10', end: '2020-07-07' });
+		// GEFS reads the 16 days from today whatever was read before.
+		expect(fetchWindow('chirps_gefs', grid, null, '2026-09-25', '2026-10-09')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
+	});
 });
 
 describe('runFetch on the fixtures', () => {
@@ -215,8 +256,10 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		const today = '2026-06-01';
 		for (const last of [null, '2026-05-28', '2020-01-01', '1990-01-01']) {
 			for (const [source, config] of [['chirps', { ...grid, startDate: '1990-01-01' }], ['chirps', grid], ['chirps_gefs', grid], ['dws', { station: 'X0H000', startDate: '1950-01-01' }], ['dws', { station: 'X0H000' }]] as const) {
-				const w = fetchWindow(source, config as never, last, today);
-				expect(FetchRequestSchema.safeParse({ source, config, ...w, today }).success, `${source} ${last}`).toBe(true);
+				for (const through of [null, '2026-05-31', '2020-03-01', '1995-01-01', '1970-12-31']) {
+					const w = fetchWindow(source, config as never, last, today, through);
+					expect(FetchRequestSchema.safeParse({ source, config, ...w, today }).success, `${source} ${last} ${through}`).toBe(true);
+				}
 			}
 		}
 	});

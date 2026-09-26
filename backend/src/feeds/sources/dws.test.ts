@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError } from '../errors.js';
 import { FIXTURE_DIR } from '../fixtures.js';
-import { dwsUrl, parseDwsDaily } from './dws.js';
+import { dwsSiteType, dwsUrl, parseDwsDaily } from './dws.js';
 
 const sample = readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8');
 const page = (table: string) => `<html><body><pre>\nStation : X0H000100.00\n\n${table}\n</pre></body></html>`;
@@ -12,6 +12,14 @@ describe('dwsUrl', () => {
 		const u = new URL(dwsUrl('X0H000', '2021-01-01', '2021-03-01'));
 		expect(u.origin + u.pathname).toBe('https://www.dws.gov.za/Hydrology/Verified/HyData.aspx');
 		expect(Object.fromEntries(u.searchParams)).toEqual({ Station: 'X0H000100.00', DataType: 'Daily', StartDT: '2021-01-01', EndDT: '2021-03-01', SiteType: 'RIV' });
+	});
+
+	it('derives SiteType from the station, and refuses a station that isn’t a river gauge', () => {
+		expect(dwsSiteType('X0H000')).toBe('RIV');
+		// Archived pages ask for a reservoir with SiteType=RES, a weather station with MET:
+		// sending RIV for them would ask the wrong question, so it is never sent.
+		expect(() => dwsUrl('X0R000', '2021-01-01', '2021-03-01')).toThrow(/river gauge/);
+		expect(() => dwsSiteType('X0E000')).toThrow(/river gauge/);
 	});
 });
 

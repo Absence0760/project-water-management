@@ -61,13 +61,29 @@ export const GridConfig = z
 
 /** DWS: a station code, e.g. X0H000 (letter, digit, letter, three digits; synthetic here). */
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
+/**
+ * The stations a DWS feed may read: river flow gauges, whose third letter is
+ * H. The letter is the station's kind in DWS's catalogue: its per-WMA River
+ * lists hold only H codes, the Reservoir lists only R codes, and archived
+ * pages ask for R stations with SiteType=RES and E stations with MET
+ * (docs/architecture.md § Data feeds). Every other letter is refused: a
+ * reservoir's daily table (variable 100.00, SiteType=RES) is its spillway
+ * discharge computed from the dam level ("X0R000 (SPILLWAY)"), not the
+ * river's flow, so it would land in a flow series as the wrong quantity;
+ * E and N are weather and rainfall stations, T tidal, and no letter but H
+ * has evidence of what its daily table holds.
+ */
+export const DWS_RIVER_GAUGE = /^[A-Z]\d[H]\d{3}$/;
+export const DWS_RIVER_GAUGE_MESSAGE =
+	'only a DWS river gauge can be fed (an H code, e.g. A2H012): a reservoir’s (R) daily table is its spillway discharge, not the river’s flow';
 export const DwsConfig = z
 	.object({
 		station: z
 			.string()
 			.trim()
 			.transform((s) => s.toUpperCase())
-			.pipe(z.string().regex(DWS_STATION, 'a DWS station code looks like A2H012')),
+			.pipe(z.string().regex(DWS_STATION, 'a DWS station code looks like A2H012'))
+			.pipe(z.string().regex(DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE)),
 		/** First day to fetch when the feed has no data yet (default: 10 years back), and never fetched before. */
 		startDate: SeriesStartDate.optional(),
 		staleAfterDays: z.number().int().min(1).max(3650).optional()
