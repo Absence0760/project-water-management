@@ -1,12 +1,13 @@
 // Every job kind the worker can run. A kind without an entry here is dead on
 // its first attempt ("no handler"), so enqueue a kind only once it's listed.
-// WP-2.13 added alert_eval; WP-3.6 added yield. Every kind now has one.
+// WP-2.13 added alert_eval; WP-3.6 added yield; issue #53 R2 added sweep. Every kind now has one.
 import type { HandlerRegistry } from '../registry.js';
 import { alertEvalHandler } from './alert-eval.js';
 import { feedFetchHandler } from './feed-fetch.js';
 import { feedIngestHandler } from './feed-ingest.js';
 import { reportRenderHandler } from './report-render.js';
 import { rerunHandler } from './rerun.js';
+import { sweepHandler } from './sweep.js';
 import { yieldHandler } from './yield.js';
 
 export const handlers: HandlerRegistry = {
@@ -15,5 +16,6 @@ export const handlers: HandlerRegistry = {
 	feed_ingest: feedIngestHandler,
 	report_render: reportRenderHandler,
 	yield: yieldHandler,
+	sweep: sweepHandler,
 	alert_eval: alertEvalHandler
 };
