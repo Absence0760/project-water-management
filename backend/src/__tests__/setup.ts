@@ -9,6 +9,10 @@ process.env.AUTH_JWT_SECRET = 'test-only-jwt-secret-0000000000000000000';
 process.env.COOKIE_SECURE = 'false';
 // Outgoing email collects in memory (src/mail/transport.ts `outbox`).
 process.env.MAIL_TRANSPORT = 'memory';
+// bcrypt cost 4 instead of 12 for new hashes (auth/password.ts honours this
+// only under vitest): at 12, a sign-up + reset + sign-in test outran the 5 s
+// timeout whenever the machine was busy.
+process.env.PASSWORD_HASH_COST = '4';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<n> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.

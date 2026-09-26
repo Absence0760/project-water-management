@@ -8,7 +8,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 ## Authentication
 
 - **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12) and are 8–200 characters. Emails are `citext`, so
+  (`bcryptjs`, cost 12; only under vitest may `PASSWORD_HASH_COST` lower it,
+  which the test setup does to 4, so no deployment can weaken it) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
