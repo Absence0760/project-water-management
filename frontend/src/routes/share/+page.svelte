@@ -1,3 +1,4 @@
+<!-- i18n-section: share -->
 <script lang="ts">
 	// A read-only share link's page (roadmap WP-2.3 phase 2; docs/ui.md § Share
 	// page): the catchment's published result for someone outside the project,
@@ -46,7 +47,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('common.pageTitle', { page: result?.state === 'ready' ? t('share.titleNamed', { name: result.view.project.name }) : t('share.title') })}</title>
+	<title>{t('{page} · Water Management', { page: result?.state === 'ready' ? t('{name} · Shared catchment view', { name: result.view.project.name }) : t('Shared catchment view') })}</title>
 	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
@@ -54,22 +55,22 @@
 <div class="share">
 	<header class="share-header">
 		<span class="brand"><BrandMark size={26} /><span class="title">Water Management</span></span>
-		<div class="end"><span class="tag">{t('share.tag')}</span><LanguageSwitch compact /></div>
+		<div class="end"><span class="tag">{t('Shared view')}</span><LanguageSwitch compact /></div>
 	</header>
 
 	<main class="share-main" data-share-state={result?.state ?? 'loading'} aria-busy={result ? undefined : 'true'}>
 		{#if !result}
-			<p class="sub" role="status">{t('share.loading')}</p>
+			<p class="sub" role="status">{t('Loading…')}</p>
 		{:else if result.state === 'nolink' || result.state === 'dead'}
 			<section class="card dead" aria-labelledby="dead-h">
-				<h1 id="dead-h">{t('share.deadTitle')}</h1>
-				<p role="alert">{result.state === 'dead' ? t('share.deadLink') : t('share.noLink')}</p>
+				<h1 id="dead-h">{t('This link doesn’t open anything')}</h1>
+				<p role="alert">{result.state === 'dead' ? t('This link has expired or was withdrawn. Ask whoever sent it for a new one.') : t('This page needs the whole link. Open the link you were sent again, or ask whoever sent it for a new one.')}</p>
 			</section>
 		{:else if result.state === 'error'}
 			<section class="card" aria-labelledby="err-h">
-				<h1 id="err-h">{t('share.title')}</h1>
-				<p role="alert">{t('share.loadFailed')}</p>
-				<button type="button" class="btn" onclick={load}>{t('common.tryAgain')}</button>
+				<h1 id="err-h">{t('Shared catchment view')}</h1>
+				<p role="alert">{t('Couldn’t load this just now. Check your connection and try again.')}</p>
+				<button type="button" class="btn" onclick={load}>{t('Try again')}</button>
 			</section>
 		{:else}
 			{@const view = result.view}
@@ -77,14 +78,14 @@
 			{@const notice = shareNotice(view)}
 			<div>
 				<h1>{view.project.name}</h1>
-				<p class="sub">{t('share.sub')}</p>
+				<p class="sub">{t('Catchment water balance, shared read-only')}</p>
 				<p class="dates">{publishedLine(view)}</p>
 			</div>
 
-			<NoticeCard {notice} noneText={t('farm.notice.none')} pageLang={wordsLang()} />
+			<NoticeCard {notice} noneText={t('No restriction from the WUA')} pageLang={wordsLang()} />
 
 			<section class="card" aria-labelledby="reserve-h">
-				<h2 id="reserve-h">{t('share.reserveTitle')}</h2>
+				<h2 id="reserve-h">{t('The river’s ecological reserve')}</h2>
 				<ul class="sites">
 					{#each reserveRows(cv) as row, i (i)}
 						<li class="site {row.state}">
@@ -108,14 +109,14 @@
 			{#if result.months}
 				<FlowChart months={result.months} />
 			{:else}
-				<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('share.chartFailed') : t('share.noChart')}</p>
+				<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use.')}</p>
 			{/if}
 
 			<section class="card" aria-labelledby="about-h">
-				<h2 id="about-h">{t('share.aboutTitle')}</h2>
-				<p>{t('share.about')}</p>
+				<h2 id="about-h">{t('About this page')}</h2>
+				<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.')}</p>
 				<p class="sub">{farmsLine(cv)}</p>
-				<p class="fine">{t('share.fine')}</p>
+				<p class="fine">{t('A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.')}</p>
 			</section>
 		{/if}
 	</main>

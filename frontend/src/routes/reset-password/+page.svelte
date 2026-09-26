@@ -1,3 +1,4 @@
+<!-- i18n-section: reset -->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
@@ -49,25 +50,25 @@
 </script>
 
 <svelte:head>
-	<title>{t('common.pageTitle', { page: t('reset.title') })}</title>
+	<title>{t('{page} · Water Management', { page: t('Choose a new password') })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title={t('reset.title')} subtitle={t('reset.subtitle')}>
+<AuthCard title={t('Choose a new password')} subtitle={t('Pick a password you don’t use anywhere else.')}>
 	{#if done}
-		<div class="alert alert-info" role="status">{t('reset.done')}</div>
-		<a class="btn btn-primary" href="{base}/login">{t('common.signIn')}</a>
+		<div class="alert alert-info" role="status">{t('Your password has been changed and you’ve been signed out everywhere. Sign in with your new password.')}</div>
+		<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
 	{:else if linkDead}
-		<div class="alert alert-error" role="alert">{t('reset.dead')}</div>
-		<a class="btn btn-primary" href="{base}/forgot-password">{t('reset.newLink')}</a>
+		<div class="alert alert-error" role="alert">{t('This reset link is invalid, already used, or older than 1 hour.')}</div>
+		<a class="btn btn-primary" href="{base}/forgot-password">{t('Send a new link')}</a>
 	{:else}
 		{#if session.user}
-			<p class="signed-in"><Rich text={tRich('reset.signedIn', { email: session.user.email })} /></p>
+			<p class="signed-in"><Rich text={tRich('You’re signed in as **{email}**. Setting a new password signs this browser out too.', { email: session.user.email })} /></p>
 		{/if}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
-				<label for="password">{t('common.newPassword')}</label>
+				<label for="password">{t('New password')}</label>
 				<PasswordInput
 					id="password"
 					autocomplete="new-password"
@@ -77,20 +78,20 @@
 					aria-describedby="password-hint"
 					bind:value={password}
 				/>
-				<span class="hint" id="password-hint">{t('reset.hint')}</span>
+				<span class="hint" id="password-hint">{t('At least 8 characters. Changing it signs you out on every device.')}</span>
 			</div>
 			<div class="field">
-				<label for="confirm">{t('common.repeatNewPassword')}</label>
+				<label for="confirm">{t('Repeat new password')}</label>
 				<PasswordInput id="confirm" autocomplete="new-password" required maxlength={200} bind:value={confirm} />
 			</div>
-			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('common.saving') : t('reset.submit')}</button>
+			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Saving…') : t('Set new password')}</button>
 		</form>
 	{/if}
 	{#snippet footer()}
 		{#if session.user}
-			<a href="{base}/">{t('common.backToProjects')}</a>
+			<a href="{base}/">{t('Back to your projects')}</a>
 		{:else}
-			<a href="{base}/login">{t('common.backToSignIn')}</a>
+			<a href="{base}/login">{t('Back to sign in')}</a>
 		{/if}
 	{/snippet}
 </AuthCard>

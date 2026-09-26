@@ -1,3 +1,4 @@
+<!-- i18n-section: farm -->
 <script lang="ts">
 	// "What do these words mean?" for farmers (docs/design/farmer-view.md §5.1):
 	// the glossary's farmer entries ($lib/help/farmer, category 'farmer') in the
@@ -40,10 +41,10 @@
 	});
 </script>
 
-<svelte:head><title>{t('farm.pageTitle', { page: t('farm.words') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My farm', { page: t('What do these words mean?') })}</title></svelte:head>
 
-<FarmShell back={{ href: `${base}/farm`, label: t('farm.myFarm') }}>
-	<h1>{t('farm.words')}</h1>
+<FarmShell back={{ href: `${base}/farm`, label: t('My farm') }}>
+	<h1>{t('What do these words mean?')}</h1>
 	{#each entries as e (e.id)}
 		<section class="card" id={e.id} aria-labelledby="{e.id}-h" lang={e.lang !== wordsLang() ? e.lang : undefined}>
 			<h2 id="{e.id}-h">{e.term}</h2>

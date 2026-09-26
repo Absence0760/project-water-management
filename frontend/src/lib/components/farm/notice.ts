@@ -1,8 +1,14 @@
 // The WUA's notice as the farm view and the /share page show it: its shape
-// and how its text splits into a title and a body. No words of our own, so
-// /share uses it without loading the message catalogue (./cards.ts
-// re-exports it).
+// and how its text splits into a title and a body, and the levels' names.
+// It loads no message code (only $lib/i18n/msg, which marks the names for the
+// translation sheet), so /share uses it without the workspace's code
+// (./cards.ts re-exports it).
 import type { RestrictionLevel } from '@water-management/engine';
+import { msg, type Msg } from '$lib/i18n/msg';
+
+// i18n-section: farm.level
+/** The restriction level's name, worded with t(): "No restriction", "Advisory", "Restriction". */
+export const LEVEL_WORDS: Record<RestrictionLevel, Msg> = { none: msg('No restriction'), advisory: msg('Advisory'), restricted: msg('Restriction') };
 
 export type NoticeLang = 'en' | 'af';
 

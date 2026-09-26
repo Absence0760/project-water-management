@@ -5,10 +5,14 @@
 // (aria-hidden); the summary sentence and the "Show the numbers" table carry
 // the content, and both come from here too, in the active language ($lib/i18n).
 import type { MonthTotals } from '@water-management/engine';
-import { t, tn } from '$lib/i18n/locale.svelte';
+import { plural, t, tn } from '$lib/i18n/locale.svelte';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd } from './format';
 
 import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP as TOP, niceMax } from './chartGeometry';
+
+// i18n-section: farm.ordinal
+/** A day of the month as an ordinal: “10th”. */
+export const ORDINAL = plural({ one: '{n}st', two: '{n}nd', few: '{n}rd', other: '{n}th' });
 
 export { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, LABEL_Y, niceMax } from './chartGeometry';
 const BASE = CHART_BASE;
@@ -30,7 +34,8 @@ export function monthLabels(monthly: readonly MonthTotals[], dataUntil: string):
 			month: m.month,
 			letter: short.charAt(0) + (partial ? '*' : ''),
 			partial,
-			row: partial ? t('farm.chart.partialRow', { day: Number(dataUntil.slice(8, 10)), month: fmtMonthYear(m.month) }) : fmtMonthYear(m.month)
+			// i18n-section: farm.chart
+			row: partial ? t('1–{day} {month}', { day: Number(dataUntil.slice(8, 10)), month: fmtMonthYear(m.month) }) : fmtMonthYear(m.month)
 		};
 	});
 }
@@ -43,8 +48,8 @@ export function rangeCaption(monthly: readonly MonthTotals[], dataUntil: string)
 	const labels = monthLabels(monthly, dataUntil);
 	const partial = labels[labels.length - 1]!.partial;
 	const day = Number(dataUntil.slice(8, 10));
-	const range = t('farm.chart.range', { from: first, to: fmtMonthYear(lastMonth) });
-	return partial ? `${range} ${t('farm.chart.partialNote', { month: fmtMonthLong(lastMonth), day: tn('farm.ordinal', day, {}, true) })}` : range;
+	const range = t('{from} to {to}.', { from: first, to: fmtMonthYear(lastMonth) });
+	return partial ? `${range} ${t('* {month} to the {day}.', { month: fmtMonthLong(lastMonth), day: tn(ORDINAL, day, {}, true) })}` : range;
 }
 
 const approxTextWidth = (s: string) => s.length * CHART_FONT_PX * 0.6;
@@ -91,13 +96,13 @@ const wasShort = (m: MonthTotals) => m.demandM3 - m.suppliedM3 > Math.max(1, m.d
 
 /** The chart's visually hidden summary sentence. */
 export function supplySummary(monthly: readonly MonthTotals[], dataUntil: string): string {
-	if (!monthly.length) return t('farm.chart.noMonths');
+	if (!monthly.length) return t('No monthly figures yet.');
 	const labels = monthLabels(monthly, dataUntil);
 	const last = labels[labels.length - 1]!;
 	const end = last.partial ? `${Number(dataUntil.slice(8, 10))} ${fmtMonthLongYear(last.month)}` : fmtMonthLongYear(last.month);
 	const short = monthly.filter(wasShort).map((m) => fmtMonthLong(m.month));
-	const shortText = short.length ? t('farm.chart.shortIn', { months: joinAnd(short) }) : t('farm.chart.neverShort');
-	return t('farm.chart.supplySummary', { from: fmtMonthLongYear(monthly[0]!.month), to: end, short: shortText });
+	const shortText = short.length ? t('You were short in {months}.', { months: joinAnd(short) }) : t('You received all you needed every month.');
+	return t('Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below.', { from: fmtMonthLongYear(monthly[0]!.month), to: end, short: shortText });
 }
 
 /** The "Show the numbers" rows: every month with its year, in ML. */
@@ -146,14 +151,14 @@ export function damChart(monthly: readonly MonthTotals[], dataUntil: string, wid
 /** The dam chart's visually hidden summary: lowest, highest and latest month-end levels. */
 export function damSummary(monthly: readonly MonthTotals[], dataUntil: string): string {
 	const withDam = monthly.filter((m) => m.damPctEnd != null) as (MonthTotals & { damPctEnd: number })[];
-	if (!withDam.length) return t('farm.chart.noDam');
+	if (!withDam.length) return t('No dam levels yet.');
 	const labels = monthLabels(monthly, dataUntil);
 	const last = labels[labels.length - 1]!;
 	const end = last.partial ? `${Number(dataUntil.slice(8, 10))} ${fmtMonthLongYear(last.month)}` : fmtMonthLongYear(last.month);
 	const low = withDam.reduce((a, b) => (b.damPctEnd < a.damPctEnd ? b : a));
 	const high = withDam.reduce((a, b) => (b.damPctEnd > a.damPctEnd ? b : a));
 	const latest = withDam[withDam.length - 1]!;
-	return t('farm.chart.damSummary', {
+	return t('Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.', {
 		from: fmtMonthLongYear(monthly[0]!.month),
 		to: end,
 		low: fmtPct(low.damPctEnd),

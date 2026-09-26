@@ -1,3 +1,4 @@
+<!-- i18n-section: auth -->
 <script lang="ts">
 	// Split sign-in / register layout: a navy brand panel with the catchment
 	// illustration on the left (a short band on phones), the form on the right.
@@ -36,15 +37,15 @@
 	</main>
 
 	<!-- After the form in the DOM so the page's h1 comes first; shown on the left. -->
-	<aside class="panel-brand" aria-label={t('auth.brandLabel')}>
+	<aside class="panel-brand" aria-label={t('About Water Management')}>
 		<div class="art"><CatchmentScene /></div>
 		<div class="copy">
 			<p class="kicker">Water Management</p>
-			<h2>{t('auth.brandHeading')}</h2>
+			<h2>{t('Catchment water balance, from rainfall to river.')}</h2>
 			<ul>
-				<li>{t('auth.brandPoint1')}</li>
-				<li>{t('auth.brandPoint2')}</li>
-				<li>{t('auth.brandPoint3')}</li>
+				<li>{t('Model farms, dams and transfers on a river network.')}</li>
+				<li>{t('Run 40+ years of daily flows in seconds.')}</li>
+				<li>{t('Check the environmental flow requirement (EWR) against every farm’s use.')}</li>
 			</ul>
 		</div>
 	</aside>

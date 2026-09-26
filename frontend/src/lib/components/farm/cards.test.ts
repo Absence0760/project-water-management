@@ -20,7 +20,12 @@ import {
 	stillFailing,
 	splitNotice,
 	supplyCard,
-	systemName, accessLine } from './cards';
+	systemName,
+	accessLine,
+	bandChip,
+	levelWord,
+	stateText
+} from './cards';
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
 import { setLocale } from '$lib/i18n/locale.svelte';
@@ -330,5 +335,32 @@ describe('Who can see my farm', () => {
 		expect(accessLine({ displayName: 'Demo Analyst', role: 'owner', you: false })).toBe('Demo Analyst · WUA, manages who has access');
 		expect(accessLine({ displayName: 'Clerk', role: 'viewer', you: false })).toBe('Clerk · WUA, can read');
 		expect(accessLine({ displayName: 'Modeller', role: 'editor', you: false })).toBe('Modeller · WUA, can change the model');
+		expect(accessLine({ displayName: 'Someone', role: 'auditor', you: false })).toBe('Someone · WUA');
+	});
+});
+
+// Words picked from a table by a value rather than written at the call: every
+// value's English, so a change to how the words are looked up can't lose one.
+describe('words picked by value', () => {
+	it('names every restriction level, model band and irrigation system', () => {
+		expect((['none', 'advisory', 'restricted'] as const).map(levelWord)).toEqual(['No restriction', 'Advisory', 'Restriction']);
+		expect((['ok', 'watch', 'short'] as const).map(bandChip)).toEqual(['Model: OK', 'Model: watch', 'Model: short']);
+		expect([0.9, 0.85, 0.75, 0.65, 0.5].map(systemName)).toEqual(['drip', 'micro or centre pivot', 'sprinklers', 'flood', 'flood']);
+	});
+
+	it('words every farm page state', () => {
+		const states = ['loading', 'slow', 'errorTitle', 'errorText', 'noPublication', 'noPublicationText', 'contact', 'removed', 'needsConnection', 'updating'] as const;
+		expect(states.map(stateText)).toEqual([
+			'Loading your farm…',
+			'Slow signal? This can take a moment.',
+			'We couldn’t load your farm',
+			'Check your signal and try again. Your figures are safe; nothing was changed.',
+			'Your WUA hasn’t published figures yet',
+			'When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.',
+			'Questions? Contact your WUA.',
+			'You no longer have access to this farm. Contact your WUA.',
+			'Charts, “Why?” and downloads need a connection.',
+			'Updating…'
+		]);
 	});
 });

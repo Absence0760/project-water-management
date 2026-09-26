@@ -1,7 +1,8 @@
-// The message catalogue loads only on the translated surfaces (WP-2.5): the
-// root layout imports it dynamically, and the modules the workspace shares
-// with the farm view (and /share) import no catalogue module at all. A static
-// import here would put messages/en.ts in every page's download again.
+// The message code loads only on the translated surfaces (WP-2.5): the root
+// layout imports it dynamically, and the modules the workspace shares with the
+// farm view (and /share) import none of it. They may mark their English with
+// msg() from $lib/i18n/msg, which imports nothing and holds no words. A static
+// import of the message code here would put it in every page's download again.
 // /share is translated too, but stays off the workspace's code: it imports
 // only its own modules, the farm view's catalogue-free ones and the i18n.
 import { readFileSync } from 'node:fs';
@@ -43,10 +44,14 @@ describe('the catalogue stays off untranslated routes', () => {
 	}
 });
 
+it('msg() imports nothing, so marking a message costs a shared module nothing', () => {
+	expect(src('lib/i18n/msg.ts')).not.toMatch(/^\s*import\s/m);
+});
+
 describe('/share stays off the workspace’s code', () => {
 	/** Static (non-type) imports of any module. */
 	const imports = (code: string) => [...code.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
-	const allowed = /^(svelte|\$app\/(navigation|paths|state)|\$lib\/api(\/types|\/client)?|\$lib\/i18n\/(locale\.svelte|LanguageSwitch\.svelte)|\$lib\/components\/share\/[\w.]+|\$lib\/components\/farm\/(notice|numbers|format|chartGeometry|NoticeCard\.svelte)|\$lib\/components\/layout\/BrandMark\.svelte|\.\/[\w.]+)$/;
+	const allowed = /^(svelte|\$app\/(navigation|paths|state)|\$lib\/api(\/types|\/client)?|\$lib\/i18n\/(locale\.svelte|msg|LanguageSwitch\.svelte)|\$lib\/components\/share\/[\w.]+|\$lib\/components\/farm\/(notice|numbers|format|chartGeometry|NoticeCard\.svelte)|\$lib\/components\/layout\/BrandMark\.svelte|\.\/[\w.]+)$/;
 	for (const file of [
 		'routes/share/+page.svelte',
 		'lib/components/share/share.ts',
