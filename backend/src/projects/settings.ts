@@ -41,6 +41,7 @@ import {
 } from '@water-management/engine';
 import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
+import { OutcomesPatch } from './outcomeSettings.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -533,7 +534,9 @@ export const SettingsPatch = z
 			.partial()
 			.strict(),
 		// When the project re-runs itself after new data (runs/autoRun.ts, WP-2.11): any subset. Not a model input.
-		autoRun: AutoRunPatch
+		autoRun: AutoRunPatch,
+		// How the outcome matrix reads a sweep (outcomeSettings.ts, issue #53 R4): either field. Not a model input.
+		outcomes: OutcomesPatch
 	})
 	.partial()
 	.passthrough()
