@@ -67,6 +67,10 @@ const base: ModelInput = {
 		landCover: [
 			{ id: 'p1', nodeId: MINE, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null },
 			{ id: 'p2', nodeId: N2, coverClass: 'pine', areaKm2: 2, densityPct: 0.5, factors: null }
+		],
+		boreholes: [
+			{ id: 'b1', nodeId: MINE, name: 'Own hole', capacityM3Day: 80, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 },
+			{ id: 'b2', nodeId: N1, name: 'Neighbour hole', capacityM3Day: 90, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
 		]
 	} as unknown as ModelInput['model'],
 	series: {}
@@ -99,16 +103,17 @@ describe('projectBaseForApplicant', () => {
 		expect(view.model.nodes.map((n) => n.id)).toEqual(base.model.nodes.map((n) => n.id));
 	});
 
-	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover', () => {
+	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {
 		expect(view.model.crops.map((c) => c.id)).toEqual([C1]);
 		expect(view.model.cropAreas).toEqual([{ nodeId: MINE, cropId: C1, areaM2: 50_000 }]);
 		expect(view.model.transfers.map((t) => t.id)).toEqual(['t1']);
 		expect((view.model.landCover ?? []).map((p) => p.id)).toEqual(['p1']);
+		expect(view.model.boreholes).toEqual([base.model.boreholes![0]]);
 	});
 
 	it('names no other node anywhere in the view', () => {
 		const text = JSON.stringify(view);
-		for (const name of ['Waterval', 'Town', 'Lucerne']) expect(text).not.toContain(name);
+		for (const name of ['Waterval', 'Town', 'Lucerne', 'Neighbour hole']) expect(text).not.toContain(name);
 		expect(text).toContain('Rooikloof');
 	});
 
@@ -122,13 +127,39 @@ describe('projectBaseForApplicant', () => {
 describe('applicationMask', () => {
 	const mask = applicationMask(base, [MINE]);
 	const rename = (value: string) => ({ op: 'node.set' as const, nodeId: MINE, field: 'name' as const, value });
-	const apply = (ops: Parameters<typeof applyScenario>[1]) => applyScenario(base, ops, { maskedNames: mask });
+	const apply = (ops: Parameters<typeof applyScenario>[1]) => applyScenario(base, ops, { mask });
 
-	it('masks every node and crop the projection hides, under the names the applicant sees', () => {
+	it('masks every node the projection hides under the name the applicant sees, and every item it leaves out by id', () => {
 		const view = projectBaseForApplicant(base, [MINE]);
 		expect(mask.nodes).toEqual(Object.fromEntries(view.anonymisedNodeIds.map((id) => [id, view.model.nodes.find((n) => n.id === id)!.name])));
 		expect(Object.keys(mask.nodes!).sort()).toEqual([N1, N2, U1].sort());
-		expect(mask.crops).toEqual({ [C2]: `crop ${C2}` });
+		expect(mask.crops).toEqual([C2]);
+		expect(mask.transfers).toEqual(['t2']);
+		expect(mask.landCover).toEqual(['p2']);
+		expect(mask.boreholes).toEqual(['b2']);
+	});
+
+	it('answers an op on a hidden item’s id exactly as on a free one, and reuse of one moves the new item (assessor only)', () => {
+		const told = (r: ReturnType<typeof apply>, id: string) => JSON.stringify([r.applied, r.problems]).replaceAll(id, 'ID');
+		for (const [hidden, op] of [
+			['t2', (id: string) => ({ op: 'transfer.remove' as const, transferId: id })],
+			['p2', (id: string) => ({ op: 'landCover.remove' as const, patchId: id })],
+			['b2', (id: string) => ({ op: 'borehole.remove' as const, boreholeId: id })]
+		] as const) {
+			expect(apply([op(hidden)]).problems).toEqual([expect.stringMatching(/not found$/)]);
+			expect(told(apply([op(hidden)]), hidden)).toBe(told(apply([op('free')]), 'free'));
+			// Positive control: their own item of the same kind is found.
+			expect(apply([op(({ t2: 't1', p2: 'p1', b2: 'b1' } as const)[hidden])]).problems).toEqual([]);
+		}
+		const addHole = (id: string) => ({
+			op: 'borehole.add' as const,
+			borehole: { id, nodeId: MINE, name: 'New', capacityM3Day: 10, annualCapM3: null, mode: 'supplemental' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0 }
+		});
+		const reused = apply([addHole('b2')]);
+		expect(told(reused, 'b2')).toBe(told(apply([addHole('free')]), 'free'));
+		expect(reused.reIds).toEqual([{ kind: 'borehole', id: 'b2', as: 'b2-2' }]);
+		// Their own borehole's id is theirs to see: reusing it is refused, as they would expect.
+		expect(apply([addHole('b1')]).problems).toEqual(['op 1 (borehole.add): borehole id b1 is already in use']);
 	});
 
 	it('answers a rename to a hidden name exactly as a rename to a free one (the oracle closed)', () => {

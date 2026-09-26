@@ -23,11 +23,11 @@
 // § Example catchments; catchments.test.ts keeps them current.
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
-import { withoutUser, withUser } from '../src/db/tx.js';
+import { type Db, withoutUser, withUser } from '../src/db/tx.js';
 import { publishRun } from '../src/publish/publish.js';
 import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
-import { executeScenarioRun } from '../src/scenarios/execute.js';
+import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
 import { buildExamples } from './examples/catchments.js';
 import { importProjectData } from './import-project.js';
@@ -147,7 +147,7 @@ export async function seedExamples(): Promise<string[]> {
 async function seedApplication(project: { id: string; owner: string }) {
 	const applicant = await ensureUser(APPLICANT);
 	await linkFarmer(project.owner, project.id, applicant, APPLICANT.farm, 'contributor');
-	await withUser(applicant, async (db) => {
+	const sid = await withUser(applicant, async (db) => {
 		const { rows: pub } = await db.query<{ run_id: string }>('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [project.id]);
 		const { rows: own } = await db.query<{ id: string }>('SELECT app_farm_nodes($1) AS id', [project.id]);
 		const { rows: dam } = await db.query<{ capacity: number }>(
@@ -160,11 +160,16 @@ async function seedApplication(project: { id: string; owner: string }) {
 			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 			[project.id, name, 'Demo application: double the farm dam (invented).', pub[0]!.run_id, JSON.stringify(ops), opsSha256(ops), own.map((r) => r.id)]
 		);
-		const sid = rows[0]!.id;
-		await recordAudit(db, project.id, 'scenario.created', { scenarioId: sid, application: true, baseRunId: pub[0]!.run_id, ops: ops.length });
-		await executeScenarioRun(db, project.id, sid, undefined, 'contributor');
+		await recordAudit(db, project.id, 'scenario.created', { scenarioId: rows[0]!.id, application: true, baseRunId: pub[0]!.run_id, ops: ops.length });
+		return rows[0]!.id;
+	});
+	// As the route runs it: no transaction open while the engine runs.
+	const authorize = async (db: Db) => ({ role: 'contributor' as const, scenario: await loadScenario(db, project.id, sid) });
+	await runScenario(applicant, project.id, undefined, authorize, async () => undefined);
+	await withUser(applicant, async (db) => {
+		const s = await loadScenario(db, project.id, sid);
 		await db.query(`UPDATE scenario SET status = 'submitted' WHERE id = $1`, [sid]);
-		await recordAudit(db, project.id, 'scenario.submitted', { scenarioId: sid, application: true, opsSha256: opsSha256(ops) });
+		await recordAudit(db, project.id, 'scenario.submitted', { scenarioId: sid, application: true, opsSha256: s.opsSha256 });
 	});
 }
 

@@ -59,6 +59,10 @@ export const rerunHandler = defineHandler({
 			publish = trigger === 'auto' && settings.publish === 'if_no_new_warnings';
 		}
 		const label = trigger === 'auto' ? autoRunLabel : trigger === 'forecast' ? forecastRunLabel : payload.label;
+		// The engine runs inside the job's transaction, unlike POST …/runs
+		// (runLiveModel): the run must commit with the job's `done`, so a
+		// retry after a crash never stores it twice, and the worker's pool
+		// serves one job at a time and no request (docs/architecture.md § A model run).
 		const run = await executeRun(db, job.projectId, label, trigger).catch((err: Error) => {
 			// A scheduled forecast with no forecast day left to run: nothing to do.
 			if (trigger === 'forecast' && err instanceof NoForecastRainError) return null;

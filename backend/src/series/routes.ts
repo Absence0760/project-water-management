@@ -71,6 +71,8 @@ export async function replaceSeries(
 		[projectId, body.kind, body.name, body.unit, body.startDate, body.values, provenance?.product ?? null, provenance?.version ?? null, opts.feedId ?? null]
 	);
 	const meta = rows[0]!;
+	// Nor is any day an API key's now (series_key_days, 053: what the ingest hold leaves out of a key's limit).
+	await db.query('DELETE FROM series_key_days WHERE project_id = $1 AND series_id = $2', [projectId, meta.id]);
 	const restore = opts.restoredFrom ? { target: 'series', restoredFrom: opts.restoredFrom } : null;
 	if (!existing) {
 		const subject = seriesSubject(meta, null, body, { ...restore, ...opts.audit });

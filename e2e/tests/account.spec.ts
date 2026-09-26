@@ -1,7 +1,8 @@
 // The account page (WP-1.9): reached from the header's account menu; rename
 // the account, see the address and whether it's confirmed, and change the
 // password while signed in (this device stays signed in, every other one is
-// signed out).
+// signed out), and download a copy of their data (GET /auth/me/export).
+import { readFile } from 'node:fs/promises';
 import { register } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
@@ -39,6 +40,19 @@ test('the account menu opens the account page, which renames the account', async
 	await page.getByRole('button', { name: 'Save name' }).click();
 	await expect(page.getByRole('alert')).toHaveText('Enter a display name.');
 	await expect(page.getByLabel('Display name')).toHaveAttribute('aria-invalid', 'true');
+});
+
+test('“Download my data” saves the account’s data export as a JSON file', async ({ page, owner }) => {
+	await page.goto('/account');
+	const panel = page.getByRole('region', { name: 'Your data' });
+	const [download] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download my data' }).click()]);
+	expect(download.suggestedFilename()).toMatch(/^my-data_\d{4}-\d{2}-\d{2}\.json$/);
+	const doc = JSON.parse(await readFile(await download.path(), 'utf8'));
+	expect(doc).toMatchObject({ format: 'water-management.subject-export', account: { email: owner.email } });
+	await expect(panel.getByRole('status')).toHaveText('Your data has been downloaded.');
+	// A second one within the minute is refused with the server's message.
+	await panel.getByRole('button', { name: 'Download my data' }).click();
+	await expect(panel.getByRole('alert')).toContainText('try again in a minute');
 });
 
 test('an unconfirmed address says so', async ({ page }) => {

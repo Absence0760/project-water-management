@@ -13,15 +13,20 @@ export type Db = pg.PoolClient;
  * transaction writes (model_revision, series_revision, audit_event;
  * 030_history.sql) defaults its change_set to it, so one request's rows group
  * together in the History tab.
+ *
+ * `readOnly`: a READ ONLY transaction at REPEATABLE READ, so every statement
+ * sees one snapshot of the database. A model run reads its inputs this way
+ * (runs/execute.ts runOutsideTransaction): the settings, model and series it
+ * loads are consistent with each other however many queries that takes.
  */
-export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): Promise<T> {
+export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>, opts: { readOnly?: boolean } = {}): Promise<T> {
 	return inTransaction(async (db) => {
 		await db.query("SELECT set_config('app.current_user_id', $1, true), set_config('app.change_set_id', $2, true)", [
 			userId,
 			crypto.randomUUID()
 		]);
 		return fn(db);
-	});
+	}, opts.readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
 }
 
 /**
@@ -53,10 +58,10 @@ export async function withoutUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
 	return inTransaction(fn);
 }
 
-async function inTransaction<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+async function inTransaction<T>(fn: (db: Db) => Promise<T>, begin = 'BEGIN'): Promise<T> {
 	const client = await getPool().connect();
 	try {
-		await client.query('BEGIN');
+		await client.query(begin);
 		const result = await fn(client);
 		await client.query('COMMIT');
 		return result;

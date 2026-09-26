@@ -14,7 +14,7 @@ import { recordModelRevision } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { saveModel } from '../model/store.js';
 import { modelProblems } from '../model/validate.js';
-import { executeRun } from '../runs/execute.js';
+import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
 import { mergeSettings, remapSettingNodeIds } from './settings.js';
@@ -123,7 +123,8 @@ export interface RunOutcome {
  */
 export async function runImported(userId: string, projectId: string): Promise<RunOutcome> {
 	try {
-		const { id } = await withUser(userId, (db) => executeRun(db, projectId, IMPORT_RUN_LABEL));
+		// As POST …/runs: no connection is held while the engine runs.
+		const id = await runLiveModel(userId, projectId, IMPORT_RUN_LABEL, 'manual', async (_db, run) => run.id);
 		return { runId: id };
 	} catch (err) {
 		if (err instanceof ApiError) return { runError: `model run failed: ${err.message}` };
