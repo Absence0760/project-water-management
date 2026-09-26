@@ -1870,8 +1870,11 @@ from the WP:
 - [ ] **Dam filling vs registered storage** (s21b): the comparison counts
       supply from the farm's own dam as abstraction and compares storage with
       the dam capacity only. Pending the hydrologist.
-- [ ] **POPIA**: allocations and holder names in the data-subject export,
-      with the rest of the POPIA work ([§ POPIA and the Step 2 release](#popia-and-the-step-2-release-wp-216)).
+- [x] **POPIA**: allocations and holder names in the data-subject export
+      (2026-09-26). `GET /auth/me/export` lists, per linked farm, the
+      allocations matched to it with the holder name (what RLS already lets
+      the farmer read). Never matched by name to an account: names aren't
+      unique ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
@@ -2090,7 +2093,8 @@ Left, each with its trigger:
       review that asks for it on screen.
 - [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
       sign-off is as strong as the signer's password.
-- [ ] **Sign-offs in the POPIA data export** (WP-1.13): a sign-off holds the
+- [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
+      2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion
       must list them (deletion keeps the row with `user_id` nulled, as the
       professional record, and the privacy notice must say so).
@@ -2166,14 +2170,16 @@ own. Loop in the CISO or security analyst before acting on any of them.
 - [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
       Africa; any other region is a transfer under s72 and needs the client's
       agreement. Trigger: the region choice in § Blocking releases.
-- [ ] **Data-subject export** ("download my data", plan.md Phase 7). Not
-      built: the operator answers a request by query today. Durable fix: a
-      `GET /auth/me/export` that returns, as JSON, the account, memberships,
-      farm links, notes written, the audit events about or by the person
-      (through a `SECURITY DEFINER` reader, since farmers can't read the log
-      under RLS), pending invites to their address, sign-offs, and the farm
-      projections of their linked farms. Trigger: before the first farmer is
-      invited on production, or the first request, whichever comes first.
+- [x] **Data-subject export** ("download my data", plan.md Phase 7;
+      2026-09-26). `GET /auth/me/export` and the Account page's **Download
+      my data**: the account, memberships, farm links with their published
+      figures and registered volumes, notes, sign-offs, invites to the
+      verified address, alert and report choices, and the audit events by or
+      about the person, the RLS-hidden parts through
+      `app_subject_export()` (054_subject_export.sql). One a minute per
+      account. `auth/export.ts` `USER_FK_COVERAGE` classifies every foreign
+      key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
+      (above) must say it exists.
 - [ ] **Self-service account deletion, and evidence that names its maker.**
       Deleting an account is an operator act today (deployment.md §
       Runbooks, item 7), and it is refused for anyone who created a

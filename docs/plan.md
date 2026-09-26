@@ -446,7 +446,8 @@ rehearsed once.
   whose `iat` is older than the watermark is rejected. "Sign out everywhere",
   a password change and an admin lock all set it. That gives revocation
   without a session table.
-- ⬜ **Data protection (POPIA):** a privacy notice, data export and account
+- 🚧 **Data protection (POPIA):** a privacy notice, data export (done:
+  `GET /auth/me/export`, the Account page's "Download my data") and account
   deletion, a retention policy for runs, and a sub-processor list (AWS). Run
   `/audit/gdpr`, `/audit/account-deletion-completeness` and
   `/audit/data-export-completeness`.

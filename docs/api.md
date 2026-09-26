@@ -18,6 +18,7 @@ storage.
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
+| GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -68,6 +69,27 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   account receives; `null` means not chosen (the site follows the browser,
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
   the farm view shows volumes.
+- **`GET /auth/me/export`** ("download my data", POPIA access;
+  `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
+  document, `{ format: 'water-management.subject-export', version: 1,
+  exportedAt, account, projectMemberships, teamMemberships, farms, notes,
+  signoffs, invites, alertSubscriptions, alertDeliveries,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `account` is
+  the `app_user` row without the password hash. `farms` is one entry per farm
+  linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
+  with the registered volumes matched to that farm (`allocations`, holder
+  name included) and the current publication's figures for it as the farm
+  page shows them (`publication.figures`, the same D2 masking; `null` when
+  nothing is published). Nothing about any other farm. `notes`, `signoffs`,
+  `invites` (to the account's address, only once it is verified; pending or
+  lapsed, with the farms a farmer invite names), `alertSubscriptions`,
+  `reportSubscriptions` and `auditEvents` (every event the person made,
+  `byYou: true`, or that names them as its subject; newest first, at most
+  50 000, `auditEventsTruncated` past that) come from `app_subject_export()`,
+  which reads only the caller's own rows, including in projects they have
+  left. Never a secret: no password or token hash, unsubscribe nonce, key or
+  link material. One export a minute per account
+  (`app_user.data_exported_at`); a render session is refused (403).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
   1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
   following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one

@@ -68,7 +68,7 @@ interface CurrentFarmRow {
 }
 
 /** The current publication, with this farm's projection (view null when the farm isn't in it). null without a publication. */
-async function currentFor(db: Db, projectId: string, nodeId: string): Promise<CurrentFarmRow | null> {
+export async function currentFor(db: Db, projectId: string, nodeId: string): Promise<CurrentFarmRow | null> {
 	const { rows } = await db.query<CurrentFarmRow>(
 		`SELECT p.run_id, p.published_at, u.display_name AS published_by_name, p.restriction_level, p.restriction_pct,
 			p.notice_en, p.notice_af, p.next_expected_on, p.catchment_view, f.view
@@ -79,6 +79,19 @@ async function currentFor(db: Db, projectId: string, nodeId: string): Promise<Cu
 		[projectId, nodeId]
 	);
 	return rows[0] ?? null;
+}
+
+/**
+ * A farm's stored projection as its farmer is shown it. The aggregate rule
+ * (D2, design §10.3): the even share is a catchment ratio, shown only with at
+ * least k − 1 other holders. cutBeyondShare is measured against that share,
+ * so it goes with it (it would bound K_tot). The farm page and the
+ * data-subject export (auth/export.ts) both go through here.
+ */
+export async function farmerProjection(db: Db, projectId: string, view: FarmProjection): Promise<FarmProjection> {
+	const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1) AS n', [projectId]);
+	if ((h[0]?.n ?? 0) >= FARMER_K - 1) return view;
+	return { ...view, river: { ...view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 }
 
 /** Whole calendar days from `iso` to today (UTC). */
@@ -112,17 +125,11 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
 			const { rows: p } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
-			// The aggregate rule (D2, design §10.3): the even share is a catchment ratio, shown only with at least k − 1 other holders.
-			// cutBeyondShare is measured against that share, so it goes with it (it would bound K_tot).
-			const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1) AS n', [id]);
-			const showShare = (h[0]?.n ?? 0) >= FARMER_K - 1;
+			const farm = await farmerProjection(db, id, cur.view);
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
 				'SELECT farms_upstream, farms_downstream, farm_count FROM app_farm_context($1, $2)',
 				[id, nodeId]
 			);
-			const farm: FarmProjection = showShare
-				? cur.view
-				: { ...cur.view, river: { ...cur.view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 			const [own, other] = q.lang === 'af' ? [cur.notice_af, cur.notice_en] : [cur.notice_en, cur.notice_af];
 			const noticeLang = own ? q.lang : other ? (q.lang === 'af' ? 'en' : 'af') : null;
 			const cv = cur.catchment_view;
