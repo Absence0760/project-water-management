@@ -114,6 +114,11 @@ export type FeedOutcome =
 	| { ok: true; lastDate: string | null; lastValue: number | null; meta: Record<string, string | number> }
 	| { ok: false; error: string };
 
+/** A fetch that worked but whose forecast issue was older than the merged one: stamp only the check time (app_record_feed_checked), as the acting user. */
+export async function recordFeedChecked(db: Db, feedId: string): Promise<void> {
+	await db.query('SELECT app_record_feed_checked($1)', [feedId]);
+}
+
 /** Record a fetch's outcome (app_record_feed_result), as the acting user. */
 export async function recordFeedResult(db: Db, feedId: string, o: FeedOutcome): Promise<void> {
 	await db.query('SELECT app_record_feed_result($1, $2, $3, $4, $5, $6)', [
@@ -132,13 +137,24 @@ export interface DueFeed {
 	actingUserId: string;
 }
 
-/** Claim due feeds for the scheduler (app_claim_due_feeds; no user context). `all`: every enabled feed, due or not. */
-export async function claimDueFeeds(db: Db, limit: number, all = false): Promise<DueFeed[]> {
+/** Due feeds for the scheduler, longest-waiting first (app_due_feeds; no user context, stamps nothing). `all`: every enabled feed, due or not. */
+export async function listDueFeeds(db: Db, limit: number, all = false): Promise<DueFeed[]> {
 	const { rows } = await db.query<DueFeed>(
-		'SELECT id, project_id AS "projectId", acting_user_id AS "actingUserId" FROM app_claim_due_feeds($1, $2)',
+		'SELECT id, project_id AS "projectId", acting_user_id AS "actingUserId" FROM app_due_feeds($1, $2)',
 		[limit, all]
 	);
 	return rows;
+}
+
+/**
+ * Claim one feed (app_claim_feed), inside a transaction as its acting user:
+ * false when it is no longer due, no longer that user's, or another tick is
+ * claiming it. Queue its fetch in the same transaction, so a rollback undoes
+ * the claim too.
+ */
+export async function claimFeed(db: Db, feedId: string, all = false): Promise<boolean> {
+	const { rows } = await db.query<{ claimed: boolean }>('SELECT app_claim_feed($1, $2) AS claimed', [feedId, all]);
+	return rows[0]?.claimed === true;
 }
 
 export async function markScheduleFailed(db: Db, feedId: string): Promise<void> {

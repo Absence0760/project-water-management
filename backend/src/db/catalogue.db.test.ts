@@ -273,13 +273,16 @@ describe('schema catalogue', () => {
 			 ORDER BY p.proname`
 		);
 		expect(fns).toEqual([
-			{ proname: 'app_claim_due_feeds', pinned: true, secdef: true },
+			{ proname: 'app_claim_feed', pinned: true, secdef: true },
+			{ proname: 'app_due_feeds', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
+			{ proname: 'app_feed_is_due', pinned: true, secdef: false },
 			{ proname: 'app_feed_schedule_failed', pinned: true, secdef: true },
+			{ proname: 'app_record_feed_checked', pinned: true, secdef: true },
 			{ proname: 'app_record_feed_result', pinned: true, secdef: true },
 			{ proname: 'data_feed_stamp', pinned: true, secdef: false }
 		]);
-		// And only water_app may call the SECURITY DEFINER ones (018 revokes PUBLIC).
+		// And only water_app may call the SECURITY DEFINER ones (018 and 026 revoke PUBLIC).
 		for (const f of fns.filter((f) => f.secdef)) {
 			const { rows } = await db.query<{ pub: boolean; app: boolean }>(
 				`SELECT has_function_privilege('public', p.oid, 'EXECUTE') AS pub, has_function_privilege('water_app', p.oid, 'EXECUTE') AS app

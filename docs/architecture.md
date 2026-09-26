@@ -367,21 +367,29 @@ merges into:
   commit in the job's transaction, as the job's acting user. A forecast
   result is keyed by its issue date (`meta.issued`, which its days must start
   on, 16 at most); one older than the issue the feed last merged (the
-  `ingest-results` queue does not keep order) is dropped, series and health
-  untouched, so an older forecast never overwrites a newer one. Re-reading an
+  `ingest-results` queue does not keep order) is dropped, series untouched
+  and only its check time (`last_attempt_at`) recorded, so an older forecast
+  never overwrites a newer one. Re-reading an
   unchanged window (CHIRPS does, every day) leaves the series row alone, so
   its `updatedAt` ("new data since the last run") moves only when a value
   does. An answer with a day after the newest the source can have (today, or
   a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
   would otherwise pin the feed's newest date, which only moves forward, in
   the future.
-- **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
-  the enabled feeds not scheduled within a day (or an hour), and the tick
-  queues a `feed_fetch` for each **as the feed's acting user** (the owner who
-  last saved it), under RLS. A failing feed retries sooner: 15 minutes after
-  one failure, doubling up to its interval. If the acting user is no longer an
-  editor, the enqueue is refused, the feed records it
-  (`app_feed_schedule_failed`), and it shows failing until an owner saves it.
+- **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
+  `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
+  A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
+  passed since it was last scheduled, since CHC publishes each issue around
+  08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
+  tick opens one transaction **as the feed's acting user** (the owner who
+  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`)
+  and queues its `feed_fetch` under RLS, so the claim and the job commit
+  together: a failure between them rolls the claim back and the next tick
+  tries again, and one feed's failure doesn't hold up the rest (#32). A
+  failing feed retries sooner: 15 minutes after one failure, doubling up to
+  its interval. If the acting user is no longer an editor, the enqueue is
+  refused, the feed records it (`app_feed_schedule_failed`, keeping the
+  claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
   source normally lags: 12 days for CHIRPS, under 12 days ahead for the

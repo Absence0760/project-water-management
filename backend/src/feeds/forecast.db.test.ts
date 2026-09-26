@@ -49,8 +49,14 @@ const forecast = async (u: User, pid: string) => {
 	return meta ? ((await u.call('GET', `/projects/${pid}/series/${meta.id}`)).body as { startDate: string; values: (number | null)[] }) : null;
 };
 const feedRow = async (id: string) =>
-	(await asOwner(`SELECT to_char(last_data_date, 'YYYY-MM-DD') AS last_data_date, last_meta, consecutive_failures, last_error FROM data_feed WHERE id = $1`, [id]))[0] as {
+	(await asOwner(
+		`SELECT to_char(last_data_date, 'YYYY-MM-DD') AS last_data_date, last_meta, consecutive_failures, last_error, last_success_at, last_attempt_at
+		 FROM data_feed WHERE id = $1`,
+		[id]
+	))[0] as {
 		last_data_date: string | null;
+		last_success_at: Date | null;
+		last_attempt_at: Date | null;
 		last_meta: Record<string, unknown> | null;
 		consecutive_failures: number;
 		last_error: string | null;
@@ -68,15 +74,20 @@ describe('forecast issues in the series', () => {
 		expect(await feedRow(feedId)).toMatchObject({ last_data_date: day(15), last_meta: { issued: day(0), merged: 16 } });
 	});
 
-	it('an older issue arriving after a newer one (a delayed or redelivered ingest-results message) changes nothing', async () => {
+	it('an older issue arriving after a newer one (a delayed or redelivered ingest-results message) changes nothing but the check time', async () => {
 		const { owner, pid, feedId, ingest } = await forecastFeed('LateIssue');
 		// Yesterday's issue stands in for "the newer one": today's is the newest the source can have.
 		await ingest(issue(-1, 5));
+		// Checked an hour ago, so a new check time is plainly later.
+		await asOwner(`UPDATE data_feed SET last_attempt_at = now() - interval '1 hour' WHERE id = $1`, [feedId]);
 		const before = await feedRow(feedId);
 		expect(await ingest(issue(-2, 1))).toEqual({ merged: 0, lastDate: null });
 		expect((await forecast(owner, pid))!).toEqual(expect.objectContaining({ startDate: day(-1), values: new Array(16).fill(5) }));
-		// Nor does its health: the newer issue's meta stands.
-		expect(await feedRow(feedId)).toEqual(before);
+		// Nor does its health: the newer issue's meta, data date and success
+		// stand. The fetch did reach the source, though, so its check time moves (#33).
+		const after = await feedRow(feedId);
+		expect({ ...after, last_attempt_at: null }).toEqual({ ...before, last_attempt_at: null });
+		expect(after.last_attempt_at!.getTime()).toBeGreaterThan(before.last_attempt_at!.getTime());
 
 		// Positive controls: the same issue again (a re-fetch) and a newer one both merge.
 		expect(await ingest(issue(-1, 6))).toEqual({ merged: 16, lastDate: day(14) });
