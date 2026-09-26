@@ -63,9 +63,11 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 
 /**
  * Stored settings for a copy whose nodes got fresh ids (POST /projects/:id/copy,
- * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) follows its
- * node. A site not in the map (already dangling) is left as it was, so the
- * copy's runs warn about it as the original's do. Anything else is unchanged.
+ * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) and the
+ * outcome matrix's site (settings.outcomes.siteNodeId, issue #53 R4) follow
+ * their node. A site not in the map (already dangling) is left as it was, so
+ * the copy's runs warn about it as the original's do. Anything else is
+ * unchanged.
  */
 export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, string>): Json {
 	const s: Json = isObj(stored) ? { ...stored } : {};
@@ -73,6 +75,9 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 		s.ewrRules = s.ewrRules.map((t: unknown) =>
 			isObj(t) && typeof t.siteNodeId === 'string' && ids.has(t.siteNodeId) ? { ...t, siteNodeId: ids.get(t.siteNodeId) } : t
 		);
+	}
+	if (isObj(s.outcomes) && typeof s.outcomes.siteNodeId === 'string' && ids.has(s.outcomes.siteNodeId)) {
+		s.outcomes = { ...s.outcomes, siteNodeId: ids.get(s.outcomes.siteNodeId) };
 	}
 	return s;
 }

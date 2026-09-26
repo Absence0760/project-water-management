@@ -775,13 +775,27 @@
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.
-// 2026-09-26  total 918 → 925 KB (measured 920, from 913 at b4d1923d).
-//             Issue #17 A3: Crops & demand becomes a page of crop cards
-//             (factor sparklines), the demand chart and per-farm stacked
-//             bars, with a crop sheet (crops/CropsTab, CropSheet, cards.ts);
-//             the old tab body moved unchanged to CropGrids for the grid
-//             modal and override mode, the demand table to DemandTable.
-//             Lazy with the Crops tab; no new dependency. Headroom ~5 KB.
+// 2026-09-26  total 918 → 924 KB (measured 921). Issue #54 item 1: the Load
+//             crop factors dialog (~9 KB, its own chunk, fetched on first
+//             open: the reference crop library, per-crop diff and demand
+//             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// 2026-09-26  total 924 → 935 KB (measured 931). origin/main already measured
+//             926 before this merge (work landed after the entry above without
+//             a raise); issue #17's Summary (board A1: KPI row with Dams today,
+//             the chart's range switch and shaded reserve days, Needs attention
+//             cards, Supply by farm in its own lazy chunk) adds 5. The largest
+//             chunk stays under 42 KB because Supply by farm was split out.
+//             Headroom ~4 KB; the next page needs a trim (the i18n catalogue).
+// 2026-09-26  total 935 → 943 KB (measured 938, from 931 on main @
+//             a2013049). Issue #17 A3: Crops & demand becomes a page of crop
+//             cards (factor sparklines), the demand chart and per-farm
+//             stacked bars, with a crop sheet (crops/CropsTab, CropSheet,
+//             cards.ts); the old tab body moved unchanged to CropGrids (the
+//             grid modal and override mode, now with #54's Load crop factors
+//             trigger), the demand table to DemandTable. All in the lazy
+//             Crops chunk; the largest chunk is unchanged (41.7 KB, the
+//             workspace page). No new dependency. Headroom ~5 KB; the i18n
+//             catalogue trim is still the next saving.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -792,7 +806,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 925,
+	totalCodeKb: 943,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

@@ -611,6 +611,7 @@
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
 								onInputsRestored={reloadInputs}
+								{onProjectChange}
 							/>
 						{/snippet}
 					</Lazy>

@@ -402,6 +402,16 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 			s.demandFactorFrom = null;
 		}
 	}
+	// The review triggers' storage reset (engine ≥ 0.46.0, issue #53 R6): its shape here, its nodes and day in buildNetworkPlan.
+	if (s.damStorageReset !== null && s.damStorageReset !== undefined) {
+		const v = s.damStorageReset as unknown;
+		const date = v && typeof v === 'object' ? (v as { date?: unknown }).date : undefined;
+		const storage = v && typeof v === 'object' ? (v as { storageM3?: unknown }).storageM3 : undefined;
+		if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || !storage || typeof storage !== 'object' || Array.isArray(storage)) {
+			warnings.push('damStorageReset needs an ISO date (YYYY-MM-DD) and a storage per dam; ignored');
+			s.damStorageReset = null;
+		}
+	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
 		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
 		s.calibrationStart = null;

@@ -25,7 +25,7 @@
 			legend: 'Reserve months met',
 			lower: 'Lower risk from',
 			increasing: 'Increasing risk from',
-			hint: 'Share of a class’s months that meet the Reserve rule table; below “increasing risk” is high risk. Used when every demand level has a rule table at the outlet.'
+			hint: 'Share of a class’s months that meet the Reserve rule table; below “increasing risk” is high risk. Used when every demand level has a rule table at the matrix’s Reserve site (the outlet unless a gauge is picked on the Runs tab), and always at a gauge.'
 		},
 		{
 			id: 'daysBelowEwr',

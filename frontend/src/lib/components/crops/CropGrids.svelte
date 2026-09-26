@@ -1,3 +1,8 @@
+<script module lang="ts">
+	// The Load crop factors dialog (issue #54 item 1) is its own chunk, fetched when first opened.
+	const loadCropFactors = () => import('./LoadCropFactorsDialog.svelte');
+</script>
+
 <script lang="ts">
 	// The Crops & demand grids: crop factors, planted areas and the demand
 	// preview, as full tables. The grid modal shows one section each
@@ -5,6 +10,8 @@
 	// (scenarios/OverrideEditor.svelte). The Crops page itself (CropsTab) is
 	// cards and bars over the same editor.
 	import type { ProjectSettings } from '@water-management/engine';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
@@ -87,6 +94,16 @@
 	}
 
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);
+
+	// Load crop factors: mounted on first open, then kept (its state survives a close).
+	let loadMounted = $state(false);
+	let loadOpen = $state(false);
+	function openLoad() {
+		loadMounted = true;
+		loadOpen = true;
+	}
+	const loaded = (names: string[]) =>
+		(announce = `Loaded crop factors into ${names.join(', ')}. Review them and save the model to keep them.`);
 
 	// --- display order: crops have their own; farm rows share the node order ---
 	let announce = $state('');
@@ -178,9 +195,21 @@
 				{#each highFactors as h, i (h.id)}{i ? '; ' : ' '}<strong>{h.name || 'unnamed crop'}</strong> ({h.months.join(', ')}){/each}.
 			</p>
 		{/if}
-		{#if !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add crop</button></div>{/if}
+		{#if !readonly}
+			<div class="toolbar after">
+				<button type="button" class="btn" onclick={add}>+ Add crop</button>
+				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
+			</div>
+		{/if}
 	{/if}
 </section>
+{#if loadMounted}
+	<Lazy load={loadCropFactors}>
+		{#snippet children(LoadCropFactorsDialog)}
+			<LoadCropFactorsDialog bind:open={loadOpen} {editor} {settings} farmIds={farms.map((f) => f.id)} onapplied={loaded} />
+		{/snippet}
+	</Lazy>
+{/if}
 {/if}
 
 {#if show('areas')}

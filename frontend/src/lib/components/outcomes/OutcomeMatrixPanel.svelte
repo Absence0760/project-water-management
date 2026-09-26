@@ -8,20 +8,28 @@
 	those years: the share of years met, n years, coloured by the project's
 	risk cut-offs. Its own chunk: RunsTab loads it lazily.
 
+	The Reserve site (settings.outcomes.siteNodeId, the outlet or a gauge with
+	a rule table) is a project setting, so everyone reading the project sees
+	the same matrix: an editor changes it here and it is saved at once;
+	viewers see it, disabled.
+
 	It reports what past years did at each level; it never picks one. The
 	pending state follows the sweep's own status and its job's (polled), and
 	the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
-	import { api, type OutcomeSettings, type RunMeta, type Sweep } from '$lib/api';
+	import type { EwrRuleTable, NetworkNode, ProjectSettings } from '@water-management/engine';
+	import { api, type OutcomeSettings, type Project, type RunMeta, type Sweep } from '$lib/api';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import { fmtDate } from '$lib/format/number';
 	import {
 		buildMatrixView,
+		chooseSite,
 		DEFAULT_DEMAND_LEVELS,
 		demandSweepRequest,
 		latestDemandSweep,
+		matrixSites,
 		parseDemandLevels,
 		SWEEP_MEMBERS_MAX,
 		sweepState,
@@ -34,6 +42,9 @@
 		run,
 		hasNaturalFlow,
 		outcomes,
+		nodes = [],
+		ewrRules = [],
+		onProjectChange,
 		canEdit
 	}: {
 		projectId: string;
@@ -43,10 +54,22 @@
 		hasNaturalFlow: boolean;
 		/** settings.outcomes (the method and the cut-offs); an older API sends none. */
 		outcomes: OutcomeSettings | undefined;
+		/** The network, for the Reserve site picker (the outlet and gauges). */
+		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId' | 'sortOrder'>[];
+		/** settings.ewrRules: which gauges have a rule table. */
+		ewrRules?: readonly Pick<EwrRuleTable, 'siteNodeId'>[];
+		/** The project after the site was saved. */
+		onProjectChange?: (p: Project) => void;
 		canEdit: boolean;
 	} = $props();
 
 	const settings = $derived(resolveOutcomes({ outcomes }));
+	const sites = $derived(matrixSites(nodes, ewrRules));
+	/** The site just picked here, until the saved project comes back through `outcomes`. */
+	let pickedSite = $state<{ id: string | null } | null>(null);
+	let siteSaving = $state(false);
+	let siteError = $state<string | null>(null);
+	const chosen = $derived(chooseSite(pickedSite ? pickedSite.id : outcomes?.siteNodeId, sites));
 	const ordinary = $derived(!run.scenarioId && !run.forecastFrom);
 	let sweep = $state<Sweep | null>(null);
 	let natural = $state.raw<(number | null)[] | null>(null);
@@ -63,7 +86,7 @@
 	const shown = $derived(sweep ? sweepState(sweep) : null);
 	const view = $derived.by((): MatrixView | null => {
 		if (!sweep || shown?.kind !== 'complete' || !natural) return null;
-		return buildMatrixView({ baseStartDate: run.startDate, baseNatural: natural, members: sweep.members, settings });
+		return buildMatrixView({ baseStartDate: run.startDate, baseNatural: natural, members: sweep.members, settings, site: chosen.site });
 	});
 	const dataState = $derived(loading ? 'loading' : !sweep ? 'empty' : (shown?.kind ?? 'loading'));
 
@@ -137,6 +160,27 @@
 		}
 	}
 
+	/** Save the picked site as the project's (an editor's choice is everyone's). */
+	async function pickSite(e: Event) {
+		const raw = (e.currentTarget as HTMLSelectElement).value;
+		const id = raw === '' ? null : raw;
+		const before = pickedSite;
+		pickedSite = { id };
+		siteSaving = true;
+		siteError = null;
+		try {
+			const p = await api.projects.update(projectId, { settings: { outcomes: { siteNodeId: id } } as unknown as Partial<ProjectSettings> });
+			if (live) onProjectChange?.(p);
+		} catch (err) {
+			if (live) {
+				pickedSite = before;
+				siteError = msg(err);
+			}
+		} finally {
+			if (live) siteSaving = false;
+		}
+	}
+
 	onDestroy(() => {
 		live = false;
 		clearTimeout(timer);
@@ -171,6 +215,23 @@
 		{/if}
 		{#if submitError}<div class="alert alert-error" role="alert">{submitError}</div>{/if}
 
+		{#if sites.length > 1}
+			<div class="field site">
+				<label for="outcome-site">Reserve site</label>
+				<select id="outcome-site" value={chosen.site.id ?? ''} onchange={pickSite} disabled={!canEdit || siteSaving} aria-describedby="outcome-site-h">
+					{#each sites as o (o.id ?? '')}
+						<option value={o.id ?? ''}>{o.label}</option>
+					{/each}
+				</select>
+				<span class="hint" id="outcome-site-h">
+					Whose Reserve rule table the matrix reads, for everyone on the project{canEdit ? '' : ' (an editor can change it)'}. Days below the
+					pragmatic EWR are only at the outlet.
+				</span>
+			</div>
+		{/if}
+		{#if chosen.notice}<p class="hint" data-testid="outcome-site-notice">{chosen.notice}</p>{/if}
+		{#if siteError}<div class="alert alert-error" role="alert">{siteError}</div>{/if}
+
 		<div role="status" aria-live="polite" class="status">
 			{#if loading}
 				<span class="muted">Loading…</span>
@@ -199,7 +260,9 @@
 				<span class="badge">{view.method === 'quintiles' ? 'Quintiles' : 'Terciles'} of {view.nYears} complete water years</span>
 				{#if view.cutoffsPending}<span class="badge badge-warn" data-testid="cutoffs-pending">Risk cut-offs pending the hydrologist</span>{/if}
 			</div>
-			{#if view.columns.length && view.nYears}
+			{#if view.siteMissing}
+				<p class="alert alert-warning" data-testid="outcome-site-missing">{view.siteMissing}</p>
+			{:else if view.columns.length && view.nYears}
 				<div class="scroll">
 					<table class="matrix" data-testid="outcome-table">
 						<caption class="visually-hidden">Outcome by demand level (rows) and class of water year (columns)</caption>
@@ -263,6 +326,10 @@
 	}
 	.start input {
 		min-width: 14rem;
+	}
+	.site {
+		margin: 0.75rem 0 0;
+		max-width: 60ch;
 	}
 	.hint {
 		font-size: 0.8rem;

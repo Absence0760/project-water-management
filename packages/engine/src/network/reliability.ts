@@ -159,6 +159,12 @@ export interface WaterAccountRow {
 	rainOnDamsM3: number;
 	/** Groundwater pumped: to the crops and users, and (engine ≥ 0.36.0, WP-3.9) into the dams. */
 	groundwaterM3: number;
+	/**
+	 * Storage set into (+) or out of (−) the dams by settings.damStorageReset
+	 * (engine ≥ 0.46.0, the review triggers' members), an in term; present
+	 * only on a run with the reset.
+	 */
+	storageSetM3?: number;
 	/** Σ transfers in − out over all farms: 0 up to float noise (a transfer moves water inside the network). */
 	transfersM3: number;
 	inM3: number;
@@ -257,6 +263,8 @@ export interface AccountNodeInput {
 	depletion: ArrayLike<number>;
 	/** End-of-day storage. */
 	storage: ArrayLike<number>;
+	/** The storage reset's step on its day (settings.damStorageReset, engine ≥ 0.46.0); missing = none. */
+	storageSet?: ArrayLike<number>;
 	initialStorageM3: number;
 }
 
@@ -422,6 +430,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const rainOnDams = s(cum.rainOnDam);
 	const groundwater = s(cum.groundwater);
 	const transfers = s(cum.transfer);
+	const storageSet = cum.storageSet ? s(cum.storageSet) : null;
 	const landCover = s(cum.landCover);
 	const unallocated = natural - s(cum.runoff) - landCover;
 	const irrSupplied = s(cum.farmSupplied);
@@ -433,9 +442,10 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const outflow = s(cum.outflow);
 	const opening = from === 0 ? cum.initialStorage : cum.storage[from - 1]!;
 	const closing = to < from ? opening : cum.storage[to]!;
-	const inM3 = natural + rainOnDams + groundwater + transfers;
+	const inBase = natural + rainOnDams + groundwater + transfers;
+	const inM3 = storageSet === null ? inBase : inBase + storageSet;
 	const outM3 = landCover + unallocated + consumptive + otherUse + evap + seepageLost + depletion + outflow;
-	const terms = [natural, rainOnDams, groundwater, transfers, landCover, unallocated, consumptive, otherUse, evap, seepageLost, depletion, outflow, opening, closing];
+	const terms = [natural, rainOnDams, groundwater, transfers, ...(storageSet === null ? [] : [storageSet]), landCover, unallocated, consumptive, otherUse, evap, seepageLost, depletion, outflow, opening, closing];
 	let rainM3: number | null = null;
 	if (x.rainMm && x.areaKm2 && x.areaKm2 > 0) {
 		let mm = 0;
@@ -458,6 +468,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		naturalFlowM3: nz(natural),
 		rainOnDamsM3: nz(rainOnDams),
 		groundwaterM3: nz(groundwater),
+		...(storageSet !== null ? { storageSetM3: nz(storageSet) } : {}),
 		transfersM3: nz(transfers),
 		inM3: nz(inM3),
 		landCoverM3: nz(landCover),
@@ -518,6 +529,8 @@ interface DailyTotals {
 	outflow: Float64Array;
 	/** End-of-day storage over all nodes (not a prefix sum). */
 	storage: Float64Array;
+	/** The storage reset's steps over all nodes; null without one (engine ≥ 0.46.0). */
+	storageSet: Float64Array | null;
 	initialStorage: number;
 }
 
@@ -526,6 +539,7 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 	const keys = ['natural', 'runoff', 'landCover', 'transfer', 'farmSupplied', 'farmReturned', 'userSupplied', 'userReturned', 'rainOnDam', 'evaporation', 'seepage', 'seepageLost', 'release', 'groundwater', 'depletion', 'outflow'] as const;
 	const c = Object.fromEntries(keys.map((k) => [k, new Float64Array(days)])) as unknown as DailyTotals;
 	c.storage = new Float64Array(days);
+	c.storageSet = x.accountNodes.some((n) => n.storageSet) ? new Float64Array(days) : null;
 	c.initialStorage = x.accountNodes.reduce((a, n) => a + n.initialStorageM3, 0);
 	// Node by node, each over every day: a day's total still adds the nodes in
 	// the list's (node-id) order, starting from 0, so every total is the same
@@ -564,6 +578,7 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 		for (let t = 0; t < days; t++) c.groundwater[t] = c.groundwater[t]! + (gw[t]! + (gwDam?.[t] ?? 0));
 		add(c.depletion, n.depletion);
 		add(c.storage, n.storage);
+		if (c.storageSet) addOptional(c.storageSet, n.storageSet);
 	}
 	return c;
 }

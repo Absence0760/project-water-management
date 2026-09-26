@@ -191,16 +191,21 @@ export function outlookLevelProblems(level: OutlookLevel): string[] {
  * the project has one, the run window pinned to the base run's start and the
  * season end, rain-source periods clipped to the history, and the level's
  * ops applied with their demand factors from the decision date on
- * (settings.demandFactorFrom). Throws when the base input already carries a
- * demand factor (a scenario run: its factor would be dropped from the
- * history) or the base run doesn't hold the day before the decision date.
+ * (settings.demandFactorFrom). With `start.storageM3` (the review triggers,
+ * ./triggers.ts) the farm dams listed start the decision date holding those
+ * volumes instead of the history's (settings.damStorageReset, engine
+ * 0.46.0); every other part of the state is still the history's. Throws
+ * when the base input already carries a demand factor (a scenario run: its
+ * factor would be dropped from the history) or a storage reset, or the base
+ * run doesn't hold the day before the decision date.
  */
 export function outlookMemberInput(
 	input: ModelInput,
 	baseRun: OutlookBaseRun,
 	season: OutlookSeason,
 	analogue: OutlookAnalogue,
-	ops: readonly ScenarioOp[] = []
+	ops: readonly ScenarioOp[] = [],
+	start: { storageM3?: Readonly<Record<string, number>> } = {}
 ): { input: ModelInput; problems: string[] } {
 	const s = resolveSeason(season);
 	const r0 = toEpochDay(baseRun.startDate);
@@ -208,6 +213,7 @@ export function outlookMemberInput(
 	if (s.from <= r0) throw new RangeError(`the decision date ${s.decisionDate} is not after the base run's first day (${baseRun.startDate}): there is no history to start from`);
 	if (s.from - 1 > r1) throw new RangeError(`the base run ends on ${fromEpochDay(r1)}, before ${fromEpochDay(s.from - 1)}, the day before the decision date: the state there isn't known`);
 	if (input.model.nodes.some((n) => n.demandFactor != null)) throw new Error('the base input carries a demand factor (a scenario run): run the outlook on an ordinary run');
+	if (input.settings.damStorageReset != null) throw new Error('the base input carries a dam storage reset: run the outlook on an ordinary run');
 	const a = toEpochDay(analogue.from);
 	if (toEpochDay(analogue.to) - a + 1 !== s.days) throw new RangeError(`analogue ${analogue.label} is not as long as the season`);
 	const rain = finalRain(baseRun);
@@ -230,7 +236,8 @@ export function outlookMemberInput(
 		...input.settings,
 		simulationStart: baseRun.startDate,
 		simulationEnd: s.seasonEnd,
-		demandFactorFrom: s.decisionDate
+		demandFactorFrom: s.decisionDate,
+		...(start.storageM3 ? { damStorageReset: { date: s.decisionDate, storageM3: { ...start.storageM3 } } } : {})
 	};
 	if (Array.isArray(input.settings.rainSource)) {
 		const last = fromEpochDay(s.from - 1);

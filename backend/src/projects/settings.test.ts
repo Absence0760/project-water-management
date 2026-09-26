@@ -882,4 +882,12 @@ describe('remapSettingNodeIds (project copy)', () => {
 		expect(remapSettingNodeIds({ apanMm: [1] }, ids)).toEqual({ apanMm: [1] });
 		expect(remapSettingNodeIds(null, ids)).toEqual({});
 	});
+
+	it('moves the outcome matrix’s site too, leaving the outlet (null) and an unknown site alone', () => {
+		const ids = new Map([['g1', 'new-g1']]);
+		const at = (siteNodeId: string | null) => ({ outcomes: { yearClassMethod: 'terciles', siteNodeId } });
+		expect(remapSettingNodeIds(at('g1'), ids)).toEqual(at('new-g1'));
+		expect(remapSettingNodeIds(at(null), ids)).toEqual(at(null));
+		expect(remapSettingNodeIds(at('gone'), ids)).toEqual(at('gone'));
+	});
 });

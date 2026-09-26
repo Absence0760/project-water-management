@@ -629,6 +629,16 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'last day with rain') },
 	// Engine ≥ 0.44.0; set only by the seasonal outlook's members, never a project setting.
 	demandFactorFrom: { label: 'Demand factors apply from', fmt: (v) => (v ? String(v) : 'the run start') },
+	// Engine ≥ 0.46.0; set only by the review triggers' members, never a project setting.
+	damStorageReset: {
+		label: 'Dam storage set',
+		fmt: (v) => {
+			const r = v as { date?: unknown; storageM3?: Record<string, unknown> } | null | undefined;
+			if (!r || typeof r !== 'object') return 'none';
+			const dams = r.storageM3 && typeof r.storageM3 === 'object' ? Object.entries(r.storageM3).map(([id, m3]) => `${id} ${String(m3)} m³`) : [];
+			return `on ${String(r.date)}: ${dams.join(', ') || 'no dam'}`;
+		}
+	},
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },

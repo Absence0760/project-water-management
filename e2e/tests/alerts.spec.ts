@@ -51,6 +51,29 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await expect(p.getByRole('region', { name: 'Alerting catchment' }).getByRole('group', { name: 'Dam running low: Lower farm' }).getByRole('radio', { name: 'Once a day (06:00)' })).toBeChecked();
 });
 
+// Screen use (issue #17): one card per catchment, side by side on a wide
+// screen, stacked on a phone, never a sideways scroll.
+test('the alert emails page lays its catchments out as cards across the width', async ({ page, owner }) => {
+	void owner;
+	await seedRunnableProject(page.request, 'Cards catchment A');
+	await seedRunnableProject(page.request, 'Cards catchment B');
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto('/account/alerts');
+	await expect(page.locator('main[data-ready="true"]')).toBeVisible();
+	const a = (await page.getByRole('region', { name: 'Cards catchment A' }).boundingBox())!;
+	const b = (await page.getByRole('region', { name: 'Cards catchment B' }).boundingBox())!;
+	expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+	expect(Math.abs(a.x - b.x)).toBeGreaterThan(a.width - 1);
+
+	await page.setViewportSize(PHONE);
+	const a2 = (await page.getByRole('region', { name: 'Cards catchment A' }).boundingBox())!;
+	const b2 = (await page.getByRole('region', { name: 'Cards catchment B' }).boundingBox())!;
+	expect(Math.abs(a2.x - b2.x)).toBeLessThan(1);
+	expect(Math.abs(a2.y - b2.y)).toBeGreaterThan(Math.min(a2.height, b2.height) - 1);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+	await expectNoViolations(page);
+});
+
 test('an alert email’s unsubscribe link works signed out, asks first, and a dead link says so', async ({ page, owner, browser }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Unsubscribe catchment');

@@ -50,8 +50,23 @@ The menu is keyboard-operable: Escape closes it and returns focus to the
 account button, as does a click outside; a tab or click that leaves the
 menu closes it too.
 
-**The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
-address and whether it is confirmed, a **Display name** form
+**The account page** (`routes/account/+page.svelte`, WP-1.9) opens with a
+header (issue #17): **Account**, then who you are as its summary line, the
+initials avatar, display name, email and a Confirmed / Not confirmed badge
+(a region named by the heading). Below it the cards sit in **two columns**
+once the page itself is 52rem wide (a container query, so the 240 px
+sidebar counts): Profile and Password on the left; Language and units,
+Alert emails and Your data on the right; one column below that. The page is
+capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
+window without scrolling (`account.spec.ts` › layout pins both widths). Form
+fields share one right edge (at most 36rem); Save name sits beside the
+display name; the new and repeated passwords sit side by side once the card
+is 30rem wide; the language switch is its compact joined form
+(`LanguageSwitch segmented`); the m³ / ML radios sit in one row, 32 px
+tall with a mouse and 44 px on touch and phones. Submit buttons are the
+primary style; Choose your alert emails, Download my data and Turn alert
+emails back on are secondary buttons. Sign out and Sign out everywhere stay
+in the account menu only. The cards: a **Display name** form
 (`PATCH /auth/me`; the account menu follows at once), **Language and units** (the
 language switch and the farm view's m³ / ML, [§ Language](#language)), a
 **Your data** panel whose **Download my data** button saves the
@@ -263,38 +278,68 @@ shorter than the cap looks as before.
 
 The tab a project opens on (id `overview`, no `?tab=`; `?tab=summary` is an
 alias). It was called Overview until issue #17 (option A · Results first)
-put the results first. Top to bottom:
+put the results first; its first screen follows board A1 of the redesign
+(issue #17, "option A's simplicity, nothing lost"). Top to bottom:
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
-   leads: there is nothing to summarise yet.
-2. The latest run's results, the "Needs attention" list, the **Flow vs
-   reserve** chart and **Dam levels** (below), the active alerts ([§ Alerts](#alerts)) and the
-   published baseline.
-3. **Once there is a run**, the setup checklist comes here, below the results
-   (usually as the one-line "Setup complete").
-4. **The model**: eight headline facts, then project details, the import
-   record (an imported project only), recent notes ([§ Notes](#notes)), team
-   and members.
+   leads, then Needs attention: there is nothing to summarise yet, so there
+   is no KPI row, chart or supply list.
+2. **The first screen, once there is a run**: the **Latest run** KPI row
+   (four cards, the mean outflow in the line under them), then two columns:
+   the **Flow vs reserve** chart on the left, and on the right (a column
+   280–340 px wide) **Needs attention** above **Supply by farm**. From
+   1100 × 620 px (`FIT_QUERY` in `OverviewTab.svelte`) the block is exactly
+   the height left in the window below its own top edge (measured with a
+   `ResizeObserver` on `body`, as the Network's map, less the save bar
+   when it shows; at least 560 px): the chart fills what the KPIs leave, the
+   side column's cards scroll inside themselves, and the page doesn't need
+   scrolling to see any of it. Narrower, the columns stack and the chart is
+   240 px tall; on a phone the KPIs are 2 × 2.
+3. **Below the first screen**, until the planned Dams and Project pages
+   exist: the active alerts ([§ Alerts](#alerts)), the published baseline,
+   **Dam levels**, the setup checklist (usually the one-line "Setup
+   complete"), then **The model**: eight headline facts, project details,
+   the import record (an imported project only), recent notes
+   ([§ Notes](#notes)), team, members, farmers and share links.
 
 - **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
   record is in: the Runs tab's *EWR vs simulated outflow* chart
-  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) over the last
-  year, shading a forecast run's forecast days. It is its own chunk, since it
-  pulls in uPlot, so the page's first paint doesn't wait for it. Its series
-  come through the Runs tab's `cachedSeries`, and it fetches only the series
-  the run stored ("This run stored no outflow or EWR series." otherwise).
+  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) with a
+  **30 days / 1 year / All** switch (LineChart's `windows`: each window ends
+  on the run's last day, it opens on a year, the pressed button is the window
+  shown and a drag-zoom releases it), shading a forecast run's forecast days.
+  The **days below the reserve are shaded** (LineChart's `shade`), from the
+  run's own `ewr_shortfall` series (`overview/summaryChart.ts`
+  `belowReserve`: negative on a day the engine counted as EWR not met), so
+  the caption's count ("Shaded: the 23 days the outflow was below the dashed
+  EWR line") is the EWR card's; a run that always met it says so. On the
+  first screen it fills its panel (`fill`: the plot gets the panel's height
+  less the chart's own head, legend and caption, measured from the drawn
+  chart). It is its own chunk, since it pulls in uPlot, so the page's first
+  paint doesn't wait for it. Its series come through the Runs tab's
+  `cachedSeries`, and it fetches only the series the run stored ("This run
+  stored no outflow or EWR series." otherwise).
+- **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
+  `overview/supplyBars.ts`): every farm in the latest run with a bar and the
+  % of its demand supplied, fullest first and emptiest last, in the Network's
+  supply bands (`network/supplyColour.ts`: amber below `SUPPLY_TARGET`, red
+  below `LOW_SUPPLY`, with a key; a farm with no demand says "no demand"
+  and goes last). A farm's name opens its [farm drawer](#farm-drawer)
+  (`farmDrawerHref`), unless it has left the model since the run. Its own
+  chunk (it waits for the run's record anyway).
 - **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
-  under Flow vs reserve once the latest run's record is in: every dam in the
-  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series), emptiest
-  first. Each row has the dam's capacity, its storage at the end of the run as
+  below the first screen once the latest run's record is in: every dam in the
+  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series,
+  `damsInRun`), emptiest first. Each row has the dam's capacity, its storage at the end of the run as
   a bar and a % of capacity (a tick marks its minimum operating level, and
   "below 30%" or "at its minimum level" is written beside the %, so colour is
   never the only cue), the lowest it reached in the run's last 365 days with
   the first day of that low, and the days in that year at or below the
   minimum. Capacity and minimum come from the run's own model
   (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them. The run summary has no dam figures, so each dam's daily series is
-  fetched through the Runs tab's `cachedSeries`, four at a time, with
+  them. The run summary has no dam figures, so `OverviewTab` fetches each
+  dam's daily series through the Runs tab's `cachedSeries`, four at a time
+  (`loadDamLevels`), for this table and the **Dams today** card, with
   "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
   **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
   dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
@@ -317,9 +362,16 @@ put the results first. Top to bottom:
   the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
-  why not, as on the Runs tab; "–" without observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
-  is only in a run's daily series, not its summary, so it has no card; the
-  **Dam levels** panel below reads those series. Each
+  why not, as on the Runs tab; "–" without observed flow). They show in the
+  order Reserve · Irrigation supplied · **Dams today** · NSE. *Dams today*
+  (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
+  storage at the end of the run as a share of their total capacity (weighted
+  by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
+  days"; none when the run is shorter), flagged below 30 %; it reads the dam
+  series fetched for Dam levels, so it says "loading dam levels" until they
+  are in, and "no dams in the run" without any. *Mean simulated outflow*
+  (m³/s, % of natural, its change) is the line under the cards, with the
+  run the changes are against. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
@@ -329,7 +381,7 @@ put the results first. Top to bottom:
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
 - **Published baseline** (WP-2.3, `overview/PublishedBaseline.svelte`),
-  under Latest run (shown with or without runs): what stakeholders and farmers see. It fetches
+  below the first screen, after the active alerts (shown with or without runs): what stakeholders and farmers see. It fetches
   `GET /projects/:id/publication` and names the published run (a link to it
   in Runs, with its period from the page's runs list), when and by whom it
   was published, the notice level with its percentage ("Advisory · 15 %"),
@@ -348,11 +400,16 @@ put the results first. Top to bottom:
   a person's act unless the project chose "Publish if there are no new
   warnings" in Settings; nothing here publishes.
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
-  `overview/attention.ts`): one sentence and one link per item, hidden when
-  there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
+  `overview/attention.ts`): a card per item, hidden when there is nothing.
+  Each card has a short title ("1 of 2 farms below 95%"), a one- or two-line
+  detail and its link; the link covers the whole card, and a second link sits
+  above it. The card is coloured by its `tone`: red when the worst short farm
+  is below `LOW_SUPPLY`, amber for a short farm above it, run warnings and
+  stale data, grey for new rainfall and unplanted farms (the title always says
+  what's wrong, so colour is never the only cue). Items: farms below `SUPPLY_TARGET` in the latest run (the
   worst named, links to the run, and, while it is still a farm in the model,
   a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
-  the latest run's warnings, rainfall the latest run hasn't used
+  the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
   (`newDataSinceRun`, links to Runs to re-run), input data older than
   `STALE_DAYS` (`freshness`, links to Data), and farms with no planted area
   once anything is planted (one farm: **Set its planted areas**, the farm
@@ -1019,6 +1076,56 @@ no-planted-area note) and the demand preview (chart and `DemandTable`).
 section, scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
 inline, on the scenario's model, so neither the crop sheet nor the page's
 overlays ever edit the catchment from there.
+
+### Load crop factors
+
+**Load crop factors…**, under the crop-factor table of the [crop
+grids](#crop-grids) (editors only: Crops & demand's **Grids › Crop
+factors**, the grid modal from any tab, and scenario override mode, where it
+fills the scenario's crops), opens a dialog over it
+that fills the project's crop factors from a source, shows what changes and
+what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
+`crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
+logic in `crops/loadFactors.ts`, data in `crops/library.ts`). Which crop set a
+catchment uses is the hydrologist's call (issue #54 Q9/Q10).
+
+- **Source:** the **reference library** (ARC/SABI Irrigation Design Manual
+  ch. 4 A-pan design factors, winter rainfall area; [model.md §2.3
+  item 8](./model.md) lists the crops, sources and conversions), or **a b023
+  workbook** the user picks: its [Crop demand] factors, read by the browser
+  importer in its worker (`spreadsheet/import/`, the same reader and
+  failure messages as Import a b023 workbook; it reads the whole workbook,
+  so a large one takes a few seconds). Client workbooks never leave the
+  browser. The AI workbook v004 (node-based, no b023 named ranges) can't be
+  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
+- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
+  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+- **Match crops:** a row per project crop with a **Load factors from**
+  select, preset by name (`matchByName`: the same name ignoring case,
+  accents, punctuation and a plural s, or the one source whose words hold the
+  crop's or the other way round, "Lucerne" → "Alfalfa (lucerne), frost
+  areas"; ambiguous or unknown names stay on **Keep current**). A library
+  vegetable (staged by portion of the season) asks for a planting month and
+  day and a season length, preset from the manual's Table 4.7 where it gives
+  one; until the month is set it has no factors. An **irrigation system**
+  select sets the crop's own efficiency (engine ≥ 0.43.0) from the SABI 2021
+  values, default **Keep**; the library crop's typical system is shown as a
+  hint, never applied unasked.
+- **Diff:** per mapped crop, its current and new factors month by month
+  (changed cells highlighted) and the efficiency, with the source table and
+  page and the entry's notes, and an **Apply to <crop>** tick (on) to accept
+  or reject that crop.
+- **Demand difference:** for the accepted changes, the mean gross irrigation
+  demand (m³/day, before rain, at the saved A-pan) now and new per farm and
+  for the catchment with the change in %, the same ÷ each farm's irrigation
+  efficiency (its crops' blend, `farmIrrigationEfficiency`), and the
+  catchment's demand by month. The engine's own functions, so it is what a
+  run would use before effective rain.
+- **Apply** replaces the accepted crops' factors (and efficiency) in the
+  shared `ModelEditor` and closes; the save bar then saves them with the
+  optional reason, and History records the change. Cancel, Esc or unticking
+  every crop leaves the model untouched. It loads into the project's existing
+  crops only: add a crop first to load into it.
 
 ### Farm drawer
 
@@ -2423,9 +2530,23 @@ chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
   reason. The classes and colours are worked out in the browser from the
   stored sweep, so changing the settings re-reads a sweep without running
   it again.
-- **Around it**: badges for the **measure** (Reserve months met at the
-  outlet when every level has a rule table there, else days below the
-  pragmatic EWR at the outlet), the method and number of complete years,
+- **Reserve site** (`settings.outcomes.siteNodeId`): a picker, shown when
+  there is more than the outlet to pick, of the outlet and every gauge above
+  it with a Reserve rule table (Settings → Reserve rule tables), in network
+  order. It is a **project setting**, not panel state, so the matrix a
+  viewer or a colleague sees is the one the editor chose: an editor's
+  pick is saved at once (`PATCH` `settings.outcomes`), a viewer sees it
+  disabled. At a gauge the matrix reads that gauge's Reserve months met,
+  from each member's stored run summary (no new sweep needed); at the outlet
+  the measure is chosen as before. A sweep with no results at the chosen
+  gauge (its base run was made before the gauge had a table) shows *This
+  sweep has no Reserve results at gauge X … Run the model again, then run a
+  new demand sweep of the new run.* instead of a table. A stored site that
+  has lost its table or gauge falls back to the outlet with a notice saying
+  so. The Settings form doesn't edit or send the site.
+- **Around it**: badges for the **measure**, naming its site (Reserve months
+  met at the chosen site when every level has a rule table there, else days
+  below the pragmatic EWR at the outlet), the method and number of complete years,
   and **Risk cut-offs pending the hydrologist** while the measure in use has
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
@@ -2435,9 +2556,13 @@ chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
   never picks one (a unit test holds the view model to that).
 
 Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
-enough years, default vs custom cut-offs, problem members) and
+enough years, default vs custom cut-offs, problem members; the site list,
+an ineligible stored site, the metric switching with the site, a sweep
+without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
+(who reads and writes the site, which nodes it accepts, copies) and
 `e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
-matrix against the stored series).
+matrix against the stored series; a gauge's matrix against its stored
+Reserve months, the viewer, the fallback).
 
 ## Scenarios (`?tab=scenarios`)
 
@@ -3004,7 +3129,9 @@ digest). The modeller workspace stays English.
   on the current one; "EN | AF" in the phone headers, the full name as the
   accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
-  also sets the farm view's volume unit (m³ or ML).
+  also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
+  the two buttons joined into one control sized like the form fields
+  (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
   this device's choice (`localStorage` `wm.locale`, try/catch), else
   Afrikaans when it is the browser's first language, else English
@@ -3150,9 +3277,11 @@ the catalogue, [§ Language](#language)); both unit-tested.
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
-  panel and from every alert email; translated): per catchment you can open,
-  a group per alert you can get, with *Right away* / *Once a day (06:00)* /
-  *Off* radios (44 px rows). A farmer sees a *Dam running low: <farm>* group
+  panel and from every alert email; translated): a card per catchment you
+  can open, as many across as fit the page's own width (at least 28rem
+  each; two at 1440, stacked on a phone), in the account page's frame
+  (capped at 92rem), each with a group per alert you can get, with *Right away* / *Once a day (06:00)* /
+  *Off* radios (32 px rows with a mouse, 44 px on touch and phones). A farmer sees a *Dam running low: <farm>* group
   per own farm and *Restriction notices from the WUA*, nothing else; a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
