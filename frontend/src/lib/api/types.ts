@@ -685,6 +685,44 @@ export interface SeriesRevisionMeta {
 	unit: string;
 }
 
+/** Longest API key name, lifetime and series list (backend ingest/keys.ts, 036_api_keys.sql). */
+export const API_KEY_NAME_MAX = 100;
+export const API_KEY_DAYS_MAX = 3650;
+export const API_KEY_SERIES_MAX = 50;
+
+/** One series an API key may write. */
+export interface ApiKeySeries {
+	kind: string;
+	name: string;
+}
+
+/** A per-project API key as its owner sees it (docs/api.md § Ingest). Never the key or its hash. */
+export interface ApiKey {
+	id: string;
+	name: string;
+	/** The first 8 characters of the id: the `wm_<prefix>_…` part of the key. */
+	prefix: string;
+	scopes: string[];
+	/** null: any series of the project. */
+	allowedSeries: ApiKeySeries[] | null;
+	createdAt: string;
+	/** Display names; null once that account is gone. */
+	createdBy: string | null;
+	/** Bumped at most once a minute when the key is used. */
+	lastUsedAt: string | null;
+	/** null: until revoked. */
+	expiresAt: string | null;
+	revokedAt: string | null;
+	revokedBy: string | null;
+}
+
+/** POST /projects/:id/api-keys' body. */
+export interface ApiKeyCreate {
+	name: string;
+	allowedSeries?: ApiKeySeries[] | null;
+	expiresInDays?: number | null;
+}
+
 /** Longest share-link label and lifetime (backend share/links.ts, 025_share_links.sql). */
 export const SHARE_LABEL_MAX = 100;
 export const SHARE_DAYS_MAX = 365;

@@ -18,6 +18,8 @@ import type {
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	ApiKey,
+	ApiKeyCreate,
 	Ensemble,
 	ImportReport,
 	ImportResult,
@@ -422,6 +424,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
 			/** Withdraw a link (owner): it stops working at once. */
 			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
+		},
+		apiKeys: {
+			/** The project's API keys, newest first, revoked and expired ones included (owner). */
+			list: (id: string) => request<{ keys: ApiKey[] }>('GET', `${p(id)}/api-keys`).then((r) => r.keys),
+			/** Make a key (owner). `secret` is the key itself: this is the only time it is shown. */
+			create: (id: string, body: ApiKeyCreate) => request<{ key: ApiKey; secret: string }>('POST', `${p(id)}/api-keys`, body),
+			/** Revoke a key (owner): the next request with it is refused. */
+			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */
