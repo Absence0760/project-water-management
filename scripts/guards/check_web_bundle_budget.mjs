@@ -775,6 +775,10 @@
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.
+// 2026-09-26  total 918 → 924 KB (measured 921). Issue #54 item 1: the Load
+//             crop factors dialog (~9 KB, its own chunk, fetched on first
+//             open: the reference crop library, per-crop diff and demand
+//             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -785,7 +789,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 918,
+	totalCodeKb: 924,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
