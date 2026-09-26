@@ -7,7 +7,8 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
 import { loadPortfolio, type PortfolioProject } from './portfolio.js';
-import { ewrStatus } from './status.js';
+import { localDate } from '../projects/timeZone.js';
+import { ageDays, ewrStatus } from './status.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -78,7 +79,30 @@ describe('GET /teams/:id/portfolio', () => {
 		expect(ids).not.toContain(strangersProject);
 		expect(res.body.thresholds).toEqual({ green: 5, amber: 20, source: 'default' });
 		expect(res.body.team).toEqual({ id: teamId, name: 'Portfolio WUA', role: 'viewer' });
-		expect(res.body.today).toBe(utcToday());
+		// No team-wide "today": each row carries its own project's (058).
+		expect(res.body).not.toHaveProperty('today');
+		for (const p of res.body.projects as PortfolioProject[]) expect(p).toMatchObject({ timeZone: 'Africa/Johannesburg', today: localDate(new Date(), 'Africa/Johannesburg') });
+	});
+
+	it('counts each row to its own project’s day: two zones 25 hours apart give two different todays', async () => {
+		await asOwner(`UPDATE project SET time_zone = 'Pacific/Kiritimati' WHERE id = $1`, [runOnly]);
+		await asOwner(`UPDATE project SET time_zone = 'Pacific/Pago_Pago' WHERE id = $1`, [empty]);
+		try {
+			const before = new Date();
+			const rows = (await portfolio(teamViewer)).body.projects as PortfolioProject[];
+			const ahead = byId(rows, runOnly)!;
+			const behind = byId(rows, empty)!;
+			expect(ahead.timeZone).toBe('Pacific/Kiritimati');
+			expect(behind.timeZone).toBe('Pacific/Pago_Pago');
+			// UTC+14 and UTC−11 are never on the same calendar day.
+			expect(ahead.today).not.toBe(behind.today);
+			expect([localDate(before, 'Pacific/Kiritimati'), localDate(new Date(), 'Pacific/Kiritimati')]).toContain(ahead.today);
+			expect([localDate(before, 'Pacific/Pago_Pago'), localDate(new Date(), 'Pacific/Pago_Pago')]).toContain(behind.today);
+			// The age follows the row's own day.
+			expect(ahead.figuresAgeDays).toBe(ageDays(ahead.figuresUntil!, ahead.today));
+		} finally {
+			await asOwner(`UPDATE project SET time_zone = DEFAULT WHERE id = ANY($1::uuid[])`, [[runOnly, empty]]);
+		}
 	});
 
 	it('answers 404 to a non-member and to another team’s id, and RLS alone holds the rows back', async () => {
@@ -86,9 +110,9 @@ describe('GET /teams/:id/portfolio', () => {
 		expect((await portfolio(admin, otherTeamId)).status).toBe(404);
 		expect((await portfolio(admin, 'not-a-uuid')).status).toBe(404);
 		// Past the membership check, the query itself shows nothing of a team the user isn't in…
-		expect(await withUser(admin.id, (db) => loadPortfolio(db, otherTeamId, utcToday()))).toEqual([]);
+		expect(await withUser(admin.id, (db) => loadPortfolio(db, otherTeamId, new Date()))).toEqual([]);
 		// …positive control: its member sees the project through the same query.
-		expect((await withUser(stranger.id, (db) => loadPortfolio(db, otherTeamId, utcToday()))).map((p) => p.id)).toEqual([strangersProject]);
+		expect((await withUser(stranger.id, (db) => loadPortfolio(db, otherTeamId, new Date()))).map((p) => p.id)).toEqual([strangersProject]);
 	});
 
 	it('a farmer on a team project gets 404, and the query never gives them a catchment roll-up', async () => {
@@ -97,9 +121,9 @@ describe('GET /teams/:id/portfolio', () => {
 		const farmNode = (await asOwner(`SELECT id FROM node WHERE project_id = $1 AND name = 'Upper farm'`, [published]))[0].id;
 		expect((await admin.call('POST', `/projects/${published}/farmers`, { email: farmer.email, nodeIds: [farmNode] })).status).toBe(201);
 		expect((await portfolio(farmer)).status).toBe(404);
-		expect(await withUser(farmer.id, (db) => loadPortfolio(db, teamId, utcToday()))).toEqual([]);
+		expect(await withUser(farmer.id, (db) => loadPortfolio(db, teamId, new Date()))).toEqual([]);
 		// Positive control: the same project reaches a team viewer.
-		expect((await withUser(teamViewer.id, (db) => loadPortfolio(db, teamId, utcToday()))).map((p) => p.id)).toContain(published);
+		expect((await withUser(teamViewer.id, (db) => loadPortfolio(db, teamId, new Date()))).map((p) => p.id)).toContain(published);
 		// The staff-only farm counts stay out of the farmer's publication response (and are in a viewer's).
 		const asFarmer = await farmer.call('GET', `/projects/${published}/publication`);
 		expect(asFarmer.status).toBe(200);
@@ -112,16 +136,16 @@ describe('GET /teams/:id/portfolio', () => {
 		const [applicant] = (await Promise.all(['PfApplicant'].map((n) => signUp(n)))) as [User];
 		expect((await admin.call('POST', `/projects/${published}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
 		expect((await portfolio(applicant)).status).toBe(404);
-		expect(await withUser(applicant.id, (db) => loadPortfolio(db, teamId, utcToday()))).toEqual([]);
+		expect(await withUser(applicant.id, (db) => loadPortfolio(db, teamId, new Date()))).toEqual([]);
 		// Positive control: the same project reaches a team viewer.
-		expect((await withUser(teamViewer.id, (db) => loadPortfolio(db, teamId, utcToday()))).map((p) => p.id)).toContain(published);
+		expect((await withUser(teamViewer.id, (db) => loadPortfolio(db, teamId, new Date()))).map((p) => p.id)).toContain(published);
 	});
 
 	it('reads every project in one query, however many there are', async () => {
 		let queries = 0;
 		const rows = await withUser(admin.id, (db) => {
 			const counting = { query: (...args: unknown[]) => (queries++, (db.query as (...a: unknown[]) => unknown)(...args)) } as unknown as Db;
-			return loadPortfolio(counting, teamId, utcToday());
+			return loadPortfolio(counting, teamId, new Date());
 		});
 		expect(rows).toHaveLength(3);
 		expect(queries).toBe(1);
@@ -135,6 +159,8 @@ describe('the figures, and where they come from', () => {
 			id: empty,
 			name: 'Charlie empty',
 			role: 'owner',
+			timeZone: 'Africa/Johannesburg',
+			today: localDate(new Date(), 'Africa/Johannesburg'),
 			dataUntil: null,
 			lastRunAt: null,
 			publishedAt: null,

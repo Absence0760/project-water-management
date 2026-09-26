@@ -17,6 +17,7 @@
 import type { Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { publishRun } from './publish.js';
 
 /** A warning's shape: its text with every number (and so every date) masked. */
@@ -69,7 +70,9 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 	const added = newWarnings(prev.warnings ?? [], next.warnings ?? []);
 	if (added.length) return { published: false, reason: 'new_warnings', detail: added[0] };
 
-	const since = current.published_at.toISOString().slice(0, 10);
+	// The day it was published where the catchment is (project.time_zone, 058), as its readers date it.
+	const { rows: tz } = await db.query<{ time_zone: string }>('SELECT time_zone FROM project WHERE id = $1', [projectId]);
+	const since = localDate(current.published_at, tz[0]?.time_zone ?? DEFAULT_TIME_ZONE);
 	let result;
 	try {
 		result = await publishRun(db, projectId, {

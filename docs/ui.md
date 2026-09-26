@@ -308,7 +308,10 @@ put the results first. Top to bottom:
   read-only for viewers). Every download of the project (CSV, JSON, the
   .xlsx workbook, the server report PDF) is dated by the calendar day there,
   so an export made just after local midnight carries today's date, not
-  UTC's yesterday. A zone the server doesn't know is refused with its error.
+  UTC's yesterday. The same day dates what the server counts for a person:
+  the portfolio's ages, the feeds' health, the farm page's "not recent"
+  notice and forecast date, and the alerts (their "today" and the 06:00
+  digest). A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then

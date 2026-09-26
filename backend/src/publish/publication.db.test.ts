@@ -1,7 +1,7 @@
 // Publishing a run (WP-2.3, 022_publication.sql) and the farmer's farm view
 // built from it (WP-2.6 API). Every "cannot see" check has a positive
 // control: the same farmer sees their own farm, a viewer sees every farm.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { trimRuns } from '../runs/execute.js';
@@ -458,6 +458,35 @@ describe('a run that goes on on forecast rain', () => {
 		const lines = file.text.replace(/^﻿/, '').trim().split('\r\n');
 		expect(lines).toHaveLength(1 + 90);
 		expect(lines.at(-1)!.startsWith('2021-12-29,')).toBe(true);
+		// The forecast's madeOn is the day the run was made where the catchment is (058): a run made at
+		// 22:30 UTC was made on the next day in South Africa. Positive control: the same run in a UTC project.
+		await asOwner(`UPDATE model_run SET created_at = '2026-09-25T22:30:00Z' WHERE id = $1`, [r]);
+		expect((await publish(owner, r, {}, p)).status).toBe(201);
+		expect((await owner.call('GET', `/projects/${p}/farm/${farmId}`)).body.farm.forecast.madeOn).toBe('2026-09-26');
+		expect((await owner.call('PATCH', `/projects/${p}`, { timeZone: 'UTC' })).status).toBe(200);
+		expect((await publish(owner, r, {}, p)).status).toBe(201);
+		expect((await owner.call('GET', `/projects/${p}/farm/${farmId}`)).body.farm.forecast.madeOn).toBe('2026-09-25');
 		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
+	});
+});
+
+describe('the farm view’s freshness', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	// Farm One's figures run to 2023-12-29; they are stale past 7 days. At 23:30 UTC on 5 January it is
+	// already the 6th in South Africa (8 days: stale), still the 5th in UTC (7 days: fresh). Only the
+	// clock is faked, so the server's own zone plays no part (rule 7).
+	it('counts the figures’ age to the project’s today, not UTC’s (positive control: a UTC project)', async () => {
+		vi.useFakeTimers({ toFake: ['Date'], now: new Date('2024-01-05T23:30:00Z') });
+		const view = async () => (await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`)).body;
+		expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: true });
+		await asOwner(`UPDATE project SET time_zone = 'UTC' WHERE id = $1`, [projectId]);
+		try {
+			expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: false });
+		} finally {
+			await asOwner(`UPDATE project SET time_zone = DEFAULT WHERE id = $1`, [projectId]);
+		}
 	});
 });

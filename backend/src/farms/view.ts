@@ -5,7 +5,7 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARM_VIEW_STALE_DAYS, FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmIndex, type FarmProjection, type FarmView, type RestrictionLevel } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmIndex, type FarmProjection, type FarmView, type RestrictionLevel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -15,6 +15,8 @@ import { ApiError } from '../http/errors.js';
 import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
 import { nodeColumnHeader } from '../export/run-tables.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
+import { localDate } from '../projects/timeZone.js';
+import { isStale } from '../portfolio/status.js';
 import type { StoredCatchmentView } from '../publish/publish.js';
 
 const isoDate = z
@@ -93,9 +95,6 @@ export async function farmerProjection(db: Db, projectId: string, view: FarmProj
 	return { ...view, river: { ...view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 }
 
-/** Whole calendar days from `iso` to today (UTC). */
-const daysSince = (iso: string, now = new Date()) => Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - toEpochDay(iso) * 86_400_000) / 86_400_000);
-
 export const farmViewRoutes = new Hono<AuthEnv>()
 	// The caller's farms in this project, and whether anything is published.
 	.get('/:id/farm', async (c) => {
@@ -122,7 +121,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			await requireFarm(db, id, nodeId);
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
-			const { rows: p } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
+			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			const farm = await farmerProjection(db, id, cur.view);
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
 				'SELECT farms_upstream, farms_downstream, farm_count FROM app_farm_context($1, $2)',
@@ -148,7 +147,8 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					nextExpectedOn: cur.next_expected_on
 				},
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
-				stale: daysSince(farm.dataUntil) > FARM_VIEW_STALE_DAYS
+				// Counted to today where the catchment is (project.time_zone, 058), not UTC's day.
+				stale: isStale(farm.dataUntil, localDate(new Date(), p[0]!.timeZone))
 			};
 			return c.json(body);
 		});
