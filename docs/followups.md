@@ -1139,6 +1139,17 @@ role and not before it.
         CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
         once per tick and share it between feeds, or keep a per-day
         preliminary/final marker so final days aren't re-read.
+  - [ ] **Ingest doesn't check a result's dates against the window asked
+        for.** A result off the `ingest-results` queue is validated for shape
+        and size, but its `startDate` can be any day, so a compromised
+        fetcher could write days far outside the fetch (still only into the
+        series that feed targets, as security.md accepts). Durable fix: put
+        the window in the `feed_fetch` job's payload (jobs/handlers, owned by
+        the jobs branches today) and have `ingestResult` refuse days outside
+        it. Trigger: before the first production deploy of the fetcher.
+        Related: "Run now" is deduped per feed but not rate-limited, and an
+        hourly schedule re-reads CHIRPS (published daily) 24 times a day; cap
+        both when the request volume item above is done.
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):
