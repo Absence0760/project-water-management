@@ -261,3 +261,42 @@ test('a CHIRPS upload is asked its product and version, and the series row shows
 	await upload(page, 'Rainfall — catchment', 'rainfall-daily.csv');
 	await expect(form.getByLabel('CHIRPS product and version')).toHaveCount(0);
 });
+
+// An automatic station's hourly record, added up into manual-gauge days (issue #40 (b) amendment 5). Synthetic.
+test('an hourly file is added up into 08:00 days, or midnight days, and the series records which', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Hourly rain');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('Kind').selectOption({ label: 'Rainfall — alternative catchment gauge' });
+	// 2 mm an hour from 21:00 on the 5th to 04:00 on the 6th (stamps close their hour): a storm straddling midnight.
+	const rows = ['timestamp,rain_mm'];
+	for (let h = 0; h < 72; h++) {
+		const iso = new Date(Date.UTC(2020, 2, 4, 9 + h)).toISOString();
+		const stamp = `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+		rows.push(`${stamp},${stamp >= '2020-03-05 21:00' && stamp <= '2020-03-06 04:00' ? 2 : 0}`);
+	}
+	await form.getByLabel('CSV file').setInputFiles({ name: 'station.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) });
+	const boundary = form.getByTestId('day-boundary');
+	await expect(boundary.getByRole('radio', { name: /^08:00 to 08:00/ })).toBeChecked();
+	await expect(form.getByTestId('sub-daily-summary')).toHaveText('72 readings, 24 a day, 08:00–08:00');
+	// Midnight splits the storm over two days, with two partial days at the ends; back to 08:00 for the upload.
+	await boundary.getByRole('radio', { name: /^midnight to midnight/ }).check();
+	await expect(form.getByTestId('sub-daily-summary')).toContainText('2 days have fewer readings');
+	await boundary.getByRole('radio', { name: /^08:00 to 08:00/ }).check();
+	await form.getByLabel('Product').fill('SASSCAL AWS');
+	await form.getByLabel('Version').fill('1');
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toHaveText('Uploaded 3 days to “Rainfall — alternative catchment gauge”.');
+
+	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — alternative catchment gauge' });
+	await expect(row.getByTestId('series-day-boundary')).toHaveText('08:00 day');
+	await expect(row.getByTestId('series-provenance')).toHaveText('SASSCAL AWS v1');
+	// No rain-source period names it yet, so no run reads it.
+	await expect(row).toContainText('Not used: no rain-source period names it');
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; dayBoundary: string }[];
+	expect(stored[0]!.dayBoundary).toBe('08:00');
+	const s = await (await page.request.get(`${API_URL}/projects/${project.id}/series/${stored[0]!.id}`)).json();
+	expect(s.startDate).toBe('2020-03-04');
+	expect(s.values).toEqual([0, 16, 0]);
+});

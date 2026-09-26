@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { createProject, putSeries } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
@@ -281,4 +282,61 @@ test.describe('CHIRPS fit period', () => {
 		await expect(fit(page).getByTestId('chirps-fit-proposal')).toHaveText(/needs a catchment rain series and a CHIRPS series/);
 		await expect(fit(page).getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
 	});
+});
+
+// Rain-source periods (engine ≥ 0.30.0, issue #40 (b)). Synthetic records only.
+test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRPS fallback for a gauge in CHIRPS block Save until given; the list survives a reload', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings rain source');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByTestId('rain-source');
+	const save = page.getByRole('button', { name: 'Save settings' });
+	await expect(section.getByTestId('rain-source-none')).toBeVisible();
+
+	await section.getByRole('button', { name: 'Add a rain-source period' }).click();
+	const period = section.getByTestId('rain-source-period');
+	await expect(section.getByRole('alert')).toHaveText(/^Rain-source period 1 needs a reason/);
+	await expect(save).toBeDisabled();
+	await period.getByLabel('From', { exact: true }).fill('2012-10-01');
+	await period.getByLabel('To', { exact: true }).fill('2019-09-30');
+	await period.getByLabel('Reason').fill('gauges closed; automatic station from 2012');
+	// The default is a fit against the reanalysis, which needs nothing else.
+	await expect(period.getByLabel('Factors')).toHaveValue('fit');
+	await expect(section.getByRole('alert')).toBeHidden();
+
+	// Fixed factors need their provenance.
+	await period.getByLabel('Factors').selectOption('fixed');
+	await expect(section.getByRole('alert')).toHaveText(/provenance needs a source and a method/);
+	await period.getByLabel('Factor, Oct, period 1').fill('1.3');
+	await period.getByLabel('Fitted by').fill('hydrologist');
+	await period.getByLabel('Method').fill('catchment ÷ ERA5 over the reference era, by month');
+	await expect(section.getByRole('alert')).toBeHidden();
+
+	// A gauge CHIRPS ingests can't fall through to CHIRPS: name the reanalysis.
+	await period.getByLabel(/CHIRPS ingests this gauge/).check();
+	await expect(section.getByRole('alert')).toHaveText(/need a fallback that isn’t CHIRPS/);
+	await expect(save).toBeDisabled();
+	await period.getByLabel('Gaps from').selectOption('rain_reanalysis_mm');
+	await expect(section.getByRole('alert')).toBeHidden();
+	await expect(save).toBeEnabled();
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	await page.reload();
+	await expect(period.getByLabel('Reason')).toHaveValue('gauges closed; automatic station from 2012');
+	await expect(period.getByLabel('Factors')).toHaveValue('fixed');
+	await expect(period.getByLabel('Factor, Oct, period 1')).toHaveValue('1.3');
+	await expect(period.getByLabel('Gaps from')).toHaveValue('rain_reanalysis_mm');
+	await expect(period.getByLabel(/CHIRPS ingests this gauge/)).toBeChecked();
+	const settings = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
+	expect(settings.rainSource).toEqual([
+		expect.objectContaining({ start: '2012-10-01', end: '2019-09-30', series: 'rain_catchment_alt_mm', gaugeInChirps: true, fallback: expect.objectContaining({ series: 'rain_reanalysis_mm' }) })
+	]);
+
+	// Remove it: none again.
+	await section.getByRole('button', { name: 'Remove rain-source period 1' }).click();
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await page.reload();
+	await expect(section.getByTestId('rain-source-none')).toBeVisible();
 });
