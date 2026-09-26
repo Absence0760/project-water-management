@@ -9,7 +9,7 @@
 // - no DTD at all: a <!DOCTYPE …> (or any other <!…> declaration) is refused,
 //   so there are no entity definitions to expand. Entity references are left
 //   in the text exactly as written; the value decoders below expand only the
-//   five XML built-ins and numeric references, as SheetJS did;
+//   five XML built-ins and numeric references;
 // - every token (a tag with its attributes, a comment, a CDATA section, a
 //   processing instruction) has a length cap, so a huge attribute value or an
 //   unterminated comment is a typed error, not an unbounded buffer;
@@ -17,9 +17,11 @@
 //   root, nothing after it), so an unclosed or mismatched tag is a typed error;
 // - UTF-16 parts are refused (Excel writes UTF-8; a leading UTF-8 BOM is fine).
 //
-// Values are handed on as SheetJS saw them: raw bytes as a "binary string"
-// (one char per byte), then decoded with ports of SheetJS's own utf8read and
-// unescapexml, so the cells the parser reads are the ones it read before.
+// Values are handed on as raw bytes in a "binary string" (one char per byte)
+// and decoded with a port of SheetJS's utf8read. Cell text (sheet.ts,
+// sharedStrings.ts) is then decoded as openpyxl reads it, since the Python
+// importer is the reference (decodeXmlText, issue #22); the workbook part's
+// names and number formats keep SheetJS's unescapexml (unescapeXml).
 import { UnreadableWorkbookError } from './errors';
 
 export interface XmlLimits {
@@ -99,15 +101,15 @@ function replaceEntities(s: string): string {
 }
 
 /**
- * SheetJS's unescapexml: the five XML entities and numeric references (as
- * UTF-16 code units, as SheetJS does), Excel's _xHHHH_ escapes, and CDATA
- * sections kept literally; `xlsx` also turns CRLF into LF. Nothing else is
+ * SheetJS's unescapexml, for the workbook part's sheet names, defined names
+ * and number formats (cell text uses decodeXmlText): the five XML entities
+ * and numeric references (as UTF-16 code units, as SheetJS does), Excel's
+ * _xHHHH_ escapes, and CDATA sections kept literally. Nothing else is
  * expanded. Where a CDATA section is unterminated or its end comes first
- * (never in well-formed XML, but possible in a formula string decoded a second
- * time), the rest is decoded as plain text; SheetJS's recursion there was
- * quadratic in the value's length.
+ * (never in well-formed XML), the rest is decoded as plain text; SheetJS's
+ * recursion there was quadratic in the value's length.
  */
-export function unescapeXml(text: string, xlsx = false): string {
+export function unescapeXml(text: string): string {
 	let out = '';
 	let s = text;
 	for (;;) {
@@ -124,7 +126,49 @@ export function unescapeXml(text: string, xlsx = false): string {
 		out += replaceEntities(s.slice(0, i)) + s.slice(i + 9, j);
 		s = s.slice(j + 3);
 	}
-	return xlsx ? out.replace(/\r\n/g, '\n') : out;
+	return out;
+}
+
+const XML_ENTITIES: Record<string, string> = { quot: '"', apos: "'", gt: '>', lt: '<', amp: '&' };
+const XML_REF_RE = /&(?:(quot|apos|gt|lt|amp)|#([0-9]+)|#x([0-9a-fA-F]+));/g;
+
+/** Whether a code point is an XML 1.0 Char, the only ones a character reference may name. */
+function isXmlChar(cp: number): boolean {
+	return cp === 0x9 || cp === 0xa || cp === 0xd || (cp >= 0x20 && cp <= 0xd7ff) || (cp >= 0xe000 && cp <= 0xfffd) || (cp >= 0x10000 && cp <= 0x10ffff);
+}
+
+function replaceXmlRefs(s: string): string {
+	if (s.indexOf('&') === -1) return s;
+	return s.replace(XML_REF_RE, (all: string, name: string | undefined, dec: string | undefined, hex: string | undefined) => {
+		if (name !== undefined) return XML_ENTITIES[name]!;
+		const cp = dec !== undefined ? parseInt(dec, 10) : parseInt(hex!, 16);
+		return isXmlChar(cp) ? String.fromCodePoint(cp) : all;
+	});
+}
+
+/**
+ * Character data (already UTF-8 decoded) as an XML parser hands it on, and so
+ * as openpyxl reads a cell's text (issue #22): literal line breaks (CRLF, a
+ * lone CR) become LF; the five built-in entities and numeric character
+ * references are expanded once, a reference to a code point beyond U+FFFF as
+ * that one character; CDATA sections are kept literally. Nothing else:
+ * Excel's _xHHHH_ escapes stay as written, and a CR written as &#13; stays a
+ * CR. A reference XML doesn't define (a named entity, upper case &AMP; or
+ * &#X41;, a number that isn't an XML character) is left as written, where an
+ * XML parser would refuse the whole file; Excel never writes one.
+ */
+export function decodeXmlText(text: string): string {
+	const s = text.indexOf('\r') === -1 ? text : text.replace(/\r\n?/g, '\n');
+	if (s.indexOf('<![CDATA[') === -1) return replaceXmlRefs(s);
+	let out = '';
+	let rest = s;
+	for (;;) {
+		const i = rest.indexOf('<![CDATA[');
+		const j = i === -1 ? -1 : rest.indexOf(']]>', i + 9);
+		if (j === -1) return out + replaceXmlRefs(rest);
+		out += replaceXmlRefs(rest.slice(0, i)) + rest.slice(i + 9, j);
+		rest = rest.slice(j + 3);
+	}
 }
 
 /** SheetJS's parsexmlbool (xsd:boolean; anything else is false). */

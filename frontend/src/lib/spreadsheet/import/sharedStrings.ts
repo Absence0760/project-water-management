@@ -1,5 +1,7 @@
-// Shared strings (xl/sharedStrings.xml) and inline strings, read the way
-// SheetJS's parse_si read them, from the streaming tokenizer's events.
+// Shared strings (xl/sharedStrings.xml) and inline strings, from the
+// streaming tokenizer's events: which text makes up the string is decided the
+// way SheetJS's parse_si decided it, and the text is decoded the way openpyxl
+// decodes it (issue #22).
 //
 // The shared-string table of a client workbook holds every label of every
 // sheet, including the per-farm result sheets the importer never reads, so
@@ -11,8 +13,18 @@
 // - rich: otherwise, when it has an <r> run, the value is the text of every
 //   <t> outside the phonetic runs (<rPh>) joined, skipping a <t> that holds
 //   anything but character data;
-// - otherwise the empty string;
-// then UTF-8 decoded and unescaped (entities, _xHHHH_, CRLF → LF).
+// - otherwise the empty string.
+//
+// That text is then decoded as openpyxl reads it, since the Python importer
+// is the reference the port matches (xml.ts decodeXmlText): UTF-8, literal
+// line breaks to LF, the five XML entities and numeric references expanded
+// once, CDATA kept literally. Excel's _xHHHH_ escapes are left as written
+// (SheetJS turned _x000D_ into a CR), and a CR written as &#13; stays a CR
+// (SheetJS turned CRLF into LF after decoding). A shared string then loses
+// every "x005F_", as openpyxl's read_string_table does (so Excel's escaped
+// underscore _x005F_x000D_ reads _x000D_); an inline string doesn't.
+// stringDecoding.test.ts pins these to openpyxl's committed output and lists
+// them as the deliberate differences from SheetJS.
 //
 // Two departures, both where SheetJS read markup as text: a self-closing <t/>
 // first child is '' (SheetJS took whatever markup followed it as the value),
@@ -20,7 +32,7 @@
 // entry, shifting every later index). And a needed string whose plain <t>
 // holds an element (schema-invalid; Excel never writes it) is refused as
 // corrupt, where SheetJS kept the markup as text.
-import { binary, notWellFormed, type Tag, unescapeXml, utf8read, type XmlHandler } from './xml';
+import { binary, decodeXmlText, notWellFormed, type Tag, utf8read, type XmlHandler } from './xml';
 
 /** Longest string collected: Excel's cell limit is 32 767 characters, so this is far beyond any real one. */
 export const MAX_STRING_CHARS = 1 << 20;
@@ -109,8 +121,8 @@ export class SiCollector {
 	}
 
 	finish(): string {
-		if (this.plain) return unescapeXml(utf8read(this.plainRaw.join('')), true);
-		if (this.rich) return unescapeXml(utf8read(this.runs.join('')), true);
+		if (this.plain) return decodeXmlText(utf8read(this.plainRaw.join('')));
+		if (this.rich) return decodeXmlText(utf8read(this.runs.join('')));
 		return '';
 	}
 }
@@ -166,7 +178,8 @@ export class SharedStringsReader implements XmlHandler {
 		this.depth--;
 		if (this.itemDepth >= 0) {
 			if (this.depth === this.itemDepth) {
-				if (this.collecting) this.strings.set(this.count - 1, this.si.finish());
+				// openpyxl's read_string_table: text.replace('x005F_', '').
+				if (this.collecting) this.strings.set(this.count - 1, this.si.finish().replaceAll('x005F_', ''));
 				this.itemDepth = -1;
 				this.collecting = false;
 			} else if (this.collecting) this.si.close(local);

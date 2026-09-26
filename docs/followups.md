@@ -1379,20 +1379,32 @@ role and not before it.
         `sourceWorkbooks.test.ts`) finds no difference. The import worker
         101 → 25 KB gzip (the bundle guard's spreadsheet-worker ceiling
         107 → 95 KB, now the export worker's).
-  - [ ] **Strings SheetJS and openpyxl decode differently** (issue #22). The reader keeps
-        SheetJS's string decoding, so the import reads what it read before.
-        Two cases differ from openpyxl, and so from the Python importer the
-        port must match: Excel's `_xHHHH_` escapes (SheetJS turns
-        `_x000D_` into a carriage return, openpyxl leaves the text as
-        written) and a formula's cached text (`t="str"`, which SheetJS
-        entity-decodes twice: `a&amp;amp;b` reads `a&b`, openpyxl `a&amp;b`).
-        Checked with a hand-made workbook through openpyxl 3.1 in read-only
-        mode. Neither occurs in a cell the importer reads in the workbooks
-        seen so far (the parity tests are green). Durable fix: decode as
-        openpyxl does in `sheet.ts` and `sharedStrings.ts` (one decode, no
-        `_xHHHH_` handling), with a Python-parity fixture for each case.
-        Trigger: a workbook whose names or labels carry either (a line break
-        typed as CR+LF in a header, a formula-built farm name with an `&`).
+  - [x] **Strings SheetJS and openpyxl decode differently** (issue #22,
+        2026-09-26). The reader kept SheetJS's string decoding, which differs
+        from openpyxl, and so from the Python importer the port must match,
+        in two cases: Excel's `_xHHHH_` escapes (SheetJS turned `_x000D_`
+        into a carriage return, openpyxl leaves the text as written) and a
+        formula's cached text (`t="str"`, which SheetJS entity-decoded twice:
+        `a&amp;amp;b` read `a&b`, openpyxl `a&amp;b`). `sheet.ts` and
+        `sharedStrings.ts` now decode cell text as openpyxl does
+        (`xml.ts` `decodeXmlText`): one entity decode, no `_xHHHH_` handling,
+        and, found while pinning it, the rest of what openpyxl does: a CR
+        written as `&#13;` stays a CR (SheetJS turned CRLF into LF after
+        decoding), a literal CR becomes LF, a reference beyond U+FFFF is one
+        character (SheetJS truncated it), and a shared string drops every
+        `x005F_` (openpyxl's `read_string_table`). Pinned by a hand-written
+        fixture with openpyxl's output committed
+        (`scripts/wbt-import/make_string_decoding_fixture.py`,
+        `fixtures/string_decoding.*`, `test_string_decoding.py`,
+        `stringDecoding.test.ts`); `readerParity.test.ts` still compares
+        everything else with SheetJS cell for cell and lists exactly which
+        fixture cells differ, and `sourceWorkbooks.test.ts` allows only
+        differences `explainedByDecoding()` puts down to decoding. None of
+        the workbooks seen so far changes (the parity tests stay green). Not
+        changed: sheet names, defined names and number formats
+        (`workbookParts.ts`) keep SheetJS's decoding, which differs from
+        openpyxl only for a name containing a literal `_xHHHH_`; no b023
+        workbook has one.
   - [x] **The notes and unmapped report are kept** (2026-09-25). The import
         dialog sends them beside the document (`importReport` on
         `POST /projects/import`, capped by zod) and they are stored in the

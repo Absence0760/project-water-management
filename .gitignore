@@ -109,9 +109,12 @@ backend.config
 # Tests use small fixtures extracted from them (see docs/model.md).
 *.xlsm
 *.xlsx
-# The one exception: the SYNTHETIC b023 workbook (an invented catchment, made by
-# scripts/wbt-import/make_synthetic_workbook.py) that the importer parity tests read.
+# The exceptions: the SYNTHETIC b023 workbook (an invented catchment, made by
+# scripts/wbt-import/make_synthetic_workbook.py) that the importer parity tests read,
+# and the hand-written string-decoding workbook (invented text, made by
+# scripts/wbt-import/make_string_decoding_fixture.py).
 !/scripts/wbt-import/fixtures/synthetic_b023.xlsx
+!/scripts/wbt-import/fixtures/string_decoding.xlsx
 # The workbooks now live outside the repo (../project-water-management-source/);
 # keep these as a safety net in case they're copied back in.
 Original/

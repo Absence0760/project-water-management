@@ -11,21 +11,27 @@
 //   number or shared-string cell with no value: an empty formula cell reads
 //   as blank;
 // - t="n" (or none): parseFloat of the value; t="s": the shared string;
-//   t="str" (a formula's cached text): the value decoded a second time, as
-//   SheetJS did; t="inlineStr": the <is> text; t="b": xsd:boolean; t="e": the
-//   error text's code; t="d": an ISO date turned into a serial number;
-//   anything else reads as blank;
+//   t="str" (a formula's cached text): the value; t="inlineStr": the <is>
+//   text; t="b": xsd:boolean; t="e": the error text's code; t="d": an ISO
+//   date turned into a serial number; anything else reads as blank;
 // - numbers carry their number format (styles.xml), so a date cell is told
 //   from a number exactly as before;
 // - the address is the r attribute (or the next column / row when absent), a
 //   later cell at the same address wins;
 // - the used range (lastRow) is the <dimension> element's when it has a valid
 //   range, else the rows and columns seen, as SheetJS's !ref was.
+//
+// One departure: a value is decoded as openpyxl decodes it, since the Python
+// importer is the reference the port matches (issue #22; xml.ts
+// decodeXmlText): UTF-8, literal line breaks to LF, the five XML entities and
+// numeric references expanded once, no _xHHHH_ handling. SheetJS decoded a
+// formula's cached text twice (a&amp;amp;b read a&b, openpyxl a&amp;b) and
+// turned _x000D_ into a CR. Shared and inline strings: ./sharedStrings.ts.
 import { UnreadableWorkbookError } from './errors';
 import type { RawCell, SheetSource } from './source';
 import { SiCollector } from './sharedStrings';
 import type { Styles } from './workbookParts';
-import { binary, notWellFormed, parseXmlBool, type Tag, unescapeXml, utf8read, type XmlHandler } from './xml';
+import { binary, decodeXmlText, notWellFormed, parseXmlBool, type Tag, utf8read, type XmlHandler } from './xml';
 
 const K_NUM = 1;
 const K_SST = 2;
@@ -454,7 +460,7 @@ export class SheetReader implements XmlHandler {
 	private finishCell(): void {
 		this.cellDepth = -1;
 		const raw = this.vRaw.length ? this.vRaw.join('') : '';
-		const v = raw === '' ? undefined : unescapeXml(raw);
+		const v = raw === '' ? undefined : decodeXmlText(utf8read(raw));
 		const t = this.cellT;
 		if (t === undefined && v === undefined) return;
 		const type = t || 'n';
@@ -478,7 +484,7 @@ export class SheetReader implements XmlHandler {
 				break;
 			case 'str':
 				kind = K_STR;
-				num = this.strings.push(v !== undefined ? unescapeXml(utf8read(v), true) : '') - 1;
+				num = this.strings.push(v ?? '') - 1;
 				break;
 			case 'inlineStr':
 				kind = K_STR;

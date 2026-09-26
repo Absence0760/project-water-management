@@ -4,7 +4,7 @@
 // unbounded buffer.
 import { describe, expect, it } from 'vitest';
 import { UnreadableWorkbookError } from './errors';
-import { type XmlHandler, XmlScanner, binary, parseXmlBool, scanXml, unescapeXml, utf8read } from './xml';
+import { type XmlHandler, XmlScanner, binary, decodeXmlText, parseXmlBool, scanXml, unescapeXml, utf8read } from './xml';
 
 const enc = new TextEncoder();
 
@@ -130,6 +130,7 @@ describe('XmlScanner', () => {
 		// Without a DTD, an entity reference stays as written: never expanded.
 		expect(events('<a>&lol9;&amp;</a>')).toContain('text:&lol9;&amp;');
 		expect(unescapeXml('&lol9;&amp;')).toBe('&lol9;&');
+		expect(decodeXmlText('&lol9;&amp;')).toBe('&lol9;&');
 	});
 
 	it('caps the length of a tag, comment or CDATA section and the nesting depth', () => {
@@ -162,7 +163,35 @@ describe('XmlScanner', () => {
 	});
 });
 
-describe('value decoding (SheetJS-compatible)', () => {
+describe('cell text decoding (as openpyxl reads it, issue #22)', () => {
+	it('expands the five entities and numeric references once, and leaves _xHHHH_ escapes as written', () => {
+		expect(decodeXmlText('&lt;&gt;&amp;&quot;&apos;&#65;&#x42;_x0043_ &nbsp; &amp;amp;')).toBe('<>&"\'AB_x0043_ &nbsp; &amp;');
+		expect(decodeXmlText('Flow_x000D__x000A_(m3/day)')).toBe('Flow_x000D__x000A_(m3/day)');
+		expect(decodeXmlText('a &amp;lt;b&amp;gt;')).toBe('a &lt;b&gt;');
+	});
+
+	it('decodes a reference beyond the BMP as one character', () => {
+		expect(decodeXmlText('&#128167;&#x1F4A7;')).toBe('\u{1F4A7}\u{1F4A7}');
+	});
+
+	it('leaves a reference XML does not define as written (an XML parser would refuse the file)', () => {
+		const odd = '&AMP; &#X41; &#0; &#xD800; &#1114112; &#; &#x;';
+		expect(decodeXmlText(odd)).toBe(odd);
+	});
+
+	it('turns literal line breaks into LF, as an XML parser does, but keeps a CR written as a reference', () => {
+		expect(decodeXmlText('a\r\nb\rc\nd')).toBe('a\nb\nc\nd');
+		expect(decodeXmlText('a&#13;&#10;b&#xD;c')).toBe('a\r\nb\rc');
+	});
+
+	it('keeps CDATA literally, line breaks normalised, and decodes around it', () => {
+		expect(decodeXmlText('a<![CDATA[&amp; _x000D_\r\n]]>&amp;<![CDATA[x]]>')).toBe('a&amp; _x000D_\n&x');
+		const long = '<![CDATA[' + 'x'.repeat(200_000) + '&amp;';
+		expect(decodeXmlText(long)).toBe('<![CDATA[' + 'x'.repeat(200_000) + '&');
+	});
+});
+
+describe('value decoding (SheetJS-compatible, for the workbook part)', () => {
 	it('decodes the five entities, numeric references and _xHHHH_ escapes, nothing else', () => {
 		expect(unescapeXml('&lt;&gt;&amp;&quot;&apos;&#65;&#x42;_x0043_ &nbsp; &amp;amp;')).toBe('<>&"\'ABC &nbsp; &amp;');
 		// SheetJS's quirk, kept: only a lowercase x makes a reference hexadecimal (&#X43; is decimal 43, '+').
@@ -171,9 +200,8 @@ describe('value decoding (SheetJS-compatible)', () => {
 		expect(unescapeXml('&#128512;')).toBe(String.fromCharCode(128512 & 0xffff));
 	});
 
-	it('keeps CDATA literally and turns CRLF into LF only for xlsx text', () => {
+	it('keeps CDATA and line breaks literally', () => {
 		expect(unescapeXml('a<![CDATA[&amp;]]>&amp;<![CDATA[x]]>')).toBe('a&amp;&x');
-		expect(unescapeXml('a&#13;&#10;b\r\nc', true)).toBe('a\nb\nc');
 		expect(unescapeXml('a\r\nb')).toBe('a\r\nb');
 	});
 

@@ -1606,8 +1606,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   Python one (`sourceWorkbooks.test.ts`, local), and both, imported through
   the route's code with a run, store identical run summaries (checked
   locally on 2026-09-25); the synthetic parity test runs in CI. Left open:
-  profiling in a real browser and two string decodings where SheetJS and
-  openpyxl differ (followups.md).
+  profiling in a real browser (followups.md). The two string decodings where
+  SheetJS and openpyxl differed now follow openpyxl (issue #22, 2026-09-26).
 - **Goal:** upload a b023 `.xlsm` in the UI with no Python, so the client
   can onboard their other catchments.
 - **Changes:**

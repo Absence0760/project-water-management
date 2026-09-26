@@ -8,6 +8,9 @@
 //   SheetJS's mini build with the options the parser was written against.
 //   The parity tests read each workbook both ways and compare every cell the
 //   parser could ask for (./readerParity.test.ts, ./sourceWorkbooks.test.ts).
+//   Cell text is the one deliberate difference: the streaming reader decodes
+//   it as openpyxl does (issue #22, ./stringDecoding.test.ts), so
+//   explainedByDecoding() tells those differences from real ones.
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { UnreadableWorkbookError } from './errors';
 import { packageParts, relTargets, relsPathOf } from './ooxml';
@@ -15,6 +18,7 @@ import { type Cell, cellAddress } from './cells';
 import type { RawCell, SheetSource, WorkbookSource } from './source';
 import { B023Workbook, sheetsToRead } from './workbook';
 import { readWorkbookXml } from './workbookParts';
+import { unescapeXml } from './xml';
 import { type StoredEntry, ZipArchive, storedZip } from './zip';
 
 /** A SheetJS WorkBook (dense or sparse sheets) as a WorkbookSource. */
@@ -109,15 +113,37 @@ function sameCell(a: Cell, b: Cell): boolean {
 	return a.constructor === b.constructor && JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** A string with every way SheetJS's decoding and openpyxl's can differ folded away. */
+function foldDecoding(s: string): string {
+	return unescapeXml(s)
+		.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, (pair) => String.fromCharCode(pair.codePointAt(0)! & 0xffff))
+		.replace(/\r\n?/g, '\n')
+		.replaceAll('x005F_', '');
+}
+
+/**
+ * Whether a SheetJS cell and the streaming reader's differ only in how the
+ * text was decoded (issue #22): _xHHHH_ escapes, a formula's cached text
+ * decoded twice, line breaks, references beyond U+FFFF, openpyxl dropping
+ * "x005F_" from shared strings. Both must be strings; anything else (a type,
+ * a number, a missing cell) is a real difference.
+ */
+export function explainedByDecoding(sheetjs: Cell, streamed: Cell): boolean {
+	return typeof sheetjs === 'string' && typeof streamed === 'string' && foldDecoding(sheetjs) === foldDecoding(streamed);
+}
+
 /**
  * The first way the parser would see two readings of a workbook differently,
  * or null: the sheet list, the defined names, the date system, which sheets
  * were read, each read sheet's used range, and every cell either reader
- * stored, read through B023Workbook as the parser reads it. The message
- * names a sheet and a cell address, never a value (client workbooks go
- * through this too).
+ * stored, read through B023Workbook as the parser reads it. With
+ * `allowDecodingDifferences`, a string cell whose difference
+ * explainedByDecoding() accounts for is not one (for real workbooks, where
+ * the streaming reader decodes as openpyxl does and SheetJS didn't). The
+ * message names a sheet and a cell address, never a value (client workbooks
+ * go through this too).
  */
-export function readerDifference(expected: WorkbookSource, actual: WorkbookSource): string | null {
+export function readerDifference(expected: WorkbookSource, actual: WorkbookSource, { allowDecodingDifferences = false } = {}): string | null {
 	if (JSON.stringify(expected.sheetNames) !== JSON.stringify(actual.sheetNames)) return 'the sheet names differ';
 	if (JSON.stringify(expected.names) !== JSON.stringify(actual.names)) return 'the defined names differ';
 	if (expected.date1904 !== actual.date1904) return 'the date system differs';
@@ -136,7 +162,10 @@ export function readerDifference(expected: WorkbookSource, actual: WorkbookSourc
 			const key = `${col},${row}`;
 			if (seen.has(key)) continue;
 			seen.add(key);
-			if (!sameCell(e.cell(name, col, row), a.cell(name, col, row))) return `[${name}] ${cellAddress(col, row)} differs`;
+			const ev = e.cell(name, col, row);
+			const av = a.cell(name, col, row);
+			if (sameCell(ev, av) || (allowDecodingDifferences && explainedByDecoding(ev, av))) continue;
+			return `[${name}] ${cellAddress(col, row)} differs`;
 		}
 	}
 	return sheets ? null : 'no sheet was read';

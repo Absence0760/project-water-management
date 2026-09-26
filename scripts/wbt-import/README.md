@@ -12,6 +12,7 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 | `extract_flow_fixture.py WORKBOOK OUT.json` | The rain-model fixture for `packages/engine/src/flow.test.ts`, which reads `data/fixtures/client-catchment-flow.json`. |
 | `frontend/src/lib/spreadsheet/import/` (TypeScript) | The same `project.json` and notes in the browser, plus an unmapped report; see [The TypeScript port](#the-typescript-port-in-browser-import). |
 | `make_synthetic_workbook.py [OUTDIR]` | The **synthetic** b023 workbook of an invented catchment and `extract_project.py`'s output for it, committed in `fixtures/` (see [The synthetic workbook](#the-synthetic-workbook)). |
+| `make_string_decoding_fixture.py [OUTDIR]` | A small hand-written workbook of every cell-text decoding case and what openpyxl reads from it, committed in `fixtures/` (see [The string-decoding fixture](#the-string-decoding-fixture)). |
 
 ## Setup
 
@@ -153,8 +154,9 @@ catchment: NATO-alphabet farm names ("Alpha Farm" … "Hotel Farm"), made-up
 crops, areas and dams, and three water years (2019-10-01 to 2022-09-30) of
 daily series from a seeded random generator. Nothing in it comes from a client
 workbook; only the layout (sheet names, named ranges, which cell holds what)
-follows the tool. It's the one `.xlsx` the repo tracks (a narrow `.gitignore`
-exception). The in-browser importer's parity test (WP-1.31) reads it and must
+follows the tool. It's one of the two `.xlsx` files the repo tracks (narrow
+`.gitignore` exceptions; the other is the [string-decoding
+fixture](#the-string-decoding-fixture)). The in-browser importer's parity test (WP-1.31) reads it and must
 produce the committed Python output:
 
 | File | What |
@@ -240,6 +242,31 @@ scripts/wbt-import/fixtures/synthetic_b023.project.json --email
 synthetic@example.com --password synthetic-password --run` (use an absolute
 path; the script runs in `backend/`).
 
+## The string-decoding fixture
+
+`fixtures/string_decoding.xlsx` is a one-sheet workbook whose XML
+`make_string_decoding_fixture.py` writes by hand, since no spreadsheet program
+writes most of its cases on demand; every string in it is invented.
+`fixtures/string_decoding.cells.json` is every cell openpyxl reads from it,
+opened as `extract_project.py` opens a workbook (read-only, cached values).
+The cases: Excel's `_xHHHH_` escapes (and `_x005F_`, its escaped underscore)
+in shared, inline and formula strings; a formula's cached text (`t="str"`)
+holding entity references; `&#13;&#10;`, literal CRLF and lone CR; references
+beyond U+FFFF; CDATA; rich-text runs; `x005F_` mid-text. openpyxl expands the
+XML entities once, leaves `_xHHHH_` as written, keeps a CR written as a
+reference, normalises literal line breaks to LF, and drops every `x005F_`
+from a shared string (not from an inline or formula string).
+
+`frontend/src/lib/spreadsheet/import/stringDecoding.test.ts` (CI) reads the
+workbook with the TypeScript reader and compares every cell with the JSON.
+`test_string_decoding.py` checks the committed workbook is what the generator
+writes and the JSON is what openpyxl reads. Regenerate after changing the
+generator, then commit both files:
+
+```sh
+.venv/bin/python scripts/wbt-import/make_string_decoding_fixture.py
+```
+
 ## The TypeScript port (in-browser import)
 
 `frontend/src/lib/spreadsheet/import/` is a TypeScript port of
@@ -274,18 +301,28 @@ the other way round. Two tests hold it:
 (`zip.ts`, `xml.ts`, `workbookParts.ts`, `sheet.ts`, `sharedStrings.ts`), not
 SheetJS, which the port used first: SheetJS held the whole [Flow data] XML
 and an object per cell, several hundred MB for the client workbook. The
-reader gives the parser exactly the cells SheetJS gave it (cached values, the
-number formats that mark a date, blanks for formula cells with no value,
-SheetJS's string decoding, `_xHHHH_` escapes included). Where SheetJS and
-openpyxl decode a string differently (`_xHHHH_` escapes, which openpyxl
-leaves as written, and a formula's cached text, which SheetJS decodes twice),
-the reader keeps SheetJS's reading; none of the workbooks seen so far has
-either in a cell the importer reads ([docs/followups.md](../../docs/followups.md)).
+reader gives the parser the cells SheetJS gave it (cached values, the number
+formats that mark a date, blanks for formula cells with no value), with one
+deliberate difference: cell text is decoded as openpyxl decodes it, since
+the Python importer is the reference (issue #22). So the XML entities are
+expanded once, a formula's cached text included (SheetJS decoded it twice:
+`a&amp;amp;b` read `a&b`, openpyxl `a&amp;b`); Excel's `_xHHHH_` escapes are
+left as written (SheetJS turned `_x000D_` into a CR); a CR written as
+`&#13;` stays a CR and a literal CR becomes LF; a reference beyond U+FFFF is
+one character; and a shared string drops every `x005F_`, as openpyxl's
+`read_string_table` does. The [string-decoding
+fixture](#the-string-decoding-fixture) pins each case to openpyxl's output.
+Sheet names, defined names and number formats (`workbookParts.ts`) still use
+SheetJS's decoding (`unescapeXml`); openpyxl reads those without `_xHHHH_`
+handling too, which only a sheet name or defined name containing a
+literal `_xHHHH_` would show.
 A third test holds the reader to SheetJS: `readerParity.test.ts` (CI) reads
 the synthetic workbook, SheetJS-written workbooks and hand-written edge cases
 with both readers (SheetJS's in `sheetjsReference.ts`, test-only) and compares
-every cell through `B023Workbook`; `sourceWorkbooks.test.ts` does the same on
-the client workbooks.
+every cell through `B023Workbook`; `stringDecoding.test.ts` lists exactly the
+fixture cells whose text SheetJS read differently; `sourceWorkbooks.test.ts`
+compares the client workbooks, allowing only differences that
+`explainedByDecoding()` puts down to the text decoding.
 
 **In the UI.** **Import b023 workbook** on the project list runs the port in a
 Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
@@ -325,13 +362,12 @@ What the port does beyond the Python:
   client workbook, about 90 MB on disk, unpacks to about 600 MB, most of it the
   calculation chain and the Element sheets), so `readWorkbook` reads the zip
   itself (`zip.ts`: capped, bounds-checked, only the needed parts, with the
-  platform's `DecompressionStream`) and hands SheetJS a small zip of just those
-  parts. That's why `readWorkbook` is async. Measured on the client workbook
-  with SheetJS on its browser code paths: peak memory down by about 40%, read
-  time from about 2.9 s to about 1.1 s. What's left is SheetJS parsing the
-  [Flow data] sheet itself ([followups.md](../../docs/followups.md)).
-- It uses SheetJS's mini build (`xlsx/dist/xlsx.mini.min`), which reads
-  `.xlsx` and `.xlsm` alike; both parity tests run through it.
+  platform's `DecompressionStream`) and parses each part as it inflates
+  (see **The reader** above). That's why `readWorkbook` is async. Measured
+  figures are in [followups.md](../../docs/followups.md) (WP-1.31).
+- It reads `.xlsx` and `.xlsm` alike. The parity tests use SheetJS's mini
+  build (`xlsx/dist/xlsx.mini.min`) as the reference reader; the import
+  worker carries no SheetJS.
 
 Differences no b023 workbook reaches: Python's `\d` also matches non-ASCII
 digits in a month list; a cell SheetJS reads as an ISO date (`t="d"`, which

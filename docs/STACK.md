@@ -58,7 +58,8 @@ sides share.
   bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored, except
-  the synthetic workbook fixture for the importer parity test
+  the synthetic workbook fixture for the importer parity test and the
+  string-decoding fixture that pins the reader to openpyxl
   (`scripts/wbt-import/fixtures/`, invented data).
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
   (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
