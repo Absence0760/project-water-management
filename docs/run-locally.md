@@ -161,7 +161,7 @@ go to Mailpit like every other email, sent by the worker, so run
 3. Lower the level below the dam (plus 5 points) and save to clear it; raise
    it again for a second crossing and a second mail.
 4. Each person's choices are at `/account/alerts`. More than 5 immediate
-   alerts in a day go into the next 06:00 (SAST) digest: `pnpm dev:jobs:tick`
+   alerts in a day go into the next 06:00 digest (06:00 in the project's time zone, SAST by default): `pnpm dev:jobs:tick`
    sends what is due.
 
 `ALERTS_ENABLED=false` in `backend/.env.development.local` is the kill

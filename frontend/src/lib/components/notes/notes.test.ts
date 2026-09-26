@@ -50,7 +50,7 @@ describe('labels', () => {
 		expect(noteAbout({ target: 'node', nodeName: 'Farm A', settingKey: null })).toBe('Farm A');
 		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'flow.a' })).toBe('Settings: Flow calibration');
 		expect(noteAbout({ target: 'setting', nodeName: null, settingKey: 'other' })).toBe('Settings: other');
-		expect(noteHref({ target: 'node', nodeId: 'n1', runId: null, settingKey: null })).toBe('?tab=network#node-row-n1');
+		expect(noteHref({ target: 'node', nodeId: 'n1', runId: null, settingKey: null })).toBe('?tab=network&node=n1');
 		expect(noteHref({ target: 'run', nodeId: null, runId: 'r/1', settingKey: null })).toBe('?tab=runs&run=r%2F1#res-notes');
 		expect(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: 'ewr' })).toBe('?tab=settings#set-ewr');
 		expect(noteHref({ target: 'project', nodeId: null, runId: null, settingKey: null })).toBeNull();

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { detailCache } from '$lib/components/runs/cache';
-	import { farmDrawerHref, farmPlanting } from '$lib/components/crops/farmDrawer';
+	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode, type SchematicSupply } from './supplyColour';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -15,7 +17,9 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
+	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
+	import { withParam, type GridId } from '$lib/workspace/overlays';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
 	import { describeUser } from './users';
@@ -83,7 +87,8 @@
 	// Fetch when colouring is switched on or a newer run lands; only then, so
 	// a failed load doesn't retry itself (the status line offers a retry).
 	$effect(() => {
-		const id = colourBy === 'supply' ? latestRun?.id : undefined;
+		// The Map layout's node card shows a farm's supply too.
+		const id = colourBy === 'supply' || view === 'map' ? latestRun?.id : undefined;
 		untrack(() => {
 			if (id && id !== supplyFor) void loadSupply(id);
 		});
@@ -99,11 +104,24 @@
 		};
 	});
 
-	// Table (all nodes, every field) on wide screens; one node at a time with
-	// help text on phones. Either can be picked.
-	let view = $state<'table' | 'detail'>('table');
+	// Three layouts, in the URL (`view=`) so each can be linked: the Map (the
+	// default, issue #17 option A · A2: the schematic beside the picked node and
+	// a list of every node), the Table (all nodes, every field) and One node
+	// (the full form, with help text). Nothing moved out of the other two.
+	type View = 'map' | 'table' | 'detail';
+	const VIEW_PARAM: Record<View, string | null> = { map: null, table: 'table', detail: 'node' };
+	const view = $derived.by<View>(() => {
+		const v = page.url.searchParams.get('view');
+		return v === 'table' ? 'table' : v === 'node' ? 'detail' : 'map';
+	});
+	function setView(v: View) {
+		const q = new URLSearchParams(page.url.search);
+		const p = VIEW_PARAM[v];
+		if (p) q.set('view', p);
+		else q.delete('view');
+		void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 	onMount(() => {
-		if (!matchMedia('(min-width: 900px)').matches) view = 'detail';
 		loadFarmers();
 	});
 
@@ -120,6 +138,11 @@
 	}
 
 	let selectedId = $state<string | null>(null);
+	// `node=<id>` picks a node (a note's link, notes.ts noteHref).
+	const nodeParam = $derived(page.url.searchParams.get('node'));
+	$effect(() => {
+		if (nodeParam) selectedId = nodeParam;
+	});
 	const selected = $derived(nodes.find((n) => n.id === selectedId) ?? nodes[0] ?? null);
 	const selectedIndex = $derived(selected ? nodes.indexOf(selected) : -1);
 	// A farm picked on the schematic or in the table: its planted areas are a click away (the farm drawer, issue #17).
@@ -130,6 +153,7 @@
 
 	function select(id: string) {
 		selectedId = id;
+		if (view === 'map') return;
 		if (view === 'detail') {
 			// The form sits below the schematic; on a phone a tapped node would
 			// otherwise change a form that is off-screen.
@@ -148,12 +172,15 @@
 	function addUser() {
 		const n = editor.addUser();
 		selectedId = n.id;
+		if (view === 'map') setView('detail');
 		queueMicrotask(() => document.getElementById(view === 'table' ? `user-name-${n.id}` : `nd-name-${n.id}`)?.focus());
 	}
 
 	function add() {
 		const n = editor.addNode();
 		selectedId = n.id;
+		// A new node is filled in on its form.
+		if (view === 'map') setView('detail');
 		queueMicrotask(() => document.getElementById(view === 'table' ? `node-name-${n.id}` : `nd-name-${n.id}`)?.focus());
 	}
 
@@ -217,6 +244,16 @@
 		}
 		return spans;
 	});
+	// --- the Map layout: the picked node's card and the list of every node ---
+	const picked = $derived(nodes.find((n) => n.id === selectedId) ?? null);
+	const latestSupply = $derived(latestRun && supplyRun?.id === latestRun.id ? supplyByNode(nodes, supplyRun.summary) : null);
+	const latestName = $derived(latestRun ? latestRun.label || fmtDate(latestRun.createdAt, true) : null);
+	const GRID_LINKS: [GridId, string][] = [
+		['crop-factors', 'Crop factors'],
+		['planted-areas', 'Planted areas'],
+		['transfers', 'Transfers']
+	];
+	const dotBand = (id: string) => (colourBy === 'supply' ? (latestSupply?.get(id)?.band ?? null) : null);
 	const totalArea = $derived(nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 	const farmArea = $derived(farms.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 </script>
@@ -224,6 +261,13 @@
 <section class="panel" aria-labelledby="sch-h">
 	<div class="panel-head">
 		<h2 id="sch-h">Schematic</h2>
+		{#if nodes.length}
+			<div class="seg" role="group" aria-label="Layout">
+				<button type="button" class="btn btn-sm" aria-pressed={view === 'map'} onclick={() => setView('map')}>Map</button>
+				<button type="button" class="btn btn-sm" aria-pressed={view === 'table'} onclick={() => setView('table')}>Table</button>
+				<button type="button" class="btn btn-sm" aria-pressed={view === 'detail'} onclick={() => setView('detail')}>One node</button>
+			</div>
+		{/if}
 		<span class="muted small">
 			{#if nodes.length}
 				{farms.length} farm{farms.length === 1 ? '' : 's'} · {gauges.length} gauge{gauges.length === 1 ? '' : 's'} ·
@@ -253,6 +297,21 @@
 			{/if}
 		</div>
 	{/if}
+	{#if view === 'map' && nodes.length}
+		<div class="map-tools">
+			<div class="grid-links" role="group" aria-labelledby="grid-links-l">
+				<span class="muted small" id="grid-links-l">Open as a grid</span>
+				{#each GRID_LINKS as [id, label] (id)}<a class="btn btn-sm" href={withParam(page.url, 'grid', id)}>{label}</a>{/each}
+				<button type="button" class="btn btn-sm" onclick={() => setView('table')}>Node table</button>
+			</div>
+			{#if !readonly}
+				<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" onclick={add}>+ Add node</button>
+			{/if}
+		</div>
+	{/if}
+	<div class:map-layout={view === 'map' && nodes.length > 0}>
+	<div class="map-main">
 	<NetworkSchematic
 		{nodes}
 		transfers={editor.model.transfers}
@@ -262,7 +321,47 @@
 		onreparent={reparent}
 		{supply}
 	/>
-	{#if pickedFarm && pickedPlanting}
+	</div>
+	{#if view === 'map' && nodes.length}
+		<aside class="map-side" aria-label="Nodes">
+			<div class="side-box">
+				{#if picked}
+					<NodeCard
+						node={picked}
+						{nodes}
+						share={shareOf(nodes.indexOf(picked))}
+						supply={picked.kind === 'farm' ? (latestSupply?.get(picked.id) ?? null) : null}
+						planting={picked.kind === 'farm' ? farmPlanting(editor.model, picked.id) : null}
+						runName={latestName}
+						{projectId}
+						saved={editor.savedNodeIds.has(picked.id)}
+						farmHref={withParam(page.url, 'farm', picked.id)}
+						{readonly}
+						onedit={() => setView('detail')}
+					/>
+				{:else}
+					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
+				{/if}
+			</div>
+			<div class="side-box">
+				<h3 class="list-h" id="all-nodes-h">All nodes</h3>
+				<ul class="node-list" aria-labelledby="all-nodes-h">
+					{#each nodes as n (n.id)}
+						{@const band = dotBand(n.id)}
+						<li>
+							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => (selectedId = n.id)}>
+								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
+								<span class="nm">{n.name || '(unnamed)'}</span>
+								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		</aside>
+	{/if}
+	</div>
+	{#if view !== 'map' && pickedFarm && pickedPlanting}
 		<p class="picked small" data-testid="picked-farm">
 			<strong>{pickedFarm.name || '(unnamed)'}</strong>:
 			{#if pickedPlanting.planted}
@@ -270,22 +369,17 @@
 			{:else}
 				nothing planted.
 			{/if}
-			<a href={farmDrawerHref('network', pickedFarm.id)}>Planted areas</a>
+			<a href={withParam(page.url, 'farm', pickedFarm.id)}>Planted areas</a>
 		</p>
 	{/if}
 </section>
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
 
+{#if view !== 'map' || nodes.length === 0}
 <section class="panel" class:one-node={view === 'detail'} aria-labelledby="net-h">
 	<div class="panel-head">
 		<h2 id="net-h">Network nodes</h2>
-		{#if nodes.length}
-			<div class="seg" role="group" aria-label="Layout">
-				<button type="button" class="btn btn-sm" aria-pressed={view === 'table'} onclick={() => (view = 'table')}>Table</button>
-				<button type="button" class="btn btn-sm" aria-pressed={view === 'detail'} onclick={() => (view = 'detail')}>One node</button>
-			</div>
-		{/if}
 	</div>
 	{#if nodes.length === 0}
 		<div class="empty">
@@ -495,6 +589,7 @@
 		{/key}
 	{/if}
 </section>
+{/if}
 
 {#if view === 'table' && users.length}
 	<section class="panel" aria-labelledby="users-h">
@@ -809,5 +904,121 @@
 	.picked {
 		margin: 0.5rem 0 0;
 		color: var(--text-2);
+	}
+	/* Map layout (issue #17, A2): the schematic beside the picked node and the node list. */
+	.map-tools {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0 0 0.6rem;
+	}
+	.grid-links {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.map-tools .spacer {
+		flex: 1;
+	}
+	.map-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 21rem;
+		gap: 1rem;
+		align-items: start;
+	}
+	.map-main {
+		min-width: 0;
+	}
+	.map-side {
+		display: grid;
+		gap: 0.75rem;
+	}
+	.side-box {
+		padding: 0.85rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+	.pick-hint {
+		margin: 0;
+	}
+	.list-h {
+		margin: 0 0 0.4rem;
+		font-size: 0.95rem;
+	}
+	.node-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		max-height: 24rem;
+		overflow-y: auto;
+	}
+	.node-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		min-height: 36px;
+		padding: 0.3rem 0.5rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-size: 0.9rem;
+		text-align: left;
+		cursor: pointer;
+	}
+	.node-row:hover {
+		background: var(--surface-2);
+	}
+	.node-row[aria-pressed='true'] {
+		background: var(--accent-soft);
+		font-weight: 600;
+	}
+	.node-row .nm {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.node-row .meta {
+		font-size: 0.8rem;
+		font-weight: 400;
+	}
+	.dot {
+		flex: none;
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--brand-node, var(--accent));
+	}
+	.dot.gauge {
+		border-radius: 2px;
+		background: var(--text-2);
+	}
+	.dot.user {
+		transform: rotate(45deg);
+		border-radius: 1px;
+		background: var(--text-muted);
+	}
+	.dot[data-band='met'] {
+		background: var(--success);
+	}
+	.dot[data-band='short'] {
+		background: var(--warning);
+	}
+	.dot[data-band='low'] {
+		background: var(--danger);
+	}
+	@media (max-width: 899px) {
+		.map-layout {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.node-row {
+			min-height: 44px;
+		}
 	}
 </style>

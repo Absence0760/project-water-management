@@ -15,7 +15,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { attachment, collectCsv, csvRow, exportFilename } from '../export/csv.js';
-import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
@@ -181,12 +181,13 @@ async function prepareImport(db: Db, projectId: string, body: z.infer<typeof Imp
 		throw err;
 	}
 	const sha256 = createHash('sha256').update(body.text, 'utf8').digest('hex');
-	const { rows: dup } = await db.query<{ fileName: string; importedAt: Date }>(
-		'SELECT file_name AS "fileName", imported_at AS "importedAt" FROM allocation_source WHERE project_id = $1 AND sha256 = $2',
+	const { rows: dup } = await db.query<{ fileName: string; importedAt: Date; timeZone: string | null }>(
+		`SELECT file_name AS "fileName", imported_at AS "importedAt", (SELECT p.time_zone FROM project p WHERE p.id = $1) AS "timeZone"
+		 FROM allocation_source WHERE project_id = $1 AND sha256 = $2`,
 		[projectId, sha256]
 	);
 	if (dup[0])
-		throw new ApiError(409, `this file was already imported (as “${dup[0].fileName}” on ${new Date(dup[0].importedAt).toISOString().slice(0, 10)}); delete that import first to re-import it`);
+		throw new ApiError(409, `this file was already imported (as “${dup[0].fileName}” on ${localDate(new Date(dup[0].importedAt), dup[0].timeZone ?? DEFAULT_TIME_ZONE)}); delete that import first to re-import it`);
 	const nodes = await matchNodes(db, projectId);
 	const { rows: known } = await db.query<KnownMatch>(
 		'SELECT registration_no AS "registrationNo", property_ref AS "propertyRef", node_id AS "nodeId" FROM allocation WHERE project_id = $1 AND node_id IS NOT NULL',

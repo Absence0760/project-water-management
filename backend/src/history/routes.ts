@@ -11,6 +11,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
@@ -315,7 +316,9 @@ export const historyRoutes = new Hono<AuthEnv>()
 			// A scenario run's inputs are its scenario applied to a base run (024_scenarios), not a state the project was ever in.
 			if (run.scenario) throw new ApiError(409, "this is a scenario run: its inputs are the scenario's changes on its base run, so they aren't restored into the project");
 			const settings = { ...(run.inputs.settings ?? {}) };
-			const reason = body.reason ?? `Inputs of the run${run.label ? ` "${run.label}"` : ''} of ${run.created_at.toISOString().slice(0, 10)}`.slice(0, 500);
+			// The run's day where the catchment is (project.time_zone, 058), as its readers date it.
+			const { rows: tz } = await db.query<{ time_zone: string }>('SELECT time_zone FROM project WHERE id = $1', [id]);
+			const reason = body.reason ?? `Inputs of the run${run.label ? ` "${run.label}"` : ''} of ${localDate(run.created_at, tz[0]?.time_zone ?? DEFAULT_TIME_ZONE)}`.slice(0, 500);
 			return c.json(await restoreInputs(db, id, { settings, model: run.inputs.model }, { reason, restoredFromRun: runId }), 201);
 		});
 	})

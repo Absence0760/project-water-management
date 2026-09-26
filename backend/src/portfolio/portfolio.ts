@@ -13,7 +13,13 @@
 //              outlet series over the same 30-day window; farm figures stay
 //              unknown until a run is published.
 //   null       no run at all: every figure is unknown.
+//
+// Ages and feed health count to each project's own today: the calendar day in
+// that project's time zone (project.time_zone, 058), so a team with
+// catchments in several zones gets each row right, and a South African one
+// isn't a day behind from 22:00 to 24:00 UTC.
 import type { Db } from '../db/tx.js';
+import { localDate } from '../projects/timeZone.js';
 import { feedHealth, type HealthInput } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
 import type { RecentShortfall } from '../publish/recent.js';
@@ -26,6 +32,9 @@ export interface PortfolioProject {
 	name: string;
 	/** The user's role on the project (never farmer: a farmer's projects are left out). */
 	role: 'viewer' | 'editor' | 'owner';
+	/** The project's time zone (058) and the calendar day there now: the day figuresAgeDays, stale and the feeds count to. */
+	timeZone: string;
+	today: string;
 	/** The newest day of recorded rain in the project's inputs (the project list's rule), or null. */
 	dataUntil: string | null;
 	/** The newest baseline run, or null. */
@@ -66,6 +75,7 @@ export interface PortfolioRow {
 	id: string;
 	name: string;
 	role: PortfolioProject['role'];
+	time_zone: string;
 	data_until: string | null;
 	last_run_at: Date | null;
 	last_run_id: string | null;
@@ -106,9 +116,9 @@ const EWR_SET = `EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(r.inpu
 
 const PORTFOLIO_SQL = `
 	WITH proj AS (
-		SELECT p.id, p.name, app_project_role(p.id) AS role FROM project p WHERE p.team_id = $1
+		SELECT p.id, p.name, p.time_zone, app_project_role(p.id) AS role FROM project p WHERE p.team_id = $1
 	)
-	SELECT pr.id, pr.name, pr.role,
+	SELECT pr.id, pr.name, pr.role, pr.time_zone,
 		to_char((SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
 			WHERE ts.project_id = pr.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0), 'YYYY-MM-DD') AS data_until,
 		lr.created_at AS last_run_at, lr.id AS last_run_id, pub.run_id AS pub_run_id,
@@ -154,13 +164,14 @@ const PORTFOLIO_SQL = `
 	LEFT JOIN LATERAL (
 		SELECT COALESCE(jsonb_agg(jsonb_build_object(
 			'source', f.source, 'config', f.config, 'enabled', f.enabled,
-			'createdAt', f.created_at AT TIME ZONE 'UTC', 'updatedAt', f.updated_at AT TIME ZONE 'UTC',
-			'lastAttemptAt', f.last_attempt_at AT TIME ZONE 'UTC', 'lastSuccessAt', f.last_success_at AT TIME ZONE 'UTC',
+			-- Instants with their offset: feedHealth dates them in the project's zone.
+			'createdAt', f.created_at, 'updatedAt', f.updated_at,
+			'lastAttemptAt', f.last_attempt_at, 'lastSuccessAt', f.last_success_at,
 			'lastDataDate', to_char(f.last_data_date, 'YYYY-MM-DD'), 'consecutiveFailures', f.consecutive_failures, 'lastError', NULL,
 			'rebuilding', CASE WHEN st.feed_id IS NULL THEN NULL ELSE jsonb_build_object(
 				'startDate', to_char(st.start_date, 'YYYY-MM-DD'),
 				'through', to_char(st.start_date + cardinality(st."values") - 1, 'YYYY-MM-DD'),
-				'updatedAt', st.updated_at AT TIME ZONE 'UTC') END
+				'updatedAt', st.updated_at) END
 		)), '[]'::jsonb) AS feeds
 		FROM data_feed f LEFT JOIN feed_stage st ON st.feed_id = f.id WHERE f.project_id = pr.id
 	) fd ON true
@@ -171,7 +182,10 @@ const PORTFOLIO_SQL = `
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-export function toPortfolioProject(r: PortfolioRow, today: string, thresholds: EwrThresholds = EWR_THRESHOLDS): PortfolioProject {
+/** One row, its ages counted to `now` in the project's own time zone. */
+export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS): PortfolioProject {
+	const timeZone = r.time_zone;
+	const today = localDate(now, timeZone);
 	const published = r.published_at !== null;
 	const source = published ? 'published' : r.last_run_at ? 'run' : null;
 	const figuresUntil = source === 'published' ? r.pub_until : source === 'run' ? r.run_until : null;
@@ -184,7 +198,7 @@ export function toPortfolioProject(r: PortfolioRow, today: string, thresholds: E
 	let ok = 0;
 	let failing = 0;
 	for (const f of r.feeds) {
-		const h = feedHealth(f, today);
+		const h = feedHealth(f, today, timeZone);
 		if (h.state === 'ok') ok++;
 		else if (h.state === 'failing' || h.state === 'stale') failing++;
 	}
@@ -192,6 +206,8 @@ export function toPortfolioProject(r: PortfolioRow, today: string, thresholds: E
 		id: r.id,
 		name: r.name,
 		role: r.role,
+		timeZone,
+		today,
 		dataUntil: r.data_until,
 		lastRunAt: iso(r.last_run_at),
 		publishedAt: iso(r.published_at),
@@ -219,7 +235,7 @@ export function toPortfolioProject(r: PortfolioRow, today: string, thresholds: E
  * status judged by `thresholds` (the team's, teams/settings.ts). The caller
  * checks team membership first.
  */
-export async function loadPortfolio(db: Db, teamId: string, today: string, thresholds: EwrThresholds = EWR_THRESHOLDS): Promise<PortfolioProject[]> {
+export async function loadPortfolio(db: Db, teamId: string, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS): Promise<PortfolioProject[]> {
 	const { rows } = await db.query<PortfolioRow>(PORTFOLIO_SQL, [teamId]);
-	return rows.map((r) => toPortfolioProject(r, today, thresholds));
+	return rows.map((r) => toPortfolioProject(r, now, thresholds));
 }

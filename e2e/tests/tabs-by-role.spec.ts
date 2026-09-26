@@ -72,6 +72,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 	await strip(v).getByRole('link', { name: 'Network' }).click();
 	await expect(v).toHaveURL(/\?tab=network$/);
 	await expect(v.getByText('You have view-only access to this project.')).toBeVisible();
+	await v.getByRole('button', { name: 'Table', exact: true }).click();
 	await expect(v.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.

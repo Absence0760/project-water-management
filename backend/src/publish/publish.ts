@@ -20,6 +20,7 @@ import {
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recentShortfall, type RecentShortfall } from './recent.js';
 
 /** Newest publications kept per project (the run_publication_cap trigger, 022_publication.sql, keeps the same number). */
@@ -209,7 +210,7 @@ async function loadProjectionRun(
 	engineVersion: string;
 	runoffModel: string;
 	calibration: StoredCatchmentView['calibration'];
-	/** A forecast run's summary.forecast (WP-2.12) and the day it was made (UTC); null for an ordinary run. */
+	/** A forecast run's summary.forecast (WP-2.12) and the day it was made, in the project's time zone (058); null for an ordinary run. */
 	forecast: { summary: ForecastSummary; madeOn: string } | null;
 } | null> {
 	const { rows } = await db.query<{
@@ -221,7 +222,8 @@ async function loadProjectionRun(
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
 		observed_until: string | null;
 		forecast: ForecastSummary | null;
-		made_on: string;
+		created_at: Date;
+		time_zone: string | null;
 	}>(
 		// observed_until: the last day of the observed rain drivers in the run's
 		// input snapshot (catchment gauge, CHIRPS), not the forecast: a run that
@@ -233,7 +235,7 @@ async function loadProjectionRun(
 				(SELECT to_char(max((s.value->>'startDate')::date + (s.value->>'length')::int - 1), 'YYYY-MM-DD')
 				 FROM jsonb_each(inputs->'series') s
 				 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0)) AS observed_until,
-			summary->'forecast' AS forecast, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS made_on,
+			summary->'forecast' AS forecast, created_at, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, summary->'calibration' AS calibration
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
@@ -261,7 +263,7 @@ async function loadProjectionRun(
 		engineVersion: r.engine_version,
 		runoffModel: r.runoff_model,
 		calibration: c ? { nse: c.nse ?? null, pbias: c.pbias ?? null, kge: c.kge ?? null } : null,
-		forecast: r.forecast ? { summary: r.forecast, madeOn: r.made_on } : null
+		forecast: r.forecast ? { summary: r.forecast, madeOn: localDate(r.created_at, r.time_zone ?? DEFAULT_TIME_ZONE) } : null
 	};
 }
 

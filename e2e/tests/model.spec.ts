@@ -8,7 +8,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 test('build a network with farms, crops and a transfer, save, reload', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Model build');
-	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
 
 	// --- network: outflow gauge + two farms ---------------------------------
 	await page.getByRole('button', { name: 'Add outflow gauge' }).click();
@@ -91,6 +91,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(page.getByLabel('Vines on Valley farm, ha')).toHaveValue('8');
 
 	await tab(page, 'Network').click();
+	// The map is the default layout; the fields are in the Table.
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	await expect(page.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
 	await expect(page.getByLabel('Area of Hilltop farm, km²', { exact: true })).toHaveValue('14.5');
 	await expect(page.getByLabel('Dam capacity of Hilltop farm, m³')).toHaveValue('120000');
@@ -103,7 +105,7 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	void owner;
 	const project = await createProject(page.request, 'Model validation');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
 	const problems = page.getByRole('status').filter({ hasText: 'Fix before saving:' });
 	const save = saveBar(page).getByRole('button', { name: 'Save changes' });
 
@@ -144,7 +146,7 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	void owner;
 	const project = await createProject(page.request, 'Unsaved guard');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
 	await page.getByLabel('Area of Upper farm, km²', { exact: true }).fill('99');
 
 	// Answer each prompt inside its listener (a click that opens a prompt only
@@ -183,14 +185,14 @@ test('large values show thousands separators in the one-node form and the view-o
 	await capacity.blur();
 	await expect(capacity).toHaveValue('300,000');
 	// The editable table keeps plain numbers.
-	await page.getByRole('button', { name: 'Table' }).click();
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300000');
 	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
 	await expect(saveBar(page)).toBeHidden();
 
 	const viewer = await signIn('Separators viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=network`);
+	await viewer.page.goto(`/projects/${project.id}?tab=network&view=table`);
 	await expect(viewer.page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300,000');
 	await expect(viewer.page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('90,000');
 });
@@ -202,7 +204,7 @@ test.describe('network layout', () => {
 		await page.setViewportSize({ width: 1920, height: 1000 });
 		const project = await createProject(page.request, 'Network fit');
 		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}?tab=network`);
+		await page.goto(`/projects/${project.id}?tab=network&view=table`);
 
 		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
 		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -247,7 +249,7 @@ test.describe('network layout', () => {
 		await page.setViewportSize({ width: 1100, height: 900 });
 		const project = await createProject(page.request, 'Network narrow');
 		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}?tab=network`);
+		await page.goto(`/projects/${project.id}?tab=network&view=table`);
 
 		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
 		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
@@ -270,9 +272,9 @@ test.describe('network layout', () => {
 			void owner;
 			const project = await createProject(page.request, 'Network phone');
 			await putModel(page.request, project.id, sampleModel());
-			await page.goto(`/projects/${project.id}?tab=network`);
+			await page.goto(`/projects/${project.id}?tab=network&view=node`);
 
-			// Phones open on the one-node form, below the schematic.
+			// The one-node form, below the schematic.
 			const picker = page.getByLabel('Node to edit');
 			await expect(picker.locator('option:checked')).toHaveText('1. Outflow gauge · gauge');
 

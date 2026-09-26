@@ -6,7 +6,6 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
-import { utcToday } from '../feeds/fetch.js';
 import { requireTeamRole } from '../teams/access.js';
 import { appliedThresholds } from '../teams/settings.js';
 import { loadPortfolio } from './portfolio.js';
@@ -17,8 +16,8 @@ export const portfolioRoutes = new Hono<AuthEnv>().get('/:id/portfolio', async (
 		const role = await requireTeamRole(db, id, 'viewer');
 		const { rows } = await db.query<{ name: string; settings: unknown }>('SELECT name, settings FROM team WHERE id = $1', [id]);
 		const thresholds = appliedThresholds(rows[0]!.settings);
-		const today = utcToday();
 		const { source: _source, ...cutoffs } = thresholds;
-		return c.json({ team: { id, name: rows[0]!.name, role }, today, thresholds, projects: await loadPortfolio(db, id, today, cutoffs) });
+		// Each project's ages count to its own today (its time zone, 058): there is no one "today" for the team.
+		return c.json({ team: { id, name: rows[0]!.name, role }, thresholds, projects: await loadPortfolio(db, id, new Date(), cutoffs) });
 	})
 );

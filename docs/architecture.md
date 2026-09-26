@@ -589,8 +589,9 @@ flowchart LR
 3. **Send** (`alerts/send.ts`, the last step of every tick, so after the
    job committed). The kill switch first: `ALERTS_ENABLED=false` skips every
    waiting delivery. Then `app_alert_claim` claims pending deliveries,
-   turning those past the daily cap (5 since the last 06:00 SAST) into
-   digest lines; after 06:00 `app_alert_claim_digest` claims each person's
+   turning those past the daily cap (5 since the last 06:00 in the project's
+   time zone, 059_local_day) into
+   digest lines; after 06:00 there `app_alert_claim_digest` claims each person's
    digest lines, one email per catchment. Each mail is built in a
    transaction **as its recipient** (`withUser`): `app_alert_my_mode`
    re-checks their access and choice, and RLS limits what the mail can say

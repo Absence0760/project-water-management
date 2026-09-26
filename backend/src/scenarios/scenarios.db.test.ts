@@ -429,12 +429,14 @@ describe('a published base (022_publication beside 024_scenarios)', () => {
 		const base = await run(u, c.projectId, 'Published baseline');
 		await publish(base);
 		const sid = await create(u, c.projectId, { name: 'On the published base', baseRunId: base, ops: [damRaise(c.farm.id, 120_000)] });
+		// Published at 22:30 UTC: the next day in South Africa, the day the citation names (the project's zone, 058).
+		await asOwner(`UPDATE run_publication SET published_at = '2026-09-25T22:30:00Z' WHERE run_id = $1`, [base]);
 		const citedBy = (await u.call('GET', `/projects/${c.projectId}/runs`)).body.runs.find((r: { id: string }) => r.id === base).citedBy;
 		expect(citedBy.map((x: { kind: string; name: string }) => [x.kind, x.kind === 'scenario' ? x.name : 'date'])).toEqual([
 			['publication', 'date'],
 			['scenario', 'On the published base']
 		]);
-		expect(citedBy[0].name).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(citedBy[0].name).toBe('2026-09-26');
 		// The published message wins on delete, as before the scenario; unpinning names both.
 		expect((await u.call('DELETE', `/projects/${c.projectId}/runs/${base}`)).body.error).toBe('run is published: it is, or was, the published baseline, so it is kept');
 		expect((await u.call('PATCH', `/projects/${c.projectId}/runs/${base}`, { pinned: true })).status).toBe(200);

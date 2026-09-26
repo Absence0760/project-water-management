@@ -17,6 +17,7 @@ import {
 } from '@water-management/engine';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { requireRole } from '../projects/access.js';
@@ -141,20 +142,20 @@ export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n
  * What cites a run, as a SQL expression over `model_run r`: a jsonb list of
  * `{ kind, id, name }`, oldest first, of the citations the caller can see
  * (RLS): publications (022_publication.sql; `name` is the day it was
- * published, YYYY-MM-DD), scenarios (024_scenarios.sql) and sign-offs
+ * published, YYYY-MM-DD, in the project's time zone, 058/059), scenarios (024_scenarios.sql) and sign-offs
  * (036_signoff.sql; `name` is the signer's full name). Evidence packs and
  * assessments add their kinds here with their migrations. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */
 export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', c.kind, 'id', c.id, 'name', c.name) ORDER BY c.at, c.id), '[]'::jsonb) FROM (
-		SELECT 'publication' AS kind, p.id, to_char(p.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS name, p.published_at AS at FROM run_publication p WHERE p.run_id = r.id
+		SELECT 'publication' AS kind, p.id, to_char(p.published_at AT TIME ZONE app_time_zone((SELECT pj.time_zone FROM project pj WHERE pj.id = p.project_id)), 'YYYY-MM-DD') AS name, p.published_at AS at FROM run_publication p WHERE p.run_id = r.id
 		UNION ALL
 		SELECT 'scenario', s.id, s.name, s.created_at FROM scenario s WHERE s.base_run_id = r.id
 		UNION ALL
 		SELECT 'signoff', so.id, so.full_name, so.signed_at FROM signoff so WHERE so.run_id = r.id
 	) c)`;
 
-/** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, UTC). */
+/** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, in the project's time zone). */
 export interface RunCitation {
 	kind: 'publication' | 'scenario' | 'signoff';
 	id: string;
@@ -564,7 +565,10 @@ export class RunInputError extends Error {
  *   be presented as reproduced.
  */
 export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
-	const { rows: run } = await db.query<StoredRun>('SELECT created_at, inputs FROM model_run WHERE id = $1', [runId]);
+	const { rows: run } = await db.query<StoredRun>(
+		'SELECT created_at, inputs, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone FROM model_run WHERE id = $1',
+		[runId]
+	);
 	if (!run[0]) throw new RunInputError('not_found', 'run not found');
 	const { rows: refs } = await db.query<StoredRef>(
 		`SELECT i.kind, i.start_date, i.sha256, b."values"
@@ -586,7 +590,10 @@ export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
  * what they may see of it).
  */
 export async function loadPublishedRunInput(db: Db, projectId: string, runId: string): Promise<{ input: ModelInput; trigger: RunTrigger }> {
-	const { rows: run } = await db.query<StoredRun & { trigger: RunTrigger }>('SELECT created_at, inputs, "trigger" FROM app_published_run_input($1, $2)', [projectId, runId]);
+	const { rows: run } = await db.query<StoredRun & { trigger: RunTrigger }>(
+		'SELECT created_at, inputs, "trigger", (SELECT p.time_zone FROM project p WHERE p.id = $1) AS time_zone FROM app_published_run_input($1, $2)',
+		[projectId, runId]
+	);
 	if (!run[0]) throw new RunInputError('not_found', 'run not found');
 	const { rows: refs } = await db.query<StoredRef>('SELECT kind, start_date, sha256, "values" FROM app_published_run_series($1, $2)', [projectId, runId]);
 	return { input: rebuildRunInput(run[0], refs), trigger: run[0].trigger };
@@ -594,6 +601,8 @@ export async function loadPublishedRunInput(db: Db, projectId: string, runId: st
 
 interface StoredRun {
 	created_at: Date;
+	/** The project's (058): the run's date in a message is the day there. */
+	time_zone: string | null;
 	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries> };
 }
 interface StoredRef {
@@ -610,7 +619,7 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 	if (refs.length === 0 && kinds.length > 0) {
 		throw new RunInputError(
 			'not_reproducible',
-			`this run is not reproducible from stored inputs: it was made on ${r.created_at.toISOString().slice(0, 10)}, before runs stored their input series (only hashes of them were kept)`
+			`this run is not reproducible from stored inputs: it was made on ${localDate(r.created_at, r.time_zone ?? DEFAULT_TIME_ZONE)}, before runs stored their input series (only hashes of them were kept)`
 		);
 	}
 	const byKind = new Map(refs.map((x) => [x.kind, x]));

@@ -327,7 +327,10 @@ put the results first. Top to bottom:
   read-only for viewers). Every download of the project (CSV, JSON, the
   .xlsx workbook, the server report PDF) is dated by the calendar day there,
   so an export made just after local midnight carries today's date, not
-  UTC's yesterday. A zone the server doesn't know is refused with its error.
+  UTC's yesterday. The same day dates what the server counts for a person:
+  the portfolio's ages, the feeds' health, the farm page's "not recent"
+  notice and forecast date, and the alerts (their "today" and the 06:00
+  digest). A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then
@@ -578,6 +581,38 @@ admin can.
 
 ## Network
 
+Three layouts, switched by the **Layout** buttons in the Schematic panel's
+header and kept in the URL so each can be linked: **Map** (the default, no
+parameter), **Table** (`view=table`) and **One node** (`view=node`).
+`node=<id>` picks a node (a note's link on the Summary, `notes.ts`
+`noteHref`, opens the map with its node picked).
+
+- **Map** (issue #17, option A's simplicity with nothing lost; the A2
+  board): the schematic beside a side column (one column below 900 px, the
+  schematic first). Above them, **Open as a grid** (a named group):
+  *Crop factors*, *Planted areas* and *Transfers* open in the
+  [grid modal](#grid-modal), and *Node table* switches to the Table layout;
+  editors also get **+ Add node**, which opens the new node on its form.
+  The side column holds:
+  - the **picked node's card** (`network/NodeCard.svelte`): kind ("Selected
+    · farm", "outflow gauge", "other water user") and name, its notes
+    (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
+    which opens the One node layout on it. A farm adds two tiles, *Supplied*
+    in the latest run (the newest run's summary, fetched through the Runs
+    tab's `detailCache` whenever this layout is showing; the tile tints for
+    the short and low bands, and "no demand" / "not in this run" are
+    written) and its *Flow share* in use. Then drains into, catchment area
+    (a user: what it takes, `describeUser`), a farm's dam capacity and its
+    irrigated area, a link ("20.00 ha, 1 crop") to the farm drawer. With
+    nothing picked: "Select a node on the map or in the list to see it
+    here."
+  - **All nodes**: a button per node, in the model's order, with a dot for
+    its kind (in its supply band's colour while *Colour farms by* is on), its
+    name and "→ downstream" (or "outlet"). Pressing one picks it (and marks
+    it on the schematic); picking on the schematic marks it here.
+
+  The Table's and One node's fields aren't on the map: every one is a click
+  away (Edit, Node table, the grids), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -609,8 +644,8 @@ admin can.
   unsaved model edits it adds that the colours show the run, not the edits.
   Gauges and other water users are not coloured. Selection, hover and drop
   states are unchanged (they live on the halo and opacity).
-- **Table** (the default from 900px wide) or **One node** (the default
-  below it), switched by the Layout buttons: every field has
+- **Table** or **One node** (until issue #17 the defaults, by screen width;
+  now the Map is): every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
   The flow share in use (with the Settings method) and its total are shown.
@@ -799,9 +834,12 @@ from the URL in place (`withoutFarm`), so Back then goes to where it was
 opened from. It is its own chunk, fetched when a URL names a farm.
 
 - **From:** the Summary's Needs attention (a farm below the supply target, a
-  single farm with nothing planted) and the Network: selecting a farm on the
-  schematic or in the table shows "*Farm*: 20.00 ha planted, 1 crop."
-  under the schematic with a **Planted areas** link (`farmPlanting`).
+  single farm with nothing planted) and the Network: on the Map, a farm's
+  card links its irrigated area ("20.00 ha, 1 crop"); on the Table and One
+  node layouts, selecting a farm shows "*Farm*: 20.00 ha planted, 1 crop."
+  under the schematic with a **Planted areas** link (`farmPlanting`). Those
+  links keep the page's other parameters (`withParam`, e.g. `view=table`),
+  so closing the drawer comes back to the same layout.
 - **Content:** every crop in the model with this farm's area (ha, the same
   inputs and labels as the Crops tab's row, "Orchard on Upper farm, ha"), the
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
@@ -817,7 +855,33 @@ opened from. It is its own chunk, fetched when a URL names a farm.
 - **Layout:** the `Dialog` component's `side` variant: full height down the
   right edge, 480 px wide, the whole width on a phone. The note linking to
   Crops & demand sits under the table, so opening the sheet focuses the first
-  area.
+  area. Its save row is `model/ModelSaveRow.svelte`, shared with the grid
+  modal.
+
+### Grid modal
+
+An existing model grid, unchanged, full screen over whichever tab is open
+(`model/GridModal.svelte`; issue #17: the simpler screens keep every grid one
+click away). It opens while the workspace URL has `grid=<id>`
+(`lib/workspace/overlays.ts`): `crop-factors`, `planted-areas` and `demand`
+(the Crops tab's sections, through its `sections` prop) and `transfers` (the
+Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
+the URL in place (`withoutParam`). It isn't opened over the grid's own tab
+(`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
+
+- **From:** the Network's Map (**Open as a grid**). More screens will link to
+  it as they simplify (the #17 checklist).
+- **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
+  the tab it comes from and the other way round, and the tab's problems list
+  shows above it (`IssueList`). The modal hides the save bar, so it carries
+  the same save row as the farm drawer (`ModelSaveRow`): status, reason,
+  **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
+  and **Close**.
+- **Layout:** the `Dialog` `full` variant with `keepInputs` (the grid's inputs
+  keep their own widths; other dialogs stretch text fields to the dialog's
+  width). The grid scrolls inside the modal; the title and the save row stay
+  put. On a phone (≤ 640 px) a `full` dialog takes the whole screen, and the
+  grid shows its phone layout (cards).
 
 On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
@@ -1050,9 +1114,12 @@ running. SheetJS loads only then, in a worker, never with the page.
   Each problem is also shown next to its field.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
-coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
-sideways scrolling: each month cell is at least 78px, room for a six-digit
-value such as 250000.
+coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
+workspace sidebar without sideways scrolling: a month cell is as narrow as a
+six-digit value such as 250000 allows (sized in the input's own digits, no
+spin buttons, as in the Network table; arrow keys still step), spare width is
+shared out between the months and the row label, and the label wraps before
+the row scrolls.
 At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
 selects and period lists shrink to the screen, and only the section menu and
 the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,

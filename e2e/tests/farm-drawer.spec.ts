@@ -21,11 +21,11 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	const project = await seedRunnableProject(page.request, 'Farm drawer');
 	await page.goto(`/projects/${project.id}?tab=network`);
 
-	// Picking the farm in the table offers its planted areas.
-	await page.getByRole('textbox', { name: 'Name' }).nth(1).focus();
-	const picked = page.getByTestId('picked-farm');
-	await expect(picked).toHaveText('Upper farm: 20.00 ha planted, 1 crop. Planted areas');
-	await picked.getByRole('link', { name: 'Planted areas' }).click();
+	// On the map, picking the farm in the node list shows its card, whose irrigated area opens the drawer.
+	await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: /^Upper farm/ }).click();
+	const card = page.getByTestId('node-card');
+	await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
+	await card.getByRole('link', { name: '20.00 ha, 1 crop' }).click();
 	await expect(page).toHaveURL(/\?tab=network&farm=/);
 	const d = drawer(page, 'Upper farm');
 	await expect(d).toBeVisible();
@@ -48,9 +48,11 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	await nav.getByRole('link', { name: 'Crops & demand' }).click();
 	await expect(page.getByLabel('Orchard on Upper farm, ha')).toHaveValue('35');
 
-	// Reopened, it saves through the page's save, with the reason.
+	// Reopened from the Table layout (the picked farm's line under the schematic), it saves through the page's save, with the reason.
 	await nav.getByRole('link', { name: 'Network' }).click();
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	await page.getByRole('textbox', { name: 'Name' }).nth(1).focus();
+	const picked = page.getByTestId('picked-farm');
 	await expect(picked).toHaveText('Upper farm: 35.00 ha planted, 1 crop. Planted areas');
 	await picked.getByRole('link', { name: 'Planted areas' }).click();
 	const again = drawer(page, 'Upper farm');
@@ -61,7 +63,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	expect(await savedArea(page, project.id, 'Upper farm')).toBe(350_000);
 	await page.keyboard.press('Escape');
 	await expect(again).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network$/);
+	await expect(page).toHaveURL(/\?tab=network&view=table$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 });
 

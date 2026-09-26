@@ -20,6 +20,8 @@
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
 	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
 	const loadFarmDrawer = () => import('$lib/components/crops/FarmCropsDrawer.svelte');
+	// An existing grid, unchanged, in a full-screen modal over any tab (`grid=<id>`, issue #17).
+	const loadGridModal = () => import('$lib/components/model/GridModal.svelte');
 	// An applicant's whole view of the project (WP-3.3): the workspace's tabs all refuse them.
 	const loadApplicantView = () => import('$lib/components/scenarios/ApplicantView.svelte');
 </script>
@@ -48,6 +50,7 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
+	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		hasModelInputsToggle,
@@ -300,6 +303,18 @@
 	});
 	$effect(() => {
 		if (!drawerOpen && untrack(() => drawerFarm)) goto(withoutFarm(page.url), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+
+	// --- the grid modal: open while the URL names a grid, closed the same way --
+	// Not over the grid's own tab, where the grid is already on the page.
+	const gridParam = $derived(page.url.searchParams.get('grid'));
+	const openGrid = $derived(isGridId(gridParam) && GRID_TAB[gridParam] !== tab ? gridParam : null);
+	let gridOpen = $state(false);
+	$effect(() => {
+		gridOpen = !!openGrid;
+	});
+	$effect(() => {
+		if (!gridOpen && untrack(() => gridParam)) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
 	});
 
 	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
@@ -612,6 +627,21 @@
 							{editor}
 							settings={project!.settings}
 							nodeId={drawerFarm}
+							readonly={!canEdit}
+							onsave={saveModel}
+							bind:reason={saveReason}
+						/>
+					{/snippet}
+				</Lazy>
+			{/if}
+			{#if openGrid}
+				<Lazy load={loadGridModal}>
+					{#snippet children(GridModal)}
+						<GridModal
+							bind:open={gridOpen}
+							grid={openGrid}
+							{editor}
+							settings={project!.settings}
 							readonly={!canEdit}
 							onsave={saveModel}
 							bind:reason={saveReason}

@@ -7,9 +7,10 @@
 //      back on.
 //   2. Immediate: claim pending deliveries (app_alert_claim), which applies
 //      the daily cap: past DAILY_CAP immediate mails since the last 06:00
-//      SAST, the rest wait for the digest.
-//   3. Digest: after 06:00 SAST, every digest line queued before it, one
-//      email per person and project (app_alert_claim_digest).
+//      in the project's time zone, the rest wait for the digest.
+//   3. Digest: after 06:00 where the catchment is (project.time_zone,
+//      059_local_day), every digest line queued before it, one email per
+//      person and project (app_alert_claim_digest).
 //
 // Each mail is built in a transaction *as its recipient* (withUser), under
 // RLS: their access is checked again now (app_alert_my_mode: a member removed
@@ -24,7 +25,6 @@ import { hashToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { alertMail, digestMail, type AlertFacts, type Recipient } from '../mail/alerts.js';
 import { sendMail, type Mail } from '../mail/transport.js';
-import { DEFAULT_DAILY_CAP, digestWindow } from './digest.js';
 import { alertsEnabled } from './evaluate.js';
 import type { AlertKind, AlertMode } from './rules.js';
 import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
@@ -55,6 +55,9 @@ const LEASE = '10 minutes';
 export const DIGEST_MAX_LINES = 20;
 /** Lines claimed per person for one digest (app_alert_claim_digest); older ones are skipped as over the limit. */
 export const DIGEST_CLAIM_LINES = 200;
+
+/** At most this many immediate alert mails per person per digest day; the rest wait for the digest. */
+export const DEFAULT_DAILY_CAP = 5;
 
 /** At most this many immediate mails per person per digest day (ALERTS_DAILY_CAP, default 5). */
 export function dailyCap(): number {
@@ -339,14 +342,14 @@ export async function sendAlerts({ now = new Date(), limit = 100 }: { now?: Date
 		console.error(JSON.stringify({ event: 'alerts_not_sent', reason: (err as Error).message }));
 		return r;
 	}
-	const { start } = digestWindow(now);
+	// The digest day (from 06:00 to 06:00) is each project's own: the claims work it out from `now` and project.time_zone.
 	const { rows: due } = await withoutUser((db) =>
-		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim($1, $2, $3, $4::interval)`, [limit, start, dailyCap(), LEASE])
+		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim($1, $2, $3, $4::interval)`, [limit, now, dailyCap(), LEASE])
 	);
 	for (const c of due) await deliver(c, secret, r);
 
 	const { rows: digest } = await withoutUser((db) =>
-		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim_digest($1, $2, $3, $4::interval)`, [start, limit, DIGEST_CLAIM_LINES, LEASE])
+		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim_digest($1, $2, $3, $4::interval)`, [now, limit, DIGEST_CLAIM_LINES, LEASE])
 	);
 	const groups = new Map<string, Claimed[]>();
 	for (const c of digest) {

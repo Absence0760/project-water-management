@@ -25,6 +25,8 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	id: 'p',
 	name: 'Alpha',
 	role: 'viewer',
+	timeZone: 'Africa/Johannesburg',
+	today: '2026-09-25',
 	dataUntil: '2026-09-24',
 	lastRunAt: '2026-09-25T06:00:00.000Z',
 	publishedAt: '2026-09-25T07:00:00.000Z',

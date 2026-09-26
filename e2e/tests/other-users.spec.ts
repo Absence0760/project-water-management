@@ -11,7 +11,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Town on the river');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'Table' }).click();
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 
 	await page.getByRole('button', { name: '+ Add other user' }).click();
 	const users = page.getByRole('region', { name: /^Other water users/ });
@@ -32,7 +32,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
 	await expect(saveBar(page)).toHaveCount(0);
 	await page.reload();
-	await page.getByRole('button', { name: 'Table' }).click();
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	const again = page.getByRole('region', { name: /^Other water users/ });
 	await expect(again.getByLabel('Demand of Town in Mar, m³/day')).toHaveValue('800');
 	await expect(again.getByLabel('Share returned (%)')).toHaveValue('40');

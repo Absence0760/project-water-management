@@ -15,7 +15,15 @@ import { fetchChirps, fetchGefs } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
-/** Today's date in UTC: CHIRPS days, DWS days and the schedule all count UTC calendar days. */
+/**
+ * Today's date in UTC, the fetch plumbing's clock: which days to ask a source
+ * for, the newest day it can have, and the schedule. CHIRPS and CHIRPS-GEFS
+ * days are UTC days. A DWS day is a South African one, and UTC's today is
+ * never after it, so bounding a window by it can only leave the newest day
+ * for the next fetch, never ask for a day that can't exist yet. Nothing a
+ * person reads is dated by it: a feed's health and the alerts count to the
+ * project's own day (health.ts, alerts/evaluate.ts; projects/timeZone.ts).
+ */
 export const utcToday = (now = new Date()) => now.toISOString().slice(0, 10);
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);

@@ -18,7 +18,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	const farmer = await signIn('Notes farmer');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper] } })).status()).toBe(201);
 
-	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.goto(`/projects/${project.id}?tab=network&view=table`);
 	await page.getByRole('button', { name: 'Add a note on Upper farm' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Upper farm' });
 	await expect(dialog).toContainText('No notes yet.');
@@ -58,7 +58,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	await page.goto(`/projects/${project.id}`);
 	const recent = page.getByRole('region', { name: 'Recent notes' });
 	await expect(recent.getByRole('listitem').first()).toContainText('Logger moved in March');
-	await expect(recent.getByRole('listitem').first().getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', `?tab=network#node-row-${upper}`);
+	await expect(recent.getByRole('listitem').first().getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', `?tab=network&node=${upper}`);
 });
 
 test('a settings group and a run take notes, and the author edits and deletes their own', async ({ page, owner }) => {

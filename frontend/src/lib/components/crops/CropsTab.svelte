@@ -11,7 +11,19 @@
 	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
 
-	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
+	let {
+		editor,
+		settings,
+		readonly,
+		sections
+	}: {
+		editor: ModelEditor;
+		settings: ProjectSettings;
+		readonly: boolean;
+		/** Only these sections (the grid modal shows one, lib/workspace/overlays.ts); all when absent. */
+		sections?: readonly ('factors' | 'areas' | 'demand')[];
+	} = $props();
+	const show = (s: 'factors' | 'areas' | 'demand') => !sections || sections.includes(s);
 
 	const crops = $derived(editor.model.crops);
 	// Farms, plus any other node that already carries crop areas.
@@ -96,6 +108,7 @@
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
 
+{#if show('factors')}
 <section class="panel" aria-labelledby="crops-h">
 	<div class="panel-head">
 		<h2 id="crops-h">Crop factors <HelpTip key="crop.cropFactor" /></h2>
@@ -166,7 +179,9 @@
 		{#if !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add crop</button></div>{/if}
 	{/if}
 </section>
+{/if}
 
+{#if show('areas')}
 <section class="panel" aria-labelledby="areas-h">
 	<div class="panel-head">
 		<h2 id="areas-h">Planted areas</h2>
@@ -230,7 +245,9 @@
 		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
 	{/if}
 </section>
+{/if}
 
+{#if show('demand')}
 <section class="panel" aria-labelledby="dem-h">
 	<div class="panel-head">
 		<h2 id="dem-h">Irrigation demand preview <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
@@ -299,6 +316,7 @@
 		</p>
 	{/if}
 </section>
+{/if}
 
 <style>
 	.small {
