@@ -490,7 +490,8 @@ the result change?", and put back any earlier version.
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
   ensembles, `POST /reports`, the allocation import preview (writes
-  nothing).
+  nothing), notes (each is its own record), and queuing or cancelling a
+  yield job (the `yield_result` row keeps who asked).
 
 ### Stored run inputs (021_series_blob.sql)
 
