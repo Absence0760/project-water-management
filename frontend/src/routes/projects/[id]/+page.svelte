@@ -48,25 +48,20 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
-	import { hasModelInputsToggle, navSections, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
+	import {
+		ALL_TABS,
+		hasModelInputsToggle,
+		navSections,
+		stripTabs,
+		TAB_LABELS,
+		VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT,
+		visibleTabs,
+		type TabId
+	} from '$lib/workspace/tabs';
 
-	// The sidebar orders them by section (navSections), not by this list.
-	const TABS = [
-		{ id: 'overview', label: 'Summary' },
-		{ id: 'network', label: 'Network' },
-		{ id: 'crops', label: 'Crops & demand' },
-		{ id: 'transfers', label: 'Transfers' },
-		{ id: 'series', label: 'Data' },
-		{ id: 'settings', label: 'Settings & calibration' },
-		{ id: 'runs', label: 'Runs & results' },
-		{ id: 'compare', label: 'Compare runs' },
-		{ id: 'scenarios', label: 'Scenarios' },
-		{ id: 'allocations', label: 'Allocations' },
-		{ id: 'applications', label: 'Applications' },
-		{ id: 'history', label: 'History' }
-	] as const;
-	type TabId = (typeof TABS)[number]['id'];
-	const TAB_IDS: TabId[] = TABS.map((t) => t.id);
+	// Every tab the page renders; the sidebar orders them by section
+	// (navSections) and names them from TAB_LABELS, which help shares.
+	const TAB_IDS: TabId[] = ALL_TABS;
 	const MODEL_TABS: TabId[] = ['network', 'crops', 'transfers'];
 	// Friendlier ?tab= spellings that resolve to the canonical keys above.
 	const TAB_ALIASES: Record<string, TabId> = {
@@ -83,7 +78,7 @@
 	const tab = $derived.by<TabId>(() => {
 		const raw = page.url.searchParams.get('tab') ?? '';
 		const t = TAB_ALIASES[raw] ?? raw;
-		return TABS.some((x) => x.id === t) ? (t as TabId) : 'overview';
+		return (TAB_IDS as string[]).includes(t) ? (t as TabId) : 'overview';
 	});
 
 	let project = $state<Project | null>(null);
@@ -94,7 +89,7 @@
 	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
 	const shownIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
-	const LABEL = Object.fromEntries(TABS.map((t) => [t.id, t.label])) as Record<TabId, string>;
+	const LABEL = TAB_LABELS;
 	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
 	// flattened in the order shown, for the arrow keys.
 	const sections = $derived(navSections(stripIds));

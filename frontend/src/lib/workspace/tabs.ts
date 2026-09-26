@@ -38,6 +38,25 @@ export const TAB_GROUP = {
 
 export type TabId = keyof typeof TAB_GROUP;
 
+/**
+ * Each tab's name, as the workspace's sidebar and the help pages show it
+ * (lib/help/guides.ts TAB_TITLES picks from this), so a rename is one line.
+ */
+export const TAB_LABELS: Record<TabId, string> = {
+	overview: 'Summary',
+	network: 'Network',
+	crops: 'Crops & demand',
+	transfers: 'Transfers',
+	series: 'Data',
+	settings: 'Settings & calibration',
+	runs: 'Runs & results',
+	compare: 'Compare runs',
+	scenarios: 'Scenarios',
+	allocations: 'Allocations',
+	applications: 'Applications',
+	history: 'History'
+};
+
 /** Every known tab, in workflow order. */
 export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
 

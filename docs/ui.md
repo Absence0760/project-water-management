@@ -53,7 +53,8 @@ first): **Outcomes** (Summary, Runs & results, Compare runs, Scenarios, Allocati
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
-section lists joins *Build the model*). It is layout only: the URLs stay
+section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
+the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **1100 px and wider:** a sidebar beside the tab's content, with the section
@@ -2323,7 +2324,13 @@ page, and closes again when you pick a page.
   width: key points beside a close-up shot, or a diagram.
 - **Overview** (`/help`): the catchment tour (eight stops from rain to the
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
-  workspace tab, `SETUP_STEPS` in `lib/help/guides.ts`) and the model guides.
+  setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
+  order of the workspace's *Build the model* section, which `tour.test.ts`
+  guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
+  the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
+  *The whole process* has a **Getting around a project** section (the three
+  sections, the sidebar, strip and phone Sections menu, and the farm drawer),
+  and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
   or one idea each, with an "On this page" list, numbered steps, tip and
