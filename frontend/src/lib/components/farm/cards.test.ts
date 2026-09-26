@@ -70,7 +70,7 @@ describe('the notice', () => {
 
 	it('names a restriction and, with no text, carries only the published percentage', () => {
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'restricted', pct: 0.2, notice: null };
+		v.publication.restriction = { level: 'restricted', pct: 20, notice: null };
 		const n = noticeCard(v)!;
 		expect(n.heading).toBe('Notice from the WUA · Restriction');
 		expect(n.label).toBeNull();

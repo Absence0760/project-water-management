@@ -93,7 +93,8 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
-		pctLine: !title && !body && r.pct != null ? `Set by the WUA: ${fmtPct(r.pct)} of registered use.` : null,
+		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
+		pctLine: !title && !body && r.pct != null ? `Set by the WUA: ${fmtPct(r.pct / 100)} of registered use.` : null,
 		byline: `${view.publication.publishedBy}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title
 	};
