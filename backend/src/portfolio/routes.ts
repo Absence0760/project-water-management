@@ -12,8 +12,9 @@ import { EWR_THRESHOLDS } from './status.js';
 export const portfolioRoutes = new Hono<AuthEnv>().get('/:id/portfolio', async (c) =>
 	withUser(c.get('userId'), async (db) => {
 		const id = c.req.param('id');
-		await requireTeamRole(db, id, 'viewer');
+		const role = await requireTeamRole(db, id, 'viewer');
+		const { rows } = await db.query<{ name: string }>('SELECT name FROM team WHERE id = $1', [id]);
 		const today = utcToday();
-		return c.json({ today, thresholds: EWR_THRESHOLDS, projects: await loadPortfolio(db, id, today) });
+		return c.json({ team: { id, name: rows[0]!.name, role }, today, thresholds: EWR_THRESHOLDS, projects: await loadPortfolio(db, id, today) });
 	})
 );

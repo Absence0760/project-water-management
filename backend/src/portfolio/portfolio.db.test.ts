@@ -76,6 +76,7 @@ describe('GET /teams/:id/portfolio', () => {
 		expect(ids).not.toContain(personal);
 		expect(ids).not.toContain(strangersProject);
 		expect(res.body.thresholds).toEqual({ amber: 0.05, red: 0.2 });
+		expect(res.body.team).toEqual({ id: teamId, name: 'Portfolio WUA', role: 'viewer' });
 		expect(res.body.today).toBe(utcToday());
 	});
 
