@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -59,7 +59,12 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				damReleaseRule: z.enum(DAM_RELEASE_RULES).default('none'),
 				damReleaseM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				damOutletCapacityM3Day: nonNeg.nullable().default(null),
-				damSeepageReturnPct: frac.default(1)
+				damSeepageReturnPct: frac.default(1),
+				// Supply rule and river pump (WP-3.8), farms only (a model rule); pump null = no limit.
+				supplyRule: z.enum(SUPPLY_RULES).default('damFirst'),
+				pumpCapacityM3Day: nonNeg.nullable().default(null),
+				supplyTriggerPct: frac.default(0.4),
+				supplyStopPct: frac.default(0.6)
 			})
 		)
 		.max(500),

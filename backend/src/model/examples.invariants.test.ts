@@ -5,8 +5,8 @@
 // so they must balance as exactly as the random fuzz networks do. Built
 // without the stored fit (several seconds; it only changes GR4J's
 // parameters): examples.test.ts covers the examples as seeded.
-import { runModel } from '@water-management/engine';
-import { checkAll } from '@water-management/engine/testing';
+import { runModel, SUPPLY_DEFAULTS } from '@water-management/engine';
+import { checkAll, sameOutput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
 
@@ -33,6 +33,25 @@ describe('engine invariants on the example catchments', () => {
 			for (const seed of [1, 2]) expect(checkAll(input, seed)).toBeNull();
 		}, 60_000);
 	}
+	// Supply rules (engine 0.41.0, WP-3.8) are off by default: an example with
+	// no supply fields and one with the dam-only defaults written out (and an
+	// inert pump capacity on every farm) give the same output to the bit.
+	it('the supply fields at their defaults change nothing (WP-3.8)', () => {
+		const ex = examples[1]!;
+		const bare = inputOf(ex);
+		bare.settings = { ...bare.settings, runoffModel: 'legacy' };
+		for (const n of bare.model.nodes) {
+			delete n.supplyRule;
+			delete n.pumpCapacityM3Day;
+			delete n.supplyTriggerPct;
+			delete n.supplyStopPct;
+		}
+		const explicit = structuredClone(bare);
+		for (const n of explicit.model.nodes) Object.assign(n, SUPPLY_DEFAULTS, n.kind === 'farm' ? { pumpCapacityM3Day: 500 } : {});
+		const out = runModel(bare);
+		expect(sameOutput(out, runModel(explicit))).toBe(true);
+		expect(out.series.some((s) => s.key === 'river_abstraction')).toBe(false);
+	}, 60_000);
 	// The GR4J-run timing budget lives in examples.perf.test.ts, its own vitest
 	// project (run serially via `pnpm test:perf`, not part of `pnpm test`) —
 	// see docs/followups.md "Wall-clock test flakes under load" (2026-09-24).

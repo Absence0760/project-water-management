@@ -105,6 +105,10 @@ erDiagram
 | `stream_depletion_frac` | (none) | Share d (0–1, default 0) of the pumping taken from the river at the node |
 | `stream_depletion_lag_days` | (none) | Lag time constant k (0–36 500 days, default 0 = same day) |
 | `user_priority` | (none) | Kind `user` only: `senior` (default) or `junior` (CHECK). The API refuses crop areas and transfers on a user node |
+| `supply_rule` | (none: b023 irrigates from the dam only) | Farms only (migration 060, engine ≥ 0.41.0, WP-3.8, [model.md §2.7e](./model.md)): `damFirst` (default, every existing row: the dam only), `riverFirst`, `trigger` or `runOfRiver` (CHECK). The API refuses a rule other than `damFirst` or a pump capacity on a gauge or user, `trigger` without a dam and `runOfRiver` with one |
+| `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; inert under `damFirst`. Stored per day, not as pumps × m³/h (the form's calculator) |
+| `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
+| `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).

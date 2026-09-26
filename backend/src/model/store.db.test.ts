@@ -83,7 +83,12 @@ describe('model store', () => {
 			boreholeRule: 'drought',
 			boreholeTriggerPct: 0.25,
 			streamDepletionFrac: 0.3,
-			streamDepletionLagDays: 12.5
+			streamDepletionLagDays: 12.5,
+			// Supply rule and river pump (WP-3.8).
+			supplyRule: 'trigger',
+			pumpCapacityM3Day: 1234.5,
+			supplyTriggerPct: 0.35,
+			supplyStopPct: 0.65
 		});
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior' });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
@@ -136,6 +141,10 @@ describe('model store', () => {
 			damReleaseM3Day: null,
 			damOutletCapacityM3Day: null,
 			damSeepageReturnPct: 1,
+			supplyRule: 'damFirst',
+			pumpCapacityM3Day: null,
+			supplyTriggerPct: 0.4,
+			supplyStopPct: 0.6,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
