@@ -35,8 +35,11 @@ export interface ScenarioResult {
 	/**
 	 * One line per op that was skipped, naming it (`op 3 (node.remove): …`):
 	 * a missing target, a value out of range, or an edit that would break the
-	 * network (a second outflow, a loop, a duplicate name…). A skipped op
-	 * changes nothing; later ops still apply.
+	 * network (a second outflow, a loop, a duplicate name…). A group of
+	 * `node.set` ops on one node that breaks a network rule is one line naming
+	 * each of its ops that applied (`ops 3–5 (node.set, "Upper farm"): …`,
+	 * or `ops 3, 5` when op 4 failed its own check). A skipped op changes
+	 * nothing; later ops still apply.
 	 */
 	problems: string[];
 	/**
@@ -486,49 +489,116 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 }
 
 /**
- * Apply `ops` to `base` in order. Never mutates `base` (settings and the
- * model are deep-copied; a series is copied only when an op scales it). An
- * op whose target is missing, whose value is out of range, or which would
- * leave the network invalid is skipped and reported in `problems`, never
- * thrown; the ops after it still apply. docs/scenarios.md has the rules.
+ * Do ops `a` and `b` (in that order) belong to one edit? Consecutive
+ * `node.set` ops on the same node do: the network rules are checked once,
+ * after the last of them (docs/scenarios.md § Edit groups).
  */
-export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
-	const masked = options.mask ? maskModel(base.model, options.mask, ops) : null;
+const sameGroup = (a: ScenarioOp | undefined, b: ScenarioOp | undefined): boolean =>
+	a?.op === 'node.set' && b?.op === 'node.set' && typeof a.nodeId === 'string' && a.nodeId === b.nodeId;
+
+/** 1-based op numbers in words: `3`, `3–5` for a run, `3, 5` otherwise. */
+function opNumbers(indices: readonly number[]): string {
+	const n = indices.map((i) => i + 1);
+	const run = n.every((x, k) => k === 0 || x === n[k - 1]! + 1);
+	return run && n.length > 1 ? `${n[0]}–${n[n.length - 1]}` : n.join(', ');
+}
+
+interface Stepped extends Omit<ScenarioResult, 'renamed' | 'reIds'> {
+	/** The input each op meets: the committed input plus the earlier ops of its own group (not yet rule-checked). */
+	before: ModelInput[];
+	/** The input with every op applied, a last group included even if it breaks a rule (what a next op would meet). */
+	pending: ModelInput;
+}
+
+/**
+ * applyScenario's loop. The ops apply in order, each to a fresh copy. A
+ * group (consecutive `node.set` ops on one node; any other op is a group of
+ * its own) is checked against the network rules once, after its last op: a
+ * group that adds a rule issue is skipped whole and reported once, against
+ * the ops of it that applied, so the scenario never keeps half an edit. An
+ * op that fails its own check (a missing target, a value out of range) is
+ * refused on its own, and the rest of its group still counts.
+ */
+function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | null): Stepped {
 	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id) } : SEE_ALL;
 	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series } };
 	let issues = structureIssues(cur);
 	const applied: AppliedOp[] = [];
 	const problems: string[] = [];
+	const before: ModelInput[] = [];
+	// The open group: the input with its ops so far applied, and those ops.
+	let draft = cur;
+	let group: AppliedOp[] = [];
+	// A last node.set group that breaks a rule stays open for a next op on the node to complete.
+	let pending: ModelInput | null = null;
 	ops.forEach((op, index) => {
-		const label = `op ${index + 1} (${typeof op?.op === 'string' ? op.op : 'unknown'})`;
-		const draft: ModelInput = { settings: cloneData(cur.settings), model: cloneData(cur.model), series: cur.series };
-		let notes: string[];
+		const kind = typeof op?.op === 'string' ? op.op : 'unknown';
+		before.push(draft);
+		const next: ModelInput = { settings: cloneData(draft.settings), model: cloneData(draft.model), series: draft.series };
 		try {
-			notes = applyOne(draft, op, see);
+			group.push({ index, op, notes: applyOne(next, op, see) });
+			draft = next;
 		} catch (e) {
 			if (!(e instanceof OpError)) throw e;
-			problems.push(`${label}: ${e.message}`);
-			return;
+			problems.push(`op ${index + 1} (${kind}): ${e.message}`);
 		}
+		if (sameGroup(op, ops[index + 1]) || !group.length) return;
 		const after = structureIssues(draft);
 		const introduced = [...new Set([...after].filter(([k]) => !issues.has(k)).map(([k, text]) => (masked && hiddenRule(k, masked) ? MASKED_RULE : text)))];
 		if (introduced.length) {
+			// One op: `op 3 (node.set)`, as always. Several: `ops 3–5 (node.set, "Upper farm")`, the node named as it stood before them.
+			const nodeName = () => cur.model.nodes.find((n) => n.id === (op as { nodeId?: unknown }).nodeId)?.name ?? '';
+			const label = group.length === 1 ? `op ${group[0]!.index + 1} (${kind})` : `ops ${opNumbers(group.map((g) => g.index))} (${kind}, "${nodeName()}")`;
 			problems.push(`${label}: ${introduced.join('; ')}`);
-			return;
+			if (index === ops.length - 1 && op.op === 'node.set') pending = draft;
+			draft = cur;
+		} else {
+			cur = draft;
+			issues = after;
+			applied.push(...group);
 		}
-		cur = draft;
-		issues = after;
-		applied.push({ index, op, notes });
+		group = [];
 	});
+	return { input: cur, applied, problems, before, pending: pending ?? draft };
+}
+
+/**
+ * Apply `ops` to `base` in order. Never mutates `base` (settings and the
+ * model are deep-copied; a series is copied only when an op scales it). An
+ * op whose target is missing or whose value is out of range is skipped and
+ * reported in `problems`, never thrown; the ops after it still apply. The
+ * network rules (a second outflow, a loop, a duplicate name, the model's
+ * save rules…) are checked after each group of ops: consecutive `node.set`
+ * ops on one node form a group, checked once after its last op and skipped
+ * whole if it breaks one, so a farm can go from `trigger` to `runOfRiver`
+ * (rule and dam together) in either order. docs/scenarios.md has the rules.
+ */
+export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
+	const masked = options.mask ? maskModel(base.model, options.mask, ops) : null;
+	const { input, applied, problems } = step(base, ops, masked);
 	const renamed: MaskedRename[] = [];
 	const reIds: MaskedReId[] = [];
 	if (masked) {
-		// cur.model is this call's own copy (every op works on a fresh draft), so restoring in place touches nothing shared.
-		restoreIds(cur.model, masked, reIds);
-		unmask(cur.model.nodes, masked.nodes, 'node', renamed);
-		unmask(cur.model.crops, masked.crops, 'crop', renamed);
+		// input.model is this call's own copy (every op works on a fresh draft), so restoring in place touches nothing shared.
+		restoreIds(input.model, masked, reIds);
+		unmask(input.model.nodes, masked.nodes, 'node', renamed);
+		unmask(input.model.crops, masked.crops, 'crop', renamed);
 	}
-	return { input: cur, applied, problems, renamed, reIds };
+	return { input, applied, problems, renamed, reIds };
+}
+
+/**
+ * The input each op of `ops` meets under applyScenario's rules (`before[i]`:
+ * the base with the ops before it applied, the earlier ops of its own group
+ * included though not yet checked against the rules), and `after`, what a
+ * next op would meet: every op applied, a last group included even while it
+ * still breaks a rule, so a form adding one op at a time builds on the
+ * group's edit so far. For describing ops and building the next one;
+ * applyScenario says which apply. The inputs share structure: read-only.
+ */
+export function scenarioSteps(base: ModelInput, ops: readonly ScenarioOp[]): { before: ModelInput[]; after: ModelInput } {
+	const { before, pending } = step(base, ops, null);
+	return { before, after: pending };
 }
 
 // ---------------------------------------------------------------------------
@@ -613,17 +683,17 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
  * Classify every op of a scenario against the input each one meets: the base
  * with the earlier ops applied, and nodes the scenario added counted as
  * owned. A skipped op (see applyScenario) is classified against the input it
- * would have met.
+ * would have met (scenarioSteps' `before`: its group's earlier ops applied).
  */
 export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: Iterable<string>, options: ApplyOptions = {}): OpClass[] {
 	const owned = new Set(ownedNodeIds);
 	// Masked once up front: each op below meets the names and ids applyScenario's would.
-	let cur = options.mask ? { ...base, model: maskModel(base.model, options.mask, ops).model } : base;
-	return ops.map((op) => {
-		const c = classifyOp(op, owned, cur);
-		const r = applyScenario(cur, [op]);
-		if (r.applied.length && op.op === 'node.add') owned.add(op.node.id);
-		cur = r.input;
+	const cur = options.mask ? { ...base, model: maskModel(base.model, options.mask, ops).model } : base;
+	const { before, applied } = step(cur, ops, null);
+	const added = new Set(applied.map((a) => a.index));
+	return ops.map((op, i) => {
+		const c = classifyOp(op, owned, before[i]);
+		if (added.has(i) && op.op === 'node.add') owned.add(op.node.id);
 		return c;
 	});
 }
