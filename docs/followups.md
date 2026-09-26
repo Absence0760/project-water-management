@@ -1205,6 +1205,17 @@ role and not before it.
         → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
         hydrologist building scenarios of more than a handful of changes,
         or WP-3.3's applicant flow.
+  - [ ] **Names of nodes a rebase dropped are lost on reload**: after a
+        rebase onto a run without a node, a change on that node keeps its
+        name only while the earlier base's snapshot is still in the editor's
+        in-memory `seenNames` (`scenarios/ScenarioEditor.svelte`); after a
+        reload it reads "a node the base run doesn't have". That map also
+        outlives a switch to another scenario (harmless, ids are UUIDs).
+        Durable fix: store the display names an op needs (`{ id, name }`)
+        with the scenario when the op is made, server-side, and drop
+        `seenNames`. Trigger: someone finds a rebased scenario's changes
+        unreadable after coming back to it, or WP-3.3's applicant flow
+        (applicants rebase more often).
   - [x] **One home for the model's save rules** (2026-09-25): the rules are
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz
