@@ -767,7 +767,11 @@
 //             measured apart; merged, #53 R4's outcome matrix and the reload
 //             prompt measure 908. R5's seasonal outlook (engine 0.44.0) is
 //             not in any page chunk. No new dependency. Headroom ~4 KB.
-// 2026-09-26  total 912 → 918 KB. Issue #17's app shell (AppShell, AccountMenu,
+// 2026-09-26  total 912 → 917 KB (measured 913). The plain failed-chunk
+//             message for the workbook download, the data download and the
+//             verify-email banner (+~0.5 KB) merged with #17's app shell,
+//             which left ~0 KB of headroom. Headroom ~4 KB.
+// 2026-09-26  total 917 → 918 KB. Issue #17's app shell (AppShell, AccountMenu,
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.

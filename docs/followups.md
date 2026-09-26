@@ -1069,7 +1069,7 @@ the suggested order (the IDs carry the detail):
       `e2e/tests/lazy-chunk.spec.ts` pins them (the layout's catalogue
       aside: its chunk has no name or content a test can block it by).
       Total bundle 891.5 → 892.8 KB gzip.
-- [ ] **Three dynamic imports still report a failed chunk as a raw error.**
+- [x] **Three dynamic imports still report a failed chunk as a raw error.**
       The run's workbook export (`export/DownloadMenu.svelte`, "Workbook
       failed: Failed to fetch dynamically imported module …") and the
       account's data export (`routes/account/+page.svelte`) show the
@@ -1085,6 +1085,15 @@ the suggested order (the IDs carry the detail):
       catalogue failure can use only because the catalogue is what failed).
       The banner may well stay silent (a reminder, not the page). Trigger:
       the next change to either export or the banner.
+      **Done 2026-09-26:** all three say it the `ChunkFailed` way. The
+      workbook download shows a compact alert below the menu (the status
+      line keeps its own errors). The account page words it with `t()`
+      (`ChunkFailed` now takes `text` and `reload`), on the translation
+      sheet. The banner says so in its place rather than vanishing, since an
+      unconfirmed address holds back pending invitations; the layout words
+      it with `msg()` through the i18n module when the page loaded it, else
+      English. `lazy-chunk.spec.ts` covers each. Total bundle 894.0 KB gzip
+      (the guard rounds up and prints 895, its ceiling: under 1 KB left).
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

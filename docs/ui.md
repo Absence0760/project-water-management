@@ -172,8 +172,10 @@ changes: save them first, or the browser will ask before the reload discards
 them."; the save bar is still there, and **Reload page** meets the same
 "leave site?" prompt as closing the tab. Nothing reloads by itself. The
 project list's import dialog and its workbook reader, Overview's alert email
-settings, the printable report and the language of the translated pages say
-the same, naming what failed
+settings, the printable report, the run's workbook download (below the
+Download menu), the account's data download, the "confirm your email"
+banner (in its place, rather than vanishing) and the language of the
+translated pages say the same, naming what failed
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
 **Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
