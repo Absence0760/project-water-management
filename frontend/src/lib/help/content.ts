@@ -189,6 +189,40 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 [Shortfalls] "Set reporting period"; docs/model.md §2.11'
 	},
 
+	{
+		id: 'assurance-of-supply',
+		term: 'Assurance of supply',
+		short: 'How reliably each farm’s irrigation demand was met over the reporting window: by days, by volume and by water years.',
+		long: 'Three measures per farm and other water user (engine 0.32.0). Days met: the share of days with demand when the whole demand was supplied (days without demand don’t count). Volume supplied: Σ supplied ÷ Σ demand, the same figure as the curtailment table. Water years met: the share of water years whose supply reached the annual threshold (Settings, default 90 %, a project choice rather than a standard).\n\nAfter Hashimoto et al. (1982), a failure is a run of consecutive demand days not fully met: the table gives the number of failures, their mean and longest length (resilience) and the mean and largest deficit per failure (vulnerability).\n\nThe definitions are pending review by the project hydrologist.',
+		units: '% ; days; m³',
+		category: 'results',
+		aliases: ['reliability', 'assurance', 'resilience', 'vulnerability', 'Hashimoto'],
+		fields: ['settings.assuranceAnnualThreshold'],
+		related: ['report-window', 'stress-class', 'water-account'],
+		source: 'docs/model.md §2.11a; Hashimoto, Stedinger & Loucks 1982'
+	},
+	{
+		id: 'stress-class',
+		term: 'Stress class',
+		short: 'A month’s supply as a class: Low (≥ 95 % of demand supplied), Moderate (≥ 85 %), High (≥ 70 %), Severe (≥ 50 %) or Critical.',
+		long: 'The classes and thresholds come from the client’s experimental node-based workbook (v004 DEV), which reported them per farm and per month. The app grids them per farm, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
+		category: 'results',
+		aliases: ['stress', 'supply ratio', 'Low', 'Moderate', 'High', 'Severe', 'Critical'],
+		related: ['assurance-of-supply'],
+		source: 'docs/model.md §4 and §2.11a'
+	},
+	{
+		id: 'water-account',
+		term: 'Water account',
+		short: 'Per water year: what entered the river network, where it went, what the dams kept, and a residual that should be 0.',
+		long: 'In: natural flow, rain on the dams, groundwater pumped and net transfers. Out: runoff removed by land cover, natural flow no farm received (flow shares not summing to 1), consumptive irrigation (supplied − return flow), other users’ net take, dam evaporation, stream depletion from boreholes and the outflow at the outlet. In − out − change in dam storage is the residual, float noise. Dam seepage is shown as a memo: it rejoins the river below the dam. The EWR required and met at each site close the account.',
+		units: 'm³',
+		category: 'results',
+		aliases: ['water balance', 'account', 'closure'],
+		related: ['assurance-of-supply', 'dam-evaporation', 'dam-seepage'],
+		source: 'docs/model.md §2.11b'
+	},
+
 	// ---- Network ------------------------------------------------------------
 	{
 		id: 'network',

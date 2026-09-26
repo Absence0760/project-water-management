@@ -422,6 +422,9 @@ export const SettingsPatch = z
 		// Open-water evaporation ÷ A-pan for the farm dams (engine N2); 2 is
 		// far above any open-water factor, 0 turns dam evaporation off.
 		lakeEvapFactor: z.number().finite().min(0).max(2),
+		// Annual assurance of supply (engine ≥ 0.32.0, WP-3.4): a water year is
+		// met when supplied ÷ demand reaches it. A fraction in (0, 1].
+		assuranceAnnualThreshold: z.number().finite().gt(0).max(1),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

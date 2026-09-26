@@ -608,6 +608,17 @@ must build WP-2.15 Phase B.
 
 ### WP-3.4 Assurance of supply, stress classes and the water account
 
+- **Status (2026-09-26): built** (engine 0.32.0; [model.md §2.11a–b](../model.md),
+  [followups.md](../followups.md) for what's left). Where the build differs
+  from the plan below: the three outputs sit in one sub-object,
+  `RunSummary.supplyAssurance.{reliability, stress, waterAccount}`, computed
+  by `network/reliability.ts`; the setting is the flat
+  `settings.assuranceAnnualThreshold`; time-based reliability counts demand
+  days only; stress grids cover the whole run and include a system grid and
+  other water users; seepage is a memo in the account (it rejoins the river),
+  dam releases wait for WP-3.5, and EWR required vs met uses the pragmatic
+  EWR at each site. `runModelWithoutChecks` (ensemble members) skips it. The
+  definitions are pending the hydrologist.
 - **Goal.** The standard planning outputs an assessor reads first. These
   are new outputs only; model results don't change.
 - **Changes**

@@ -27,6 +27,7 @@ workbook cells.
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
 | `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes (no Moriasi rating words on daily scores, CR-6). |
 | `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain, the EWR charge and its irrigation / storage split, and total change (m³/day, l/s) over the reporting window, plus the EWR sites table → `RunSummary.curtailment`. |
+| `reliability.ts` | – (the node-based v004 DEV model's stress classes, model.md §4) | Assurance of supply per farm and user (time-based, volumetric, annual; resilience and vulnerability), stress classes per water-year month, and the water account per water year → `RunSummary.supplyAssurance` (engine ≥ 0.32.0, WP-3.4, docs/model.md §2.11a–b). |
 | `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm (from engine 0.17.0 the farm's EWR charge). |
 | `attribution.ts` | – (replaces the use of Element sheet AB) | Who is charged for an EWR shortfall (engine ≥ 0.17.0, audit Q17): each EWR site's (outlet, gauges) shortfall pro rata to the upstream farms' net impact, the natural remainder, each farm's largest charge and its irrigation part. docs/model.md §2.7b. |
 | `users.test.ts` | – | Other water users (WP-1.33, docs/model.md §2.7c), hand-worked. |

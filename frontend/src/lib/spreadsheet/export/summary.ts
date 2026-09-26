@@ -22,6 +22,10 @@ const STARTS: [title: string | RegExp, sheet: SummarySheet][] = [
 	['EWR sites (reporting window)', 'Curtailment'],
 	[/^Reserve compliance by month/, 'Reserve compliance'],
 	[/^Water balance by water year/, 'Annual volumes'],
+	// Assurance of supply (engine ≥ 0.32.0, backend export/supply-assurance.ts).
+	[/^Assurance of supply/, 'Curtailment'],
+	[/^Stress classes by month/, 'Curtailment'],
+	[/^Water account by water year/, 'Annual volumes'],
 	['CHIRPS bias correction', 'Data checks'],
 	['Catchment rain treated as missing', 'Data checks'],
 	['Multi-day rain accumulations', 'Data checks'],

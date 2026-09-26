@@ -32,13 +32,17 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-ewr', label: 'EWR vs outflow' },
 				{ id: 'res-ewr-grid', label: 'EWR by month' },
 				// The 5–95 % range on the EWR and Reserve findings (issue #4 phase 9): every run, beside the findings it qualifies.
-				{ id: 'res-uncertainty', label: 'Uncertainty bands' }
+				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
+				// Where the water went per water year (engine ≥ 0.32.0, WP-3.4); older runs say it wasn't computed.
+				{ id: 'res-water-account', label: 'Water account' }
 			]
 		},
 		{
 			label: 'Farms & users',
 			sections: [
 				{ id: 'res-curtailment', label: 'Curtailment' },
+				// Reliability and stress classes (engine ≥ 0.32.0, WP-3.4); older runs say they weren't computed.
+				{ id: 'res-assurance', label: 'Assurance of supply' },
 				// Farm detail is only drawn when the run has farms.
 				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Farm detail' }] : [])
 			]
