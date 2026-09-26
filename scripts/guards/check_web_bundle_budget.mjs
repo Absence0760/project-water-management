@@ -779,6 +779,13 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// 2026-09-26  total 924 → 935 KB (measured 931). origin/main already measured
+//             926 before this merge (work landed after the entry above without
+//             a raise); issue #17's Summary (board A1: KPI row with Dams today,
+//             the chart's range switch and shaded reserve days, Needs attention
+//             cards, Supply by farm in its own lazy chunk) adds 5. The largest
+//             chunk stays under 42 KB because Supply by farm was split out.
+//             Headroom ~4 KB; the next page needs a trim (the i18n catalogue).
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -789,7 +796,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 924,
+	totalCodeKb: 935,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
