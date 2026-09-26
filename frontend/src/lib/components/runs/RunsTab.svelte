@@ -27,6 +27,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { resultGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -626,6 +627,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
 						{/key}
+						<!-- Comments on the run from anyone on the team (WP-2.7), beside its one written explanation above. -->
+						<p class="run-comments"><NotesDrawer {projectId} target={{ kind: 'run', runId: shownRun.id, label: shownRun.label || fmtDate(shownRun.createdAt, true) }} /></p>
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}

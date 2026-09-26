@@ -1698,7 +1698,7 @@ role and not before it.
 
 ## Allocations (WP-3.10)
 
-The first slice (2026-09-26: migration 037, engine `compareAllocations`,
+The first slice (2026-09-26: migration 038, engine `compareAllocations`,
 `backend/src/allocations/`, the Allocations tab; [allocations.md](./allocations.md))
 stores registered volumes and compares them with a run's modelled use. Left,
 from the WP:

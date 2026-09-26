@@ -989,6 +989,29 @@ forecast card later.
 
 ### WP-2.7 Notes and comments
 
+> **Status: built** (`037_notes.sql`, `backend/src/notes/`,
+> `frontend/src/lib/components/notes/`; [api.md § Notes](../api.md#notes),
+> [data-model.md § Notes](../data-model.md#notes-037_notessql),
+> [ui.md § Notes](../ui.md#notes)). Where the build departs from the plan
+> below, and why:
+> - **A deleted note stays readable to its author** as well as to editors, at
+>   the RLS level: Postgres checks an updated row against the SELECT
+>   policies, so an author who isn't an editor couldn't soft-delete their own
+>   note otherwise. The API lists no deleted note to anyone.
+> - **Editors moderate by deleting only**: the `note_guard` trigger lets only
+>   the author change the body, and column grants keep the target and
+>   visibility fixed.
+> - **`GET /notes/counts`** feeds the count badges (one call per project),
+>   and `GET /notes` also takes `target=` and `limit=`; `settingKey`
+>   matches a group and its sub-keys. Settings notes are kept per group
+>   (`flow`, `ewr`, …), not per parameter yet.
+> - **A farm note needs a farm node** (the API refuses `farm` visibility on
+>   a gauge or other user: no farmer could read it).
+> - **History:** deleting records `note.deleted`; adding and editing are
+>   exempt in the write-route guard (the row carries its author and dates).
+> - The report's "Notes" section (WP-2.15) still shows the run's own notes,
+>   not these comments.
+
 **Goal.** Knowledge that lives in people's heads today ("dam raised in 2019
 per owner", "logger moved in March") is kept against the farm, parameter or
 run it's about.

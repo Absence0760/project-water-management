@@ -2,7 +2,7 @@
 // farm or water user, and how a run's modelled use compares with them
 // (roadmap WP-3.10 first slice; docs/allocations.md, docs/api.md
 // § Allocations). Viewers read volumes; holder names only for editors and
-// owners (decision D3, allocation_holder's RLS in 037_allocations.sql); editors
+// owners (decision D3, allocation_holder's RLS in 038_allocations.sql); editors
 // write. Farmers get 403 here like on every viewer route: RLS already scopes
 // them to their own farms for when the farm view shows their allocation.
 //

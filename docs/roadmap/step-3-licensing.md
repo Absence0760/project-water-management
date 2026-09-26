@@ -1071,7 +1071,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.10 Water-use allocations: WARMS vs modelled use
 
-- **Status.** First slice built (2026-09-26): migration `037_allocations.sql`
+- **Status.** First slice built (2026-09-26): migration `038_allocations.sql`
   (`allocation_source`, `allocation`, `allocation_holder` for names per D3 (b),
   pending legal advice), engine `compareAllocations` (no `runModel` change, so
   no engine bump; [model.md §2.12](../model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)),

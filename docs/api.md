@@ -1051,7 +1051,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migration 037,
+modelled use against them (roadmap WP-3.10, migration 038,
 [allocations.md](./allocations.md)). The app compares; it never decides
 whether a use is lawful.
 
@@ -1183,6 +1183,28 @@ never a farm's row, name or id.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
   `revokedBy`), not yet as audit events (WP-2.4,
   [followups.md](./followups.md)).
+
+## Notes
+
+Plain-text notes and comments on a node, a run, a settings group or the
+project (WP-2.7; [data-model.md § Notes](./data-model.md#notes-037_notessql)).
+The min role is **farmer** on every route, and RLS does the scoping: a farmer
+reads and writes only `farm` notes on their linked farms, and never sees a
+`team` note.
+
+| Method | Path | Body / query | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&target=project\|node\|run\|setting&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
+| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
+| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey?, visibility?: 'team' \| 'farm' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404` | farmer |
+| PATCH | `/projects/:id/notes/:noteId` | `{ body }` | `{ note }` with `editedAt` set. Author only (`403`) | farmer |
+| DELETE | `/projects/:id/notes/:noteId` | – | `204`: a soft delete, recorded as `note.deleted`. The author or an editor (`403`); a deleted or unknown note is `404` | farmer |
+
+- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting', nodeId, nodeName, runId, settingKey, visibility, mine, canDelete }`.
+  `author` is a display name (`null` once that account is gone); `nodeName`
+  is the node's name when the caller can see it; `mine` = the caller wrote
+  it (and may edit it); `canDelete` = the author or an editor.
+- `body` is plain text. Clients render it escaped, never as HTML or markdown.
 
 ## Farm
 

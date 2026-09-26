@@ -1,4 +1,4 @@
-// Allocations (roadmap WP-3.10 first slice; 037_allocations.sql,
+// Allocations (roadmap WP-3.10 first slice; 038_allocations.sql,
 // docs/allocations.md): the API end to end, and RLS with positive controls.
 //  - the synthetic WARMS extract previews with ≥ 90 % matched, commits with
 //    its file hash as provenance, refuses a second import of the same file,

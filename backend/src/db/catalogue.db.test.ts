@@ -14,6 +14,8 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
+	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
+	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
 	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
@@ -67,9 +69,11 @@ const APPEND_ONLY = new Set([
  * its run or project). Every uncertainty ensemble started is kept, so a band
  * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
  * not deleted: the row is the record of who made and withdrew it until the
- * audit log (WP-2.4) has events for both (025_share_links.sql).
+ * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
+ * soft-deleted: the body stays for the audit trail, hidden from all but
+ * editors (037_notes.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite

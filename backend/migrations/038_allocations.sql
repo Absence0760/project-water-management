@@ -1,4 +1,4 @@
--- 037_allocations — registered and licensed water-use volumes per farm or
+-- 038_allocations — registered and licensed water-use volumes per farm or
 -- water user, next to modelled use (roadmap WP-3.10 first slice, issue #45
 -- "WARMS volumes"; docs/allocations.md, docs/data-model.md § Allocations).
 --
@@ -51,7 +51,7 @@ CREATE UNIQUE INDEX allocation_source_sha_idx ON allocation_source (project_id, 
 CREATE INDEX allocation_source_imported_by_idx ON allocation_source (imported_by);
 
 COMMENT ON TABLE allocation_source IS
-	'The file a batch of allocations was imported from, with its SHA-256 (037, WP-3.10). Deleting it deletes its allocations; hand-entered rows have none.';
+	'The file a batch of allocations was imported from, with its SHA-256 (038, WP-3.10). Deleting it deletes its allocations; hand-entered rows have none.';
 
 -- ---------------------------------------------------------------------------
 -- allocation
@@ -91,7 +91,7 @@ CREATE INDEX allocation_project_idx ON allocation (project_id);
 CREATE INDEX allocation_node_idx ON allocation (node_id);
 
 COMMENT ON TABLE allocation IS
-	'A registered or licensed volume per year for one water source, matched to a farm or water-user node (037, WP-3.10). Names live in allocation_holder.';
+	'A registered or licensed volume per year for one water source, matched to a farm or water-user node (038, WP-3.10). Names live in allocation_holder.';
 COMMENT ON COLUMN allocation.authorisation IS 'registration (WARMS), licence, general_authorisation or existing_lawful_use. Not a finding of lawfulness.';
 COMMENT ON COLUMN allocation.volume_m3_year IS 'Registered volume, m³ per year. Compared with modelled use per water year (engine compareAllocations).';
 
@@ -141,7 +141,7 @@ CREATE INDEX allocation_holder_allocation_idx ON allocation_holder (allocation_i
 CREATE INDEX allocation_holder_project_idx ON allocation_holder (project_id);
 
 COMMENT ON TABLE allocation_holder IS
-	'The registered user''s name for an allocation (037, WP-3.10, decision D3 (b) pending legal advice): editors and owners, and the linked farmer for their own farm; never viewers.';
+	'The registered user''s name for an allocation (038, WP-3.10, decision D3 (b) pending legal advice): editors and owners, and the linked farmer for their own farm; never viewers.';
 
 -- ---------------------------------------------------------------------------
 -- RLS

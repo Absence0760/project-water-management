@@ -762,6 +762,61 @@ export interface ShareSeries {
 	recent: { startDate: string; values: (number | null)[] };
 }
 
+/** Longest note, in characters (backend NOTE_MAX, 037_notes.sql). */
+export const NOTE_MAX = 4000;
+
+/** Who may read a note: the team (viewers and above), or also the farmers of its farm. */
+export type NoteVisibility = 'team' | 'farm';
+export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting';
+
+/** A plain-text note on a node, run, setting or the project (WP-2.7; docs/api.md § Notes). */
+export interface Note {
+	id: string;
+	/** Plain text: render escaped, never as HTML or markdown. */
+	body: string;
+	/** Display name; null once that account is gone. */
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+	target: NoteTargetKind;
+	nodeId: string | null;
+	/** The node's name, when the caller can see the node. */
+	nodeName: string | null;
+	runId: string | null;
+	settingKey: string | null;
+	visibility: NoteVisibility;
+	/** The caller wrote it, and may edit it. */
+	mine: boolean;
+	/** The caller may delete it: its author, or an editor. */
+	canDelete: boolean;
+}
+
+/** GET /notes filters: one target, a settings group (`calibration` matches `calibration.*`), or a kind of target. */
+export interface NotesQuery {
+	nodeId?: string;
+	runId?: string;
+	settingKey?: string;
+	target?: NoteTargetKind;
+	limit?: number;
+}
+
+/** POST /notes: at most one target; `visibility: 'farm'` only on a farm. */
+export interface NoteCreate {
+	body: string;
+	nodeId?: string;
+	runId?: string;
+	settingKey?: string;
+	visibility?: NoteVisibility;
+}
+
+/** How many notes the caller can see on each target (the count badges). */
+export interface NoteCounts {
+	project: number;
+	nodes: Record<string, number>;
+	runs: Record<string, number>;
+	settings: Record<string, number>;
+}
+
 /** A professional sign-off on a run (035_signoff, docs/api.md § Sign-offs). Immutable. */
 export interface Signoff {
 	id: string;

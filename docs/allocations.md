@@ -33,7 +33,7 @@ A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
 the farm and source on each day.
 
-Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-037_allocationssql).
+Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql).
 
 ## Importing
 
