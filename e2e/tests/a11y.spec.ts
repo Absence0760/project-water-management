@@ -4,7 +4,7 @@
 // need a person), but anything it does flag must stay fixed: fix it at the
 // source, never by disabling a rule here.
 import type { Page } from '@playwright/test';
-import { expectNoViolations } from '../support/a11y.ts';
+import { expectNoViolations, violations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail, updateSettings } from '../support/api.ts';
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
@@ -30,6 +30,32 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	},
 	{ id: 'history', ready: (p) => expect(p.getByTestId('history-entry').first()).toBeVisible() }
 ];
+
+// The positive control: the fast scan (legacy mode, violation details only,
+// support/a11y.ts) still reports what it should, a missing alt text and faint
+// text among them, still keeps to the WCAG tags, and refuses a page with a
+// frame, which it would not scan.
+test('the scan reports violations it is shown, and refuses a page with a frame', async ({ page }) => {
+	await page.goto('/login');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	expect(await violations(page)).toEqual([]);
+	await page.evaluate(() => {
+		const main = document.querySelector('main') ?? document.body;
+		main.insertAdjacentHTML('beforeend', '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"><p style="color:#ccc;background:#fff">Faint text</p>');
+	});
+	// An empty table header breaks only axe's best-practice rule (empty-table-header),
+	// which the WCAG tags leave out.
+	await page.evaluate(() => {
+		const main = document.querySelector('main') ?? document.body;
+		main.insertAdjacentHTML('beforeend', '<table><tr><th></th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>');
+	});
+	const ids = (await violations(page)).map((v) => v.id);
+	expect(ids).toEqual(expect.arrayContaining(['image-alt', 'color-contrast']));
+	expect(ids).not.toContain('empty-table-header');
+	await page.evaluate(() => document.body.append(document.createElement('iframe')));
+	await expect.poll(() => page.frames().length).toBe(2);
+	await expect(violations(page)).rejects.toThrow(/has a frame/);
+});
 
 // Both themes: the dark palette has its own contrast to keep in check.
 for (const colorScheme of ['light', 'dark'] as const) {
@@ -119,27 +145,36 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 			});
 
-			test('the view-only workspace has no violations', async ({ page, owner, signIn }) => {
-				void owner;
-				const project = await seedRunnableProject(page.request, 'A11y view only');
-				await createRun(page.request, project.id, 'Baseline');
-				const viewer = await signIn('A11y viewer');
-				await addMember(page.request, project.id, viewer.user.email, 'viewer');
-				for (const t of TABS.filter((x) => ['overview', 'network', 'runs'].includes(x.id))) {
+			// One tab per test, like TABS above: each scan gets its own budget.
+			for (const t of TABS.filter((x) => ['overview', 'network', 'runs'].includes(x.id))) {
+				test(`the view-only ${t.id} tab has no violations`, async ({ page, owner, signIn }) => {
+					void owner;
+					const project = await seedRunnableProject(page.request, `A11y view only ${t.id}`);
+					await createRun(page.request, project.id, 'Baseline');
+					const viewer = await signIn('A11y viewer');
+					await addMember(page.request, project.id, viewer.user.email, 'viewer');
 					await viewer.page.goto(`/projects/${project.id}?tab=${t.id}`);
 					await t.ready(viewer.page);
 					await expect(viewer.page.getByText('View only', { exact: false }).first()).toBeVisible();
 					await expectNoViolations(viewer.page);
-				}
-			});
+				});
+			}
 
-			test('GR4J settings and a GR4J run have no violations', async ({ page, owner }) => {
+			const GR4J = { runoffModel: 'gr4j', gr4j: { x1: 350, x2: -0.5, x3: 90, x4: 1.7, warmupDays: 365 } };
+
+			test('GR4J settings have no violations', async ({ page, owner }) => {
 				void owner;
-				const project = await seedRunnableProject(page.request, 'A11y GR4J');
-				await updateSettings(page.request, project.id, { runoffModel: 'gr4j', gr4j: { x1: 350, x2: -0.5, x3: 90, x4: 1.7, warmupDays: 365 } });
+				const project = await seedRunnableProject(page.request, 'A11y GR4J settings');
+				await updateSettings(page.request, project.id, GR4J);
 				await page.goto(`/projects/${project.id}?tab=settings`);
 				await expect(page.getByLabel(/^Groundwater exchange X2/)).toHaveValue('-0.5');
 				await expectNoViolations(page);
+			});
+
+			test('a GR4J run has no violations', async ({ page, owner }) => {
+				void owner;
+				const project = await seedRunnableProject(page.request, 'A11y GR4J run');
+				await updateSettings(page.request, project.id, GR4J);
 				await createRun(page.request, project.id, 'GR4J');
 				await page.goto(`/projects/${project.id}?tab=runs`);
 				const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
@@ -171,12 +206,17 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 			});
 
-			test('teams, a team page, help and a help guide have no violations', async ({ page, owner }) => {
+			// One page per test, so each scan has the test budget to itself (the
+			// glossary alone is ~3,000 elements).
+			test('the teams list has no violations', async ({ page, owner }) => {
 				void owner;
 				await page.goto('/teams');
 				await expect(page.getByRole('heading', { level: 1, name: 'Teams' })).toBeVisible();
 				await expectNoViolations(page);
+			});
 
+			test('a team page has no violations', async ({ page, owner }) => {
+				void owner;
 				const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'A11y team' } });
 				expect(res.status()).toBe(201);
 				const { team } = (await res.json()) as { team: { id: string } };
@@ -184,26 +224,38 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expect(page.getByRole('heading', { level: 1, name: 'A11y team' })).toBeVisible();
 				await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
 				await expectNoViolations(page);
-
-				await page.goto('/help');
-				await expect(page.getByRole('heading', { level: 1, name: 'How the catchment model works' })).toBeVisible();
-				await expect(page.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
-				await expectNoViolations(page);
-
-				await page.goto('/help/glossary');
-				await expect(page.getByRole('heading', { level: 1, name: 'Glossary' })).toBeVisible();
-				await expectNoViolations(page);
-
-				await page.goto('/help/search?q=dam');
-				await expect(page.getByRole('heading', { level: 1, name: 'Search help' })).toBeVisible();
-				await expect(page.getByRole('region', { name: 'Guides' })).toBeVisible();
-				await expectNoViolations(page);
-
-				// A guide with every block type and two diagrams.
-				await page.goto('/help/guides/how-calibration-works');
-				await expect(page.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible();
-				await expectNoViolations(page);
 			});
+
+			const HELP_PAGES: { path: string; ready: (page: Page) => Promise<void> }[] = [
+				{
+					path: '/help',
+					ready: async (p) => {
+						await expect(p.getByRole('heading', { level: 1, name: 'How the catchment model works' })).toBeVisible();
+						await expect(p.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
+					}
+				},
+				{ path: '/help/glossary', ready: (p) => expect(p.getByRole('heading', { level: 1, name: 'Glossary' })).toBeVisible() },
+				{
+					path: '/help/search?q=dam',
+					ready: async (p) => {
+						await expect(p.getByRole('heading', { level: 1, name: 'Search help' })).toBeVisible();
+						await expect(p.getByRole('region', { name: 'Guides' })).toBeVisible();
+					}
+				},
+				// A guide with every block type and two diagrams.
+				{
+					path: '/help/guides/how-calibration-works',
+					ready: (p) => expect(p.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible()
+				}
+			];
+			for (const h of HELP_PAGES) {
+				test(`help page ${h.path} has no violations`, async ({ page, owner }) => {
+					void owner;
+					await page.goto(h.path);
+					await h.ready(page);
+					await expectNoViolations(page);
+				});
+			}
 
 			test('an invitation opened while signed in has no violations', async ({ page, owner, signIn }) => {
 				void owner;
