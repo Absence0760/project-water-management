@@ -115,6 +115,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		passed_for_senior: 0,
 		groundwater_used: 0,
 		groundwater_to_dam: 0,
+		river_abstraction: 0,
 		depletion_store: 0,
 		baseflow_depletion: 0,
 		depletion_unmet: 0

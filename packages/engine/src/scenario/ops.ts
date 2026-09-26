@@ -15,6 +15,7 @@ import {
 	LAND_COVER_CLASSES,
 	PE_KINDS,
 	PE_SOURCE_MAX,
+	SUPPLY_RULES,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
 	type CalibrationFlowKind,
@@ -495,7 +496,12 @@ const NODE_FIELDS: Record<string, Check> = {
 		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every((r) => isObj(r) && isNum(r.levelM) && isNum(r.areaM2) && isNum(r.volumeM3))
 			? null
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
-	)
+	),
+	// Its supply rule and river pump (engine ≥ 0.42.0, WP-3.8): the editor's new node carries them; runModel checks how they fit together.
+	supplyRule: oneOf(SUPPLY_RULES),
+	pumpCapacityM3Day: nullable(nonNeg),
+	supplyTriggerPct: range(0, 1),
+	supplyStopPct: range(0, 1)
 };
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -503,7 +509,20 @@ export function nodeAddFieldError(field: string, value: unknown): string | null 
 	return c ? c(value) : `"${field}" is not a node field`;
 }
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
-const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES]);
+const NODE_OPTIONAL = new Set<string>([
+	'sortOrder',
+	'damAreaFullM2',
+	'damAreaExponent',
+	'damSeepagePerDay',
+	'damCurve',
+	'supplyRule',
+	'pumpCapacityM3Day',
+	'supplyTriggerPct',
+	'supplyStopPct',
+	...DAM_STORAGE,
+	...USER,
+	...BOREHOLES
+]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,

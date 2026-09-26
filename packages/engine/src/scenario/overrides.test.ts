@@ -136,6 +136,17 @@ describe('applyScenario: each op', () => {
 		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
 	});
 
+	it('node.add takes a supply rule and river pump, and checks them (WP-3.8)', () => {
+		const add = (over: Record<string, unknown>) =>
+			one({ op: 'node.add', node: node('N', { name: 'Pump scheme', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, ...over }) });
+		const r = add({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'N')).toMatchObject({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200 });
+		expect(add({ supplyRule: 'always' }).problems[0]).toMatch(/supplyRule must be one of damFirst, riverFirst, trigger, runOfRiver/);
+		expect(add({ pumpCapacityM3Day: -1 }).problems[0]).toMatch(/pumpCapacityM3Day/);
+		expect(add({ supplyStopPct: 1.5 }).problems[0]).toMatch(/supplyStopPct/);
+	});
+
 	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
 		expect(one({ op: 'node.add', node: node('A', { name: 'X', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown node nowhere/);
