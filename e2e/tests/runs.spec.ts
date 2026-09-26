@@ -22,11 +22,11 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
-	await expect(summary.getByRole('heading', { name: 'Farms' })).toBeVisible();
+	await expect(summary.getByRole('heading', { name: 'Units' })).toBeVisible();
 	const farms = summary.getByRole('table');
 	await expect(farms.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
 	await expect(farms.getByRole('rowheader', { name: /^Lower farm/ })).toBeVisible();
-	await expect(farms.getByRole('rowheader', { name: 'All farms' })).toBeVisible();
+	await expect(farms.getByRole('rowheader', { name: 'All units' })).toBeVisible();
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.
@@ -248,7 +248,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Water account',
 		'Curtailment',
 		'Assurance of supply',
-		'Farm detail',
+		'Unit detail',
 		'Hydrograph',
 		'Flow duration',
 		'Calibration',
@@ -261,10 +261,10 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Explore outputs'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
-	const groups = ['River & Reserve', 'Farms & users', 'Model quality', 'Record', 'Dig deeper'];
-	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Farms & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
+	const groups = ['River & Reserve', 'Units & users', 'Model quality', 'Record', 'Dig deeper'];
+	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
 	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR vs outflow', 'EWR by month', 'Uncertainty bands', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
-	await expect(menu.getByRole('list', { name: 'Farms & users' }).getByRole('link')).toHaveText(['Curtailment', 'Assurance of supply', 'Farm detail']);
+	await expect(menu.getByRole('list', { name: 'Units & users' }).getByRole('link')).toHaveText(['Curtailment', 'Assurance of supply', 'Unit detail']);
 	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
 	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
 	// The summary opens with the model checks, each linking to its panel.
@@ -280,9 +280,9 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu.getByRole('link', { name: 'Summary' })).not.toHaveAttribute('aria-current', 'location');
 
-	await menu.getByRole('link', { name: 'Farm detail' }).click();
+	await menu.getByRole('link', { name: 'Unit detail' }).click();
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
-	const farm = page.getByRole('region', { name: 'Farm detail' });
+	const farm = page.getByRole('region', { name: 'Unit detail' });
 	await expect(farm).toBeInViewport();
 	// The section's top edge clears the sticky menu (no app bar across the top since the sidebar, issue #17).
 	const menuBox = await menu.boundingBox();

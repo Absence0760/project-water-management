@@ -120,8 +120,8 @@ describe('monthlyRows', () => {
 describe('nodeRows', () => {
 	it('lists nodes in network order with what each drains into', () => {
 		expect(nodeRows(model)).toEqual([
-			['Upper farm', 'Farm', 'Lower farm', '1.00', '150,000', '80%'],
-			['Lower farm', 'Farm', 'Outlet gauge', '1.00', '–', '80%'],
+			['Upper farm', 'Unit', 'Lower farm', '1.00', '150,000', '80%'],
+			['Lower farm', 'Unit', 'Outlet gauge', '1.00', '–', '80%'],
 			['Outlet gauge', 'Gauge', 'outlet', '5.00', '–', '–']
 		]);
 	});

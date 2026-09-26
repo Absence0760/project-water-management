@@ -140,7 +140,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	// The plain-words summary above the cards: no rule table, so the pragmatic EWR at the gauge, then the farms and the fit.
-	await expect(summary.getByText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day).* farms? got .* Calibration fit over [\d,]+ observed days \(parameters not fitted\): NSE/)).toBeVisible();
+	await expect(summary.getByText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day).* units? got .* Calibration fit over [\d,]+ observed days \(parameters not fitted\): NSE/)).toBeVisible();
 	// Headline flows in m³/s, with the annual volume and m³/day beneath.
 	const stat = (term: string) => summary.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd[1]');
 	await expect(stat('Mean natural flow')).toHaveText(/^[\d\s,.]+m³\/s$/);

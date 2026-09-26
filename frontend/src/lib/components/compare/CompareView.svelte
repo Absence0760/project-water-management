@@ -387,7 +387,7 @@
 				</section>
 
 				<section class="panel" aria-labelledby="farms-h">
-					<div class="panel-head"><h2 id="farms-h">Farms</h2></div>
+					<div class="panel-head"><h2 id="farms-h">Units</h2></div>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
 

@@ -24,10 +24,10 @@ export function supplyIssues(
 	const trigger = n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct;
 	const stop = n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct;
 	if (n.kind !== 'farm') {
-		if (rule !== 'damFirst' || pump !== null) out.push('only a farm has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.');
+		if (rule !== 'damFirst' || pump !== null) out.push('only a unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.');
 		return out;
 	}
-	if (rule === 'trigger' && !(n.damCapacityM3 > 0)) out.push('the “dam, river when low” supply rule needs a farm dam to switch on; enter a dam capacity or pick another supply rule.');
+	if (rule === 'trigger' && !(n.damCapacityM3 > 0)) out.push('the “dam, river when low” supply rule needs a dam to switch on; enter a dam capacity or pick another supply rule.');
 	if (rule === 'runOfRiver' && n.damCapacityM3 > 0) out.push('run of river has no dam; set the dam capacity to 0 or pick another supply rule.');
 	if (pump !== null && !inRange(pump, 0, Infinity)) out.push("the river pump capacity can't be negative.");
 	if (!inRange(trigger, 0, 1) || !inRange(stop, 0, 1)) out.push('the supply switch levels must be between 0% and 100%.');
@@ -85,7 +85,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if ((n.boreholeCapacityM3Day ?? 0) > 0) {
 			if (n.kind === 'gauge') issues.push({ area: 'network', message: `${label}: a gauge can't have boreholes.` });
 			else if (n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
-				issues.push({ area: 'network', message: `${label}: the drought borehole rule needs a farm dam to trigger on.` });
+				issues.push({ area: 'network', message: `${label}: the drought borehole rule needs a dam on the unit to trigger on.` });
 		}
 		if (!inRange(n.boreholeCapacityM3Day ?? 0, 0, Infinity) || !inRange(n.streamDepletionLagDays ?? 0, 0, 36_500))
 			issues.push({ area: 'network', message: `${label}: borehole capacity and depletion lag can't be negative.` });
@@ -97,7 +97,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (n.damReleaseM3Day && (n.damReleaseM3Day.length !== 12 || n.damReleaseM3Day.some((v) => !inRange(v, 0, Infinity))))
 			issues.push({ area: 'network', message: `${label}: the dam release needs 12 monthly values, none negative.` });
 		if (n.damCurve && n.damCurve.length) {
-			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a farm has a dam';
+			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a unit has a dam';
 			if (bad) issues.push({ area: 'network', message: `${label}: dam survey curve: ${bad}.` });
 		}
 		// Supply rule and river pump (WP-3.8), as the API checks them.
@@ -109,7 +109,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 				issues.push({ area: 'network', message: `${label}: demand needs 12 monthly values, none negative.` });
 			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });
 			if (transfers.some((t) => t.fromNodeId === n.id || t.toNodeId === n.id))
-				issues.push({ area: 'transfers', message: `${label} is an other water user: transfers run between farm dams.` });
+				issues.push({ area: 'transfers', message: `${label} is an other water user: transfers run between units’ dams.` });
 		}
 	}
 
@@ -167,7 +167,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (count > 1) issues.push({ area: 'crops', message: `Crop name "${key}" is used ${count} times.` });
 	}
 	if (cropAreas.some((a) => !nodeIds.has(a.nodeId) || !cropIds.has(a.cropId))) {
-		issues.push({ area: 'crops', message: 'A crop area refers to a deleted farm or crop.' });
+		issues.push({ area: 'crops', message: 'A crop area refers to a deleted unit or crop.' });
 	}
 	if (cropAreas.some((a) => !inRange(a.areaM2, 0, Infinity))) {
 		issues.push({ area: 'crops', message: "Crop areas can't be negative." });
@@ -176,8 +176,8 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	// Land cover (WP-1.35), as the API checks it.
 	for (const lc of model.landCover ?? []) {
 		const n = nodes.find((x) => x.id === lc.nodeId);
-		if (!n) issues.push({ area: 'network', message: 'A land-cover patch refers to a deleted farm.' });
-		else if (n.kind !== 'farm') issues.push({ area: 'network', message: `"${nodeName(n.id)}": land cover lies on a farm, not a ${n.kind === 'user' ? 'user' : 'gauge'}.` });
+		if (!n) issues.push({ area: 'network', message: 'A land-cover patch refers to a deleted unit.' });
+		else if (n.kind !== 'farm') issues.push({ area: 'network', message: `"${nodeName(n.id)}": land cover lies on a unit, not a ${n.kind === 'user' ? 'user' : 'gauge'}.` });
 		if (!inRange(lc.areaKm2, 0, Infinity) || !inRange(lc.densityPct, 0, 1) || (lc.factors && (!inRange(lc.factors.mar, 0, 1) || !inRange(lc.factors.lowFlow, 0, 1))))
 			issues.push({ area: 'network', message: `Land cover on "${n ? nodeName(n.id) : '?'}": area can't be negative, cover and reductions are 0–100%.` });
 	}
@@ -189,7 +189,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!n) issues.push({ area: 'network', message: 'A borehole refers to a deleted node.' });
 		else if (n.kind === 'gauge') issues.push({ area: 'network', message: `${label}: a gauge can't have boreholes.` });
 		else if (b.mode !== 'none' && !(n.kind === 'farm' && n.damCapacityM3 > 0)) {
-			if (b.mode === 'emergency') issues.push({ area: 'network', message: `${label}: emergency mode needs a farm dam to trigger on.` });
+			if (b.mode === 'emergency') issues.push({ area: 'network', message: `${label}: emergency mode needs a dam on the unit to trigger on.` });
 			if (b.target === 'dam') issues.push({ area: 'network', message: `${label}: it pumps into a dam, and there is none.` });
 		}
 		if (!b.name.trim()) issues.push({ area: 'network', message: 'Every borehole needs a name.' });

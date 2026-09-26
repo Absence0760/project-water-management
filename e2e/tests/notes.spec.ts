@@ -26,7 +26,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	await dialog.getByRole('button', { name: 'Add note' }).click();
 	await expect(dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem')).toHaveCount(1);
 	await dialog.getByLabel('Add a note').fill('Dam raised in 2019 per owner');
-	await dialog.getByLabel('Also show to this farm’s farmers').check();
+	await dialog.getByLabel('Also show to this unit’s farmers').check();
 	await dialog.getByRole('button', { name: 'Add note' }).click();
 	const items = dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem');
 	await expect(items).toHaveCount(2);

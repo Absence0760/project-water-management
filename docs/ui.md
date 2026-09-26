@@ -84,6 +84,25 @@ characters.*, the two not matching).
 
 ## Project workspace
 
+**Terminology: Unit (issue #54 item 2a, client question Q6).** The modeller
+workspace calls a demand node of kind `farm` a **unit**: a farm,
+sub-catchment or town with land of its own, a runoff share, an optional dam
+and demands (a town that only draws water from the river is an *other water
+user*). Only the labels changed: Network, Crops & demand, the results
+panels, History, scenario forms, the printable report, the xlsx notes, the
+download menu's labels and the workspace help (`lib/help`: tips, articles,
+guides, tour; the one definition is the glossary's **Unit** entry,
+`element-farm`, which also says a unit is not a unit of measurement). The
+code, database, API and CSV names (`kind: 'farm'`, `/farm`, `farms.csv`,
+`farm_scope`), URL params, test ids, engine and API messages (run warnings,
+save errors) and the summary CSV's block titles keep **farm**. So does
+everything farmer-facing: the farmer view (`/farm`), its i18n messages and
+Afrikaans, emails and the public `/share` page, plus workspace text about
+what a farmer sees (the publication panel's "farm views", "Preview as
+farmer", the farmers list and the invite CSV's `farm` column, "Shown to
+the farm" on notes). The importer's notes keep b023's own terms, and node
+names ("Upper farm") are data. A new node is still named `Farm N`.
+
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
 renders empty and then fills in. The Summary, Data and Runs tabs take those
@@ -718,7 +737,7 @@ Portfolio](./api.md#portfolio)):
   "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
   run it again" (dashed outline). Under it, how old the figures are
   ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
-- **Farms short**: "2 of 12 farms short this week" (a link to the Runs tab's
+- **Units short**: "2 of 12 units short this week" (a link to the Runs tab's
   Curtailment section of that run, over the last 7 days; the tab scrolls
   there once the run's results render and moves focus to the table's
   heading) and the count over 30 days; "Unknown
@@ -775,7 +794,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
 
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
-    ("2 farms · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²";
+    ("2 units · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²";
     "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
     as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
@@ -801,7 +820,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
     at its usual size, and a network wider than the box at its tightest
     spacing scrolls. The side column is `clamp(17rem, 24vw, 22rem)`.
   - **Legend line:** the shapes, the supply bands present, the run they come
-    from ("Farms coloured by … in run “test”, ran today", read out) and the
+    from ("Units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
   - The **Grids** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
@@ -851,7 +870,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
-- **Colour farms by** (the Catchment map card's header, offered once there is
+- **Colour units by** (the Catchment map card's header, offered once there is
   a farm; component state, not kept in the URL). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
   second label line, the legend entries and a caption sentence, so nothing is
@@ -961,7 +980,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   **Edit the survey rows** and **Remove the curve**. Below: **Release rule**
   (none / pass inflow / fixed) with its monthly amounts (m³/day, Oct–Sep,
   *Use October's amount for every month*); under pass inflow a checkbox
-  keeps the EWR required at the node as the target. The Farm dam group gains
+  keeps the EWR required at the node as the target. The Dam group gains
   **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
   limit), one-node form only. Viewers see the values read-only (no paste
   controls). The dam hint about a missing area is dropped when a curve gives
@@ -1432,8 +1451,8 @@ The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
 workbook's FarmTemplate order, the letter in each header
 (`Irrigation supplied [G] (m³/day)`), the working columns between them and the
-balance check `[V]` next to outflow. **Fragmented flow — all farms** and
-**Fragmented EWR — all farms** (only when the run has farms) put one series
+balance check `[V]` next to outflow. **Fragmented flow — all units** and
+**Fragmented EWR — all units** (only when the run has farms) put one series
 of every farm side by side, a date column then a column per farm, like
 the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. Each
 of the two has a **Preview** button beside it in the menu, which opens the
@@ -1757,7 +1776,7 @@ which checks every catchment tab).
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
   inverted band) show next to the field and block Save; the save bar links
   to the WR2012 group.
-- **Flow share between farms**.
+- **Flow share between units**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) a bar chart and the annual volume, the
   curtailment reporting window (also the assurance of supply's window), and
@@ -2018,7 +2037,7 @@ run's report to chosen members every week or month.
   `runs/sections.ts` in groups). Each group's name leads its pills, and each
   group is a list labelled by that name. It sticks at the top (under the
   phone bar on a phone) down the long results page, marks the section being read, wraps to about two
-  rows on a laptop, and on phones is one sideways strip. Farm detail appears
+  rows on a laptop, and on phones is one sideways strip. Unit detail appears
   only when the run has farms, Reserve compliance only with a rule table,
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
@@ -2045,8 +2064,8 @@ run's report to chosen members every week or month.
      matrix** ([§ Outcome matrix](#outcome-matrix)), the **Seasonal
      outlook** ([§ Seasonal outlook](#seasonal-outlook)) and the water
      account.
-  3. **Farms & users**: curtailment (led by the share-the-pain board, with
-     the other water users and the EWR sites tables), farm detail.
+  3. **Units & users**: curtailment (led by the share-the-pain board, with
+     the other water users and the EWR sites tables), unit detail.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
@@ -2121,7 +2140,7 @@ run's report to chosen members every week or month.
   rules met in X % of months at the headline site when there is a rule table,
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every farm got at least 95 %"; left out when the run has no farms), then,
+  "Every unit got at least 95 %"; left out when the run has no farms), then,
   only when the run was scored against observed flow, the NSE and PBIAS with
   PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
   parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
@@ -2264,7 +2283,7 @@ run's report to chosen members every week or month.
   On the Runs tab the curtailment panel leads with a board under its
   *Curtailment targets* heading and period line, over the same reporting
   window (it follows the [picker](#report-window)); the per-farm table
-  follows under a *Per farm* heading. The printable report leaves the board
+  follows under a *Per unit* heading. The printable report leaves the board
   out (`CurtailmentTable`'s `board` prop). Three stages, side by side, each
   as a share of the group's own demand: **1. Today** (supplied ÷ demand),
   **2. Equitable share** (equitable share volume ÷ demand: the same % for
@@ -2272,7 +2291,7 @@ run's report to chosen members every week or month.
   that SA restrictions are set per user category), **3. EWR met** (volume
   left ÷ demand: the equitable share less the farm's EWR supply cut). A row
   of three cards gives the farm totals per stage; the table has one row per
-  farm (a bar, the whole %, the m³/day), an **All farms** total row, then
+  farm (a bar, the whole %, the m³/day), an **All units** total row, then
   **Other water users (outside the equitable share)**: each user its own
   row with a *senior, not curtailed* or *junior, curtailed* badge, *not in
   the share* at stage 2, and at stage 3 what it takes after its supply cut
@@ -2511,7 +2530,7 @@ run's report to chosen members every week or month.
   other runoff model's simulated outflow (fetched on demand, left out with a
   note when it used another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
-  Q70 / Q90 / Q95 table. Farm detail (dam
+  Q70 / Q90 / Q95 table. Unit detail (dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
@@ -2520,7 +2539,7 @@ run's report to chosen members every week or month.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
-- **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
+- **Assurance of supply** (`#res-assurance`, under *Units & users* after the
   curtailment table; `reliability/AssurancePanel.svelte`, helpers in
   `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
@@ -2676,7 +2695,7 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   farm dams' storage on the day before the decision date, which every year
   starts from.
 - **The table**: one row per demand level, in the order given: **dam
-  storage at season end**, **farm demand met** and **days below the EWR**
+  storage at season end**, **unit demand met** and **days below the EWR**
   (or **Reserve months met**), each the median in bold with its 10–90 %
   range under it, and **years met in full** ("EWR met on every day in 7 of
   12 years"). The planning figure's level carries a **Planning figure**
@@ -2917,7 +2936,7 @@ the assessor's decision, the empty list, axe in light and dark).
 
 WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
 settings revisions and audit events, grouped by the viewer's day, with a
-request's change set folded into one entry; filters by farm, event kind and
+request's change set folded into one entry; filters by unit ("All units"), event kind and
 parameter. Each revision shows its change lines, and for editors a
 **Restore this version** button behind a confirm that previews the diff;
 restore buttons are disabled while there are unsaved model edits, and a
@@ -3009,7 +3028,7 @@ exists, says so with a link to Runs & results.
   chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
-  for the outlet and every farm), **Farms, warnings and checks** (the run
+  for the outlet and every farm), **Units, warnings and checks** (the run
   summary: warnings, headline cards, the farm table; the self-checks and the
   water balance by water year, without Trace a day) and **Notes** (the run's
   notes, when it has any). A section appears only when the run has its data;

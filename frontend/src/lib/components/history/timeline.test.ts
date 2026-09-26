@@ -61,10 +61,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('signoff.created', { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
 			'Signed off a run as Dr A. Hydrologist (SACNASP 400999/20)'
 		);
-		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the farm Hilltop');
-		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the farm Hilltop (from their invite)');
+		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the unit Hilltop');
+		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(
-			'Unlinked Cara from the farm Hilltop (the farm was removed, or is no longer a farm)'
+			'Unlinked Cara from the unit Hilltop (the unit was removed, or is no longer a unit)'
 		);
 		expect(eventLine(ev('series.replaced', { kind: 'rain_catchment_mm', name: '', daysChanged: 12, from: '2024-01-01', to: '2024-03-31' }))).toBe(
 			'Replaced the Rainfall — catchment series: 12 days changed (1 Jan 2024 to 31 Mar 2024)'

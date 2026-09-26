@@ -219,15 +219,15 @@
 
 	{#if riverTail}<div class="wide slot">{@render riverTail()}</div>{/if}
 
-	<h2 class="group-h wide">Farms &amp; users</h2>
+	<h2 class="group-h wide">Units &amp; users</h2>
 	{#if farmsLead}<div class="wide slot">{@render farmsLead()}</div>{/if}
 
 	{#if farmOptions.length}
 		<section class="panel wide" id="res-farm" aria-labelledby="farm-h">
 			<div class="panel-head">
-				<h3 id="farm-h">Farm detail</h3>
+				<h3 id="farm-h">Unit detail</h3>
 				<div class="field inline">
-					<label for="farm-pick">Farm</label>
+					<label for="farm-pick">Unit</label>
 					<select id="farm-pick" bind:value={farmId}>
 						{#each farmOptions as f (f.nodeId)}
 							<option value={f.nodeId}>{f.name} · {fmtPct(f.fractionSupplied, 0)} supplied</option>
@@ -251,7 +251,7 @@
 						{:else if farmLoading}
 							<div class="chart-ph" style:height="310px" role="status">Loading…</div>
 						{:else}
-							<p class="muted nodam">This farm has no dam, so there is no storage to chart.</p>
+							<p class="muted nodam">This unit has no dam, so there is no storage to chart.</p>
 						{/if}
 					</div>
 					<div>

@@ -83,23 +83,23 @@
 				{/if}
 				{#if comparison.unmatchedAllocationIds.length}
 					<p class="alert alert-info">
-						{comparison.unmatchedAllocationIds.length} registered volume{comparison.unmatchedAllocationIds.length === 1 ? ' is' : 's are'} not matched to a farm yet, so
+						{comparison.unmatchedAllocationIds.length} registered volume{comparison.unmatchedAllocationIds.length === 1 ? ' is' : 's are'} not matched to a unit yet, so
 						{comparison.unmatchedAllocationIds.length === 1 ? 'it is' : 'they are'} not counted below.
 					</p>
 				{/if}
 				{#if comparison.notInRunAllocationIds.length}
 					<p class="alert alert-info">
-						{comparison.notInRunAllocationIds.length} registered volume{comparison.notInRunAllocationIds.length === 1 ? ' belongs' : 's belong'} to a farm this run doesn't
+						{comparison.notInRunAllocationIds.length} registered volume{comparison.notInRunAllocationIds.length === 1 ? ' belongs' : 's belong'} to a unit this run doesn't
 						have (added or removed since it ran).
 					</p>
 				{/if}
 				{#if rows.length}
 					<div class="table-wrap">
 						<table class="data cards" data-testid="allocation-compare-table">
-							<caption class="visually-hidden">Modelled use against the registered volume per farm, water source and water year</caption>
+							<caption class="visually-hidden">Modelled use against the registered volume per unit, water source and water year</caption>
 							<thead>
 								<tr>
-									<th scope="col">Farm or user</th>
+									<th scope="col">Unit or user</th>
 									<th scope="col">Source</th>
 									<th scope="col">Water year</th>
 									<th scope="col" class="num">Registered (m³)</th>

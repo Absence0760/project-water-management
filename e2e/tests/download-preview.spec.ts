@@ -22,11 +22,11 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 	await menuButton.click();
 	// A preview only on the two all-farms tables.
 	await expect(page.getByRole('button', { name: /^Preview / })).toHaveCount(2);
-	await page.getByRole('button', { name: 'Preview Fragmented flow — all farms (CSV)' }).click();
+	await page.getByRole('button', { name: 'Preview Fragmented flow — all units (CSV)' }).click();
 
-	const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all farms' });
+	const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all units' });
 	await expect(dialog).toBeVisible();
-	await expect(dialog).toContainText(`${body.length} of ${body.length} days · 2 farms`);
+	await expect(dialog).toContainText(`${body.length} of ${body.length} days · 2 units`);
 	await expect(dialog.locator('thead th')).toHaveText(['Date', ...farms]);
 
 	// The first day's values are the file's, to the shown precision; numbers line up right under their headers.
@@ -58,7 +58,7 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 
 	// The EWR table opens in the same dialog with its own file.
 	await menuButton.click();
-	await page.getByRole('button', { name: 'Preview Fragmented EWR — all farms (CSV)' }).click();
-	const ewr = page.getByRole('dialog', { name: 'Fragmented EWR — all farms' });
+	await page.getByRole('button', { name: 'Preview Fragmented EWR — all units (CSV)' }).click();
+	const ewr = page.getByRole('dialog', { name: 'Fragmented EWR — all units' });
 	await expect(ewr.locator('thead th').nth(1)).toHaveText(/\[Y\] \(m³\/day\)$/);
 });

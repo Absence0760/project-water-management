@@ -17,10 +17,10 @@ test('a fresh project: nothing loaded, every step to do', async ({ page, owner }
 	await expect(setup(page).getByRole('heading', { name: 'Set up this catchment' })).toBeVisible();
 	await expect(setup(page)).toContainText('0 of 5 done');
 	await expect(setup(page)).toContainText('Upload daily catchment rainfall (mm).');
-	await expect(setup(page)).toContainText('Run it to get farm supply & deficit');
+	await expect(setup(page)).toContainText('Run it to get unit supply & deficit');
 	await expect(stat(page, 'Time series')).toHaveText('0');
 	await expect(stat(page, 'Model runs')).toHaveText('0');
-	await expect(stat(page, 'Farms')).toHaveText('0+ 0 gauges');
+	await expect(stat(page, 'Units')).toHaveText('0+ 0 gauges');
 });
 
 test('a project with data and a run: setup complete, counts shown', async ({ page, owner }) => {
@@ -35,7 +35,7 @@ test('a project with data and a run: setup complete, counts shown', async ({ pag
 	await expect(done).toContainText(/1 run, latest \d{4}-\d{2}-\d{2}\./);
 	await expect(stat(page, 'Time series')).toHaveText('2');
 	await expect(stat(page, 'Model runs')).toHaveText('1');
-	await expect(stat(page, 'Farms')).toHaveText('2+ 1 gauge');
+	await expect(stat(page, 'Units')).toHaveText('2+ 1 gauge');
 	await expect(stat(page, 'Outflow gauge')).toHaveText('Outflow gauge');
 });
 
@@ -105,13 +105,13 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(flow.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Supply by farm' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
 
-	// First screen (board A1): the KPI row, then the chart on the left, Needs attention above Supply by farm on the right.
+	// First screen (board A1): the KPI row, then the chart on the left, Needs attention above Supply by unit on the right.
 	const kpis = await box('Latest run');
 	const chart = await box('Flow vs reserve');
 	const attention = await box('Needs attention');
-	const supply = await box('Supply by farm');
+	const supply = await box('Supply by unit');
 	expect(chart.y).toBeGreaterThan(kpis.y + kpis.height - 1);
 	expect(attention.x).toBeGreaterThan(chart.x + chart.width);
 	expect(Math.abs(attention.y - chart.y)).toBeLessThan(2);
@@ -181,12 +181,12 @@ test('needs attention cards and supply by farm: coloured by how much it matters,
 
 	const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
 	const short = attention.locator('[data-attention="short-farms"]');
-	await expect(short).toContainText('1 of 2 farms below 95%');
+	await expect(short).toContainText('1 of 2 units below 95%');
 	await expect(short).toContainText(/Lower farm got \d+% of its demand in the latest run/);
 	await expect(short).toHaveAttribute('data-tone', /^(danger|warning)$/);
 	await expect(attention.locator('[data-attention="stale-data"]')).toHaveAttribute('data-tone', 'warning');
 
-	const supply = page.getByRole('region', { name: 'Supply by farm' });
+	const supply = page.getByRole('region', { name: 'Supply by unit' });
 	const rows = supply.getByRole('listitem');
 	await expect(rows).toHaveCount(2);
 	// Fullest first, emptiest last, in the Network's supply bands, with a key to them.
@@ -223,7 +223,7 @@ test.describe('the first screen has no accessibility violations', () => {
 			await page.goto(`/projects/${project.id}`);
 			await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('full');
-			await expect(page.getByRole('region', { name: 'Supply by farm' })).toBeVisible();
+			await expect(page.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
 			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 			await expectNoViolations(page);
 		});
@@ -267,7 +267,7 @@ test('each headline fact opens the tab behind it, from anywhere on its tile', as
 	const project = await createProject(page.request, 'Overview fact links');
 	await page.goto(`/projects/${project.id}`);
 	const tabs: [string, string][] = [
-		['Farms', 'Network'],
+		['Units', 'Network'],
 		['Irrigated area', 'Crops & demand'],
 		['Active transfers', 'Transfers'],
 		['Time series', 'Data'],

@@ -71,14 +71,14 @@
 			was supplied (a project setting, not a standard).
 		</p>
 		{#if assurance.reliability.length === 0}
-			<p class="muted">This network has no farms or other water users.</p>
+			<p class="muted">This network has no units or other water users.</p>
 		{:else}
 			<div class="table-wrap">
 				<table class="data" data-testid="reliability-table">
-					<caption class="visually-hidden">Reliability of supply per farm and other water user over the reporting window</caption>
+					<caption class="visually-hidden">Reliability of supply per unit and other water user over the reporting window</caption>
 					<thead>
 						<tr>
-							<th scope="col">Farm or user</th>
+							<th scope="col">Unit or user</th>
 							<th scope="col" class="num">Days met<br /><span class="u">% of demand days</span></th>
 							<th scope="col" class="num">Volume supplied<br /><span class="u">% of demand</span></th>
 							<th scope="col" class="num">Water years met</th>
@@ -119,7 +119,7 @@
 					<label for="{uid}-grid">Show</label>
 					<select id="{uid}-grid" bind:value={gridId}>
 						{#each grids as g (g.nodeId ?? 'system')}
-							<option value={g.nodeId ?? 'system'}>{g.kind === 'system' ? 'All farms and users' : g.name}</option>
+							<option value={g.nodeId ?? 'system'}>{g.kind === 'system' ? 'All units and users' : g.name}</option>
 						{/each}
 					</select>
 				</div>
@@ -140,7 +140,7 @@
 			<div class="table-wrap scroll">
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<table class="heat" role="grid" aria-labelledby="{uid}-sh" onkeydown={onKey} data-testid="stress-grid">
-					<caption class="visually-hidden">Stress class per month for {grid.kind === 'system' ? 'all farms and users' : grid.name}, water years October to September.</caption>
+					<caption class="visually-hidden">Stress class per month for {grid.kind === 'system' ? 'all units and users' : grid.name}, water years October to September.</caption>
 					<thead>
 						<tr>
 							<th scope="col">Water year</th>

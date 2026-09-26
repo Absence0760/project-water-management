@@ -136,7 +136,7 @@ describe('validateModel', () => {
 			'"Town": the share returned must be between 0% and 100%.',
 			'"Town": demand needs 12 monthly values, none negative.',
 			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
-			'"Town" is an other water user: transfers run between farm dams.'
+			'"Town" is an other water user: transfers run between units’ dams.'
 		]);
 	});
 
@@ -144,7 +144,7 @@ describe('validateModel', () => {
 		const g = node('g', 'Gauge', null);
 		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 100, streamDepletionFrac: 0.5 }]))).toEqual([]);
 		expect(messages(model([{ ...g, boreholeCapacityM3Day: 5 }, node('a', 'A', 'g')]))).toEqual(['"Gauge": a gauge can\'t have boreholes.']);
-		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a farm dam to trigger on.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a dam on the unit to trigger on.']);
 		expect(messages(model([g, { ...node('a', 'A', 'g'), streamDepletionFrac: 1.5, streamDepletionLagDays: -1 }]))).toEqual([
 			'"A": borehole capacity and depletion lag can\'t be negative.',
 			'"A": stream depletion and the drought trigger must be between 0% and 100%.'
@@ -160,7 +160,7 @@ describe('validateModel', () => {
 		const a = { ...node('a', 'A', 'g'), damCapacityM3: 20_000 };
 		expect(messages(model([g, { ...a, damCurve: curve, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(5), damSeepageReturnPct: 0.5 }]))).toEqual([]);
 		expect(messages(model([g, { ...a, damCurve: [curve[1]!] }]))).toEqual(['"A": dam survey curve: a survey curve needs at least two rows.']);
-		expect(messages(model([{ ...g, damCurve: curve }, a]))).toEqual(['"Gauge": dam survey curve: only a farm has a dam.']);
+		expect(messages(model([{ ...g, damCurve: curve }, a]))).toEqual(['"Gauge": dam survey curve: only a unit has a dam.']);
 		expect(messages(model([g, { ...a, damSeepageReturnPct: 1.5, damOutletCapacityM3Day: -1, damReleaseM3Day: [1] }]))).toEqual([
 			'"A": the share of seepage returning must be between 0% and 100%.',
 			'"A": the dam outlet capacity can\'t be negative.',
@@ -172,7 +172,7 @@ describe('validateModel', () => {
 		const g = node('g', 'Gauge', null);
 		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [p] }))).toEqual([]);
-		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a farm, not a gauge.']);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a unit, not a gauge.']);
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, densityPct: 2 }] }))).toEqual(['Land cover on "A": area can\'t be negative, cover and reductions are 0–100%.']);
 	});
 
@@ -196,14 +196,14 @@ describe('validateModel', () => {
 			'"A": run of river has no dam; set the dam capacity to 0 or pick another supply rule.'
 		]);
 		expect(messages(model([g, farm({ supplyRule: 'trigger' })]))).toEqual([
-			'"A": the “dam, river when low” supply rule needs a farm dam to switch on; enter a dam capacity or pick another supply rule.'
+			'"A": the “dam, river when low” supply rule needs a dam to switch on; enter a dam capacity or pick another supply rule.'
 		]);
 		expect(messages(model([g, farm({ supplyRule: 'trigger', damCapacityM3: 50_000, supplyTriggerPct: 0.6, supplyStopPct: 0.4 })]))).toEqual([
 			'"A": the switch-back level must be at least the switch-to-river level.'
 		]);
 		expect(messages(model([g, farm({ pumpCapacityM3Day: -1 })]))).toEqual(['"A": the river pump capacity can\'t be negative.']);
 		expect(messages(model([{ ...g, supplyRule: 'riverFirst' }, farm({})]))).toEqual([
-			'"Gauge": only a farm has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
+			'"Gauge": only a unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
 		]);
 	});
 

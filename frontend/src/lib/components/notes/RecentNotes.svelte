@@ -40,7 +40,7 @@
 	{:else if notes === null}
 		<p class="muted" aria-busy="true">Loading notes…</p>
 	{:else if notes.length === 0}
-		<p class="muted">No notes yet. Add one on a farm in Network, a run, a settings group or the project itself.</p>
+		<p class="muted">No notes yet. Add one on a unit in Network, a run, a settings group or the project itself.</p>
 	{:else}
 		<ul class="recent">
 			{#each notes as n (n.id)}
