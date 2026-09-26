@@ -1775,6 +1775,12 @@ from the WP:
       a record the importer ignores; a copy takes none. Why, per path:
       [data-model.md § Notes](./data-model.md#notes-037_notessql). Tests in
       `notes/notes.db.test.ts`.
+- [x] **The notes count cache never evicted** (2026-09-26). The module-level
+      map in `notes/counts.svelte.ts` kept one entry per project opened in a
+      session, and a project visited again showed its first visit's counts.
+      Now only the open project's counts are kept (another project replaces
+      them) and sign-out clears them (`clearNoteCounts`, AppHeader and
+      FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)
 

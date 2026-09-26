@@ -1911,7 +1911,9 @@ March") is kept against what it is about.
     each naming and linking to its target, and the project-level notes
     button.
   One `GET /notes/counts` per project feeds every badge
-  (`counts.svelte.ts`), refreshed after any change.
+  (`counts.svelte.ts`), refreshed after any change. Only the open project's
+  counts are kept: opening another project drops them (coming back loads
+  them again), and signing out forgets them.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
   hidden from everyone, kept for the audit trail). On a farm, *Also show to

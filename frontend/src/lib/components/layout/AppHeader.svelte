@@ -6,6 +6,7 @@
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { clearAllSaved } from '$lib/components/farm/savedCopy';
+	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
 	import BrandMark from './BrandMark.svelte';
 
 	let signingOut = $state(false);
@@ -69,6 +70,7 @@
 	async function finishSignOut() {
 		// The farmer view's saved copies stay on the phone only while signed in (design §9).
 		clearAllSaved();
+		clearNoteCounts();
 		session.user = null;
 		signingOut = false;
 		await tick();
