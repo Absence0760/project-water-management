@@ -92,7 +92,7 @@ describe('route auth inventory', () => {
 
 	// Firm yield (WP-3.6, 035_yield): auth-gated like every project route.
 	it('inventories the yield routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/yield', 'GET /projects/:id/yield']) {
+		for (const r of ['POST /projects/:id/yield', 'GET /projects/:id/yield', 'POST /projects/:id/yield/:jobId/cancel']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

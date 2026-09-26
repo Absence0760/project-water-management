@@ -44,10 +44,11 @@ export interface JobContext<P> {
 	payload: P;
 	/**
 	 * Report how far the job is, 0–100 (035_yield app_job_progress). Written
-	 * outside the job's transaction, so the status list sees it at once; a
-	 * lost lease makes it a no-op. Optional to call.
+	 * outside the job's transaction, so the status list sees it at once.
+	 * Answers false when the job should stop: someone cancelled it
+	 * (app_cancel_job) or the lease was lost. Optional to call.
 	 */
-	progress(pct: number): Promise<void>;
+	progress(pct: number): Promise<boolean>;
 }
 
 export interface JobHandler<P = unknown> {

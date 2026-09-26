@@ -154,6 +154,42 @@ describe('POST /projects/:id/yield', () => {
 	});
 });
 
+describe('POST /projects/:id/yield/:jobId/cancel', () => {
+	it('kills a waiting job at once; a viewer who didn’t queue it gets 404', async () => {
+		const owner = await signUp('YieldCancel');
+		const viewer = await signUp('YieldCancelViewer');
+		const c = await catchment(owner);
+		await member(owner, c.projectId, viewer, 'viewer');
+		const jobId = (await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'curve' })).body.jobId;
+		expect((await viewer.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`)).status).toBe(404);
+		expect((await job(jobId)).status).toBe('queued');
+		const res = await owner.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`);
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual({ status: 'dead', cancelled: true });
+		expect(await job(jobId)).toMatchObject({ status: 'dead', last_error: 'cancelled' });
+		await tick();
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield?runId=${c.runId}`)).body.results).toEqual([]);
+		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${crypto.randomUUID()}/cancel`)).status).toBe(404);
+	});
+
+	it('flags a running job, and its next progress report answers false', async () => {
+		const owner = await signUp('YieldCancelRunning');
+		const c = await catchment(owner);
+		const jobId = (await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'curve' })).body.jobId;
+		// Claim it as a worker would, without running it.
+		const [claimed] = (await asOwner(
+			`UPDATE job SET status = 'running', attempts = 1, locked_until = now() + interval '1 minute', lease_token = gen_random_uuid(), started_at = now()
+			 WHERE id = $1 RETURNING lease_token`,
+			[jobId]
+		)) as [{ lease_token: string }];
+		const go = async () => ((await asOwner('SELECT app_job_progress($1, $2, 40) AS go', [jobId, claimed.lease_token])) as [{ go: boolean }])[0].go;
+		expect(await go()).toBe(true);
+		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`)).body).toEqual({ status: 'running', cancelled: true });
+		expect(await go()).toBe(false);
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), locked_until = NULL, lease_token = NULL WHERE id = $1`, [jobId]);
+	});
+});
+
 describe('yield_result RLS', () => {
 	it('a viewer reads results but may not queue or write one; an outsider sees nothing', async () => {
 		const owner = await signUp('YieldRlsOwner');

@@ -2,6 +2,7 @@
 //
 //   POST /projects/:id/yield   editor   queue a yield job (202 { jobId }; 200 when an identical one is pending)
 //   GET  /projects/:id/yield   viewer   stored results, ?runId= or ?scenarioId=, optional nodeId / jobId
+//   POST /projects/:id/yield/:jobId/cancel   the user who queued it, or an editor   stop a yield job
 //
 // Status and progress of the job: GET /projects/:id/jobs (WP-2.8).
 import { Hono } from 'hono';
@@ -12,7 +13,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
-import { requireRole } from '../projects/access.js';
+import { requireRole, UUID } from '../projects/access.js';
 import { checkYieldNode, listYieldResults, pendingYieldJobs, YIELD_JOBS_PER_USER, yieldDedupeKey, yieldInput, YieldRequest } from './store.js';
 
 const Uuid = z.string().uuid();
@@ -38,6 +39,22 @@ export const yieldRoutes = new Hono<AuthEnv>()
 		});
 		if (result.created) await wakeWorker(result.job.id);
 		return c.json({ jobId: result.job.id, job: result.job, created: result.created }, result.created ? 202 : 200);
+	})
+	// A waiting job is dead at once; a running one stops at its next progress report.
+	.post('/:id/yield/:jobId/cancel', async (c) => {
+		const id = c.req.param('id');
+		const jobId = c.req.param('jobId');
+		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
+		const status = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			const { rows } = await db.query<{ status: string | null }>(
+				`SELECT app_cancel_job(j.id) AS status FROM job j WHERE j.id = $1 AND j.project_id = $2`,
+				[jobId, id]
+			);
+			return rows[0]?.status ?? null;
+		});
+		if (!status) throw new ApiError(404, 'not found');
+		return c.json({ status, cancelled: status === 'dead' || status === 'running' });
 	})
 	.get('/:id/yield', async (c) => {
 		const q = ListQuery.parse(c.req.query());

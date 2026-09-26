@@ -116,7 +116,7 @@ async function renderAs(u: { id: string }, projectId: string, email: boolean) {
 	});
 	const job = { id: jobId, projectId, kind: 'report_render' as const, actingUserId: u.id, leaseToken: crypto.randomUUID(), attempts: 1, maxAttempts: 3 };
 	const started = Date.now();
-	const outcome = await withUser(u.id, (db) => reportRenderHandler.run({ db, job, payload: { reportId }, progress: async () => {} })).then(
+	const outcome = await withUser(u.id, (db) => reportRenderHandler.run({ db, job, payload: { reportId }, progress: async () => true })).then(
 		() => null,
 		(err: Error & { retry?: boolean }) => err
 	);

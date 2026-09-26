@@ -5,11 +5,15 @@
 //
 // The engine is synchronous; a curve is one firm-yield search per capacity,
 // with the job's progress reported (outside its transaction) between them.
+// A cancel (app_cancel_job) stops it at the next report: dead, "cancelled",
+// nothing stored.
 import { ENGINE_VERSION, firmYield, isMonotone, prepareYield, storageYieldCapacities, type YieldPoint, type YieldProblem } from '@water-management/engine';
 import { ApiError } from '../../http/errors.js';
 import { checkYieldNode, YIELD_RESULTS_KEPT, yieldInput, YieldPayload, type YieldPoints } from '../../yield/store.js';
 import { JobError } from '../errors.js';
 import { defineHandler } from '../registry.js';
+
+const CANCELLED = () => new JobError('cancelled', { retry: false });
 
 export const yieldHandler = defineHandler({
 	role: 'editor',
@@ -31,14 +35,14 @@ export const yieldHandler = defineHandler({
 		try {
 			if (payload.kind === 'firm') {
 				points = { point: firmYield(problem, payload.nodeId, opts) };
-				await progress(100);
+				if (!(await progress(100))) throw CANCELLED();
 			} else {
 				const i = problem.nodeIds.indexOf(payload.nodeId);
 				const caps = storageYieldCapacities(problem.plan.nodes[i]!.damCapacityM3, n);
 				const out: YieldPoint[] = [];
 				for (const c of caps) {
 					out.push(firmYield(problem, payload.nodeId, { ...opts, capacityM3: c }));
-					await progress((100 * out.length) / caps.length);
+					if (!(await progress((100 * out.length) / caps.length))) throw CANCELLED();
 				}
 				points = { baseCapacityM3: problem.plan.nodes[i]!.damCapacityM3, assurance, points: out, monotone: isMonotone(out, tolerance) };
 			}

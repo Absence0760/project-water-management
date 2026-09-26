@@ -54,12 +54,20 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 	}
 }
 
-/** app_job_progress on its own connection, outside the job's transaction. Best effort: a failure is logged, never fails the job. */
-async function reportProgress(job: ClaimedJob, pct: number): Promise<void> {
+/**
+ * app_job_progress on its own connection, outside the job's transaction:
+ * false when the job was cancelled or its lease lost. Best effort: a failure
+ * to write is logged and the job carries on (true).
+ */
+async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 	const v = Math.max(0, Math.min(100, Math.round(pct)));
-	await withoutUser((db) => db.query('SELECT app_job_progress($1, $2, $3)', [job.id, job.leaseToken, v])).catch((err) => {
+	try {
+		const { rows } = await withoutUser((db) => db.query<{ go: boolean }>('SELECT app_job_progress($1, $2, $3) AS go', [job.id, job.leaseToken, v]));
+		return rows[0]?.go !== false;
+	} catch (err) {
 		console.warn(JSON.stringify({ event: 'job_progress_failed', jobId: job.id, error: (err as Error).message }));
-	});
+		return true;
+	}
 }
 
 async function readPayload(db: Db, jobId: string): Promise<unknown> {

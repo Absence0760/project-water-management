@@ -14,6 +14,11 @@
 --    long job reports how far it is from outside its own transaction (whose
 --    writes nobody sees until it commits). Only the current lease holder can
 --    write it, and only while the job is running; the claim resets it.
+--  * `job.cancel_requested_at` and app_cancel_job: the user who queued a
+--    job, or an editor of its project, cancels it. A waiting job is dead at
+--    once ("cancelled"); a running one is flagged, and app_job_progress
+--    answers false from then on, so a handler that reports progress stops at
+--    its next report.
 --  * `yield_result`, with RLS viewer read, editor insert and delete, grants,
 --    covering indexes and a same-project trigger.
 --
@@ -35,8 +40,12 @@ ALTER TABLE job ADD COLUMN progress smallint CHECK (progress BETWEEN 0 AND 100);
 COMMENT ON COLUMN job.progress IS
 	'How far a running job is, 0–100, as its handler reports it (app_job_progress); NULL when it reports none. Reset when the job is claimed.';
 
+ALTER TABLE job ADD COLUMN cancel_requested_at timestamptz;
+COMMENT ON COLUMN job.cancel_requested_at IS
+	'When someone asked to cancel the job while it ran (app_cancel_job); app_job_progress then answers false and the handler stops. NULL = not asked.';
+
 -- The enqueue trigger, from its latest definition (016_jobs.sql), also
--- clearing progress so an enqueue can't forge one.
+-- clearing progress and the cancel flag so an enqueue can't forge them.
 CREATE OR REPLACE FUNCTION job_enqueue() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
@@ -55,6 +64,7 @@ CREATE OR REPLACE FUNCTION job_enqueue() RETURNS trigger
 		NEW.started_at := NULL;
 		NEW.finished_at := NULL;
 		NEW.progress := NULL;
+		NEW.cancel_requested_at := NULL;
 		NEW.created_at := now();
 		NEW.run_after := GREATEST(COALESCE(NEW.run_after, now()), now());
 		IF NEW.run_after > now() + interval '7 days' THEN
@@ -83,20 +93,54 @@ CREATE TRIGGER job_progress_reset BEFORE UPDATE OF lease_token ON job
 -- Record a running job's progress. Only the current lease's holder (the
 -- worker running it) can, as for app_finish_job; anyone else gets false.
 -- Called outside the job's own transaction so the status UI sees it at once.
+-- Also false once someone asked to cancel the job: the handler stops.
 CREATE FUNCTION app_job_progress(p_id uuid, p_lease uuid, p_pct integer) RETURNS boolean
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 	AS $$
+	DECLARE
+		v_go boolean;
 	BEGIN
 		IF p_pct IS NULL OR p_pct < 0 OR p_pct > 100 THEN
 			RAISE EXCEPTION 'progress is 0–100' USING ERRCODE = 'invalid_parameter_value';
 		END IF;
 		UPDATE job j SET progress = p_pct
-		WHERE j.id = p_id AND j.status = 'running' AND j.lease_token = p_lease;
-		RETURN FOUND;
+		WHERE j.id = p_id AND j.status = 'running' AND j.lease_token = p_lease
+		RETURNING j.cancel_requested_at IS NULL INTO v_go;
+		RETURN COALESCE(v_go, false);
 	END
 	$$;
 REVOKE ALL ON FUNCTION app_job_progress(uuid, uuid, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_job_progress(uuid, uuid, integer) TO water_app;
+
+-- Cancel a job of the kinds a user may cancel (yield only, for now), as the
+-- session's user: the one who queued it, or an editor of its project. A
+-- queued or retrying job is dead at once; a running one is flagged for its
+-- handler (app_job_progress). Returns the job's status afterwards, or NULL
+-- when there is no such job for this user (not theirs, not visible, or
+-- another kind). SECURITY DEFINER: water_app has no UPDATE on job.
+CREATE FUNCTION app_cancel_job(p_id uuid) RETURNS text
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		uid uuid := app_current_user_id();
+		v_status text;
+	BEGIN
+		IF uid IS NULL THEN
+			RETURN NULL;
+		END IF;
+		UPDATE job j SET
+			status = CASE WHEN j.status IN ('queued', 'failed') THEN 'dead' ELSE j.status END,
+			finished_at = CASE WHEN j.status IN ('queued', 'failed') THEN now() ELSE j.finished_at END,
+			last_error = CASE WHEN j.status IN ('queued', 'failed') THEN 'cancelled' ELSE j.last_error END,
+			cancel_requested_at = CASE WHEN j.status = 'running' THEN COALESCE(j.cancel_requested_at, now()) ELSE j.cancel_requested_at END
+		WHERE j.id = p_id AND j.kind = 'yield'
+		  AND (j.acting_user_id = uid OR app_has_role(j.project_id, 'editor'))
+		RETURNING j.status INTO v_status;
+		RETURN v_status;
+	END
+	$$;
+REVOKE ALL ON FUNCTION app_cancel_job(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_cancel_job(uuid) TO water_app;
 
 -- ---------------------------------------------------------------------------
 -- yield_result
