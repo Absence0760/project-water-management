@@ -1322,6 +1322,19 @@ must build WP-2.15 Phase B.
 
 ### WP-3.13 Liability and credibility: disclaimers, validation statement, sign-off
 
+- **Status (2026-09-26): first slice built**, on the report route
+  (`/projects/:id/report`): the draft disclaimer (pending the client's legal
+  review, followups.md § Blocking releases), `validationStatement` with the
+  limitations generated from engine-audit.md (`pnpm gen:limitations`, a
+  doc-parsing test), and the immutable sign-off on a **run**
+  (`035_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound
+  to the statement's SHA-256, `signoff.created` in the audit log, the run
+  cited so kept), with the dialog. Engine 0.31.2. Left
+  ([followups.md § Liability and sign-off](../followups.md#liability-and-sign-off-wp-313)):
+  `ENGINE_BUILD` from CI, the methodology statement and errata docs, the
+  pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
+  sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
+  scenario is signed through its run, which is what a pack cites.
 - **Goal.** A pack says exactly how far it can be trusted and who is
   professionally responsible for it.
 - **Changes**

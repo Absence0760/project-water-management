@@ -14,7 +14,7 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (036_notes.sql).
+	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
@@ -48,7 +48,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * then consumed or purged only through app_consume_render_token
  * (023_reports.sql). The change history is the record of who changed what: a
  * model revision and an audit event go only with their project, a series
- * revision also through its retention trim (030_history.sql).
+ * revision also through its retention trim (030_history.sql). A sign-off
+ * is a professional's signature on a run, never changed (035_signoff.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',
@@ -60,7 +61,8 @@ const APPEND_ONLY = new Set([
 	'render_token',
 	'model_revision',
 	'series_revision',
-	'audit_event'
+	'audit_event',
+	'signoff'
 ]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
@@ -69,7 +71,7 @@ const APPEND_ONLY = new Set([
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
  * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (036_notes.sql).
+ * editors (037_notes.sql).
  */
 const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note']);
 /**

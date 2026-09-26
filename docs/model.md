@@ -2921,6 +2921,46 @@ it never changes a run's results.
   coefficient's ±0.1, and whether 300 members suffice, are defaults to
   confirm, not findings.
 
+### 2.10f Validation statement and known limitations (engine ≥ 0.31.2, roadmap WP-3.13)
+
+`validationStatement({ summary, engineVersion, legacy }, build?)`
+(`packages/engine/src/liability/validation.ts`) says how far one saved run
+can be trusted, from its stored summary alone (no re-run, so any run has
+one). It changes no run output; 0.31.2 only adds it to the engine's surface.
+
+- **Calibration statistics with ratings.** NSE and PBIAS carry the Moriasi
+  et al. (2007) streamflow ratings (NSE > 0.75 very good, > 0.65 good,
+  > 0.50 satisfactory; |PBIAS| < 10 % very good, < 15 % good, < 25 %
+  satisfactory; otherwise unsatisfactory). KGE and log-flow NSE are shown
+  without a rating, since the paper gives none. The statement always carries
+  the caveat that those thresholds were set for **monthly** flows and a daily
+  fit scores lower for the same skill (calibration research CR-6): a guide,
+  not a pass mark.
+- **Flagged data-quality years**: the water years whose catchment rain reads
+  far below CHIRPS (`lowvschirps`, §2.10a; up to the check's example cap),
+  and the one-line text of every other data-quality check that fired.
+- **Runoff coefficient (audit W1)**: natural flow ÷ rain on the catchment,
+  marked implausible above 1.
+- **Engine version, and the build's test results** (`EngineBuild`: version,
+  git SHA, invariant suite passed, soak cases). CI does not inject the build
+  record yet ([followups.md](./followups.md#liability-and-sign-off-wp-313)),
+  so the statement says the results were not recorded; a record is only
+  ever shown for the version it was made for.
+- **Self-checks**: the run's own verification (`summary.verification`).
+- **Known limitations**, generated from [engine-audit.md](./engine-audit.md):
+  every finding or workbook quirk whose decision is still open (it says
+  *pending* the hydrologist or assessor, *Needs hydrologist*, or it is only
+  *Warned* or *Built* off by default). `pnpm gen:limitations` rewrites
+  `liability/limitations.generated.ts` from the doc, and
+  `limitations.test.ts` parses the doc again and fails when the two differ,
+  so an audit item's status can't change without the list following it.
+
+The same module holds the draft disclaimer (`DISCLAIMER`, versioned, marked
+draft until the client's legal review, Step 2 D10) and the sign-off
+statement (`signoffStatement(run)`): the five confirmations of WP-3.13, the
+limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
+sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it

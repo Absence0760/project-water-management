@@ -195,6 +195,7 @@ export type AuditKind =
 	| 'scenario.changed'
 	| 'scenario.deleted'
 	| 'note.deleted'
+	| 'signoff.created'
 	| 'restore';
 
 /**

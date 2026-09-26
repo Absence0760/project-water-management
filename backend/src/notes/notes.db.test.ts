@@ -1,4 +1,4 @@
-// Notes and comments (036_notes.sql, roadmap WP-2.7): the API and the RLS
+// Notes and comments (037_notes.sql, roadmap WP-2.7): the API and the RLS
 // underneath it. A farmer reads and writes only `farm` notes on their own
 // farm and never a `team` note; a soft-deleted note is hidden from everyone
 // but editors; only the author edits. Every "cannot see" check has a positive

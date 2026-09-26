@@ -253,6 +253,22 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		route: `POST ${P}/runs/:runId/signoffs`,
+		records: ['signoff.created'],
+		call: async (c) => {
+			const path = `${at(c)}/runs/${c.scenarioRunId}/signoffs`;
+			const { statement, statementSha256 } = (await c.owner.call('GET', path)).body;
+			return c.owner.call('POST', path, {
+				fullName: 'Guard Signer',
+				registrationBody: 'SACNASP',
+				registrationNo: '1',
+				scope: 'guard',
+				confirmed: statement.confirmations.map((k: { id: string }) => k.id),
+				statementSha256
+			});
+		}
+	},
+	{
 		route: `DELETE ${P}/scenarios/:sid`,
 		records: ['scenario.deleted'],
 		call: async (c) => {
@@ -315,8 +331,8 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
-	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (036_notes.sql)' },
-	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (036_notes.sql note_guard)' },
+	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (037_notes.sql)' },
+	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
 ];
 

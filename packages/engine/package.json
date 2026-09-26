@@ -15,7 +15,8 @@
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --project unit",
 		"test:watch": "vitest",
-		"test:perf": "vitest run --project perf"
+		"test:perf": "vitest run --project perf",
+		"gen:limitations": "tsx scripts/gen-limitations.ts"
 	},
 	"devDependencies": {
 		"tsx": "4.21.0",

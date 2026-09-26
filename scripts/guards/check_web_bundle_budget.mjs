@@ -472,13 +472,21 @@
 //               +3.5 to +8 KB. At 1500: −2 KB total, +2 KB on every page.
 //             - Svelte css: 'injected' (80 CSS files, 65 of them under 1 KB,
 //               cost ~23 KB of gzip overhead): total +6 KB, largest chunk 42.
-// 2026-09-26  total 821 → 835 KB; other ceilings unchanged. Notes and
+// 2026-09-26  total 821 → 837 KB for WP-3.1's reproduce panel and WP-3.13's
+//             validation statement, sign-off dialog and disclaimer (report
+//             sections), merged together on main. The reproduce panel and
+//             the sign-off dialog are lazy chunks; the report grows by its
+//             three closing sections. No new dependency; the largest page
+//             chunk stays under 41 KB. The engine split (#9) is still the
+//             way to win the total back.
+
+// 2026-09-26  total 837 → 844 KB; other ceilings unchanged. Notes and
 //             comments (WP-2.7): the notes drawer and its count badges on
 //             network rows, the run Record group and the settings groups,
 //             Recent notes on the Overview, and the farmer's notes card.
-//             Merged on main after #44's reporting-window picker, which had
-//             already taken the total to 821; the merge measured 829 KB. The
-//             drawer is small and mounted from several tabs, so most of it
+//             Merged after #44's reporting-window picker and WP-3.1/3.13
+//             above; the merge measured 838 KB (the notes branch alone was
+//             +8 KB). The drawer is mounted from several tabs, so most of it
 //             sits in shared chunks. No new dependency; the largest page
 //             chunk stays 40 KB. Headroom ~6 KB. #9's engine split (~20 KB,
 //             docs/followups.md) is the way back down.
@@ -492,7 +500,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 835,
+	totalCodeKb: 844,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,

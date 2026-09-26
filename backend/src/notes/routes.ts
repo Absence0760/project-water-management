@@ -1,4 +1,4 @@
-// Notes and comments (roadmap WP-2.7, 036_notes.sql; docs/api.md § Notes).
+// Notes and comments (roadmap WP-2.7, 037_notes.sql; docs/api.md § Notes).
 //
 // Plain-text notes kept against a node, a run, a setting or the project.
 // The min role is farmer on every route, and RLS does the scoping: a farmer
@@ -14,13 +14,13 @@ import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 
-/** Longest note body (the 036 CHECK). */
+/** Longest note body (the 037 CHECK). */
 export const NOTE_MAX = 4000;
 /** Most notes one list returns. */
 export const NOTES_LIMIT_MAX = 500;
 const NOTES_LIMIT_DEFAULT = 100;
 
-/** A settings path (`calibration.a`) or group (`ewr`); the 036 CHECK. */
+/** A settings path (`calibration.a`) or group (`ewr`); the 037 CHECK. */
 export const SETTING_KEY = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$/;
 
 const uuid = z.string().regex(UUID, 'not a valid id');

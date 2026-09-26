@@ -169,6 +169,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return `Deleted the scenario “${str(s.name)}”`;
+		case 'signoff.created':
+			return `Signed off a run as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
 		case 'share_link.created':
 			return 'Created a share link';
 		case 'share_link.revoked':

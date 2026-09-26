@@ -123,6 +123,7 @@ pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm test:guards            # node:test suites for scripts/guards and scripts/release
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
+pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
 ```
 
 ## Running tests

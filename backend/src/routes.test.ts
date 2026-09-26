@@ -81,6 +81,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Sign-offs (WP-3.13, 035_signoff): auth-gated like every project route.
+	it('inventories the sign-off routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
 	it('inventories the scenario routes as auth-gated', () => {
 		const scenarios = [
@@ -157,7 +165,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Notes and comments (WP-2.7, 036_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
+	// Notes and comments (WP-2.7, 037_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
 	it('inventories the note routes as auth-gated', () => {
 		const notes = [
 			'GET /projects/:id/notes',

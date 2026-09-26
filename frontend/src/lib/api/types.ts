@@ -18,6 +18,7 @@ import type {
 	RunComparison,
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
+	SignoffStatement,
 	RunSummary,
 	ScenarioOp
 } from '@water-management/engine';
@@ -317,11 +318,11 @@ export type ReproductionDifference =
 
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
- * day it was published (YYYY-MM-DD, UTC). Evidence packs and assessments
- * (WP-3.13/3.14) will add kinds.
+ * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
+ * signer's name. Evidence packs and assessments (WP-3.14) will add kinds.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario';
+	kind: 'publication' | 'scenario' | 'signoff';
 	id: string;
 	name: string;
 }
@@ -761,7 +762,7 @@ export interface ShareSeries {
 	recent: { startDate: string; values: (number | null)[] };
 }
 
-/** Longest note, in characters (backend NOTE_MAX, 036_notes.sql). */
+/** Longest note, in characters (backend NOTE_MAX, 037_notes.sql). */
 export const NOTE_MAX = 4000;
 
 /** Who may read a note: the team (viewers and above), or also the farmers of its farm. */
@@ -814,4 +815,42 @@ export interface NoteCounts {
 	nodes: Record<string, number>;
 	runs: Record<string, number>;
 	settings: Record<string, number>;
+}
+
+/** A professional sign-off on a run (035_signoff, docs/api.md § Sign-offs). Immutable. */
+export interface Signoff {
+	id: string;
+	runId: string;
+	fullName: string;
+	registrationBody: string;
+	registrationNo: string;
+	scope: string;
+	statementVersion: string;
+	statementSha256: string;
+	disclaimerVersion: string;
+	signedAt: string;
+	/** The caller signed it. */
+	mine: boolean;
+}
+
+/** GET /projects/:id/runs/:runId/signoffs. */
+export interface SignoffList {
+	statement: SignoffStatement;
+	/** SHA-256 of the statement's RFC 8785 text: sent back with a sign-off. */
+	statementSha256: string;
+	disclaimer: { version: string; status: 'draft' | 'agreed' };
+	/** Why the caller can't sign this run, or null when they can. */
+	cannotSign: string | null;
+	signoffs: Signoff[];
+}
+
+/** POST /projects/:id/runs/:runId/signoffs. */
+export interface SignoffRequest {
+	fullName: string;
+	registrationBody: string;
+	registrationNo: string;
+	scope: string;
+	/** Every confirmation id of the statement. */
+	confirmed: string[];
+	statementSha256: string;
 }

@@ -989,9 +989,9 @@ forecast card later.
 
 ### WP-2.7 Notes and comments
 
-> **Status: built** (`036_notes.sql`, `backend/src/notes/`,
+> **Status: built** (`037_notes.sql`, `backend/src/notes/`,
 > `frontend/src/lib/components/notes/`; [api.md § Notes](../api.md#notes),
-> [data-model.md § Notes](../data-model.md#notes-036_notessql),
+> [data-model.md § Notes](../data-model.md#notes-037_notessql),
 > [ui.md § Notes](../ui.md#notes)). Where the build departs from the plan
 > below, and why:
 > - **A deleted note stays readable to its author** as well as to editors, at
