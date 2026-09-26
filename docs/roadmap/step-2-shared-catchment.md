@@ -1720,6 +1720,17 @@ for alert counts.
 
 ### WP-2.15 One-click PDF report
 
+> **Status: Phase A built** (issue #19; `frontend/src/routes/projects/[id]/report/`,
+> `lib/components/report/`; [ui.md § Report](../ui.md#report)). Built before
+> #15 (the licensing evidence pack), so the section list is data-driven
+> (`report/sections.ts`) for #15 to extend the same route. Left out until their
+> data exists, with no placeholder: the published-by line and restriction
+> notice (WP-2.3), changes since the previous publication (WP-2.4) and the
+> disclaimer (D10); the notes are the run's notes (WP-2.7 later). The Overview
+> published-card entry point waits for WP-2.3. The farmer access test (a
+> farmer gets 403) waits for WP-2.1's farmer role; today a non-member gets the
+> workspace's not-found message. Phase B is not started (D9).
+
 **Goal.** A meeting-ready catchment report in one click. It replaces the
 consultant copy-pasting from Excel.
 
