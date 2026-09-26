@@ -7,8 +7,9 @@ hypothetical figures for the client catchment; they are **not committed**
 describes them generically. The build is tracked in
 [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
 Built so far: R1 (`demand.scale`, engine 0.41.0,
-[scenarios.md](../scenarios.md)) and R3's equal-share board
-([ui.md § Share the pain](../ui.md#share-the-pain)); the rest is not yet.
+[scenarios.md](../scenarios.md)), R3's equal-share board
+([ui.md § Share the pain](../ui.md#share-the-pain)) and R4's engine half
+(§3.4); the rest is not yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -120,6 +121,12 @@ restriction waits for plan.md O4; the view model's `ShareRule` is where it
 goes (a second rule kind, labelled as a what-if).
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
+
+**Status: engine half built** (`views/yearClasses.ts`, `views/outcomeMatrix.ts`;
+method, tie and partial-year rules in
+[model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
+Still to build: the project settings for the method and the risk cut-offs
+(after O1 / O2), the demand-level runs (R2 sweeps over R1's `demand.scale`) and the matrix view.
 
 - **Classify water years** by the run's own natural flow at the outlet
   (annual total): terciles by default (dry / normal / wet) or quintiles

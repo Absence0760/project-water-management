@@ -3870,6 +3870,91 @@ the start, no losses, a constant inflow *q*, capacity *C*, *n* days: yield
 curve; and a pattern case: with no storage, yield × the peak factor = the
 inflow.
 
+### 2.14 Water-year classes and the outcome matrix (issue #53 R4, engine half)
+
+Derived views over saved runs, not part of `runModel`: no run output
+changes, so `ENGINE_VERSION` doesn't move. Pure
+(`packages/engine/src/views/yearClasses.ts`, `views/outcomeMatrix.ts`).
+The design and its research are in
+[design/planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m).
+The UI, the project settings and the demand-level runs (R1/R2) are not
+built yet; the defaults below wait on the client's O1 and O2
+([plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
+
+**Year classes** (`classifyWaterYears`, `classifyRunWaterYears`). The
+classes are the catchment's own: its water years ranked by the annual total
+of the run's natural flow at the outlet (`natural_flow`, m³).
+
+- **Which years.** Only **complete** water years (1 October … 30 September
+  all inside the run, the Reserve's `completeWaterYears`, §2.9d). A part
+  year at either end is listed in `excluded` as `partial`, and a year with a
+  non-finite day as `missingDays`; neither is ranked, since a part total
+  would read as a dry year.
+- **Method.** `terciles` (dry / normal / wet) or `quintiles` (very dry …
+  very wet); `auto` (the default) takes quintiles from
+  `YEAR_CLASS_QUINTILE_MIN_YEARS` = 25 complete years, else terciles
+  **(judgement, pending O2)**. The method is a parameter, so O2's answer
+  changes a default, not code.
+- **Bounds** (`boundsM3`, rising, k − 1 of them for k classes). The annual
+  totals sorted wettest first; the bound between class j − 1 and j is the
+  total at exceedance rank h = (k − j)(n + 1) ÷ k: Weibull plotting
+  positions, linear between ranks, held at the wettest / driest year beyond
+  them, the same rule as the Reserve's natural curve (`durationQuantile`,
+  §2.9c). The rank is worked out in integers, so a bound that falls on a
+  rank is exactly that year's total. Each class carries its lower
+  (exclusive) and upper (inclusive) bound in m³; the driest has no lower
+  bound and the wettest no upper one.
+- **Ties.** A year exactly on a bound goes to the **drier** class ("dry = at
+  or below the lower tercile"), and years with equal totals always share a
+  class, since classes go by value, not by rank. Where the bounds fall on
+  ranks (n + 1 a multiple of k, e.g. 8 years in terciles) the classes are
+  therefore uneven (3 / 3 / 2).
+
+**Outcome matrix** (`outcomeMatrix(levels, classes, options)`). One row per
+demand level (a run each; R1's `demand.scale` at 1.0 / 0.85 / 0.7 once it
+exists), one column per class. Per cell:
+
+| Metric | When | Per water year | Cell value |
+| --- | --- | --- | --- |
+| `reserveMonthsMet` | every level's run has a Reserve rule table at the site (`summary.ewrAssurance`, §2.9c; the outlet by default, a gauge by `siteNodeId`) | months met of months assessed | Σ met ÷ Σ months over the class's years |
+| `daysBelowEwr` | otherwise | days with `ewr_shortfall` < 0 at the outlet (the `ewrDaysNotMet` test, §2.9) of the year's days | Σ days below ÷ Σ days |
+
+- **One metric per matrix.** When only some levels have the table, every
+  cell uses days below the EWR and a warning says why, so the rows compare.
+  `metric` can be forced; forcing `reserveMonthsMet` without a table throws.
+- **Years.** Only the classed years, and in each run only those it covers
+  (a warning names a level whose run misses some). Every cell carries
+  `nYears` and its years. A year is **met in full** when every month met
+  (Reserve) or no day fell below the EWR; `yearsMet` counts those, for the
+  wording.
+- **Not enough years.** Fewer than `OUTCOME_MIN_YEARS` = 3 years:
+  `enoughYears: false`, `value` and `risk` null (**judgement**, design §3.4).
+- **Risk labels** (`outcomeRisk`, O1's wording: *lower*, *increasing*,
+  *high*), from cut-offs passed in, each in its metric's direction, a value
+  on a cut-off counting to the lower risk:
+
+  | Metric | Lower risk | Increasing risk | High risk |
+  | --- | --- | --- | --- |
+  | `reserveMonthsMet` | ≥ 0.90 | ≥ 0.75 | below |
+  | `daysBelowEwr` | ≤ 0.05 | ≤ 0.20 | above |
+
+  These defaults (`DEFAULT_OUTCOME_RISK_CUTOFFS`) are **placeholders
+  pending the hydrologist** (`OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
+  and `cutoffsAreDefault` on the result, so a surface can say so). Days
+  below reuse the portfolio traffic lights' 5 % / 20 % (roadmap D11, also
+  unconfirmed); 90 % / 75 % of months is a judgement.
+- **Wording** (`describeOutcomeCell`) counts years, never "likely": "Reserve
+  met in every month in 7 of 9 dry years (94 % of months met)", "Only 2 wet
+  years in the record: not enough years to judge."
+
+**Tests** (`yearClasses.test.ts`, `outcomeMatrix.test.ts`, synthetic
+series): the 24 / 25-year switch, bounds against `durationQuantile`, a tie
+on a bound, equal totals, part and missing-day years, a skewed `TZ`; both
+metrics, the fallback and forced metric, the gauge site, the 3-year flag,
+every risk label at and beside its cut-offs, cut-off validation, the
+wording; and on random fuzz runs, every day below the EWR and every Reserve
+month of the classed years is counted exactly once.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs
