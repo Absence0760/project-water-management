@@ -4,8 +4,9 @@ Research and recommendations for four decision-support outputs the client
 sketched with a chat assistant (received 2026-09-26). The sketches used
 hypothetical figures for the client catchment; they are **not committed**
 (the repo is public and they name the catchment and its users). This doc
-describes them generically. Nothing here is built yet; the build is tracked
-in [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
+describes them generically. The build is tracked in
+[issue #53](https://github.com/Absence0760/project-water-management/issues/53);
+R4's engine half is built (§3.4).
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -107,6 +108,12 @@ irrigation, industry) instead of one equal share, labelled as a what-if
 until the authorisation-based allocation (model.md §2.11) exists.
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
+
+**Status: engine half built** (`views/yearClasses.ts`, `views/outcomeMatrix.ts`;
+method, tie and partial-year rules in
+[model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
+Still to build: the project settings for the method and the risk cut-offs
+(after O1 / O2), the demand-level runs (R1, R2) and the matrix view.
 
 - **Classify water years** by the run's own natural flow at the outlet
   (annual total): terciles by default (dry / normal / wet) or quintiles
