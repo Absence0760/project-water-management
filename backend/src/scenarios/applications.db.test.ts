@@ -1,0 +1,396 @@
+// Applicants and applications (roadmap WP-3.3; 035_contributor_role,
+// 036_contributor_scope; docs/scenarios.md § Applications). A contributor (a
+// licence applicant or their consultant) works on the published baseline
+// without seeing other applicants' drafts, other farms' inputs or anything
+// unpublished; the assessors (editors) see what has been submitted. Every
+// "cannot see" has its positive control.
+import { beforeAll, describe, expect, it } from 'vitest';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+const ZERO = '00000000-0000-4000-8000-000000000000';
+
+let owner: User; // the assessing authority's modeller
+let assessor: User; // editor
+let viewer: User;
+let applicantA: User; // contributor, linked to Rooikloof
+let applicantB: User; // contributor, no farm link
+let consultant: User; // contributor, shares A's application
+let farmer: User; // farmer, linked to Kliphuis
+let teamApplicant: User; // a team member who is also a direct contributor
+let stranger: User;
+let projectId: string;
+let published: string;
+let unpublished: string;
+// Gauge ← five farms (five holders: the catchment series' k).
+const outlet = node('Gauge', null);
+const rooikloof = node('Rooikloof', outlet.id, { damCapacityM3: 100_000 });
+const kliphuis = node('Kliphuis', outlet.id, { damCapacityM3: 50_000 });
+const bergvliet = node('Bergvliet', outlet.id);
+const doornhoek = node('Doornhoek', outlet.id);
+const waterval = node('Waterval', outlet.id);
+const OTHER_FARMS = ['Kliphuis', 'Bergvliet', 'Doornhoek', 'Waterval'];
+const citrus = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: monthly(0.7) };
+const lucerne = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+
+const P = () => `/projects/${projectId}`;
+const damRaise = (nodeId: string, value: number) => ({ op: 'node.set', nodeId, field: 'damCapacityM3', value });
+const rowsAs = async <T = Record<string, unknown>>(u: User, sql: string, params: unknown[] = []) =>
+	withUser(u.id, async (db) => (await db.query<T & Record<string, unknown>>(sql, params)).rows);
+
+async function runModel(u: User, label: string) {
+	const res = await u.call('POST', `${P()}/runs`, { label });
+	expect(res.status, JSON.stringify(res.body)).toBe(201);
+	return res.body.run.id as string;
+}
+
+async function apply(u: User, name: string, ops: unknown[] = [damRaise(rooikloof.id, 120_000)]) {
+	const res = await u.call('POST', `${P()}/scenarios`, { name, baseRunId: published, ops });
+	expect(res.status, JSON.stringify(res.body)).toBe(201);
+	return res.body.scenario.id as string;
+}
+
+beforeAll(async () => {
+	[owner, assessor, viewer, applicantA, applicantB, consultant, farmer, teamApplicant, stranger] = (await Promise.all(
+		['Aowner', 'Assessor', 'Aviewer', 'Applicanta', 'Applicantb', 'Consultant', 'Afarmer', 'Teamapp', 'Astranger'].map((n) => signUp(n))
+	)) as User[] as [User, User, User, User, User, User, User, User, User];
+	const team = (await owner.call('POST', '/teams', { name: 'Assessing office' })).body.team.id as string;
+	expect((await owner.call('POST', `/teams/${team}/members`, { email: teamApplicant.email, role: 'member' })).status).toBe(201);
+	projectId = (await owner.call('POST', '/projects', { name: 'Applications', teamId: team })).body.project.id;
+	const model = {
+		nodes: [outlet, rooikloof, kliphuis, bergvliet, doornhoek, waterval],
+		crops: [citrus, lucerne],
+		cropAreas: [
+			{ nodeId: rooikloof.id, cropId: citrus.id, areaM2: 50_000 },
+			{ nodeId: kliphuis.id, cropId: lucerne.id, areaM2: 30_000 }
+		],
+		transfers: []
+	};
+	expect((await owner.call('PUT', `${P()}/model`, model)).status).toBe(200);
+	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150) } })).status).toBe(200);
+	const days = 60;
+	const rain = Array.from({ length: days }, (_, i) => (i % 7 === 0 ? 20 : 0));
+	expect((await owner.call('PUT', `${P()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	expect((await owner.call('PUT', `${P()}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2020-01-01', values: new Array(days).fill(0.2) })).status).toBe(200);
+	published = await runModel(owner, 'Baseline');
+	expect((await owner.call('POST', `${P()}/publication`, { runId: published })).status).toBe(201);
+	unpublished = await runModel(owner, 'Work in progress');
+	for (const [u, role] of [
+		[assessor, 'editor'],
+		[viewer, 'viewer'],
+		[applicantA, 'contributor'],
+		[applicantB, 'contributor'],
+		[consultant, 'contributor'],
+		[teamApplicant, 'contributor']
+	] as const) {
+		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
+	}
+	expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: [kliphuis.id] })).status).toBe(201);
+	// A contributor keeps farm links (036 widened farm_link_check and /farmers/:userId).
+	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
+	expect(linked.status, JSON.stringify(linked.body)).toBe(200);
+	expect(linked.body.farmer).toMatchObject({ role: 'contributor', nodeIds: [rooikloof.id] });
+});
+
+describe('an application', () => {
+	let sid: string;
+	let draftRun: string;
+	const seen: unknown[] = [];
+	const asA = async (method: string, path: string, body?: unknown) => {
+		const res = await applicantA.call(method, path, body);
+		seen.push(res.body);
+		return res;
+	};
+
+	it('is made by a contributor on the published run, owning their linked farm, and hidden from everyone else', async () => {
+		const res = await asA('POST', `${P()}/scenarios`, { name: 'Raise Rooikloof', baseRunId: published, ops: [damRaise(rooikloof.id, 120_000)] });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		sid = res.body.scenario.id;
+		expect(res.body.scenario).toMatchObject({
+			origin: 'applicant',
+			status: 'draft',
+			ownerUserId: applicantA.id,
+			ownedNodeIds: [rooikloof.id],
+			baseRun: { id: published, label: 'Baseline' },
+			members: [],
+			submittedAt: null,
+			outcome: null
+		});
+		// Its own farm: the dam raise is the proposal.
+		expect(res.body.check.classified).toEqual(['proposal']);
+		// Positive control: A lists and reads it.
+		expect((await asA('GET', `${P()}/scenarios`)).body.scenarios.map((s: { id: string }) => s.id)).toEqual([sid]);
+		expect((await asA('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
+		// Nobody else does, not even the assessors while it is a draft.
+		for (const u of [applicantB, consultant, assessor, viewer, owner]) {
+			expect((await u.call('GET', `${P()}/scenarios/${sid}`)).status, u.email).toBe(404);
+			expect((await u.call('GET', `${P()}/scenarios`)).body.scenarios.map((s: { id: string }) => s.id), u.email).not.toContain(sid);
+			expect(await rowsAs(u, 'SELECT id FROM scenario WHERE id = $1', [sid]), u.email).toEqual([]);
+		}
+		expect((await assessor.call('GET', `${P()}/applications`)).body.applications).toEqual([]);
+		// A farmer: 403 like every scenario route.
+		expect((await farmer.call('GET', `${P()}/scenarios`)).status).toBe(403);
+	});
+
+	it("is shared with the applicant's consultant, who then reads it (and leaves)", async () => {
+		const res = await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.members).toEqual([{ userId: consultant.id, displayName: 'Consultant' }]);
+		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
+		// Still hidden from the other applicant (control above: the consultant sees it).
+		expect((await applicantB.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
+		// Not a member of the project, or only a farmer: the same refusal as no such address.
+		for (const email of [stranger.email, farmer.email, 'nobody@example.com']) {
+			expect(await asA('POST', `${P()}/scenarios/${sid}/members`, { email }), email).toEqual({ status: 404, body: { error: 'no contributor or above on this project has that address' } });
+		}
+		// Only the owner shares.
+		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/members`, { email: applicantB.email })).status).toBe(403);
+		// The consultant leaves, then is added back.
+		expect((await consultant.call('DELETE', `${P()}/scenarios/${sid}/members/${consultant.id}`)).status).toBe(204);
+		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
+		expect((await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email })).status).toBe(201);
+	});
+
+	it('shows the applicant the base with every other farm anonymised', async () => {
+		const res = await asA('GET', `${P()}/scenarios/${sid}/base`);
+		expect(res.status).toBe(200);
+		const nodes = res.body.model.nodes as { id: string; name: string; damCapacityM3: number; areaKm2: number }[];
+		expect(nodes.find((n) => n.id === rooikloof.id)).toMatchObject({ name: 'Rooikloof', damCapacityM3: 100_000 });
+		expect(nodes.find((n) => n.id === outlet.id)).toMatchObject({ name: 'Gauge' });
+		const k = nodes.find((n) => n.id === kliphuis.id)!;
+		expect(k.name).toMatch(/^Farm \d$/);
+		expect(k.damCapacityM3).toBe(0);
+		expect(k.areaKm2).toBe(0);
+		expect(res.body.anonymisedNodeIds.sort()).toEqual([kliphuis.id, bergvliet.id, doornhoek.id, waterval.id].sort());
+		// Only the crops on their own farm.
+		expect(res.body.model.crops.map((c: { name: string }) => c.name)).toEqual(['Citrus']);
+		expect(res.body.model.cropAreas).toEqual([{ nodeId: rooikloof.id, cropId: citrus.id, areaM2: 50_000 }]);
+		// Positive control: an editor gets the base as it is.
+		const team = await apply(owner, 'Team look', []);
+		const full = await owner.call('GET', `${P()}/scenarios/${team}/base`);
+		expect(full.body.anonymisedNodeIds).toEqual([]);
+		expect(full.body.model.nodes.find((n: { id: string }) => n.id === kliphuis.id)).toMatchObject({ name: 'Kliphuis', damCapacityM3: 50_000 });
+	});
+
+	it('runs as the applicant, hidden from the assessors while a draft; its row but never the published run', async () => {
+		const res = await asA('POST', `${P()}/scenarios/${sid}/runs`, {});
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		draftRun = res.body.run.id;
+		// Metadata only: the summary names every farm.
+		expect(res.body.run.summary).toBeUndefined();
+		expect(res.body.run.scenarioId).toBe(sid);
+		// Positive control: A and the consultant read the run and its series.
+		for (const u of [applicantA, consultant]) {
+			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toHaveLength(1);
+			expect((await rowsAs<{ n: number }>(u, 'SELECT count(*)::int AS n FROM run_series WHERE run_id = $1', [draftRun]))[0]!.n, u.email).toBeGreaterThan(0);
+		}
+		// The assessors and viewers don't, nor does the other applicant.
+		for (const u of [assessor, viewer, applicantB]) {
+			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toEqual([]);
+			expect((await rowsAs<{ n: number }>(u, 'SELECT count(*)::int AS n FROM run_series WHERE run_id = $1', [draftRun]))[0]!.n, u.email).toBe(0);
+		}
+		expect((await assessor.call('GET', `${P()}/runs`)).body.runs.map((r: { id: string }) => r.id)).not.toContain(draftRun);
+		// The published run's row stays out of reach (its inputs hold every farm); its catchment series don't.
+		expect(await rowsAs(applicantA, 'SELECT id FROM model_run WHERE id = $1', [published])).toEqual([]);
+		const keys = await rowsAs<{ key: string; node_id: string | null }>(applicantA, 'SELECT key, node_id FROM run_series WHERE run_id = $1', [published]);
+		const catchment = keys.filter((k) => k.node_id === null);
+		expect(catchment.length).toBeGreaterThan(0);
+		expect(catchment.every((k) => ['natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall'].includes(k.key))).toBe(true);
+		// …and, as a farmer would, their own farm's allowlisted keys (022), no other farm's.
+		expect(new Set(keys.filter((k) => k.node_id !== null).map((k) => k.node_id))).toEqual(new Set([rooikloof.id]));
+		// …of a published run only (control: the published one above).
+		expect(await rowsAs(applicantA, 'SELECT key FROM run_series WHERE run_id = $1', [unpublished])).toEqual([]);
+		// A contributor without farm links reads the same catchment series, and no farm's.
+		expect((await rowsAs(applicantB, 'SELECT key FROM run_series WHERE run_id = $1 AND node_id IS NOT NULL', [published]))).toEqual([]);
+		// The project's log says a run was made, not what the draft is called.
+		const [event] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'run.created' AND subject->>'runId' = $2`, [projectId, draftRun]);
+		expect(event.subject).toEqual(expect.objectContaining({ application: true }));
+		expect(JSON.stringify(event.subject)).not.toContain('Raise Rooikloof');
+	});
+
+	it('keeps an applicant to the published baseline and their own scenarios through the API', async () => {
+		// An unpublished run is not a base (404, as if it didn't exist), nor is any run's page.
+		expect((await asA('POST', `${P()}/scenarios`, { name: 'Sneaky', baseRunId: unpublished })).status).toBe(404);
+		for (const r of [published, unpublished, draftRun]) {
+			expect((await asA('GET', `${P()}/runs/${r}`)).status, r).toBe(403);
+			expect((await asA('GET', `/compare/runs?a=${projectId}:${published}&b=${projectId}:${r}`)).status, r).toBe(403);
+		}
+		expect((await asA('GET', `${P()}/model`)).status).toBe(403);
+		expect((await asA('PUT', `${P()}/model`, { nodes: [], crops: [], cropAreas: [], transfers: [] })).status).toBe(403);
+		// Positive control: an editor can.
+		expect((await assessor.call('GET', `${P()}/model`)).status).toBe(200);
+		// An applicant's own nodes are their links, not what they claim.
+		expect((await asA('POST', `${P()}/scenarios`, { name: 'Claim', baseRunId: published, ownedNodeIds: [kliphuis.id] })).status).toBe(403);
+		// A team scenario is not theirs to read.
+		expect((await asA('GET', `${P()}/scenarios`)).body.scenarios.every((s: { origin: string }) => s.origin === 'applicant')).toBe(true);
+	});
+
+	it('names no other farm in anything the applicant received (D2 default)', async () => {
+		// An op on another farm is a baseline assumption (the engine's messages
+		// about it are renamed: applicant.test.ts).
+		const res = await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000), damRaise(kliphuis.id, 10)] });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.check.classified).toEqual(['proposal', 'baseline']);
+		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000)] })).status).toBe(200);
+		const text = JSON.stringify(seen);
+		for (const name of OTHER_FARMS) expect(text, name).not.toContain(name);
+		expect(text).toContain('Rooikloof');
+	});
+
+	it('is submitted by its owner, frozen, then seen by the assessors (not viewers) with its runs', async () => {
+		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/submit`)).status).toBe(403);
+		const res = await asA('POST', `${P()}/scenarios/${sid}/submit`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.scenario.status).toBe('submitted');
+		expect(res.body.scenario.submittedAt).not.toBeNull();
+		// Frozen: the ops can't change, through the API or the table.
+		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [] })).status).toBe(409);
+		await expect(withUser(applicantA.id, (db) => db.query(`UPDATE scenario SET ops = '[]' WHERE id = $1`, [sid]))).rejects.toMatchObject({ code: '23514' });
+		// The assessors see it, and its run.
+		const list = await assessor.call('GET', `${P()}/applications`);
+		expect(list.body.applications.map((a: { id: string; owner: string }) => [a.id, a.owner])).toEqual([[sid, 'Applicanta']]);
+		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
+		expect(await rowsAs(assessor, 'SELECT id FROM model_run WHERE id = $1', [draftRun])).toHaveLength(1);
+		// Viewers still don't, until it is decided.
+		expect((await viewer.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
+		expect((await viewer.call('GET', `${P()}/applications`)).status).toBe(403);
+		// An assessor can't edit it.
+		expect((await assessor.call('PATCH', `${P()}/scenarios/${sid}`, { name: 'Renamed' })).status).toBe(403);
+	});
+
+	it('is decided by an assessor, never by its applicant, and viewers then read it', async () => {
+		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(403);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'maybe' })).status).toBe(400);
+		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved_with_conditions', note: 'Releases of 5 % in dry months.' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.scenario).toMatchObject({ status: 'decided', outcome: 'approved_with_conditions', decisionNote: 'Releases of 5 % in dry months.', decidedBy: 'Assessor' });
+		// Final: no second decision, no withdrawal, no delete.
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'refused' })).status).toBe(409);
+		expect((await asA('POST', `${P()}/scenarios/${sid}/withdraw`)).status).toBe(409);
+		expect((await asA('DELETE', `${P()}/scenarios/${sid}`)).status).toBe(409);
+		// Viewers read a decided application (control above: not before).
+		expect((await viewer.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
+		const kinds = (await asOwner(`SELECT kind, subject FROM audit_event WHERE project_id = $1 AND subject->>'scenarioId' = $2 AND kind LIKE 'scenario.%' ORDER BY id`, [projectId, sid])).map(
+			(e: { kind: string; subject: { name?: string } }) => [e.kind, e.subject.name ?? null]
+		);
+		expect(kinds).toEqual([
+			['scenario.created', null],
+			['scenario.shared', null],
+			['scenario.unshared', null],
+			['scenario.shared', null],
+			['scenario.changed', null],
+			['scenario.changed', null],
+			['scenario.submitted', null],
+			['scenario.decided', 'Raise Rooikloof']
+		]);
+	});
+});
+
+describe('withdraw, reopen and delete', () => {
+	it('lets the owner withdraw, reopen and delete, which takes the draft runs with it', async () => {
+		const sid = await apply(applicantB, 'Pump from the river', []);
+		const run = await applicantB.call('POST', `${P()}/scenarios/${sid}/runs`, {});
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/submit`)).body.scenario.status).toBe('submitted');
+		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/withdraw`)).body.scenario.status).toBe('withdrawn');
+		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/reopen`)).body.scenario).toMatchObject({ status: 'draft', submittedAt: null });
+		// Hidden again from the assessor once a draft.
+		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
+		expect((await applicantB.call('DELETE', `${P()}/scenarios/${sid}`)).status).toBe(204);
+		// Its run went with it (not left behind, visible to every viewer with scenario_id cleared).
+		expect(await asOwner('SELECT id FROM model_run WHERE id = $1', [run.body.run.id])).toEqual([]);
+	});
+
+	it('keeps an application to its newest runs, as its owner', async () => {
+		const sid = await apply(applicantB, 'Many runs', []);
+		const ids: string[] = [];
+		for (let i = 0; i < 7; i++) ids.push((await applicantB.call('POST', `${P()}/scenarios/${sid}/runs`, {})).body.run.id);
+		const left = await asOwner('SELECT id FROM model_run WHERE scenario_id = $1 ORDER BY created_at DESC, id DESC', [sid]);
+		expect(left).toHaveLength(5);
+		expect(ids.slice(-1)[0]).toBe(left[0].id);
+	});
+});
+
+describe('roles', () => {
+	it('lets a contributor linked to a farm read that farm’s publication row (control: one without a link can’t)', async () => {
+		expect(await rowsAs(applicantA, 'SELECT node_id FROM publication_farm')).toEqual([{ node_id: rooikloof.id }]);
+		expect(await rowsAs(applicantB, 'SELECT node_id FROM publication_farm')).toEqual([]);
+		// And their farm view, as a farmer's.
+		expect((await applicantA.call('GET', `${P()}/farm`)).body.farms).toEqual([{ nodeId: rooikloof.id, name: 'Rooikloof' }]);
+	});
+
+	it('gives a team member who is also a contributor the editor view (app_project_role takes the max)', async () => {
+		const mine = (await teamApplicant.call('GET', '/projects')).body.projects.find((p: { id: string }) => p.id === projectId);
+		expect(mine.role).toBe('editor');
+		expect((await teamApplicant.call('GET', `${P()}/model`)).status).toBe(200);
+		// …so a scenario they make is a team scenario, not an application.
+		const res = await teamApplicant.call('POST', `${P()}/scenarios`, { name: 'Team member idea', baseRunId: published });
+		expect(res.body.scenario.origin).toBe('team');
+	});
+
+	it('lets an owner give and change the contributor role', async () => {
+		const u = await signUp('Latecomer');
+		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role: 'contributor' })).body.member.role).toBe('contributor');
+		expect((await owner.call('PATCH', `${P()}/members/${u.id}`, { role: 'viewer' })).body.member.role).toBe('viewer');
+	});
+
+	it('keeps viewers from making scenarios (control: a contributor and an editor can)', async () => {
+		expect((await viewer.call('POST', `${P()}/scenarios`, { name: 'Viewer idea', baseRunId: published })).status).toBe(403);
+	});
+});
+
+/**
+ * The project routes a contributor may call: the farmer's (publication, farm
+ * view) and the scenario routes, where RLS and the route's own rules say what
+ * they reach. Every other one refuses them (400 or 403), the fail-closed
+ * default of ranking below viewer.
+ */
+const CONTRIBUTOR_ALLOWED = new Set([
+	'GET /projects/:id/publication',
+	'GET /projects/:id/farm',
+	'GET /projects/:id/farm/:nodeId',
+	'GET /projects/:id/farm/:nodeId/export.csv',
+	'GET /projects/:id/farm/:nodeId/access',
+	'GET /projects/:id/scenarios',
+	'POST /projects/:id/scenarios',
+	'GET /projects/:id/scenarios/:sid',
+	'PATCH /projects/:id/scenarios/:sid',
+	'DELETE /projects/:id/scenarios/:sid',
+	'GET /projects/:id/scenarios/:sid/base',
+	'POST /projects/:id/scenarios/:sid/runs',
+	'POST /projects/:id/scenarios/:sid/rebase',
+	'POST /projects/:id/scenarios/:sid/submit',
+	'POST /projects/:id/scenarios/:sid/withdraw',
+	'POST /projects/:id/scenarios/:sid/reopen',
+	'POST /projects/:id/scenarios/:sid/members',
+	'DELETE /projects/:id/scenarios/:sid/members/:userId'
+]);
+
+describe('project routes for a contributor', () => {
+	const allRoutes = [
+		...new Set(app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS' && r.path.startsWith('/projects/:id')).map((r) => `${r.method} ${r.path}`))
+	];
+	const refused = allRoutes.filter((r) => !CONTRIBUTOR_ALLOWED.has(r));
+
+	it('finds the project routes, the contributor-allowed ones among them', () => {
+		expect(refused.length).toBeGreaterThan(40);
+		for (const r of CONTRIBUTOR_ALLOWED) expect(allRoutes).toContain(r);
+	});
+
+	it.each(refused)('%s refuses a contributor', async (route) => {
+		const [method, path] = route.split(' ') as [string, string];
+		const url = path.replace(':id', projectId).replace(/:[A-Za-z]+/g, ZERO);
+		const res = await applicantB.call(method, url, method === 'GET' ? undefined : {});
+		expect([400, 403]).toContain(res.status);
+	});
+
+	// The allowed ones answer an unknown id with 404 (or a validation 400), never data.
+	it.each([...CONTRIBUTOR_ALLOWED].filter((r) => r.includes(':sid') || r.includes(':nodeId')))('%s answers an unknown id without data', async (route) => {
+		const [method, path] = route.split(' ') as [string, string];
+		const url = path.replace(':id', projectId).replace(/:[A-Za-z]+/g, ZERO);
+		const res = await applicantB.call(method, url, method === 'GET' ? undefined : {});
+		expect([400, 404]).toContain(res.status);
+	});
+});

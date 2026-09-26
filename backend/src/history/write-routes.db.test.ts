@@ -260,6 +260,50 @@ const WRITE_ROUTES: Entry[] = [
 			return c.owner.call('DELETE', `${at(c)}/scenarios/${r.body.scenario.id}`);
 		}
 	},
+	// --- the submission workflow (WP-3.3) ------------------------------------------------
+	{
+		route: `POST ${P}/scenarios/:sid/submit`,
+		records: ['scenario.submitted'],
+		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/withdraw`,
+		records: ['scenario.withdrawn'],
+		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/withdraw`)
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/reopen`,
+		records: ['scenario.reopened'],
+		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/reopen`)
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/decide`,
+		records: ['scenario.decided'],
+		call: async (c) => {
+			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
+			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { outcome: 'approved' });
+		}
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/members`,
+		records: ['scenario.shared'],
+		call: async (c) => {
+			// An application: a contributor's scenario on the published run, shared with another contributor.
+			const [applicant, consultant] = await Promise.all(['Gapplicant', 'Gconsultant'].map((n) => signUp(n)));
+			for (const u of [applicant!, consultant!]) expect((await c.owner.call('POST', `${at(c)}/members`, { email: u.email, role: 'contributor' })).status).toBe(201);
+			expect((await c.owner.call('POST', `${at(c)}/publication`, { runId: c.runId })).status).toBe(201);
+			const s = await applicant!.call('POST', `${at(c)}/scenarios`, { name: 'Guard application', baseRunId: c.runId });
+			c.applicant = applicant;
+			c.consultant = consultant;
+			c.applicationId = s.body.scenario.id;
+			return applicant!.call('POST', `${at(c)}/scenarios/${c.applicationId}/members`, { email: consultant!.email });
+		}
+	},
+	{
+		route: `DELETE ${P}/scenarios/:sid/members/:userId`,
+		records: ['scenario.unshared'],
+		call: (c) => (c.applicant as User).call('DELETE', `${at(c)}/scenarios/${c.applicationId}/members/${(c.consultant as User).id}`)
+	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
 		route: `POST ${P}/feeds`,

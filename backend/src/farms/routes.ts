@@ -51,6 +51,8 @@ export interface ActiveFarmer {
 	userId: string;
 	email: string;
 	displayName: string;
+	/** A contributor (a licence applicant, WP-3.3) keeps farm links too: an irrigator applying to raise their own dam. */
+	role: 'farmer' | 'contributor';
 	nodeIds: string[];
 }
 
@@ -69,13 +71,13 @@ export type FarmerEntry = ActiveFarmer | InvitedFarmer;
 
 async function activeFarmers(db: Db, projectId: string): Promise<ActiveFarmer[]> {
 	const { rows } = await db.query<Omit<ActiveFarmer, 'status'>>(
-		`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName",
+		`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role::text AS role,
 			coalesce(array_agg(fl.node_id ORDER BY fl.node_id) FILTER (WHERE fl.node_id IS NOT NULL), '{}') AS "nodeIds"
 		 FROM project_member m
 		 JOIN app_user u ON u.id = m.user_id
 		 LEFT JOIN farm_link fl ON fl.project_id = m.project_id AND fl.user_id = m.user_id
-		 WHERE m.project_id = $1 AND m.role = 'farmer'
-		 GROUP BY m.user_id, u.email, u.display_name
+		 WHERE m.project_id = $1 AND m.role IN ('farmer', 'contributor')
+		 GROUP BY m.user_id, u.email, u.display_name, m.role
 		 ORDER BY u.display_name, u.email`,
 		[projectId]
 	);
@@ -294,14 +296,14 @@ export const farmerRoutes = new Hono<AuthEnv>()
 				}
 				if (user?.verified) {
 					const role = roleOf.get(user.id);
-					if (role && role !== 'farmer') {
+					if (role && role !== 'farmer' && role !== 'contributor') {
 						mark('error', `already a member of this project (${role})`);
 						continue;
 					}
 					if (!role) {
 						await addFarmer(db, id, user, nodeIds, actor);
 					} else {
-						// Already a farmer: the rows add farms, they never take one away.
+						// Already a farmer (or a contributor, WP-3.3): the rows add farms, they never take one away.
 						const before = (await farmLinks(db, id)).filter((l) => l.userId === user.id);
 						await setLinks(db, id, user.id, nodeIds, actor, false);
 						await recordLinkChanges(db, id, before, (await farmLinks(db, id)).filter((l) => l.userId === user.id), 'farmers_set');
@@ -330,7 +332,8 @@ export const farmerRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			const nodeIds = await assertFarms(db, id, body.nodeIds);
-			const { rows } = await db.query(`SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2 AND role = 'farmer'`, [id, userId]);
+			// A farmer's, or a contributor's (036_contributor_scope: an applicant keeps their farm links).
+			const { rows } = await db.query(`SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2 AND role IN ('farmer', 'contributor')`, [id, userId]);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			const before = (await farmLinks(db, id)).filter((l) => l.userId === userId);
 			await setLinks(db, id, userId, nodeIds, c.get('userId'));

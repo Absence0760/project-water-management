@@ -85,7 +85,8 @@ const PatchBody = z.object({
 	/** Why the settings changed, kept with the revision (ignored without settings). */
 	reason: Reason
 });
-const RoleEnum = z.enum(['viewer', 'editor', 'owner']);
+// 'contributor': a licence applicant (035/036, WP-3.3). Farmers are added through /farmers.
+const RoleEnum = z.enum(['contributor', 'viewer', 'editor', 'owner']);
 const ImportQuery = z.object({
 	teamId: z.string().uuid().optional(),
 	/** `run=1`: run the model once after the import commits. */
