@@ -18,6 +18,7 @@ import type {
 	ImportResult,
 	EnsembleDetail,
 	EnsembleStart,
+	Farmer,
 	Member,
 	Nomination,
 	Project,
@@ -217,6 +218,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
+		},
+		/** Farmer members and their farms (WP-2.1). A farmer leaves or is removed through members.remove. */
+		farmers: {
+			list: (id: string) => request<{ farmers: Farmer[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
+			/** An existing, verified account only (invites for farmers come with WP-2.2). */
+			add: (id: string, email: string, nodeIds: string[]) =>
+				request<{ farmer: Farmer }>('POST', `${p(id)}/farmers`, { email, nodeIds }).then((r) => r.farmer),
+			setFarms: (id: string, userId: string, nodeIds: string[]) =>
+				request<{ farmer: Farmer }>('PUT', `${p(id)}/farmers/${enc(userId)}`, { nodeIds }).then((r) => r.farmer)
 		},
 		teams: {
 			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),

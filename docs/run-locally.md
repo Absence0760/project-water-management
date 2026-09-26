@@ -77,7 +77,10 @@ This loads three invented catchments, each with one run, for two local demo
 users: `demo@example.com` and `analyst@example.com`, password `demo-password`
 (they exist only in your docker Postgres). The team "Demo Catchment
 Consultants" (demo is admin, analyst a member) owns Kleinberg and Droëvlei;
-analyst owns Sandspruit and shares it with demo as a viewer. Every name and
+analyst owns Sandspruit and shares it with demo as a viewer. Two demo
+**farmers** (WP-2.1) see only their own farms: `farmer1@example.com` is linked
+to Vaalbank (Sandspruit), `farmer2@example.com` to Rietspruit (Sandspruit) and
+Kareebos (Droëvlei), same password. Every name and
 number is synthetic, so the examples are committed
 (`backend/scripts/examples/`) and work on any clone. Re-seeding gives the same
 projects. Between them they show every feature of the current engine:

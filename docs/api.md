@@ -86,6 +86,11 @@ address moments ago, or sign-in is locked for this address (with
 unexpected is `500 { error: "Internal server error" }`; raw database error
 text never reaches the client.
 
+**Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
+route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
+lists their projects with `role: "farmer"`, `dataUntil: null` and
+`lastRunAt: null`. Their own farm routes come with WP-2.6.
+
 ## Projects
 
 Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
@@ -355,13 +360,28 @@ out, and a re-import of an export records itself as a `project-file` import.
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
-| DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | viewer |
+| DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
 `409 a project must keep at least one owner` when demoting or removing the
 last direct owner (including the last owner leaving).
 
 These are **direct** members only. People who reach a team project through the
-team are listed by `GET /teams/:id`, not here.
+team are listed by `GET /teams/:id`, not here. The list includes farmers
+(`role: "farmer"`); `role` in `POST`/`PATCH` is `viewer`, `editor` or `owner`
+only, farmers are added below.
+
+### Farmers
+
+Members with the role `farmer`, linked to the farm nodes they may read
+([data-model.md § Farmers](./data-model.md#farmers-019_farmer_rolesql-020_farm_scopesql)).
+Remove one (or a farmer leaves) with `DELETE /projects/:id/members/:userId`;
+their links go with the membership.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/farmers` | – | `{ farmers: { userId, email, displayName, nodeIds }[] }` | viewer |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50] }` | `201 { farmer }`. `409` when no **verified** account has the address (invites for farmers are WP-2.2) or the account is already a member; `400` when a node isn't a farm of this project | owner |
+| PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer here | owner |
 
 ### Invites
 

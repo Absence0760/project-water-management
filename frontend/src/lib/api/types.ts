@@ -17,7 +17,13 @@ import type {
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
-export type Role = 'viewer' | 'editor' | 'owner';
+/**
+ * Project roles, lowest first. `farmer` (WP-2.1) sits below viewer: a farmer
+ * reads only the farms linked to them, and every workspace control that asks
+ * for viewer or above hides itself (hasRole).
+ */
+export type Role = 'farmer' | 'viewer' | 'editor' | 'owner';
+/** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
 export const ROLES: readonly Role[] = ['viewer', 'editor', 'owner'];
 
 export interface User {
@@ -118,6 +124,14 @@ export interface Member {
 	email: string;
 	displayName: string;
 	role: Role;
+}
+
+/** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
+export interface Farmer {
+	userId: string;
+	email: string;
+	displayName: string;
+	nodeIds: string[];
 }
 
 /**
@@ -363,7 +377,7 @@ export interface RunCompareResponse {
 	catchmentSeries: { key: string; label: string; unit: string }[];
 }
 
-const RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
+const RANK: Record<Role, number> = { farmer: -1, viewer: 0, editor: 1, owner: 2 };
 
 /** True when `role` is at least `min`. */
 export function hasRole(role: Role | undefined | null, min: Role): boolean {

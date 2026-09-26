@@ -118,6 +118,19 @@ In short:
   project_id = …` therefore returns nothing rather than someone else's data.
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
+- **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
+  existing policy and every `requireRole(…, 'viewer')` refuses them (fail
+  closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
+  expects `400`/`403`). Extra `SELECT` policies let them read their linked
+  farms, the gauges and their own membership row, and nothing else: no other
+  farm's name or figures, no member list, no series, runs or run series. A
+  farmer-facing aggregate of farm quantities needs at least `k − 1` other
+  holders (`app_other_farm_holders`, `k = 5`), counted by holder, not farm
+  node, so a multi-farm owner can't back out a neighbour's figures; flow
+  volumes are never shown to farmers because in a small catchment they reveal
+  a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
+  Open with the client and the security lead: who may hold viewer on a
+  project with farmers (FV-D5), since viewers see every farm.
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its

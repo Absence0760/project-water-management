@@ -21,7 +21,8 @@
 		onmakeoutlet,
 		landCover = [],
 		onaddcover,
-		onremovecover
+		onremovecover,
+		farmersNote = null
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -37,6 +38,8 @@
 		landCover?: LandCoverPatch[];
 		onaddcover?: () => void;
 		onremovecover?: (id: string) => void;
+		/** "N farmers are linked…" for a farm with linked farmers (WP-2.1); null otherwise. */
+		farmersNote?: string | null;
 	} = $props();
 
 	const groups = $derived.by(() => {
@@ -95,6 +98,7 @@
 		</div>
 	</div>
 
+	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
 	{#if node.kind === 'gauge'}
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.

@@ -11,6 +11,7 @@ import { expect, test } from '../support/fixtures.ts';
 // DEV-ONLY demo credentials, as printed by `pnpm seed:examples`.
 const DEMO = { email: 'demo@example.com', password: 'demo-password' };
 const ANALYST = { email: 'analyst@example.com', password: 'demo-password' };
+const FARMER1 = { email: 'farmer1@example.com', password: 'demo-password' };
 const KLEINBERG = 'Example · Kleinberg (winter rainfall)';
 const DROEVLEI = 'Example · Droëvlei (water-stressed)';
 const SANDSPRUIT = 'Example · Sandspruit (summer rainfall, larger network)';
@@ -51,7 +52,7 @@ const roleIn = (page: Page, name: string) =>
 		.filter({ has: page.getByRole('rowheader', { name, exact: true }) })
 		// The "Your role" cell (column positions vary: the Team column only shows in some groups).
 		.getByRole('cell')
-		.filter({ hasText: /^(owner|editor|viewer)$/ });
+		.filter({ hasText: /^(owner|editor|viewer|farmer)$/ });
 
 test('each demo user sees their own and shared example catchments with the right role', async ({ page, browser }) => {
 	await signInAs(page, DEMO);
@@ -82,4 +83,25 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await expect(page.getByRole('button', { name: /^Initial run \(seed\)/ })).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Farms' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(0);
+});
+
+// WP-2.1: the seeded farmers, as the owner manages them and as a farmer's own list shows them.
+test('the owner sees the seeded farmers with their farms, and a farmer sees only their own catchment', async ({ page, browser }) => {
+	await signInAs(page, ANALYST);
+	await page.getByRole('link', { name: SANDSPRUIT, exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: SANDSPRUIT })).toBeVisible();
+	const farmers = page.getByRole('region', { name: /^Farmers/ });
+	await expect(farmers.getByRole('heading', { name: 'Farmers (2)' })).toBeVisible();
+	await expect(farmers.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^Demo Farmer\b(?! Two)/ }) })).toContainText('Vaalbank');
+	await expect(farmers.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^Demo Farmer Two/ }) })).toContainText('Rietspruit');
+	// Farmers aren't listed as members.
+	await expect(page.getByRole('region', { name: /Members|Shared directly with/ }).getByText('farmer1@example.com')).toHaveCount(0);
+
+	const context = await browser.newContext();
+	const farmer = await context.newPage();
+	await signInAs(farmer, FARMER1);
+	await expect(roleIn(farmer, SANDSPRUIT)).toHaveText('farmer');
+	await expect(farmer.getByRole('rowheader', { name: KLEINBERG, exact: true })).toHaveCount(0);
+	await expect(farmer.getByRole('rowheader', { name: DROEVLEI, exact: true })).toHaveCount(0);
+	await context.close();
 });

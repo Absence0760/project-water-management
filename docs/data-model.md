@@ -41,6 +41,8 @@ erDiagram
   app_user ||--o{ job : "acts as"
   project  ||--o{ data_feed : "scheduled feeds"
   app_user |o--o{ data_feed : "acts as (nullable)"
+  project_member ||--o{ farm_link : "farmer's farms"
+  node     ||--o{ farm_link : "linked farmers"
 ```
 
 ## Tables and their workbook origin
@@ -361,6 +363,7 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 
 | Role | Can |
 | --- | --- |
+| `farmer` | Read only the farms linked to them (`farm_link`), and leave. Nothing of the model, series or runs (§ Farmers, 019/020) |
 | `viewer` | Read the project, its model, series, runs and members |
 | `editor` | Everything a viewer can, plus change settings and model data, upload series, run the model, write a run's notes, delete runs |
 | `owner` | Everything an editor can, plus add/remove members, change roles, delete the project |
@@ -368,6 +371,66 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
+
+### Farmers (019_farmer_role.sql, 020_farm_scope.sql)
+
+A **farmer** (roadmap WP-2.1, issue #24; design
+[design/farmer-view.md](./design/farmer-view.md) §10) is a direct project
+member with the role `farmer`, linked to one or more farm nodes in
+`farm_link (project_id, node_id, user_id, added_by, added_at)`. A farm may
+have several farmers, and a farmer several farms, in any number of projects.
+Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
+[api.md](./api.md#farmers)).
+
+- **The role sorts below `viewer`** (`farmer < viewer < editor < owner`).
+  Every existing policy asks for `viewer` or above, so it refuses a farmer
+  without being touched: a table nobody wrote a farmer policy for stays closed
+  to farmers (fail closed). The backend's `requireRole` ranks it the same way,
+  so every route that asks for `viewer` answers a farmer `403`. Team roles
+  never map to `farmer`, and the effective role is the higher of the direct
+  and the team role, so a farmer who is also in the team is simply an editor
+  or viewer. `019` adds the value on its own because an enum value can't be
+  used in the transaction that added it.
+- **What a farmer reads** is added as extra permissive `SELECT` policies,
+  ORed with the viewer ones (`020`), through `app_farm_nodes(project)` (the
+  current user's linked nodes, `SECURITY DEFINER`):
+
+  | Table | A farmer may read |
+  | --- | --- |
+  | `project` | the row |
+  | `project_member` | their own row only, never the list (it holds neighbours' emails) |
+  | `node` | their linked farms, and the gauges; no other farm, not even its name, and no other water user |
+  | `crop_area`, `land_cover` | rows on their linked farms |
+  | `crop` | only the crops planted on their linked farms |
+  | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
+  | `farm_link` | their own links |
+  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no `run_series` (a farmer will read results only through a publication, WP-2.3), no invites, teams, jobs, feeds or evidence |
+
+  A farmer writes nothing: every write policy asks for `editor` or `owner`.
+- **A link needs a membership and goes with it**: `farm_link` has a foreign
+  key to `project_member (project_id, user_id) ON DELETE CASCADE`, so removing
+  a farmer, their leaving, or the project going removes their links, and a
+  deleted farm node takes its links with it. A save of the model keeps them
+  (nodes are upserted by id); a farm changed into a gauge or water user loses
+  them (trigger `node_unlink_farmers`), and the Network tab says so first. A trigger allows only `farm`
+  nodes and only members whose role is `farmer`; `assert_same_project` keeps
+  the node in the project.
+- **Anonymised context** (decision D1, option b): `app_farm_context(project,
+  node)` returns the number of farms upstream and downstream of a node and
+  the catchment's farm count, never ids or names, to a viewer or a user
+  linked to that node, and no row to anyone else.
+- **The aggregate rule** (decision D2): `app_other_farm_holders(project)`
+  counts the holders of the farms *not* linked to the current user, farms
+  linked to the same user counted once and an unlinked farm on its own. A
+  farmer-facing aggregate of farm quantities (totals, the even share) is shown
+  only when it is at least `k − 1` (`k = 5`, pending the client). One owner
+  holding three of five farms therefore can't read the other two's combined
+  figures.
+- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
+  and every `/projects/:id` route answering a farmer `400`/`403`), and a
+  catalogue test that every table with a node column has a farmer-aware
+  `SELECT` policy or is listed as never read by farmers (`run_series` until
+  WP-2.3).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
@@ -441,6 +504,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `project_import` (import reports): SELECT needs `viewer`; INSERT needs
   `owner`, as yourself, and only in the transaction that created the project;
   no UPDATE or DELETE for anyone (see § Import reports above).
+- Farmers (`farmer` role, 020): the extra farm-scoped `SELECT` policies of
+  § Farmers above; `farm_link`: viewers read every link, a farmer their own,
+  owners change them.
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

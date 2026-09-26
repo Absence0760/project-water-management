@@ -95,7 +95,7 @@ pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); r
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e)
 
-pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
+pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com), password demo-password
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run]
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
