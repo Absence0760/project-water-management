@@ -20,8 +20,8 @@ async function openAccount(page: import('@playwright/test').Page, displayName: s
 
 test('the account menu opens the account page, which renames the account', async ({ page, owner }) => {
 	await openAccount(page, owner.displayName);
-	await expect(page.getByRole('region', { name: 'Profile' })).toContainText(owner.email);
-	await expect(page.getByRole('region', { name: 'Profile' })).toContainText('Confirmed');
+	await expect(page.getByRole('region', { name: 'Account', exact: true })).toContainText(owner.email);
+	await expect(page.getByRole('region', { name: 'Account', exact: true })).toContainText('Confirmed');
 
 	// Save is only offered once the name differs.
 	const save = page.getByRole('button', { name: 'Save name' });
@@ -59,7 +59,7 @@ test('an unconfirmed address says so', async ({ page }) => {
 	const user = await register(page.context().request, 'Unconfirmed', { verified: false });
 	void user;
 	await page.goto('/account');
-	await expect(page.getByRole('region', { name: 'Profile' })).toContainText('Not confirmed');
+	await expect(page.getByRole('region', { name: 'Account', exact: true })).toContainText('Not confirmed');
 });
 
 test('changing the password keeps this device signed in and signs out another device', async ({ page, owner, browser }) => {
@@ -123,6 +123,61 @@ test('a wrong current password and a too-short new password are shown as errors'
 	await expect(page.getByLabel('New password', { exact: true })).toHaveAttribute('aria-invalid', 'true');
 	await expect(page.getByLabel('Repeat new password')).toHaveAccessibleDescription('Use at least 8 characters.');
 	await expect(current).not.toHaveAttribute('aria-invalid');
+});
+
+// Screen use (issue #17): the header says who you are; on a wide screen the
+// cards sit in two columns (Profile + Password, then Language and units +
+// Alert emails + Your data) and the page fits a 1440×960 window without
+// scrolling; on a phone they stack in one column; never a sideways scroll.
+test.describe('layout', () => {
+	const box = async (page: import('@playwright/test').Page, name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!;
+
+	test('two columns at 1440 × 960 that fit the window', async ({ page, owner }) => {
+		await page.setViewportSize({ width: 1440, height: 960 });
+		await page.goto('/account');
+		await expect(page.getByLabel('Display name')).toHaveValue(owner.displayName);
+		const head = page.getByRole('region', { name: 'Account', exact: true });
+		await expect(head).toContainText(owner.displayName);
+		await expect(head).toContainText(owner.email);
+
+		const profile = await box(page, 'Profile');
+		const password = await box(page, 'Password');
+		const prefs = await box(page, 'Language and units');
+		const alerts = await box(page, 'Alert emails');
+		const data = await box(page, 'Your data');
+		// Left column: Profile over Password; right column: the other three.
+		expect(Math.abs(password.x - profile.x)).toBeLessThan(1);
+		expect(password.y).toBeGreaterThan(profile.y);
+		expect(prefs.x).toBeGreaterThan(profile.x + profile.width);
+		expect(Math.abs(prefs.y - profile.y)).toBeLessThan(1);
+		expect(Math.abs(alerts.x - prefs.x)).toBeLessThan(1);
+		expect(Math.abs(data.x - prefs.x)).toBeLessThan(1);
+		// The two columns use the width: together they span most of the page beside the sidebar.
+		expect(prefs.x + prefs.width - profile.x).toBeGreaterThan(1000);
+		// Everything in view: no page scroll at all.
+		const { scrollH, innerH, scrollW, innerW } = await page.evaluate(() => ({
+			scrollH: document.documentElement.scrollHeight,
+			innerH: window.innerHeight,
+			scrollW: document.documentElement.scrollWidth,
+			innerW: window.innerWidth
+		}));
+		expect(scrollH).toBeLessThanOrEqual(innerH);
+		expect(scrollW).toBeLessThanOrEqual(innerW);
+	});
+
+	test('one column on a phone, with no sideways scroll', async ({ page, owner }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto('/account');
+		await expect(page.getByLabel('Display name')).toHaveValue(owner.displayName);
+		const order = ['Profile', 'Password', 'Language and units', 'Alert emails', 'Your data'];
+		const boxes = await Promise.all(order.map((n) => box(page, n)));
+		for (let i = 1; i < boxes.length; i++) {
+			expect(Math.abs(boxes[i]!.x - boxes[0]!.x)).toBeLessThan(1);
+			expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y + boxes[i - 1]!.height - 1);
+		}
+		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+		expect(overflow).toBeLessThanOrEqual(0);
+	});
 });
 
 // axe on /account in both themes, at desktop and phone width, with the error state and the open menu.
