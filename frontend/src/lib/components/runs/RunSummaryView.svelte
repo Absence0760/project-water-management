@@ -1,9 +1,3 @@
-<script module lang="ts">
-	// Land cover, groundwater and other users' tables: a separate chunk (HumanImpactTables.svelte).
-	// Exported so the printable report can load it before it says it is ready.
-	export const loadHumanImpacts = () => import('./HumanImpactTables.svelte');
-</script>
-
 <script lang="ts">
 	// Headline numbers, calibration fit and the per-farm table of one run.
 	import type { RunSummary } from '@water-management/engine';
@@ -15,6 +9,7 @@
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
+	import { loadHumanImpacts } from './humanImpacts';
 
 	let {
 		summary,

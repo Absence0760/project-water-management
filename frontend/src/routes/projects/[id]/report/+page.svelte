@@ -28,7 +28,8 @@
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
-	import RunSummaryView, { loadHumanImpacts } from '$lib/components/runs/RunSummaryView.svelte';
+	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
+	import { loadHumanImpacts } from '$lib/components/runs/humanImpacts';
 	import { runSentence } from '$lib/components/runs/runSentence';
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
