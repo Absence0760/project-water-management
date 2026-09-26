@@ -285,7 +285,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -344,6 +344,8 @@ function runNetwork(
 		}
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
+		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
+		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
 		if (node.kind === 'user') {
 			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
 			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
@@ -600,6 +602,7 @@ function runNetwork(
 				groundwaterToDam: r.groundwaterToDam,
 				depletion: r.depletion,
 				storage: r.storage,
+				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -697,8 +700,11 @@ function runPlausibility(r: {
 		const w = sim.workings?.[i];
 		if (!w || plan.nodes[i]!.kind !== 'farm') continue;
 		const q = sim.nodes[i]!.storage;
+		const set = sim.nodes[i]!.storageSet;
 		let prev = plan.nodes[i]!.initialStorageM3;
 		for (let t = 0; t < days; t++) {
+			// The storage reset's step (engine ≥ 0.46.0) is no water the dams took from the river.
+			if (set) prev += set[t]!;
 			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
 			prev = q[t]!;
 		}
@@ -744,6 +750,7 @@ export function buildNetworkPlan(
 	start?: number
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology> } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
+	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
 	const factorFrom = start === undefined ? 0 : demandFactorStart(settings.demandFactorFrom, start, days);
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
@@ -831,6 +838,7 @@ export function buildNetworkPlan(
 	}
 
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom);
+	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 
@@ -846,6 +854,7 @@ export function buildNetworkPlan(
 		month,
 		naturalFlow: natural,
 		ewr,
+		...(reset ? { storageResetDay: reset.day } : {}),
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
@@ -870,11 +879,50 @@ export function buildNetworkPlan(
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
-				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
+				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
+				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
 			};
 		})
 	};
 	return { plan, topo };
+}
+
+/**
+ * settings.damStorageReset (engine ≥ 0.46.0, issue #53 R6, docs/model.md
+ * §2.15a) resolved against the run: its day and, per farm dam listed, the
+ * storage it starts that day with (clamped to 0 … capacity). A date outside
+ * the run, a node that isn't a farm with a dam and a value that isn't a
+ * number are left out with a warning; null when nothing is left.
+ */
+function storageResetOf(
+	reset: ProjectSettings['damStorageReset'],
+	nodes: ModelInput['model']['nodes'],
+	start: number,
+	days: number,
+	warnings: string[]
+): { day: number; byNode: Map<number, number> } | null {
+	if (!reset) return null;
+	const day = toEpochDay(reset.date) - start;
+	if (day < 0 || day >= days) {
+		warnings.push(`damStorageReset: ${reset.date} is outside the run; ignored`);
+		return null;
+	}
+	const byNode = new Map<number, number>();
+	for (const [id, v] of Object.entries(reset.storageM3)) {
+		const i = nodes.findIndex((n) => n.id === id);
+		const n = nodes[i];
+		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) {
+			warnings.push(`damStorageReset: "${id}" is not a farm with a dam; ignored`);
+			continue;
+		}
+		if (typeof v !== 'number' || !Number.isFinite(v)) {
+			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
+			continue;
+		}
+		if (v < 0 || v > n.damCapacityM3) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${n.damCapacityM3} m³; clamped`);
+		byNode.set(i, Math.min(Math.max(v, 0), n.damCapacityM3));
+	}
+	return byNode.size ? { day, byNode } : null;
 }
 
 // ---------------------------------------------------------------------------
