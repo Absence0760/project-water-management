@@ -31,7 +31,9 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 		const g = s.gr4j;
 		rows.push(['GR4J parameters', `X1 ${fmtNum(g.x1, 1, true)} mm · X2 ${fmtNum(g.x2, 2, true)} mm/day · X3 ${fmtNum(g.x3, 1, true)} mm · X4 ${fmtNum(g.x4, 2, true)} days · warm-up ${fmtNum(g.warmupDays)} days`]);
 		// Engine ≥ 0.31.0 (issue #39); a snapshot without it ran on pan coefficient × A-pan.
-		rows.push(['GR4J potential evaporation', peText(s.pe)]);
+		// Engine ≥ 0.31.1: under pan × A-pan, where the pan-coefficient row came from, when noted.
+		const kpSource = s.pe?.kind !== 'monthly' && s.panCoefficientSource ? ` (pan coefficient: ${s.panCoefficientSource})` : '';
+		rows.push(['GR4J potential evaporation', peText(s.pe) + kpSource]);
 	}
 	rows.push(
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],

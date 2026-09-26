@@ -213,6 +213,8 @@ export interface FitRecord {
 		chirpsSource?: SeriesProvenance | null;
 		rainSource?: RainSourcePeriod[];
 		pe?: PeInput;
+		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
+		panCoefficientSource?: string;
 	};
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
@@ -241,6 +243,7 @@ export interface FitContext {
 		rainSource?: RainSourcePeriod[];
 		/** GR4J's PE input (engine ≥ 0.31.0); absent = `{ kind: 'pan' }`. */
 		pe?: PeInput | null;
+		panCoefficientSource?: string;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -285,7 +288,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(r.chirpsFactors !== undefined ? { chirpsFactors: structuredClone(r.chirpsFactors) } : {}),
 			...(ctx.chirpsSource !== undefined ? { chirpsSource: ctx.chirpsSource ? { ...ctx.chirpsSource } : null } : {}),
 			rainSource: structuredClone(ctx.settings.rainSource ?? []),
-			pe: structuredClone(resolvePe(ctx.settings.pe, []))
+			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
+			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {})
 		},
 		splitSample: r.splitSample,
 		differential: r.differential,

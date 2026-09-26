@@ -23,7 +23,10 @@ test('a run lists the CHIRPS factors it applied, and Settings can turn the corre
 	await page.getByLabel(/^Run label/).fill('Corrected');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Corrected' })).toBeVisible();
-	const note = page.getByRole('status').getByRole('listitem').filter({ hasText: 'CHIRPS rain bias-corrected' });
+	// A note on how the input data were handled: folded away under the warnings to check (runs/credibility.ts).
+	const dataNotes = page.getByTestId('warnings-data');
+	await dataNotes.getByText(/notes? on how the input data were handled/).click();
+	const note = dataNotes.getByRole('listitem').filter({ hasText: 'CHIRPS rain bias-corrected' });
 	await expect(note).toContainText('on 30 days where catchment rain is blank');
 	await expect(note).toContainText('Oct 2.00 (pooled), Nov 2.00 (pooled)');
 

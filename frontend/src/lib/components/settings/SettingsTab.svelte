@@ -180,10 +180,13 @@
 		if (!open) s.gr4j.x2 = 0;
 	}
 
-	/** Fills panCoefficient with a preset's values (still editable after); doesn't store which preset was picked. */
+	/** Fills panCoefficient with a preset's values (still editable after), and its source note with the preset's name. */
 	function applyPanPreset(id: string) {
 		const preset = PAN_COEFFICIENT_PRESETS.find((p) => p.id === id);
-		if (preset) s.panCoefficient = [...preset.values];
+		if (preset) {
+			s.panCoefficient = [...preset.values];
+			s.panCoefficientSource = `${preset.label} preset: ${PAN_COEFFICIENT_PRESET_SOURCE}`;
+		}
 		panPreset = '';
 	}
 
@@ -545,13 +548,18 @@
 						<option value="">Choose a preset…</option>
 						{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
 					</select>
-					<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; nothing is stored about which preset was picked. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
+					<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; the source note below records which preset. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
 				</div>
 				{#if !readonly}
 					<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; code-split, it is collapsed until opened. -->
 					<Lazy load={loadPanHelper}>
 						{#snippet children(PanCoefficientHelper)}
-							<PanCoefficientHelper onapply={(v: number[]) => (s.panCoefficient = [...v] as typeof s.panCoefficient)} />
+							<PanCoefficientHelper
+								onapply={(v: number[], note: string) => {
+									s.panCoefficient = [...v] as typeof s.panCoefficient;
+									s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
+								}}
+							/>
 						{/snippet}
 					</Lazy>
 				{/if}
@@ -574,6 +582,19 @@
 					</table>
 				</div>
 				<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
+				<div class="field pan-source">
+					<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" /></span>
+					<input
+						id="st-pan-source"
+						readonly={readonly}
+						maxlength={PE_SOURCE_MAX}
+						value={s.panCoefficientSource ?? ''}
+						placeholder="e.g. FAO-56 Table 5, Case A, 10 m fetch; RH and wind from a nearby station"
+						aria-describedby="st-pan-source-h"
+						oninput={(e) => (s.panCoefficientSource = e.currentTarget.value)}
+					/>
+					<span class="hint" id="st-pan-source-h">Optional: where the row comes from. A preset or the FAO-56 helper fills it; it is recorded with each fit and run, and changing it alone doesn't mark a fit's forcing as changed.</span>
+				</div>
 				{#if panOutOfRange.length}
 					<p class="alert alert-warning small" role="status">
 						Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
@@ -1123,11 +1144,13 @@
 	.pe-annual {
 		margin: 0.3rem 0 0;
 	}
-	.pe-source {
+	.pe-source,
+	.pan-source {
 		max-width: 40rem;
 		margin-top: 0.5rem;
 	}
-	.pe-source input {
+	.pe-source input,
+	.pan-source input {
 		width: 100%;
 	}
 	.check {

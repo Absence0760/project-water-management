@@ -102,7 +102,9 @@ The page has these sections, top to bottom:
    120 mm (1,105 → 1,115 mm/yr)"), or "changed in N months" when more than
    three did. A reworded source is listed too ("source "…" → "…""), since it
    is part of the run's record. A run saved before 0.31.0 has no `pe` and
-   compares as pan coefficient × A-pan.
+   compares as pan coefficient × A-pan. A changed pan-coefficient source
+   note (`panCoefficientSource`, engine ≥ 0.31.1) is its own line, **Pan
+   coefficient source**, reading "none" where a run has none.
 3. **Headline results.** A **Water balance** table (total irrigation supplied
    and deficit, share of demand supplied, farms below 95 % supplied, EWR days
    not met and their share, mean outflow and natural flow, the runoff
