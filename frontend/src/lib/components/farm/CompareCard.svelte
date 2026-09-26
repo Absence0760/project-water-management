@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.compare -->
 <script lang="ts">
 	// "Compared with last season" (design §3 Q1, E4): the same dates a year
 	// earlier, from the same published run.
@@ -10,7 +11,7 @@
 </script>
 
 <section class="card" aria-labelledby="cmp-h">
-	<h2 id="cmp-h">{t('farm.compare.title')}</h2>
+	<h2 id="cmp-h">{t('Compared with last season')}</h2>
 	{#if vm.available}
 		<table>
 			<thead>

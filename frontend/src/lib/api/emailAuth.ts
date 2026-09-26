@@ -2,7 +2,7 @@
 // § Auth, § Members, § Teams). Kept beside client.ts rather than inside it so
 // it can land without touching the shared client; it goes through the same
 // `request`, so errors are the usual ApiError.
-import type { MessageKey } from '$lib/i18n/messages/en';
+import { msg, type Msg } from '$lib/i18n/msg';
 import type { Api } from './client';
 import type { AddMemberResult, Invite, InviteInfo, Member, Role, TeamMember, TeamRole } from './types';
 
@@ -58,12 +58,13 @@ export function linkToken(url: URL, param: 'token' | 'invite' = 'token'): string
 
 /**
  * Password rule shared with the server (8–200 characters). Returns the
- * message's catalogue key (the caller words it with `t`), so this module,
- * which the workspace uses too, never loads the catalogue.
+ * English message (the translated pages word it with `t`), so this module,
+ * which the workspace uses too, never loads the message code.
  */
-export function passwordProblem(password: string, confirm: string): MessageKey | null {
-	if (password.length < 8) return 'password.tooShort';
-	if (password.length > 200) return 'password.tooLong';
-	if (password !== confirm) return 'password.mismatch';
+export function passwordProblem(password: string, confirm: string): Msg | null {
+	// i18n-section: password
+	if (password.length < 8) return msg('Use at least 8 characters.');
+	if (password.length > 200) return msg('Use at most 200 characters.');
+	if (password !== confirm) return msg('The two passwords don’t match.');
 	return null;
 }

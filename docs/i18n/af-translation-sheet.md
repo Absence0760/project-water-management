@@ -4,17 +4,19 @@
 
 Every string a farmer can see in the app that has no reviewed Afrikaans yet (roadmap WP-2.5). Until a string
 is translated, the app shows it in English. Please fill in the **Afrikaans** column and send the sheet back;
-a developer copies each line into the catalogue, and the line then leaves this sheet.
+a developer copies each line into the catalogue by its **Id**, and the line then leaves this sheet.
+A site string's id is made from its English: if the English changes, the string comes back with a new id.
 
 How to write the Afrikaans:
 
 - Keep every `{name}` placeholder as it is (the app fills it in: a number, a date, a farm name). You may move it.
 - Keep `**` round the words that should stay bold.
-- Keys ending in `.one` / `.other` are the singular and plural of one word; `.two` / `.few` are ordinal forms.
+- Ids ending in `.one` / `.other` are the singular and plural of one word; `.two` / `.few` are ordinal forms.
+- A row whose context starts **Meaning:** has English that means something else elsewhere; each has its own row, so they can be worded differently.
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-618 strings: 524 on the site, 70 in emails, 24 in the glossary.
+604 strings: 510 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -22,847 +24,833 @@ How to write the Afrikaans:
 
 Words used on several pages (buttons, field labels, the page title in the browser tab).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `common.language` | Language |  |  |
-| `common.languageSaveFailed` | Couldn’t save your choice to your account. It applies on this device. |  |  |
-| `common.tryAgain` | Try again |  |  |
-| `common.signIn` | Sign in |  |  |
-| `common.signOut` | Sign out |  |  |
-| `common.email` | Email |  |  |
-| `common.password` | Password |  |  |
-| `common.displayName` | Display name |  |  |
-| `common.newPassword` | New password |  |  |
-| `common.repeatNewPassword` | Repeat new password |  |  |
-| `common.sending` | Sending… |  |  |
-| `common.saving` | Saving… |  |  |
-| `common.goToProjects` | Go to your projects |  |  |
-| `common.backToProjects` | Back to your projects |  |  |
-| `common.backToSignIn` | Back to sign in |  |  |
-| `common.and` | and | Joins the last two items of a list: “Nov and Dec”. |  |
-| `common.pageTitle` | {page} · Water Management | The browser tab title; {page} is the page’s own name. Keep: {page} |  |
+| `967aa5dd` | Sending… |  |  |
+| `184e3db0` | Your dam |  |  |
+| `66acb5e9` | Show the numbers |  |  |
+| `a8761ba5` | Month |  |  |
+| `ebbd21ba` | Choose your alert emails |  |  |
+| `eea9510d` | My farm |  |  |
+| `874e0640` | What do these words mean? |  |  |
+| `8b4f3c70` | Sign out |  |  |
+| `213e90fa` | Try again |  |  |
+| `19024a1a` | Next update expected around {date}. | Added after the dates line. Keep: {date} |  |
+| `82c3a5ec` | No restriction from the WUA |  |  |
+| `d50e04d5` | not available |  |  |
+| `b5bdd13c` | You |  |  |
+| `1062f5ed` | A former member |  |  |
+| `74119e7f` | Saving… |  |  |
+| `0f29c2a6` | and | Joins the last two items of a list: “Nov and Dec”. |  |
+| `9a73db9b` | Language |  |  |
+| `9883f14f` | Couldn’t save your choice to your account. It applies on this device. |  |  |
+| `bcf9b210` | You’re not signed in. Sign in and try again. |  |  |
+| `753da152` | Wrong email or password. |  |  |
+| `ee4b7db1` | Your current password is wrong. |  |  |
+| `96d7c65d` | {page} · Water Management | The browser tab title; {page} is the page’s own name. Keep: {page} |  |
+| `43352167` | Email |  |  |
+| `4e167b8c` | Display name |  |  |
+| `ae0ab8fe` | Saved. |  |  |
+| `ef1f00de` | Alert emails |  |  |
+| `3a253624` | Once {email} can receive email again, turn alert emails back on. Your choices are kept. | Keep: {email} |  |
+| `8a32f572` | Turning them back on… |  |  |
+| `41c28629` | Turn alert emails back on |  |  |
+| `d01ae81a` | Alert emails are back on. |  |  |
+| `2cc30838` | Password |  |  |
+| `6a3aaab2` | New password |  |  |
+| `b8f627b1` | Repeat new password |  |  |
+| `299fd967` | {page} · My farm | The browser tab title; {page} is the farm’s name or the page’s own name. Keep: {page} |  |
+| `744be623` | Sign in |  |  |
+| `67674c65` | Create one |  |  |
+| `d3b436ab` | Go to your projects |  |  |
+| `02ef5686` | Send a new link |  |  |
+| `5b46b440` | Back to your projects |  |  |
 
 ### password
 
 Password rules, shown under a password field when the password is not accepted.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `password.tooShort` | Use at least 8 characters. |  |  |
-| `password.tooLong` | Use at most 200 characters. |  |  |
-| `password.mismatch` | The two passwords don’t match. |  |  |
+| `5aa9fe2a` | Use at least 8 characters. |  |  |
+| `bb72711c` | Use at most 200 characters. |  |  |
+| `d62a92b9` | The two passwords don’t match. |  |  |
 
 ### auth
 
 The sign-in pages: the brand panel beside every sign-in form.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `auth.brandLabel` | About Water Management |  |  |
-| `auth.brandHeading` | Catchment water balance, from rainfall to river. |  |  |
-| `auth.brandPoint1` | Model farms, dams and transfers on a river network. |  |  |
-| `auth.brandPoint2` | Run 40+ years of daily flows in seconds. |  |  |
-| `auth.brandPoint3` | Check the environmental flow requirement (EWR) against every farm’s use. | EWR is the modeller’s word; this panel is shown to everyone who signs in. |  |
+| `a156f424` | About Water Management |  |  |
+| `7b2abdbd` | Catchment water balance, from rainfall to river. |  |  |
+| `d8aeaac5` | Model farms, dams and transfers on a river network. |  |  |
+| `b386da9a` | Run 40+ years of daily flows in seconds. |  |  |
+| `65909895` | Check the environmental flow requirement (EWR) against every farm’s use. | EWR is the modeller’s word; this panel is shown to everyone who signs in. |  |
 
 ### login
 
 The sign-in page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `login.subtitle` | Welcome back. Sign in to your catchment projects. |  |  |
-| `login.forgot` | Forgot password? |  |  |
-| `login.busy` | Signing in… |  |  |
-| `login.noAccount` | No account? |  |  |
-| `login.createOne` | Create one |  |  |
-| `login.wrong` | Wrong email or password. |  |  |
+| `0650eb3f` | Welcome back. Sign in to your catchment projects. |  |  |
+| `e2619568` | Forgot password? |  |  |
+| `1a982eaf` | Signing in… |  |  |
+| `07494a6a` | No account? |  |  |
 
 ### register
 
 The create-an-account page, including an emailed invitation (from the WUA or a colleague).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `register.title` | Create an account |  |  |
-| `register.titleInvite` | Accept your invitation |  |  |
-| `register.subtitle` | Model your own catchments, or join a team’s. |  |  |
-| `register.pageTitle` | Create account |  |  |
-| `register.targetProject` | the project {name} | Keep: {name} |  |
-| `register.targetTeam` | the team {name} | Keep: {name} |  |
-| `register.checking` | Checking your invitation… |  |  |
-| `register.invitedYou` | **{inviter}** invited you to **{target}**. | Keep: {inviter}, {target} |  |
-| `register.joinNow` | Create your account to join. You’ll have access straight away. |  |  |
-| `register.deadLink` | This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an account — then ask whoever invited you to add you again. |  |  |
-| `register.checkFailed` | We couldn’t check your invitation right now. You can still create an account; you’ll join once your email address is confirmed. |  |  |
-| `register.emailHintInvite` | The invitation was sent to this address. To use another, ask {inviter} to invite that one instead. | Keep: {inviter} |  |
-| `register.emailHint` | Colleagues add you to teams and projects by this address. |  |  |
-| `register.passwordHint` | At least 8 characters. A short passphrase works well. |  |  |
-| `register.passwordLength` | Password must be 8–200 characters. |  |  |
-| `register.busy` | Creating… |  |  |
-| `register.submit` | Create account |  |  |
-| `register.submitInvite` | Create account and join |  |  |
-| `register.already` | Already registered? |  |  |
-| `register.signedInTitle` | You’re already signed in |  |  |
-| `register.signedInAs` | Signed in as **{email}**. | Keep: {email} |  |
-| `register.checkingThis` | Checking the invitation… |  |  |
-| `register.invitedThis` | **{inviter}** invited this address to **{target}**. | Keep: {inviter}, {target} |  |
-| `register.confirmedAlready` | Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask {inviter} to add you again. | Keep: {inviter}, {target} |  |
-| `register.joinOnConfirm` | You’ll join as soon as you confirm your email address: use the link we sent to {email}. | Keep: {email} |  |
-| `register.resend` | Resend confirmation email |  |  |
-| `register.resent` | Sent. Check your inbox (and spam folder) for the confirmation link. |  |  |
-| `register.alreadyConfirmed` | Your address is already confirmed. |  |  |
-| `register.otherAddress` | This invitation to **{target}** is for **{email}**, not the account you’re signed in with. | Keep: {email}, {target} |  |
-| `register.otherAddressHelp` | To accept it, sign out and create an account for {email}. To use this account instead, ask {inviter} to invite {me}. | {me} is the address of the account that is signed in. Keep: {email}, {inviter}, {me} |  |
-| `register.signingOut` | Signing out… |  |  |
-| `register.signOutAccept` | Sign out and accept as {email} | Keep: {email} |  |
-| `register.stay` | Stay signed in and go to your projects |  |  |
-| `register.checkFailedSignedIn` | We couldn’t check this invitation right now. Try the link again later. |  |  |
-| `register.deadLinkSignedIn` | This invitation link is invalid, was revoked, or has expired (they last 7 days). Ask whoever invited you to send a new one. |  |  |
-| `register.notYou` | Not you? |  |  |
+| `3aff6ef6` | Sent. Check your inbox (and spam folder) for the confirmation link. |  |  |
+| `fe63a2c7` | Your address is already confirmed. |  |  |
+| `4b568eda` | the project {name} | Keep: {name} |  |
+| `bbe4f51e` | the team {name} | Keep: {name} |  |
+| `fe087f11` | Password must be 8–200 characters. |  |  |
+| `c91c4fa3` | Create account | Meaning: page title. The same English elsewhere has its own row. |  |
+| `3fe0bfdd` | You’re already signed in |  |  |
+| `4084a860` | Signed in as **{email}**. | Keep: {email} |  |
+| `606b0a25` | Checking the invitation… |  |  |
+| `15014a63` | **{inviter}** invited this address to **{target}**. | Keep: {inviter}, {target} |  |
+| `183e62a9` | Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask {inviter} to add you again. | Keep: {inviter}, {target} |  |
+| `adf70fb7` | You’ll join as soon as you confirm your email address: use the link we sent to {email}. | Keep: {email} |  |
+| `8417462b` | Resend confirmation email |  |  |
+| `a33d5294` | This invitation to **{target}** is for **{email}**, not the account you’re signed in with. | Keep: {email}, {target} |  |
+| `d7e05349` | To accept it, sign out and create an account for {email}. To use this account instead, ask {inviter} to invite {me}. | {me} is the address of the account that is signed in. Keep: {email}, {inviter}, {me} |  |
+| `53ed2592` | Signing out… |  |  |
+| `f5eed39b` | Sign out and accept as {email} | Keep: {email} |  |
+| `7882be4a` | Stay signed in and go to your projects |  |  |
+| `d0bf5972` | We couldn’t check this invitation right now. Try the link again later. |  |  |
+| `1f58c58c` | This invitation link is invalid, was revoked, or has expired (they last 7 days). Ask whoever invited you to send a new one. |  |  |
+| `03c04bca` | Not you? |  |  |
+| `4252753f` | Accept your invitation |  |  |
+| `d7f6c093` | Create an account |  |  |
+| `23534e88` | Model your own catchments, or join a team’s. |  |  |
+| `6422c1b3` | Checking your invitation… |  |  |
+| `dae1dc58` | **{inviter}** invited you to **{target}**. | Keep: {inviter}, {target} |  |
+| `4747998e` | Create your account to join. You’ll have access straight away. |  |  |
+| `d2b77b57` | This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an account — then ask whoever invited you to add you again. |  |  |
+| `bb9d18b6` | We couldn’t check your invitation right now. You can still create an account; you’ll join once your email address is confirmed. |  |  |
+| `ece15e61` | The invitation was sent to this address. To use another, ask {inviter} to invite that one instead. | Keep: {inviter} |  |
+| `e08e5750` | Colleagues add you to teams and projects by this address. |  |  |
+| `73c4cd8e` | At least 8 characters. A short passphrase works well. |  |  |
+| `1aa1a030` | Creating… |  |  |
+| `eda60971` | Create account and join |  |  |
+| `50dc6622` | Create account |  |  |
+| `0fa8342a` | Already registered? |  |  |
 
 ### forgot
 
 The forgot-password page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `forgot.title` | Reset your password |  |  |
-| `forgot.titleSent` | Check your email |  |  |
-| `forgot.subtitle` | Enter the email address you signed up with and we’ll send you a link to choose a new password. |  |  |
-| `forgot.sentTo` | If there is an account for **{email}**, we’ve emailed it a link to choose a new password. | Keep: {email} |  |
-| `forgot.sentHelp` | The link works once and expires in 1 hour. Check your spam folder if it doesn’t arrive in a few minutes. |  |  |
-| `forgot.otherAddress` | Use a different address |  |  |
-| `forgot.submit` | Send reset link |  |  |
-| `forgot.remembered` | Remembered it? |  |  |
+| `42f0a3dc` | Reset your password |  |  |
+| `26eb828a` | Check your email |  |  |
+| `7d035662` | Enter the email address you signed up with and we’ll send you a link to choose a new password. |  |  |
+| `2715f554` | If there is an account for **{email}**, we’ve emailed it a link to choose a new password. | Keep: {email} |  |
+| `e89fdeca` | The link works once and expires in 1 hour. Check your spam folder if it doesn’t arrive in a few minutes. |  |  |
+| `9cc79b0e` | Use a different address |  |  |
+| `e10f2988` | Send reset link |  |  |
+| `3bf754b9` | Remembered it? |  |  |
 
 ### reset
 
 The choose-a-new-password page (opened from the reset email).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `reset.title` | Choose a new password |  |  |
-| `reset.subtitle` | Pick a password you don’t use anywhere else. |  |  |
-| `reset.done` | Your password has been changed and you’ve been signed out everywhere. Sign in with your new password. |  |  |
-| `reset.dead` | This reset link is invalid, already used, or older than 1 hour. |  |  |
-| `reset.newLink` | Send a new link |  |  |
-| `reset.signedIn` | You’re signed in as **{email}**. Setting a new password signs this browser out too. | Keep: {email} |  |
-| `reset.hint` | At least 8 characters. Changing it signs you out on every device. |  |  |
-| `reset.submit` | Set new password |  |  |
+| `042e1946` | Choose a new password |  |  |
+| `87daf9cc` | Pick a password you don’t use anywhere else. |  |  |
+| `ff89913b` | Your password has been changed and you’ve been signed out everywhere. Sign in with your new password. |  |  |
+| `67cb9269` | This reset link is invalid, already used, or older than 1 hour. |  |  |
+| `eedbdfff` | You’re signed in as **{email}**. Setting a new password signs this browser out too. | Keep: {email} |  |
+| `8c040ccc` | At least 8 characters. Changing it signs you out on every device. |  |  |
+| `4a62d996` | Set new password |  |  |
+| `5b7ba2af` | Back to sign in |  |  |
 
 ### verify
 
 The confirm-your-email page (opened from the confirmation email).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `verify.title` | Confirm your email |  |  |
-| `verify.working` | Confirming your email address… |  |  |
-| `verify.doneSignedIn` | Thanks — **{email}** is confirmed. Any projects or teams you were invited to are now in your list. | Keep: {email} |  |
-| `verify.doneSignedOut` | Thanks — your email address is confirmed. Sign in to see any projects or teams you were invited to. |  |  |
-| `verify.dead` | This confirmation link is invalid, already used, or older than 48 hours. |  |  |
-| `verify.newLink` | Send a new link |  |  |
-| `verify.sentNew` | We’ve sent a new link to {email}. | Keep: {email} |  |
-| `verify.yourAddress` | your address |  |  |
-| `verify.signInToResend` | Sign in and use **Resend email** in the banner at the top of the page to get a new link. |  |  |
-| `verify.noAccount` | No account yet? |  |  |
-| `verify.createOne` | Create one |  |  |
+| `c77d6547` | We’ve sent a new link to {email}. | Keep: {email} |  |
+| `9fbfb0f6` | your address |  |  |
+| `62aee4d2` | Confirm your email |  |  |
+| `14532712` | Confirming your email address… |  |  |
+| `313d15b2` | Thanks — **{email}** is confirmed. Any projects or teams you were invited to are now in your list. | Keep: {email} |  |
+| `43343d8b` | Thanks — your email address is confirmed. Sign in to see any projects or teams you were invited to. |  |  |
+| `44951451` | This confirmation link is invalid, already used, or older than 48 hours. |  |  |
+| `b2820f54` | Sign in and use **Resend email** in the banner at the top of the page to get a new link. |  |  |
+| `d6cf81c0` | No account yet? |  |  |
 
 ### banner
 
 The strip at the top of every page until the email address is confirmed.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `banner.label` | Email confirmation |  |  |
-| `banner.text` | Please confirm your email address. We sent a link to | Followed by the email address in bold. |  |
-| `banner.resend` | Resend email |  |  |
-| `banner.dismiss` | Dismiss |  |  |
-| `banner.sent` | Sent — check your inbox (and spam folder). |  |  |
+| `beb2912f` | Sent — check your inbox (and spam folder). |  |  |
+| `307ccd54` | Email confirmation |  |  |
+| `1ec5e7a0` | Please confirm your email address. We sent a link to | Followed by the email address in bold. |  |
+| `329d64e6` | Resend email |  |  |
+| `265915f3` | Dismiss |  |  |
 
 ### account
 
 The account page: name, language and units, password.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `account.title` | Account |  |  |
-| `account.profile` | Profile |  |  |
-| `account.status` | Status |  |  |
-| `account.confirmed` | Confirmed |  |  |
-| `account.notConfirmed` | Not confirmed |  |  |
-| `account.notConfirmedHelp` | Use the link we emailed you. The banner above can send it again. |  |  |
-| `account.nameHint` | Shown to people you share projects and teams with. |  |  |
-| `account.nameEmpty` | Enter a display name. |  |  |
-| `account.nameTooLong` | Use at most 100 characters. |  |  |
-| `account.saveName` | Save name |  |  |
-| `account.nameSaved` | Name saved. |  |  |
-| `account.preferences` | Language and units |  |  |
-| `account.languageHint` | Your farm pages, the sign-in pages and the emails we send you use this language. |  |  |
-| `account.unit` | Volumes on your farm pages |  |  |
-| `account.unitM3` | Cubic metres (m³) |  |  |
-| `account.unitML` | Megalitres (ML) |  |  |
-| `account.unitSaved` | Saved. |  |  |
-| `account.password` | Password |  |  |
-| `account.passwordIntro` | Changing your password signs you out on every other device. This browser stays signed in. |  |  |
-| `account.currentPassword` | Current password |  |  |
-| `account.currentEmpty` | Enter your current password. |  |  |
-| `account.currentWrong` | Your current password is wrong. |  |  |
-| `account.passwordHint` | At least 8 characters. |  |  |
-| `account.changing` | Changing… |  |  |
-| `account.change` | Change password |  |  |
-| `account.changed` | Password changed. Every other device has been signed out. |  |  |
-| `account.alerts` | Alert emails |  |  |
-| `account.alertsHint` | Choose which alerts you get by email, and how often. |  |  |
-| `account.alertsLink` | Choose your alert emails |  |  |
-| `account.data` | Your data |  |  |
-| `account.dataHint` | Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file. |  |  |
-| `account.dataDownload` | Download my data |  |  |
-| `account.dataDownloading` | Preparing… |  |  |
-| `account.dataDone` | Your data has been downloaded. |  |  |
+| `a7f2031b` | Enter a display name. |  |  |
+| `c5951029` | Use at most 100 characters. |  |  |
+| `f555922c` | Enter your current password. |  |  |
+| `59f8a2fc` | Account |  |  |
+| `cd17328e` | Profile |  |  |
+| `005ef20f` | Status |  |  |
+| `382d99ae` | Confirmed |  |  |
+| `6cef8c0f` | Not confirmed |  |  |
+| `5c3e0092` | Use the link we emailed you. The banner above can send it again. |  |  |
+| `5eaf8d89` | Shown to people you share projects and teams with. |  |  |
+| `7692acbb` | Save name |  |  |
+| `6c898a5d` | Name saved. |  |  |
+| `65eef061` | Language and units |  |  |
+| `a2fc07cd` | Your farm pages, the sign-in pages and the emails we send you use this language. |  |  |
+| `93a111b0` | Volumes on your farm pages |  |  |
+| `66535c7a` | Cubic metres (m³) |  |  |
+| `7b231e72` | Megalitres (ML) |  |  |
+| `8c942903` | Choose which alerts you get by email, and how often. |  |  |
+| `0819f3fe` | Your data |  |  |
+| `745aefa7` | Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file. |  |  |
+| `bf0c7feb` | Preparing… |  |  |
+| `7247e23b` | Download my data |  |  |
+| `a51c54d9` | Your data has been downloaded. |  |  |
+| `a7a7cd70` | Changing your password signs you out on every other device. This browser stays signed in. |  |  |
+| `8eedf1f3` | Current password |  |  |
+| `28fdf9ef` | At least 8 characters. |  |  |
+| `e0345c10` | Changing… |  |  |
+| `87f6bf6e` | Change password |  |  |
+| `12bb2549` | Password changed. Every other device has been signed out. |  |  |
 
 ### farm
 
 The farm view (a farmer’s own farm, on a phone). Plain words for farmers; see docs/design/farmer-view.md §5.1 for the words to use and to avoid.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.myFarm` | My farm |  |  |
-| `farm.myFarms` | My farms |  |  |
-| `farm.yourFarm` | Your farm |  |  |
-| `farm.yourFarms` | Your farms |  |  |
-| `farm.pageTitle` | {page} · My farm | The browser tab title; {page} is the farm’s name or the page’s own name. Keep: {page} |  |
-| `farm.menu` | Menu |  |  |
-| `farm.words` | What do these words mean? |  |  |
-| `farm.noCopy` | Don’t keep a copy on this phone |  |  |
-| `farm.keepOn` | Your figures will be kept on this phone. |  |  |
-| `farm.keepOff` | Nothing is kept on this phone now. |  |  |
-| `farm.preview` | You’re previewing {farm} as its farmer sees it | Keep: {farm} |  |
-| `farm.backToWorkspace` | Back to the workspace |  |  |
-| `farm.stampTime` | {time} on {date} | “07:42 on 19 Jan 2024”. Keep: {date}, {time} |  |
-| `farm.perDay` | {amount} a day | {amount} is a volume with its unit: “121 m³”. Keep: {amount} |  |
-| `farm.span` | {from} to {to} | Two dates: “1 Oct to 10 Jan”. Keep: {from}, {to} |  |
-| `farm.notAvailable` | not available |  |  |
-| `farm.disclaimer` | These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction. |  |  |
+| `c98e5cb5` | Your figures will be kept on this phone. |  |  |
+| `6b7e2e01` | Nothing is kept on this phone now. |  |  |
+| `00c6075a` | Menu |  |  |
+| `ed984863` | Your farms |  |  |
+| `adfda47f` | Don’t keep a copy on this phone |  |  |
+| `9ab2f19d` | Back to the workspace |  |  |
+| `e9c21f82` | Your farm |  |  |
+| `ee93a305` | These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction. |  |  |
+| `c16deffa` | You’re previewing {farm} as its farmer sees it | Keep: {farm} |  |
+| `2111a4a0` | {amount} a day | {amount} is a volume with its unit: “121 m³”. Keep: {amount} |  |
+| `060fa091` | {time} on {date} | “07:42 on 19 Jan 2024”. Keep: {date}, {time} |  |
+| `328b495a` | My farms |  |  |
+| `1d79071b` | No farm is linked to your account yet. Your WUA links your farm to your account. |  |  |
+| `1ec4a724` | Your projects |  |  |
+| `b17ad0ae` | Not published yet |  |  |
 
 ### farm.state
 
 Farm view: loading, error and empty states.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.state.loading` | Loading your farm… |  |  |
-| `farm.state.slow` | Slow signal? This can take a moment. |  |  |
-| `farm.state.errorTitle` | We couldn’t load your farm |  |  |
-| `farm.state.errorText` | Check your signal and try again. Your figures are safe; nothing was changed. |  |  |
-| `farm.state.noPublication` | Your WUA hasn’t published figures yet |  |  |
-| `farm.state.noPublicationText` | When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here. |  |  |
-| `farm.state.contact` | Questions? Contact your WUA. |  |  |
-| `farm.state.removed` | You no longer have access to this farm. Contact your WUA. |  |  |
-| `farm.state.needsConnection` | Charts, “Why?” and downloads need a connection. |  |  |
-| `farm.state.updating` | Updating… |  |  |
-| `farm.state.stillOffline` | Still no connection. If this keeps happening, contact your WUA. |  |  |
-| `farm.state.stillFailing` | Still not working. If this keeps happening, contact your WUA. |  |  |
+| `c034131c` | Loading your farm… |  |  |
+| `4148b895` | Slow signal? This can take a moment. |  |  |
+| `686ff28c` | We couldn’t load your farm |  |  |
+| `5f465ddc` | Check your signal and try again. Your figures are safe; nothing was changed. |  |  |
+| `f000a929` | Your WUA hasn’t published figures yet |  |  |
+| `b8a972fb` | When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here. |  |  |
+| `ecebdb11` | Questions? Contact your WUA. |  |  |
+| `90bc6213` | You no longer have access to this farm. Contact your WUA. |  |  |
+| `b3bbbaf7` | Charts, “Why?” and downloads need a connection. |  |  |
+| `4f1bb013` | Updating… |  |  |
+| `86547211` | Still no connection. If this keeps happening, contact your WUA. |  |  |
+| `5d76a1e6` | Still not working. If this keeps happening, contact your WUA. |  |  |
 
 ### farm.saved
 
 Farm view: the strip over the copy of the figures kept on the phone.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.saved.offline` | No signal. These are the figures saved on this phone at {time}. We’ll update them when you’re back online. | Keep: {time} |  |
-| `farm.saved.failed` | We couldn’t update your figures. These are the figures saved on this phone at {time}. | Keep: {time} |  |
+| `c0d4aac6` | No signal. These are the figures saved on this phone at {time}. We’ll update them when you’re back online. | Keep: {time} |  |
+| `4829b397` | We couldn’t update your figures. These are the figures saved on this phone at {time}. | Keep: {time} |  |
 
 ### farm.n
 
 Farm view: a counted noun after a number (“3 days”). .one is the singular, .other the plural.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.n.day.one` | day |  |  |
-| `farm.n.day.other` | days |  |  |
-| `farm.n.week.one` | week |  |  |
-| `farm.n.week.other` | weeks |  |  |
-| `farm.n.point.one` | point |  |  |
-| `farm.n.point.other` | points |  |  |
-| `farm.n.farm.one` | farm |  |  |
-| `farm.n.farm.other` | farms |  |  |
+| `fd1a1a20.one` | day |  |  |
+| `fd1a1a20.other` | days |  |  |
+| `c2d97242.one` | week |  |  |
+| `c2d97242.other` | weeks |  |  |
+| `a3e2d360.one` | point |  |  |
+| `a3e2d360.other` | points |  |  |
+| `940baade.one` | farm |  |  |
+| `940baade.other` | farms |  |  |
 
 ### farm.ordinal
 
 Farm view: a day of the month as an ordinal (“the 10th”). If Afrikaans has one form for all, give it in every row.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.ordinal.one` | {n}st | Keep: {n} |  |
-| `farm.ordinal.two` | {n}nd | Keep: {n} |  |
-| `farm.ordinal.few` | {n}rd | Keep: {n} |  |
-| `farm.ordinal.other` | {n}th | Keep: {n} |  |
+| `9d963c34.one` | {n}st | Keep: {n} |  |
+| `9d963c34.two` | {n}nd | Keep: {n} |  |
+| `9d963c34.few` | {n}rd | Keep: {n} |  |
+| `9d963c34.other` | {n}th | Keep: {n} |  |
 
 ### farm.dates
 
 Farm view: the dates line under the farm name on every page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.dates.fresh` | Published by the WUA on {published}. Data up to {until}. | Keep: {published}, {until} |  |
-| `farm.dates.stale` | Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming. | {age} is a count of days: “3 days”. Keep: {age}, {published}, {until} |  |
-| `farm.dates.next` | Next update expected around {date}. | Added after the dates line. Keep: {date} |  |
+| `351d363e` | Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming. | {age} is a count of days: “3 days”. Keep: {age}, {published}, {until} |  |
+| `f51b7fed` | Published by the WUA on {published}. Data up to {until}. | Keep: {published}, {until} |  |
 
 ### farm.level
 
 Farm view: the WUA’s restriction level, as published by the WUA.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.level.none` | No restriction |  |  |
-| `farm.level.advisory` | Advisory |  |  |
-| `farm.level.restricted` | Restriction |  |  |
+| `ea44e200` | No restriction |  |  |
+| `1597c5ce` | Advisory |  |  |
+| `9db32ccd` | Restriction |  |  |
 
 ### farm.notice
 
 Farm view (and the shared view): the WUA’s notice card, first on the page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.notice.label` | Notice from the WUA · {level} | Keep: {level} |  |
-| `farm.notice.pct` | Set by the WUA: {pct} of registered use. | A percentage of the farm’s registered water use. Keep: {pct} |  |
-| `farm.notice.none` | No restriction from the WUA |  |  |
-| `farm.notice.onlyEn` | The WUA wrote this notice in English only. | Under the WUA’s notice when the reader chose Afrikaans and the WUA wrote it only in English. |  |
-| `farm.notice.onlyAf` | The WUA wrote this notice in Afrikaans only. | Under the WUA’s notice when the reader chose English and the WUA wrote it only in Afrikaans. |  |
+| `692d3ef2` | Notice from the WUA · {level} | Keep: {level} |  |
+| `091d4149` | Set by the WUA: {pct} of registered use. | A percentage of the farm’s registered water use. Keep: {pct} |  |
+| `840b8f7d` | The WUA wrote this notice in English only. | Under the WUA’s notice when the reader chose Afrikaans and the WUA wrote it only in English. |  |
+| `4a5ec0cb` | The WUA wrote this notice in Afrikaans only. | Under the WUA’s notice when the reader chose English and the WUA wrote it only in Afrikaans. |  |
 
 ### farm.page
 
 Farm view: the main page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.page.switch` | Your farms in this catchment |  |  |
-| `farm.page.offlineNotice` | WUA notice · {level} | Keep: {level} |  |
-| `farm.page.glance` | At a glance |  |  |
-| `farm.page.glanceSupply` | of the water you needed this season |  |  |
-| `farm.page.glanceDam` | dam full |  |  |
-| `farm.page.more` | More |  |  |
-| `farm.page.download` | Download my figures (CSV) |  |  |
+| `899c33fd` | Your farms in this catchment |  |  |
+| `5849b249` | WUA notice · {level} | Keep: {level} |  |
+| `2b760ced` | At a glance |  |  |
+| `3e1ec91d` | of the water you needed this season |  |  |
+| `07095e7e` | dam full |  |  |
+| `4f34d900` | More |  |  |
+| `defc0d3b` | Download my figures (CSV) |  |  |
 
 ### farm.supply
 
 Farm view: the “Water you received this season” card.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.supply.title` | Water you received this season |  |  |
-| `farm.supply.ofNeeded` | of what you needed |  |  |
-| `farm.supply.littleNeed` | Your farm needed very little water this season. |  |  |
-| `farm.supply.volumes` | {got} of {need} since {from} | “324.2 ML of 376.5 ML since 1 Oct”. Keep: {from}, {got}, {need} |  |
-| `farm.supply.last30Little` | Last 30 days: very little water needed |  |  |
-| `farm.supply.last30` | Last 30 days: **{pct}** · {got} of {need} | Keep: {got}, {need}, {pct} |  |
-| `farm.supply.efficiency` | Worked out by the model, not read from your meter. It assumes {pct} of the water you pump reaches the crop ({system}). Wrong? Tell your WUA. | Keep: {pct}, {system} |  |
-| `farm.supply.showInLabel` | Show volumes in |  |  |
-| `farm.supply.showIn` | Show in | Before two buttons, “ML” and “m³”. |  |
-| `farm.supply.unitFailed` | Couldn’t save your choice to your account. It applies on this phone. |  |  |
+| `8b9ca333` | Water you received this season |  |  |
+| `cf96dde6` | of what you needed |  |  |
+| `7ae028f6` | Show volumes in |  |  |
+| `e557592b` | Show in | Before two buttons, “ML” and “m³”. |  |
+| `0515b26b` | Couldn’t save your choice to your account. It applies on this phone. |  |  |
+| `a87b6aad` | Your farm needed very little water this season. |  |  |
+| `2937054a` | {got} of {need} since {from} | “324.2 ML of 376.5 ML since 1 Oct”. Keep: {from}, {got}, {need} |  |
+| `a91b9d31` | Last 30 days: very little water needed |  |  |
+| `4e9af1ae` | Last 30 days: **{pct}** · {got} of {need} | Keep: {got}, {need}, {pct} |  |
+| `48170aeb` | Worked out by the model, not read from your meter. It assumes {pct} of the water you pump reaches the crop ({system}). Wrong? Tell your WUA. | Keep: {pct}, {system} |  |
 
 ### farm.system
 
 Farm view: the irrigation system the model assumes, inside the efficiency sentence.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.system.drip` | drip |  |  |
-| `farm.system.microPivot` | micro or centre pivot |  |  |
-| `farm.system.sprinklers` | sprinklers |  |  |
-| `farm.system.flood` | flood |  |  |
+| `bda12fda` | drip |  |  |
+| `28a56743` | micro or centre pivot |  |  |
+| `169380a8` | sprinklers |  |  |
+| `c2e71bdb` | flood |  |  |
 
 ### farm.short
 
 Farm view: the days the farm was short of water. {head} is “Short on 16 days (in Nov and Dec)”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.short.never` | You weren't short of water on any day this season. |  |  |
-| `farm.short.head` | Short on {days} | Keep: {days} |  |
-| `farm.short.headIn` | Short on {days} in {months} | Keep: {days}, {months} |  |
-| `farm.short.riverOne` | {head}, when the river was too low to take from. | Keep: {head} |  |
-| `farm.short.riverAll` | {head}, all when the river was too low to take from. | Keep: {head} |  |
-| `farm.short.stopOne` | {head}, when your dam was down to its stop level. | Keep: {head} |  |
-| `farm.short.stopAll` | {head}, all when your dam was down to its stop level. | Keep: {head} |  |
-| `farm.short.stopSome` | {head}, {n} of them when your dam was down to its stop level. | Keep: {head}, {n} |  |
-| `farm.short.emptyOne` | {head}, when your dam was empty. | Keep: {head} |  |
-| `farm.short.emptyAll` | {head}, all when your dam was empty. | Keep: {head} |  |
-| `farm.short.emptySome` | {head}, {n} of them when your dam was empty. | Keep: {head}, {n} |  |
-| `farm.short.plain` | {head}. | Keep: {head} |  |
+| `6e9e3ebc` | You weren't short of water on any day this season. |  |  |
+| `936fdd7b` | Short on {days} in {months} | Keep: {days}, {months} |  |
+| `0cfb399f` | Short on {days} | Keep: {days} |  |
+| `6c55630d` | {head}, when the river was too low to take from. | Keep: {head} |  |
+| `a299ea88` | {head}, all when the river was too low to take from. | Keep: {head} |  |
+| `c6733c26` | {head}, when your dam was down to its stop level. | Keep: {head} |  |
+| `0bc9a7c5` | {head}, all when your dam was down to its stop level. | Keep: {head} |  |
+| `efed06e2` | {head}, when your dam was empty. | Keep: {head} |  |
+| `7673f82f` | {head}, all when your dam was empty. | Keep: {head} |  |
+| `53fc0453` | {head}, {n} of them when your dam was down to its stop level. | Keep: {head}, {n} |  |
+| `aa2e5499` | {head}, {n} of them when your dam was empty. | Keep: {head}, {n} |  |
+| `6c3f611f` | {head}. | Keep: {head} |  |
 
 ### farm.dam
 
 Farm view: the “Your dam” card.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.dam.title` | Your dam |  |  |
-| `farm.dam.full` | full |  |  |
-| `farm.dam.details` | Dam details |  |  |
-| `farm.dam.stopsAt` | irrigation stops at {pct} | Keep: {pct} |  |
-| `farm.dam.volumes` | {storage} of {capacity} | Keep: {capacity}, {storage} |  |
-| `farm.dam.trendFlat` | About the same as 30 days ago ({was}) | Keep: {was} |  |
-| `farm.dam.trendUp` | Up {points} in 30 days (was {was}) | Keep: {points}, {was} |  |
-| `farm.dam.trendDown` | Down {points} in 30 days (was {was}) | Keep: {points}, {was} |  |
-| `farm.dam.lessThanDay` | less than a day |  |  |
-| `farm.dam.about` | about {span} | {span} is “3 days” or “2 weeks”. Keep: {span} |  |
-| `farm.dam.daysLeft` | At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide. | {use} is a volume (“45 m³”); {lasts} is “about 3 weeks”. Keep: {lasts}, {use} |  |
-| `farm.dam.daysLeftLong` | At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer. | {use} is a volume (“45 m³”); {lasts} is “about 3 weeks”. Keep: {lasts}, {use} |  |
-| `farm.dam.noStop` | The model assumes your pump can empty the dam. Tell your WUA the level your pump stops at. |  |  |
-| `farm.dam.atStop` | Your dam is down to the level where irrigation stops. There is no water above it to use until water flows in. |  |  |
-| `farm.dam.modelled` | Worked out by the model, not measured at your dam. |  |  |
+| `ff79b33c` | full |  |  |
+| `cc94dd23` | Dam details |  |  |
+| `e9f24832` | less than a day |  |  |
+| `f95020de` | about {span} | {span} is “3 days” or “2 weeks”. Keep: {span} |  |
+| `b08c43fc` | The model assumes your pump can empty the dam. Tell your WUA the level your pump stops at. |  |  |
+| `010bf2a1` | Your dam is down to the level where irrigation stops. There is no water above it to use until water flows in. |  |  |
+| `df26d8c9` | Worked out by the model, not measured at your dam. |  |  |
+| `314f6830` | About the same as 30 days ago ({was}) | Keep: {was} |  |
+| `100c3cb5` | Up {points} in 30 days (was {was}) | Keep: {points}, {was} |  |
+| `ef59dc0c` | Down {points} in 30 days (was {was}) | Keep: {points}, {was} |  |
+| `1cc72e56` | At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer. | {use} is a volume (“45 m³”); {lasts} is “about 3 weeks”. Keep: {lasts}, {use} |  |
+| `00f9df75` | At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide. | {use} is a volume (“45 m³”); {lasts} is “about 3 weeks”. Keep: {lasts}, {use} |  |
+| `e54e8052` | irrigation stops at {pct} | Keep: {pct} |  |
+| `e25b39e5` | {storage} of {capacity} | Keep: {capacity}, {storage} |  |
 
 ### farm.band
 
 Farm view: the model’s own rating chip on the look-back card (not a restriction).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.band.ok` | Model: OK |  |  |
-| `farm.band.watch` | Model: watch |  |  |
-| `farm.band.short` | Model: short |  |  |
+| `70c63e42` | Model: OK |  |  |
+| `1308106b` | Model: watch |  |  |
+| `1b1d09f2` | Model: short |  |  |
 
 ### farm.back
 
 Farm view: the “Looking back” card (the model’s estimate, not a restriction).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.back.heading` | Looking back: {span} | Keep: {span} |  |
-| `farm.back.notOfficial` | The model’s estimate, not an official restriction. |  |  |
-| `farm.back.why` | Why? What can I do? |  |  |
-| `farm.back.whyPct` | Why {pct}? What can I do? | Keep: {pct} |  |
-| `farm.back.pumpLess` | If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed. | Keep: {pct} |  |
-| `farm.back.notAsked` | The river didn't need you to pump less this season. You had about **{pct}** of the water you needed. | Keep: {pct} |  |
-| `farm.back.short` | The model’s look back and what you can do |  |  |
+| `0c3464ae` | The model’s estimate, not an official restriction. |  |  |
+| `7385f2d1` | {from} to {to} | Two dates: “1 Oct to 10 Jan”. Keep: {from}, {to} |  |
+| `66e7245b` | Looking back: {span} | Keep: {span} |  |
+| `7915a193` | Why? What can I do? |  |  |
+| `0d0fa754` | If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed. | Keep: {pct} |  |
+| `d69891d7` | The river didn't need you to pump less this season. You had about **{pct}** of the water you needed. | Keep: {pct} |  |
+| `3ea4ad58` | Why {pct}? What can I do? | Keep: {pct} |  |
+| `4f85b1d2` | The model’s look back and what you can do |  |  |
 
 ### farm.forecast
 
 Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.forecast.kicker` | Forecast |  |  |
-| `farm.forecast.title` | Next {days} | {days} is “14 days”. Keep: {days} |  |
-| `farm.forecast.dam` | Lowest dam level expected: about {pct} | Keep: {pct} |  |
-| `farm.forecast.damAround` | Lowest dam level expected: about {pct} around {date} | Keep: {date}, {pct} |  |
-| `farm.forecast.noShort` | The model doesn’t expect you to be short on any of these {days} days. | Keep: {days} |  |
-| `farm.forecast.short` | You may be short on {n} of the {days} days. | Keep: {days}, {n} |  |
-| `farm.forecast.from` | From the rain forecast of {made}, for {from} to {to}. | Keep: {from}, {made}, {to} |  |
-| `farm.forecast.fine` | Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction. |  |  |
-| `farm.forecast.old` | This forecast is {age} old. Your WUA may publish a newer one. | {age} is “5 days”. Keep: {age} |  |
+| `5f3a8bf0` | Forecast |  |  |
+| `f64a019a` | Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction. |  |  |
+| `0f4c3e21` | Next {days} | {days} is “14 days”. Keep: {days} |  |
+| `45d78280` | Lowest dam level expected: about {pct} around {date} | Keep: {date}, {pct} |  |
+| `eafa9db3` | Lowest dam level expected: about {pct} | Keep: {pct} |  |
+| `f0f4c8d4` | The model doesn’t expect you to be short on any of these {days} days. | Keep: {days} |  |
+| `9d644bd9` | You may be short on {n} of the {days} days. | Keep: {days}, {n} |  |
+| `d81d6b5a` | From the rain forecast of {made}, for {from} to {to}. | Keep: {from}, {made}, {to} |  |
+| `76642b98` | This forecast is {age} old. Your WUA may publish a newer one. | {age} is “5 days”. Keep: {age} |  |
 
 ### farm.compare
 
 Farm view: the “Compared with last season” card.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.compare.title` | Compared with last season |  |  |
-| `farm.compare.unavailable` | Not available: the model’s data doesn’t reach back to the same dates last season. |  |  |
-| `farm.compare.littleNeeded` | very little needed |  |  |
-| `farm.compare.received` | Water received |  |  |
-| `farm.compare.damOn` | Dam on {date} | Keep: {date} |  |
+| `3366c515` | Compared with last season |  |  |
+| `04bf0305` | Not available: the model’s data doesn’t reach back to the same dates last season. |  |  |
+| `7d565e64` | very little needed |  |  |
+| `0764cc4b` | Water received |  |  |
+| `0be5fdfe` | Dam on {date} | Keep: {date} |  |
 
 ### farm.river
 
 Farm view: the “Your farm on the river” card. Counts only, never a neighbour’s name.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.river.title` | Your farm on the river |  |  |
-| `farm.river.privacy` | Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs. |  |  |
-| `farm.river.upNone` | No farm is |  |  |
-| `farm.river.upOne` | 1 farm is |  |  |
-| `farm.river.upMany` | {n} farms are | Keep: {n} |  |
-| `farm.river.downNone` | none is |  |  |
-| `farm.river.downOne` | 1 is |  |  |
-| `farm.river.downMany` | {n} are | Keep: {n} |  |
-| `farm.river.position` | {up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm. | {up} is one of the three “farm is / farms are” rows above, {down} one of the three “is / are” rows, {count} is “8 farms”. Keep: {count}, {down}, {up} |  |
-| `farm.river.outletKept` | River at {name}: kept its reserve on every one of the last {days}. | Keep: {days}, {name} |  |
-| `farm.river.outletAll` | River at {name}: below its reserve on **all of the last {days}**. | Keep: {days}, {name} |  |
-| `farm.river.outletSome` | River at {name}: below its reserve on **{n} of the last {days}**. | Keep: {days}, {n}, {name} |  |
+| `e1a3c95e` | Your farm on the river |  |  |
+| `24364e6e` | Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs. |  |  |
+| `140855da` | No farm is |  |  |
+| `70cf71a0` | 1 farm is |  |  |
+| `63385228` | {n} farms are | Keep: {n} |  |
+| `a30f6eb1` | none is |  |  |
+| `22b49fbc` | 1 is |  |  |
+| `c7fda361` | {n} are | Keep: {n} |  |
+| `7f35d413` | {up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm. | {up} is one of the three “farm is / farms are” rows in this section, {down} one of the three “is / are” rows, {count} is “8 farms”. Keep: {count}, {down}, {up} |  |
+| `e3636500` | River at {name}: kept its reserve on every one of the last {days}. | Keep: {days}, {name} |  |
+| `384881b5` | River at {name}: below its reserve on **all of the last {days}**. | Keep: {days}, {name} |  |
+| `0e68a86a` | River at {name}: below its reserve on **{n} of the last {days}**. | Keep: {days}, {n}, {name} |  |
 
 ### farm.who
 
 Farm view: “Who can see my farm” on the river card.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.who.heading` | Who can see my farm |  |  |
-| `farm.who.you` | You |  |  |
-| `farm.who.linked` | Anyone else linked to this farm |  |  |
-| `farm.who.staff` | The WUA’s staff |  |  |
-| `farm.who.modeller` | The WUA’s modeller |  |  |
-| `farm.who.not` | Other farmers can’t see your farm’s figures, and you can’t see theirs. |  |  |
-| `farm.who.loading` | Loading the names… |  |  |
-| `farm.who.failed` | Couldn’t load the names just now. Your WUA can tell you who these people are. |  |  |
-| `farm.who.youMark` | (you) |  |  |
-| `farm.who.role.farmer` | linked to this farm |  |  |
-| `farm.who.role.viewer` | WUA, can read |  |  |
-| `farm.who.role.editor` | WUA, can change the model |  |  |
-| `farm.who.role.owner` | WUA, manages who has access |  |  |
-| `farm.who.role.unknown` | WUA |  |  |
+| `1e0d6b44` | Who can see my farm |  |  |
+| `a728cd62` | Anyone else linked to this farm |  |  |
+| `452a58e5` | The WUA’s staff |  |  |
+| `fae0a161` | The WUA’s modeller |  |  |
+| `b066abfc` | Other farmers can’t see your farm’s figures, and you can’t see theirs. |  |  |
+| `e66cc2c6` | Loading the names… |  |  |
+| `760d014c` | Couldn’t load the names just now. Your WUA can tell you who these people are. |  |  |
+| `89c2c21d` | linked to this farm |  |  |
+| `456f91da` | WUA, can read |  |  |
+| `ca2e6460` | WUA, can change the model |  |  |
+| `7095cfda` | WUA, manages who has access |  |  |
+| `aeedf2e8` | WUA |  |  |
+| `394c6255` | (you) |  |  |
 
 ### farm.notes
 
 Farm view: the notes card.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.notes.title` | Notes about your farm |  |  |
-| `farm.notes.intro` | Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm. | Keep: {farm} |  |
-| `farm.notes.empty` | No notes about this farm yet. |  |  |
-| `farm.notes.loadFailed` | Couldn’t load the notes. {reason} | {reason} is one of the “Error messages” below. Keep: {reason} |  |
-| `farm.notes.loading` | Loading notes… |  |  |
-| `farm.notes.list` | Notes |  |  |
-| `farm.notes.editLabel` | Edit note |  |  |
-| `farm.notes.save` | Save |  |  |
-| `farm.notes.cancel` | Cancel |  |  |
-| `farm.notes.you` | You |  |  |
-| `farm.notes.formerMember` | A former member |  |  |
-| `farm.notes.edited` | edited |  |  |
-| `farm.notes.editedAt` | Edited {date} | Keep: {date} |  |
-| `farm.notes.edit` | Edit |  |  |
-| `farm.notes.delete` | Delete |  |  |
-| `farm.notes.noteFrom` | note from {date} | Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”. Keep: {date} |  |
-| `farm.notes.confirmMine` | Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. |  |  |
-| `farm.notes.confirmOther` | Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. | Keep: {author} |  |
-| `farm.notes.add` | Add a note |  |  |
-| `farm.notes.plainText` | Plain text. |  |  |
-| `farm.notes.audience` | Read by the WUA and anyone else linked to this farm. |  |  |
-| `farm.notes.submit` | Add note |  |  |
-| `farm.notes.writeFirst` | Write something first. |  |  |
-| `farm.notes.tooLong` | Too long: {length} of {max} characters. | {length} and {max} are numbers of characters. Keep: {length}, {max} |  |
+| `9dd59c12` | Notes about your farm |  |  |
+| `6ee0c03c` | Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm. | Keep: {farm} |  |
+| `d2af0a62` | No notes about this farm yet. |  |  |
+| `ff2814ef` | Couldn’t load the notes. {reason} | {reason} is one of the “Error messages” below. Keep: {reason} |  |
+| `44437fd4` | Loading notes… |  |  |
+| `0ff01b6a` | Notes |  |  |
+| `395e6e23` | Edit note |  |  |
+| `4d2d5d68` | Save |  |  |
+| `35afca3b` | Cancel |  |  |
+| `6df599e8` | edited |  |  |
+| `68202858` | Edited {date} | Keep: {date} |  |
+| `c2c76cb1` | Edit |  |  |
+| `5797ea6a` | Delete |  |  |
+| `d1097925` | note from {date} | Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”. Keep: {date} |  |
+| `1882f376` | Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. |  |  |
+| `fe7cbd34` | Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes. | Keep: {author} |  |
+| `1ce96c5d` | Add a note |  |  |
+| `91c537d0` | Plain text. |  |  |
+| `6cff79ac` | Read by the WUA and anyone else linked to this farm. |  |  |
+| `b6439108` | Add note |  |  |
+| `81dc7120` | Write something first. |  |  |
+| `0081fb6e` | Too long: {length} of {max} characters. | {length} and {max} are numbers of characters. Keep: {length}, {max} |  |
 
 ### farm.chart
 
 Farm view: the two small charts and their “Show the numbers” tables. The summaries are read by screen readers.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.chart.title` | Last 12 months, in ML |  |  |
-| `farm.chart.damTitle` | Last 12 months |  |  |
-| `farm.chart.needed` | Needed |  |  |
-| `farm.chart.received` | Received |  |  |
-| `farm.chart.showNumbers` | Show the numbers |  |  |
-| `farm.chart.month` | Month |  |  |
-| `farm.chart.damFull` | Dam full |  |  |
-| `farm.chart.supplyCaption` | Water you needed and received each month |  |  |
-| `farm.chart.damCaption` | Dam level at the end of each month |  |  |
-| `farm.chart.partialRow` | 1–{day} {month} | A month cut short by the data: “1–10 Jan 2024”. Keep: {day}, {month} |  |
-| `farm.chart.range` | {from} to {to}. | Keep: {from}, {to} |  |
-| `farm.chart.partialNote` | * {month} to the {day}. | {day} is an ordinal (“10th”). Keep: {day}, {month} |  |
-| `farm.chart.noMonths` | No monthly figures yet. |  |  |
-| `farm.chart.shortIn` | You were short in {months}. | Keep: {months} |  |
-| `farm.chart.neverShort` | You received all you needed every month. |  |  |
-| `farm.chart.supplySummary` | Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below. | Keep: {from}, {short}, {to} |  |
-| `farm.chart.noDam` | No dam levels yet. |  |  |
-| `farm.chart.damSummary` | Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below. | Keep: {from}, {high}, {highMonth}, {latest}, {low}, {lowMonth}, {to} |  |
+| `698f7893` | Last 12 months |  |  |
+| `eaa19146` | Dam level at the end of each month |  |  |
+| `9309471e` | Dam full |  |  |
+| `99e77075` | Last 12 months, in ML |  |  |
+| `dc508b54` | Needed |  |  |
+| `5cf817d2` | Received |  |  |
+| `54a6fc83` | Water you needed and received each month |  |  |
+| `037aec13` | 1–{day} {month} | A month cut short by the data: “1–10 Jan 2024”. Keep: {day}, {month} |  |
+| `dadd876d` | {from} to {to}. | Keep: {from}, {to} |  |
+| `c6056b3d` | * {month} to the {day}. | {day} is an ordinal (“10th”). Keep: {day}, {month} |  |
+| `df723322` | No monthly figures yet. |  |  |
+| `86a76517` | You were short in {months}. | Keep: {months} |  |
+| `6d1bd261` | You received all you needed every month. |  |  |
+| `f66cc4c1` | Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below. | Keep: {from}, {short}, {to} |  |
+| `531d4239` | No dam levels yet. |  |  |
+| `f8cd4d40` | Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below. | Keep: {from}, {high}, {highMonth}, {latest}, {low}, {lowMonth}, {to} |  |
 
 ### farm.damPage
 
 Farm view: the dam details page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.damPage.noDam` | {farm} has no dam in the model. | Keep: {farm} |  |
-| `farm.damPage.back` | Back to my farm |  |  |
-| `farm.damPage.howFull` | How full it is |  |  |
-| `farm.damPage.asOf` | full on {date} | Keep: {date} |  |
-| `farm.damPage.inDam` | Water in the dam |  |  |
-| `farm.damPage.capacity` | Full |  |  |
-| `farm.damPage.usable` | You can still use |  |  |
-| `farm.damPage.last30` | Last 30 days |  |  |
-| `farm.damPage.lastSeason` | Same day last season |  |  |
-| `farm.damPage.lastSpill` | Last full and spilling |  |  |
-| `farm.damPage.noChange` | no change |  |  |
-| `farm.damPage.up` | up {amount} | Keep: {amount} |  |
-| `farm.damPage.down` | down {amount} | Keep: {amount} |  |
-| `farm.damPage.noSpill` | not in the last 12 months |  |  |
-| `farm.damPage.range` | {from} to {to}, end of each month. | Keep: {from}, {to} |  |
-| `farm.damPage.stopLine` | Dashed line: irrigation stops ({pct}). | Keep: {pct} |  |
-| `farm.damPage.short` | You were short on {days}. | Keep: {days} |  |
-| `farm.damPage.shortIn` | You were short on {days} in {months}. | Keep: {days}, {months} |  |
-| `farm.damPage.shortAtLine` | You were short on {days}, while the dam sat at that line. | Keep: {days} |  |
-| `farm.damPage.shortInAtLine` | You were short on {days} in {months}, while the dam sat at that line. | Keep: {days}, {months} |  |
-| `farm.damPage.usableNote` | “You can still use” is the water above the level where irrigation stops (your pump intake or reserve). |  |  |
-| `farm.damPage.sourceTitle` | Where these figures come from |  |  |
-| `farm.damPage.source1` | Nobody measures your dam for this. The model works the level out every day from rain, the river flowing in, and the water your crops need. |  |  |
-| `farm.damPage.source2` | If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model. |  |  |
-| `farm.damPage.whatModelled` | What is “modelled”? |  |  |
+| `547b9d7a` | no change |  |  |
+| `c0540250` | up {amount} | Keep: {amount} |  |
+| `7aaa0ad7` | down {amount} | Keep: {amount} |  |
+| `e61ebc6c` | not in the last 12 months |  |  |
+| `fbeb4492` | Water in the dam |  |  |
+| `7fa5ff5c` | Full |  |  |
+| `f9fb4eaf` | You can still use |  |  |
+| `d0778b33` | Last 30 days |  |  |
+| `c273f6ec` | Same day last season |  |  |
+| `bd9ac3d7` | Last full and spilling |  |  |
+| `9bfd8080` | {from} to {to}, end of each month. | Keep: {from}, {to} |  |
+| `af9974c3` | Dashed line: irrigation stops ({pct}). | Keep: {pct} |  |
+| `306af3a9` | You were short on {days} in {months}, while the dam sat at that line. | Keep: {days}, {months} |  |
+| `ee358f2d` | You were short on {days} in {months}. | Keep: {days}, {months} |  |
+| `3f835501` | You were short on {days}, while the dam sat at that line. | Keep: {days} |  |
+| `678f5d85` | You were short on {days}. | Keep: {days} |  |
+| `191c8b97` | full on {date} | Keep: {date} |  |
+| `f16b1581` | “You can still use” is the water above the level where irrigation stops (your pump intake or reserve). |  |  |
+| `096438fe` | Nobody measures your dam for this. The model works the level out every day from rain, the river flowing in, and the water your crops need. |  |  |
+| `294b89aa` | If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model. |  |  |
+| `189ba2c7` | {farm} has no dam in the model. | Keep: {farm} |  |
+| `b0f24bf9` | Back to my farm |  |  |
+| `29b90af1` | How full it is |  |  |
+| `78baf9da` | Where these figures come from |  |  |
+| `b7c8226b` | What is “modelled”? |  |  |
 
 ### farm.why
 
 Farm view: the “Why?” page, the model’s look back in three steps.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.why.pageTitle` | Why? |  |  |
-| `farm.why.title` | Why about {pct}? | Keep: {pct} |  |
-| `farm.why.titlePlain` | What the model found |  |  |
-| `farm.why.intro` | Looking back over {from} to {to}, the model checks two things: was water shared fairly between farms, and did the river keep enough water flowing? | Keep: {from}, {to} |  |
-| `farm.why.step1` | 1. Was water shared fairly? |  |  |
-| `farm.why.kHidden` | Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures. |  |  |
-| `farm.why.aboutEven` | about an even share |  |  |
-| `farm.why.lessThanEven` | a little less than an even share (about {amount}) | Keep: {amount} |  |
-| `farm.why.moreThanEven` | a little more than an even share (about {amount}) | Keep: {amount} |  |
-| `farm.why.notPart` | It isn’t part of the {pct}. | Keep: {pct} |  |
-| `farm.why.notPartPlain` | It isn’t part of the model’s look back. |  |  |
-| `farm.why.catchment` | Across the catchment, farms received **{share}** of what they needed. We call that the **even share**. | Keep: {share} |  |
-| `farm.why.shareLabel` | even share {pct} | Keep: {pct} |  |
-| `farm.why.youLabel` | you {pct} | Keep: {pct} |  |
-| `farm.why.you` | You received **{pct}**: {comparison}. | Keep: {comparison}, {pct} |  |
-| `farm.why.check` | **This is a fairness check, not extra water for you.** Whether more water can reach your farm depends on where you are on the river and what is in your dam. {notPart} | Keep: {notPart} |  |
-| `farm.why.step2` | 2. Did the river keep flowing? |  |  |
-| `farm.why.reserve` | The law keeps some water in the river so it stays healthy for everyone downstream. This is the river’s **reserve**. |  |  |
-| `farm.why.shareRule` | Farms upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you. |  |  |
-| `farm.why.beyondShare` | The river’s share of your water is more than an even share of the catchment’s supply. The WUA may need to look at this. |  |  |
-| `farm.why.keptReserve` | The river kept its reserve every day this season, at every point below your farm. |  |  |
-| `farm.why.belowReserve` | The river was below its reserve {sites}. | Keep: {sites} |  |
-| `farm.why.site` | at {name} on **{days}** | One gauge in the list after “below its reserve”; several are joined with “, ” and “ and ”. Keep: {days}, {name} |  |
-| `farm.why.reasonOneDay` | On that day, water taken upstream was part of the reason, not only low rain. |  |  |
-| `farm.why.reasonEveryDay` | On every one of those days, water taken upstream was part of the reason, not only low rain. |  |  |
-| `farm.why.reasonOnlyRain` | It was only because of low rain: water taken upstream wasn’t part of the reason. |  |  |
-| `farm.why.reasonMixed` | Water taken upstream was part of the reason on the other days; on {list} it was only because of low rain. | Keep: {list} |  |
-| `farm.why.rainSite` | {days} at {name} | One item of {list} in the mixed-reason sentence. Keep: {days}, {name} |  |
-| `farm.why.pump` | **Pump about {amount} a day less**{ls}. Averaged over all {days} that is {average}. | {amount} is a number of m³; {ls} is empty or “ (2.3 l/s)”; {days} is “102 days”; {average} is “12 m³ a day”. Keep: {amount}, {average}, {days}, {ls} |  |
-| `farm.why.dam` | Your dam held back about **{amount} a day** the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn’t, the WUA may talk to you about it. | Keep: {amount} |  |
-| `farm.why.damAlso` | Your dam also held back about **{amount} a day** the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn’t, the WUA may talk to you about it. | Keep: {amount} |  |
-| `farm.why.asked` | You were asked to help on {n} of the {days}. | Keep: {days}, {n} |  |
-| `farm.why.askedOnThose` | You were asked to help on {n} of the {days}. On those days: | Keep: {days}, {n} |  |
-| `farm.why.notAsked` | You weren’t asked to help on any day this season. |  |  |
-| `farm.why.step3` | 3. Where {pct} comes from | Keep: {pct} |  |
-| `farm.why.step3Caption` | Daily averages over {span} | Keep: {span} |  |
-| `farm.why.received` | You received |  |  |
-| `farm.why.pumpLess` | Pump less for the river |  |  |
-| `farm.why.leaves` | Leaves |  |  |
-| `farm.why.needed` | You needed |  |  |
-| `farm.why.sum` | {leaves} is about **{pct}** of the {need} you needed. | {leaves} and {need} are numbers of m³ a day. Keep: {leaves}, {need}, {pct} |  |
-| `farm.why.damNotInSum` | Holding back less in the dam doesn’t come off today’s pumping, so it isn’t in this sum. But it leaves less in your dam for later in the season. |  |  |
-| `farm.why.decidedTitle` | What the WUA decided |  |  |
-| `farm.why.decidedNone` | Only a notice from your WUA is a restriction. Right now: **no restriction**. |  |  |
-| `farm.why.decided` | Only a notice from your WUA is a restriction. Right now: **{level}**. | Keep: {level} |  |
-| `farm.why.readNotice` | Read the notice |  |  |
-| `farm.why.notTitle` | What this is not |  |  |
-| `farm.why.notAllocation` | Not your allocation or licence. It doesn’t know your registered water use. |  |  |
-| `farm.why.notForecast` | Not a forecast. It looks back over {span}. | Keep: {span} |  |
-| `farm.why.notMeasured` | Not measured. It comes from a model of the catchment, which can be wrong. |  |  |
-| `farm.why.whatReserve` | What is the river’s reserve? |  |  |
+| `6312837d` | What the model found |  |  |
+| `d8487d8c` | Why about {pct}? | Keep: {pct} |  |
+| `4c86f524` | Looking back over {from} to {to}, the model checks two things: was water shared fairly between farms, and did the river keep enough water flowing? | Keep: {from}, {to} |  |
+| `1ede5f43` | Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures. |  |  |
+| `8babe8ec` | about an even share |  |  |
+| `8bf5fde0` | a little less than an even share (about {amount}) | Keep: {amount} |  |
+| `fa998f28` | a little more than an even share (about {amount}) | Keep: {amount} |  |
+| `af600ca5` | It isn’t part of the model’s look back. |  |  |
+| `53be7341` | It isn’t part of the {pct}. | Keep: {pct} |  |
+| `db912bbe` | Across the catchment, farms received **{share}** of what they needed. We call that the **even share**. | Keep: {share} |  |
+| `ab92f385` | even share {pct} | Keep: {pct} |  |
+| `90f45e1f` | you {pct} | Keep: {pct} |  |
+| `a8445071` | You received **{pct}**: {comparison}. | Keep: {comparison}, {pct} |  |
+| `813eaac7` | **This is a fairness check, not extra water for you.** Whether more water can reach your farm depends on where you are on the river and what is in your dam. {notPart} | Keep: {notPart} |  |
+| `923c70c6` | The law keeps some water in the river so it stays healthy for everyone downstream. This is the river’s **reserve**. |  |  |
+| `9c3f2d8e` | Farms upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you. |  |  |
+| `1adee368` | The river’s share of your water is more than an even share of the catchment’s supply. The WUA may need to look at this. |  |  |
+| `0c5e3afe` | The river kept its reserve every day this season, at every point below your farm. |  |  |
+| `977a32db` | at {name} on **{days}** | One gauge in the list after “below its reserve”; several are joined with “, ” and “ and ”. Keep: {days}, {name} |  |
+| `ae466978` | The river was below its reserve {sites}. | Keep: {sites} |  |
+| `71e03a95` | On that day, water taken upstream was part of the reason, not only low rain. |  |  |
+| `e86702c8` | On every one of those days, water taken upstream was part of the reason, not only low rain. |  |  |
+| `7b2a3430` | It was only because of low rain: water taken upstream wasn’t part of the reason. |  |  |
+| `a3792c6a` | {days} at {name} | One item of {list} in the mixed-reason sentence. Keep: {days}, {name} |  |
+| `48966770` | Water taken upstream was part of the reason on the other days; on {list} it was only because of low rain. | Keep: {list} |  |
+| `7e1f2974` | **Pump about {amount} a day less**{ls}. Averaged over all {days} that is {average}. | {amount} is a number of m³; {ls} is empty or “ (2.3 l/s)”; {days} is “102 days”; {average} is “12 m³ a day”. Keep: {amount}, {average}, {days}, {ls} |  |
+| `b6ff3b6b` | Your dam also held back about **{amount} a day** the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn’t, the WUA may talk to you about it. | Keep: {amount} |  |
+| `76abd9c6` | Your dam held back about **{amount} a day** the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn’t, the WUA may talk to you about it. | Keep: {amount} |  |
+| `c7dfe948` | You were asked to help on {n} of the {days}. On those days: | Keep: {days}, {n} |  |
+| `488ab009` | You were asked to help on {n} of the {days}. | Keep: {days}, {n} |  |
+| `d7b526ca` | You weren’t asked to help on any day this season. |  |  |
+| `659a5e81` | Holding back less in the dam doesn’t come off today’s pumping, so it isn’t in this sum. But it leaves less in your dam for later in the season. |  |  |
+| `737e3ce3` | 3. Where {pct} comes from | Keep: {pct} |  |
+| `c6fa2900` | Daily averages over {span} | Keep: {span} |  |
+| `e36fd697` | You received |  |  |
+| `06470532` | Pump less for the river |  |  |
+| `eb4bd3e9` | Leaves |  |  |
+| `e31fe149` | You needed |  |  |
+| `78fd83cd` | {leaves} is about **{pct}** of the {need} you needed. | {leaves} and {need} are numbers of m³ a day. Keep: {leaves}, {need}, {pct} |  |
+| `09d3c636` | Only a notice from your WUA is a restriction. Right now: **no restriction**. |  |  |
+| `a99180e3` | Only a notice from your WUA is a restriction. Right now: **{level}**. | Keep: {level} |  |
+| `678ca7b2` | Not your allocation or licence. It doesn’t know your registered water use. |  |  |
+| `94fee914` | Not a forecast. It looks back over {span}. | Keep: {span} |  |
+| `0d7ba988` | Not measured. It comes from a model of the catchment, which can be wrong. |  |  |
+| `50d99212` | Why? |  |  |
+| `2064df9f` | 1. Was water shared fairly? |  |  |
+| `0701a4df` | 2. Did the river keep flowing? |  |  |
+| `9ca5252f` | What the WUA decided |  |  |
+| `6aca3fee` | Read the notice |  |  |
+| `b3e48362` | What this is not |  |  |
+| `a0ea4b15` | What is the river’s reserve? |  |  |
 
 ### farm.list
 
 Farm view: “Your farms”, for a farmer with several farms.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.list.none` | No farm is linked to your account yet. Your WUA links your farm to your account. |  |  |
-| `farm.list.projects` | Your projects |  |  |
-| `farm.list.notPublished` | Not published yet |  |  |
-| `farm.list.littleNeeded` | very little water needed |  |  |
-| `farm.list.got` | {pct} of water needed | Keep: {pct} |  |
-| `farm.list.dam` | dam {pct} | Keep: {pct} |  |
-| `farm.list.noDam` | no dam |  |  |
-| `farm.list.privacy` | Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them. |  |  |
+| `ac1332f5` | very little water needed |  |  |
+| `3a0d2f1b` | {pct} of water needed | Keep: {pct} |  |
+| `a648e736` | dam {pct} | Keep: {pct} |  |
+| `ddebfbe0` | no dam |  |  |
+| `71e0b4a4` | Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them. |  |  |
 
 ### farm.alerts
 
 Farm view: the alert card, shown while the farm’s dam is below the WUA’s alert level. What the model estimates, never a promise.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `farm.alerts.title` | Alerts |  |  |
-| `farm.alerts.dam` | Your dam is below the alert level of {threshold}: about {pct} on {date}. | Keep: {date}, {pct}, {threshold} |  |
-| `farm.alerts.damForecast` | On the rain forecast, your dam may fall below the alert level of {threshold}: about {pct} around {date}. | Keep: {date}, {pct}, {threshold} |  |
-| `farm.alerts.manage` | Choose your alert emails |  |  |
+| `c184a764` | On the rain forecast, your dam may fall below the alert level of {threshold}: about {pct} around {date}. | Keep: {date}, {pct}, {threshold} |  |
+| `321b2d7f` | Your dam is below the alert level of {threshold}: about {pct} on {date}. | Keep: {date}, {pct}, {threshold} |  |
+| `18996e5e` | Alerts |  |  |
 
 ### alerts
 
 The alert emails page (from the account page): which alerts a person gets by email, per catchment, and how often.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `alerts.title` | Alert emails |  |  |
-| `alerts.intro` | Choose which alerts you get by email for each catchment, and how often. Alerts come from the catchment model: estimates, not instructions. |  |  |
-| `alerts.cap` | At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00). | Keep: {cap} |  |
-| `alerts.none` | None of your catchments can send you alerts yet. |  |  |
-| `alerts.back` | Back to your account |  |  |
-| `alerts.notOn` | Not switched on for this catchment yet: you get nothing until the WUA turns it on. |  |  |
-| `alerts.muted` | All alert emails for this catchment are off. |  |  |
-| `alerts.unmute` | Turn alert emails back on |  |  |
-| `alerts.saving` | Saving… |  |  |
-| `alerts.saved` | Saved. |  |  |
-| `alerts.suppressed.bounce` | Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed. | Keep: {email} |  |
-| `alerts.suppressed.complaint` | Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending. | Keep: {email} |  |
-| `alerts.suppressed.fix` | Once {email} can receive email again, turn alert emails back on. Your choices are kept. | Keep: {email} |  |
-| `alerts.suppressed.resume` | Turn alert emails back on |  |  |
-| `alerts.suppressed.resuming` | Turning them back on… |  |  |
-| `alerts.suppressed.resumed` | Alert emails are back on. |  |  |
-| `alerts.suppressed.tooSoon` | Emails to this address were refused again less than a day after you turned them back on. Check the address, then try again tomorrow. |  |  |
+| `554605ea` | Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending. | Keep: {email} |  |
+| `51c58bae` | Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed. | Keep: {email} |  |
+| `bf6a6804` | Emails to this address were refused again less than a day after you turned them back on. Check the address, then try again tomorrow. |  |  |
+| `eb3bc0dd` | Back to your account |  |  |
+| `2ba7c149` | Choose which alerts you get by email for each catchment, and how often. Alerts come from the catchment model: estimates, not instructions. |  |  |
+| `6e6c53b1` | At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00). | Keep: {cap} |  |
+| `8349b21d` | None of your catchments can send you alerts yet. |  |  |
+| `b99a108a` | All alert emails for this catchment are off. |  |  |
+| `2e3ec238` | Not switched on for this catchment yet: you get nothing until the WUA turns it on. |  |  |
 
 ### alerts.mode
 
 Alert emails page: how often, one choice per alert.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `alerts.mode.immediate` | Right away |  |  |
-| `alerts.mode.daily_digest` | Once a day (06:00) |  |  |
-| `alerts.mode.off` | Off |  |  |
+| `52eea1c1` | Right away |  |  |
+| `983ec4ee` | Once a day (06:00) |  |  |
+| `0dc6b4aa` | Off |  |  |
 
 ### alerts.kind
 
 Alert emails page: the name of each kind of alert.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `alerts.kind.dam_below` | Dam running low |  |  |
-| `alerts.kind.damFarm` | Dam running low: {farm} | Keep: {farm} |  |
-| `alerts.kind.ewr_forecast_fail` | River flow at risk in the forecast |  |  |
-| `alerts.kind.data_stale` | Data feed behind |  |  |
-| `alerts.kind.restriction_published` | Restriction notices from the WUA |  |  |
-| `alerts.kind.job_dead` | Failed background jobs |  |  |
-| `alerts.kind.feed_failing` | Failing data feeds |  |  |
+| `25f39a9c` | Dam running low |  |  |
+| `0c0907e6` | River flow at risk in the forecast |  |  |
+| `b947a78d` | Data feed behind |  |  |
+| `8cb73870` | Restriction notices from the WUA |  |  |
+| `df3539b8` | Failed background jobs |  |  |
+| `cf891bfc` | Failing data feeds |  |  |
+| `21b1fd3a` | Dam running low: {farm} | Keep: {farm} |  |
 
 ### unsubscribe
 
 The page an alert email’s “Stop these emails” link opens. Works without signing in.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `unsubscribe.title` | Stop alert emails |  |  |
-| `unsubscribe.ask` | Stop getting these alert emails? You can turn them back on from your account at any time. |  |  |
-| `unsubscribe.confirm` | Stop these emails |  |  |
-| `unsubscribe.working` | One moment… |  |  |
-| `unsubscribe.done` | You won’t get {kind} emails for {project} any more. | Keep: {kind}, {project} |  |
-| `unsubscribe.doneAll` | You won’t get any alert emails for {project} any more. | Keep: {project} |  |
-| `unsubscribe.dead` | This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment. |  |  |
-| `unsubscribe.noToken` | This link is incomplete. Open it again from the email, or copy the whole link. |  |  |
-| `unsubscribe.manage` | Manage alerts |  |  |
+| `d14653a3` | You won’t get any alert emails for {project} any more. | Keep: {project} |  |
+| `fa614c6b` | You won’t get {kind} emails for {project} any more. | Keep: {kind}, {project} |  |
+| `ac585d38` | Stop alert emails |  |  |
+| `72528562` | Stop getting these alert emails? You can turn them back on from your account at any time. |  |  |
+| `cf936b69` | One moment… |  |  |
+| `c156b4db` | Stop these emails |  |  |
+| `5ac110b9` | Manage alerts |  |  |
+| `d526c5e1` | This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment. |  |  |
+| `aa5e9817` | This link is incomplete. Open it again from the email, or copy the whole link. |  |  |
 
 ### unsubscribe.kind
 
 Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for {project} any more”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `unsubscribe.kind.dam_below` | dam level |  |  |
-| `unsubscribe.kind.ewr_forecast_fail` | river flow forecast |  |  |
-| `unsubscribe.kind.data_stale` | missing data |  |  |
-| `unsubscribe.kind.restriction_published` | restriction notice |  |  |
-| `unsubscribe.kind.job_dead` | failed background job |  |  |
-| `unsubscribe.kind.feed_failing` | failing data feed |  |  |
+| `17e428e3` | dam level |  |  |
+| `d1fc2e28` | river flow forecast |  |  |
+| `081c1745` | missing data |  |  |
+| `ca03de5f` | restriction notice |  |  |
+| `8bc7a37b` | failed background job |  |  |
+| `fb655347` | failing data feed |  |  |
 
 ### share
 
 The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `share.title` | Shared catchment view |  |  |
-| `share.titleNamed` | {name} · Shared catchment view | Keep: {name} |  |
-| `share.tag` | Shared view |  |  |
-| `share.loading` | Loading… |  |  |
-| `share.deadTitle` | This link doesn’t open anything |  |  |
-| `share.deadLink` | This link has expired or was withdrawn. Ask whoever sent it for a new one. |  |  |
-| `share.noLink` | This page needs the whole link. Open the link you were sent again, or ask whoever sent it for a new one. |  |  |
-| `share.loadFailed` | Couldn’t load this just now. Check your connection and try again. |  |  |
-| `share.sub` | Catchment water balance, shared read-only |  |  |
-| `share.published` | Published by {name} on {date}. Data up to {until}. | {name} is a person’s name, or “a former member” (share.formerMember); {date} and {until} are dates like “12 Jan 2024”. Keep: {date}, {name}, {until} |  |
-| `share.next` | Next update expected around {date}. | Keep: {date} |  |
-| `share.formerMember` | a former member |  |  |
-| `share.formerMemberByline` | A former member |  |  |
-| `share.reserveTitle` | The river’s ecological reserve |  |  |
-| `share.outlet` | At the catchment outlet |  |  |
-| `share.at` | At {place} | {place} is the name of a river gauge (a weir), as the WUA named it. Keep: {place} |  |
-| `share.season` | {n} of {days} below it this season (since {date}). | {n} is a number of days; {days} is like “102 days”; {date} is a date like “1 Oct 2023”. Keep: {date}, {days}, {n} |  |
-| `share.chartFailed` | Couldn’t load the flow chart just now. |  |  |
-| `share.noChart` | The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use. |  |  |
-| `share.aboutTitle` | About this page |  |  |
-| `share.about` | This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures. |  |  |
-| `share.farms` | {farms} in the catchment. | {farms} is like “6 farms”. Keep: {farms} |  |
-| `share.fine` | A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn. |  |  |
+| `0a953858` | Published by {name} on {date}. Data up to {until}. | {name} is a person’s name, or “a former member” (the “A former member” row); {date} and {until} are dates like “12 Jan 2024”. Keep: {date}, {name}, {until} |  |
+| `51eae74d` | a former member |  |  |
+| `82aa7d85` | At the catchment outlet |  |  |
+| `60d1632f` | At {place} | {place} is the name of a river gauge (a weir), as the WUA named it. Keep: {place} |  |
+| `a8344db9` | {n} of {days} below it this season (since {date}). | {n} is a number of days; {days} is like “102 days”; {date} is a date like “1 Oct 2023”. Keep: {date}, {days}, {n} |  |
+| `aecf2c05` | {farms} in the catchment. | {farms} is like “6 farms”. Keep: {farms} |  |
+| `d520e65e` | {name} · Shared catchment view | Keep: {name} |  |
+| `7c6df5c8` | Shared catchment view |  |  |
+| `6d06bb05` | Shared view |  |  |
+| `2e7e4ae3` | Loading… |  |  |
+| `6595c259` | This link doesn’t open anything |  |  |
+| `519fdd9e` | This link has expired or was withdrawn. Ask whoever sent it for a new one. |  |  |
+| `5950d7c5` | This page needs the whole link. Open the link you were sent again, or ask whoever sent it for a new one. |  |  |
+| `79725e4a` | Couldn’t load this just now. Check your connection and try again. |  |  |
+| `bc8ea99f` | Catchment water balance, shared read-only |  |  |
+| `d593593a` | The river’s ecological reserve |  |  |
+| `c1e6e998` | Couldn’t load the flow chart just now. |  |  |
+| `c67f2840` | The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use. |  |  |
+| `254af6c5` | About this page |  |  |
+| `60cadb22` | This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures. |  |  |
+| `e4b3fdc4` | A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn. |  |  |
 
 ### share.last30
 
 Shared view: each river site over the last 30 days. {days} is “30 days”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `share.last30.kept` | Kept its reserve on every one of the last {days}. | Keep: {days} |  |
-| `share.last30.missedAll` | Below its reserve on all of the last {days}. | Keep: {days} |  |
-| `share.last30.missed` | Below its reserve on {n} of the last {days}. | Keep: {days}, {n} |  |
+| `03ac8a80` | Kept its reserve on every one of the last {days}. | Keep: {days} |  |
+| `ac4d93a5` | Below its reserve on all of the last {days}. | Keep: {days} |  |
+| `cd1a360e` | Below its reserve on {n} of the last {days}. | Keep: {days}, {n} |  |
 
 ### share.chart
 
 Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `share.chart.title` | River flow each month, in m³ a day |  |  |
-| `share.chart.flow` | Flow at the outlet |  |  |
-| `share.chart.reserve` | Ecological reserve |  |  |
-| `share.chart.caption` | Mean flow at the outlet and the ecological reserve each month, in m³ a day |  |  |
-| `share.chart.month` | Month |  |  |
-| `share.chart.flowCol` | Flow |  |  |
-| `share.chart.reserveCol` | Reserve |  |  |
-| `share.chart.none` | No flows to show. |  |  |
-| `share.chart.aboveAll` | The mean flow was above the reserve in every month. |  |  |
-| `share.chart.belowAll` | The mean flow was below the reserve in every month. |  |  |
-| `share.chart.below` | The mean flow was below the reserve in {n} of the {months} months. | Keep: {months}, {n} |  |
-| `share.chart.summary` | River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below. | {from} and {to} are months like “November 2023”; {verdict} is one of the three sentences above it. Keep: {from}, {to}, {verdict} |  |
-| `share.chart.span` | {from} to {to}. Monthly means of the modelled daily flow. | {from} and {to} are months like “Nov 2023”. Keep: {from}, {to} |  |
+| `a0ddf26e` | River flow each month, in m³ a day |  |  |
+| `916671c6` | Flow at the outlet |  |  |
+| `16bf7d51` | Ecological reserve |  |  |
+| `4702e852` | Mean flow at the outlet and the ecological reserve each month, in m³ a day |  |  |
+| `3df462b5` | Flow |  |  |
+| `57d1f6eb` | Reserve |  |  |
+| `be1887a5` | No flows to show. |  |  |
+| `bb92196c` | The mean flow was above the reserve in every month. |  |  |
+| `d9bcae10` | The mean flow was below the reserve in every month. |  |  |
+| `0a3709bf` | The mean flow was below the reserve in {n} of the {months} months. | Keep: {months}, {n} |  |
+| `8ca58fb8` | River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below. | {from} and {to} are months like “November 2023”; {verdict} is one of the three sentences above it. Keep: {from}, {to}, {verdict} |  |
+| `ac863279` | {from} to {to}. Monthly means of the modelled daily flow. | {from} and {to} are months like “Nov 2023”. Keep: {from}, {to} |  |
 
 ### error
 
 A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `error.not_signed_in` | You’re not signed in. Sign in and try again. |  |  |
-| `error.account_exists` | An account with that email address already exists. Sign in, or reset your password. |  |  |
-| `error.wrong_credentials` | Wrong email or password. |  |  |
-| `error.signin_locked` | Too many sign-in attempts for this address. Try again in {wait}, or reset your password. | {wait} is “1 minute” or “3 minutes” (the error.minutes rows). Keep: {wait} |  |
-| `error.wrong_current_password` | Your current password is wrong. |  |  |
-| `error.password_changed_elsewhere` | Your password was changed somewhere else a moment ago. Sign in again. |  |  |
-| `error.link_invalid` | This link is invalid or has expired. Ask for a new one. |  |  |
-| `error.already_verified` | Your email address is already confirmed. |  |  |
-| `error.verification_sent_recently` | A confirmation email was sent a moment ago. Check your inbox, or try again in a minute. |  |  |
-| `error.invite_invalid` | This invitation is invalid or has expired. |  |  |
-| `error.note_farmer_own_farm` | You can add notes only to your own farm. |  |  |
-| `error.note_farm_visibility` | Only a note on a farm can be shown to its farmers. |  |  |
-| `error.note_author_only` | Only the person who wrote a note can change it. |  |  |
-| `error.note_delete_denied` | Only the person who wrote a note, or the WUA, can delete it. |  |  |
-| `error.unsubscribe_link_gone` | This link doesn’t work any more. |  |  |
-| `error.export_throttled` | You downloaded your data a moment ago. Try again in {wait}. | On the account page’s “Download my data”. {wait} is “1 minute” (the error.minutes rows). Keep: {wait} |  |
-| `error.alerts_resume_throttled` | You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow. | On the alert-email banner’s “Turn alert emails back on”, when the mail server refused the address again within a day. |  |
+| `18840a52` | An account with that email address already exists. Sign in, or reset your password. |  |  |
+| `7f8f9853` | Too many sign-in attempts for this address. Try again in {wait}, or reset your password. | {wait} is “1 minute” or “3 minutes” (the “{n} minute” / “{n} minutes” rows). Keep: {wait} |  |
+| `c5d6716a` | Your password was changed somewhere else a moment ago. Sign in again. |  |  |
+| `17b132df` | This link is invalid or has expired. Ask for a new one. |  |  |
+| `fccf74a7` | Your email address is already confirmed. |  |  |
+| `1f0dc36b` | A confirmation email was sent a moment ago. Check your inbox, or try again in a minute. |  |  |
+| `a2aa61f9` | This invitation is invalid or has expired. |  |  |
+| `84fea91c` | You can add notes only to your own farm. |  |  |
+| `09cd5bcf` | Only a note on a farm can be shown to its farmers. |  |  |
+| `7d1f4730` | Only the person who wrote a note can change it. |  |  |
+| `b1f091c0` | Only the person who wrote a note, or the WUA, can delete it. |  |  |
+| `8db26af3` | This link doesn’t work any more. |  |  |
+| `9c2638b9` | You downloaded your data a moment ago. Try again in {wait}. | On the account page’s “Download my data”. {wait} is “1 minute” (the “{n} minute” / “{n} minutes” rows). Keep: {wait} |  |
+| `e5a8dee0` | You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow. | On the alert-email banner’s “Turn alert emails back on”, when the mail server refused the address again within a day. |  |
 
 ### error.minutes
 
 Error messages: a number of minutes inside “Try again in {wait}”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `error.minutes.one` | {n} minute | Keep: {n} |  |
-| `error.minutes.other` | {n} minutes | Keep: {n} |  |
+| `a60f17d2.one` | {n} minute | Keep: {n} |  |
+| `a60f17d2.other` | {n} minutes | Keep: {n} |  |
 
 ### error.status
 
 Error messages for a problem the server gave no reason for.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
-| `error.status.network` | Couldn’t reach the server. Check your connection and try again. |  |  |
-| `error.status.server` | Something went wrong on our side. Try again in a moment. |  |  |
-| `error.status.invalid` | That wasn’t accepted. Check what you entered and try again. |  |  |
-| `error.status.forbidden` | You don’t have access to that. |  |  |
-| `error.status.notFound` | That isn’t there any more. |  |  |
-| `error.status.conflict` | That clashes with a change made a moment ago. Reload the page and try again. |  |  |
-| `error.status.tooLarge` | That is too large to send. |  |  |
-| `error.status.tooMany` | Too many tries. Wait a minute and try again. |  |  |
-| `error.status.unknown` | Something went wrong. Try again. |  |  |
+| `058318a7` | Couldn’t reach the server. Check your connection and try again. |  |  |
+| `9da83d63` | Something went wrong on our side. Try again in a moment. |  |  |
+| `7343f1e9` | That wasn’t accepted. Check what you entered and try again. |  |  |
+| `a7684194` | You don’t have access to that. |  |  |
+| `f0aa79de` | That isn’t there any more. |  |  |
+| `b1fbe570` | That clashes with a change made a moment ago. Reload the page and try again. |  |  |
+| `806c91e6` | That is too large to send. |  |  |
+| `45db8d33` | Too many tries. Wait a minute and try again. |  |  |
+| `9df7013d` | Something went wrong. Try again. |  |  |
 
 ## Emails
 
@@ -870,7 +858,7 @@ Error messages for a problem the server gave no reason for.
 
 Every email: the line under the button, followed by the link itself.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.buttonFallback` | If the button doesn't work, copy this address into your browser: |  |  |
 
@@ -878,7 +866,7 @@ Every email: the line under the button, followed by the link itself.
 
 Email: confirm your address. Sent after signing up, and again from “Resend email”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.verify.subject` | Confirm your email address — {product} | Keep: {product} |  |
 | `mail.verify.heading` | Confirm your email address |  |  |
@@ -891,7 +879,7 @@ Email: confirm your address. Sent after signing up, and again from “Resend ema
 
 Email: reset your password. Sent from “Forgot password?” on the sign-in page.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.reset.subject` | Reset your password — {product} | Keep: {product} |  |
 | `mail.reset.heading` | Reset your password |  |  |
@@ -905,7 +893,7 @@ Email: reset your password. Sent from “Forgot password?” on the sign-in page
 
 Email: the farmer invite. The WUA gives a farmer access to their farm(s) in a catchment. {farms} is one or more farm names joined with “and” (or “your farm”).
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.farmer.subject` | {inviter} has given you access to {farms} in {catchment} | Keep: {catchment}, {farms}, {inviter} |  |
 | `mail.farmer.heading` | Your farm on {product} | Keep: {product} |  |
@@ -918,7 +906,7 @@ Email: the farmer invite. The WUA gives a farmer access to their farm(s) in a ca
 
 Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.invite.signUp` | Create your {product} account with this email address ({email}) to accept. | Keep: {email}, {product} |  |
 | `mail.invite.signUpAction` | Create account and accept |  |  |
@@ -933,7 +921,7 @@ Email: the farmer invite, how to accept. “signUp” lines go to an address wit
 
 Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.alert.subject` | {what} — {project} | The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment. Keep: {project}, {what} |  |
 | `mail.alert.openFarm` | Open your farm |  |  |
@@ -970,7 +958,7 @@ Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm da
 
 Alert emails: the daily summary (06:00), listing several alerts in one email.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.alert.digest.subject` | Your alerts for {project} — {product} | Keep: {product}, {project} |  |
 | `mail.alert.digest.heading` | Your alerts for {project} | Keep: {project} |  |
@@ -983,7 +971,7 @@ Alert emails: the daily summary (06:00), listing several alerts in one email.
 
 Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `mail.alert.kind.dam_below` | dam level |  |  |
 | `mail.alert.kind.ewr_forecast_fail` | river flow forecast |  |  |
@@ -998,7 +986,7 @@ Alert emails: the name of a kind of alert, inside “You get this email because 
 
 The glossary, “What do these words mean?”, linked from every farm page. Plain words for farmers.
 
-| Key | English | Context | Afrikaans |
+| Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `help.farm-even-share.term` | Even share | The entry’s title. (For the developer: sourceHash 12fb005bdc918fadd911d84f03a437ee73e2321ad9de86f2a4f959dd902c1296.) |  |
 | `help.farm-even-share.short` | The share of what they needed that farms across the catchment received. A fairness check, not water you are owed. | One sentence, shown first (at most 140 characters). |  |

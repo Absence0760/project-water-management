@@ -1,3 +1,4 @@
+<!-- i18n-section: common -->
 <!--
 	The language switch (WP-2.5; docs/ui.md § Language): English | Afrikaans,
 	each named in its own language and marked with its `lang`, so a screen
@@ -30,14 +31,14 @@
 	}
 </script>
 
-<div class="lang" class:compact role="group" aria-label={t('common.language')}>
+<div class="lang" class:compact role="group" aria-label={t('Language')}>
 	{#each LOCALES as l (l)}
 		<button type="button" lang={l} aria-pressed={i18n.locale === l} aria-label={compact ? LANGUAGE_NAMES[l] : undefined} onclick={() => choose(l)}>
 			{compact ? l.toUpperCase() : LANGUAGE_NAMES[l]}
 		</button>
 	{/each}
 </div>
-<p class="lang-status" role="status">{failed ? t('common.languageSaveFailed') : ''}</p>
+<p class="lang-status" role="status">{failed ? t('Couldn’t save your choice to your account. It applies on this device.') : ''}</p>
 
 <style>
 	.lang {

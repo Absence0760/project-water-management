@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.river -->
 <script lang="ts">
 	// "Your farm on the river" (design §3 Q4): counts only, no names or
 	// positions (D1 b); the outlet's days below its reserve, never a flow; the
@@ -30,7 +31,7 @@
 </script>
 
 <section class="card" aria-labelledby="fair-h">
-	<h2 id="fair-h">{t('farm.river.title')}</h2>
+	<h2 id="fair-h">{t('Your farm on the river')}</h2>
 	<p>{positionLine(view)}</p>
 	<p><Rich text={outletLine(view)} /></p>
 	<p class="privacy">

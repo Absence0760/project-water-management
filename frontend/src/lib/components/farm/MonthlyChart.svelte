@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.chart -->
 <script lang="ts">
 	// "Last 12 months, in ML" (design §3 Q1, §7): needed as an outline and
 	// received as a fill, drawn as inline SVG at the card's rendered width so
@@ -15,11 +16,11 @@
 </script>
 
 <section class="card" aria-labelledby="chart-h">
-	<h2 id="chart-h">{t('farm.chart.title')}</h2>
+	<h2 id="chart-h">{t('Last 12 months, in ML')}</h2>
 	<p class="visually-hidden">{supplySummary(farm.monthly, farm.dataUntil)}</p>
 	<div class="legend" aria-hidden="true">
-		<span><span class="key need"></span>{t('farm.chart.needed')}</span>
-		<span><span class="key got"></span>{t('farm.chart.received')}</span>
+		<span><span class="key need"></span>{t('Needed')}</span>
+		<span><span class="key got"></span>{t('Received')}</span>
 	</div>
 	<div class="plot" bind:clientWidth={width}>
 		{#if chart}
@@ -38,10 +39,10 @@
 	</div>
 	<p class="fine">{rangeCaption(farm.monthly, farm.dataUntil)}</p>
 	<details>
-		<summary>{t('farm.chart.showNumbers')}</summary>
+		<summary>{t('Show the numbers')}</summary>
 		<table class="numbers">
-			<caption class="visually-hidden">{t('farm.chart.supplyCaption')}</caption>
-			<thead><tr><th scope="col">{t('farm.chart.month')}</th><th scope="col">{t('farm.chart.needed')}</th><th scope="col">{t('farm.chart.received')}</th></tr></thead>
+			<caption class="visually-hidden">{t('Water you needed and received each month')}</caption>
+			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Needed')}</th><th scope="col">{t('Received')}</th></tr></thead>
 			<tbody>
 				{#each rows as r (r.label)}
 					<tr><th scope="row">{r.label}</th><td>{r.need}</td><td>{r.got}</td></tr>

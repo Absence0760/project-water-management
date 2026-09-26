@@ -12,22 +12,10 @@
 // constants, for the same reason.
 import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
 import { STALE_DAYS } from '$lib/components/series/freshness';
-import { i18n, t, tRich, type MessageKey } from '$lib/i18n/locale.svelte';
+import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
-import { pickNotice, splitNotice, type NoticeVm } from './notice';
-import {
-	count,
-	daysBetween,
-	fmtDay,
-	fmtDayMonth,
-	fmtMonthShort,
-	fmtPct,
-	fmtStampDay,
-	fmtStampTime,
-	fmtVolume,
-	joinAnd,
-	type VolumeUnit
-} from './format';
+import { LEVEL_WORDS, pickNotice, splitNotice, type NoticeVm } from './notice';
+import { count, DAYS, daysBetween, FARMS, fmtDay, fmtDayMonth, fmtMonthShort, fmtPct, fmtStampDay, fmtStampTime, fmtVolume, joinAnd, POINTS, type VolumeUnit, WEEKS } from './format';
 
 // ---- The dates line (§2, §6.1 item 2) ---------------------------------------
 
@@ -46,16 +34,17 @@ export function datesLine(view: FarmView, today: string): DatesLine {
 	const until = view.farm.dataUntil;
 	const age = daysBetween(until, today);
 	const stale = view.stale || age > STALE_DAYS;
-	const v = { published: fmtStampDay(view.publication.publishedAt), until: fmtDay(until), age: count('farm.n.day', age) };
-	let text = t(stale ? 'farm.dates.stale' : 'farm.dates.fresh', v);
-	if (view.publication.nextExpectedOn) text += ` ${t('farm.dates.next', { date: fmtDay(view.publication.nextExpectedOn) })}`;
+	const v = { published: fmtStampDay(view.publication.publishedAt), until: fmtDay(until), age: count(DAYS, age) };
+	// i18n-section: farm.dates
+	let text = t(stale ? 'Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.' : 'Published by the WUA on {published}. Data up to {until}.', v);
+	if (view.publication.nextExpectedOn) text += ` ${t('Next update expected around {date}.', { date: fmtDay(view.publication.nextExpectedOn) })}`;
 	return { text, stale };
 }
 
 // ---- The WUA's answer (§3 Q2, §6.1 item 3) -----------------------------------
 
 /** The restriction level in words: "No restriction", "Advisory", "Restriction". */
-export const levelWord = (level: RestrictionLevel) => t(`farm.level.${level}`);
+export const levelWord = (level: RestrictionLevel) => t(LEVEL_WORDS[level]);
 
 export { splitNotice, type NoticeVm } from './notice';
 
@@ -70,30 +59,32 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 	if (r.level === 'none') return null;
 	const picked = pickNotice(r, i18n.locale);
 	const { title, body } = splitNotice(picked?.text ?? null);
-	const label = t('farm.notice.label', { level: levelWord(r.level) });
+	// i18n-section: farm.notice
+	const label = t('Notice from the WUA · {level}', { level: levelWord(r.level) });
 	return {
 		level: r.level,
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
 		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
-		pctLine: !title && !body && r.pct != null ? t('farm.notice.pct', { pct: fmtPct(r.pct / 100) }) : null,
+		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: {pct} of registered use.', { pct: fmtPct(r.pct / 100) }) : null,
 		byline: `${view.publication.publishedBy}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,
-		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'farm.notice.onlyEn' : 'farm.notice.onlyAf') : null
+		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'The WUA wrote this notice in English only.' : 'The WUA wrote this notice in Afrikaans only.') : null
 	};
 }
 
-export const noRestriction = () => t('farm.notice.none');
+export const noRestriction = () => t('No restriction from the WUA');
 
 // ---- Water you received this season (§3 Q1) ---------------------------------
 
-const SYSTEMS: [number, MessageKey][] = [
-	[0.9, 'farm.system.drip'],
-	[0.85, 'farm.system.microPivot'],
-	[0.75, 'farm.system.sprinklers'],
-	[0.65, 'farm.system.flood']
+const SYSTEMS: [number, Msg][] = [
+	// i18n-section: farm.system
+	[0.9, msg('drip')],
+	[0.85, msg('micro or centre pivot')],
+	[0.75, msg('sprinklers')],
+	[0.65, msg('flood')]
 ];
 
 /** The irrigation system nearest an efficiency (§3 Q1: drip 0.90, micro/pivot 0.85, sprinkler 0.75, flood 0.65). */
@@ -103,24 +94,34 @@ export function systemName(efficiency: number): string {
 	return t(best[1]);
 }
 
-export const littleNeed = () => t('farm.supply.littleNeed');
+// i18n-section: farm.supply
+export const littleNeed = () => t('Your farm needed very little water this season.');
 
 /** "Short on 16 days in Nov and Dec, all when your dam was down to its stop level." */
 export function shortLine(farm: FarmProjection): string {
 	const s = farm.season;
-	if (s.shortDays <= 0) return t('farm.short.never');
+	// i18n-section: farm.short
+	if (s.shortDays <= 0) return t('You weren\'t short of water on any day this season.');
 	const months = joinAnd(s.shortMonths.map(fmtMonthShort));
-	const days = count('farm.n.day', s.shortDays);
-	const head = months ? t('farm.short.headIn', { days, months }) : t('farm.short.head', { days });
+	const days = count(DAYS, s.shortDays);
+	const head = months ? t('Short on {days} in {months}', { days, months }) : t('Short on {days}', { days });
 	const one = s.shortDays === 1;
-	if (farm.damCapacityM3 <= 0) return t(one ? 'farm.short.riverOne' : 'farm.short.riverAll', { head });
+	if (farm.damCapacityM3 <= 0) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
 	const stop = farm.damMinPct > 0;
 	if (s.shortDaysAtStopLevel >= s.shortDays) {
-		const key = stop ? (one ? 'farm.short.stopOne' : 'farm.short.stopAll') : one ? 'farm.short.emptyOne' : 'farm.short.emptyAll';
-		return t(key, { head });
+		return t(
+			stop
+				? one
+					? '{head}, when your dam was down to its stop level.'
+					: '{head}, all when your dam was down to its stop level.'
+				: one
+					? '{head}, when your dam was empty.'
+					: '{head}, all when your dam was empty.',
+			{ head }
+		);
 	}
-	if (s.shortDaysAtStopLevel > 0) return t(stop ? 'farm.short.stopSome' : 'farm.short.emptySome', { head, n: s.shortDaysAtStopLevel });
-	return t('farm.short.plain', { head });
+	if (s.shortDaysAtStopLevel > 0) return t(stop ? '{head}, {n} of them when your dam was down to its stop level.' : '{head}, {n} of them when your dam was empty.', { head, n: s.shortDaysAtStopLevel });
+	return t('{head}.', { head });
 }
 
 export interface SupplyVm {
@@ -142,13 +143,14 @@ export function supplyCard(farm: FarmProjection, unit: VolumeUnit): SupplyVm {
 	return {
 		pct: s.fraction == null ? null : fmtPct(s.fraction),
 		barPct: s.fraction == null ? 0 : Math.round(Math.min(Math.max(s.fraction, 0), 1) * 100),
-		volumes: t('farm.supply.volumes', { got: fmtVolume(s.suppliedM3, unit), need: fmtVolume(s.demandM3, unit), from: fmtDayMonth(s.from) }),
+		// i18n-section: farm.supply
+		volumes: t('{got} of {need} since {from}', { got: fmtVolume(s.suppliedM3, unit), need: fmtVolume(s.demandM3, unit), from: fmtDayMonth(s.from) }),
 		short: shortLine(farm),
 		last30:
 			l.fraction == null
-				? [t('farm.supply.last30Little')]
-				: tRich('farm.supply.last30', { pct: fmtPct(l.fraction), got: fmtVolume(l.suppliedM3, unit), need: fmtVolume(l.demandM3, unit) }),
-		efficiency: t('farm.supply.efficiency', { pct: fmtPct(eff), system: systemName(eff) })
+				? [t('Last 30 days: very little water needed')]
+				: tRich('Last 30 days: **{pct}** · {got} of {need}', { pct: fmtPct(l.fraction), got: fmtVolume(l.suppliedM3, unit), need: fmtVolume(l.demandM3, unit) }),
+		efficiency: t('Worked out by the model, not read from your meter. It assumes {pct} of the water you pump reaches the crop ({system}). Wrong? Tell your WUA.', { pct: fmtPct(eff), system: systemName(eff) })
 	};
 }
 
@@ -156,14 +158,15 @@ export function supplyCard(farm: FarmProjection, unit: VolumeUnit): SupplyVm {
 
 /** How long the usable water lasts: whole days under 14, then weeks. */
 export function lastsFor(days: number): string {
-	if (days < 1) return t('farm.dam.lessThanDay');
-	if (days < 14) return t('farm.dam.about', { span: count('farm.n.day', Math.max(1, Math.round(days))) });
-	return t('farm.dam.about', { span: count('farm.n.week', Math.round(days / 7)) });
+	// i18n-section: farm.dam
+	if (days < 1) return t('less than a day');
+	if (days < 14) return t('about {span}', { span: count(DAYS, Math.max(1, Math.round(days))) });
+	return t('about {span}', { span: count(WEEKS, Math.round(days / 7)) });
 }
 
-export const noStopLevel = () => t('farm.dam.noStop');
-export const atStopLevel = () => t('farm.dam.atStop');
-export const damModelled = () => t('farm.dam.modelled');
+export const noStopLevel = () => t('The model assumes your pump can empty the dam. Tell your WUA the level your pump stops at.');
+export const atStopLevel = () => t('Your dam is down to the level where irrigation stops. There is no water above it to use until water flows in.');
+export const damModelled = () => t('Worked out by the model, not measured at your dam.');
 
 export interface DamVm {
 	/** "24 %". */
@@ -186,11 +189,11 @@ export interface DamVm {
 export function damTrend(pct: number, pct30dAgo: number): DamVm['trend'] {
 	const points = Math.round((pct - pct30dAgo) * 100);
 	const was = fmtPct(pct30dAgo);
-	if (points === 0) return { dir: 'flat', text: t('farm.dam.trendFlat', { was }) };
-	const n = count('farm.n.point', Math.abs(points));
+	if (points === 0) return { dir: 'flat', text: t('About the same as 30 days ago ({was})', { was }) };
+	const n = count(POINTS, Math.abs(points));
 	return points > 0
-		? { dir: 'up', text: t('farm.dam.trendUp', { points: n, was }) }
-		: { dir: 'down', text: t('farm.dam.trendDown', { points: n, was }) };
+		? { dir: 'up', text: t('Up {points} in 30 days (was {was})', { points: n, was }) }
+		: { dir: 'down', text: t('Down {points} in 30 days (was {was})', { points: n, was }) };
 }
 
 /**
@@ -202,7 +205,7 @@ export function daysLeftLine(farm: FarmProjection, unit: VolumeUnit, long = fals
 	if (!d || d.usableM3 == null || farm.damMinPct <= 0) return null;
 	if (d.usableM3 <= 0) return [atStopLevel()];
 	if (d.usableDays == null || !(d.use14M3Day > 0)) return null;
-	return tRich(long ? 'farm.dam.daysLeftLong' : 'farm.dam.daysLeft', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
+	return tRich(long ? 'At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.' : 'At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
 }
 
 /** null for a farm with no dam: no dam card and no dam page. */
@@ -214,8 +217,8 @@ export function damCard(farm: FarmProjection, unit: VolumeUnit): DamVm | null {
 		pct: fmtPct(d.pct),
 		barPct: Math.round(Math.min(Math.max(d.pct, 0), 1) * 100),
 		stopPct: hasStop ? Math.round(farm.damMinPct * 100) : null,
-		stopLabel: hasStop ? t('farm.dam.stopsAt', { pct: fmtPct(farm.damMinPct) }) : null,
-		volumes: t('farm.dam.volumes', { storage: fmtVolume(d.storageM3, unit), capacity: fmtVolume(farm.damCapacityM3, unit) }),
+		stopLabel: hasStop ? t('irrigation stops at {pct}', { pct: fmtPct(farm.damMinPct) }) : null,
+		volumes: t('{storage} of {capacity}', { storage: fmtVolume(d.storageM3, unit), capacity: fmtVolume(farm.damCapacityM3, unit) }),
 		trend: damTrend(d.pct, d.pct30dAgo),
 		daysLeft: daysLeftLine(farm, unit),
 		noStop: hasStop ? null : noStopLevel()
@@ -224,10 +227,13 @@ export function damCard(farm: FarmProjection, unit: VolumeUnit): DamVm | null {
 
 // ---- Looking back: the model card (§3 Q2, §6.2) ------------------------------
 
+// i18n-section: farm.band
 /** "Model: OK", "Model: watch", "Model: short". */
-export const bandChip = (band: ModelBand) => t(`farm.band.${band}`);
+const BANDS: Record<ModelBand, Msg> = { ok: msg('Model: OK'), watch: msg('Model: watch'), short: msg('Model: short') };
+export const bandChip = (band: ModelBand) => t(BANDS[band]);
 
-export const notOfficial = () => t('farm.back.notOfficial');
+// i18n-section: farm.back
+export const notOfficial = () => t('The model’s estimate, not an official restriction.');
 
 export interface LookingBackVm {
 	heading: string;
@@ -239,7 +245,7 @@ export interface LookingBackVm {
 }
 
 /** "1 Oct to 10 Jan". */
-export const seasonSpan = (farm: FarmProjection) => t('farm.span', { from: fmtDayMonth(farm.season.from), to: fmtDayMonth(farm.season.to) });
+export const seasonSpan = (farm: FarmProjection) => t('{from} to {to}', { from: fmtDayMonth(farm.season.from), to: fmtDayMonth(farm.season.to) });
 
 /** True when the river asked this farm to pump less (a supply cut above the 1 m³/day floor on at least one day). */
 export const pumpLessAsked = (farm: FarmProjection) =>
@@ -247,15 +253,15 @@ export const pumpLessAsked = (farm: FarmProjection) =>
 
 export function lookingBack(farm: FarmProjection): LookingBackVm {
 	const r = farm.river;
-	const heading = t('farm.back.heading', { span: seasonSpan(farm) });
-	if (r.headline == null) return { heading, chip: null, text: [littleNeed()], link: t('farm.back.why') };
+	const heading = t('Looking back: {span}', { span: seasonSpan(farm) });
+	if (r.headline == null) return { heading, chip: null, text: [littleNeed()], link: t('Why? What can I do?') };
 	const pct = fmtPct(r.headline);
-	const text = tRich(pumpLessAsked(farm) ? 'farm.back.pumpLess' : 'farm.back.notAsked', { pct });
-	return { heading, chip: r.band ? bandChip(r.band) : null, text, link: t('farm.back.whyPct', { pct }) };
+	const text = tRich(pumpLessAsked(farm) ? 'If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed.' : 'The river didn\'t need you to pump less this season. You had about **{pct}** of the water you needed.', { pct });
+	return { heading, chip: r.band ? bandChip(r.band) : null, text, link: t('Why {pct}? What can I do?', { pct }) };
 }
 
 /** The one link line that replaces the model card under a `restricted` notice. */
-export const lookingBackShort = () => t('farm.back.short');
+export const lookingBackShort = () => t('The model’s look back and what you can do');
 
 // ---- Compared with last season (§3 Q1, E4) -----------------------------------
 
@@ -278,14 +284,16 @@ export type CompareVm =
 
 export function compareCard(farm: FarmProjection): CompareVm {
 	const last = farm.lastSeason;
-	if (!last) return { available: false, text: t('farm.compare.unavailable') };
-	const pct = (f: number | null) => (f == null ? t('farm.compare.littleNeeded') : fmtPct(f));
-	const rows = [{ label: t('farm.compare.received'), now: pct(farm.season.fraction), then: pct(last.fraction) }];
+	// i18n-section: farm.compare
+	if (!last) return { available: false, text: t('Not available: the model’s data doesn’t reach back to the same dates last season.') };
+	const pct = (f: number | null) => (f == null ? t('very little needed') : fmtPct(f));
+	const rows = [{ label: t('Water received'), now: pct(farm.season.fraction), then: pct(last.fraction) }];
 	if (farm.dam && farm.damCapacityM3 > 0) {
 		rows.push({
-			label: t('farm.compare.damOn', { date: fmtDayMonth(farm.season.to) }),
+			label: t('Dam on {date}', { date: fmtDayMonth(farm.season.to) }),
 			now: fmtPct(farm.dam.pct),
-			then: last.damPct == null ? t('farm.notAvailable') : fmtPct(last.damPct)
+			// i18n-section: farm
+			then: last.damPct == null ? t('not available') : fmtPct(last.damPct)
 		});
 	}
 	return {
@@ -299,82 +307,95 @@ export function compareCard(farm: FarmProjection): CompareVm {
 
 // ---- Your farm on the river (§3 Q4) ------------------------------------------
 
+// i18n-section: farm.river
 /** The one privacy sentence, the same everywhere (§3 Q4, §11 F5). */
-export const privacy = () => t('farm.river.privacy');
+export const privacy = () => t('Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.');
 
 /** "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment. The same rules apply to every farm." */
 export function positionLine(view: FarmView): string {
 	const { farmsUpstream: up, farmsDownstream: down, farmCount: n } = view.context;
-	const upText = up === 0 ? t('farm.river.upNone') : up === 1 ? t('farm.river.upOne') : t('farm.river.upMany', { n: up });
-	const downText = down === 0 ? t('farm.river.downNone') : down === 1 ? t('farm.river.downOne') : t('farm.river.downMany', { n: down });
-	return t('farm.river.position', { up: upText, down: downText, count: count('farm.n.farm', n) });
+	const upText = up === 0 ? t('No farm is') : up === 1 ? t('1 farm is') : t('{n} farms are', { n: up });
+	const downText = down === 0 ? t('none is') : down === 1 ? t('1 is') : t('{n} are', { n: down });
+	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm.', { up: upText, down: downText, count: count(FARMS, n) });
 }
 
 /** "River at Sandspruit Outlet: below its reserve on all of the last 30 days." A count, never a flow volume. */
 export function outletLine(view: FarmView): Rich {
 	const o = view.outlet30;
-	const v = { name: o.name, days: count('farm.n.day', o.days), n: o.daysNotMet };
-	if (o.daysNotMet <= 0) return tRich('farm.river.outletKept', v);
-	return tRich(o.daysNotMet >= o.days ? 'farm.river.outletAll' : 'farm.river.outletSome', v);
+	const v = { name: o.name, days: count(DAYS, o.days), n: o.daysNotMet };
+	if (o.daysNotMet <= 0) return tRich('River at {name}: kept its reserve on every one of the last {days}.', v);
+	return tRich(o.daysNotMet >= o.days ? 'River at {name}: below its reserve on **all of the last {days}**.' : 'River at {name}: below its reserve on **{n} of the last {days}**.', v);
 }
 
 /** "Who can see my farm" (§10.2): the people, by name, from GET …/farm/:nodeId/access; the roles alone if that fails. */
 export const whoCanSee = () => ({
-	heading: t('farm.who.heading'),
-	people: [t('farm.who.you'), t('farm.who.linked'), t('farm.who.staff'), t('farm.who.modeller')],
-	not: t('farm.who.not'),
-	loading: t('farm.who.loading'),
-	failed: t('farm.who.failed')
+	// i18n-section: farm.who
+	heading: t('Who can see my farm'),
+	people: [t('You'), t('Anyone else linked to this farm'), t('The WUA’s staff'), t('The WUA’s modeller')],
+	not: t('Other farmers can’t see your farm’s figures, and you can’t see theirs.'),
+	loading: t('Loading the names…'),
+	failed: t('Couldn’t load the names just now. Your WUA can tell you who these people are.')
 });
 
-const ACCESS_ROLES = ['farmer', 'viewer', 'editor', 'owner'] as const;
+const ACCESS_ROLES = {
+	farmer: msg('linked to this farm'),
+	viewer: msg('WUA, can read'),
+	editor: msg('WUA, can change the model'),
+	owner: msg('WUA, manages who has access'),
+	unknown: msg('WUA')
+};
 
 /** One line of "Who can see my farm": "Jane Smith (you) · linked to this farm". */
 export function accessLine(p: { displayName: string; role: string; you: boolean }): string {
-	const role = (ACCESS_ROLES as readonly string[]).includes(p.role) ? (p.role as (typeof ACCESS_ROLES)[number]) : 'unknown';
-	return `${p.displayName}${p.you ? ` ${t('farm.who.youMark')}` : ''} · ${t(`farm.who.role.${role}`)}`;
+	const role = Object.hasOwn(ACCESS_ROLES, p.role) && p.role !== 'unknown' ? ACCESS_ROLES[p.role as keyof typeof ACCESS_ROLES] : ACCESS_ROLES.unknown;
+	return `${p.displayName}${p.you ? ` ${t('(you)')}` : ''} · ${t(role)}`;
 }
 
-export const disclaimer = () => t('farm.disclaimer');
+// i18n-section: farm
+export const disclaimer = () => t('These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction.');
 
 // ---- Several farms (/farm, board 9) ------------------------------------------
 
 /** "86 % of water needed · dam 24 %", or "· no dam". */
 export function farmSummaryLine(farm: FarmProjection): string {
-	const got = farm.season.fraction == null ? t('farm.list.littleNeeded') : t('farm.list.got', { pct: fmtPct(farm.season.fraction) });
-	const dam = farm.dam && farm.damCapacityM3 > 0 ? t('farm.list.dam', { pct: fmtPct(farm.dam.pct) }) : t('farm.list.noDam');
+	// i18n-section: farm.list
+	const got = farm.season.fraction == null ? t('very little water needed') : t('{pct} of water needed', { pct: fmtPct(farm.season.fraction) });
+	const dam = farm.dam && farm.damCapacityM3 > 0 ? t('dam {pct}', { pct: fmtPct(farm.dam.pct) }) : t('no dam');
 	return `${got} · ${dam}`;
 }
 
-export const farmsPrivacy = () => t('farm.list.privacy');
+export const farmsPrivacy = () => t('Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.');
 
 // ---- States (§6.5, boards 5 to 8) ---------------------------------------------
 
 const STATE_KEYS = {
-	loading: 'farm.state.loading',
-	slow: 'farm.state.slow',
-	errorTitle: 'farm.state.errorTitle',
-	errorText: 'farm.state.errorText',
-	noPublication: 'farm.state.noPublication',
-	noPublicationText: 'farm.state.noPublicationText',
-	contact: 'farm.state.contact',
-	removed: 'farm.state.removed',
-	needsConnection: 'farm.state.needsConnection',
-	updating: 'farm.state.updating'
-} as const satisfies Record<string, MessageKey>;
+	// i18n-section: farm.state
+	loading: msg('Loading your farm…'),
+	slow: msg('Slow signal? This can take a moment.'),
+	errorTitle: msg('We couldn’t load your farm'),
+	errorText: msg('Check your signal and try again. Your figures are safe; nothing was changed.'),
+	noPublication: msg('Your WUA hasn’t published figures yet'),
+	noPublicationText: msg('When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.'),
+	contact: msg('Questions? Contact your WUA.'),
+	removed: msg('You no longer have access to this farm. Contact your WUA.'),
+	needsConnection: msg('Charts, “Why?” and downloads need a connection.'),
+	updating: msg('Updating…')
+};
 
 /** One of the farm pages' state lines, in the active language. */
 export const stateText = (which: keyof typeof STATE_KEYS) => t(STATE_KEYS[which]);
 
 /** The contact line after a second failure in a row. */
 export function stillFailing(offline: boolean): string {
-	return t(offline ? 'farm.state.stillOffline' : 'farm.state.stillFailing');
+	return t(offline ? 'Still no connection. If this keeps happening, contact your WUA.' : 'Still not working. If this keeps happening, contact your WUA.');
 }
 
 /** The status strip over a saved copy: no signal, or the update failed. */
 export function savedStrip(savedAt: number, why: 'offline' | 'failed'): string {
-	return t(why === 'offline' ? 'farm.saved.offline' : 'farm.saved.failed', { time: fmtStampTime(savedAt) });
+	// i18n-section: farm.saved
+	return t(why === 'offline' ? 'No signal. These are the figures saved on this phone at {time}. We’ll update them when you’re back online.' : 'We couldn’t update your figures. These are the figures saved on this phone at {time}.', { time: fmtStampTime(savedAt) });
 }
 
+// i18n-section: farm
 /** "You're previewing Vaalbank as its farmer sees it" (viewer+ only). */
-export const previewBanner = (farmName: string) => t('farm.preview', { farm: farmName });
+export const previewBanner = (farmName: string) => t('You’re previewing {farm} as its farmer sees it', { farm: farmName });

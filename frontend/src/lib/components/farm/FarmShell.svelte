@@ -1,3 +1,4 @@
+<!-- i18n-section: farm -->
 <script lang="ts">
 	// The farmer view's page frame (docs/design/farmer-view.md §6.1, §7): its own
 	// header ("My farm" and Menu, or a back link), the preview banner for WUA
@@ -49,7 +50,7 @@
 	function toggleKeep() {
 		keep = !keep;
 		setKeepsCopy(keep);
-		note = keep ? t('farm.keepOn') : t('farm.keepOff');
+		note = keep ? t('Your figures will be kept on this phone.') : t('Nothing is kept on this phone now.');
 	}
 
 	async function signOut() {
@@ -95,22 +96,22 @@
 				{back.label}
 			</a>
 		{:else}
-			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('farm.myFarm')}</span></span>
+			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('My farm')}</span></span>
 		{/if}
 		<span class="spacer"></span>
 		<LanguageSwitch compact />
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="menu-root" bind:this={menuRoot} onkeydown={onKeydown} onfocusout={onFocusOut}>
 			<button type="button" class="menu-btn" bind:this={trigger} aria-expanded={menuOpen} aria-controls="farm-menu" onclick={() => (menuOpen = !menuOpen)}>
-				{t('farm.menu')}
+				{t('Menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm">{t('farm.yourFarms')}</a></li>
-				<li><a href="{base}/farm/words">{t('farm.words')}</a></li>
+				<li><a href="{base}/farm">{t('Your farms')}</a></li>
+				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
 				<li>
-					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('farm.noCopy')}</button>
+					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
 				</li>
-				<li><button type="button" onclick={signOut}>{t('common.signOut')}</button></li>
+				<li><button type="button" onclick={signOut}>{t('Sign out')}</button></li>
 			</ul>
 			<p class="visually-hidden" role="status">{note}</p>
 		</div>
@@ -119,7 +120,7 @@
 	{#if preview}
 		<div class="preview" role="note">
 			<span>{preview.text}.</span>
-			<a href={preview.href}>{t('farm.backToWorkspace')}</a>
+			<a href={preview.href}>{t('Back to the workspace')}</a>
 		</div>
 	{/if}
 
@@ -133,7 +134,7 @@
 				{/if}
 			</svg>
 			<span>{strip.text}</span>
-			{#if onretry}<button type="button" onclick={onretry}>{t('common.tryAgain')}</button>{/if}
+			{#if onretry}<button type="button" onclick={onretry}>{t('Try again')}</button>{/if}
 		</div>
 	{/if}
 

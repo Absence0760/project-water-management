@@ -1,3 +1,4 @@
+<!-- i18n-section: login -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -32,16 +33,16 @@
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
 			// A wrong password, a lockout (429) or anything else, worded from the error's code (docs/api.md § Errors).
-			error = err instanceof ApiError && err.status === 401 ? t('login.wrong') : errorText(err);
+			error = err instanceof ApiError && err.status === 401 ? t('Wrong email or password.') : errorText(err);
 		} finally {
 			busy = false;
 		}
 	}
 </script>
 
-<svelte:head><title>{t('common.pageTitle', { page: t('common.signIn') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · Water Management', { page: t('Sign in') })}</title></svelte:head>
 
-<AuthCard title={t('common.signIn')} subtitle={t('login.subtitle')}>
+<AuthCard title={t('Sign in')} subtitle={t('Welcome back. Sign in to your catchment projects.')}>
 	{#if DEMO}
 		<div class="demo">
 			<span>Demo: <span class="mono">{DEMO.email}</span> / <span class="mono">{DEMO.password}</span></span>
@@ -58,18 +59,18 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<form onsubmit={submit}>
 		<div class="field">
-			<label for="email">{t('common.email')}</label>
+			<label for="email">{t('Email')}</label>
 			<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 		</div>
 		<div class="field">
-			<label for="password">{t('common.password')}</label>
+			<label for="password">{t('Password')}</label>
 			<PasswordInput id="password" autocomplete="current-password" required bind:value={password} />
-			<a class="forgot" href={forgotHref}>{t('login.forgot')}</a>
+			<a class="forgot" href={forgotHref}>{t('Forgot password?')}</a>
 		</div>
-		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('login.busy') : t('common.signIn')}</button>
+		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Signing in…') : t('Sign in')}</button>
 	</form>
 	{#snippet footer()}
-		{t('login.noAccount')} <a href="{base}/register{page.url.search}">{t('login.createOne')}</a>
+		{t('No account?')} <a href="{base}/register{page.url.search}">{t('Create one')}</a>
 	{/snippet}
 </AuthCard>
 

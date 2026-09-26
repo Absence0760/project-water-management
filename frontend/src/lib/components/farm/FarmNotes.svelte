@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.notes -->
 <!--
 	"Notes about your farm" on the farmer's page (WP-2.7): the farmer's own
 	notes and the WUA's farm-visible ones on this farm, and a form to add one
@@ -14,15 +15,15 @@
 </script>
 
 <section class="card" aria-labelledby="farm-notes-h">
-	<h2 id="farm-notes-h">{t('farm.notes.title')}</h2>
-	<p class="sub">{t('farm.notes.intro', { farm: farmName })}</p>
+	<h2 id="farm-notes-h">{t('Notes about your farm')}</h2>
+	<p class="sub">{t('Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm.', { farm: farmName })}</p>
 	<NotesList
 		{projectId}
 		target={{ kind: 'node', nodeId, name: farmName, isFarm: true }}
 		farmer
 		farmOnly={preview}
 		canWrite={!preview}
-		emptyText={t('farm.notes.empty')}
+		emptyText={t('No notes about this farm yet.')}
 		words={farmNotesWords()}
 	/>
 </section>

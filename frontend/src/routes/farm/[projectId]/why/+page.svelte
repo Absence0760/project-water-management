@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.why -->
 <script lang="ts">
 	// "Why about 83 %?" (docs/design/farmer-view.md §5, §6.4, board 4): the
 	// model's look back in three steps a farmer can check by hand. Each step is
@@ -23,9 +24,9 @@
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>{t('farm.pageTitle', { page: farm.view ? whyTitle(farm.view.farm) : t('farm.why.pageTitle') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My farm', { page: farm.view ? whyTitle(farm.view.farm) : t('Why?') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('farm.myFarm') }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My farm') }}>
 	{#snippet children(view)}
 		{@const s1 = step1(view.farm)}
 		{@const s2 = step2(view.farm)}
@@ -37,7 +38,7 @@
 		</div>
 
 		<section class="card" aria-labelledby="s1-h">
-			<h2 id="s1-h">{t('farm.why.step1')}</h2>
+			<h2 id="s1-h">{t('1. Was water shared fairly?')}</h2>
 			{#if s1.shown}
 				<p><Rich text={s1.catchment} /></p>
 				<div class="share" aria-hidden="true">
@@ -53,7 +54,7 @@
 		</section>
 
 		<section class="card" aria-labelledby="s2-h">
-			<h2 id="s2-h">{t('farm.why.step2')}</h2>
+			<h2 id="s2-h">{t('2. Did the river keep flowing?')}</h2>
 			<p><Rich text={s2.intro} /></p>
 			<p><Rich text={s2.sites} />{#if s2.reason}{' '}{s2.reason}{/if}</p>
 			{#if s2.rule}<p>{s2.rule}</p>{/if}
@@ -92,17 +93,17 @@
 		{/if}
 
 		<section class="card" aria-labelledby="s4-h">
-			<h2 id="s4-h">{t('farm.why.decidedTitle')}</h2>
+			<h2 id="s4-h">{t('What the WUA decided')}</h2>
 			<p><Rich text={wuaDecided(view)} /></p>
-			<a class="link" href="{main}#notice">{t('farm.why.readNotice')}</a>
+			<a class="link" href="{main}#notice">{t('Read the notice')}</a>
 		</section>
 
 		<section class="card" aria-labelledby="s5-h">
-			<h2 id="s5-h">{t('farm.why.notTitle')}</h2>
+			<h2 id="s5-h">{t('What this is not')}</h2>
 			<ul class="not">
 				{#each whatThisIsNot(view.farm) as line (line)}<li>{line}</li>{/each}
 			</ul>
-			<a class="link" href="{base}/farm/words#farm-reserve">{t('farm.why.whatReserve')}</a>
+			<a class="link" href="{base}/farm/words#farm-reserve">{t('What is the river’s reserve?')}</a>
 		</section>
 	{/snippet}
 </FarmPage>

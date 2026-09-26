@@ -1,3 +1,4 @@
+<!-- i18n-section: account -->
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
@@ -32,11 +33,11 @@
 		nameSaved = false;
 		const name = displayName.trim();
 		if (!name) {
-			nameError = t('account.nameEmpty');
+			nameError = t('Enter a display name.');
 			return;
 		}
 		if (name.length > 100) {
-			nameError = t('account.nameTooLong');
+			nameError = t('Use at most 100 characters.');
 			return;
 		}
 		nameError = null;
@@ -120,7 +121,7 @@
 		e.preventDefault();
 		passwordChanged = false;
 		if (!current) {
-			passwordError = t('account.currentEmpty');
+			passwordError = t('Enter your current password.');
 			passwordErrorField = 'current';
 			return;
 		}
@@ -140,7 +141,7 @@
 			passwordChanged = true;
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 403) {
-				passwordError = t('account.currentWrong');
+				passwordError = t('Your current password is wrong.');
 				passwordErrorField = 'current';
 			} else {
 				// 429 (the sign-in lockout) and anything else, worded from the error's code (docs/api.md § Errors).
@@ -153,27 +154,27 @@
 	}
 </script>
 
-<svelte:head><title>{t('common.pageTitle', { page: t('account.title') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · Water Management', { page: t('Account') })}</title></svelte:head>
 
 <main class="page account">
-	<h1>{t('account.title')}</h1>
+	<h1>{t('Account')}</h1>
 
 	{#if session.user}
 		<section class="panel" aria-labelledby="profile-h">
-			<h2 id="profile-h">{t('account.profile')}</h2>
+			<h2 id="profile-h">{t('Profile')}</h2>
 			<dl class="facts">
 				<div>
-					<dt>{t('common.email')}</dt>
+					<dt>{t('Email')}</dt>
 					<dd><EmailText email={session.user.email} /></dd>
 				</div>
 				<div>
-					<dt>{t('account.status')}</dt>
+					<dt>{t('Status')}</dt>
 					<dd>
 						{#if session.user.emailVerified}
-							<span class="badge badge-owner">{t('account.confirmed')}</span>
+							<span class="badge badge-owner">{t('Confirmed')}</span>
 						{:else}
-							<span class="badge badge-warn">{t('account.notConfirmed')}</span>
-							<span class="muted note">{t('account.notConfirmedHelp')}</span>
+							<span class="badge badge-warn">{t('Not confirmed')}</span>
+							<span class="muted note">{t('Use the link we emailed you. The banner above can send it again.')}</span>
 						{/if}
 					</dd>
 				</div>
@@ -181,7 +182,7 @@
 			<form onsubmit={saveName} novalidate>
 				{#if nameError}<div class="alert alert-error" role="alert" id="name-error">{nameError}</div>{/if}
 				<div class="field">
-					<label for="display-name">{t('common.displayName')}</label>
+					<label for="display-name">{t('Display name')}</label>
 					<input
 						id="display-name"
 						autocomplete="name"
@@ -191,75 +192,75 @@
 						bind:value={displayName}
 						oninput={() => (nameSaved = false)}
 					/>
-					<span class="hint" id="name-hint">{t('account.nameHint')}</span>
+					<span class="hint" id="name-hint">{t('Shown to people you share projects and teams with.')}</span>
 				</div>
 				<div class="actions">
 					<button class="btn btn-primary" type="submit" disabled={savingName || !nameChanged}>
-						{savingName ? t('common.saving') : t('account.saveName')}
+						{savingName ? t('Saving…') : t('Save name')}
 					</button>
-					<p class="status" role="status" aria-live="polite">{nameSaved ? t('account.nameSaved') : ''}</p>
+					<p class="status" role="status" aria-live="polite">{nameSaved ? t('Name saved.') : ''}</p>
 				</div>
 			</form>
 		</section>
 
 		<section class="panel" aria-labelledby="prefs-h">
-			<h2 id="prefs-h">{t('account.preferences')}</h2>
+			<h2 id="prefs-h">{t('Language and units')}</h2>
 			<div class="pref">
-				<p class="pref-label">{t('common.language')}</p>
+				<p class="pref-label">{t('Language')}</p>
 				<LanguageSwitch />
-				<p class="hint">{t('account.languageHint')}</p>
+				<p class="hint">{t('Your farm pages, the sign-in pages and the emails we send you use this language.')}</p>
 			</div>
 			<fieldset class="pref">
-				<legend class="pref-label">{t('account.unit')}</legend>
+				<legend class="pref-label">{t('Volumes on your farm pages')}</legend>
 				{#if unitError}<div class="alert alert-error" role="alert">{unitError}</div>{/if}
 				<label class="radio">
 					<input type="radio" name="volume-unit" value="m3" checked={(session.user.volumeUnit ?? 'm3') === 'm3'} onchange={() => chooseUnit('m3')} />
-					{t('account.unitM3')}
+					{t('Cubic metres (m³)')}
 				</label>
 				<label class="radio">
 					<input type="radio" name="volume-unit" value="ML" checked={session.user.volumeUnit === 'ML'} onchange={() => chooseUnit('ML')} />
-					{t('account.unitML')}
+					{t('Megalitres (ML)')}
 				</label>
-				<p class="status" role="status" aria-live="polite">{unitSaved ? t('account.unitSaved') : ''}</p>
+				<p class="status" role="status" aria-live="polite">{unitSaved ? t('Saved.') : ''}</p>
 			</fieldset>
 		</section>
 
 		<section class="panel" aria-labelledby="alerts-h">
-			<h2 id="alerts-h">{t('account.alerts')}</h2>
+			<h2 id="alerts-h">{t('Alert emails')}</h2>
 			{#if session.user.mailSuppressed}
 				<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
 					<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>
-					<p>{t('alerts.suppressed.fix', { email: session.user.email })}</p>
+					<p>{t('Once {email} can receive email again, turn alert emails back on. Your choices are kept.', { email: session.user.email })}</p>
 					{#if resumeError}<p class="resume-error" role="alert">{resumeError}</p>{/if}
 					<button type="button" class="btn btn-sm" onclick={resumeMail} disabled={resuming}>
-						{resuming ? t('alerts.suppressed.resuming') : t('alerts.suppressed.resume')}
+						{resuming ? t('Turning them back on…') : t('Turn alert emails back on')}
 					</button>
 				</div>
 			{/if}
-			<p class="status" role="status" aria-live="polite">{resumed ? t('alerts.suppressed.resumed') : ''}</p>
-			<p class="muted intro">{t('account.alertsHint')}</p>
-			<p><a href="{base}/account/alerts">{t('account.alertsLink')}</a></p>
+			<p class="status" role="status" aria-live="polite">{resumed ? t('Alert emails are back on.') : ''}</p>
+			<p class="muted intro">{t('Choose which alerts you get by email, and how often.')}</p>
+			<p><a href="{base}/account/alerts">{t('Choose your alert emails')}</a></p>
 		</section>
 
 		<section class="panel" aria-labelledby="data-h">
-			<h2 id="data-h">{t('account.data')}</h2>
-			<p class="muted intro">{t('account.dataHint')}</p>
+			<h2 id="data-h">{t('Your data')}</h2>
+			<p class="muted intro">{t('Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.')}</p>
 			{#if exportError}<div class="alert alert-error" role="alert">{exportError}</div>{/if}
 			<div class="actions">
 				<button class="btn" type="button" onclick={downloadData} disabled={exporting}>
-					{exporting ? t('account.dataDownloading') : t('account.dataDownload')}
+					{exporting ? t('Preparing…') : t('Download my data')}
 				</button>
-				<p class="status" role="status" aria-live="polite">{exported ? t('account.dataDone') : ''}</p>
+				<p class="status" role="status" aria-live="polite">{exported ? t('Your data has been downloaded.') : ''}</p>
 			</div>
 		</section>
 
 		<section class="panel" aria-labelledby="password-h">
-			<h2 id="password-h">{t('account.password')}</h2>
-			<p class="muted intro">{t('account.passwordIntro')}</p>
+			<h2 id="password-h">{t('Password')}</h2>
+			<p class="muted intro">{t('Changing your password signs you out on every other device. This browser stays signed in.')}</p>
 			<form onsubmit={changePassword} novalidate>
 				{#if passwordError}<div class="alert alert-error" role="alert" id="password-error">{passwordError}</div>{/if}
 				<div class="field">
-					<label for="current-password">{t('account.currentPassword')}</label>
+					<label for="current-password">{t('Current password')}</label>
 					<PasswordInput
 						id="current-password"
 						autocomplete="current-password"
@@ -270,7 +271,7 @@
 					/>
 				</div>
 				<div class="field">
-					<label for="new-password">{t('common.newPassword')}</label>
+					<label for="new-password">{t('New password')}</label>
 					<PasswordInput
 						id="new-password"
 						autocomplete="new-password"
@@ -279,10 +280,10 @@
 						aria-describedby={passwordErrorField === 'next' ? 'password-error new-password-hint' : 'new-password-hint'}
 						bind:value={next}
 					/>
-					<span class="hint" id="new-password-hint">{t('account.passwordHint')}</span>
+					<span class="hint" id="new-password-hint">{t('At least 8 characters.')}</span>
 				</div>
 				<div class="field">
-					<label for="repeat-password">{t('common.repeatNewPassword')}</label>
+					<label for="repeat-password">{t('Repeat new password')}</label>
 					<PasswordInput
 						id="repeat-password"
 						autocomplete="new-password"
@@ -294,9 +295,9 @@
 				</div>
 				<div class="actions">
 					<button class="btn btn-primary" type="submit" disabled={changing}>
-						{changing ? t('account.changing') : t('account.change')}
+						{changing ? t('Changing…') : t('Change password')}
 					</button>
-					<p class="status" role="status" aria-live="polite">{passwordChanged ? t('account.changed') : ''}</p>
+					<p class="status" role="status" aria-live="polite">{passwordChanged ? t('Password changed. Every other device has been signed out.') : ''}</p>
 				</div>
 			</form>
 		</section>
