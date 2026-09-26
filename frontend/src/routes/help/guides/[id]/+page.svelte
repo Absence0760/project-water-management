@@ -125,6 +125,38 @@
 	.guide-page {
 		max-width: 46rem;
 	}
+	/* With room beside the text (the Help column's own width), "On this page"
+	   becomes a rail on the right that stays in view while reading, instead of
+	   a box in the text; the article keeps its reading width. */
+	@container help-main (min-width: 56rem) {
+		.guide-page {
+			display: grid;
+			grid-template-columns: minmax(0, 42rem) 12rem;
+			column-gap: 2rem;
+			max-width: none;
+			align-items: start;
+		}
+		.guide-page > :global(*) {
+			grid-column: 1;
+		}
+		.guide-page > .onpage {
+			grid-column: 2;
+			grid-row: 1 / span 999;
+			position: sticky;
+			top: 1rem;
+			margin: 0;
+		}
+		/* In the narrow rail a wrapped heading reads better as a plain block link than a bullet. */
+		.guide-page > .onpage ul {
+			list-style: none;
+			padding-left: 0;
+		}
+		.guide-page > .onpage li a {
+			display: block;
+			padding: 0.2rem 0;
+			line-height: 1.35;
+		}
+	}
 	.crumbs ol {
 		display: flex;
 		flex-wrap: wrap;

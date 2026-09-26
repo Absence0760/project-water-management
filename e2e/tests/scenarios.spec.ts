@@ -296,18 +296,26 @@ test('a trigger farm goes straight to run of river, one change at a time: the ha
 test('override mode records edits in the Network, Crops and Transfers tables as changes, never touching the catchment', async ({ page, owner }) => {
 	void owner;
 	const { project, scenarioId } = await seedScenario(page, 'Scenario override mode');
-	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	// The catchment's own model, as saved: compared whole before and after recording.
+	const liveModel = async () => (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as unknown;
+	const before = await liveModel();
+	// A stray overlay parameter on the Scenarios tab never opens the page's grid or farm drawer (the catchment's model, with its save).
+	const lower = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Lower farm')!.id;
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}&grid=nodes&farm=${lower}`);
 	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
 
 	// It says plainly that this is the scenario, not the catchment, and starts from the scenario's model (the raise applied).
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
-	// Override mode shows the node table inline, on the scenario's model: not the map, whose Grids menu opens
-	// the page's grid on the catchment's model (issue #17).
+	// Override mode shows the node table inline, on the scenario's model: not the map, whose Grids menu and
+	// farm links open the page's overlays on the catchment's model (issue #17).
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
-	await expect(mode.locator('details.grids-menu')).toHaveCount(0);
+	await expect(page.locator('details.grids-menu')).toHaveCount(0);
+	await expect(page.getByTestId('node-card')).toHaveCount(0);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
 	const record = page.getByTestId('override-record');
 	await expect(record).toContainText('No edits yet.');
 
@@ -322,6 +330,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	await expect(pending.nth(0)).toContainText('Lower farm: Dam capacity 90,000 m³ → 100,000 m³');
 	await expect(pending.nth(1)).toContainText('Lower farm: Orchard 12 ha → 15 ha');
 	await expect(pending.nth(2)).toContainText('The transfer Upper farm → Lower farm:');
+	expect(await liveModel()).toEqual(before);
 
 	// An edit no change can express is named, and holds the rest back until it is undone.
 	await mode.getByRole('button', { name: 'Network', exact: true }).click();
@@ -337,10 +346,9 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	await expect(record).toContainText('No edits yet.');
 	await expect(page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('100000');
 
-	// The catchment's own model is untouched.
-	const live = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { name: string; damCapacityM3: number }[] };
-	expect(live.nodes.find((n) => n.name === 'Lower farm')!.damCapacityM3).toBe(90_000);
-	expect(live.nodes.find((n) => n.name === 'Upper farm')!.damCapacityM3).toBe(150_000);
+	// The catchment's own model is untouched, and no edit is waiting for the page's save bar.
+	expect(await liveModel()).toEqual(before);
+	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 
 	// Undo takes the three back as one edit; closing brings the form back.
 	await page.getByRole('button', { name: 'Undo', exact: true }).click();

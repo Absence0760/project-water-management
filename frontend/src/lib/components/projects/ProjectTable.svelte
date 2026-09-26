@@ -52,6 +52,7 @@
 	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
 {/snippet}
 
+<div class="pt">
 <div class="table-wrap">
 	<table class="data projects">
 		<caption class="visually-hidden">{caption}</caption>
@@ -117,6 +118,7 @@
 			{/each}
 		</tbody>
 	</table>
+</div>
 </div>
 
 <style>
@@ -244,9 +246,14 @@
 		justify-content: flex-end;
 		gap: 0.25rem;
 	}
-	/* Updated, Team and Open go first when space runs short (the sort still
-	   uses Updated; the team moves under the name; the name opens the project). */
-	@media (max-width: 1200px) {
+	/* The table answers to its own width, not the window's (it sits beside the
+	   app sidebar and the owner list, issue #17): Updated, Team and Open go
+	   first when space runs short (the sort still uses Updated; the team moves
+	   under the name; the name opens the project). */
+	.pt {
+		container-type: inline-size;
+	}
+	@container (max-width: 910px) {
 		.xwide,
 		.open {
 			display: none;
@@ -258,7 +265,7 @@
 			width: 190px;
 		}
 	}
-	@media (max-width: 760px) {
+	@container (max-width: 730px) {
 		.wide,
 		.open {
 			display: none;

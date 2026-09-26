@@ -3,7 +3,7 @@
 	// The farmer view's page frame (docs/design/farmer-view.md §6.1, §7): its own
 	// header ("My farm" and Menu, or a back link), the preview banner for WUA
 	// staff, the status strip over a saved copy, and one centred 560 px column
-	// at a 16 px base. The workspace's AppHeader isn't shown on /farm
+	// at a 16 px base. The workspace's AppShell isn't shown on /farm
 	// (routes/+layout.svelte). The card styles every farm page shares live here.
 	// The language switch (EN | AF, WP-2.5) sits in the header, as the design's
 	// board 1 has it.

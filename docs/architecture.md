@@ -65,7 +65,7 @@ origin**, so the session cookie is first-party.
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
 | `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
-| `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. |
+| `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
 | `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
@@ -146,7 +146,15 @@ that needs them.
   a scenario's override editor its own. Users: `Lazy`, the project list's
   import dialog, the workbook reader in that dialog, Overview's alert email
   settings, the printable report's human-impact tables (it waits for them
-  before it is ready), and the root layout's language catalogue.
+  before it is ready), the run's workbook download (the alert sits below
+  the Download menu), the account's data download, the verify-email banner
+  (said in the banner's place, since an unconfirmed address holds back
+  pending invitations) and the root layout's language catalogue. On a
+  translated page the wording is the page's: `ChunkFailed` takes `text` and
+  `reload` already worded with `t()` (the account page), or the layout words
+  `msg()` messages through the i18n module when the page loaded it (the
+  banner's failure; English on the workspace). `ChunkFailed` itself stays
+  off the i18n module, so the workspace never loads it.
   `e2e/tests/lazy-chunk.spec.ts` blocks each chunk and pins the message, the
   prompt with unsaved edits, and the recovery by reload.
 - The open tab's chunk starts downloading alongside the project data, and a

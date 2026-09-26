@@ -559,7 +559,8 @@ conditions come before any client numbers:
         more sensitive after refitting;
       - refits score better at flat 0.70 and the winter preset than at the
         extremes, a mild hint that the true forcing sits mid-range.
-      Still open: the hydrologist picks the monthly values (Q4 below).
+      Still open: the hydrologist picks the monthly values (Q4 below);
+      the PE level itself was decided with #13 (plan.md, 2026-09-26).
 - [x] **The stored GR4J parameters don't fit the logger.** The client
       project never had fitted GR4J parameters (it ran on the defaults).
       **Refitted 2026-09-25 on engine 0.20.0** (after the rain fixes of
@@ -1069,7 +1070,7 @@ the suggested order (the IDs carry the detail):
       `e2e/tests/lazy-chunk.spec.ts` pins them (the layout's catalogue
       aside: its chunk has no name or content a test can block it by).
       Total bundle 891.5 → 892.8 KB gzip.
-- [ ] **Three dynamic imports still report a failed chunk as a raw error.**
+- [x] **Three dynamic imports still report a failed chunk as a raw error.**
       The run's workbook export (`export/DownloadMenu.svelte`, "Workbook
       failed: Failed to fetch dynamically imported module …") and the
       account's data export (`routes/account/+page.svelte`) show the
@@ -1085,6 +1086,15 @@ the suggested order (the IDs carry the detail):
       catalogue failure can use only because the catalogue is what failed).
       The banner may well stay silent (a reminder, not the page). Trigger:
       the next change to either export or the banner.
+      **Done 2026-09-26:** all three say it the `ChunkFailed` way. The
+      workbook download shows a compact alert below the menu (the status
+      line keeps its own errors). The account page words it with `t()`
+      (`ChunkFailed` now takes `text` and `reload`), on the translation
+      sheet. The banner says so in its place rather than vanishing, since an
+      unconfirmed address holds back pending invitations; the layout words
+      it with `msg()` through the i18n module when the page loaded it, else
+      English. `lazy-chunk.spec.ts` covers each. Total bundle 894.0 KB gzip
+      (the guard rounds up and prints 895, its ceiling: under 1 KB left).
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
@@ -2164,7 +2174,7 @@ from the WP:
       map in `notes/counts.svelte.ts` kept one entry per project opened in a
       session, and a project visited again showed its first visit's counts.
       Now only the open project's counts are kept (another project replaces
-      them) and sign-out clears them (`clearNoteCounts`, AppHeader and
+      them) and sign-out clears them (`clearNoteCounts`, AccountMenu and
       FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)

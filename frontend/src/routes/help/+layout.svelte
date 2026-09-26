@@ -1,12 +1,16 @@
 <script lang="ts">
-	// The help shell: every /help page shares one sidebar (search, guides,
+	// The help shell: every /help page shares one contents list (guides and
 	// glossary) so the landing page, the guides and the glossary read as one
-	// piece. On wide screens the sidebar stays beside the text; on phones it
-	// folds behind a "Help contents" button above the page.
+	// piece, and one search box, at the top of the page (not in a side panel).
+	// On wide screens the contents are a column beside the text that stays in
+	// view while reading; the app sidebar stays short (the contents don't go in
+	// it: a long list made it scroll). On phones they fold behind a "Help
+	// contents" button.
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
+	import { MediaQuery } from 'svelte/reactivity';
 	import HelpNav from '$lib/components/help/HelpNav.svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -29,6 +33,8 @@
 		});
 	}
 
+	const wide = new MediaQuery('min-width: 900px');
+
 	let contentsOpen = $state(false);
 	$effect(() => {
 		void page.url.pathname;
@@ -36,31 +42,45 @@
 	});
 </script>
 
+{#snippet searchForm()}
+	<form role="search" class="search" onsubmit={(e) => (e.preventDefault(), search())}>
+		<label for="help-q" class="visually-hidden">Search help</label>
+		<input id="help-q" type="search" placeholder="Search guides and terms" bind:value={q} oninput={search} autocomplete="off" />
+	</form>
+{/snippet}
+
 <div class="page help-shell">
-	<aside class="side">
-		<form role="search" class="search" onsubmit={(e) => (e.preventDefault(), search())}>
-			<label for="help-q" class="visually-hidden">Search help</label>
-			<input id="help-q" type="search" placeholder="Search guides and terms" bind:value={q} oninput={search} autocomplete="off" />
-		</form>
-		<button
-			type="button"
-			class="btn toggle"
-			aria-expanded={contentsOpen}
-			aria-controls="help-contents"
-			onclick={() => (contentsOpen = !contentsOpen)}>Help contents</button
-		>
-		<div id="help-contents" class="contents" class:open={contentsOpen}>
+	{#if wide.current}
+		<aside class="side" aria-label="Help contents">
 			<HelpNav />
-		</div>
-	</aside>
-	<main class="help-main">
-		{@render children()}
-	</main>
+		</aside>
+	{/if}
+	<div class="help-col">
+		{@render searchForm()}
+		{#if !wide.current}
+			<button
+				type="button"
+				class="btn toggle"
+				aria-expanded={contentsOpen}
+				aria-controls="help-contents"
+				onclick={() => (contentsOpen = !contentsOpen)}>Help contents</button
+			>
+			<div id="help-contents" class="contents" class:open={contentsOpen}>
+				<HelpNav />
+			</div>
+		{/if}
+		<main class="help-main">
+			{@render children()}
+		</main>
+	</div>
 </div>
 
 <style>
+	/* The app's usual page width (not a narrower cap), starting at the sidebar:
+	   the contents column sits beside it, and the tour and guides get the width
+	   (the text keeps its own reading width). */
 	.help-shell {
-		max-width: 80rem;
+		max-width: 1480px;
 	}
 	.search input {
 		width: 100%;
@@ -83,35 +103,33 @@
 		min-width: 0;
 		margin-top: 1.25rem;
 	}
-	@media (min-width: 64rem) {
+	/* The search heads the page, across the text column. */
+	.search {
+		max-width: 36rem;
+	}
+	.help-col {
+		min-width: 0;
+	}
+	/* Pages size their own layout to the text column (a guide's "On this page" rail). */
+	.help-main {
+		container: help-main / inline-size;
+	}
+	@media (min-width: 900px) {
 		.help-shell {
 			display: grid;
-			grid-template-columns: 16.5rem minmax(0, 1fr);
+			grid-template-columns: 13rem minmax(0, 1fr);
 			gap: 2.5rem;
 			align-items: start;
 		}
+		/* In view while reading; it scrolls on its own only when it is taller
+		   than the window (a short window, or the glossary's term list). */
 		.side {
 			position: sticky;
-			top: calc(var(--header-h) + 1rem);
-			display: flex;
-			flex-direction: column;
-			max-height: calc(100vh - var(--header-h) - 2rem);
-		}
-		.toggle {
-			display: none;
-		}
-		.contents {
-			display: block;
-			flex: 1;
-			min-height: 0;
+			top: 1rem;
+			max-height: calc(100vh - 2rem);
 			overflow-y: auto;
 			overscroll-behavior: contain;
-			margin-top: 0.75rem;
-			padding: 0 0.25rem 0 0;
-			border: 0;
-		}
-		.help-main {
-			margin-top: 0;
+			scrollbar-width: thin;
 		}
 	}
 </style>

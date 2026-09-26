@@ -1,4 +1,10 @@
 <script lang="ts">
+	// The account menu (Account, Sign out, Sign out everywhere): a disclosure
+	// list of a link and buttons, same pattern as DownloadMenu (no
+	// role="menu"/menuitem, so no arrow-key contract to keep). In the app
+	// sidebar's foot it opens upward (`up`); in the phone bar, downward, and
+	// `compact` shows the initials only.
+
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -7,26 +13,14 @@
 	import { session } from '$lib/auth/session.svelte';
 	import { clearAllSaved } from '$lib/components/farm/savedCopy';
 	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
-	import BrandMark from './BrandMark.svelte';
+
+	let { up = false, compact = false }: { up?: boolean; compact?: boolean } = $props();
 
 	let signingOut = $state(false);
-	// The account menu: a disclosure list of a link and buttons, same pattern as
-	// DownloadMenu (no role="menu"/menuitem, so no arrow-key contract to keep).
-	// It sits under a sticky header with room below, so plain CSS anchoring is
-	// enough — no viewport math like DownloadMenu needs for scrolling tables.
 	let menuOpen = $state(false);
 	let accountRoot: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
 	const menuId = 'account-menu';
-
-	// Section the current URL belongs to, for aria-current on the nav.
-	const section = $derived.by(() => {
-		const p = page.url.pathname.slice(base.length) || '/';
-		if (p === '/' || p.startsWith('/projects')) return 'projects';
-		if (p.startsWith('/teams')) return 'teams';
-		if (p.startsWith('/help')) return 'help';
-		return null;
-	});
 
 	const onAccountPage = $derived((page.url.pathname.slice(base.length) || '/') === '/account');
 
@@ -108,141 +102,59 @@
 </script>
 
 {#if session.user}
-	<a class="skip" href="#main">Skip to content</a>
-	<header class="app-header">
-		<a class="brand" href="{base}/" aria-label="Water Management — projects">
-			<BrandMark size={28} />
-			<span class="wordmark" aria-hidden="true">Water Management</span>
-		</a>
-		<nav aria-label="Main">
-			<a href="{base}/" aria-current={section === 'projects' ? 'page' : undefined}>Projects</a>
-			<a href="{base}/teams" aria-current={section === 'teams' ? 'page' : undefined}>Teams</a>
-			<a href="{base}/help" aria-current={section === 'help' ? 'page' : undefined}>Help</a>
-		</nav>
-		<div class="spacer"></div>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="account" bind:this={accountRoot} onkeydown={onMenuKeydown} onfocusout={onMenuFocusOut}>
-			<button
-				type="button"
-				class="account-trigger"
-				bind:this={trigger}
-				aria-label="Account menu for {session.user.displayName}"
-				aria-expanded={menuOpen}
-				aria-controls={menuId}
-				disabled={signingOut}
-				onclick={() => (menuOpen = !menuOpen)}
-			>
-				<span class="avatar" aria-hidden="true">{initials}</span>
-				<span class="who">
-					<span class="name">{session.user.displayName}</span>
-					<span class="email">{session.user.email}</span>
-				</span>
-				<span aria-hidden="true" class="caret">▾</span>
-			</button>
-			<ul id={menuId} class="menu" hidden={!menuOpen}>
-				<li>
-					<a
-						class="item"
-						href="{base}/account"
-						aria-current={onAccountPage ? 'page' : undefined}
-						onclick={() => closeMenu()}
-					>
-						<span class="label">Account</span>
-						<span class="hint" aria-hidden="true">Name and password</span>
-					</a>
-				</li>
-				<li>
-					<button type="button" class="item" onclick={signOut} disabled={signingOut}>
-						<span class="label">Sign out</span>
-						<span class="hint" aria-hidden="true">Just this device</span>
-					</button>
-				</li>
-				<li>
-					<button type="button" class="item item-danger" onclick={signOutEverywhere} disabled={signingOut}>
-						<span class="label">Sign out everywhere</span>
-						<span class="hint" aria-hidden="true">Every device, including this one</span>
-					</button>
-				</li>
-			</ul>
-			<!-- Only while the menu is open (so it exists before a sign-out starts and can announce
-			     it): an always-present empty status region would sit on every page. -->
-			{#if menuOpen || signingOut}
-				<p class="visually-hidden" role="status" aria-live="polite">{signingOut ? 'Signing out…' : ''}</p>
-			{/if}
-		</div>
-	</header>
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="account" class:up class:compact bind:this={accountRoot} onkeydown={onMenuKeydown} onfocusout={onMenuFocusOut}>
+		<button
+			type="button"
+			class="account-trigger"
+			bind:this={trigger}
+			aria-label="Account menu for {session.user.displayName}"
+			aria-expanded={menuOpen}
+			aria-controls={menuId}
+			disabled={signingOut}
+			onclick={() => (menuOpen = !menuOpen)}
+		>
+			<span class="avatar" aria-hidden="true">{initials}</span>
+			<span class="who">
+				<span class="name">{session.user.displayName}</span>
+				<span class="email">{session.user.email}</span>
+			</span>
+			<span aria-hidden="true" class="caret">▾</span>
+		</button>
+		<ul id={menuId} class="menu" hidden={!menuOpen}>
+			<li>
+				<a
+					class="item"
+					href="{base}/account"
+					aria-current={onAccountPage ? 'page' : undefined}
+					onclick={() => closeMenu()}
+				>
+					<span class="label">Account</span>
+					<span class="hint" aria-hidden="true">Name and password</span>
+				</a>
+			</li>
+			<li>
+				<button type="button" class="item" onclick={signOut} disabled={signingOut}>
+					<span class="label">Sign out</span>
+					<span class="hint" aria-hidden="true">Just this device</span>
+				</button>
+			</li>
+			<li>
+				<button type="button" class="item item-danger" onclick={signOutEverywhere} disabled={signingOut}>
+					<span class="label">Sign out everywhere</span>
+					<span class="hint" aria-hidden="true">Every device, including this one</span>
+				</button>
+			</li>
+		</ul>
+		<!-- Only while the menu is open (so it exists before a sign-out starts and can announce
+		     it): an always-present empty status region would sit on every page. -->
+		{#if menuOpen || signingOut}
+			<p class="visually-hidden" role="status" aria-live="polite">{signingOut ? 'Signing out…' : ''}</p>
+		{/if}
+	</div>
 {/if}
 
 <style>
-	.skip {
-		position: absolute;
-		left: var(--gutter);
-		top: -100px;
-		z-index: 50;
-		padding: 0.5rem 0.8rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-	}
-	.skip:focus {
-		top: 8px;
-	}
-	.app-header {
-		display: flex;
-		align-items: center;
-		gap: 1.5rem;
-		height: var(--header-h);
-		padding: 0 var(--gutter);
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
-		position: sticky;
-		top: 0;
-		z-index: 20;
-	}
-	.brand {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.55rem;
-		font-family: var(--font-display);
-		font-weight: 600;
-		font-size: 1.15rem;
-		color: var(--brand-navy);
-		letter-spacing: -0.01em;
-		white-space: nowrap;
-		min-height: var(--tap);
-	}
-	.brand:hover {
-		text-decoration: none;
-	}
-	nav {
-		display: flex;
-		align-self: stretch;
-		gap: 0.25rem;
-	}
-	nav a {
-		display: inline-flex;
-		align-items: center;
-		padding: 0 0.7rem;
-		color: var(--text-2);
-		font-weight: 500;
-		border-bottom: 2px solid transparent;
-		border-top: 2px solid transparent;
-	}
-	nav a:hover {
-		color: var(--text);
-		text-decoration: none;
-		background: var(--surface-2);
-	}
-	nav a[aria-current='page'] {
-		color: var(--accent);
-		border-bottom-color: var(--accent);
-	}
-	nav a:focus-visible {
-		outline-offset: -2px;
-	}
-	.spacer {
-		flex: 1;
-	}
 	.account {
 		position: relative;
 		min-width: 0;
@@ -361,26 +273,18 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 	}
-	@media (prefers-color-scheme: dark) {
-		.brand {
-			color: var(--text);
-		}
+	/* In the sidebar's foot the trigger fills the width and the menu opens above it. */
+	.up .account-trigger {
+		width: 100%;
 	}
-	@media (max-width: 760px) {
-		.who {
-			display: none;
-		}
+	.up .menu {
+		top: auto;
+		bottom: calc(100% + 4px);
+		left: 0;
+		right: auto;
 	}
-	@media (max-width: 560px) {
-		.app-header {
-			gap: 0.5rem;
-		}
-		.wordmark,
-		.avatar {
-			display: none;
-		}
-		nav a {
-			padding: 0 0.6rem;
-		}
+	.compact .who,
+	.compact .caret {
+		display: none;
 	}
 </style>

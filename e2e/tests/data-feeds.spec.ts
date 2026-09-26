@@ -26,6 +26,16 @@ const day = (n: number) => {
 	const d = new Date(Date.now() + n * 86_400_000);
 	return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
+/**
+ * Today where the catchment is, as the panel writes it. The health sentence
+ * dates when a feed was checked in the project's time zone (health.ts;
+ * project.time_zone defaults to Africa/Johannesburg, 058), which is a day
+ * ahead of UTC from 22:00 to 24:00 UTC.
+ */
+const projectToday = () => {
+	const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(new Date()).split('-').map(Number) as [number, number, number];
+	return `${d} ${MONTHS[m - 1]} ${y}`;
+};
 
 /** Attach a CHIRPS feed straight through the API (as whoever `request` is signed in as). */
 async function attachFeed(request: APIRequestContext, projectId: string): Promise<string> {
@@ -74,7 +84,7 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(feed.getByText('OK', { exact: true })).toBeVisible();
 	await expect(feed).toContainText(`Last data ${day(15)} · checked `);
 	// The health sentence, written by the panel from the server's reason code, its days formatted the same way (never raw ISO).
-	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${day(0)}.`);
+	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${projectToday()}.`);
 	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
 
 	// The forecast landed in the project's series.
