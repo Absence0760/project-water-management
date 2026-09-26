@@ -321,6 +321,69 @@ predates the setting, so run comparison reads it as legacy.
     They are **indicative, from FAO-56 Table 5 climate classes** (Allen et
     al. 1998); confirm against local humidity and wind before relying on
     them.
+
+    **Issue #13 reading of FAO-56 Table 5 for the winter-rainfall
+    preset.** The result: the current preset swings too far.
+    Table 5 gives the Class A coefficient by mean RH, wind at 2 m, and the
+    pan's siting and fetch. For **moderate wind (2–5 m/s)**, the Western Cape
+    norm all year:
+
+    | Siting | Fetch | RH 40–70 % | RH > 70 % |
+    | --- | --- | --- | --- |
+    | Case A (pan in a short green crop) | 1 m | 0.60 | 0.65 |
+    | | 10 m | 0.70 | 0.75 |
+    | | 100 m | 0.75 | 0.80 |
+    | | 1000 m | 0.80 | 0.80 |
+    | Case B (pan in dry fallow) | 1 m | 0.75 | 0.80 |
+    | | 10 m | 0.65 | 0.70 |
+    | | 100 m | 0.60 | 0.65 |
+    | | 1000 m | 0.55 | 0.60 |
+
+    - **Climate class.** The dry season (Oct–Apr) has mean RH of 40–70 %.
+      The wet season (May–Sep) is about 70 % or more.
+    - **What a standard pan reads.** A standard pan enclosure (Case A, about
+      10 m of green fetch) reads **0.70 in the dry season and 0.75 in the wet
+      season**. The step between seasons is about 0.05.
+    - **Why the current preset is too wide.** Its summer 0.65 needs a 1 m
+      fetch or a dry-fallow pan. Its winter 0.80 needs 100 m or more of green
+      fetch. One pan can't have both sitings.
+    - **Proposed change.** Issue #39 changes the preset to 0.70 Oct–Apr and
+      0.75 May–Sep.
+    - **Ensemble range.** For an uncertainty ensemble (CR-21), use
+      **0.60–0.80 in the dry season and 0.65–0.85 in the wet season**. The
+      low end is Case B or a low-RH summer. The high end is Case A with a
+      long fetch, or a screened pan.
+    - **Cross-check.** FAO-56 Penman–Monteith ET₀ from reanalysis should come
+      out at about Kp × A-pan. A ratio outside 0.6–0.85 means the A-pan row
+      or the coefficient is wrong. Reanalysis cells are coarse, so treat it as
+      a check, not a value.
+
+    **Check the A-pan row before choosing a coefficient** (issue #13). A
+    workbook's A-pan row isn't necessarily raw A-pan.
+
+    - **A pre-scaled row.** A row already multiplied by a pan or lake
+      factor (0.7 × A-pan, i.e. an ET₀ or open-water estimate) makes GR4J's
+      coefficient count twice. PE then comes out near 0.5 × A-pan, and the
+      fitted production store X1 grows to absorb the extra rain.
+    - **The same row drives three things.** Crop demand is crop factor ×
+      A-pan (§2.3). Dam evaporation is lake factor × A-pan (§2.7a). GR4J PE
+      is Kp × A-pan. So a scaled row understates all three.
+    - **Fixing it.** Correct the row. If the crop factors were meant against
+      the scaled row, rescale them too, so the irrigation demand is kept.
+    - **Checks that expose a bad row:**
+      1. Compare the row with the WR90/WR2012 **S-pan** MAE for the
+         quaternary. An A-pan reads *higher* than a Symons S-pan beside it,
+         so an A-pan annual total below the S-pan MAE is a red flag. Bosman
+         (1990, *Water SA* 16(4):227–236) gives the SA inter-conversion and
+         bird-screen formulae. Taljaard (2023, MEng, Stellenbosch) finds the
+         relationship linear and the old annual equations still valid, and
+         proposes monthly ones.
+      2. The Penman–Monteith ratio above. A ratio above 0.85 means the row is
+         too low.
+      3. Screening. SA pans were often bird-screened, which cuts pan
+         evaporation by up to about 10 % (FAO-56 ch. 4). A screened record
+         needs the Bosman correction, or a coefficient at the high end of the
+         range.
   - **Plausibility warning.** A run warns, and Settings hints
     (`panCoefficientOutOfRange`), when a month sits outside **0.6–0.85**,
     FAO-56's usual range for a Class A pan. This is a soundness check, not a
