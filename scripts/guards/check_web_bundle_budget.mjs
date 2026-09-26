@@ -411,11 +411,11 @@
 //             PE control in the lazy Settings chunk (settings/peInput.ts),
 //             help entries, and the fit provenance and report rows. No new
 //             dependency; the largest page chunk is 40 KB. Headroom ~6 KB.
-// 2026-09-26  total 774 → 801 KB; other ceilings unchanged. The Scenarios
+// 2026-09-26  total 782 → 809 KB; other ceilings unchanged. The Scenarios
 //             tab (issue #18 stage D): the list, the override editor and its
 //             "Add a change" form for every ScenarioOp, the op list with the
 //             baseline callout, and the scenario-vs-base compare section.
-//             Measured on the branch (off main 0b3f51c): 795 KB, of which
+//             Measured on the branch (off main 0b3f51c) at 795 KB, over a 774 KB base, of which
 //             the two new lazy chunks are ~24 KB gzip (the tab, editor, form
 //             and compare section ~13 KB; the op list with the field specs,
 //             op descriptions and op builder, scenarios/fields.ts + ops.ts,
@@ -434,7 +434,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 801,
+	totalCodeKb: 809,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,

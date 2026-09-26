@@ -1538,7 +1538,12 @@ them scenarios).
   (a leaf farm or other water user), remove a node, set a farm's crop area,
   add a crop (optionally starting from another crop's factors), add, change
   or remove a transfer, add or remove land cover, change a setting, scale
-  rainfall by a % change over a date range. Targets come from the model as
+  rainfall by a % change over a date range. A setting's value is typed as
+  the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
+  control, the source (pan coefficient × A-pan, or a monthly row in mm with
+  a required source note), checked with the Settings tab's own rules
+  (`settings/peInput.ts`), and a new monthly row starts from the PE GR4J
+  runs on now. Targets come from the model as
   the listed ops leave it, so a node the scenario adds can be changed next.
   A field starts at its current value with "Now: …" under it; percentages
   are typed as %, areas in ha. The op is built and checked with the engine's

@@ -294,6 +294,13 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   offers and the value each op replaces in its description. It never decides
   whether an op applies or how it is classed: those are the server's check,
   on the run's stored series (a `series.scale` can only be checked there).
+- **Compound settings.** `settings.set pe` (GR4J's PE input) is edited as a
+  whole: the kind, and for `monthly` the 12 values and the required source.
+  The form reuses the Settings tab's PE helpers (`settings/peInput.ts`:
+  `peFormError`, `withPeKind`, `peText`), so its rules and wording match, and
+  describes the op as "GR4J potential evaporation: pan coefficient × A-pan →
+  monthly, entered directly: 1,200 mm a year (source)". Like every
+  `settings.set`, it is a baseline assumption.
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. The proposer's

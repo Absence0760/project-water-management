@@ -1,4 +1,4 @@
-import { applyScenario, type ModelInput, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyOp, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
 import { buildOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
@@ -71,6 +71,10 @@ describe('describeOp', () => {
 		expect(d({ op: 'landCover.remove', patchId: P })).toBe('Lower farm: remove Pine plantation (mature) (1.5 km²)');
 		expect(d({ op: 'settings.set', path: 'flowShareMethod', value: 'manual' })).toBe('Flow-share method: By area → Manual');
 		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: start of data → 2022-01-01');
+		// An unset PE input is pan × A-pan (a project saved before engine 0.31.0).
+		expect(d({ op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm: new Array<number>(12).fill(100) as unknown as Monthly, source: 'Station ET₀' } })).toBe(
+			'GR4J potential evaporation: pan coefficient × A-pan → monthly, entered directly: 1,200 mm a year (Station ET₀)'
+		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 2022-01-01 to end');
 	});
@@ -136,6 +140,17 @@ describe('buildOp', () => {
 		expect(draftSpec({ kind: 'crop.add', field: 'x' })).toBeNull();
 	});
 
+	it('says what is wrong with a PE input before anything is saved', () => {
+		expect(buildOp(draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'monthly', mm: '100', source: '' } }), m)).toEqual({
+			ok: false,
+			error: 'GR4J potential evaporation: say where the monthly PE comes from: its source is required'
+		});
+		expect(buildOp(draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'pan', mm: '', source: '' } }), m)).toEqual({
+			ok: true,
+			op: { op: 'settings.set', path: 'pe', value: { kind: 'pan' } }
+		});
+	});
+
 	it('says what is missing or out of range, in the units typed', () => {
 		expect(buildOp(draft({ kind: 'node.set', field: 'damCapacityM3', value: '1' }), m)).toEqual({ ok: false, error: 'Pick a node' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, value: '1' }), m)).toEqual({ ok: false, error: 'Pick what to change' });
@@ -171,6 +186,7 @@ describe('buildOp', () => {
 			draft({ kind: 'landCover.remove', patchId: P }),
 			draft({ kind: 'settings.set', field: 'flowShareMethod', value: 'hiLo' }),
 			draft({ kind: 'settings.set', field: 'calibration.summerMonths', months: [12, 1, 2] }),
+			draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'monthly', mm: '100', source: ' Station ET₀ ' } }),
 			draft({ kind: 'series.scale', seriesKind: 'rain_catchment_mm', changePct: '-10', from: '2022-01-01', to: '' })
 		].map((x) => buildOp(x, m, id));
 		for (const r of ops) expect(r.ok, JSON.stringify(r)).toBe(true);
@@ -180,9 +196,12 @@ describe('buildOp', () => {
 		expect(built[4]).toEqual({ op: 'transfer.set', transferId: T, field: 'months', value: [1, 12] });
 		expect(built[5]).toEqual({ op: 'transfer.set', transferId: T, field: 'enabled', value: false });
 		expect(built[7]).toMatchObject({ op: 'landCover.add', patch: { nodeId: UP, areaKm2: 0.4, densityPct: 0.3, factors: null } });
-		expect(built[11]).toEqual({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2022-01-01' });
+		expect(built[11]).toEqual({ op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm: new Array(12).fill(100), source: 'Station ET₀' } });
+		expect(built[12]).toEqual({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2022-01-01' });
 		// Each applies to the base on its own (series.scale needs the run's stored rain, so it is the server's).
-		for (const op of built.slice(0, 11)) expect(applyScenario(base(), [op]).problems, op.op).toEqual([]);
+		for (const op of built.slice(0, 12)) expect(applyScenario(base(), [op]).problems, op.op).toEqual([]);
+		// A settings change, the PE input included, is a baseline assumption whoever owns what.
+		expect(classifyOp(built[11]!, [UP, LO, G])).toBe('baseline');
 	});
 });
 

@@ -24,7 +24,7 @@ import {
 import { newNode } from '$lib/model/editor.svelte';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
-import { NODE_FIELD_SPECS, SETTINGS_SPECS, TRANSFER_FIELD_SPECS, formatValue, monthsText, parseValue, percentMessage, settingsValue, type ValueSpec } from './fields';
+import { NODE_FIELD_SPECS, SETTINGS_SPECS, TRANSFER_FIELD_SPECS, formatValue, monthsText, parseValue, percentMessage, settingsValue, type PeDraft, type ValueSpec } from './fields';
 
 // ---------------------------------------------------------------------------
 // The base, and the input each op meets
@@ -200,8 +200,10 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
-			const was = before ? settingsValue(before.settings, op.path) : undefined;
-			return `${f?.label ?? op.path}: ${f ? change(f.spec, was ?? (f.spec.t === 'date' ? null : undefined), op.value, nodeName) : `→ ${String(op.value)}`}`;
+			// An unset date or PE input has a meaning (start of data; pan × A-pan, as the engine runs it): show it as the "was".
+			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe';
+			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
+			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'series.scale': {
 			const pct = (op.factor - 1) * 100;
@@ -227,6 +229,8 @@ export interface OpDraft {
 	value: string;
 	/** Months, for a months field or a new transfer. */
 	months: number[];
+	/** settings.set pe: the PE input being written. */
+	pe: PeDraft;
 	cropId: string;
 	areaHa: string;
 	transferId: string;
@@ -260,6 +264,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		field: '',
 		value: '',
 		months: [],
+		pe: { kind: 'pan', mm: '', source: '' },
 		cropId: '',
 		areaHa: '',
 		transferId: '',
@@ -312,7 +317,7 @@ function number(text: string, what: string, opts: { nullable?: boolean; scale?: 
 	if (opts.int && !Number.isInteger(n)) throw new DraftError(`${what} must be a whole number`);
 	return Math.round((n / (opts.scale ?? 1)) * 1e9) / 1e9;
 }
-function parsed(spec: ValueSpec, input: string | number[], what: string): unknown {
+function parsed(spec: ValueSpec, input: string | number[] | PeDraft, what: string): unknown {
 	const p = parseValue(spec, input);
 	if (!p.ok) throw new DraftError(`${what}: ${p.error}`);
 	return p.value;
@@ -405,7 +410,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'settings.set': {
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick a setting');
-				const value = parsed(spec, spec.t === 'months' ? d.months : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
+				const value = parsed(spec, spec.t === 'months' ? d.months : spec.t === 'pe' ? d.pe : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
 				op = { op: 'settings.set', path: d.field, value } as ScenarioOp;
 				break;
 			}

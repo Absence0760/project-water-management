@@ -18,11 +18,15 @@ import {
 	isIsoDate,
 	type NodeKind,
 	type NodeSetField,
+	type PeInput,
+	type PeKind,
 	type SettingsPath,
 	type TransferSetField
 } from '@water-management/engine';
+import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
+import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
 
 export interface EnumOption {
 	value: string;
@@ -42,7 +46,21 @@ export type ValueSpec =
 	/** An ISO date; empty is null. */
 	| { t: 'date'; nullLabel: string }
 	/** A node of the model, by id. */
-	| { t: 'node' };
+	| { t: 'node' }
+	/**
+	 * GR4J's potential-evaporation input (settings.pe, issue #39): pan
+	 * coefficient × A-pan, or a monthly row in mm with a required source.
+	 * Typed as a PeDraft (the kind, the 12 values as text, the source).
+	 */
+	| { t: 'pe' };
+
+/** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
+export interface PeDraft {
+	kind: PeKind;
+	/** 12 values in mm, Oct to Sep, as typed (parsed like any monthly field). */
+	mm: string;
+	source: string;
+}
 
 export interface FieldSpec {
 	label: string;
@@ -159,6 +177,7 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	reportEnd: { label: 'Curtailment report end', spec: { t: 'date', nullLabel: 'end of run' } },
 	calibrationStart: { label: 'Calibration window start', spec: { t: 'date', nullLabel: 'start of record' } },
 	calibrationEnd: { label: 'Calibration window end', spec: { t: 'date', nullLabel: 'end of record' } },
+	pe: { label: 'GR4J potential evaporation', spec: { t: 'pe' } },
 	calibrationFlowKind: {
 		label: 'Calibration flow series',
 		spec: { t: 'enum', options: CALIBRATION_FLOW_KINDS.map((k) => ({ value: k, label: kindLabel(k) })), nullable: true, nullLabel: 'default (observed, else logger)' }
@@ -180,8 +199,6 @@ export function settingsValue(settings: Record<string, unknown> | undefined, pat
 // ---------------------------------------------------------------------------
 
 export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
-/** Water-year order (Oct–Sep), as monthly settings and crop factors are stored. */
-export const WATER_YEAR_MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'] as const;
 
 /** [11, 12, 1] → "Jan, Nov, Dec" (calendar order); [] → "no months"; all 12 → "every month". */
 export function monthsText(ms: readonly number[]): string {
@@ -204,7 +221,8 @@ const round = (n: number) => Math.round(n * 1e9) / 1e9;
  * is null where the field allows it. Percentages are divided by 100. The
  * range checks are the engine's, run on the op afterwards.
  */
-export function parseValue(spec: ValueSpec, input: string | readonly number[]): Parsed {
+export function parseValue(spec: ValueSpec, input: string | readonly number[] | PeDraft): Parsed {
+	if (spec.t === 'pe') return parsePe(input);
 	if (spec.t === 'months') {
 		if (!Array.isArray(input)) return { ok: false, error: 'pick the months' };
 		return { ok: true, value: [...new Set(input as number[])].sort((a, b) => a - b) };
@@ -246,6 +264,39 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[]): 
 		case 'node':
 			return text ? { ok: true, value: text } : { ok: false, error: 'pick a node' };
 	}
+	return { ok: false, error: 'unknown field' };
+}
+
+const MONTHLY_MM: ValueSpec = { t: 'monthly', unit: 'mm', scale: 1, nullable: false };
+
+/**
+ * A PE draft → the stored input. The monthly row is read like any monthly
+ * field; the whole input then goes through the Settings form's own check
+ * (settings/peInput.ts peFormError: 12 values 0–10 000 mm, a source of 1 to
+ * PE_SOURCE_MAX characters), the same rules the engine's settings.set check has.
+ */
+function parsePe(input: unknown): Parsed {
+	const d = input as Partial<PeDraft> | null;
+	if (!d || typeof d !== 'object' || Array.isArray(d)) return { ok: false, error: 'pick where the PE comes from' };
+	if (d.kind === 'pan') return { ok: true, value: { kind: 'pan' } satisfies PeInput };
+	if (d.kind !== 'monthly') return { ok: false, error: 'pick where the PE comes from' };
+	const mm = parseValue(MONTHLY_MM, d.mm ?? '');
+	if (!mm.ok) return mm;
+	const value: EditablePe = { kind: 'monthly', mm: mm.value as number[], source: (d.source ?? '').trim() };
+	const e = peFormError(value);
+	return e ? { ok: false, error: e.charAt(0).toLowerCase() + e.slice(1).replace(/\.$/, '') } : { ok: true, value };
+}
+
+/**
+ * The form's PE draft for a stored input (absent is pan × A-pan, as the engine
+ * runs it). Choosing `monthly` over a pan input starts the row from the PE GR4J
+ * runs on now (the Settings form's withPeKind), with the source blank.
+ */
+export function peDraftOf(v: unknown, settings: Record<string, unknown> | undefined, kind?: PeKind): PeDraft {
+	const cur = peOf({ pe: (v ?? null) as PeInput | null });
+	const arr = (x: unknown) => (Array.isArray(x) ? (x as number[]) : []);
+	const pe = kind ? withPeKind({ apanMm: arr(settings?.apanMm), panCoefficient: arr(settings?.panCoefficient), pe: cur }, kind) : cur;
+	return pe.kind === 'pan' ? { kind: 'pan', mm: '', source: '' } : { kind: 'monthly', mm: pe.mm.join(' '), source: pe.source };
 }
 
 /** A stored value as editable text: the inverse of parseValue (months are ticked, not typed). */
@@ -260,6 +311,9 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 			return v === true ? 'true' : v === false ? 'false' : '';
 		case 'months':
 			return Array.isArray(v) ? monthsText(v as number[]) : '';
+		case 'pe':
+			// The monthly row as typed; the kind and source are the PeDraft's (peDraftOf).
+			return peDraftOf(v, undefined).mm;
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -298,6 +352,8 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			return typeof v === 'string' ? nodeName(v) : '–';
 		case 'text':
 			return typeof v === 'string' ? `“${v}”` : String(v);
+		case 'pe':
+			return peText(v === null || v === undefined ? null : (v as PeInput));
 	}
 }
 
