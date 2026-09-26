@@ -193,6 +193,24 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
 	});
 
+	it('a later fetch never re-reads before the feed’s startDate, where the series holds the owner’s own days', async () => {
+		const owner = await signUp('Floor');
+		const pid = await project(owner);
+		// The owner's own rainfall before the feed takes over.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-30), values: [7, 7] })).status).toBe(200);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		for (let i = 0; i < 2; i++) {
+			// The second fetch has a newest day, so it re-reads revisions: not across startDate.
+			await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+			expect((await tick()).done).toBe(1);
+		}
+		expect((await feedRow(id)).last_data_date).toBe(addDays(-3));
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(addDays(-30));
+		expect(s.values.slice(0, 2)).toEqual([7, 7]);
+		expect(s.values[10]).not.toBeNull(); // startDate (day -20) on is the feed's
+	});
+
 	it('a failed fetch records the reason, writes nothing, and the feed shows failing', async () => {
 		const owner = await signUp('Failer');
 		const pid = await project(owner);
@@ -209,6 +227,8 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		// Fixing the cell clears the failure (a new place) and the next fetch succeeds.
 		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()] } });
 		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null });
+		// The old place's fetch says nothing about the new one: waiting, not "ok, no data".
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health).toMatchObject({ state: 'pending', message: 'Waiting for its first fetch.' });
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		await tick();
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health.state).toBe('ok');
