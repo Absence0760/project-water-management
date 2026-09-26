@@ -161,8 +161,8 @@
 	}
 
 	/** Leave the question: with `name`, into that separate series. Focus goes to the name field either way. */
-	async function answerTakeover(name: string | null = null) {
-		if (name !== null) draft.targetName = name;
+	async function answerTakeover(name?: string) {
+		if (name !== undefined) draft.targetName = name;
 		takeover = null;
 		await tick();
 		document.getElementById(`${uid}-name`)?.focus();
