@@ -347,6 +347,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string) => request<{ team: Team; members: TeamMember[] }>('GET', t(id)),
 			rename: (id: string, name: string) =>
 				request<{ team: Team }>('PATCH', t(id), { name }).then((r) => r.team),
+			/** The portfolio's traffic-light cut-offs (team admin, D11); null goes back to the defaults. */
+			setThresholds: (id: string, thresholds: { green: number; amber: number } | null) =>
+				request<{ team: Team }>('PATCH', t(id), { settings: { portfolio: { thresholds } } }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
 			/** An address with no account gets a pending invite instead (`{ invited: true, invite }`). */
 			addMember: (id: string, email: string, role: TeamRole) =>

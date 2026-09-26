@@ -23,14 +23,14 @@ import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
-import { lockProjectRuns, trimRuns } from '../runs/execute.js';
+import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
 import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
-	executeScenarioRun,
 	loadBaseInput,
 	loadScenario,
+	runScenario,
 	SCENARIO_SELECT,
 	trimApplicationRuns,
 	type ScenarioCheck,
@@ -46,11 +46,12 @@ const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json(
  * each is classed. The input itself stays server-side. The messages quote
  * only names the caller sees (checkScenario masks an application's hidden
  * nodes for everyone); `renamed`, the hidden nodes an application's ops took
- * the name of, is for the assessors, never a contributor.
+ * the name of, and `reIds`, the new items moved off a hidden item's id, are
+ * for the assessors, never a contributor.
  */
 function checkView(c: ScenarioCheck, role: Role) {
 	const view = { applied: c.applied, problems: c.problems, classified: c.classified };
-	return role === 'contributor' ? view : { ...view, renamed: c.renamed };
+	return role === 'contributor' ? view : { ...view, renamed: c.renamed, reIds: c.reIds };
 }
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
@@ -279,17 +280,16 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/runs', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = ScenarioRunBody.parse(await json(c));
-		return withUser(c.get('userId'), async (db) => {
+		// A team scenario: an editor runs it. An application: whoever reads it
+		// as its owner or a shared member, and the assessors; never a viewer.
+		// Checked when the run is read and again when it is stored (runScenario).
+		const authorize = async (db: Db) => {
 			const role = await requireRole(db, id, 'contributor');
-			const s = await loadScenario(db, id, scenarioId(sid));
-			// A team scenario: an editor runs it. An application: whoever reads it
-			// as its owner or a shared member, and the assessors; never a viewer.
-			if (role === 'viewer' || (!isApplication(s) && rank[role] < rank.editor)) throw new ApiError(403, 'requires editor role');
-			const { id: runId, check } = await executeScenarioRun(db, id, s.id, body.label, role).catch((err: Error) => {
-				// As POST …/runs: engine problems with the input are the user's to fix.
-				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
-				throw new ApiError(400, `model run failed: ${err.message}`);
-			});
+			const scenario = await loadScenario(db, id, scenarioId(sid));
+			if (role === 'viewer' || (!isApplication(scenario) && rank[role] < rank.editor)) throw new ApiError(403, 'requires editor role');
+			return { role, scenario };
+		};
+		const result = await runScenario(c.get('userId'), id, body.label, authorize, async (db, { id: runId, check, scenario: s }, role) => {
 			if (role === 'contributor') {
 				// The applicant's own cap (they can't trim the project's runs), and
 				// the run's metadata only (app_scenario_run_meta, 046: they can't
@@ -302,13 +302,14 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					[id, s.id, runId]
 				);
 				const { applied, classified } = checkView(check, role);
-				return c.json({ run: rows[0], removedRunIds, applied, classified }, 201);
+				return { run: rows[0], removedRunIds, applied, classified };
 			}
 			// A scenario run counts toward the cap like any other.
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META_SQL.meta}, r.summary ${RUN_META_SQL.from} WHERE r.id = $1`, [runId]);
-			return c.json({ run: rows[0], removedRunIds, ...checkView(check, role) }, 201);
-		});
+			return { run: rows[0], removedRunIds, ...checkView(check, role) };
+		}).catch(runFailure); // As POST …/runs: engine problems with the input are the user's to fix.
+		return c.json(result, 201);
 	})
 	.post('/:id/scenarios/:sid/rebase', async (c) => {
 		const { id, sid } = c.req.param();

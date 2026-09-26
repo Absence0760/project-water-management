@@ -1935,8 +1935,11 @@ the forecast kinds.
 > it is never a false green; farm counts are stored at publish time as
 > `catchment_view.recent` (farms short in 7 / 30 days) and kept out of a
 > farmer's publication response; `alertsFiring` counts the firing alerts
-> (WP-2.13 filled the hook); the D11 thresholds are fixed defaults, not yet a team
-> setting (followups.md); "farms short this week" links to the Runs tab's
+> (WP-2.13 filled the hook); the D11 thresholds are a team setting
+> (`team.settings`, 055_team_settings: team admins edit them on the team
+> page, each change is a `team_thresholds.changed` audit event on every team
+> project, and the page says which apply), defaulting to 5 % / 20 %, which
+> the hydrologist still has to confirm (plan.md D11); "farms short this week" links to the Runs tab's
 > Curtailment section of the run over the last 7 days (`window=last7`, #44;
 > it doesn't scroll there yet, followups.md); `seed:examples` still puts two of its three catchments in
 > the demo team (Sandspruit stays the analyst's own, which the e2e uses as
@@ -1975,7 +1978,8 @@ GET /teams/:id/portfolio → { projects: {
 ```
 Traffic-light thresholds (D11) default to: green < 5 % of days EWR not met
 over 30 days, amber < 20 %, red otherwise. They are a team setting, and the
-hydrologist should confirm them.
+hydrologist should confirm them. *Built:* the setting (`team.settings`, 055)
+and its editor exist; the defaults' sign-off is still open.
 
 **UI**
 - `routes/teams/[id]/portfolio/+page.svelte`, linked from the team page and
@@ -2428,7 +2432,7 @@ Step 2 is done, and Step 3 can open, when **all** of these hold:
 | D8 | Number format app-wide once af-ZA arrives (followups: thousands separator) | Locale-driven (en-ZA vs af-ZA); spaces everywhere; commas everywhere | Locale-driven through `Intl`: Afrikaans gets a space and a decimal comma. Decide en-ZA's separator (space is SI-correct). | Operator + client |
 | D9 | Server-side PDF (Phase B)? | Print-only; or headless Chromium in a container Lambda with S3/MinIO | Print-only until someone asks for emailed or scheduled reports. | Client |
 | D10 | Liability and disclaimer wording | – | Draft with the client; the Afrikaans version is reviewed; it's shown on the farmer view, share page, alerts and report. | Client (legal) |
-| D11 | Portfolio traffic-light thresholds | fixed, or a team setting | A team setting with defaults 5 % / 20 % EWR days not met over 30 days. | Hydrologist |
+| D11 | Portfolio traffic-light thresholds | fixed, or a team setting | A team setting with defaults 5 % / 20 % EWR days not met over 30 days. **Setting built** (055_team_settings, team admins); the hydrologist still has to confirm the defaults. | Hydrologist |
 | D12 | What happens to audit-log actors on account deletion | delete the events; pseudonymise; keep the name | Pseudonymise ("Deleted user"), keep the events. | Operator + client's information officer (POPIA) |
 | D13 | Queue transport in production | SQS + Postgres job table; or Postgres-only with a 1-min EventBridge tick | SQS + Postgres, as planned (DLQs, and the bridge to the non-VPC fetcher). The Postgres-only option saves ~$10/month but still needs some way across the VPC boundary for fetches. | Operator |
 

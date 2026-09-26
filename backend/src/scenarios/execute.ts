@@ -1,15 +1,24 @@
 // Scenarios (roadmap WP-3.2, docs/scenarios.md): loading one, checking its
 // ops against its base run, and running it. A scenario applies to its base
 // run's stored input (loadRunInput), never the live model, and its run goes
-// through the same save path as any other (runAndStore), so it is an ordinary
+// through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
 import { applicationMask } from './applicant.js';
-import { loadPublishedRunInput, loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
+import {
+	type ComputeRun,
+	loadPublishedRunInput,
+	loadRunInput,
+	lockProjectRuns,
+	RunInputError,
+	runOutsideTransaction,
+	type RunPlan,
+	storeRun
+} from '../runs/execute.js';
 import type { OpName } from './names.js';
 import type { ScenarioOutcome, ScenarioStatus } from './schema.js';
 
@@ -87,6 +96,8 @@ export interface ScenarioCheck {
 	classified: OpClass[];
 	/** An application's hidden nodes and crops renamed because an op took their name (applyScenario's `renamed`). Never shown to a contributor. */
 	renamed: MaskedRename[];
+	/** An application's new items moved off a hidden item's id (applyScenario's `reIds`). Never shown to a contributor. */
+	reIds: MaskedReId[];
 }
 
 /**
@@ -133,54 +144,112 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
  * given the base. An application's ops meet every node and crop its
  * applicant can't see under the anonymous name they see it by
  * (applicationMask, WP-3.3), whoever checks it: the application is judged
- * in its applicant's namespace, so no message quotes a hidden name and no
- * rename collides with one (docs/scenarios.md § Applications).
+ * in its applicant's namespace, so no message quotes a hidden name, a
+ * hidden item's id or name answers as a free one, and nothing counts what
+ * they can't see (docs/scenarios.md § Applications).
  */
 export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>): ScenarioCheck {
-	const options = s.origin === 'applicant' ? { maskedNames: applicationMask(base, s.ownedNodeIds) } : {};
-	const { input, applied, problems, renamed } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+	const options = s.origin === 'applicant' ? { mask: applicationMask(base, s.ownedNodeIds) } : {};
+	const { input, applied, problems, renamed, reIds } = applyScenario(base, s.ops, options);
+	return { input, base, applied, problems, renamed, reIds, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+}
+
+/** Who may run a scenario, and the scenario as they read it: the route's check, made when the run is read and again when it is stored. */
+export type AuthorizeScenarioRun = (db: Db) => Promise<{ role: Role; scenario: ScenarioRow }>;
+
+/** What a scenario run was computed from (runScenario): its plan, the check that made its input, and the scenario then. */
+interface ScenarioRunPlan {
+	run: RunPlan;
+	check: ScenarioCheck;
+	scenario: ScenarioRow;
 }
 
 /**
- * Run a scenario: its base run's stored input → applyScenario → the same
- * checked run and save as any run (runAndStore), with scenario_id set and the
- * scenario's ops, hash and classification recorded in the run's snapshot.
+ * A scenario run's plan: its base run's stored input → applyScenario, with
+ * the scenario's ops, hash and classification for the run's snapshot.
  * Refuses (422, `details.problems`) when any op doesn't apply: a result with
- * an op silently skipped would not be the scenario its name says. Doesn't
- * trim; the route does, as for any run.
+ * an op silently skipped would not be the scenario its name says.
  */
-export async function executeScenarioRun(
-	db: Db,
-	projectId: string,
-	scenarioId: string,
-	label: string | undefined,
-	role?: Role
-): Promise<{ id: string; output: ModelOutput; check: ScenarioCheck; scenario: ScenarioRow }> {
-	// The project's run lock first, then the scenario row. The delete and rebase
-	// routes take the same run lock before they touch the row, so a run racing
-	// either waits for it and reads the scenario as it then is. (runAndStore and
-	// trimRuns take the same lock again later.) The row itself is read without
-	// FOR KEY SHARE: that lock needs the UPDATE policy (045), which a shared
-	// member or an assessor running an application doesn't pass.
-	await lockProjectRuns(db, projectId);
-	const scenario = await loadScenario(db, projectId, scenarioId);
+export async function prepareScenarioRun(db: Db, projectId: string, scenario: ScenarioRow, label: string | undefined, role: Role): Promise<ScenarioRunPlan> {
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
 	const check = checkScenario(base, scenario);
 	if (check.problems.length)
 		throw new ApiError(422, check.problems.length === 1 ? "an op of this scenario doesn't apply to its base run" : `${check.problems.length} ops of this scenario don't apply to its base run`, {
 			problems: check.problems
 		});
-	const { id, output } = await runAndStore(db, projectId, label || scenario.name, check.input, {
-		id: scenario.id,
-		name: scenario.name,
-		baseRunId: scenario.baseRunId,
-		ops: scenario.ops,
-		opsSha256: scenario.opsSha256,
-		ownedNodeIds: scenario.ownedNodeIds,
-		classified: check.classified
-	}, 'manual', { privateLabel: scenario.origin === 'applicant' });
-	return { id, output, check, scenario };
+	const run: RunPlan = {
+		projectId,
+		label: label || scenario.name,
+		input: check.input,
+		trigger: 'manual',
+		scenario: {
+			id: scenario.id,
+			name: scenario.name,
+			baseRunId: scenario.baseRunId,
+			ops: scenario.ops,
+			opsSha256: scenario.opsSha256,
+			ownedNodeIds: scenario.ownedNodeIds,
+			classified: check.classified
+		},
+		privateLabel: scenario.origin === 'applicant'
+	};
+	return { run, check, scenario };
+}
+
+/**
+ * True when the scenario as it is now would not give the run computed from
+ * `then`: its ops, base run, owned nodes or origin moved (an edit, a rebase).
+ * A new name, description or status doesn't change the result.
+ */
+export function scenarioChanged(then: ScenarioRow, now: ScenarioRow): boolean {
+	return (
+		then.opsSha256 !== now.opsSha256 ||
+		then.baseRunId !== now.baseRunId ||
+		then.origin !== now.origin ||
+		JSON.stringify([...then.ownedNodeIds].sort()) !== JSON.stringify([...now.ownedNodeIds].sort())
+	);
+}
+
+/**
+ * Run a scenario (POST …/scenarios/:sid/runs) as `userId`, with no
+ * connection held while the engine runs (runOutsideTransaction): the same
+ * checked run and save as any run (storeRun), with scenario_id set and the
+ * scenario's ops, hash and classification recorded in the run's snapshot.
+ *
+ * `authorize` runs in both transactions. In the second, after the project's
+ * run lock (the delete and rebase routes take it before they touch the row,
+ * so they can't slip in between the check and the save): a caller who lost
+ * the right to run it while the engine ran gets its 403/404 and nothing is
+ * stored, and a scenario that was deleted (404) or changed so the result
+ * would differ (409, scenarioChanged) stores nothing either: run it again.
+ * The row is read without FOR KEY SHARE: that lock needs the UPDATE policy
+ * (045), which a shared member or an assessor running an application doesn't
+ * pass. `then` runs in the second transaction after the run is stored, with
+ * the role as it then is. Doesn't trim; `then` does, as for any run.
+ */
+export function runScenario<T>(
+	userId: string,
+	projectId: string,
+	label: string | undefined,
+	authorize: AuthorizeScenarioRun,
+	then: (db: Db, run: { id: string; output: ModelOutput; check: ScenarioCheck; scenario: ScenarioRow }, role: Role) => Promise<T>,
+	compute?: ComputeRun
+): Promise<T> {
+	return runOutsideTransaction(
+		userId,
+		async (db) => {
+			const { role, scenario } = await authorize(db);
+			return prepareScenarioRun(db, projectId, scenario, label, role);
+		},
+		async (db, plan, output) => {
+			await lockProjectRuns(db, projectId);
+			const { role, scenario } = await authorize(db);
+			if (scenarioChanged(plan.scenario, scenario)) throw new ApiError(409, 'this scenario changed while it ran (its ops or base run); run it again');
+			const { id } = await storeRun(db, plan.run, output);
+			return then(db, { id, output, check: plan.check, scenario: plan.scenario }, role);
+		},
+		compute
+	);
 }
 
 /**

@@ -54,10 +54,10 @@ async function main() {
 		console.error('usage: pnpm gen:i18n:stamp <glossary id>   (after the translator has checked the entry against the current English)');
 		process.exit(2);
 	}
-	const [{ HELP }, { HELP_AF }] = await Promise.all([load('frontend/src/lib/help/content.ts'), load(HELP_AF_FILE)]);
-	const entry = HELP.find((e) => e.id === id);
+	const [{ FARMER_HELP }, { HELP_AF }] = await Promise.all([load('frontend/src/lib/help/farmer.ts'), load(HELP_AF_FILE)]);
+	const entry = FARMER_HELP.find((e) => e.id === id);
 	if (!entry) {
-		console.error(`no glossary entry "${id}" in frontend/src/lib/help/content.ts`);
+		console.error(`no farmer glossary entry "${id}" in frontend/src/lib/help/farmer.ts`);
 		process.exit(1);
 	}
 	if (entry.category !== 'farmer') {

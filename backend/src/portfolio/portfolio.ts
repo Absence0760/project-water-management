@@ -17,7 +17,7 @@ import type { Db } from '../db/tx.js';
 import { feedHealth, type HealthInput } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
 import type { RecentShortfall } from '../publish/recent.js';
-import { ageDays, ewrFigure, isStale, type EwrFigure } from './status.js';
+import { ageDays, EWR_THRESHOLDS, ewrFigure, isStale, type EwrFigure, type EwrThresholds } from './status.js';
 
 export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 
@@ -171,16 +171,16 @@ const PORTFOLIO_SQL = `
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-export function toPortfolioProject(r: PortfolioRow, today: string): PortfolioProject {
+export function toPortfolioProject(r: PortfolioRow, today: string, thresholds: EwrThresholds = EWR_THRESHOLDS): PortfolioProject {
 	const published = r.published_at !== null;
 	const source = published ? 'published' : r.last_run_at ? 'run' : null;
 	const figuresUntil = source === 'published' ? r.pub_until : source === 'run' ? r.run_until : null;
 	const ewr =
 		source === 'published'
-			? ewrFigure({ hasFigures: true, ewrSet: r.pub_ewr_set ?? false, daysNotMet: r.pub_not_met30, days: r.pub_days30 })
+			? ewrFigure({ hasFigures: true, ewrSet: r.pub_ewr_set ?? false, daysNotMet: r.pub_not_met30, days: r.pub_days30 }, thresholds)
 			: source === 'run'
-				? ewrFigure({ hasFigures: true, ewrSet: r.run_ewr_set ?? false, daysNotMet: r.run_days30 ? r.run_not_met30 : null, days: r.run_days30 || null })
-				: ewrFigure({ hasFigures: false, ewrSet: false, daysNotMet: null, days: null });
+				? ewrFigure({ hasFigures: true, ewrSet: r.run_ewr_set ?? false, daysNotMet: r.run_days30 ? r.run_not_met30 : null, days: r.run_days30 || null }, thresholds)
+				: ewrFigure({ hasFigures: false, ewrSet: false, daysNotMet: null, days: null }, thresholds);
 	let ok = 0;
 	let failing = 0;
 	for (const f of r.feeds) {
@@ -214,8 +214,12 @@ export function toPortfolioProject(r: PortfolioRow, today: string): PortfolioPro
 	};
 }
 
-/** Every catchment of the team the user may see (RLS), in one query. The caller checks team membership first. */
-export async function loadPortfolio(db: Db, teamId: string, today: string): Promise<PortfolioProject[]> {
+/**
+ * Every catchment of the team the user may see (RLS), in one query, each EWR
+ * status judged by `thresholds` (the team's, teams/settings.ts). The caller
+ * checks team membership first.
+ */
+export async function loadPortfolio(db: Db, teamId: string, today: string, thresholds: EwrThresholds = EWR_THRESHOLDS): Promise<PortfolioProject[]> {
 	const { rows } = await db.query<PortfolioRow>(PORTFOLIO_SQL, [teamId]);
-	return rows.map((r) => toPortfolioProject(r, today));
+	return rows.map((r) => toPortfolioProject(r, today, thresholds));
 }

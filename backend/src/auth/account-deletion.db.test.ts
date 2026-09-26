@@ -8,6 +8,7 @@
 // project's other members as the positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -117,5 +118,57 @@ describe('deleting a co-owner’s account', () => {
 		// Positive control: the owner's own events keep the owner's name.
 		expect(log.some((e) => e.actor === 'Downer')).toBe(true);
 		expect(await asOwner('SELECT 1 FROM invite WHERE invited_by = $1', [coOwner.id])).toEqual([]);
+	});
+});
+
+// An assessor who decided an application (045, WP-3.3): scenario.decided_by is
+// ON DELETE SET NULL, and the foreign key's update has to get through
+// scenario_guard, which refuses every other change to a decision (052).
+describe('deleting an assessor’s account', () => {
+	let assessor: User;
+	let applicant: User;
+	let sid: string;
+	const decision = async () =>
+		(await asOwner('SELECT status, outcome, decision_note, decided_at IS NOT NULL AS dated, decided_by, updated_at FROM scenario WHERE id = $1', [sid]))[0];
+
+	beforeAll(async () => {
+		[assessor, applicant] = (await Promise.all(['Dassessor', 'Dapplicant'].map((n) => signUp(n)))) as [User, User];
+		for (const [u, role] of [
+			[assessor, 'editor'],
+			[applicant, 'contributor']
+		] as const) {
+			expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
+		}
+		const made = await applicant.call('POST', `/projects/${projectId}/scenarios`, { name: 'Raise the weir', baseRunId: runId, ops: [] });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		sid = made.body.scenario.id;
+		expect((await applicant.call('POST', `/projects/${projectId}/scenarios/${sid}/submit`)).status).toBe(200);
+		const decided = await assessor.call('POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'refused', note: 'Too little left in dry years.' });
+		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
+	});
+
+	it('is refused to water_app while the account exists: a decision’s assessor never changes (positive control)', async () => {
+		const before = await decision();
+		expect(before).toMatchObject({ status: 'decided', decided_by: assessor.id });
+		// Clearing who decided, or naming someone else, is still refused: the applicant is the app user the
+		// update policy lets write a decided application (the guard, not RLS, stops them).
+		for (const to of [null, owner.id]) {
+			await expect(withUser(applicant.id, (db) => db.query('UPDATE scenario SET decided_by = $2 WHERE id = $1', [sid, to]))).rejects.toMatchObject({ code: '23514' });
+		}
+		// …and so is clearing it together with anything else.
+		await expect(
+			withUser(applicant.id, (db) => db.query(`UPDATE scenario SET decided_by = NULL, outcome = 'approved', decision_note = '' WHERE id = $1`, [sid]))
+		).rejects.toMatchObject({ code: '23514' });
+		expect(await decision()).toEqual(before);
+	});
+
+	it('goes through, keeping the decision with no assessor, and the scenario otherwise untouched', async () => {
+		const before = await decision();
+		await asOwner('DELETE FROM app_user WHERE id = $1', [assessor.id]);
+		expect(await decision()).toEqual({ ...before, decided_by: null });
+		const read = await owner.call('GET', `/projects/${projectId}/scenarios/${sid}`);
+		expect(read.status).toBe(200);
+		expect(read.body.scenario).toMatchObject({ status: 'decided', outcome: 'refused', decisionNote: 'Too little left in dry years.' });
+		expect(JSON.stringify(await events())).not.toContain('Dassessor');
 	});
 });

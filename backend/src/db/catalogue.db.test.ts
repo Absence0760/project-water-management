@@ -36,6 +36,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	share_link: ['revoked_at', 'revoked_by'],
 	// An API key likewise: never its hash, scopes or series, only its revocation (039_api_keys.sql).
 	api_key: ['revoked_at', 'revoked_by'],
+	// A key's days only grow (as the key) or shrink (as a person); the row never moves (053_series_key_days.sql).
+	series_key_days: ['days'],
 	// An alert event's rule, project, farm and opening time are fixed; it clears, and its value and detail follow the watched figure (051_alerts.sql).
 	alert_event: ['cleared_at', 'detail', 'state', 'value']
 };

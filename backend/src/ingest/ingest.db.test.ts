@@ -549,3 +549,103 @@ describe('a key pushing days that look wrong holds the automatic re-run (WP-2.16
 		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
 	});
 });
+
+// The hold's limit leaves out every day the pushing key wrote before
+// (series_key_days, 053; series/hold.ts), so a key poisoning slowly can't
+// lift the bar it is later judged by. Each series: 600 days of a person's
+// upload, rain of 10 mm every 5th day (120 wet days, a limit of 5 × 10 =
+// 50 mm). 20 key days of 45 mm, each batch under that limit, would lift
+// the 99th percentile to 45 (a limit of 225 mm) if they counted.
+describe('the hold judges a key without its own earlier days (053)', () => {
+	let pid: string;
+	let a: { id: string; secret: string };
+	let b: { id: string; secret: string };
+	const day = (n: number) => new Date(Date.UTC(2022, 0, 1 + n)).toISOString().slice(0, 10);
+	/** 20 days of 45 mm from 2022-01-01, in five pushes of four, none held. */
+	async function slowPoison(key: { secret: string }, name: string) {
+		for (let i = 0; i < 5; i++) {
+			const res = await merge(key.secret, rain(day(4 * i), [45, 45, 45, 45], name));
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			expect(res.body.rerunHeld, `batch ${i}`).toBeNull();
+		}
+	}
+	const keyDays = async (keyId: string, name: string) =>
+		(
+			await asOwner(
+				`SELECT d.days::text AS days FROM series_key_days d JOIN time_series t ON t.id = d.series_id
+				 WHERE d.project_id = $1 AND d.api_key_id = $2 AND t.name = $3`,
+				[pid, keyId, name]
+			)
+		).map((r) => r.days as string);
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Slow poison' })).body.project.id as string;
+		for (const [u, role] of [
+			[editor, 'editor'],
+			[viewer, 'viewer']
+		] as const) {
+			expect((await owner.call('POST', `/projects/${pid}/members`, { email: u.email, role })).status).toBe(201);
+		}
+		const values = Array.from({ length: 600 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+		for (const name of ['slow', 'shared', 'released']) {
+			expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', name, unit: 'mm', startDate: '2020-01-01', values })).status).toBe(200);
+		}
+		a = await newKey(pid, { name: 'Gateway A' });
+		b = await newKey(pid, { name: 'Gateway B' });
+	});
+
+	it('holds a key that pushed in batches to the limit without its own days', async () => {
+		await slowPoison(a, 'slow');
+		expect(await keyDays(a.id, 'slow')).toEqual(['{[2022-01-01,2022-01-21)}']);
+		const res = await merge(a.secret, rain('2022-02-01', [200], 'slow'));
+		expect(res.body.rerunHeld).toMatchObject({ negative: 0, outlier: 1, examples: [{ date: '2022-02-01', value: 200 }] });
+		// A value re-sent unchanged isn't claimed: the key's days are the ones whose value it changed.
+		expect((await merge(a.secret, rain('2019-12-31', [0, 10], 'slow'))).status).toBe(200);
+		expect(await keyDays(a.id, 'slow')).toEqual(['{[2019-12-31,2020-01-01),[2022-01-01,2022-01-21),[2022-02-01,2022-02-02)}']);
+	});
+
+	it('counts the days another key wrote (positive control)', async () => {
+		await slowPoison(b, 'shared');
+		const res = await merge(a.secret, rain('2022-02-01', [200], 'shared'));
+		expect(res.status).toBe(200);
+		expect(res.body.rerunHeld).toBeNull();
+	});
+
+	it('counts the key’s days once a person has written over them, and a replace releases them all', async () => {
+		await slowPoison(a, 'released');
+		// The person keeps the key's values, but they are the person's now.
+		const kept = await owner.call('POST', `/projects/${pid}/series/merge`, rain(day(0), new Array(18).fill(45), 'released'));
+		expect(kept.status).toBe(200);
+		expect(await keyDays(a.id, 'released')).toEqual(['{[2022-01-19,2022-01-21)}']);
+		expect((await merge(a.secret, rain('2022-02-01', [200], 'released'))).body.rerunHeld).toBeNull();
+		expect(await keyDays(a.id, 'released')).toEqual(['{[2022-01-19,2022-01-21),[2022-02-01,2022-02-02)}']);
+		// Replacing the series whole (here with the same days) makes every day the person's.
+		const [whole] = await asOwner(`SELECT start_date::text AS "startDate", "values" FROM time_series WHERE project_id = $1 AND name = 'released'`, [pid]);
+		const put = await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', name: 'released', unit: 'mm', ...whole });
+		expect(put.status, JSON.stringify(put.body)).toBe(200);
+		expect(await keyDays(a.id, 'released')).toEqual([]);
+	});
+
+	it('lets a key only add its own days, and a person only release them', async () => {
+		const range = `datemultirange(daterange('2022-01-01', '2022-01-02'))`;
+		const [slow] = await asOwner(`SELECT id FROM time_series WHERE project_id = $1 AND name = 'slow'`, [pid]);
+		// A key can't clear its record, nor write another key's.
+		await expect(withApiKey(a.id, (db) => db.query(`UPDATE series_key_days SET days = days - ${range} WHERE project_id = $1`, [pid]))).rejects.toMatchObject({
+			code: '23514'
+		});
+		await expect(
+			withApiKey(a.id, (db) => db.query(`INSERT INTO series_key_days (project_id, series_id, api_key_id, days) VALUES ($1, $2, $3, ${range})`, [pid, slow.id, b.id]))
+		).rejects.toThrow();
+		// A person can't mark days as a key's (which would drop them from its limit).
+		await expect(
+			withUser(editor.id, (db) => db.query(`INSERT INTO series_key_days (project_id, series_id, api_key_id, days) VALUES ($1, $2, $3, ${range})`, [pid, slow.id, b.id]))
+		).rejects.toMatchObject({ code: '42501' });
+		await expect(
+			withUser(editor.id, (db) => db.query(`UPDATE series_key_days SET days = days + datemultirange(daterange('2020-01-01', '2021-01-01')) WHERE project_id = $1`, [pid]))
+		).rejects.toMatchObject({ code: '42501' });
+		// Positive control: the editor can release, and a viewer sees nothing.
+		const released = await withUser(editor.id, (db) => db.query(`UPDATE series_key_days SET days = days - ${range} WHERE project_id = $1 AND series_id = $2`, [pid, slow.id]));
+		expect(released.rowCount).toBe(1);
+		expect(await withUser(viewer.id, async (db) => (await db.query('SELECT 1 FROM series_key_days WHERE project_id = $1', [pid])).rows)).toEqual([]);
+	});
+});

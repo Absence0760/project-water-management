@@ -284,50 +284,71 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 			return c.json({ ensemble: await loadRow(db, id, runId, rows[0]!.id), notes }, 201);
 		});
 	})
+	// Verifying re-runs members with the engine: read in one transaction,
+	// verify with none open, store in a second, so it holds no pooled
+	// connection while the engine runs (docs/architecture.md § A model run).
 	.post('/:id/runs/:runId/uncertainty/:uid/result', async (c) => {
 		const { id, runId, uid } = c.req.param();
 		const raw = await readJson(c);
-		return withUser(c.get('userId'), async (db) => {
+		const userId = c.get('userId');
+		/** Who may store it: an editor, the one who started it, while it is still started on today's engine. Checked in both transactions. */
+		const storable = async (db: Db) => {
 			await requireRole(db, id, 'editor');
 			const row = await loadRow(db, id, runId, uid);
 			if (row.status !== 'started') throw new ApiError(409, 'this ensemble is already stored; start a new one to run it again');
-			if (row.createdById !== c.get('userId')) throw new ApiError(403, 'only whoever started an ensemble can store its result');
+			if (row.createdById !== userId) throw new ApiError(403, 'only whoever started an ensemble can store its result');
 			if (row.engineVersion !== ENGINE_VERSION) throw new ApiError(409, `this ensemble was started on engine ${row.engineVersion}; start a new one`);
-			const input = await runModelInput(db, id, runId);
-			const random = () => randomInt(0, 2 ** 32) / 2 ** 32;
-			let summary: unknown;
-			let result: unknown;
-			let accepted: number;
-			if (row.baselineId) {
+			return row;
+		};
+		const read = await withUser(
+			userId,
+			async (db) => {
+				const row = await storable(db);
+				const input = await runModelInput(db, id, runId);
+				if (!row.baselineId) return { row, input, paired: false as const, body: EnsembleResultBody.parse(raw) };
 				const body = PairedResultBody.parse(raw);
 				const { rows } = await db.query<{ result: { header: EnsembleHeader; members: MemberResult[] } }>('SELECT result FROM run_uncertainty WHERE id = $1', [row.baselineId]);
-				const base = rows[0]!.result;
-				const kept = pairedMembers(base);
-				const { mismatches, header } = engine(() => verifyPaired(input, row.options, base.header, kept, body.members as PairedMember[], CHECKED_MEMBERS, random));
-				if (mismatches.length || !header) throw new ApiError(422, 'the posted pairs do not reproduce', mismatches);
-				const s = summarisePaired({ options: row.options, header: base.header, members: base.members }, { header, members: body.members as PairedMember[] });
-				summary = s;
-				accepted = s.members;
-				result = { engineVersion: ENGINE_VERSION, header, members: body.members };
-			} else {
-				const body = EnsembleResultBody.parse(raw);
-				const members = body.members as MemberResult[];
-				const { mismatches, header } = engine(() => verifyEnsemble(input, row.options, members, CHECKED_MEMBERS, random));
-				if (mismatches.length || !header) throw new ApiError(422, 'the posted ensemble does not reproduce', mismatches);
-				const coverage = body.coverage as RecordCoverage[];
-				const bad = coverageMismatch(row.options, header, members, coverage);
-				if (bad) throw new ApiError(422, 'the posted ensemble does not reproduce', [bad]);
-				const s = summariseEnsemble({ options: row.options, header, members, coverage });
-				summary = s;
-				accepted = s.accepted;
-				result = { engineVersion: ENGINE_VERSION, header, members, coverage };
-			}
-			await db.query(`UPDATE run_uncertainty SET status = 'complete', accepted = $2, summary = $3, result = $4 WHERE id = $1`, [
+				return { row, input, paired: true as const, body, base: rows[0]!.result };
+			},
+			{ readOnly: true }
+		);
+		const { row, input } = read;
+		const random = () => randomInt(0, 2 ** 32) / 2 ** 32;
+		let summary: unknown;
+		let result: unknown;
+		let accepted: number;
+		if (read.paired) {
+			const { base, body } = read;
+			const kept = pairedMembers(base);
+			const { mismatches, header } = engine(() => verifyPaired(input, row.options, base.header, kept, body.members as PairedMember[], CHECKED_MEMBERS, random));
+			if (mismatches.length || !header) throw new ApiError(422, 'the posted pairs do not reproduce', mismatches);
+			const s = summarisePaired({ options: row.options, header: base.header, members: base.members }, { header, members: body.members as PairedMember[] });
+			summary = s;
+			accepted = s.members;
+			result = { engineVersion: ENGINE_VERSION, header, members: body.members };
+		} else {
+			const { body } = read;
+			const members = body.members as MemberResult[];
+			const { mismatches, header } = engine(() => verifyEnsemble(input, row.options, members, CHECKED_MEMBERS, random));
+			if (mismatches.length || !header) throw new ApiError(422, 'the posted ensemble does not reproduce', mismatches);
+			const coverage = body.coverage as RecordCoverage[];
+			const bad = coverageMismatch(row.options, header, members, coverage);
+			if (bad) throw new ApiError(422, 'the posted ensemble does not reproduce', [bad]);
+			const s = summariseEnsemble({ options: row.options, header, members, coverage });
+			summary = s;
+			accepted = s.accepted;
+			result = { engineVersion: ENGINE_VERSION, header, members, coverage };
+		}
+		return withUser(userId, async (db) => {
+			// Still theirs to store: an editor removed meanwhile gets 403/404, and of two posts only the first stores (status).
+			await storable(db);
+			const { rowCount } = await db.query(`UPDATE run_uncertainty SET status = 'complete', accepted = $2, summary = $3, result = $4 WHERE id = $1 AND status = 'started'`, [
 				uid,
 				accepted,
 				JSON.stringify(summary),
 				JSON.stringify(result)
 			]);
+			if (rowCount !== 1) throw new ApiError(409, 'this ensemble is already stored; start a new one to run it again');
 			return c.json({ ensemble: await loadRow(db, id, runId, uid) });
 		});
 	});

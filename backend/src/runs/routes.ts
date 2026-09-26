@@ -9,7 +9,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, trimRuns } from './execute.js';
+import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, runFailure, runLiveModel, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
@@ -66,18 +66,15 @@ export const runRoutes = new Hono<AuthEnv>()
 			.object({ label: z.string().trim().max(200).default(''), forecast: z.boolean().default(false) })
 			.parse(await c.req.json().catch(() => ({})));
 		const id = c.req.param('id');
-		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
-			const { id: runId } = await executeRun(db, id, body.label, body.forecast ? 'forecast' : 'manual').catch((err: Error) => {
-				// Engine problems (bad inputs, missing series) are the user's to fix.
-				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
-				throw new ApiError(400, `model run failed: ${err.message}`);
-			});
+		// Inputs read in one transaction, the engine run with none open, the run
+		// stored in a second (runLiveModel): a long run holds no pooled connection.
+		const result = await runLiveModel(c.get('userId'), id, body.label, body.forecast ? 'forecast' : 'manual', async (db, run) => {
 			// Keep the newest N manual runs per project (the new one included), and the newest unkept run of each automatic trigger (a forecast run replaces the last).
 			const removedRunIds = await trimRuns(db, id);
-			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [runId]);
-			return c.json({ run: rows[0], removedRunIds }, 201);
-		});
+			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [run.id]);
+			return { run: rows[0], removedRunIds };
+		}).catch(runFailure);
+		return c.json(result, 201);
 	})
 	// The exact input a run would use (merged settings, the model, the first
 	// series of each kind by name), for running the engine in the browser:

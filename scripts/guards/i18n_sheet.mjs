@@ -17,7 +17,7 @@
 // to erasable syntax and type-only imports):
 //   frontend/src/lib/i18n/messages/{en,af}.ts   the farmer pages
 //   backend/src/mail/i18n/{en,af}.ts            the farmer emails
-//   frontend/src/lib/help/content{,.af}.ts      the farmer glossary (/farm/words)
+//   frontend/src/lib/help/farmer.ts, content.af.ts  the farmer glossary (/farm/words)
 //
 // A string leaves the sheet when its Afrikaans lands in af.ts (or
 // content.af.ts with a matching sourceHash). The workspaces' catalogue tests
@@ -154,13 +154,13 @@ async function sources() {
 		load('frontend/src/lib/i18n/messages/af.ts'),
 		load('backend/src/mail/i18n/en.ts'),
 		load('backend/src/mail/i18n/af.ts'),
-		load('frontend/src/lib/help/content.ts'),
+		load('frontend/src/lib/help/farmer.ts'),
 		load('frontend/src/lib/help/content.af.ts')
 	]);
 	return {
 		site: catalogueGroups({ en: siteEn.en, af: siteAf.af, sections: siteEn.sections, notes: siteEn.notes }),
 		mail: catalogueGroups({ en: mailEn.en, af: mailAf.af, sections: mailEn.sections, notes: mailEn.notes }),
-		help: help.HELP,
+		help: help.FARMER_HELP,
 		helpAf: helpAf.HELP_AF
 	};
 }

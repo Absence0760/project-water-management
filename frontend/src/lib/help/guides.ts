@@ -25,7 +25,7 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 export type TabId = 'overview' | 'network' | 'crops' | 'transfers' | 'series' | 'settings' | 'runs';
 
 export const TAB_TITLES: Record<TabId, string> = {
-	overview: 'Overview',
+	overview: 'Summary',
 	network: 'Network',
 	crops: 'Crops & demand',
 	transfers: 'Transfers',
@@ -135,7 +135,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Overview shows the newest run’s headline results, each with its change from the run before, and a **Needs attention** list: farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
 					}
 				]
 			},
@@ -169,7 +169,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Open **Projects** in the header and press **New project**.',
 							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create**.',
-							'The project opens on its **Overview** tab. Work through the setup checklist from the top.'
+							'The project opens on its **Summary** tab. Work through the setup checklist from the top.'
 						]
 					},
 					{
@@ -324,7 +324,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'With A-pan at 0 in every month the crops need no water, and every farm looks fully supplied. The Overview checklist warns about this.'
+						text: 'With A-pan at 0 in every month the crops need no water, and every farm looks fully supplied. The Summary’s checklist warns about this.'
 					}
 				]
 			}

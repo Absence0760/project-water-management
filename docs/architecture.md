@@ -130,11 +130,19 @@ that needs them.
   the loading state.
 
 Help tooltips (`components/help/HelpTip.svelte`) don't import the help text
-either. It is a 26 KB (gzip) chunk that the first HelpTip starts fetching when
-its module loads, off the page's critical path, and every HelpTip shares it.
-Until it arrives a tip renders nothing, as it does for an unknown key. Without
-this, every tab with a tooltip carried the whole glossary: the Network tab adds
-25 KB on top of the page instead of 51 KB.
+either. The text is three modules, each its own chunk: `lib/help/tips.ts`
+(each entry's term, short text, units and field keys: 10 KB gzip),
+`lib/help/articles.ts` (the fuller text, other names, related ids and source,
+by id: 32 KB with `content.ts`, which joins them for the /help pages) and
+`lib/help/farmer.ts` (the farm view's words, whole: 2 KB). The first HelpTip
+starts fetching the tips when its module loads, off the page's critical path,
+and every HelpTip shares them; until they arrive a tip renders nothing, as it
+does for an unknown key. A tip never loads the long text (it was one 42 KB
+chunk, the largest page chunk, until 2026-09-26), and /farm/words loads only
+`farmer.ts`; only the /help pages load everything. `lib/help/content.test.ts`
+keeps HelpTip off `content.ts` and `articles.ts` and the text modules free of
+run-time imports. Splitting costs ~3 KB of total (smaller chunks compress
+worse), the price of a tip fetching 10 KB instead of 42.
 
 The build targets ES2022 (`frontend/vite.config.ts`). Vite's default target
 down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 KB
@@ -265,6 +273,9 @@ sliding back into the page chunk.
 4. Project routes open **one transaction** on a pooled `pg` connection as
    `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
+   A route that runs the engine opens two, one to read and one to store, and
+   runs the engine between them with no connection held
+   ([§ A model run](#a-model-run)).
 5. zod validates the input. The model document is saved in one transaction
    (rows missing from a `PUT` are deleted). Tree validation runs before the
    write. `saveModel` (`model/store.ts`) is set-based: one statement clears the
@@ -288,9 +299,12 @@ sequenceDiagram
   participant A as API (Lambda)
   participant P as Postgres
   B->>A: POST /projects/:id/runs
+  A->>P: BEGIN REPEATABLE READ READ ONLY; set app.current_user_id
+  A->>P: role check (editor); SELECT project, nodes, crops, areas, transfers, series (RLS)
+  A->>P: COMMIT (connection back to the pool)
+  A->>A: runModelChecked(input), no transaction open
   A->>P: BEGIN; set app.current_user_id
-  A->>P: SELECT project, nodes, crops, areas, transfers, series (RLS)
-  A->>A: runModelChecked(input)
+  A->>P: role check (editor) again
   A->>P: INSERT model_run (inputs snapshot, summary)
   A->>P: INSERT run_series × N (double precision[])
   A->>P: lock the project's runs; INSERT series_blob (new values only), run_input_series
@@ -300,6 +314,62 @@ sequenceDiagram
   B->>A: GET /runs/:runId/series?key=…&nodeId=…
   A-->>B: { startDate, values }  (one series per chart)
 ```
+
+### A model run
+
+A request that runs the engine holds **no database connection while it
+computes** (`runOutsideTransaction`, `backend/src/runs/execute.ts`). A long
+run used to run inside the request's transaction and so pinned a pooled
+connection, and with it any locks and snapshot, for the whole run (issue
+#41). Now it has three steps:
+
+1. **Read**, in a `READ ONLY` transaction at `REPEATABLE READ`
+   (`withUser(…, { readOnly: true })`): the role check and the inputs. That
+   is one consistent snapshot, so the settings, model and series agree with
+   each other however many queries the read takes.
+2. **Compute**, with no transaction open. The engine is synchronous, so a
+   run still occupies the Node thread. Only the database is freed.
+3. **Store**, in a new transaction: the role check again, then the run,
+   its outputs and stored inputs, the trim and the read-back.
+
+Between steps 1 and 3 the world may move:
+
+- **The caller loses access.** Step 3 checks the role again, so a user
+  removed from the project, or made a viewer, while the engine ran gets
+  404/403 and nothing is stored. RLS would refuse the insert anyway; the
+  check makes the answer clean.
+- **The project changes.** The run stores the input read in step 1 (its
+  snapshot and stored series), so its results always match its stored
+  inputs and "Check reproduction" finds it identical. It is a run of the
+  project as it stood when read, exactly as a run followed a moment later by
+  an edit would be. The run's "What changed since this run" shows the
+  edit. It is not redone, because a steady stream of feed writes could make
+  a redo go on for ever, and new data queues its own re-run. One transaction
+  had the same gap: nothing locked the inputs, and under READ COMMITTED each
+  read could see a different moment.
+- **A scenario changes** (`runScenario`, `scenarios/execute.ts`). Step 3
+  takes the project's run lock (the delete and rebase routes take it too),
+  reads the scenario again and refuses with `409` if its ops, base run, owned
+  nodes or origin moved, or `404` if it was deleted. A new name or
+  description doesn't change the result, so the run is stored under the
+  scenario as it was computed.
+
+The same split is used by `POST /projects/:id/runs`, a scenario run, an
+import's run, `GET …/runs/:runId/reproduce` (read, then re-run; nothing to
+store) and storing an uncertainty ensemble (`POST
+…/uncertainty/:uid/result`, whose server check re-runs members; step 3 only
+stores while the ensemble is still `started`, so of two posts only one
+stores). `connection.db.test.ts` pins it with a pool of **one** connection
+and an injected engine: another query succeeds while a run computes.
+
+**Jobs keep the engine inside their transaction.** The `rerun` and `yield`
+handlers run in the job's `withUser` transaction (`executeRun`, one
+transaction). A job's writes must commit together with its `done` (see
+[Background work](#background-work)), which is what makes a retry after a
+crash or a lost lease store nothing twice. The worker's pool serves one job
+at a time and no request, so the connection a job holds is one nobody else
+is waiting for. Splitting a job would need a two-phase handler API with its
+own idempotency; do that only if jobs start competing for connections.
 
 ## Background work
 

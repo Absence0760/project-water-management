@@ -196,9 +196,10 @@ test('large values show thousands separators in the one-node form and the view-o
 });
 
 test.describe('network layout', () => {
-	test('the node table fits a 1440px screen, flow share and remove included', async ({ page, owner }) => {
+	// Beside the workspace sidebar (issue #17) the table fits from about 1700 px; narrower, it scrolls (next test).
+	test('the node table fits a 1920px screen beside the sidebar, flow share and remove included', async ({ page, owner }) => {
 		void owner;
-		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.setViewportSize({ width: 1920, height: 1000 });
 		const project = await createProject(page.request, 'Network fit');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=network`);

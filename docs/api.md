@@ -18,6 +18,7 @@ storage.
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
+| GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -68,6 +69,27 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   account receives; `null` means not chosen (the site follows the browser,
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
   the farm view shows volumes.
+- **`GET /auth/me/export`** ("download my data", POPIA access;
+  `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
+  document, `{ format: 'water-management.subject-export', version: 1,
+  exportedAt, account, projectMemberships, teamMemberships, farms, notes,
+  signoffs, invites, alertSubscriptions, alertDeliveries,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `account` is
+  the `app_user` row without the password hash. `farms` is one entry per farm
+  linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
+  with the registered volumes matched to that farm (`allocations`, holder
+  name included) and the current publication's figures for it as the farm
+  page shows them (`publication.figures`, the same D2 masking; `null` when
+  nothing is published). Nothing about any other farm. `notes`, `signoffs`,
+  `invites` (to the account's address, only once it is verified; pending or
+  lapsed, with the farms a farmer invite names), `alertSubscriptions`,
+  `reportSubscriptions` and `auditEvents` (every event the person made,
+  `byYou: true`, or that names them as its subject; newest first, at most
+  50 000, `auditEventsTruncated` past that) come from `app_subject_export()`,
+  which reads only the caller's own rows, including in projects they have
+  left. Never a secret: no password or token hash, unsubscribe nonce, key or
+  link material. One export a minute per account
+  (`app_user.data_exported_at`); a render session is refused (403).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
   1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
   following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one
@@ -591,7 +613,7 @@ move or copy into it). `role` in the member and invite bodies is one of
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
-| PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
+| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
@@ -600,8 +622,16 @@ move or copy into it). `role` in the member and invite bodies is one of
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 | GET | `/teams/:id/portfolio` | – | `Portfolio` (see [Portfolio](#portfolio) below) | viewer |
 
-- `Team = { id, name, role, createdAt, memberCount, projectCount }` — `role` is
-  **your** role in the team.
+- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds }` — `role` is
+  **your** role in the team. `settings` is the stored document
+  (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
+  `portfolioThresholds = { green, amber, source: 'team' | 'default' }` is what
+  the portfolio judges by: the team's own, or the defaults (5, 20).
+- **Thresholds** (decision D11): percent of the last 30 days with the outlet
+  EWR not met, `green` and `amber` each 0–100 with `green < amber` (decimals
+  allowed); anything else, or an unknown key anywhere in `settings`, is a
+  `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
+  in the database). Every member reads them; only an admin changes them.
 - `TeamMember = { userId, email, displayName, role }`
 - `409 a team must keep at least one admin` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
@@ -616,9 +646,11 @@ run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is
 left out, so nobody gets a catchment roll-up of their neighbours.
 
-- `Portfolio = { team: { id, name, role }, today, thresholds: { amber, red }, projects: PortfolioProject[] }`;
+- `Portfolio = { team: { id, name, role }, today, thresholds: { green, amber, source }, projects: PortfolioProject[] }`;
   `today` is the server's UTC date the ages count to; `thresholds` are the
-  traffic-light fractions (below).
+  traffic-light cut-offs every `ewr.status` below was judged by, in percent,
+  and `source` says whether they are the team's (`team`) or the defaults
+  (`default`), so the page can say which apply.
 - `PortfolioProject = { id, name, role, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
   - `source`: where the figures come from. `published`: the current
     publication. `run`: nothing is published, so the newest baseline run
@@ -633,9 +665,11 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     the outlet EWR over the 30 days to `figuresUntil` (the publication's
     `catchmentView`, or, for `source: 'run'`, counted in SQL from that run's
     one outlet series; the DB test checks the two agree). Thresholds (D11):
-    **green** below 5 % of the days not met, **amber** below 20 %, **red**
-    otherwise; they are defaults for the hydrologist to confirm, not yet a
-    team setting (followups.md). `unknown` carries `reason`: `no-figures` (no
+    **green** below `thresholds.green` % of the days not met, **amber**
+    below `thresholds.amber` %, **red** otherwise: the team's own
+    ([Teams](#teams)), or by default 5 % and 20 %, which the hydrologist
+    still has to confirm (plan.md D11). A boundary is exclusive: exactly
+    5 % is amber. `unknown` carries `reason`: `no-figures` (no
     run), `no-ewr` (the source run had no EWR set, every month 0, so "never
     short" would be a false green) or `no-series` (the run has no outlet EWR
     record).
@@ -908,7 +942,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day | editor |
+| POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day. The engine runs with no database connection held; your role is checked again before the run is stored, so if you lose editor access meanwhile the answer is `403`/`404` and nothing is stored. The run records the inputs it was computed from, even if the project changes while it runs ([architecture.md § A model run](./architecture.md#a-model-run)) | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it) | viewer |
@@ -1277,7 +1311,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
-| POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `400 model run failed: …` as for any run | editor |
+| POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `409 this scenario changed while it ran (its ops or base run); run it again` when its ops, base run or owned nodes changed while the engine ran, and `404` when it was deleted (nothing is stored in either case; a rename doesn't count); `400 model run failed: …` as for any run | editor |
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
 - `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
@@ -1293,7 +1327,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   op still names that id, and the current base's name wins. Display only;
   it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
-  | 'baseline')[], renamed? }`: the ops applied to the base (engine `applyScenario`,
+  | 'baseline')[], renamed?, reIds? }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`
   and `checkError` says why only if the base can't be rebuilt. `renamed:
   { kind: 'node' | 'crop', id, name, as }[]` (viewer and up only, never a
@@ -1301,7 +1335,10 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   hidden farms and crops given a suffixed name in its runs because the
   applicant gave one of theirs that name (049, [scenarios.md §
   Applications](./scenarios.md#applications-wp-33)); always `[]` for a team
-  scenario.
+  scenario. `reIds: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole',
+  id, as }[]` (the same readers) lists the items an application added under
+  the id of one its applicant can't see, and the fresh id each has in its
+  runs; always `[]` for a team scenario.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether
@@ -1604,8 +1641,10 @@ CORS (gateways aren't browsers), JSON bodies only.
 - `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
   when days this push carried look wrong by the engine's data-quality rules
   (a negative rain or flow; a value above the outlier limit of the series
-  it lands in, taken without this push's days, once that series has 100
-  or more non-zero days), else
+  it lands in, taken without this push's days and without the days this
+  key wrote before that nobody has written since, once that leaves 100 or
+  more non-zero days, else without this push's days alone; no outlier
+  limit while that is under 100), else
   `null`. The days are merged all the same, `series.held` is recorded as
   the key (with the counts, up to 5 examples and the `source` label), no
   re-run is queued (`rerunQueuedFor: null`), and every automatic re-run

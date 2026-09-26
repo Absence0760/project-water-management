@@ -17,12 +17,20 @@ export type EwrStatus = 'green' | 'amber' | 'red' | 'unknown';
 export type EwrUnknownReason = 'no-figures' | 'no-ewr' | 'no-series';
 
 /**
- * Traffic-light thresholds (roadmap D11): green below 5 % of the 30 days with
- * the outlet EWR not met, amber below 20 %, red otherwise. Defaults the
- * hydrologist still has to confirm; per-team values are a follow-up
- * (docs/followups.md).
+ * Traffic-light thresholds (roadmap D11), in percent of the window's days
+ * with the outlet EWR not met: green below `green`, amber below `amber`, red
+ * otherwise. A team may set its own (055_team_settings, teams/settings.ts).
  */
-export const EWR_THRESHOLDS = { amber: 0.05, red: 0.2 } as const;
+export interface EwrThresholds {
+	green: number;
+	amber: number;
+}
+
+/**
+ * The defaults, for a team that has set none: green below 5 %, amber below
+ * 20 %. The hydrologist still has to confirm them (plan.md D11).
+ */
+export const EWR_THRESHOLDS: Readonly<EwrThresholds> = Object.freeze({ green: 5, amber: 20 });
 
 export interface EwrFigure {
 	status: EwrStatus;
@@ -35,20 +43,25 @@ export interface EwrFigure {
 	reason?: EwrUnknownReason;
 }
 
-/** The status for `daysNotMet` of `days`. An empty window is unknown, never green. */
-export function ewrStatus(daysNotMet: number, days: number, t: { amber: number; red: number } = EWR_THRESHOLDS): Exclude<EwrStatus, 'unknown'> | null {
+/** The status for `daysNotMet` of `days` under thresholds `t`. An empty window is unknown, never green. */
+export function ewrStatus(daysNotMet: number, days: number, t: EwrThresholds = EWR_THRESHOLDS): Exclude<EwrStatus, 'unknown'> | null {
 	if (!(days > 0) || !(daysNotMet >= 0) || daysNotMet > days) return null;
-	const f = daysNotMet / days;
-	return f < t.amber ? 'green' : f < t.red ? 'amber' : 'red';
+	// daysNotMet ÷ days < pct ÷ 100, cross-multiplied so no division rounds a
+	// boundary (7 of 100 days is 7 %, not 7.000000000000001 %).
+	const below = (pct: number) => daysNotMet * 100 < pct * days;
+	return below(t.green) ? 'green' : below(t.amber) ? 'amber' : 'red';
 }
 
 /** The EWR figure from what the query read, with the unknown reason when there's nothing honest to show. */
-export function ewrFigure(input: { hasFigures: boolean; ewrSet: boolean; daysNotMet: number | null; days: number | null }): EwrFigure {
+export function ewrFigure(
+	input: { hasFigures: boolean; ewrSet: boolean; daysNotMet: number | null; days: number | null },
+	thresholds: EwrThresholds = EWR_THRESHOLDS
+): EwrFigure {
 	const unknown = (reason: EwrUnknownReason): EwrFigure => ({ status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason });
 	if (!input.hasFigures) return unknown('no-figures');
 	if (!input.ewrSet) return unknown('no-ewr');
 	if (input.daysNotMet == null || input.days == null) return unknown('no-series');
-	const status = ewrStatus(input.daysNotMet, input.days);
+	const status = ewrStatus(input.daysNotMet, input.days, thresholds);
 	if (!status) return unknown('no-series');
 	return { status, daysNotMet30: input.daysNotMet, days30: input.days, fraction30: input.daysNotMet / input.days };
 }

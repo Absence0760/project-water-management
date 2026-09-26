@@ -127,3 +127,54 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await reviewer.page.goto(`/teams/${team.id}`);
 	await expect(reviewer.page.getByRole('link', { name: 'New project in this team' })).toBeVisible();
 });
+
+test('only a team admin edits the portfolio traffic lights; a member reads which apply', async ({ page, owner, signIn }) => {
+	void owner;
+	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Lights Board' } });
+	const { team } = (await res.json()) as { team: { id: string } };
+	const colleague = await signIn('Lights member');
+	expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+
+	// The admin: the defaults, said to be waiting for the hydrologist, and a form.
+	await page.goto(`/teams/${team.id}`);
+	const panel = page.getByRole('region', { name: 'Portfolio traffic lights' });
+	await expect(panel).toContainText('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
+	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
+	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
+	await expect(panel.getByLabel('Amber below (%)')).toHaveValue('20');
+	const save = panel.getByRole('button', { name: 'Save thresholds' });
+	await expect(save).toBeDisabled(); // nothing changed yet
+	await expect(panel.getByRole('alert')).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: 'Use the defaults' })).toHaveCount(0);
+
+	// Green not below amber: said, and not sendable.
+	await panel.getByLabel('Green below (%)').fill('20');
+	await expect(panel.getByRole('alert')).toHaveText('The green cut-off must be below the amber one.');
+	await expect(panel.getByLabel('Green below (%)')).toHaveAttribute('aria-invalid', 'true');
+	await expect(save).toBeDisabled();
+
+	await panel.getByLabel('Green below (%)').fill('2.5');
+	await panel.getByLabel('Amber below (%)').fill('12.5');
+	await expect(panel.getByRole('alert')).toHaveCount(0);
+	await save.click();
+	await expect(panel.getByRole('status')).toHaveText('Saved. The portfolio now uses these thresholds.');
+	await expect(panel).toContainText('green when it was not met on under 2.5 % of them, amber under 12.5 %, red otherwise');
+	await expect(panel).toContainText('These are the team’s own thresholds.');
+
+	// The member reads them, and has no form.
+	await colleague.page.goto(`/teams/${team.id}`);
+	const theirs = colleague.page.getByRole('region', { name: 'Portfolio traffic lights' });
+	await expect(theirs).toContainText('amber under 12.5 %');
+	await expect(theirs).toContainText('Only admins can change them.');
+	await expect(theirs.getByRole('button')).toHaveCount(0);
+	await expect(theirs.getByRole('spinbutton')).toHaveCount(0);
+
+	// Back to the defaults, after a reload (the saved values come from the server).
+	await page.reload();
+	await expect(panel.getByLabel('Green below (%)')).toHaveValue('2.5');
+	await panel.getByRole('button', { name: 'Use the defaults' }).click();
+	await expect(panel.getByRole('status')).toHaveText('Saved. The portfolio uses the default thresholds again.');
+	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
+	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
+	await expectNoViolations(page, { tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] });
+});

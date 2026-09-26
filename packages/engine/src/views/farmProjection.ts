@@ -16,9 +16,21 @@
 // run's stored flows (see reattribute below): exact, except that a transfer
 // network with a loop is cut to a tree first (documented there). The charges
 // themselves always come from the stored series, never from the recompute.
+//
+// The same recompute over any window, other water users included, is
+// curtailmentOverWindow (below): the Runs tab's reporting-window picker
+// (issue #44) and the season here share it.
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
-import { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentInput, type CurtailmentSiteInput } from '../network/curtailment';
+import {
+	computeCurtailment,
+	DEMAND_PCT_FLOOR_M3_DAY,
+	otherUserCurtailment,
+	type CurtailmentInput,
+	type CurtailmentSiteInput,
+	type CurtailmentUserInput,
+	type ReportWindow
+} from '../network/curtailment';
 import { buildTopology, canonicalOrder } from '../network/topology';
 import type { CurtailmentFarm, CurtailmentSummary, NetworkNode, Transfer } from '../project';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
@@ -291,7 +303,9 @@ function consumptiveShare(n: NetworkNode): number {
 /**
  * The season (1 Oct to the run's last day, from the run's first day when it
  * starts later) and its curtailment table over every farm, as runModel would
- * compute it with the season as its report window.
+ * compute it with the season as its report window (curtailmentOverWindow,
+ * without the other water users' rows, so a publication reads no user series
+ * beyond PROJECTION_SERIES.user).
  */
 export function analyseSeason(run: ProjectionRun): SeasonAnalysis {
 	const d0 = toEpochDay(run.startDate);
@@ -302,25 +316,123 @@ export function analyseSeason(run: ProjectionRun): SeasonAnalysis {
 	const from = Math.max(0, toEpochDay(seasonStart(dataUntil)) - d0);
 	const from30 = Math.max(0, to - 29);
 	const window = { from, to, reportStart: fromEpochDay(d0 + from), reportEnd: fromEpochDay(d0 + to) };
+	const { curtailment, sites, bindingApproximate } = curtailmentOverWindow(run, window, { otherUsers: false });
+	return {
+		startDate: run.startDate,
+		dataUntil,
+		season: { from, to, fromDate: window.reportStart, toDate: window.reportEnd },
+		last30: { from: from30, to, fromDate: fromEpochDay(d0 + from30), toDate: window.reportEnd },
+		curtailment,
+		sites,
+		bindingApproximate
+	};
+}
 
+// ---------------------------------------------------------------------------
+// The curtailment table over any window (issue #44)
+// ---------------------------------------------------------------------------
+
+/** A saved run, as the curtailment recompute sees it (no dataUntil: the window is the caller's). */
+export type CurtailmentRun = Omit<ProjectionRun, 'dataUntil'>;
+
+/** The curtailment table over one window, recomputed from a run's stored series. */
+export interface WindowCurtailment {
+	/** Farms, other water users and EWR sites, as runModel reports them with this window as the report window. */
+	curtailment: CurtailmentSummary;
+	/** The EWR sites in the engine's order, with their daily series over the whole run. */
+	sites: SeasonSite[];
+	/** True when a loop in the transfer rules made the binding sites approximate (transferVolumes). */
+	bindingApproximate: boolean;
+}
+
+/** A run read once, whose curtailment table can then be worked out over any window. */
+export interface PreparedCurtailment {
+	/** The run's days (index 0 = startDate). */
+	days: number;
+	/** The table over `window` (day indices into the run, inclusive). Throws on an empty window or one outside the run. */
+	over(window: ReportWindow): WindowCurtailment;
+}
+
+export interface CurtailmentOptions {
+	/** Include the other water users' rows (reads their demand, return_flow and ewr_charge). Default true. */
+	otherUsers?: boolean;
+}
+
+/**
+ * Every stored series prepareCurtailment reads for this model (null node =
+ * catchment), so a caller that fetches series one at a time (the Runs tab's
+ * reporting-window picker) knows what to fetch.
+ */
+export function curtailmentSeriesKeys(nodes: readonly NetworkNode[], transfers: readonly Transfer[], options: CurtailmentOptions = {}): { nodeId: string | null; key: string }[] {
+	const out: { nodeId: string | null; key: string }[] = [];
+	const add = (nodeId: string | null, ...keys: string[]) => keys.forEach((key) => out.push({ nodeId, key }));
+	const topo = buildTopology(nodes);
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	// The farms whose net transfer series transferVolumes reads.
+	const inRule = new Set<string>();
+	for (const tr of transfers) {
+		const a = byId.get(tr.fromNodeId);
+		const b = byId.get(tr.toNodeId);
+		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);
+	}
+	nodes.forEach((n, i) => {
+		add(n.id, 'inflow_upstream', 'outflow');
+		if (n.kind === 'farm') {
+			add(n.id, 'runoff', 'supplied', 'dam_storage', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
+			if (inRule.has(n.id)) add(n.id, 'transfer');
+		} else if (n.kind === 'user') {
+			add(n.id, 'supplied');
+			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
+		} else if (n.kind === 'gauge' && i !== topo.outflow) {
+			add(n.id, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+		}
+	});
+	if (topo.outflow >= 0) add(null, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+	return out;
+}
+
+/**
+ * Reads a saved run once for curtailmentOverWindow: its farm, other-user and
+ * EWR-site series, and each day's binding site, recomputed with the engine's
+ * attribution on the stored flows (reattribute). `over` is cheap, so a caller
+ * showing several windows of one run prepares once.
+ */
+export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOptions = {}): PreparedCurtailment {
+	const d0 = toEpochDay(run.startDate);
+	const days = toEpochDay(run.endDate) - d0 + 1;
+	if (!(days > 0)) throw new ProjectionInputError('the run has no days');
 	const { res, pos, siteNodes, approximate } = reattribute(run, days);
 	const nodes = run.nodes;
-	const farms: CurtailmentInput[] = nodes.flatMap((n, i) => {
+	const farms = nodes.flatMap((n, i) => {
 		if (n.kind !== 'farm') return [];
-		const bind = bindingSite(res, i, from, to, (node) => pos[node]!);
-		return [
-			{
+		const input: CurtailmentInput = {
+			nodeId: n.id,
+			name: n.name,
+			demand: need(run, n.id, 'demand', days),
+			supplied: need(run, n.id, 'supplied', days),
+			ewrCharge: need(run, n.id, 'ewr_charge', days),
+			ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
+			consumptivePerSupplied: consumptiveShare(n)
+		};
+		return [{ i, input }];
+	});
+	const users: CurtailmentUserInput[] = [];
+	if (options.otherUsers !== false) {
+		for (const n of nodes) {
+			if (n.kind !== 'user') continue;
+			users.push({
 				nodeId: n.id,
 				name: n.name,
+				// As runModel reads it (run.ts otherUsers): senior unless marked junior.
+				senior: (n.userPriority ?? 'senior') !== 'junior',
 				demand: need(run, n.id, 'demand', days),
 				supplied: need(run, n.id, 'supplied', days),
+				returned: need(run, n.id, 'return_flow', days),
 				ewrCharge: need(run, n.id, 'ewr_charge', days),
-				ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
-				consumptivePerSupplied: consumptiveShare(n),
-				ewrBindingSiteId: bind < 0 ? null : nodes[siteNodes[bind]!]!.id
-			}
-		];
-	});
+				consumptivePerSupplied: consumptiveShare(n)
+			});
+		}
+	}
 	const sites: SeasonSite[] = siteNodes.map((node, si) => {
 		const isOutlet = si === 0 && nodes[node]!.downstreamNodeId === null;
 		const id = isOutlet ? null : nodes[node]!.id;
@@ -344,14 +456,31 @@ export function analyseSeason(run: ProjectionRun): SeasonAnalysis {
 		natural: s.natural
 	}));
 	return {
-		startDate: run.startDate,
-		dataUntil,
-		season: { from, to, fromDate: window.reportStart, toDate: window.reportEnd },
-		last30: { from: from30, to, fromDate: fromEpochDay(d0 + from30), toDate: window.reportEnd },
-		curtailment: computeCurtailment(farms, window, siteInputs),
-		sites,
-		bindingApproximate: approximate
+		days,
+		over(window) {
+			if (!(window.from >= 0 && window.to < days)) throw new ProjectionInputError(`the window ${window.reportStart} … ${window.reportEnd} is outside the run`);
+			const farmInputs = farms.map(({ i, input }) => {
+				const bind = bindingSite(res, i, window.from, window.to, (node) => pos[node]!);
+				return { ...input, ewrBindingSiteId: bind < 0 ? null : nodes[siteNodes[bind]!]!.id };
+			});
+			const curtailment = computeCurtailment(farmInputs, window, siteInputs);
+			// runModel adds the rows only when the network has other water users.
+			if (users.length) curtailment.otherUsers = otherUserCurtailment(users, window);
+			return { curtailment, sites, bindingApproximate: approximate };
+		}
 	};
+}
+
+/**
+ * The curtailment table (farms, other water users, EWR sites) over any
+ * window of a saved run, from its stored daily series: what runModel reports
+ * with that window as the project's report window, the EWR site that bound
+ * each farm's charge included (exact, except after a transfer loop:
+ * `bindingApproximate`). Over the run's own window it is the stored table.
+ * Pure. For several windows of one run, prepareCurtailment once.
+ */
+export function curtailmentOverWindow(run: CurtailmentRun, window: ReportWindow, options: CurtailmentOptions = {}): WindowCurtailment {
+	return prepareCurtailment(run, options).over(window);
 }
 
 // ---------------------------------------------------------------------------

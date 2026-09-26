@@ -12,7 +12,7 @@ afterEach(() => {
 
 describe('ewrStatus', () => {
 	it('green below 5 %, amber below 20 %, red from 20 % (of 30 days: 1 green, 2–5 amber, 6+ red)', () => {
-		expect(EWR_THRESHOLDS).toEqual({ amber: 0.05, red: 0.2 });
+		expect(EWR_THRESHOLDS).toEqual({ green: 5, amber: 20 });
 		expect(ewrStatus(0, 30)).toBe('green');
 		expect(ewrStatus(1, 30)).toBe('green'); // 3.3 %
 		expect(ewrStatus(2, 30)).toBe('amber'); // 6.7 %
@@ -30,8 +30,24 @@ describe('ewrStatus', () => {
 		expect(ewrStatus(31, 30)).toBeNull();
 		expect(ewrStatus(Number.NaN, 30)).toBeNull();
 	});
-	it('takes other thresholds', () => {
-		expect(ewrStatus(3, 30, { amber: 0.2, red: 0.5 })).toBe('green');
+	it('takes a team’s thresholds, in percent', () => {
+		const t = { green: 20, amber: 50 };
+		expect(ewrStatus(3, 30, t)).toBe('green'); // 10 %
+		expect(ewrStatus(6, 30, t)).toBe('amber'); // exactly 20 %
+		expect(ewrStatus(14, 30, t)).toBe('amber');
+		expect(ewrStatus(15, 30, t)).toBe('red'); // exactly 50 %
+	});
+	it('a boundary that division would round is still exact (7 of 100 days is 7 %, not above it)', () => {
+		expect(7 / 100 * 100).toBeGreaterThan(7); // the float trap the cross-multiplication avoids
+		expect(ewrStatus(7, 100, { green: 7.5, amber: 8 })).toBe('green');
+		expect(ewrStatus(7, 100, { green: 7, amber: 8 })).toBe('amber');
+		expect(ewrStatus(7, 100, { green: 1, amber: 7 })).toBe('red');
+	});
+	it('the extremes: green 0 is never green, amber 100 is red only when every day failed', () => {
+		const t = { green: 0, amber: 100 };
+		expect(ewrStatus(0, 30, t)).toBe('amber');
+		expect(ewrStatus(29, 30, t)).toBe('amber');
+		expect(ewrStatus(30, 30, t)).toBe('red');
 	});
 });
 
@@ -44,6 +60,12 @@ describe('ewrFigure', () => {
 	});
 	it('a known figure carries its counts and fraction, and no reason', () => {
 		expect(ewrFigure({ hasFigures: true, ewrSet: true, daysNotMet: 9, days: 30 })).toEqual({ status: 'red', daysNotMet30: 9, days30: 30, fraction30: 0.3 });
+	});
+	it('judges by the thresholds it is given, the defaults otherwise', () => {
+		const input = { hasFigures: true, ewrSet: true, daysNotMet: 9, days: 30 };
+		expect(ewrFigure(input, { green: 10, amber: 40 }).status).toBe('amber');
+		expect(ewrFigure(input, { green: 31, amber: 40 }).status).toBe('green');
+		expect(ewrFigure(input).status).toBe('red');
 	});
 });
 
@@ -115,6 +137,15 @@ describe('toPortfolioProject', () => {
 			alertsFiring: 0,
 			restriction: { level: 'advisory', pct: 12.5 }
 		});
+	});
+
+	it('passes the team’s thresholds to the status (3 of 30 days: amber by default, green under 20 / 50)', () => {
+		expect(toPortfolioProject(row(), today).ewr.status).toBe('amber');
+		expect(toPortfolioProject(row(), today, { green: 20, amber: 50 }).ewr.status).toBe('green');
+		expect(toPortfolioProject(row(), today, { green: 1, amber: 5 }).ewr.status).toBe('red');
+		// The run-only path takes them too.
+		const runOnly = row({ published_at: null, run_days30: 30, run_not_met30: 3 });
+		expect(toPortfolioProject(runOnly, today, { green: 20, amber: 50 }).ewr.status).toBe('green');
 	});
 
 	it('a publication from before the farm counts existed leaves them unknown, not zero', () => {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Role } from '$lib/api/types';
 import {
 	ALL_TABS,
+	NAV_SECTIONS,
+	navSections,
 	hasModelInputsToggle,
 	stripTabs,
 	TAB_GROUP,
@@ -109,5 +111,41 @@ describe('stripTabs', () => {
 
 	it('ignores an open tab the page doesn’t render', () => {
 		expect(stripTabs(short, 'scenarios', PAGE.filter((id) => id !== 'scenarios'))).toEqual(short);
+	});
+});
+
+describe('navSections', () => {
+	it('lists every tab in exactly one section', () => {
+		const listed = NAV_SECTIONS.flatMap((s) => [...s.tabs]);
+		expect([...listed].sort()).toEqual([...ALL_TABS].sort());
+		expect(new Set(listed).size).toBe(listed.length);
+	});
+
+	it('puts outcomes first, then the model, then review', () => {
+		expect(navSections(ALL_TABS)).toEqual([
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
+		]);
+	});
+
+	it('orders by section whatever order the tabs arrive in, and drops empty sections', () => {
+		// A viewer before "Show model inputs".
+		expect(navSections(visibleTabs('viewer', {}, PAGE))).toEqual([
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] },
+			{ id: 'model', label: 'Build the model', tabs: ['series'] }
+		]);
+		expect(navSections<TabId>(['history', 'overview'])).toEqual([
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
+			{ id: 'review', label: 'Review', tabs: ['history'] }
+		]);
+		expect(navSections<TabId>([])).toEqual([]);
+	});
+
+	it('puts a tab no section lists at the end of "Build the model"', () => {
+		expect(navSections(['overview', 'newthing', 'network'])).toEqual([
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] }
+		]);
 	});
 });
