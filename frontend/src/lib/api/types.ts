@@ -147,10 +147,51 @@ export interface FarmAccessPerson {
 
 /** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
 export interface Farmer {
+	status: 'active';
 	userId: string;
 	email: string;
 	displayName: string;
 	nodeIds: string[];
+}
+
+/** The languages a farmer invite email can be in (invite.locale; `af` is sent in English until WP-2.5). */
+export type InviteLocale = 'en' | 'af';
+
+/** A pending farmer invite and the farms it will link (WP-2.2). Listed for owners only. */
+export interface InvitedFarmer {
+	status: 'invited' | 'expired';
+	inviteId: string;
+	email: string;
+	nodeIds: string[];
+	/** Display name of whoever (re-)sent it. */
+	invitedBy: string;
+	expiresAt: string;
+	locale: InviteLocale;
+}
+
+/** A row of GET /projects/:id/farmers: a farmer, or (owners only) a pending farmer invite. */
+export type FarmerEntry = Farmer | InvitedFarmer;
+
+/** POST /projects/:id/farmers: a verified account is added, any other address invited. */
+export type AddFarmerResult =
+	| { farmer: Farmer; invited?: undefined; invite?: undefined }
+	| { invited: true; invite: InvitedFarmer; farmer?: undefined };
+
+/** One row of POST /projects/:id/farmers/bulk (a CSV line: email,farm,language). */
+export interface BulkFarmerRow {
+	email: string;
+	/** A farm's name, matched exactly and case-insensitively. */
+	farm: string;
+	locale?: string;
+}
+
+/** What happened to (or, in a dry run, would happen to) one bulk row. `row` indexes the request's rows. */
+export interface BulkFarmerResult {
+	row: number;
+	email: string;
+	farm: string;
+	status: 'added' | 'invited' | 'error';
+	error?: string;
 }
 
 /**

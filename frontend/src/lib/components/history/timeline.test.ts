@@ -40,6 +40,8 @@ describe('what an item says', () => {
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer', via: 'invite' }))).toBe('Ben joined as viewer (accepted an invite)');
 		expect(eventLine(ev('member.removed', { displayName: 'Ben', role: 'farmer', self: true }))).toBe('Ben left the project');
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'editor' }))).toBe('Changed Ben’s role from viewer to editor');
+		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the farm Hilltop');
+		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the farm Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(
 			'Unlinked Cara from the farm Hilltop (the farm was removed, or is no longer a farm)'
 		);

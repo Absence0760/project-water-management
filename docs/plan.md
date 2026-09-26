@@ -425,7 +425,8 @@ rehearsed once.
   by email for people without an account yet — "Forgot password?" on sign-in,
   a confirm-email banner, sign-up through an invite link (address locked, joins
   on sign-up), and pending invites with re-send / revoke on the project Members
-  panel and the team page.
+  panel and the team page. Farmers are invited with their farms, one by one
+  or from a CSV of up to 200 rows with a preview (WP-2.2, issue #27).
 - 🚧 **Abuse limits:** **per-account login lockout** (back off after N failed
   attempts per email, stored in the DB so it holds across Lambda instances),
   plus a per-IP limit on register. This adds to the WAF rate rule at the edge.

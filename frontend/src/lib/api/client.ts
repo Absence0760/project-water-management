@@ -24,7 +24,12 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	AddFarmerResult,
+	BulkFarmerResult,
+	BulkFarmerRow,
 	Farmer,
+	FarmerEntry,
+	InviteLocale,
 	HistoryPage,
 	HistoryQuery,
 	HistoryRevision,
@@ -244,12 +249,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
-		/** Farmer members and their farms (WP-2.1). A farmer leaves or is removed through members.remove. */
+		/**
+		 * Farmer members and their farms (WP-2.1), and pending farmer invites
+		 * (WP-2.2; listed for owners only). A farmer leaves or is removed through
+		 * members.remove; an invite is revoked through the project's invites.
+		 */
 		farmers: {
-			list: (id: string) => request<{ farmers: Farmer[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
-			/** An existing, verified account only (invites for farmers come with WP-2.2). */
-			add: (id: string, email: string, nodeIds: string[]) =>
-				request<{ farmer: Farmer }>('POST', `${p(id)}/farmers`, { email, nodeIds }).then((r) => r.farmer),
+			list: (id: string) => request<{ farmers: FarmerEntry[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
+			/** A verified account is added (`{ farmer }`); any other address is invited (`{ invited: true, invite }`). */
+			add: (id: string, email: string, nodeIds: string[], locale: InviteLocale = 'en') =>
+				request<AddFarmerResult>('POST', `${p(id)}/farmers`, { email, nodeIds, locale }),
+			/** Many rows at once, one farm each; `dryRun` returns the outcomes without writing or mailing anything. */
+			bulk: (id: string, rows: BulkFarmerRow[], dryRun = false) =>
+				request<{ results: BulkFarmerResult[]; dryRun: boolean }>('POST', `${p(id)}/farmers/bulk`, { rows, dryRun }).then((r) => r.results),
 			setFarms: (id: string, userId: string, nodeIds: string[]) =>
 				request<{ farmer: Farmer }>('PUT', `${p(id)}/farmers/${enc(userId)}`, { nodeIds }).then((r) => r.farmer)
 		},

@@ -172,8 +172,19 @@ record (an imported project only), team and members.
   **Farmers**. Below 900 px it is one column in the order details, import
   record, team, members, farmers, share links.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
-  farms linked to them, by name. Owners add an existing, verified account by
-  email with a tick box per farm, change a farmer's farms, and remove one.
+  farms linked to them, by name. Owners change a farmer's farms and remove
+  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
+  opens a dialog with two modes: *One farmer* (email, a tick box per farm,
+  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  one farm per row, pasted or uploaded, header optional; parsing in
+  `overview/farmers.ts`). A CSV is previewed first: a table of every row's
+  line, email, farm and what will happen (added, invited, or the row's
+  error), from a server dry run that sends nothing; **Send** then does it and
+  the table shows the results. A verified account is added at once; anyone
+  else is invited and listed under **Pending farmer invitations** (owners
+  only) with their farms, who sent it and when it expires, with Resend and
+  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
+  Farmer invites stay out of the Members panel's pending list.
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this tab: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".

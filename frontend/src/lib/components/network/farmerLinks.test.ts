@@ -3,8 +3,12 @@ import { countByNode, linkedNote, removeMessage } from './farmerLinks';
 
 describe('countByNode', () => {
 	it('counts the farmers linked to each farm', () => {
-		expect(countByNode([{ nodeIds: ['a', 'b'] }, { nodeIds: ['a'] }])).toEqual({ a: 2, b: 1 });
+		expect(countByNode([{ status: 'active', nodeIds: ['a', 'b'] }, { status: 'active', nodeIds: ['a'] }])).toEqual({ a: 2, b: 1 });
 		expect(countByNode([])).toEqual({});
+	});
+
+	it('leaves out pending and expired invites, which link nobody yet', () => {
+		expect(countByNode([{ status: 'active', nodeIds: ['a'] }, { status: 'invited', nodeIds: ['a', 'b'] }, { status: 'expired', nodeIds: ['b'] }])).toEqual({ a: 1 });
 	});
 });
 

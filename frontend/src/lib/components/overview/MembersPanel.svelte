@@ -218,7 +218,7 @@
 		<PendingInvites
 			bind:invites
 			idPrefix="project"
-			load={() => invitesApi.list(projectId)}
+			load={async () => (await invitesApi.list(projectId)).filter((i) => i.role !== 'farmer') /* farmer invites: FarmersPanel */}
 			resend={async (inv) => {
 				const r = await invitesApi.add(projectId, inv.email, inv.role as Role);
 				if (r.invited) return r.invite;
