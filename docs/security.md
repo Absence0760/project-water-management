@@ -8,7 +8,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 ## Authentication
 
 - **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12; 4 under vitest only, `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
+  (`bcryptjs`, cost 12; 4 under vitest and on the e2e API server, which sets `PASSWORD_HASH_COST=4`, an override Lambda refuses at startup; `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
