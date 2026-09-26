@@ -1,12 +1,40 @@
 # The catchment workspace (UI)
 
-## App header and account menu
+## App shell and account menu
 
-Every signed-in page (`lib/components/layout/AppHeader.svelte`) shows a sticky
-header with the brand, the Projects / Teams / Help nav, and an account control
-on the right: an avatar, display name and email that open a menu (same
-disclosure pattern as the Data/Runs tabs' download menu — a button plus a
-hidden list, not an ARIA `menu`/`menuitem` widget) with three entries:
+Every signed-in page sits in one frame (`lib/components/layout/AppShell.svelte`,
+issue #17), except the farmer view (`/farm`, its own `FarmShell`) and the
+sign-in pages (`AuthCard`). The root layout wraps the page in it once a
+session exists. A **Skip to content** link comes first.
+
+- **900 px and wider:** a full-height sidebar (15rem, 240 px) from the top
+  edge, sticky while the page scrolls and scrolling on its own when taller
+  than the window. From the top: the app mark (a link to `/`), the **Main**
+  navigation (Projects / Teams / Help, `aria-current="page"` on the section
+  the URL is in; the project workspace counts as Projects), the page's own
+  navigation in the slot (below), and the account menu at the foot. Nothing
+  is fixed across the top, so `--header-h` (`app.css`) is 0 and sticky bars
+  and in-page link targets stop at the top edge.
+- **Below 900 px (phones):** a slim sticky bar, 52 px (`--header-h`): a
+  **Menu** button that opens the Main navigation under the bar, the brand,
+  and a compact account button (initials only). The Menu closes on a
+  navigation or Escape (Escape puts focus back on the button).
+
+**The page slot** (`layout/sidebar.svelte.ts`): a page puts its own
+navigation in the sidebar with `fillSidebar(snippet, on)`, called from an
+`$effect` so it clears when the page goes. It fills the slot only while the
+sidebar is shown; on a phone the page renders that navigation in the page
+instead, so only one copy exists at a time (one set of ids, one tab order).
+The project workspace is the one user ([§ where the sections
+live](#project-workspace)); Help keeps its contents in the page
+([§ Help](#help-help)).
+
+**The account menu** (`layout/AccountMenu.svelte`) is a button showing an
+avatar, display name and email (initials only on the phone bar, `compact`)
+that opens a list (same disclosure pattern as the Data/Runs tabs' download
+menu — a button plus a hidden list, not an ARIA `menu`/`menuitem` widget)
+with three entries. At the sidebar's foot it opens upward (`up`); on the
+phone bar, downward.
 
 - **Account** — a link to `/account` (marked `aria-current` while there).
 - **Sign out** — ends this device's session only, same as before.
@@ -18,11 +46,11 @@ hidden list, not an ARIA `menu`/`menuitem` widget) with three entries:
 
 The menu is keyboard-operable: Escape closes it and returns focus to the
 account button, as does a click outside; a tab or click that leaves the
-header closes it too.
+menu closes it too.
 
 **The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
 address and whether it is confirmed, a **Display name** form
-(`PATCH /auth/me`; the header follows at once), **Language and units** (the
+(`PATCH /auth/me`; the account menu follows at once), **Language and units** (the
 language switch and the farm view's m³ / ML, [§ Language](#language)), a
 **Your data** panel whose **Download my data** button saves the
 data-subject export (`GET /auth/me/export`, a JSON file; the download
@@ -36,6 +64,8 @@ in an alert above the form, with the field it's about marked
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
+
+## Project workspace
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
@@ -57,21 +87,27 @@ section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
 the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
-- **1100 px and wider:** a sidebar beside the tab's content, with the section
-  labels shown, sticky under the app header. The page grows by the sidebar's
-  width, so on a wide screen the content column keeps its usual 1480 px
-  maximum. Narrower, the widest grids scroll inside their own box: the
-  network's node table fits beside the sidebar from about 1700 px and scrolls
-  below that, its name and remove columns kept in view (`model.spec.ts`).
-- **900–1099 px:** one strip across the top, sections side by side with a
-  divider and a small label over each.
+- **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
+  under a "Catchment" label and the project's name (a link to its Summary),
+  the section labels shown, with a viewer's **Show model inputs** at the end.
+  The sidebar's **Projects** link replaces the old "Projects / *name*"
+  breadcrumb row. The content column keeps its usual 1480 px maximum beside
+  the sidebar; narrower, the widest grids scroll inside their own box: the
+  network's node table fits from about 1700 px and scrolls below that, its
+  name and remove columns kept in view (`model.spec.ts`).
 - **Below 900 px (phones):** a full-width **Sections** button naming the open
   tab (its accessible name is "Project sections: *Tab*", with the problems dot
   when a model tab has one) opens the same grouped list in the page, the
   section labels shown and the open tab marked, with a viewer's **Show model
   inputs** at the end. Choosing a tab or pressing Escape closes it (Escape puts
-  focus back on the button). It replaced a 12-tab strip that scrolled
-  sideways, where a phone showed about three tabs and none of the grouping.
+  focus back on the button). The phone bar's **Menu** holds Projects / Teams /
+  Help. It replaced a 12-tab strip that scrolled sideways, where a phone
+  showed about three tabs and none of the grouping.
+
+The list is rendered once, in whichever of the two places applies
+(`fillSidebar(…, wide && project loaded && not the Applicant view)`), so
+its tab ids and arrow keys never exist twice. The Applicant view fills no
+slot.
 
 The arrow keys move through the tabs in the order shown, across sections,
 wrapping at the ends (Right/Down next, Left/Up previous).
@@ -92,13 +128,13 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 | History | `history` | `changes` | `lib/components/history/` |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
-`visibleTabs(role, prefs, rendered)`, decides which tabs the strip shows and
+`visibleTabs(role, prefs, rendered)`, decides which tabs the sections list shows and
 which setup-checklist steps are links:
 
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, Data, Runs & results, Compare runs, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
+| viewer | Summary, Data, Runs & results, Compare runs, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -111,8 +147,8 @@ checkbox isn't saved: it resets when the project is opened again.
 
 This is **presentation, not access control**: RLS still lets a viewer read
 every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
-opens it, and the strip then shows that tab in its place while it is open
-(`stripTabs`), so you can see where you are. The Summary's checklist keeps a
+opens it, and the sections list then shows that tab in its place while it is
+open (`stripTabs`), so you can see where you are. The Summary's checklist keeps a
 hidden tab's step and its status, but as plain text rather than a link; its
 headline facts still link to their tabs (a deep link, as above). The
 per-member "choose your own tabs" preference is not built yet
@@ -410,6 +446,16 @@ review has options and reports a `.json` file doesn't). The dialog downloads
 on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+
+**Layout answers to the space it has, not the window** (container queries,
+since the app sidebar takes 240 px from 900 px). The owner list sits beside
+the tables while the page's content box is wider than 868 px
+(`routes/+page.svelte`, container `projects-page`), and above them
+narrower. Each table (`ProjectTable.svelte`, container on its wrapper) drops
+its Team and Updated columns and the **Open** button at 910 px or narrower
+(the team moves under the name; the sort still uses Updated; the name opens
+the project), and at 730 px or narrower folds role, freshness, last run and
+the date into a meta line under the name, with the row's buttons stacked.
 
 **A click anywhere on a project's row opens it.** The name link stretches
 over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:
@@ -1192,7 +1238,7 @@ running. The workbook code loads only then, in a worker, never with the page.
   `#set-quality`, then `#set-feeds` after the form; listed by
   `settings/sections.ts`). It is the shared in-page menu
   (`common/SectionNav.svelte`, also on Runs & results): a bar of pill links
-  that sticks under the app header down the long form and marks the group
+  that sticks at the top (under the phone bar on a phone) down the long form and marks the group
   being read with `aria-current="location"` (scroll spy: `activeSectionId`
   in `common/sectionNav.ts`, the last section whose top has passed under the
   menu, or the last one at the bottom of the page). A group with a Save
@@ -1212,7 +1258,7 @@ running. The workbook code loads only then, in a worker, never with the page.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
-workspace sidebar without sideways scrolling: a month cell is as narrow as a
+app sidebar without sideways scrolling: a month cell is as narrow as a
 six-digit value such as 250000 allows (sized in the input's own digits, no
 spin buttons, as in the Network table; arrow keys still step), spare width is
 shared out between the months and the row label, and the label wraps before
@@ -1727,14 +1773,14 @@ run's report to chosen members every week or month.
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
   `runs/sections.ts` in groups). Each group's name leads its pills, and each
-  group is a list labelled by that name. It sticks under the app header down
-  the long results page, marks the section being read, wraps to about two
+  group is a list labelled by that name. It sticks at the top (under the
+  phone bar on a phone) down the long results page, marks the section being read, wraps to about two
   rows on a laptop, and on phones is one sideways strip. Farm detail appears
   only when the run has farms, Reserve compliance only with a rule table,
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to
-  section, or a focused control, clears both the header and the menu.
+  section, or a focused control, clears both the phone bar and the menu.
 - **Page order.** The results are grouped by the question they answer
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
@@ -2686,7 +2732,7 @@ exists, says so with a link to Runs & results.
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
-  flagged rows), and no app header, banner or on-screen bar.
+  flagged rows), and no app sidebar, phone bar, banner or on-screen bar.
 - **Themes.** On screen the report follows the light or dark theme. A print
   is always light: on `beforeprint` the page and each print-mode chart set
   `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
@@ -2716,12 +2762,16 @@ exists, says so with a link to Runs & results.
 
 ## Help (`/help`)
 
-Every help page shares one shell (`routes/help/+layout.svelte`): a sidebar
-(`help/HelpNav.svelte`) with the search box, the overview, every guide by group
-(*Start here*, *How it works*, *How to*) and the glossary, which marks the page
-you're on (`aria-current`). On wide screens (≥ 64rem) it stays beside the text
-as you scroll; on phones it folds behind a **Help contents** button above the
-page, and closes again when you pick a page.
+Every help page shares one shell (`routes/help/+layout.svelte`): the search
+box heads the page, above the text, and a contents list
+(`help/HelpNav.svelte`: the overview, every guide by group, *Start here*,
+*How it works*, *How to*, and the glossary) marks the page you're on
+(`aria-current`). From 900 px the contents are a 15rem column in the page
+beside the text, sticky while you read, scrolling on their own only when
+taller than the window (a short window, or the glossary's term list). They
+don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
+a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
+under the search box, and close again when you pick a page.
 
 - **Pictures.** One Blender scene of an invented catchment, rendered as several
   shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
@@ -2749,7 +2799,9 @@ page, and closes again when you pick a page.
   guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
   the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
   *The whole process* has a **Getting around a project** section (the three
-  sections, the sidebar, strip and phone Sections menu, and the farm drawer),
+  sections, where they sit in the app sidebar under the catchment's name,
+  Projects / Teams / Help at its top, the phone bar's Menu and the phone
+  Sections button, and the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
@@ -2782,10 +2834,10 @@ page, and closes again when you pick a page.
 - **Glossary** (`/help/glossary`): every entry (`lib/help/content.ts` joins
   `tips.ts`, `articles.ts` and `farmer.ts`), grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
   the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the
-  sidebar which topic and term are on screen; the sidebar lists the current
-  topic's terms.
-- **Search** (`/help/search?q=`): results update as you type in the sidebar's
-  box, which keeps focus; guides first, then glossary terms.
+  contents which topic and term are on screen; the contents list the current
+  topic's terms and keep the current one in view inside their column.
+- **Search** (`/help/search?q=`): results update as you type in the box at
+  the head of the page, which keeps focus; guides first, then glossary terms.
 
 ## Farmer view (`/farm`)
 
@@ -2807,7 +2859,7 @@ published.
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My farm", the EN | AF
   language switch, Menu: your farms, the words, "Don't keep a copy on this
-  phone", sign out); the app header isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
+  phone", sign out); the app shell isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
   nothing under 13 px, existing tokens only, light and dark.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
@@ -3135,4 +3187,5 @@ or Run button.
   itself with `data-scroll-label`, or takes its table caption or section name.
 - Row move buttons are 24 × 24 px (WCAG 2.2 target size, 2.5.8).
 - `html { scroll-padding-top }` keeps focused controls and in-page link targets
-  clear of the sticky header (WCAG 2.4.11).
+  clear of the phone bar (`--header-h`, 0 from 900 px, where nothing is
+  fixed across the top; WCAG 2.4.11).

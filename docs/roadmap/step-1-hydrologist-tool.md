@@ -108,7 +108,7 @@ browser (SvelteKit SPA)
  ├─ lib/calibration/autocal.worker.ts calibrate() off the main thread      (WP-1.18, issue #4)
  ├─ lib/spreadsheet/*.worker.ts       SheetJS CE: .xlsx export, templates,
  │                                    b023 workbook import                  (WP-1.28/1.30/1.31)
- └─ /account, /privacy routes; account menu in AppHeader                    (WP-1.9, 1.13)
+ └─ /account, /privacy routes; account menu (AccountMenu)                 (WP-1.9, 1.13)
         │  same-origin /api (CloudFront → Lambda Function URL)
 Hono backend
  ├─ POST /projects/import             ProjectFile → project (atomic)        (WP-1.8)
@@ -576,7 +576,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   for preferences (WP-1.26) and the privacy actions (WP-1.13).
 - **Changes:**
   - **frontend:**
-    - `components/layout/AppHeader.svelte`: the Sign out button becomes an
+    - `components/layout/AppHeader.svelte` (since issue #17, `AccountMenu.svelte` in the app shell): the Sign out button becomes an
       account menu button showing the display name, with Account, Sign out
       and Sign out everywhere (which asks for confirmation);
     - new `routes/account/+page.svelte`: display name, email and
