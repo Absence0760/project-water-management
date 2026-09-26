@@ -10,6 +10,7 @@ import { headlineSite } from '$lib/components/runs/ewrAssurance';
 import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
 import { daysBetween, describeAge } from '$lib/components/series/coverage';
 import { fmtNum, fmtPct, localIsoDate } from '$lib/format/number';
+import { calibrationSample } from '$lib/components/calibration/sample';
 
 export interface RunPick {
 	/** The run the strip shows. */
@@ -167,7 +168,7 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 			help: 'stats.nse',
 			value: fmtNum(cal.nse, 2),
 			unit: '',
-			sub: [`${fmtNum(cal.days)} days observed`, 'calibration period (in-sample)'],
+			sub: [`${fmtNum(cal.days)} days observed`, calibrationSample(cal).short],
 			flagged: false,
 			delta: previous && hasCalibration(previous) ? change(previous.calibration?.nse, cal.nse) : null,
 			spec: { format: 'ratio', better: 'higher', digits: 2 }

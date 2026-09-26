@@ -35,7 +35,7 @@ import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type N
 import { verifyRun } from './verify/verify';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
-import { exclusionRanges } from './calibrate/provenance';
+import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder } from './network/topology';
 import { cmpStr } from './order';
@@ -48,6 +48,7 @@ import {
 	DAM_AREA_EXPONENT,
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
+	OBSERVED_SERIES_LABEL,
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
@@ -215,11 +216,23 @@ function runNetwork(
 		push(
 			null,
 			'observed_flow',
-			OBSERVED_LABEL[observedKind],
+			OBSERVED_SERIES_LABEL[observedKind],
 			'm³/day',
 			// m³/s × 86400 (the workbook rounds [Flow data] P); missing days are NaN so charts show gaps.
 			observedM3s.map((v) => (v === null ? NaN : v * SEC_PER_DAY))
 		);
+		// The other record too, when the project has both (engine ≥ 0.39.0,
+		// issue #45): shown beside the calibration record, never scored.
+		const otherKind = CALIBRATION_FLOW_KINDS.find((k) => k !== observedKind && series[k]);
+		if (otherKind) {
+			push(
+				null,
+				'observed_flow_other',
+				OBSERVED_SERIES_LABEL[otherKind],
+				'm³/day',
+				aligned(otherKind).map((v) => (v === null ? NaN : v * SEC_PER_DAY))
+			);
+		}
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
@@ -470,7 +483,8 @@ function runNetwork(
 					exclusions: exclusionRanges(settings.calibrationExclusions)
 				}),
 				flowKind: observedKind,
-				simulatedKey: 'simulated_outflow' as const
+				simulatedKey: 'simulated_outflow' as const,
+				fitStatus: calibrationFitStatus(settings, observedKind)
 			}
 		: null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
@@ -1301,11 +1315,6 @@ const USER_LABELS: Record<string, string> = {
 	demand: 'Demand from the river',
 	supplied: 'Taken from the river',
 	deficit: 'Demand not met'
-};
-
-const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
-	flow_observed_m3s: 'Observed flow',
-	flow_logger_m3s: 'Observed flow (logger)'
 };
 
 /**

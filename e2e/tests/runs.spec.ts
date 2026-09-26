@@ -31,9 +31,11 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.
 	await expect(calibration.getByRole('definition').filter({ hasText: 'Simulated outflow at the outlet' })).toBeVisible();
-	// The headline fit scores are labelled as in-sample (issue #4).
-	await expect(calibration.getByText('Calibration period (in-sample).', { exact: true })).toBeVisible();
-	await expect(summary.getByText('calibration period (in-sample)')).toHaveCount(2);
+	// The headline fit scores say whether they are in-sample (issue #4): these parameters were set by hand, not fitted (issue #45).
+	await expect(calibration.getByText('Calibration period (parameters not fitted).', { exact: true })).toBeVisible();
+	await expect(summary.getByText('calibration period (parameters not fitted)')).toHaveCount(2);
+	await expect(summary.getByText(/in-sample/)).toHaveCount(0);
+	await expect(calibration.getByText(/in-sample/)).toHaveCount(0);
 
 	// The outlet EWR test on the observed record: the 2×2 table, the scores and a per-month breakdown.
 	const agreement = page.getByRole('region', { name: 'EWR test: model against observed flow' });
@@ -105,6 +107,30 @@ test('the hydrograph starts with natural flow hidden and keeps a legend toggle a
 	await chart.getByRole('button', { name: 'Log scale' }).click();
 	await expect(chart.getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
+});
+
+test('the hydrograph names the gauge and the logger, and shows both when a project has both (issue #45)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Gauge and logger');
+	await createRun(page.request, project.id, 'Gauge only');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Gauge only' })).toBeVisible();
+	await expect(page.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed gauge, Natural, Simulated outflow' })).toBeVisible();
+
+	// A logger beside the gauge, chosen as the calibration record.
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(60) });
+	await updateSettings(page.request, project.id, { calibrationFlowKind: 'flow_logger_m3s' });
+	await createRun(page.request, project.id, 'Both records');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Both records' })).toBeVisible();
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	await expect(
+		chart.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed logger (calibration record), Observed gauge, Natural, Simulated outflow' })
+	).toBeVisible();
+	await expect(chart.locator('canvas')).toBeVisible();
+	await expect(chart.getByText(/^Observed logger \(calibration record\) is the solid line and Observed gauge the dashed one, shown but not scored/).first()).toBeVisible();
+	// The flow-duration curve's observed line is the calibration record, named as such.
+	await expect(page.getByRole('rowheader', { name: 'Observed logger (calibration record) (m³/s)', exact: true })).toBeVisible();
 });
 
 test('the hydrograph view moves through the record by Shift+drag and by Earlier / Later, and a plain drag still zooms', async ({ page, owner }) => {

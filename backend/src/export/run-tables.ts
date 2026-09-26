@@ -37,6 +37,7 @@ const CATCHMENT_ORDER = [
 	'natural_flow',
 	'simulated_outflow',
 	'observed_flow',
+	'observed_flow_other',
 	'ewr',
 	'ewr_shortfall',
 	'ewr_charged',
@@ -119,7 +120,7 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgDeficitM3Day', 'Average deficit (m³/day)'],
 	['fractionSupplied', 'Demand supplied (%)'],
 	// Engine ≥ 0.17.0: the EWR charge at the EWR sites (audit Q17); older runs: the reach shortfall AB.
-	['avgEwrShortfallM3Day', 'Average EWR charge (m³/day)'],
+	['avgEwrShortfallM3Day', 'Average EWR charge (m³/day charged)'],
 	['daysEwrNotMet', 'Days charged for the EWR']
 ];
 
@@ -143,7 +144,9 @@ const CALIBRATION_ROWS: Record<string, string> = {
 	pbias: 'PBIAS (%)',
 	rmseM3s: 'RMSE (m³/s)',
 	meanObservedM3s: 'Mean observed flow (m³/s)',
-	meanSimulatedM3s: 'Mean simulated flow (m³/s)'
+	meanSimulatedM3s: 'Mean simulated flow (m³/s)',
+	// Engine ≥ 0.39.0 (issue #45): only 'fitted' scores are in-sample; notFitted / edited / otherPeriod say why not.
+	fitStatus: 'Parameters fitted on these days (fitted = in-sample scores)'
 };
 
 type Cell = string | number | null;
@@ -725,6 +728,13 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 }
 
+/**
+ * An EWR charge or shortfall the engine keeps ≤ 0 (the workbook's sign), as
+ * the positive volume charged: one convention across the UI and every export
+ * (issue #45). Absent (older runs) stays empty.
+ */
+const charged = (v: number | null | undefined): Cell => (v == null ? null : 0 - v);
+
 type Curtailment = NonNullable<RunSummary['curtailment']>;
 type CurtailmentRow = Curtailment['farms'][number];
 
@@ -739,9 +749,11 @@ const CURTAILMENT_COLUMNS: [header: string, value: (f: CurtailmentRow, siteName:
 	['Above (−) / below (+) equitable share [N] (m³/day)', (f) => f.reduceGainM3Day],
 	['Above (−) / below (+) equitable share [O] (l/s)', (f) => f.reduceGainLs],
 	['Equitable share [P] (% of demand)', (f) => pct(f.targetFraction) as Cell],
-	['EWR charge [R] (m³/day)', (f) => f.ewrShortfallM3Day],
-	['EWR charge met by irrigating less (m³/day)', (f) => f.ewrChargeIrrigationM3Day ?? null],
-	['EWR charge met by storing less / passing inflow (m³/day)', (f) => f.ewrChargeStorageM3Day ?? null],
+	// Issue #45: the charge is a volume charged, positive, as in the farm summary and every table
+	// (the engine and the workbook keep R ≤ 0 so S = N + R holds; the header says so).
+	['EWR charge [R] (m³/day charged; workbook R × −1)', (f) => charged(f.ewrShortfallM3Day)],
+	['EWR charge met by irrigating less (m³/day charged)', (f) => charged(f.ewrChargeIrrigationM3Day)],
+	['EWR charge met by storing less / passing inflow (m³/day charged)', (f) => charged(f.ewrChargeStorageM3Day)],
 	['Supply cut for the EWR (m³/day)', (f) => f.ewrSupplyCutM3Day ?? null],
 	['Supply cut for the EWR (l/s)', (f) => f.ewrSupplyCutLs ?? null],
 	['EWR site setting the charge', (f, site) => (f.ewrBindingSiteId ? site(f.ewrBindingSiteId) : '')],
@@ -790,9 +802,9 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 		t.reduceGainM3Day,
 		t.reduceGainLs,
 		'',
-		t.ewrShortfallM3Day,
-		t.ewrChargeIrrigationM3Day ?? null,
-		t.ewrChargeStorageM3Day ?? null,
+		charged(t.ewrShortfallM3Day),
+		charged(t.ewrChargeIrrigationM3Day),
+		charged(t.ewrChargeStorageM3Day),
 		t.ewrSupplyCutM3Day ?? null,
 		'',
 		'',
@@ -813,8 +825,8 @@ export function* ewrSiteLines(c: RunSummary['curtailment']): Generator<string> {
 		yield csvRow(['Run made before engine 0.17.0: the EWR was assessed farm by farm (workbook AB), not at sites.']);
 		return;
 	}
-	yield csvRow(['Site', 'Outlet', 'Farms upstream', 'Days not met', 'Average shortfall (m³/day)', 'Charged to farms (m³/day)', 'Natural (m³/day)']);
-	for (const s of c.ewrSites) yield csvRow([s.name, s.isOutlet ? 'yes' : 'no', s.farmCount, s.daysNotMet, s.shortfallM3Day, s.chargedM3Day, s.naturalM3Day]);
+	yield csvRow(['Site', 'Outlet', 'Farms upstream', 'Days not met', 'Average shortfall (m³/day, positive)', 'Charged to farms (m³/day, positive)', 'Natural (m³/day, positive)']);
+	for (const s of c.ewrSites) yield csvRow([s.name, s.isOutlet ? 'yes' : 'no', s.farmCount, s.daysNotMet, charged(s.shortfallM3Day), charged(s.chargedM3Day), charged(s.naturalM3Day)]);
 }
 
 const RULE_UNIT_TEXT = { mcm: 'Mm³ per month', m3s: 'm³/s (mean over the month)' } as const;
@@ -1062,7 +1074,7 @@ export function* columnGuideLines(): Generator<string> {
  */
 export function* otherUserLines(summary: RunSummary): Generator<string> {
 	yield csvRow(['Other water users (whole run)']);
-	yield csvRow(['User', 'Priority', 'Average demand (m³/day)', 'Average taken (m³/day)', 'Average deficit (m³/day)', 'Demand supplied (%)', 'Average returned (m³/day)', 'Average EWR charge (m³/day)', 'Days charged for the EWR']);
+	yield csvRow(['User', 'Priority', 'Average demand (m³/day)', 'Average taken (m³/day)', 'Average deficit (m³/day)', 'Demand supplied (%)', 'Average returned (m³/day)', 'Average EWR charge (m³/day charged)', 'Days charged for the EWR']);
 	for (const u of summary.users ?? []) {
 		yield csvRow([u.name, u.priority, u.avgDemandM3Day, u.avgSuppliedM3Day, u.avgDeficitM3Day, pct(u.fractionSupplied) as Cell, u.avgReturnedM3Day, u.avgEwrChargeM3Day, u.daysEwrNotMet]);
 	}
@@ -1070,9 +1082,9 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 	if (!rows.length) return;
 	yield '';
 	yield csvRow(['Other water users: EWR charge and curtailment (reporting window)']);
-	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day)']);
+	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day charged)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day charged)']);
 	for (const r of rows) {
-		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, r.ewrChargeM3Day, r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, r.uncurtailedChargeM3Day]);
+		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, charged(r.ewrChargeM3Day), r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, charged(r.uncurtailedChargeM3Day)]);
 	}
 	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
 }

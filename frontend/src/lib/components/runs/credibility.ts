@@ -8,6 +8,7 @@ import { fmtNum } from '$lib/format/number';
 import { checksHeadline } from './checks';
 import { findings } from './plausibility';
 import { FLAG_LABEL } from './wr2012';
+import { calibrationSample } from '$lib/components/calibration/sample';
 
 /**
  * Warnings that report how the engine handled the input data, as it was set
@@ -73,9 +74,16 @@ export function credibility(summary: CredibilityInput): CredibilityItem[] {
 		});
 	}
 	const cal = summary.calibration;
+	// "in-sample" only when the parameters were fitted on these days (issue #45).
+	const qualifier = calibrationSample(cal).qualifier;
 	out.push(
 		cal && cal.days > 0 && cal.nse != null
-			? { label: 'Fit', text: `NSE ${fmtNum(cal.nse, 2)} over ${fmtNum(cal.days)} observed days (in-sample)`, tone: 'none', href: '#res-calibration' }
+			? {
+					label: 'Fit',
+					text: `NSE ${fmtNum(cal.nse, 2)} over ${fmtNum(cal.days)} observed days${qualifier ? ` (${qualifier})` : ''}`,
+					tone: 'none',
+					href: '#res-calibration'
+				}
 			: { label: 'Fit', text: 'not scored: no observed flow in the calibration window', tone: 'none', href: '#res-calibration' }
 	);
 	return out;

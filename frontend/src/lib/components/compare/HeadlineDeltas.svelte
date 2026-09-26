@@ -4,6 +4,7 @@
 	import { fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
+	import { calibrationSample } from '$lib/components/calibration/sample';
 
 	let { comparison }: { comparison: RunComparison } = $props();
 
@@ -36,6 +37,15 @@
 					{ label: 'Monthly pattern correlation', unit: '', m: comparison.wr2012.patternCorrelation, spec: { format: 'ratio', better: 'higher', digits: 2 } }
 				]
 			: []
+	);
+
+	// "In-sample" only for a run whose parameters were fitted on the days scored (issue #45).
+	const samples = $derived({
+		a: calibrationSample({ fitStatus: comparison.calibration?.fitStatus?.a ?? undefined }),
+		b: calibrationSample({ fitStatus: comparison.calibration?.fitStatus?.b ?? undefined })
+	});
+	const sampleCaption = $derived(
+		samples.a.short === samples.b.short ? samples.a.short : `calibration period (run A ${samples.a.qualifier ?? 'not recorded'}, run B ${samples.b.qualifier ?? 'not recorded'})`
 	);
 
 	const calibration = $derived<Row[]>(
@@ -86,11 +96,11 @@
 		<h3>Calibration against observed flow</h3>
 		{#if calibration.length}
 			<p class="muted small in-sample">
-				Calibration period (in-sample): each run is scored on the days its parameters were tuned on. The validation scores of
-				the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the EWR test against
-				observed flow</a> below is a check the fit didn't optimise.
+				{sampleCaption[0]!.toUpperCase() + sampleCaption.slice(1)}: in-sample means scored on the days the parameters were fitted
+				on. The validation scores of the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the
+				EWR test against observed flow</a> below is a check the fit didn't optimise.
 			</p>
-			{@render table(calibration, 'Calibration statistics for both runs, calibration period (in-sample)')}
+			{@render table(calibration, `Calibration statistics for both runs, ${sampleCaption}`)}
 		{:else}
 			<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
 		{/if}

@@ -83,7 +83,7 @@ describe('summary sheet', () => {
 		// CHIRPS factors, rain treated as missing, rain-source periods, multi-day accumulations,
 		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
 		expect(lines.filter((l) => l === '').length).toBe(20);
-		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
+		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day charged),Days charged for the EWR');
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -166,9 +166,10 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		const header = lines.find((l) => l.startsWith('Farm,'))!.split(',');
 		const row = lines.find((l) => l.startsWith('"Farm, upper"'))!.replace('"Farm, upper"', 'F').split(',');
 		const at = (h: string) => row[header.indexOf(h)];
-		expect(at('EWR charge [R] (m³/day)')).toBe('-30');
-		expect(at('EWR charge met by irrigating less (m³/day)')).toBe('-12');
-		expect(at('EWR charge met by storing less / passing inflow (m³/day)')).toBe('-18');
+		// Issue #45: the charge and its parts are volumes charged, positive like the farm summary's; the cut stays a (negative) change.
+		expect(at('EWR charge [R] (m³/day charged; workbook R × −1)')).toBe('30');
+		expect(at('EWR charge met by irrigating less (m³/day charged)')).toBe('12');
+		expect(at('EWR charge met by storing less / passing inflow (m³/day charged)')).toBe('18');
 		expect(at('Supply cut for the EWR (m³/day)')).toBe('-16');
 		expect(Number(at('Supply cut for the EWR (l/s)'))).toBeCloseTo(-16 / 86.4, 12);
 		expect(at('EWR site setting the charge')).toBe('Weir');
@@ -232,7 +233,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		const lines = [...otherUserLines({ users, curtailment: { ...c, otherUsers } } as unknown as RunSummary)];
 		expect(lines[0]).toBe('Other water users (whole run)');
 		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
-		expect(lines).toContain('Town,senior,100,90,45,-5,no (senior),0,0,-5');
+		expect(lines).toContain('Town,senior,100,90,45,5,no (senior),0,0,5');
 		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
 	});
 
@@ -249,7 +250,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 
 	it('lists every EWR site; charged + natural = shortfall', () => {
 		const lines = [...ewrSiteLines(c)];
-		expect(lines.slice(2)).toEqual(['Outlet,yes,1,10,-40,-30,-10', 'Weir,no,1,4,-30,-30,0']);
+		expect(lines.slice(2)).toEqual(['Outlet,yes,1,10,40,30,10', 'Weir,no,1,4,30,30,0']);
 	});
 
 	it('says what an older run did', () => {
@@ -657,6 +658,12 @@ describe('run notes and the WR2012 block', () => {
 		expect(cal).toBeGreaterThan(0);
 		expect(wr).toBeGreaterThan(cal);
 		expect(lines).toContain('Quaternary,X11A');
+	});
+
+	it('says whether the calibration scores are in-sample (issue #45)', () => {
+		const withStatus = { ...summary, calibration: { ...summary.calibration!, fitStatus: 'notFitted' as const } };
+		expect([...summaryCsvLines(meta, withStatus)]).toContain('Parameters fitted on these days (fitted = in-sample scores),notFitted');
+		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Parameters fitted on these days'))).toBe(false);
 	});
 });
 

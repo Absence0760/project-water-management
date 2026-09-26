@@ -2,13 +2,14 @@
 	Curtailment targets per farm: the b023 [Shortfalls] report over the run's
 	reporting window (RunSummary.curtailment, engine ≥ 0.3.0). Formulas and
 	workbook quirks: docs/model.md §2.11. Sign convention: negative = reduce,
-	positive = below the equitable share. The equitable share is a fairness
+	positive = below the equitable share; EWR charges and shortfalls are
+	volumes, shown positive like the Farms table (issue #45). The equitable share is a fairness
 	benchmark, never an allocation (audit Q11): no label says "gain".
 -->
 <script lang="ts">
 	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { curtailmentRows, cutCount, ewrSiteRows, fmtSigned, fmtVol } from './curtailment';
+	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
 
 	let {
 		summary,
@@ -57,7 +58,8 @@
 			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = below the equitable share.
 			<em>Above (−) / below (+) equitable share</em> compares the supply with the fairness benchmark (equitable
 			share volume − supplied). <em>Total change</em> also removes the
-			farm's {attributed ? 'EWR charge' : 'EWR shortfall'}. 1 l/s = 86.4 m³/day.
+			farm's {attributed ? 'EWR charge' : 'EWR shortfall'}. {attributed ? 'EWR charge, irrigate less and store less' : 'EWR shortfall'}
+			are volumes charged, shown without a sign, the same as in the Farms table. 1 l/s = 86.4 m³/day.
 			{#if cuts}
 				<span class="flag-key" aria-hidden="true"></span>
 				{cuts} of {rows.length} farm{rows.length === 1 ? '' : 's'} must cut (highlighted).
@@ -68,8 +70,8 @@
 		<div class="table-wrap">
 			<table class="data">
 				<caption class="visually-hidden">
-					Curtailment targets per farm, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative values are
-					reductions, positive values are below the equitable share.
+					Curtailment targets per farm, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative changes are
+					reductions, positive ones are below the equitable share; EWR charges are volumes charged.
 				</caption>
 				<thead>
 					<tr class="group">
@@ -85,7 +87,7 @@
 						<th scope="col" class="num">Equitable share volume<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">l/s</span></th>
-						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'}<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'}<br /><span class="u">m³/day charged</span></th>
 						{#if attributed}
 							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num" title="The part of the EWR charge met by storing less or passing inflow">Store less / pass inflow<br /><span class="u">m³/day</span></th>
@@ -121,10 +123,10 @@
 							<td class="num">{r.target}</td>
 							<td class="num" class:neg={r.reduceGain.startsWith('-')} class:pos={r.reduceGain.startsWith('+')}>{r.reduceGain}</td>
 							<td class="num" class:neg={r.reduceGainLs.startsWith('-')} class:pos={r.reduceGainLs.startsWith('+')}>{r.reduceGainLs}</td>
-							<td class="num" class:neg={r.ewrShortfall.startsWith('-')}>{r.ewrShortfall}</td>
+							<td class="num">{r.ewrShortfall}</td>
 							{#if attributed}
-								<td class="num" class:neg={r.ewrIrrigation.startsWith('-')}>{r.ewrIrrigation}</td>
-								<td class="num" class:neg={r.ewrStorage.startsWith('-')}>{r.ewrStorage}</td>
+								<td class="num">{r.ewrIrrigation}</td>
+								<td class="num">{r.ewrStorage}</td>
 								<td class="num" class:neg={r.supplyCut.startsWith('-')}>{r.supplyCut}</td>
 								<td class="num" class:neg={r.supplyCutLs.startsWith('-')}>{r.supplyCutLs}</td>
 								<td>{r.bindingSite}</td>
@@ -145,10 +147,10 @@
 						<td class="num">{fmtVol(c.totals.targetM3Day)}</td>
 						<td class="num">{fmtSigned(c.totals.reduceGainM3Day)}</td>
 						<td class="num">{fmtSigned(c.totals.reduceGainLs)}</td>
-						<td class="num">{fmtSigned(c.totals.ewrShortfallM3Day, 0)}</td>
+						<td class="num">{fmtCharged(c.totals.ewrShortfallM3Day)}</td>
 						{#if attributed}
-							<td class="num">{fmtSigned(c.totals.ewrChargeIrrigationM3Day, 0)}</td>
-							<td class="num">{fmtSigned(c.totals.ewrChargeStorageM3Day, 0)}</td>
+							<td class="num">{fmtCharged(c.totals.ewrChargeIrrigationM3Day)}</td>
+							<td class="num">{fmtCharged(c.totals.ewrChargeStorageM3Day)}</td>
 							<td class="num">{fmtSigned(c.totals.ewrSupplyCutM3Day)}</td>
 							<td class="num"></td>
 							<td></td>
@@ -206,9 +208,9 @@
 								<td class="num">{fmtVol(u.demandM3Day)}</td>
 								<td class="num">{fmtVol(u.suppliedM3Day)}</td>
 								<td class="num">{fmtVol(u.returnedM3Day)}</td>
-								<td class="num" class:neg={u.ewrChargeM3Day < 0}>{fmtSigned(u.ewrChargeM3Day)}</td>
+								<td class="num">{fmtCharged(u.ewrChargeM3Day)}</td>
 								<td class="num" class:neg={u.supplyCutM3Day < 0}>{fmtSigned(u.supplyCutM3Day)}</td>
-								<td class="num" class:neg={u.uncurtailedChargeM3Day < 0}>{fmtSigned(u.uncurtailedChargeM3Day)}</td>
+								<td class="num">{fmtCharged(u.uncurtailedChargeM3Day)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -217,7 +219,7 @@
 		{/if}
 		{#if sites.length}
 			<h4 id="ewr-sites-heading">EWR sites</h4>
-			<p class="muted small">Days not met and daily averages over {range}.</p>
+			<p class="muted small">Days not met and daily averages over {range}; shortfalls are volumes (m³/day), shown positive.</p>
 			{#if sites.length === 1}
 				<p class="muted small">
 					EWR assessed at 1 site (outlet). Add gauges at the Reserve determination's EWR sites to protect upstream
@@ -242,8 +244,8 @@
 								<th scope="row">{s.name}</th>
 								<td class="num">{s.farmCount}</td>
 								<td class="num">{s.daysNotMet}</td>
-								<td class="num" class:neg={s.shortfall.startsWith('-')}>{s.shortfall}</td>
-								<td class="num" class:neg={s.charged.startsWith('-')}>{s.charged}</td>
+								<td class="num">{s.shortfall}</td>
+								<td class="num">{s.charged}</td>
 								<td class="num">{s.natural}</td>
 							</tr>
 						{/each}

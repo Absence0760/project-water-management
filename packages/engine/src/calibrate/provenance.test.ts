@@ -4,6 +4,7 @@ import { defaultProjectSettings, type ProjectSettings, type RainSourcePeriod, ty
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import {
+	calibrationFitStatus,
 	editedParams,
 	excludedDayMask,
 	exclusionError,
@@ -184,6 +185,24 @@ describe('fit record', () => {
 		expect(editedParams(s, rec)).toEqual([]);
 		s.calibration.b = 1.5;
 		expect(editedParams(s, rec)).toEqual(['b']);
+	});
+
+	it('calls the scores in-sample only when the parameters were fitted on the days scored (issue #45)', () => {
+		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
+		const rec = fitRecordFromReport(report(), ctx);
+		// Positive control: the fit's model, window, exclusions and record, parameters as fitted.
+		expect(calibrationFitStatus({ ...s, fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
+		// A forcing change since the fit leaves the days fitted the same.
+		expect(calibrationFitStatus({ ...s, chirpsBiasCorrection: 'none', fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
+		// Nothing fitted: no record, or a record for the other runoff model.
+		expect(calibrationFitStatus(s, 'flow_logger_m3s')).toBe('notFitted');
+		expect(calibrationFitStatus({ ...s, runoffModel: 'legacy', fitRecord: rec }, 'flow_logger_m3s')).toBe('notFitted');
+		// Edited by hand since the fit.
+		expect(calibrationFitStatus({ ...s, gr4j: { ...s.gr4j, x1: 1 }, fitRecord: rec }, 'flow_logger_m3s')).toBe('edited');
+		// Fitted, but on other days: another window, other exclusions or the other record.
+		expect(calibrationFitStatus({ ...s, calibrationEnd: '2014-01-01', fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
+		expect(calibrationFitStatus({ ...s, calibrationExclusions: [], fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
+		expect(calibrationFitStatus({ ...s, fitRecord: rec }, 'flow_observed_m3s')).toBe('otherPeriod');
 	});
 
 	it('says when the fit no longer describes the settings', () => {

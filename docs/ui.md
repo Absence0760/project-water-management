@@ -225,8 +225,9 @@ put the results first. Top to bottom:
   tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
   site from `headlineSite`) or, without a rule table, *EWR not met* (days below
   the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
-  M farms below" `SUPPLY_TARGET`); *Calibration NSE* (in-sample; "–" without
-  observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
+  M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
+  (in-sample)" only when the parameters were fitted on those days, otherwise
+  why not, as on the Runs tab; "–" without observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
   is only in a run's daily series, not its summary, so it has no card. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
@@ -1522,8 +1523,8 @@ run's report to chosen members every week or month.
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
-     self-checks, the plausibility findings, the WR2012 flag and the in-sample
-     fit, each in words with a coloured edge and a link to its panel.
+     self-checks, the plausibility findings, the WR2012 flag and the calibration
+     fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow, EWR by month, and the **Uncertainty bands** (their own
      panel and menu entry, beside the findings they qualify).
@@ -1604,18 +1605,29 @@ run's report to chosen members every week or month.
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
   "Every farm got at least 95 %"; left out when the run has no farms), then,
-  only when the run was scored against observed flow, the in-sample NSE and
-  PBIAS with PBIAS in `rating.ts`'s plain words (NSE unrated). Then the headline cards give mean natural
+  only when the run was scored against observed flow, the NSE and PBIAS with
+  PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
+  parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
   months", the longest run not met and a link to the panel; the days card is
   then labelled "Days below the pragmatic EWR", the secondary measure), irrigation
   supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
-  in plain words by `runs/rating.ts`), labelled **calibration period (in-sample)**: they are
-  scored on the days the parameters were tuned on. When the parameters came
-  from Fit automatically, the fit's validation scores sit beside the in-sample
-  one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
+  in plain words by `runs/rating.ts`), labelled by whether they are in-sample
+  (issue #45, `calibration/sample.ts`, from the run's
+  `summary.calibration.fitStatus`, engine ≥ 0.39.0): **calibration period
+  (in-sample)** only when the run's parameters came from Fit automatically for
+  its runoff model, unedited, on the same calibration window, exclusions and
+  flow record; otherwise **calibration period (parameters not fitted)** (set
+  by hand, imported or defaults), **(parameters edited since the fit)** or
+  **(not the period fitted)**; a run from before engine 0.39.0 says only
+  "calibration period". The calibration panel's note, the checks line, the
+  plain-words sentence, the Summary tab's card and the run comparison use the
+  same words (compare: one label when both runs agree, else "run A …, run B
+  …"). When the parameters came from Fit automatically, the fit's validation
+  scores sit beside the fit's own score under **Where the parameters came
+  from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
   badge and a tinted row). The **Supplied % of demand** column has a small bar
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
@@ -1722,6 +1734,13 @@ run's report to chosen members every week or month.
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run
   means (`RunSummaryView.svelte`).
+- **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
+  crop water requirement after effective rainfall ÷ irrigation efficiency (D =
+  F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the
+  requirement; supplied, deficit and % supplied are measured against it. The
+  farm detail's supply chart calls the line "Abstraction demand". *EWR charge*
+  is a positive volume charged (m³/day), the same sign the curtailment table
+  and every export use (below).
 - **Curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -1732,7 +1751,14 @@ run's report to chosen members every week or month.
   condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
   pass inflow*, the *Supply cut* (m³/day and l/s) and the *EWR site* setting
-  the charge, with a note on the rule; older runs show the single "EWR
+  the charge, with a note on the rule. **Sign convention** (issue #45): the
+  charge, its irrigate-less and store-less parts, the other users' charge and
+  charge left standing, and the EWR sites' shortfall, charged and natural
+  parts are volumes, shown positive (`fmtCharged`), as the Farms table shows
+  the charge, so one farm reads the same in both tables; the changes they ask
+  for (above/below the equitable share, supply cut, total change) keep − =
+  reduce. The engine's curtailment fields stay ≤ 0 (the workbook's column R
+  sign, so S = N + R holds): only the display and the exports flip them; older runs show the single "EWR
   shortfall" column (AB). *Total change* and *volume left* count only the
   supply cut (Q13): a farm with no demand shows no cut, and a farm with only a
   storage charge gets a "store less / pass inflow X m³/day" badge; a farm
@@ -1748,7 +1774,13 @@ run's report to chosen members every week or month.
   tables follow the [reporting window picker](#report-window)); with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* The hydrograph (observed flow as a line
-  under simulated outflow, broken on every day without a reading and never
+  under simulated outflow, labelled by instrument, *Observed gauge* or
+  *Observed logger* (from the stored series' label); when the project has
+  both records (engine ≥ 0.39.0, issue #45) both are drawn: the calibration
+  record solid in the observed colour and labelled "(calibration record)",
+  the other dashed in `--series-4` (its own light and dark value) and not
+  scored, with the caption saying which is which; the flow-duration curve's
+  observed line and Q table row carry the same label. Each record is broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
   scale and unit switches; a switched-off entry is struck through in the
@@ -1767,7 +1799,7 @@ run's report to chosen members every week or month.
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them; the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
-  in-sample note, and adds the gauge vs logger table when years disagree),
+  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
