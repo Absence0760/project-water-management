@@ -31,13 +31,13 @@ export type ChirpsBiasMode = (typeof CHIRPS_BIAS_MODES)[number];
  * (settings.chirpsFitPeriod, engine ≥ 0.29.0, ./rain.ts, issue #40 (a),
  * docs/model.md §2.4b):
  * - 'all' (default): one set of monthly factors over the whole record;
- * - 'segments': one set per double-mass segment (§2.10a); a gap is filled
- *   with its own segment's factors, a gap before the first or after the last
- *   judged year with the nearest segment's;
  * - a list of water-year ranges, each with a reason: one set per range,
  *   fitted only on that range; a gap outside every range takes the nearest.
+ * The double-mass breaks only ever *propose* ranges (proposeChirpsFitRanges,
+ * ./doublemass.ts) for the hydrologist to confirm: an automatic break can
+ * land a year or two off the real network change (issue #40 amendments).
  */
-export const CHIRPS_FIT_PERIOD_MODES = ['all', 'segments'] as const;
+export const CHIRPS_FIT_PERIOD_MODES = ['all'] as const;
 /** One listed fit range: water years `fromWaterYear` … `toWaterYear` (each the calendar year its 1 October falls in), inclusive. */
 export interface ChirpsFitRange {
 	fromWaterYear: number;

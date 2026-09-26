@@ -237,7 +237,7 @@ export function rainAccumulations(
 	}
 
 	if (sb) {
-		// The run's fit period too (engine ≥ 0.29.0): a window is judged with its own segment's factors.
+		// The run's fit period too (engine ≥ 0.29.0): a window is judged with its own range's factors.
 		const pre = chirpsBiasFactors(series, chirpsMode, zr, [], fit);
 		const factor = (day: number) => chirpsFactorOn(pre, day) ?? 1;
 		for (const c of detectAccumulations(sa, sb, factor)) {

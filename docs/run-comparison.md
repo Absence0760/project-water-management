@@ -57,11 +57,12 @@ The page has these sections, top to bottom:
    note when the **CHIRPS bias factors** differ (`RunComparison.chirpsFit`:
    any month's applied factor, or the water years left out of the fit, with
    the pooled factor and left-out years of each side; from engine 0.29.0 also
-   the CHIRPS fit period, its fit segments and each segment's factors, with
-   each side's period and segments named; `chirpsFit.ts`). A change of the
-   `chirpsFitPeriod` setting itself is also a settings line ("CHIRPS fit
-   period: whole record → double-mass segments"); a run saved before 0.29.0
-   compares as the whole record. The
+   the CHIRPS fit period, its listed ranges, each range's factors and every
+   fit's reference window (the water years that gave it shared days), with
+   each side's period, ranges and windows named; `chirpsFit.ts`). A change of
+   the `chirpsFitPeriod` setting itself is also a settings line ("CHIRPS fit
+   period: whole record → listed water years: …"); a run saved before 0.29.0
+   compares as the whole record, with no windows to compare. The
    factors can move with no settings line at all: new rain data, a keep-dry
    or missing period (which since engine 0.18.0 also decides which days the
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),

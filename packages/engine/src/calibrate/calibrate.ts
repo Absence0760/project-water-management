@@ -207,7 +207,7 @@ export interface CalibrationReport {
 	marPenalty?: MarPenaltyResult | null;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
-	/** The CHIRPS factors the fit's rain used, per fit segment (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
+	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** Model runs used, over every stage. */
 	evaluations: number;

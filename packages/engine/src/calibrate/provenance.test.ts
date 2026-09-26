@@ -260,20 +260,20 @@ describe('fit record', () => {
 
 	it('records the CHIRPS fit period and factors, and flags a changed fit period (engine ≥ 0.29.0)', () => {
 		const ranges = [{ fromWaterYear: 1990, toWaterYear: 2004, reason: 'old network' }];
-		const factors = [{ label: 'listed range 1990/91–2004/05 (old network), filling every year', factors: new Array(12).fill(1.5) }];
+		const factors = [{ label: 'range 1990/91–2004/05 (old network), filling every year', fittedOn: '1990/91–2004/05', factors: new Array(12).fill(1.5) }];
 		const rec = fitRecordFromReport(report({ chirpsFactors: factors }), { ...ctx, settings: { ...ctx.settings, chirpsFitPeriod: ranges } });
 		expect(rec.forcing!.chirpsFitPeriod).toEqual(ranges);
 		expect(rec.forcing!.chirpsFactors).toEqual(factors);
 		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const };
 		// Positive control: the same period is no change.
 		expect(fitRecordStatus({ ...base, chirpsFitPeriod: [{ ...ranges[0]! }] }, rec).forcingChanged).toBe(false);
-		expect(fitRecordStatus({ ...base, chirpsFitPeriod: 'segments' }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: 'all' }, rec).forcingChanged).toBe(true);
 		expect(fitRecordStatus({ ...base, chirpsFitPeriod: [{ ...ranges[0]!, toWaterYear: 2005 }] }, rec).forcingChanged).toBe(true);
 		// Settings without it (a run before engine 0.29.0) fitted the whole record.
 		expect(fitRecordStatus(base, rec).forcingChanged).toBe(true);
 		expect(fitRecordStatus(base, fitRecordFromReport(report(), ctx)).forcingChanged).toBe(false);
 		// A forcing recorded before it: nothing to compare, so it alone never flags.
 		const { chirpsFitPeriod: _p, chirpsFactors: _f, ...pre029 } = rec.forcing!;
-		expect(fitRecordStatus({ ...base, chirpsFitPeriod: 'segments' }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: ranges }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
 	});
 });

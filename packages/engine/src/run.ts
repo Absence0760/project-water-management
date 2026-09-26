@@ -710,10 +710,9 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	// covers (audit B4), which the zero-run fill then leaves alone. Every
 	// consumer (runoff models, demand, calibration, the runoff coefficient)
 	// reads the rain through `aligned`.
-	// The double-mass check comes first: settings.chirpsFitPeriod 'segments'
-	// (engine ≥ 0.29.0, issue #40) fits the CHIRPS factors per segment it finds.
+	// settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): which years the CHIRPS factors are fitted on.
 	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
-	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, doubleMass };
+	const fitOpts = { fitPeriod: settings.chirpsFitPeriod };
 	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
 	const claimed = new Set<number>();
 	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
@@ -1367,7 +1366,7 @@ export function chirpsColumns(
 	const raw = alignSeries(chirps, start, days).map((v) => (v === null ? NaN : v));
 	const out = [{ key: 'rain_chirps', label: 'CHIRPS rain as uploaded', unit: 'mm', values: raw }];
 	if (corr?.mode === 'monthly' && corr.months.some((m) => m.factor !== null)) {
-		// The day's own fit segment's factor with a CHIRPS fit period (engine ≥ 0.29.0), else its calendar month's.
+		// The day's own fit range's factor with a CHIRPS fit period (engine ≥ 0.29.0), else its calendar month's.
 		const factor = corr.fitPeriod?.segments.length
 			? Array.from({ length: days }, (_, t) => chirpsFactorOn(corr, start + t) ?? NaN)
 			: Array.from(month, (m) => corr.months[m - 1]!.factor ?? NaN);

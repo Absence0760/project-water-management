@@ -475,7 +475,7 @@ them) falls back to its default with a warning.
 Engine ≥ 0.7.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
 Setting: `settings.chirpsBiasCorrection`, `'monthly'` (default) or `'none'`;
 and from engine 0.29.0 `settings.chirpsFitPeriod`, which years the factors are
-fitted on ([below](#fit-period-and-per-segment-factors-engine--0290-issue-40)).
+fitted on ([below](#fit-period-and-per-range-factors-engine--0290-issue-40)).
 
 **Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
 the catchment rain is blank. CHIRPS is a 0.05° satellite-and-gauge product.
@@ -562,7 +562,7 @@ models. Correcting the fallback was the first condition for adopting GR4J.
   456–457): it corrects the monthly volume, not the number of wet days or the
   intensity distribution.
 
-#### Fit period and per-segment factors (engine ≥ 0.29.0, issue #40)
+#### Fit period and per-range factors (engine ≥ 0.29.0, issue #40)
 
 **Why.** One set of factors fitted over every year is a blend of eras. When
 the catchment / CHIRPS ratio changes part-way through the record (a station
@@ -575,66 +575,75 @@ factors come from:
 | Value | Factors | A gap is filled with |
 | --- | --- | --- |
 | `'all'` (default) | one set over every year, as up to 0.28 | those factors |
-| `'segments'` | one set per double-mass segment (§2.10a); segment *k* fits on the water years from its first judged year to the year before segment *k* + 1's, the first open to the record's start and the last to its end | its own segment's factors, so a gap before the first judged year or after the last takes the nearest segment |
 | `[{ fromWaterYear, toWaterYear, reason }, …]` | one set per listed range, fitted **only** on that range's years; ranges must not overlap and each needs a reason. Years outside every range stay out of **every** fit, the fallback below included | the range that holds its year; a year between two ranges takes the nearer range, the later one on a tie (the one closer to today's network), and a year before the first or after the last takes that one |
 
-Everything else in the fit is unchanged and applies to every segment: the
-suspect days and years left out (low-vs-CHIRPS years, flagged zero runs,
-periods listed as missing in §2.4c, accumulation windows, the keep-dry
-guard, which still judges with whole-record factors), the minimum sample and
-the clamp. **The minimum sample falls back within the segment first**: a
-month short of 90 shared days or 50 mm of CHIRPS in its segment takes the
-segment's pooled factor, and with too little for that, the factor for that
-month over the whole record (with listed ranges: over all the ranges
-together), marked `source: 'record'`. `'segments'` without a reported
-double-mass break (or with too short a record for the check) fits the whole
-record, and the run says so. `summary.chirpsCorrection.months` and `pooled`
-stay the whole-record fit (with listed ranges, the all-ranges fit), which is
-also what `rain_chirps_corrected` uses outside the segmented case; the
-segments are in `summary.chirpsCorrection.fitPeriod`.
+**The double-mass breaks only propose ranges.** There is no automatic mode.
+`proposeChirpsFitRanges` (`doublemass.ts`) turns the reported segments into
+one range each (from a segment's first judged year to the year before the
+next one's), with a reason that says it is a proposal, and Settings →
+*Propose from the double-mass breaks* fills the list with them. Nothing
+changes until the hydrologist saves. A detected break can land a year or two
+from the real network change (the 5-year minimum segment and dry years move
+it; on the client record the recent-era break came out early), and a break
+that is partly **CHIRPS's** (a product change, or v2 drifting against ERA5,
+CHIRPS v3 and MERRA-2, as issue #12 found on the client catchment) moves it
+too. So each range is checked against the station history and the CHIRPS
+version, and its reason rewritten, before it is saved.
 
-**Which to use.** Neither option is chosen automatically, and a break alone
-doesn't say which record changed.
+Everything else in the fit is unchanged and applies to every range: the
+suspect days and years left out (low-vs-CHIRPS years, flagged zero runs
+that CHIRPS fills, periods listed as missing in §2.4c, accumulation windows,
+the keep-dry guard, which still judges with whole-record factors), the
+minimum sample and the clamp. **Replaced and filled days never enter any
+fit**: a `missing` period at any level leaves every range's factors exactly
+as if its days were blank (a test pins this with a period at 10 × CHIRPS),
+and so do the days of a flagged zero run CHIRPS fills. **The minimum sample
+falls back within the range first**: a month short of 90 shared days or
+50 mm of CHIRPS in its range takes the range's pooled factor, and with too
+little for that, the factor for that month over all the listed ranges
+together, marked `source: 'record'`. `summary.chirpsCorrection.months` and
+`pooled` are the whole-record fit, or with listed ranges the all-ranges fit;
+the ranges are in `summary.chirpsCorrection.fitPeriod`.
 
-- **Listed ranges are the first-class choice.** Put the break where the
-  station history or the CHIRPS version says it is. The automatic segments
-  put it where the double-mass check estimates it, which can be a few years
-  off, and when the break is partly **CHIRPS's** (a product change, or v2
-  drifting against ERA5, CHIRPS v3 and MERRA-2, as issue #12 found on the
-  client catchment) the check moves it too. List ranges when the break is
-  suspected to be in the reference rather than the catchment series, or when
-  a transition era should be left out of every fit.
+**When to split.** A break alone doesn't say which record changed.
+
 - **Split only when the step is real against its own uncertainty**: the
   difference between two eras' ratios should be large against the
   **standard error of each era's ratio** (the year-to-year scatter divided by
   the square root of the number of years), or a change-point test (Pettitt,
   as the check uses, or Buishand's range test) should call it. The
-  year-to-year coefficient of variation alone overstates how uncertain an
-  era's mean ratio is, so judging a step against it leaves real steps
-  unsplit. A segment needs enough years for its own factors: with fewer than
-  about three years of a month, the month falls back as above.
-- **To take a period out of every fit** without choosing ranges, list it as
-  `missing` (§2.4c): its days leave every factor fit, but its catchment rain
-  is then filled from CHIRPS too. Listed ranges leave whole water years out
-  of the fit while keeping their recorded catchment rain.
+  year-to-year coefficient of variation alone measures single years, not an
+  era's mean, so judging a step against it leaves real steps unsplit. A
+  range needs enough years for its own factors: with fewer than about three
+  years of a month, the month falls back as above.
+- Put the break where the station history or the CHIRPS version says it is;
+  when the break may be in the reference (CHIRPS) rather than the catchment
+  series, the per-range factors still correct the fill (they are measured
+  against the same CHIRPS the fill uses), but the break year should come from
+  the CHIRPS product history, not the detection.
+- **To take a period out of every fit** while keeping its recorded rain,
+  leave its water years outside the listed ranges. To take it out and fill
+  it from CHIRPS, list it as `missing` (§2.4c).
 
 **Output.** `summary.chirpsCorrection.fitPeriod` holds the period
-(`period`: `'all'`, `'segments'` or `'ranges'`, the listed ranges), why
-`'segments'` fell back to the whole record (`note`), and per fit segment its
-water years (the judged segment or range, the years fitted on and the years
-filled), reason, double-mass slope, pooled factor, 12 month factors with
-their source, and the days it filled. With listed ranges,
-`outsideRangeDaysLeftOut` counts the shared days outside them. The
-correction warning lists the factors per segment, each with the years it
-fills; the double-mass run warning (§2.10a) names the segment whose factors
-filled each gap; `chirps_factor` shows each day's own segment factor. The
-summary CSV adds the fit period and one block per segment after the
-whole-record block. Run comparison lists a change of
-`chirpsFitPeriod` among the settings, and `chirpsFit` says whether the fit
-period, the segments or any segment's factors differ. A fit record's
-`forcing` stores `chirpsFitPeriod` and the factors per segment
-(`chirpsFactors`, calendar months), and a change of fit period flags
-"Forcing changed since fit". A run saved before 0.29.0 compares as `'all'`.
+(`period`: `'all'` or `'ranges'`, and the listed ranges) and per range its
+water years, reason, the years it fills, the years that actually gave it
+shared days (`fitWindow`, the **reference window**), its pooled factor, 12
+month factors with their source, and the days it filled.
+`summary.chirpsCorrection.fitWindow` is the same for the whole-record (or
+all-ranges) fit. With listed ranges, `outsideRangeDaysLeftOut` counts the
+shared days outside them. The correction warning lists the factors per
+range, each with its reference window and the years it fills; the
+double-mass run warning (§2.10a) names the range whose factors filled each
+gap; `chirps_factor` shows each day's own range factor. The summary CSV
+adds the fit period, the reference windows and one block per range after
+the whole-record block. Run comparison lists a change of `chirpsFitPeriod`
+among the settings, and `chirpsFit` says whether the fit period, the
+ranges, any range's factors or any reference window differ. A fit record's
+`forcing` stores `chirpsFitPeriod` and the factors per range with their
+reference windows (`chirpsFactors`, calendar months), and a change of fit
+period flags "Forcing changed since fit". A run saved before 0.29.0 compares
+as `'all'`, with no reference windows to compare.
 
 **Where it applies.** Only to CHIRPS that is actually used: a day with no
 catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`.
@@ -670,8 +679,8 @@ and the series explorer:
 | --- | --- | --- |
 | `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so the legacy `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
 | `rain_chirps` | CHIRPS as uploaded | NaN |
-| `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. With fit segments (engine ≥ 0.29.0), the day's own segment's factor. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
-| `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with fit segments, its segment's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
+| `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. With listed fit ranges (engine ≥ 0.29.0), the day's own range's factor. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
+| `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
 
@@ -681,8 +690,8 @@ pooled, or none), the unclamped own factor, whether it was clamped, the shared
 days and the catchment and CHIRPS rain on them, and the days CHIRPS filled in;
 then the pooled factor and the water years left out of the fit, with (engine
 ≥ 0.18.0) which were far below CHIRPS, each doubted keep-dry, and the day
-counts left out or kept in; then (engine ≥ 0.29.0) the fit period and each
-fit segment's factors (`chirpsFactorLines` in
+counts left out or kept in; then (engine ≥ 0.29.0) the fit period, the
+reference windows and each listed range's factors (`chirpsFactorLines` in
 `backend/src/export/run-tables.ts`). Run comparison notes when the two runs'
 factors or left-out years differ (`RunComparison.chirpsFit`,
 [run-comparison.md](./run-comparison.md)).
@@ -2350,23 +2359,24 @@ and a gap in the latest era is filled with an older era's ratio.
   breaks keep their place.
 - *On its own it only warns.* A slope break doesn't say which record is
   wrong: it may be the catchment network, CHIRPS, or a real improvement such
-  as a better-placed gauge. Leaving a segment out automatically could remove
-  the only era that matches today's network. So with the default fit period
-  the fit and the rain a run uses don't change; the hydrologist can fit the
-  factors per segment or per listed range instead (`settings.chirpsFitPeriod`,
-  engine ≥ 0.29.0, §2.4b *Fit period*). The run reports the result in
-  `RunSummary.dataQuality.doubleMass`, a `doublemass` data check lists the
+  as a better-placed gauge, and its position is an estimate. Leaving a
+  segment out automatically could remove the only era that matches today's
+  network. So with the default fit period the fit and the rain a run uses
+  don't change; the hydrologist can list water-year ranges to fit the factors
+  on (`settings.chirpsFitPeriod`, engine ≥ 0.29.0, §2.4b *Fit period*), and
+  the breaks can propose them, never apply them. The run reports the result
+  in `RunSummary.dataQuality.doubleMass`, a `doublemass` data check lists the
   breaks (and says whether the factors blend the segments or are fitted per
-  segment or range), and a **run warning**:
+  listed range), and a **run warning**:
   - with whole-record factors, when CHIRPS fills days in a segment whose
     slope differs by `DOUBLE_MASS_RUN_WARN_CHANGE` (20 %) or more from the
     fit's pooled catchment / CHIRPS ratio (a water year before the first
     judged year counts in the first segment, after the last in the last);
-  - with a fit period (engine ≥ 0.29.0), whenever CHIRPS fills a day: it
-    **names the segment or range whose factors filled each gap** and how many
-    days, and adds any double-mass segment whose slope still differs by 20 %
-    or more from the pooled ratio of the factors that filled it (a listed
-    range that doesn't follow the breaks).
+  - with listed ranges (engine ≥ 0.29.0), whenever CHIRPS fills a day: it
+    **names the range whose factors filled each gap** and how many days, and
+    adds any double-mass segment whose slope still differs by 20 % or more
+    from the pooled ratio of the factors that filled it (a range that doesn't
+    follow the breaks).
 
   The Data tab draws the curve with the whole-record line and the segments,
   and the departure by year; the run's summary CSV has a *Double-mass check*

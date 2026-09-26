@@ -331,11 +331,11 @@ arbiter:
   filled with a blend of ratios. Factors fitted in the reference era, or in
   the gap's own double-mass segment, keep the fill consistent with the
   calibration forcing. **Done, engine 0.29.0 (issue #40 (a)):**
-  `settings.chirpsFitPeriod`, per double-mass segment or per listed
-  water-year range with a reason ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-segment-factors-engine--0290-issue-40)).
-  Prefer listed ranges: the automatic segments place the break where the
-  double-mass check estimates it, which can be a few years off, and a break
-  that is partly CHIRPS's moves it too.
+  `settings.chirpsFitPeriod`, per listed water-year range with a reason
+  ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
+  The double-mass breaks only propose ranges: the check places a break where
+  it estimates it, which can be a year or two off, and a break that is partly
+  CHIRPS's moves it too.
 - **Don't mix product versions in one series.** A CHIRPS series built from
   v2 for the past and v3 for new days has a break at the join that the
   double-mass check will attribute to the catchment. Replace the whole

@@ -12,7 +12,7 @@ import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
-import { fitPeriodText, fitSegmentName, type ChirpsCorrection } from './rain';
+import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import {
 	defaultProjectSettings,
 	upgradeLegacyModel,
@@ -143,15 +143,18 @@ export interface RunComparison {
 		excludedWaterYearsB: number[] | null;
 		/**
 		 * Engine ≥ 0.29.0: each run's CHIRPS fit period in words ("whole
-		 * record", "double-mass segments", the listed ranges), and its fit
-		 * segments by name. A run saved before 0.29.0 fitted the whole record.
-		 * A change of period, of segments or of a segment's factors counts in
-		 * `changed`.
+		 * record" or the listed ranges), its fit ranges by name, and the
+		 * reference window of every fit (the water years that gave it shared
+		 * days; empty for a run saved before 0.29.0, which fitted the whole
+		 * record). A change of period, of ranges, of a range's factors or of a
+		 * reference window counts in `changed`.
 		 */
 		fitPeriodA?: string | null;
 		fitPeriodB?: string | null;
 		segmentsA?: string[];
 		segmentsB?: string[];
+		fitWindowsA?: string[];
+		fitWindowsB?: string[];
 		changed: boolean;
 	} | null;
 	/**
@@ -334,6 +337,8 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 					fitPeriodB: xb ? fitPeriodText(xb.fitPeriod) : null,
 					segmentsA: segsOf(xa).map(fitSegmentName),
 					segmentsB: segsOf(xb).map(fitSegmentName),
+					fitWindowsA: fitWindowLabels(xa),
+					fitWindowsB: fitWindowLabels(xb),
 					changed:
 						!xa ||
 						!xb ||
@@ -341,7 +346,9 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 						monthsDiffer(xa.months, xb.months) ||
 						fitPeriodText(xa.fitPeriod) !== fitPeriodText(xb.fitPeriod) ||
 						!same(segsOf(xa).map(fitSegmentName), segsOf(xb).map(fitSegmentName)) ||
-						segsOf(xa).some((s, i) => monthsDiffer(s.months, segsOf(xb)[i]?.months))
+						segsOf(xa).some((s, i) => monthsDiffer(s.months, segsOf(xb)[i]?.months)) ||
+						// Only when both recorded their windows: a run before 0.29.0 has none to compare.
+						(xa.fitWindow !== undefined && xb.fitWindow !== undefined && !same(fitWindowLabels(xa), fitWindowLabels(xb)))
 				}
 			: null;
 
@@ -518,7 +525,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 		fmt: (v) => (v === 'monthly' ? 'monthly factors' : v === 'none' ? 'raw CHIRPS' : String(v))
 	},
 	// Engine ≥ 0.29.0; a snapshot without it takes the default, 'all', which is what older runs did.
-	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || v === 'segments' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
+	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },

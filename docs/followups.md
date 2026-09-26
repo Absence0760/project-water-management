@@ -309,22 +309,25 @@ Tick items off (or move them into an issue) as they are done.
       part-way through the record, but the CHIRPS factors were one set
       fitted over all eras, so a gap in the latest era was filled with a
       blend of older ratios. `settings.chirpsFitPeriod` now chooses: `'all'`
-      (the default, unchanged), `'segments'` (one set per double-mass
-      segment, each gap filled with its own segment's factors, the nearest
-      segment outside the judged years) or water-year ranges, each with a
-      reason (one set per range, fitted only on its years; years outside
-      every range stay out of every fit). The minimum sample and clamp hold
-      per segment, falling back to the segment's pooled factor, then the
-      whole record's. Recorded in `summary.chirpsCorrection.fitPeriod`, the
-      summary CSV, run comparison and fit provenance (`forcing.chirpsFitPeriod`,
-      `forcing.chirpsFactors`; a change flags "Forcing changed since fit");
-      the double-mass run warning names the segment whose factors filled each
-      gap; Settings → Rain gaps and CHIRPS → *CHIRPS fit period*
-      ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-segment-factors-engine--0290-issue-40)).
-      Never applied silently: the default stays `'all'`, and the docs steer
-      to listed ranges where the break may be CHIRPS's (issue #12). The rest
-      of issue #40 (a per-period rain source, CHIRPS version provenance) is
-      separate work.
+      (the default, unchanged) or water-year ranges, each with a reason (one
+      set per range, fitted only on its years; years outside every range stay
+      out of every fit; a gap takes the nearest range). Following the issue
+      #40 amendments, the double-mass breaks only *propose* ranges
+      (`proposeChirpsFitRanges`, Settings → *Propose from the double-mass
+      breaks*) for the hydrologist to check: there is no automatic
+      `'segments'` mode. The minimum sample and clamp hold per range,
+      falling back to the range's pooled factor, then all the ranges'.
+      `missing` and filled days stay out of every fit. Recorded, with each
+      fit's reference window, in `summary.chirpsCorrection.fitPeriod`, the
+      summary CSV, run comparison and fit provenance
+      (`forcing.chirpsFitPeriod`, `forcing.chirpsFactors`; a change flags
+      "Forcing changed since fit"); the double-mass run warning names the
+      range whose factors filled each gap; Settings → Rain gaps and CHIRPS →
+      *CHIRPS fit period*
+      ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
+      Never applied silently: the default stays `'all'`. The rest of issue
+      #40 (a per-period rain source with its replaced days out of every fit,
+      CHIRPS version provenance, 08:00 aggregation) is separate work.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no

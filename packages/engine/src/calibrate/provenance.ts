@@ -187,7 +187,7 @@ export interface FitRecord {
 	 * the accumulation fields absent on one made before 0.20.0.
 	 * `settings.chirpsFitPeriod` (engine ≥ 0.29.0) decides which factors fill
 	 * each gap, so it is recorded too, with the factors themselves per fit
-	 * segment (`chirpsFactors`, from the fit's own run); both absent on a
+	 * range (`chirpsFactors`, from the fit's own run); both absent on a
 	 * `forcing` made before them.
 	 */
 	forcing?: {

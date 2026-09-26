@@ -241,7 +241,7 @@ describe('compareRuns', () => {
 		expect(compareRuns(with_(corr(2, [1999])), with_(corr(2, [1999]))).chirpsFit).toEqual({
 			pooledFactor: { a: 2, b: 2, delta: 0 }, excludedWaterYearsA: [1999], excludedWaterYearsB: [1999],
 			// A run without a fit period (before engine 0.29.0) fitted the whole record.
-			fitPeriodA: 'whole record', fitPeriodB: 'whole record', segmentsA: [], segmentsB: [], changed: false
+			fitPeriodA: 'whole record', fitPeriodB: 'whole record', segmentsA: [], segmentsB: [], fitWindowsA: [], fitWindowsB: [], changed: false
 		});
 		// A keep-dry that returns a year to the fit moves both.
 		const moved = compareRuns(with_(corr(2, [1999])), with_(corr(1.9, [])));
@@ -253,36 +253,50 @@ describe('compareRuns', () => {
 		expect(compareRuns(with_(null), with_(corr(2, [], 'none'))).chirpsFit).toBeNull();
 	});
 
-	it('notes a change of CHIRPS fit period or of a fit segment’s factors (engine ≥ 0.29.0)', () => {
+	it('notes a change of CHIRPS fit period, of a range’s factors or of a reference window (engine ≥ 0.29.0)', () => {
 		const base = (): NonNullable<RunSummary['chirpsCorrection']> => ({
 			mode: 'monthly', minDays: 90, minMm: 50, clampMin: 0.25, clampMax: 4,
 			pooled: { days: 1000, catchmentMm: 2000, chirpsMm: 1000, ownFactor: 2, factor: 2, clamped: false },
 			excludedWaterYears: [],
 			months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, days: 100, catchmentMm: 200, chirpsMm: 100, ownFactor: 2, factor: 2, source: 'month' as const, clamped: false, fallbackDays: 0 })),
-			fallbackDays: 0, correctedDays: 0, fallbackRawMm: 0, fallbackCorrectedMm: 0
+			fallbackDays: 0, correctedDays: 0, fallbackRawMm: 0, fallbackCorrectedMm: 0,
+			fitPeriod: { period: 'all', ranges: [], segments: [] },
+			fitWindow: { fromWaterYear: 1990, toWaterYear: 2009 }
 		});
-		const segmented = (later: number) => {
+		const listed = (later: number, lastFitYear = 2009) => {
 			const c = base();
-			const seg = (from: number, f: number, fillFrom: number | null, fillTo: number | null) => ({
-				source: 'doubleMass' as const, fromWaterYear: from, toWaterYear: from + 9, reason: null, slope: f, fitFrom: fillFrom, fitTo: fillTo, fillFrom, fillTo,
+			const seg = (from: number, f: number, fillFrom: number | null, fillTo: number | null, reason: string) => ({
+				fromWaterYear: from, toWaterYear: from + 9, reason, fillFrom, fillTo,
+				fitWindow: { fromWaterYear: from, toWaterYear: Math.min(from + 9, lastFitYear) },
 				pooled: { ...c.pooled, ownFactor: f, factor: f },
 				months: c.months.map((m) => ({ ...m, ownFactor: f, factor: f })),
 				fallbackDays: 0, correctedDays: 0, fallbackRawMm: 0, fallbackCorrectedMm: 0
 			});
-			c.fitPeriod = { period: 'segments', ranges: [], segments: [seg(1990, 2.5, null, 1999), seg(2000, later, 2000, null)], note: null };
+			const ranges = [
+				{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'old network' },
+				{ fromWaterYear: 2000, toWaterYear: 2009, reason: 'new network' }
+			];
+			c.fitPeriod = { period: 'ranges', ranges, segments: [seg(1990, 2.5, null, 1999, 'old network'), seg(2000, later, 2000, null, 'new network')] };
+			c.fitWindow = { fromWaterYear: 1990, toWaterYear: lastFitYear };
 			return c;
 		};
 		const with_ = (c: RunSummary['chirpsCorrection']) => run(summary([], { chirpsCorrection: c }));
-		// Positive control: the same segments and factors are no change.
-		expect(compareRuns(with_(segmented(1.2)), with_(segmented(1.2))).chirpsFit).toMatchObject({
-			fitPeriodA: 'double-mass segments',
-			segmentsB: ['double-mass segment 1990/91–1999/00', 'double-mass segment 2000/01–2009/10'],
+		// Positive control: the same ranges, factors and windows are no change.
+		expect(compareRuns(with_(listed(1.2)), with_(listed(1.2))).chirpsFit).toMatchObject({
+			fitPeriodA: 'listed water years: 1990/91–1999/00 (old network); 2000/01–2009/10 (new network)',
+			segmentsB: ['range 1990/91–1999/00 (old network)', 'range 2000/01–2009/10 (new network)'],
+			fitWindowsB: ['all ranges: 1990/91–2009/10', 'range 1990/91–1999/00 (old network): 1990/91–1999/00', 'range 2000/01–2009/10 (new network): 2000/01–2009/10'],
 			changed: false
 		});
-		// Whole record against segments, with the whole-record factors equal: the period alone counts.
-		expect(compareRuns(with_(base()), with_(segmented(1.2))).chirpsFit).toMatchObject({ fitPeriodA: 'whole record', segmentsA: [], changed: true });
-		// Same period, one segment's factors moved.
-		expect(compareRuns(with_(segmented(1.2)), with_(segmented(1.3))).chirpsFit!.changed).toBe(true);
+		// Whole record against ranges, with the whole-record factors equal: the period alone counts.
+		expect(compareRuns(with_(base()), with_(listed(1.2))).chirpsFit).toMatchObject({ fitPeriodA: 'whole record', segmentsA: [], fitWindowsA: ['whole record: 1990/91–2009/10'], changed: true });
+		// Same period, one range's factors moved.
+		expect(compareRuns(with_(listed(1.2)), with_(listed(1.3))).chirpsFit!.changed).toBe(true);
+		// Same period and factors, a different reference window (the later range lost its last years of data).
+		expect(compareRuns(with_(listed(1.2)), with_(listed(1.2, 2007))).chirpsFit!.changed).toBe(true);
+		// A run from before 0.29.0 has no windows: nothing to compare them with.
+		const { fitWindow: _w, fitPeriod: _p, ...old } = base();
+		expect(compareRuns(with_(old), with_(base())).chirpsFit).toMatchObject({ fitWindowsA: [], changed: false });
 	});
 
 	it('compares the runoff coefficient and KGE, e.g. legacy against GR4J', () => {
@@ -685,8 +699,6 @@ describe('diffInputs', () => {
 	it('describes a change of the CHIRPS fit period (engine ≥ 0.29.0)', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
-		b.settings.chirpsFitPeriod = 'segments';
-		expect(texts(a, b)).toEqual(['CHIRPS fit period: whole record → double-mass segments']);
 		b.settings.chirpsFitPeriod = [{ fromWaterYear: 2005, toWaterYear: 2019, reason: 'new network' }];
 		expect(texts(a, b)).toEqual(['CHIRPS fit period: whole record → listed water years: 2005/06–2019/20 (new network)']);
 		// A run saved before the setting existed fitted the whole record, the default.

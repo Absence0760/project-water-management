@@ -32,7 +32,6 @@
 import { monthOfEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import { waterYearOf } from './network/stats';
-import type { DoubleMass } from './doublemass';
 import {
 	ACCUMULATION_MODES,
 	CHIRPS_FIT_PERIOD_MODES,
@@ -66,9 +65,9 @@ export interface ChirpsMonthFactor {
 	chirpsMm: number;
 	/** catchmentMm / chirpsMm when the sample is big enough, unclamped; else null. */
 	ownFactor: number | null;
-	/** The factor for this month (own or pooled, clamped; in a fit segment, else the whole record's); null when none is available. */
+	/** The factor for this month (own or pooled, clamped; in a fit range, else all the ranges'); null when none is available. */
 	factor: number | null;
-	/** 'record' (engine ≥ 0.29.0, fit segments only): neither the segment's month nor its pooled sample was big enough, so the whole-record factor for the month. */
+	/** 'record' (engine ≥ 0.29.0, fit ranges only): neither the range's month nor its pooled sample was big enough, so the month's factor over all the ranges together. */
 	source: 'month' | 'pooled' | 'record' | null;
 	/** The factor was clamped to CHIRPS_FACTOR_MIN … CHIRPS_FACTOR_MAX. */
 	clamped: boolean;
@@ -91,35 +90,31 @@ export interface ChirpsKeepDryDoubt {
 	waterYears: number[];
 }
 
-/**
- * One set of CHIRPS factors fitted on part of the record (engine ≥ 0.29.0,
- * settings.chirpsFitPeriod 'segments' or listed ranges): a double-mass
- * segment, or a listed water-year range.
- */
-export interface ChirpsFitSegment {
-	source: 'doubleMass' | 'listed';
-	/** The segment's first and last judged water year, or the listed range. */
+/** Water years that gave a fit its shared days, first and last (engine ≥ 0.29.0): the reference window of the factors. */
+export interface ChirpsFitWindow {
 	fromWaterYear: number;
 	toWaterYear: number;
-	/** The listed range's reason; null for a double-mass segment. */
-	reason: string | null;
-	/** The double-mass slope over the segment (Σ catchment / Σ CHIRPS on its judged years); null for a listed range. */
-	slope: number | null;
-	/**
-	 * Water years the factors were fitted on, inclusive; null = open-ended (the
-	 * record's start or end). A double-mass segment fits on every year it
-	 * fills; a listed range only on its own years.
-	 */
-	fitFrom: number | null;
-	fitTo: number | null;
-	/** Water years whose gaps these factors fill, inclusive; null = open-ended. The segments' fill spans tile every year. */
+}
+
+/**
+ * One set of CHIRPS factors fitted on a listed water-year range (engine ≥
+ * 0.29.0, settings.chirpsFitPeriod).
+ */
+export interface ChirpsFitSegment {
+	/** The listed range, inclusive, and its reason. The factors are fitted on these years only. */
+	fromWaterYear: number;
+	toWaterYear: number;
+	reason: string;
+	/** Water years whose gaps these factors fill, inclusive; null = open-ended (the record's start or end). The ranges' fill spans tile every year. */
 	fillFrom: number | null;
 	fillTo: number | null;
-	/** As ChirpsCorrection.pooled, over this segment's shared days. */
+	/** The water years that actually gave the fit shared days; null when none did. */
+	fitWindow: ChirpsFitWindow | null;
+	/** As ChirpsCorrection.pooled, over this range's shared days. */
 	pooled: ChirpsCorrection['pooled'];
-	/** Calendar months 1–12: own, else the segment's pooled, else the whole record's factor ('record'). */
+	/** Calendar months 1–12: own, else the range's pooled, else all the ranges' factor ('record'). */
 	months: ChirpsMonthFactor[];
-	/** Run counts, as ChirpsCorrection's, for the days this segment's factors filled. */
+	/** Run counts, as ChirpsCorrection's, for the days this range's factors filled. */
 	fallbackDays: number;
 	correctedDays: number;
 	fallbackRawMm: number;
@@ -128,20 +123,20 @@ export interface ChirpsFitSegment {
 
 /** The fit period a correction used (engine ≥ 0.29.0). */
 export interface ChirpsFitPeriodInfo {
-	/** 'ranges' for a listed period. */
-	period: 'all' | 'segments' | 'ranges';
-	/** The listed ranges, as resolved (empty unless 'ranges'). */
+	/** 'ranges' for listed water-year ranges. */
+	period: 'all' | 'ranges';
+	/** The listed ranges, as resolved (empty for 'all'). */
 	ranges: ChirpsFitRange[];
-	/** The fit segments, in water-year order. Empty for 'all', and for 'segments' without a double-mass break (see `note`): the whole-record factors then fill every gap. */
+	/** One fit per listed range, in water-year order; empty for 'all'. */
 	segments: ChirpsFitSegment[];
-	/** Why 'segments' fell back to the whole record: no double-mass result, or no reported break. */
-	note: 'noDoubleMass' | 'noBreak' | null;
 }
 
 export interface ChirpsCorrection {
 	mode: ChirpsBiasMode;
 	/** The fit period (engine ≥ 0.29.0; absent before, when the whole record was always used). */
 	fitPeriod?: ChirpsFitPeriodInfo;
+	/** The water years that gave `months` / `pooled` their shared days (engine ≥ 0.29.0): the reference window; null when none did. */
+	fitWindow?: ChirpsFitWindow | null;
 	minDays: number;
 	minMm: number;
 	clampMin: number;
@@ -174,9 +169,9 @@ export interface ChirpsCorrection {
 	/**
 	 * Calendar months 1–12, in order: the factors over every fitted year (the
 	 * whole record; with listed fit ranges, the ranges together). With fit
-	 * segments they are a thin segment month's last fallback, and each
-	 * month's fallbackDays still counts every day CHIRPS filled in that
-	 * calendar month, whichever segment's factor it took.
+	 * ranges they are a thin range month's last fallback, and each month's
+	 * fallbackDays still counts every day CHIRPS filled in that calendar
+	 * month, whichever range's factor it took.
 	 */
 	months: ChirpsMonthFactor[];
 	/** Run days where CHIRPS stood in for blank catchment rain. */
@@ -252,7 +247,7 @@ type MonthSums = { days: number[]; cMm: number[]; hMm: number[] };
 
 /**
  * Per-month factors from the month sums: own where the sample is big enough,
- * else pooled; clamped. With `record` (a fit segment's, engine ≥ 0.29.0), a
+ * else pooled; clamped. With `record` (a fit range's, engine ≥ 0.29.0), a
  * month with neither takes the whole record's factor for it.
  */
 function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[]): { pooled: ChirpsCorrection['pooled']; months: ChirpsMonthFactor[] } {
@@ -289,39 +284,20 @@ function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[]): { poo
 	return { pooled, months };
 }
 
-/** Where the factors are fitted (engine ≥ 0.29.0): settings.chirpsFitPeriod, and the double-mass result 'segments' splits on. */
+/** Where the factors are fitted (engine ≥ 0.29.0): settings.chirpsFitPeriod. */
 export interface ChirpsFitOptions {
 	fitPeriod?: ChirpsFitPeriod;
-	doubleMass?: DoubleMass | null;
 }
 
-type SegmentPlan = Omit<ChirpsFitSegment, 'pooled' | 'months' | 'fallbackDays' | 'correctedDays' | 'fallbackRawMm' | 'fallbackCorrectedMm'>;
+type SegmentPlan = Pick<ChirpsFitSegment, 'fromWaterYear' | 'toWaterYear' | 'reason' | 'fillFrom' | 'fillTo'>;
 
 /**
- * The fit segments for a fit period. 'segments': one per double-mass segment
- * (none without a reported break), each fitted on and filling the water years
- * from its first judged year to the year before the next segment's, the
- * first open to the start, the last to the end. Listed ranges: each fitted
- * on its own years only; a year between two ranges fills from the nearer
- * (the later on a tie, as the one closer to today's network), a year before
- * the first or after the last from that one.
+ * One fit per listed range, fitted on its own years only. A year between two
+ * ranges fills from the nearer (the later on a tie, as the one closer to
+ * today's network); a year before the first or after the last from that one.
  */
-function fitSegmentPlan(
-	period: ChirpsFitPeriod,
-	dm: DoubleMass | null
-): { period: ChirpsFitPeriodInfo['period']; ranges: ChirpsFitRange[]; segments: SegmentPlan[]; note: ChirpsFitPeriodInfo['note'] } {
-	if (period === 'all') return { period: 'all', ranges: [], segments: [], note: null };
-	if (period === 'segments') {
-		if (!dm) return { period, ranges: [], segments: [], note: 'noDoubleMass' };
-		if (dm.breaks.length === 0 || dm.segments.length < 2) return { period, ranges: [], segments: [], note: 'noBreak' };
-		const last = dm.segments.length - 1;
-		const segments = dm.segments.map((s, k): SegmentPlan => {
-			const fillFrom = k === 0 ? null : s.fromWaterYear;
-			const fillTo = k === last ? null : dm.segments[k + 1]!.fromWaterYear - 1;
-			return { source: 'doubleMass', fromWaterYear: s.fromWaterYear, toWaterYear: s.toWaterYear, reason: null, slope: s.slope, fitFrom: fillFrom, fitTo: fillTo, fillFrom, fillTo };
-		});
-		return { period, ranges: [], segments, note: null };
-	}
+function fitSegmentPlan(period: ChirpsFitPeriod): { period: ChirpsFitPeriodInfo['period']; ranges: ChirpsFitRange[]; segments: SegmentPlan[] } {
+	if (!Array.isArray(period)) return { period: 'all', ranges: [], segments: [] };
 	const ranges = [...period].sort((a, b) => a.fromWaterYear - b.fromWaterYear);
 	const segments = ranges.map((r, k): SegmentPlan => {
 		const prev = ranges[k - 1];
@@ -329,19 +305,19 @@ function fitSegmentPlan(
 		// Gap years between two ranges: the first half (rounded down) to the earlier one.
 		const fillFrom = prev ? prev.toWaterYear + Math.floor((r.fromWaterYear - prev.toWaterYear - 1) / 2) + 1 : null;
 		const fillTo = next ? r.toWaterYear + Math.floor((next.fromWaterYear - r.toWaterYear - 1) / 2) : null;
-		return { source: 'listed', fromWaterYear: r.fromWaterYear, toWaterYear: r.toWaterYear, reason: r.reason, slope: null, fitFrom: r.fromWaterYear, fitTo: r.toWaterYear, fillFrom, fillTo };
+		return { fromWaterYear: r.fromWaterYear, toWaterYear: r.toWaterYear, reason: r.reason, fillFrom, fillTo };
 	});
-	return { period: 'ranges', ranges: ranges.map((r) => ({ ...r })), segments, note: null };
+	return { period: 'ranges', ranges: ranges.map((r) => ({ ...r })), segments };
 }
 
-/** The fit segment whose factors fill a gap in water year `wy`, or null when the whole-record factors do. */
+/** The fit range whose factors fill a gap in water year `wy`, or null when the whole-record factors do. */
 export function chirpsFitSegmentFor(corr: ChirpsCorrection | null, wy: number): ChirpsFitSegment | null {
 	const segs = corr?.fitPeriod?.segments;
 	if (!segs?.length) return null;
 	return segs.find((s) => (s.fillFrom === null || wy >= s.fillFrom) && (s.fillTo === null || wy <= s.fillTo)) ?? null;
 }
 
-/** The factor CHIRPS on epoch day `day` is multiplied by where it fills a gap: its fit segment's month factor, else the whole record's; null for none. Ignores the mode. */
+/** The factor CHIRPS on epoch day `day` is multiplied by where it fills a gap: its fit range's month factor, else the whole record's; null for none. Ignores the mode. */
 export function chirpsFactorOn(corr: ChirpsCorrection | null, day: number): number | null {
 	if (!corr) return null;
 	const seg = chirpsFitSegmentFor(corr, waterYearOf(day));
@@ -429,10 +405,10 @@ export function chirpsBiasFactors(
 		}
 	}
 	const doubtYears = new Set(doubtful.flatMap((d) => d.waterYears));
-	// Engine ≥ 0.29.0: the fit period. Listed ranges leave every year outside them out of every fit, the whole-record fallback included.
-	const plan = fitSegmentPlan(opts.fitPeriod ?? 'all', opts.doubleMass ?? null);
+	// Engine ≥ 0.29.0: the fit period. Listed ranges leave every year outside them out of every fit, the all-ranges fallback included.
+	const plan = fitSegmentPlan(opts.fitPeriod ?? 'all');
 	const listed = plan.period === 'ranges' ? plan.segments : null;
-	const inListed = (wy: number) => !listed || listed.some((p) => wy >= p.fitFrom! && wy <= p.fitTo!);
+	const inListed = (wy: number) => !listed || listed.some((p) => wy >= p.fromWaterYear && wy <= p.toWaterYear);
 	let flaggedDaysLeftOut = 0;
 	let missingDaysLeftOut = 0;
 	let keptDryDaysInFit = 0;
@@ -454,22 +430,41 @@ export function chirpsBiasFactors(
 		const wy = waterYearOf(d.day);
 		return !doubtYears.has(wy) && inListed(wy) && (d.status === null || d.status === 'keptDry');
 	};
+	/** The first and last water year among the days `include` keeps: a fit's reference window. */
+	const windowOf = (include: (d: (typeof shared)[number]) => boolean): ChirpsFitWindow | null => {
+		let lo = Infinity;
+		let hi = -Infinity;
+		for (const d of shared) {
+			if (!include(d)) continue;
+			const wy = waterYearOf(d.day);
+			if (wy < lo) lo = wy;
+			if (wy > hi) hi = wy;
+		}
+		return Number.isFinite(lo) ? { fromWaterYear: lo, toWaterYear: hi } : null;
+	};
 	const fit = factorsFrom(sums(inFit));
-	// One set per fit segment, from the same days, split by water year.
+	// One set per listed range, from the same days, split by water year.
 	const segments: ChirpsFitSegment[] = plan.segments.map((p) => {
-		const f = factorsFrom(
-			sums((d) => {
-				if (!inFit(d)) return false;
-				const wy = waterYearOf(d.day);
-				return (p.fitFrom === null || wy >= p.fitFrom) && (p.fitTo === null || wy <= p.fitTo);
-			}),
-			fit.months
-		);
-		return { ...p, pooled: f.pooled, months: f.months, fallbackDays: 0, correctedDays: 0, fallbackRawMm: 0, fallbackCorrectedMm: 0 };
+		const include = (d: (typeof shared)[number]) => {
+			const wy = waterYearOf(d.day);
+			return inFit(d) && wy >= p.fromWaterYear && wy <= p.toWaterYear;
+		};
+		const f = factorsFrom(sums(include), fit.months);
+		return {
+			...p,
+			fitWindow: windowOf(include),
+			pooled: f.pooled,
+			months: f.months,
+			fallbackDays: 0,
+			correctedDays: 0,
+			fallbackRawMm: 0,
+			fallbackCorrectedMm: 0
+		};
 	});
 	return {
 		mode,
-		fitPeriod: { period: plan.period, ranges: plan.ranges, segments, note: plan.note },
+		fitPeriod: { period: plan.period, ranges: plan.ranges, segments },
+		fitWindow: windowOf(inFit),
 		minDays: CHIRPS_FACTOR_MIN_DAYS,
 		minMm: CHIRPS_FACTOR_MIN_MM,
 		clampMin: CHIRPS_FACTOR_MIN,
@@ -510,7 +505,7 @@ export function applyChirpsCorrection(
 		const v = chirps[t];
 		if (catchment[t] != null || v == null) continue;
 		const mf = corr.months[month[t]! - 1]!;
-		// With fit segments (engine ≥ 0.29.0) the day's own segment's factor; the whole-record month still counts the day.
+		// With fit ranges (engine ≥ 0.29.0) the day's own range's factor; the whole-record month still counts the day.
 		const seg = segmented ? chirpsFitSegmentFor(corr, waterYearOf(start + t)) : null;
 		const sf = seg ? seg.months[month[t]! - 1]! : mf;
 		mf.fallbackDays++;
@@ -535,20 +530,22 @@ export function applyChirpsCorrection(
 /**
  * The CHIRPS factors a fit ran under, as fit provenance records them
  * (FitRecord.forcing.chirpsFactors, engine ≥ 0.29.0): one entry per fit
- * segment, or one for the whole record; calendar months Jan … Dec. null
+ * range, or one for the whole record; calendar months Jan … Dec. null
  * without CHIRPS or in mode 'none'.
  */
 export interface ChirpsFactorSet {
-	/** "whole record", or the fit segment's name and the years it fills. */
+	/** "whole record", or the fit range's name and the years it fills. */
 	label: string;
+	/** The water years the factors were fitted on, in words (the reference window); absent on a set recorded without it. */
+	fittedOn?: string;
 	/** Applied factor per calendar month (Jan … Dec); null for a month without one. */
 	factors: (number | null)[];
 }
 export function chirpsFactorSets(corr: ChirpsCorrection | null): ChirpsFactorSet[] | null {
 	if (!corr || corr.mode !== 'monthly') return null;
 	const segs = corr.fitPeriod?.segments ?? [];
-	if (!segs.length) return [{ label: 'whole record', factors: corr.months.map((m) => m.factor) }];
-	return segs.map((s) => ({ label: `${fitSegmentName(s)}, filling ${fitSegmentFillText(s)}`, factors: s.months.map((m) => m.factor) }));
+	if (!segs.length) return [{ label: 'whole record', fittedOn: fitWindowText(corr.fitWindow), factors: corr.months.map((m) => m.factor) }];
+	return segs.map((s) => ({ label: `${fitSegmentName(s)}, filling ${fitSegmentFillText(s)}`, fittedOn: fitWindowText(s.fitWindow), factors: s.months.map((m) => m.factor) }));
 }
 
 /** settings.chirpsFitPeriod as the engine uses it: an unknown value, or a list with no valid range, falls back to 'all' with a warning; invalid or overlapping ranges are dropped with one. */
@@ -591,7 +588,7 @@ export function resolveChirpsFitPeriod(raw: unknown, warnings: string[]): Chirps
 /** "1990/91", or "1990/91–2004/05" for more than one year. */
 const yearSpan = (a: number, b: number) => (a === b ? waterYearLabel(a) : `${waterYearLabel(a)}–${waterYearLabel(b)}`);
 
-/** The water years a fit segment fills, in words: "up to 2004/05", "2005/06–2011/12", "from 2012/13 on", "every year". */
+/** The water years a fit range fills, in words: "up to 2004/05", "2005/06–2011/12", "from 2012/13 on", "every year". */
 export function fitSegmentFillText(s: Pick<ChirpsFitSegment, 'fillFrom' | 'fillTo'>): string {
 	if (s.fillFrom === null && s.fillTo === null) return 'every year';
 	if (s.fillFrom === null) return `up to ${waterYearLabel(s.fillTo!)}`;
@@ -599,19 +596,35 @@ export function fitSegmentFillText(s: Pick<ChirpsFitSegment, 'fillFrom' | 'fillT
 	return yearSpan(s.fillFrom, s.fillTo);
 }
 
-/** A fit segment's name: "double-mass segment 1990/91–2004/05" or "listed range 2005/06–2019/20 (reason)". */
-export function fitSegmentName(s: Pick<ChirpsFitSegment, 'source' | 'fromWaterYear' | 'toWaterYear' | 'reason'>): string {
-	return s.source === 'doubleMass'
-		? `double-mass segment ${yearSpan(s.fromWaterYear, s.toWaterYear)}`
-		: `listed range ${yearSpan(s.fromWaterYear, s.toWaterYear)} (${s.reason})`;
+/** A fit range's name: "range 2005/06–2019/20 (reason)". */
+export function fitSegmentName(s: Pick<ChirpsFitSegment, 'fromWaterYear' | 'toWaterYear' | 'reason'>): string {
+	return `range ${yearSpan(s.fromWaterYear, s.toWaterYear)} (${s.reason})`;
+}
+
+/** A fit's reference window in words: "1990/91–2009/10", or "no shared days". */
+export function fitWindowText(w: ChirpsFitWindow | null | undefined): string {
+	return w ? yearSpan(w.fromWaterYear, w.toWaterYear) : 'no shared days';
 }
 
 /** A fit period (the setting, or a correction's record of it) in words, for warnings, the summary CSV and run comparison. */
 export function fitPeriodText(p: ChirpsFitPeriod | ChirpsFitPeriodInfo | undefined): string {
-	const period = p === undefined ? 'all' : typeof p === 'string' || Array.isArray(p) ? p : p.period === 'ranges' ? p.ranges : p.period;
-	if (period === 'all') return 'whole record';
-	if (period === 'segments') return 'double-mass segments';
+	const period = p === undefined ? 'all' : typeof p === 'string' || Array.isArray(p) ? p : p.period === 'ranges' ? p.ranges : 'all';
+	if (!Array.isArray(period)) return 'whole record';
 	return `listed water years: ${period.map((r) => `${yearSpan(r.fromWaterYear, r.toWaterYear)} (${r.reason})`).join('; ')}`;
+}
+
+/**
+ * One reference window per fit, for run comparison and fit provenance: the
+ * whole-record (or all-ranges) fit, then each range. Engine ≥ 0.29.0; empty
+ * for a correction made before it.
+ */
+export function fitWindowLabels(c: ChirpsCorrection | null | undefined): string[] {
+	if (!c || c.fitWindow === undefined) return [];
+	const segs = c.fitPeriod?.segments ?? [];
+	return [
+		`${segs.length ? 'all ranges' : 'whole record'}: ${fitWindowText(c.fitWindow)}`,
+		...segs.map((s) => `${fitSegmentName(s)}: ${fitWindowText(s.fitWindow)}`)
+	];
 }
 
 const MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -651,6 +664,7 @@ export function keepDryDoubtWarnings(c: ChirpsCorrection | null): string[] {
 	);
 }
 
+
 /** The run warning for the correction, or null when CHIRPS was never the fallback (or the mode is 'none'). */
 export function chirpsCorrectionWarning(c: ChirpsCorrection | null): string | null {
 	if (!c || c.fallbackDays === 0 || c.mode === 'none') return null;
@@ -668,7 +682,7 @@ export function chirpsCorrectionWarning(c: ChirpsCorrection | null): string | nu
 			.filter((mf) => mf.factor !== null)
 			.map(
 				(mf) =>
-					`${MONTH_ABBR[mf.month]} ${f(mf.factor!)}${mf.source === 'pooled' ? ' (pooled)' : mf.source === 'record' ? (c.fitPeriod?.period === 'ranges' ? ' (all ranges)' : ' (whole record)') : ''}${mf.clamped ? ' (clamped)' : ''}`
+					`${MONTH_ABBR[mf.month]} ${f(mf.factor!)}${mf.source === 'pooled' ? ' (pooled)' : mf.source === 'record' ? ' (all ranges)' : ''}${mf.clamped ? ' (clamped)' : ''}`
 			)
 			.join(', ');
 	const segs = c.fitPeriod?.segments ?? [];
@@ -677,27 +691,17 @@ export function chirpsCorrectionWarning(c: ChirpsCorrection | null): string | nu
 		`(${Math.round(c.fallbackRawMm)} mm raw → ${Math.round(c.fallbackCorrectedMm)} mm): `;
 	const rules =
 		`A month with fewer than ${c.minDays} shared days, or less than ${c.minMm} mm of CHIRPS on them, uses the pooled factor` +
-		(segs.length ? ` of its segment, then the factor over ${c.fitPeriod!.period === 'ranges' ? 'all the listed ranges' : 'the whole record'}` : '') +
+		(segs.length ? ' of its range, then the factor over all the listed ranges' : '') +
 		`; factors are clamped to ${c.clampMin}–${c.clampMax}.`;
 	const tail = `${excluded} Catchment and forecast rain are not changed. Settings → CHIRPS bias correction turns this off.`;
 	if (segs.length) {
-		// Engine ≥ 0.29.0: one set per fit segment, each named with the years it fills.
-		const parts = segs.map((s) => `${fitSegmentName(s)}, filling ${fitSegmentFillText(s)} (${plural(s.correctedDays, 'day')}): ${factors(s.months)}`);
-		return (
-			head +
-			`factor = catchment / CHIRPS rain per month, fitted per ${c.fitPeriod!.period === 'segments' ? 'double-mass segment' : 'listed water-year range'} ` +
-			`(Settings → CHIRPS fit period): ${parts.join('; ')}. ` +
-			rules +
-			tail
+		// Engine ≥ 0.29.0: one set per listed range, each named with the years it was fitted on and the years it fills.
+		const parts = segs.map(
+			(s) => `${fitSegmentName(s)}, fitted on ${fitWindowText(s.fitWindow)}, filling ${fitSegmentFillText(s)} (${plural(s.correctedDays, 'day')}): ${factors(s.months)}`
 		);
+		return head + `factor = catchment / CHIRPS rain per month, fitted per listed water-year range (Settings → CHIRPS fit period): ${parts.join('; ')}. ` + rules + tail;
 	}
-	const fellBack =
-		c.fitPeriod?.note === 'noBreak'
-			? ' The fit period is double-mass segments, but the double-mass check finds no break, so one set of factors fits the whole record.'
-			: c.fitPeriod?.note === 'noDoubleMass'
-				? ' The fit period is double-mass segments, but the record is too short for the double-mass check, so one set of factors fits the whole record.'
-				: '';
-	return head + `factor = catchment / CHIRPS rain per month, ${factors(c.months)}. ` + rules + fellBack + tail;
+	return head + `factor = catchment / CHIRPS rain per month, ${factors(c.months)}. ` + rules + tail;
 }
 
 // ---------------------------------------------------------------------------
