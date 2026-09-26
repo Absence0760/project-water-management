@@ -39,7 +39,10 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	// A key's days only grow (as the key) or shrink (as a person); the row never moves (053_series_key_days.sql).
 	series_key_days: ['days'],
 	// An alert event's rule, project, farm and opening time are fixed; it clears, and its value and detail follow the watched figure (051_alerts.sql).
-	alert_event: ['cleared_at', 'detail', 'state', 'value']
+	alert_event: ['cleared_at', 'detail', 'state', 'value'],
+	// A sweep's base run, job, name and members' ops are fixed at insert; each gets its outcome once (062_scenario_sweeps.sql).
+	scenario_sweep: ['completed_at', 'engine_version', 'status'],
+	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -150,6 +153,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'scenario.decided_by': 'set null',
 	'scenario.owner_user_id': 'restrict',
 	'scenario_member.added_by': 'set null',
+	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
+	'scenario_sweep.created_by': 'set null',
 	'series_revision.created_by': 'set null',
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
