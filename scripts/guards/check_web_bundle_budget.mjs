@@ -684,7 +684,17 @@
 //             and node list, and lib/workspace/overlays.ts. Headroom ~5 KB.
 //             Four raises today: the English-as-key i18n trim (~5–7 KB,
 //             docs/followups.md) is due before the next.
-// Run:   pnpm build:frontend && pnpm check:bundle
+// 2026-09-26  total stays 973 KB (measured 969: 969.8 → 968.4 exact). The
+//             English-as-key i18n trim (issue #9): messages are their
+//             English at the call, af.ts keyed by a hash, no English
+//             catalogue. It saved 1.4 KB, not the 5–7 estimated: the keys are
+//             gone, but the English compresses worse spread over the pages'
+//             chunks than in one 11 KB catalogue chunk. The win is in first
+//             loads, 6–9 KB each on the translated routes (farm 97.9 → 91.8,
+//             sign-in 71.5 → 63.0, /share 74.3 → 65.7). New measurement + 5
+//             would be 974, over the current ceiling, so it stays; headroom
+//             ~4 KB. Build-time key shortening is moot: no keys are left.
+// Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
