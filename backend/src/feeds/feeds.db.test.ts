@@ -263,6 +263,60 @@ describe('the scheduler', () => {
 		await expect(withoutUser((db) => claimDueFeeds(db, 0))).rejects.toMatchObject({ code: '22023' });
 	});
 
+	it('two ticks at once never claim the same feed (FOR UPDATE SKIP LOCKED), and a feed idle for days is claimed once, not once per missed day', async () => {
+		const owner = await signUp('Racer');
+		const pid = await project(owner);
+		const ids: string[] = [];
+		for (let i = 0; i < 6; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id);
+		// The worker was down for five days.
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '5 days' WHERE project_id = $1`, [pid]);
+		const [a, b] = await Promise.all([withoutUser((db) => claimDueFeeds(db, 50)), withoutUser((db) => claimDueFeeds(db, 50))]);
+		const claimed = [...a, ...b].map((f) => f.id);
+		expect(claimed.sort()).toEqual([...ids].sort());
+		expect(await withoutUser((db) => claimDueFeeds(db, 50))).toEqual([]);
+	});
+
+	it('the oldest-scheduled feeds go first when more are due than a tick takes', async () => {
+		const owner = await signUp('Queue');
+		const pid = await project(owner);
+		const ids: string[] = [];
+		for (let i = 0; i < 3; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id);
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [ids[0]]);
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '3 days' WHERE id = $1`, [ids[1]]);
+		// ids[2] was never scheduled: first of all.
+		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[2], ids[1]]);
+		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[0]]);
+	});
+
+	it('a failing feed backs off 15 min × 2^(failures − 1), never beyond its own interval', async () => {
+		const owner = await signUp('Backoff');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const dueAfter = async (failures: number, minutesAgo: number) => {
+			await asOwner(`UPDATE data_feed SET consecutive_failures = $2, last_scheduled_at = now() - make_interval(mins => $3) WHERE id = $1`, [id, failures, minutesAgo]);
+			return (await withoutUser((db) => claimDueFeeds(db, 50))).length === 1;
+		};
+		// Three failures: an hour (a minute's slack for the tick).
+		expect(await dueAfter(3, 55)).toBe(false);
+		expect(await dueAfter(3, 60)).toBe(true);
+		// Eight failures would be 32 h: capped at the day.
+		expect(await dueAfter(8, 23 * 60)).toBe(false);
+		expect(await dueAfter(8, 24 * 60)).toBe(true);
+		// An hourly feed's cap is its hour.
+		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' });
+		expect(await dueAfter(5, 50)).toBe(false);
+		expect(await dueAfter(5, 60)).toBe(true);
+	});
+
+	it('scheduling a feed whose fetch is already waiting ("Run now") adds no second job', async () => {
+		const owner = await signUp('Dedupe');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		expect((await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(202);
+		expect(await scheduleDueFeeds()).toEqual({ queued: 1, refused: 0 });
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]))[0].n).toBe(1);
+	});
+
 	it('a tick queues and runs due feeds end to end (dev:feeds:run is this with every feed)', async () => {
 		const owner = await signUp('Ticker');
 		const pid = await project(owner);
