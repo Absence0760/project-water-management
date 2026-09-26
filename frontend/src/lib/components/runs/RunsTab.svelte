@@ -28,7 +28,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { activeSectionId, resultGroups } from './sections';
+	import { resultGroups } from './sections';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
@@ -317,41 +318,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const overAllocated = $derived(overAllocationError(inputFlowShares({ model: editor.model, settings: project.settings }).sum));
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
-	// The rail's in-page menu, and which section is being read (scroll spy).
+	// The in-page menu above the results (SectionNav).
 	const groups = $derived(detail ? resultGroups(detail.run.summary) : []);
-	const sections = $derived(groups.flatMap((g) => g.sections));
-	let activeSection = $state<string | null>(null);
-	$effect(() => {
-		const ids = sections.map((x) => x.id);
-		if (!ids.length) return;
-		let frame = 0;
-		const update = () => {
-			frame = 0;
-			const root = document.documentElement;
-			// A section counts as reached once its top passes under the sticky header.
-			const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
-			const tops = ids.flatMap((id) => {
-				const el = document.getElementById(id);
-				return el ? [{ id, top: el.getBoundingClientRect().top }] : [];
-			});
-			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2);
-		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(update);
-		};
-		update();
-		window.addEventListener('scroll', schedule, { passive: true });
-		window.addEventListener('resize', schedule);
-		// Panels below load their charts after the summary, which moves every later section.
-		const grow = new ResizeObserver(schedule);
-		grow.observe(document.body);
-		return () => {
-			cancelAnimationFrame(frame);
-			window.removeEventListener('scroll', schedule);
-			window.removeEventListener('resize', schedule);
-			grow.disconnect();
-		};
-	});
 	const downloadItems = $derived(
 		detail
 			? runDownloadItems(
@@ -416,9 +384,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {#if drift}<p class="alert alert-warning" role="status" data-testid="evidence-drift">{drift}</p>{/if}
 
 <div class="layout">
-	<!-- The rail: the runs list, then an in-page menu of the result panels. It
-	     stays in view beside the long results page (sticky on wide screens) and
-	     marks the section being read. -->
+	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
 	<aside class="rail">
 		<section class="panel list" aria-labelledby="runs-h">
 			<div class="panel-head">
@@ -487,27 +453,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				</ul>
 			{/if}
 		</section>
-		{#if sections.length}
-			<nav class="panel sections" aria-label="Result sections">
-				<!-- Screen readers only: the group names label the menu visibly, and the room goes to its entries (a 768px laptop window). -->
-				<h2 class="visually-hidden">On this page</h2>
-				<ul class="groups">
-					{#each groups as g, gi (gi)}
-						<li>
-							{#if g.label}<span class="grp-h" id="grp-{gi}">{g.label}</span>{/if}
-							<ul aria-labelledby={g.label ? `grp-${gi}` : undefined}>
-								{#each g.sections as sec (sec.id)}
-									<li><a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{sec.label}</a></li>
-								{/each}
-							</ul>
-						</li>
-					{/each}
-				</ul>
-			</nav>
-		{/if}
 	</aside>
 
 	<div class="detail">
+		<!-- In-page menu: sticks under the app header above the results, grouped by the question each panel answers. -->
+		{#if groups.length}<SectionNav {groups} label="Result sections" />{/if}
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}
@@ -836,26 +786,17 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		gap: 1rem;
 		min-width: 0;
 	}
-	/* Wide screens: the rail rides along beside the results, scrolling on its own if taller than the window. */
+	/* Wide screens: the rail rides along beside the results, and a long runs
+	   list scrolls inside its panel (from a 7.5rem floor) to fit the window,
+	   clipping rather than spilling out of the rail. */
 	@media (min-width: 901px) {
 		.rail {
 			position: sticky;
 			top: calc(var(--header-h) + 0.75rem);
 			max-height: calc(100vh - var(--header-h) - 1.5rem);
-			overflow-y: auto;
-			overscroll-behavior: contain;
-		}
-		/* A long runs list scrolls inside its panel and gives up height to the menu
-		   below, so the whole menu stays in view on a laptop screen however many
-		   sections it lists: the rail is a column where only the list shrinks (a
-		   fixed 25vh cap overflowed once the menu grew a line). */
-		.rail {
 			display: flex;
 			flex-direction: column;
 		}
-		/* The list's panel shrinks first (its list scrolls inside, from a 7.5rem
-		   floor), and clips rather than spills: when it spilled, the runs slid
-		   under the menu, which then took their clicks. */
 		.rail .list {
 			flex: 0 1 auto;
 			min-height: 0;
@@ -863,15 +804,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			display: flex;
 			flex-direction: column;
 		}
-		/* A little less padding than a panel: the whole menu fits a 768px window beside a full runs list. */
-		.rail .sections {
-			flex: none;
-			padding-block: 0.5rem;
-		}
 		.rail .runs {
 			flex: 0 1 auto;
 			min-height: 7.5rem;
-			max-height: 24rem;
 			overflow-y: auto;
 		}
 	}
@@ -993,66 +928,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	.placeholder {
 		text-align: center;
 		padding: 3rem 1rem;
-	}
-	/* In-page menu: the results run to about fifteen panels. A vertical list in
-	   the rail on wide screens, wrapping chips above the results on narrow ones. */
-	.sections ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	/* A group's name above its links (sections.ts), quieter than the links. */
-	.grp-h {
-		display: block;
-		margin: 0.15rem 0 0;
-		font-size: 0.7rem;
-		line-height: 1.3;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted);
-	}
-	.sections a {
-		display: block;
-		padding: 0.25rem 0.6rem;
-		border-left: 2px solid var(--border);
-		font-size: 0.85rem;
-		color: var(--text-2);
-		text-decoration: none;
-	}
-	.sections a:hover {
-		color: var(--accent);
-		border-left-color: var(--accent);
-	}
-	.sections a[aria-current='location'] {
-		color: var(--accent);
-		border-left-color: var(--accent);
-		background: var(--accent-soft);
-		font-weight: 600;
-	}
-	@media (max-width: 900px) {
-		.sections ul {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 0.35rem;
-		}
-		/* Each group's chips wrap on their own lines, under the group's name. */
-		.sections ul.groups {
-			display: block;
-		}
-		.sections a {
-			display: inline-flex;
-			align-items: center;
-			min-height: 36px;
-			padding: 0 0.6rem;
-			border: 1px solid var(--border);
-			border-radius: 999px;
-			font-size: 0.8rem;
-		}
-		.sections a:hover,
-		.sections a[aria-current='location'] {
-			border-color: var(--accent);
-		}
 	}
 	.agree {
 		margin-top: 1rem;

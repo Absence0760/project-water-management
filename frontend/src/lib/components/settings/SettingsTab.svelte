@@ -44,7 +44,7 @@
 	import { dataQualityError } from './dataQuality';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
-	import { activeSectionId } from '$lib/components/runs/sections';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
@@ -254,61 +254,17 @@
 	const petMissing = $derived(!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }));
 	const num = (k: string) => cal[k] as number;
 
-	// The sticky in-page menu, and which group is being read (scroll spy, as on
-	// Runs & results). The menu and the save bar both stick, so in-page jumps and
-	// focus scrolling keep clear of them (WCAG 2.4.11) while this tab is shown.
-	let navHeight = $state(0);
+	// The in-page menu (SectionNav) and the save bar both stick, so in-page jumps
+	// and focus scrolling keep clear of them (WCAG 2.4.11) while this tab is shown.
 	let actionsHeight = $state(0);
-	let activeSection = $state<string | null>(null);
-	let navList = $state<HTMLUListElement>();
-	// On a phone the menu is one sideways strip: keep the marked link in it in view.
-	$effect(() => {
-		const link = activeSection ? navList?.querySelector<HTMLElement>(`a[href="#${activeSection}"]`) : null;
-		if (!navList || !link || navList.scrollWidth <= navList.clientWidth) return;
-		const left = link.offsetLeft - navList.offsetLeft;
-		if (left < navList.scrollLeft || left + link.offsetWidth > navList.scrollLeft + navList.clientWidth) {
-			navList.scrollLeft = left - 16;
-		}
-	});
 	$effect(() => {
 		const root = document.documentElement;
-		const header = parseFloat(getComputedStyle(root).getPropertyValue('--header-h')) || 0;
-		root.style.scrollPaddingTop = `${header + navHeight + 12}px`;
 		root.style.scrollPaddingBottom = actionsHeight ? `${actionsHeight + 12}px` : '';
 		return () => {
-			root.style.scrollPaddingTop = '';
 			root.style.scrollPaddingBottom = '';
 		};
 	});
-	$effect(() => {
-		let frame = 0;
-		const update = () => {
-			frame = 0;
-			const root = document.documentElement;
-			// A group counts as reached once its top passes under the sticky menu.
-			const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
-			const tops = SETTINGS_SECTIONS.flatMap(({ id }) => {
-				const el = document.getElementById(id);
-				return el ? [{ id, top: el.getBoundingClientRect().top }] : [];
-			});
-			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2);
-		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(update);
-		};
-		update();
-		window.addEventListener('scroll', schedule, { passive: true });
-		window.addEventListener('resize', schedule);
-		// Groups open and close (Advanced, the WR2012 fields, a fit's result), which moves every later one.
-		const grow = new ResizeObserver(schedule);
-		grow.observe(document.body);
-		return () => {
-			cancelAnimationFrame(frame);
-			window.removeEventListener('scroll', schedule);
-			window.removeEventListener('resize', schedule);
-			grow.disconnect();
-		};
-	});
+	const navGroups = $derived([{ label: null, sections: SETTINGS_SECTIONS.map((sec) => ({ ...sec, problem: blockers.some((b) => b.id === sec.id) })) }]);
 </script>
 
 <form onsubmit={save} novalidate>
@@ -320,21 +276,8 @@
 		year, October → September.
 	</p>
 
-	<!-- In-page menu: sticks under the app header down this long form and marks
-	     the group being read. A wrapping row on wide screens, one scrolling strip
-	     on phones. -->
-	<nav class="sections" aria-label="Settings sections" bind:clientHeight={navHeight}>
-		<span class="nav-h" aria-hidden="true">On this page</span>
-		<ul bind:this={navList}>
-			{#each SETTINGS_SECTIONS as sec (sec.id)}
-				<li>
-					<a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>
-						{sec.label}{#if blockers.some((b) => b.id === sec.id)}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</nav>
+	<!-- In-page menu: sticks under the app header down this long form and marks the group being read. -->
+	<SectionNav groups={navGroups} label="Settings sections" />
 
 	<!-- Demand ------------------------------------------------------------------>
 	<section class="panel" id="set-demand" aria-labelledby="dem-h">
@@ -1203,79 +1146,6 @@
 		width: 100%;
 	}
 	/* In-page menu (as on Runs & results, but a bar: the monthly input rows need the full width). */
-	.sections {
-		position: sticky;
-		top: var(--header-h);
-		z-index: 15;
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		margin: 0 0 1rem;
-		padding: 0.45rem 0;
-		background: var(--bg);
-		border-bottom: 1px solid var(--border);
-	}
-	.nav-h {
-		flex: none;
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted);
-	}
-	.sections ul {
-		list-style: none;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		margin: 0;
-		padding: 0;
-		min-width: 0;
-	}
-	.sections a {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		min-height: 30px;
-		padding: 0 0.65rem;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		background: var(--surface);
-		font-size: 0.8rem;
-		color: var(--text-2);
-		text-decoration: none;
-		white-space: nowrap;
-	}
-	.sections a:hover {
-		border-color: var(--accent);
-		color: var(--accent);
-	}
-	.sections a[aria-current='location'] {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		color: var(--accent);
-		font-weight: 600;
-	}
-	.dot {
-		width: 0.45rem;
-		height: 0.45rem;
-		border-radius: 50%;
-		background: var(--danger);
-	}
-	/* Phones: one row that scrolls sideways inside the bar, never the page. */
-	@media (max-width: 640px) {
-		.nav-h {
-			display: none;
-		}
-		.sections ul {
-			flex-wrap: nowrap;
-			overflow-x: auto;
-			scrollbar-width: none;
-		}
-		.sections a {
-			min-height: 36px;
-		}
-	}
 	.blockers {
 		display: flex;
 		flex-wrap: wrap;

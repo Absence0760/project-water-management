@@ -716,13 +716,17 @@ running. SheetJS loads only then, in a worker, never with the page.
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
   `#set-quality`, then `#set-feeds` after the form; listed by
-  `settings/sections.ts`). It sticks under the app header down the long form
-  and marks the group being read with `aria-current="location"`, using the
-  Runs rail's scroll spy (`activeSectionId` from `runs/sections.ts`). It is a
-  bar rather than a side rail because the monthly input rows need the full
+  `settings/sections.ts`). It is the shared in-page menu
+  (`common/SectionNav.svelte`, also on Runs & results): a bar of pill links
+  that sticks under the app header down the long form and marks the group
+  being read with `aria-current="location"` (scroll spy: `activeSectionId`
+  in `common/sectionNav.ts`, the last section whose top has passed under the
+  menu, or the last one at the bottom of the page). A group with a Save
+  blocker gets a red dot ("has a problem" to screen readers). It is a bar
+  rather than a side rail because the monthly input rows need the full
   width. On phones it is one strip that scrolls sideways inside itself (the
-  marked link kept in view), never the page. While the tab is shown it raises
-  the page's `scroll-padding-top` by the menu's height and sets
+  marked link kept in view), never the page. While shown, the menu raises
+  the page's `scroll-padding-top` by its height, and this tab sets
   `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
   focused control is never hidden under either (WCAG 2.4.11).
 - **Save bar.** Sticky at the bottom (above the model save bar when that
@@ -1134,26 +1138,21 @@ run's report to chosen members every week or month.
 ## Runs & results
 
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
-  list and, below it, an **On this page** menu (the "Result sections"
-  navigation) linking to each panel (`#res-summary` … `#res-explore`, listed
-  by `runs/sections.ts` in groups, each a list labelled by the group's name
-  under a small heading). The rail is sticky, so the menu stays in view down
-  the long results page, and it marks the section being read with
-  `aria-current="location"` (scroll spy: `activeSectionId`, the last section
-  whose top has passed under the sticky header, or the last one at the
-  bottom of the page). A long runs list scrolls inside its panel so the menu
-  stays in reach: the rail is a column in which only the list shrinks (at
-  most 24rem, at least 7.5rem), so with 20 runs and every menu entry the rail
-  still fits a 768px-tall window without clipping, and a longer menu takes
-  its height from the list (once the list is at its minimum the rail scrolls
-  on its own). Narrower, the rail stacks above the results and the menu
-  becomes wrapping chips, a line of them per group. Farm detail appears only
-  when the run has farms, Reserve compliance only with a rule table, Runoff
-  model only for a GR4J run, WR2012 check only with a reference, and
+  list. It is sticky, and a long list scrolls inside its panel (at least
+  7.5rem tall) so the rail fits the window without clipping. Narrower, the
+  rail stacks above the results.
+- **On this page.** Above the results, the same menu as Settings &
+  calibration (`common/SectionNav.svelte`; the "Result sections"
+  navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
+  `runs/sections.ts` in groups). Each group's name leads its pills, and each
+  group is a list labelled by that name. It sticks under the app header down
+  the long results page, marks the section being read, wraps to about two
+  rows on a laptop, and on phones is one sideways strip. Farm detail appears
+  only when the run has farms, Reserve compliance only with a rule table,
+  Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
-  page's `scroll-padding-top`
-  keeps a jumped-to section, or a focused control, clear of the sticky
-  header.
+  page's `scroll-padding-top` includes the menu's height, so a jumped-to
+  section, or a focused control, clears both the header and the menu.
 - **Page order.** The results are grouped by the question they answer
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
@@ -1182,11 +1181,8 @@ run's report to chosen members every week or month.
      sign-off, after the results.
   6. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
-  The rail's menu names its groups visibly (its "On this page" heading is for
-  screen readers only) and keeps every link 24 px tall; at 768 px tall it fits
-  beside a full runs list, whose panel shrinks first and clips rather than
-  spilling under the menu. The bullets below describe each panel; the order
-  above is the page's.
+  The menu names the same groups. The bullets below describe each panel; the
+  order above is the page's.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
   rainfall series, and while the farms' flow shares add up to more than 100 %
@@ -1379,12 +1375,11 @@ run's report to chosen members every week or month.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
-  and (placed in the calibration panel, under the fit record) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  and (its own panel in the River & Reserve group, beside the findings it qualifies) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
   [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
   `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
-  shown, `#res-uncertainty`, inside the calibration panel below the fit
-  record, whose menu entry is **Calibration & uncertainty** so the rail still
-  fits a laptop screen; helpers in `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
+  shown, `#res-uncertainty`, menu entry **Uncertainty bands**; helpers in
+  `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
   **decision rule** in a box above every band (thresholds, split date,
   percentiles, the 30-set gate, coverage test, sample), a line with the
   options (sets, seed, bounds, pan shift, rain sources, records, model, who
@@ -1426,8 +1421,8 @@ run's report to chosen members every week or month.
   runs list; the note also appears on the compare page and in the summary CSV.
   The same panel then holds the **Evidence** section
   (`runs/EvidencePanel.svelte`, `#res-evidence`, helpers in
-  `runs/evidence.ts`; the menu entry is **Notes & evidence**, one entry so the
-  rail still fits a laptop screen beside a full runs list): whether the shown
+  `runs/evidence.ts`; the menu entry is **Notes & evidence**, one entry for
+  the panel): whether the shown
   run is the project's nominated evidence run ("Nominated as evidence on … by
   …", or "…; replaced by “B” on …" for a past one) and, when another run is,
   which. Editors get a required **Why this run is the evidence** textarea (2 000
