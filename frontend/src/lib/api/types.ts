@@ -290,6 +290,13 @@ export interface RunMeta {
 	 * that you can see, oldest first. Absent from an older API.
 	 */
 	citedBy?: RunCitation[];
+	/**
+	 * What made the run (038_run_trigger): manual, auto (a re-run after new
+	 * data, WP-2.11) or forecast (forecast mode, WP-2.12). Absent from an older API.
+	 */
+	trigger?: 'manual' | 'auto' | 'forecast';
+	/** A forecast run's first forecast day (summary.forecast.from); null otherwise. Absent from an older API. */
+	forecastFrom?: string | null;
 }
 
 /**

@@ -10,6 +10,8 @@
 	import { localIsoDate } from '$lib/format/number';
 	import CompareCard from '$lib/components/farm/CompareCard.svelte';
 	import DamCard from '$lib/components/farm/DamCard.svelte';
+	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
+	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import LookingBack from '$lib/components/farm/LookingBack.svelte';
@@ -73,7 +75,9 @@
 			<SupplyCard farm={view.farm} bind:unit />
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
 			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />
-			<!-- "Next 14 days" (ForecastCard) stays out until forecast mode exists (WP-2.12): the FarmView contract has no forecast yet. -->
+			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
+			{@const forecast = forecastCard(view.farm, today)}
+			{#if forecast}<ForecastCard vm={forecast} />{/if}
 			<MonthlyChart farm={view.farm} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />

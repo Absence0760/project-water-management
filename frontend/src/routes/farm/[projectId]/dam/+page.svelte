@@ -9,6 +9,8 @@
 	import DamChart from '$lib/components/farm/DamChart.svelte';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
+	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
+	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import Rich from '$lib/components/farm/Rich.svelte';
 	import { datesLine } from '$lib/components/farm/cards';
 	import { DAM_SOURCE, damPage } from '$lib/components/farm/dam';
@@ -60,7 +62,9 @@
 			</section>
 
 			<DamChart farm={view.farm} caption={d.chartCaption} />
-			<!-- "Next 14 days" stays out until forecast mode exists (WP-2.12). -->
+			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
+			{@const forecast = forecastCard(view.farm, today)}
+			{#if forecast}<ForecastCard vm={forecast} />{/if}
 
 			<section class="card" aria-labelledby="about-h">
 				<h2 id="about-h">Where these figures come from</h2>

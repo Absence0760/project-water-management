@@ -118,5 +118,21 @@ export async function collectWorkbookInput(
 		done++;
 	}
 	onProgress({ phase: 'build', done, total, label: '' });
-	return { input: { summaryCsv, summary: run.summary, settings: run.settings, model: run.model, catchment, nodes }, filename };
+	// A forecast run (WP-2.12): every daily sheet leads with the forecast flag, as the daily CSVs do.
+	const flagged = (t: DailyTable | null) => (t && run.summary.forecast ? withForecastFlag(t, run.summary.forecast.from) : t);
+	return {
+		input: { summaryCsv, summary: run.summary, settings: run.settings, model: run.model, catchment: flagged(catchment), nodes: nodes.map((t) => flagged(t)!) },
+		filename
+	};
+}
+
+/** The header of the forecast flag column (1 on a forecast day, 0 before), first after the date. */
+export const FORECAST_FLAG_HEADER = 'forecast (1 = modelled on forecast rain)';
+
+/** `table` with the forecast flag column in front: 1 from `from` (a forecast run's first forecast day), 0 before. */
+export function withForecastFlag(table: DailyTable, from: string): DailyTable {
+	const length = Math.max(0, ...table.columns.map((c) => c.values.length));
+	const cut = Math.round((Date.parse(`${from}T00:00:00Z`) - Date.parse(`${table.startDate}T00:00:00Z`)) / 86_400_000);
+	const values = Array.from({ length }, (_, i) => (i >= cut ? 1 : 0));
+	return { ...table, columns: [{ header: FORECAST_FLAG_HEADER, unit: null, values }, ...table.columns] };
 }
