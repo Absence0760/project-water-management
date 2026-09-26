@@ -336,7 +336,10 @@ merges into:
   commit in the job's transaction, as the job's acting user. Re-reading an
   unchanged window (CHIRPS does, every day) leaves the series row alone, so
   its `updatedAt` ("new data since the last run") moves only when a value
-  does.
+  does. An answer with a day after the newest the source can have (today, or
+  a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
+  would otherwise pin the feed's newest date, which only moves forward, in
+  the future.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who

@@ -15,7 +15,8 @@ import { runTick } from '../jobs/runner.js';
 import { utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
-import { claimDueFeeds } from './store.js';
+import { ingestResult } from './ingest.js';
+import { claimDueFeeds, feedForJob } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -343,5 +344,149 @@ describe('the production hand-off (ingest-results → feed_ingest)', () => {
 		await tick();
 		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ last_attempt_at: null });
+	});
+});
+
+describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → series/merge.ts mergeInto)', () => {
+	/** A feed of a fresh project; `ingest` applies a result as the job does, as its acting user. */
+	async function setup(name: string, over: Record<string, unknown> = {}) {
+		const owner = await signUp(name);
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, ...over })).body.feed.id as string;
+		const ingest = (raw: unknown) => withUser(owner.id, async (db) => ingestResult(db, (await feedForJob(db, pid, id))!, raw));
+		return { owner, pid, id, ingest };
+	}
+	const ok = (startDate: string, values: (number | null)[], meta: Record<string, string | number> = { days: values.length }) => ({ ok: true, startDate, values, meta });
+	const seriesMeta = async (u: User, pid: string, kind: string) =>
+		((await u.call('GET', `/projects/${pid}/series`)).body.series as { kind: string; name: string; updatedAt: string }[]).find((s) => s.kind === kind && s.name === '');
+
+	it('is idempotent: the same result twice leaves the values and the series’ updatedAt as they were', async () => {
+		const { owner, pid, id, ingest } = await setup('Twice');
+		expect(await ingest(ok('2026-01-01', [1, null, 3]))).toEqual({ merged: 2, lastDate: '2026-01-03' });
+		const first = (await seriesMeta(owner, pid, 'rain_chirps_mm'))!;
+		const health = await feedRow(id);
+		expect(await ingest(ok('2026-01-01', [1, null, 3]))).toEqual({ merged: 2, lastDate: '2026-01-03' });
+		// updatedAt means "the values last changed" (the Runs tab's "new data since the last run"), so
+		// re-reading an unchanged window, which CHIRPS does every day (its revision window), must not bump it.
+		expect(await seriesMeta(owner, pid, 'rain_chirps_mm')).toEqual(first);
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, null, 3]);
+		// The fetch itself still counts: its attempt is recorded.
+		const again = await feedRow(id);
+		expect(again).toMatchObject({ last_data_date: '2026-01-03', last_value: 3, consecutive_failures: 0 });
+		expect((again.last_attempt_at as Date).getTime()).toBeGreaterThan((health.last_attempt_at as Date).getTime());
+		// Positive control: a revised value changes the series and its updatedAt.
+		await ingest(ok('2026-01-02', [2]));
+		expect((await seriesMeta(owner, pid, 'rain_chirps_mm'))!.updatedAt > first.updatedAt).toBe(true);
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, 2, 3]);
+	});
+
+	it('writes nothing when the transaction fails after the merge: the merge and the health commit together', async () => {
+		const { owner, pid, id, ingest } = await setup('Atomic');
+		await expect(
+			withUser(owner.id, async (db) => {
+				await ingestResult(db, (await feedForJob(db, pid, id))!, ok('2026-01-01', [1, 2]));
+				throw new Error('the job failed after the merge');
+			})
+		).rejects.toThrow('the job failed after the merge');
+		expect(await series(owner, pid, 'rain_chirps_mm')).toBeNull();
+		expect(await feedRow(id)).toMatchObject({ last_attempt_at: null, last_data_date: null });
+		// Positive control: the same ingest, committed, writes both.
+		await ingest(ok('2026-01-01', [1, 2]));
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, 2]);
+		expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-01-02' });
+	});
+
+	it('a merge the series can’t take (past 60 000 days) is a recorded failure that leaves the series whole', async () => {
+		const { owner, pid, id, ingest } = await setup('TooLong');
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1850-01-01', values: [7] })).status).toBe(200);
+		expect(await ingest(ok('2026-01-01', [1]))).toEqual({ merged: 0, lastDate: null });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '1850-01-01', values: [7] });
+		expect(await feedRow(id)).toMatchObject({
+			consecutive_failures: 1,
+			last_data_date: null,
+			last_error: 'the series could not take the new days: series would exceed 60000 days'
+		});
+	});
+
+	it('a result the database would refuse (meta too many bytes, a NUL) is recorded as invalid, not a job that dies retrying', async () => {
+		const { owner, pid, id, ingest } = await setup('Bytes');
+		// Within the per-field limits (20 keys of 40 and values of 100 characters) but in 3-byte
+		// characters: ~8.5 KB of JSON against last_meta's 4 KB CHECK.
+		const wide = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${i}`.padEnd(40, '€'), ''.padEnd(100, '€')]));
+		await ingest(ok('2026-01-01', [1], wide));
+		expect(await series(owner, pid, 'rain_chirps_mm')).toBeNull();
+		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 1, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
+		// Postgres refuses U+0000 in text and in jsonb.
+		await ingest(ok('2026-01-01', [1], { note: 'a\u0000b' }));
+		await ingest({ ok: false, error: 'bad\u0000byte' });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toBeNull();
+		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 3, last_error: 'the fetcher’s answer was not valid, so nothing was written' });
+		// Positive control: an ordinary result goes through.
+		await ingest(ok('2026-01-01', [1], { days: 1, issued: '2026-01-01' }));
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1]);
+	});
+
+	it('user-entered days: the source’s value replaces the user’s on the same day (the feed owns its series), a gap never erases one, another series is untouched', async () => {
+		const { owner, pid, ingest } = await setup('UserData');
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, 20, 30] });
+		// The user's own record under another name: a feed writes only the series it targets.
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'My gauge', unit: 'mm', startDate: '2026-01-01', values: [5, 5, 5] });
+		await ingest(ok('2025-12-31', [0, 1, null, 3, 4]));
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2025-12-31', values: [0, 1, 20, 3, 4] });
+		const list = (await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; name: string }[];
+		const mine = list.find((s) => s.name === 'My gauge')!;
+		expect((await owner.call('GET', `/projects/${pid}/series/${mine.id}`)).body).toMatchObject({ startDate: '2026-01-01', values: [5, 5, 5] });
+	});
+
+	it('writes the source’s unit and the exact days whatever the server’s time zone', async () => {
+		const tz = process.env.TZ;
+		try {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				process.env.TZ = zone; // UTC+14, UTC-11
+				const { owner, pid, id, ingest } = await setup('Zoned', { source: 'dws', config: { station: 'X0H000' } });
+				await owner.call('PUT', `/projects/${pid}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2026-03-01', values: [9] });
+				expect(await ingest(ok('2026-02-27', [1.25, null, 2.5, null]))).toEqual({ merged: 2, lastDate: '2026-03-01' });
+				expect(await series(owner, pid, 'flow_observed_m3s')).toMatchObject({ startDate: '2026-02-27', unit: 'm³/s', values: [1.25, null, 2.5, null] });
+				expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-03-01', last_value: 2.5 });
+			}
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
+	it('refuses an answer with days the source can’t have yet, which would otherwise pin the newest date in the future', async () => {
+		const { owner, pid, id, ingest } = await setup('Future');
+		await ingest(ok(addDays(-2), [1, 2]));
+		// Today and tomorrow: tomorrow can't exist yet.
+		expect(await ingest(ok(addDays(0), [3, 4]))).toEqual({ merged: 0, lastDate: null });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: addDays(-2), values: [1, 2] });
+		expect(await feedRow(id)).toMatchObject({
+			last_data_date: addDays(-1),
+			consecutive_failures: 1,
+			last_error: `the fetcher’s answer had days after ${utcToday()}, so nothing was written`
+		});
+		// Positive control: up to today is fine.
+		expect(await ingest(ok(addDays(-1), [3, 4]))).toEqual({ merged: 2, lastDate: addDays(0) });
+		expect(await feedRow(id)).toMatchObject({ last_data_date: addDays(0), consecutive_failures: 0 });
+	});
+
+	it('a forecast may reach its sixteenth day, not a day further', async () => {
+		const { owner, pid, id, ingest } = await setup('Horizon', gefs());
+		expect(await ingest(ok(utcToday(), new Array(17).fill(1)))).toEqual({ merged: 0, lastDate: null });
+		expect(await series(owner, pid, 'rain_forecast_mm')).toBeNull();
+		expect((await feedRow(id)).last_error).toBe(`the fetcher’s answer had days after ${addDays(15)}, so nothing was written`);
+		expect(await ingest(ok(utcToday(), new Array(16).fill(1)))).toEqual({ merged: 16, lastDate: addDays(15) });
+	});
+
+	it('an empty window (the source had nothing) is a success that writes nothing and keeps the newest date', async () => {
+		const { owner, pid, id, ingest } = await setup('Empty');
+		await ingest(ok('2026-01-01', [1, 2]));
+		expect(await ingest({ ok: true, startDate: null, values: [], meta: { days: 0 } })).toEqual({ merged: 0, lastDate: null });
+		expect(await ingest(ok('2026-01-05', [null, null]))).toEqual({ merged: 0, lastDate: null });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2026-01-01', values: [1, 2] });
+		expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-01-02', last_value: 2, consecutive_failures: 0, last_error: null, last_meta: { days: 2, merged: 0 } });
+		// An older window never moves the newest date back.
+		await ingest(ok('2025-12-01', [4]));
+		expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-01-02', last_value: 2 });
 	});
 });
