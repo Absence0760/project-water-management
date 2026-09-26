@@ -36,8 +36,8 @@ export class ApiError extends Error {
 
 /**
  * Every error code the API sends (docs/api.md § Errors). A code is a
- * contract: the frontend's catalogue has an `error.<code>` message for each
- * (frontend/src/lib/i18n/apiError.test.ts), so rename none; add new ones.
+ * contract: the frontend words each one (`CODES` in
+ * frontend/src/lib/i18n/apiError.ts; apiError.test.ts), so rename none; add new ones.
  * Errors without a code are worded on the client by their status.
  */
 export const ERROR_CODES = [

@@ -103,16 +103,17 @@ export const monthsBelow = (months: readonly FlowMonth[]) => months.filter((m) =
 
 /** The chart's visually hidden summary. */
 export function flowSummary(months: readonly FlowMonth[]): string {
-	if (!months.length) return t('share.chart.none');
+	// i18n-section: share.chart
+	if (!months.length) return t('No flows to show.');
 	const below = monthsBelow(months).length;
 	const verdict =
-		below === 0 ? t('share.chart.aboveAll') : below === months.length ? t('share.chart.belowAll') : t('share.chart.below', { n: below, months: months.length });
-	return t('share.chart.summary', { from: fmtMonthLongYear(months[0]!.month), to: fmtMonthLongYear(months[months.length - 1]!.month), verdict });
+		below === 0 ? t('The mean flow was above the reserve in every month.') : below === months.length ? t('The mean flow was below the reserve in every month.') : t('The mean flow was below the reserve in {n} of the {months} months.', { n: below, months: months.length });
+	return t('River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below.', { from: fmtMonthLongYear(months[0]!.month), to: fmtMonthLongYear(months[months.length - 1]!.month), verdict });
 }
 
 /** "Oct 2021 to Sept 2023. Monthly means of the modelled daily flow." */
 export const flowCaption = (months: readonly FlowMonth[]) =>
-	months.length ? t('share.chart.span', { from: fmtMonthYear(months[0]!.month), to: fmtMonthYear(months[months.length - 1]!.month) }) : '';
+	months.length ? t('{from} to {to}. Monthly means of the modelled daily flow.', { from: fmtMonthYear(months[0]!.month), to: fmtMonthYear(months[months.length - 1]!.month) }) : '';
 
 const m3Day = (v: number | null) => (v == null ? '–' : `${fmtNumber(Math.round(v))}${NBSP}m³`);
 

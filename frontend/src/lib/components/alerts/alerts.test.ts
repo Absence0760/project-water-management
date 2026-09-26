@@ -43,6 +43,23 @@ describe('the preferences page’s words', () => {
 		expect(['immediate', 'daily_digest', 'off'].map((m) => modeLabel(m as 'off'))).toEqual(['Right away', 'Once a day (06:00)', 'Off']);
 	});
 
+	it('names every kind of alert, and each in an unsubscribe sentence', () => {
+		const kinds = ['dam_below', 'ewr_forecast_fail', 'data_stale', 'restriction_published', 'job_dead', 'feed_failing'] as const;
+		expect(kinds.map((kind) => choiceLabel({ kind, nodeName: null }))).toEqual([
+			'Dam running low',
+			'River flow at risk in the forecast',
+			'Data feed behind',
+			'Restriction notices from the WUA',
+			'Failed background jobs',
+			'Failing data feeds'
+		]);
+		expect(kinds.map((kind) => unsubscribedText({ kind, project: { name: 'R' }, farm: null }))).toEqual(
+			['dam level', 'river flow forecast', 'missing data', 'restriction notice', 'failed background job', 'failing data feed'].map(
+				(k) => `You won’t get ${k} emails for R any more.`
+			)
+		);
+	});
+
 	it('says what the unsubscribe turned off', () => {
 		expect(unsubscribedText({ kind: 'dam_below', project: { name: 'Rietvlei' }, farm: 'Farm One' })).toBe('You won’t get dam level emails for Rietvlei any more.');
 		expect(unsubscribedText({ kind: 'all', project: { name: 'Rietvlei' }, farm: null })).toBe('You won’t get any alert emails for Rietvlei any more.');

@@ -151,7 +151,7 @@ doesn't localise messages: codes keep every word a farmer reads in the
 frontend catalogue and on the translation sheet, and the API in one
 language. A code is a contract: add new ones, never rename one
 (`ERROR_CODES` in `backend/src/http/errors.ts`; a frontend test fails when a
-code has no `error.<code>` message). A guard (`backend/src/http/errorCodes.test.ts`)
+code has no message in `apiError.ts` `CODES`). A guard (`backend/src/http/errorCodes.test.ts`)
 fails on any uncoded `ApiError` in the routes the translated pages call,
 unless it is listed there with why its status says enough.
 

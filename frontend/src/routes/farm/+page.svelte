@@ -1,3 +1,4 @@
+<!-- i18n-section: farm -->
 <script lang="ts">
 	// "Your farms" (docs/design/farmer-view.md §6.5 board 9): every farm linked
 	// to this user, across projects, with its notice level, received % and dam
@@ -85,18 +86,18 @@
 	onMount(load);
 </script>
 
-<svelte:head><title>{t('farm.pageTitle', { page: t('farm.yourFarms') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My farm', { page: t('Your farms') })}</title></svelte:head>
 
-<FarmShell title={t('farm.myFarms')} busy={rows == null && !failed}>
+<FarmShell title={t('My farms')} busy={rows == null && !failed}>
 	{#if failed}
 		<FarmStatus kind="error" offline={failed.offline} attempts={failed.attempts} retry={load} />
 	{:else if rows == null}
 		<FarmSkeleton />
 	{:else}
-		<h1>{t('farm.yourFarms')}</h1>
+		<h1>{t('Your farms')}</h1>
 		{#if rows.length === 0}
-			<p>{t('farm.list.none')}</p>
-			{#if hasOther}<a class="link" href="{base}/">{t('farm.list.projects')}</a>{/if}
+			<p>{t('No farm is linked to your account yet. Your WUA links your farm to your account.')}</p>
+			{#if hasOther}<a class="link" href="{base}/">{t('Your projects')}</a>{/if}
 		{:else}
 			<ul class="farms">
 				{#each rows as r (r.projectId + '/' + r.nodeId)}
@@ -107,7 +108,7 @@
 								{#if r.publication}<span class="level {r.publication.restriction.level}">{levelWord(r.publication.restriction.level)}</span>{/if}
 							</span>
 							<span class="sub">{r.projectName}</span>
-							<span>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : '') : t('farm.list.notPublished')}</span>
+							<span>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : '') : t('Not published yet')}</span>
 						</a>
 					</li>
 				{/each}

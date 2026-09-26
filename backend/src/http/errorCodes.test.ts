@@ -3,8 +3,8 @@
 // The translated pages (sign-in, account, alert, farm and /share) word an
 // error from its code; an uncoded one gets only a generic line for its
 // status. So a new `new ApiError(…)` in these files fails here until it gets
-// `ApiError.coded(…)` (and an `error.<code>` message in the frontend
-// catalogue, frontend/src/lib/i18n/apiError.test.ts) or a deliberate entry.
+// `ApiError.coded(…)` (and its words in the frontend's `CODES`,
+// frontend/src/lib/i18n/apiError.ts) or a deliberate entry.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 

@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.page -->
 <script lang="ts">
 	// The phone-first farmer view (WP-2.6, docs/design/farmer-view.md §6.1):
 	// one farm's page, from the current publication. ?node= picks the farm when
@@ -38,14 +39,14 @@
 	const href = (sub: string) => farmHref(base, projectId, farm.nodeId, several || !!asked, sub);
 </script>
 
-<svelte:head><title>{t('farm.pageTitle', { page: farm.farmName ?? t('farm.myFarm') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My farm', { page: farm.farmName ?? t('My farm') })}</title></svelte:head>
 
 <FarmPage {farm} {projectId} {asked}>
 	{#snippet children(view)}
 		{@const notice = noticeCard(view)}
 		{@const dam = damCard(view.farm, unit)}
 		{#if several && farm.index}
-			<nav class="switch" aria-label={t('farm.page.switch')}>
+			<nav class="switch" aria-label={t('Your farms in this catchment')}>
 				{#each farm.index.farms as f (f.nodeId)}
 					<a href={farmHref(base, projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
 				{/each}
@@ -61,16 +62,16 @@
 		{#if farm.offline}
 			<!-- No signal: the reduced view over the saved copy (board 8). -->
 			<section class="card" aria-labelledby="o-notice">
-				<h2 id="o-notice">{t('farm.page.offlineNotice', { level: levelWord(view.publication.restriction.level) })}</h2>
+				<h2 id="o-notice">{t('WUA notice · {level}', { level: levelWord(view.publication.restriction.level) })}</h2>
 				{#if notice?.title}<p lang={notice.lang && notice.lang !== wordsLang() ? notice.lang : undefined}>{notice.title}</p>{/if}
 			</section>
 			<section class="card" aria-labelledby="o-glance">
-				<h2 id="o-glance">{t('farm.page.glance')}</h2>
+				<h2 id="o-glance">{t('At a glance')}</h2>
 				<div class="glance">
 					{#if view.farm.season.fraction != null}
-						<div><p class="num-big">{supplyCard(view.farm, unit).pct}</p><p class="sub">{t('farm.page.glanceSupply')}</p></div>
+						<div><p class="num-big">{supplyCard(view.farm, unit).pct}</p><p class="sub">{t('of the water you needed this season')}</p></div>
 					{/if}
-					{#if dam}<div><p class="num-big">{dam.pct}</p><p class="sub">{t('farm.page.glanceDam')}</p></div>{/if}
+					{#if dam}<div><p class="num-big">{dam.pct}</p><p class="sub">{t('dam full')}</p></div>{/if}
 				</div>
 			</section>
 			<p class="sub">{stateText('needsConnection')}</p>
@@ -88,9 +89,9 @@
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
 			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />
-			<nav class="more" aria-label={t('farm.page.more')}>
-				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download>{t('farm.page.download')}</a>
-				<a href="{base}/farm/words">{t('farm.words')}</a>
+			<nav class="more" aria-label={t('More')}>
+				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download>{t('Download my figures (CSV)')}</a>
+				<a href="{base}/farm/words">{t('What do these words mean?')}</a>
 			</nav>
 			<p class="fine">{disclaimer()}</p>
 		{/if}

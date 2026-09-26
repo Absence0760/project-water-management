@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.dam -->
 <script lang="ts">
 	// "Your dam" (design §3 Q3): how full, the stop mark, the 30-day change and
 	// the days-left line, or the no-stop-level wording. Not rendered for a farm
@@ -10,8 +11,8 @@
 </script>
 
 <section class="card" aria-labelledby="dam-h">
-	<h2 id="dam-h">{t('farm.dam.title')}</h2>
-	<p class="big"><span>{vm.pct}</span><span class="sub">{t('farm.dam.full')}</span></p>
+	<h2 id="dam-h">{t('Your dam')}</h2>
+	<p class="big"><span>{vm.pct}</span><span class="sub">{t('full')}</span></p>
 	<div class="gauge" class:with-stop={vm.stopPct != null} aria-hidden="true">
 		<div class="track"><span style:width="{vm.barPct}%"></span></div>
 		{#if vm.stopPct != null}
@@ -32,7 +33,7 @@
 	{#if vm.daysLeft}<p class="note"><Rich text={vm.daysLeft} /></p>{/if}
 	{#if vm.noStop}<p class="note">{vm.noStop}</p>{/if}
 	<p class="fine">{damModelled()}</p>
-	<a class="link" {href}>{t('farm.dam.details')}<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5 L16 12 L9 19" /></svg></a>
+	<a class="link" {href}>{t('Dam details')}<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 5 L16 12 L9 19" /></svg></a>
 </section>
 
 <style>

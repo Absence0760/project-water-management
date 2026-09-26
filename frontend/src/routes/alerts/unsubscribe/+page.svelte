@@ -1,3 +1,4 @@
+<!-- i18n-section: unsubscribe -->
 <script lang="ts">
 	// The page an alert email's "Stop these emails" link opens (WP-2.13,
 	// docs/ui.md § Alerts). Works signed in or out: the token in the URL's
@@ -48,29 +49,29 @@
 </script>
 
 <svelte:head>
-	<title>{t('common.pageTitle', { page: t('unsubscribe.title') })}</title>
+	<title>{t('{page} · Water Management', { page: t('Stop alert emails') })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title={t('unsubscribe.title')}>
+<AuthCard title={t('Stop alert emails')}>
 	<div data-ready={status === 'loading' ? undefined : 'true'} data-state={status}>
 		{#if status === 'ask' || status === 'working'}
-			<p>{t('unsubscribe.ask')}</p>
+			<p>{t('Stop getting these alert emails? You can turn them back on from your account at any time.')}</p>
 			{#if failure}<div class="alert alert-error" role="alert">{failure}</div>{/if}
 			<button type="button" class="btn btn-primary" onclick={confirm} disabled={status === 'working'}>
-				{status === 'working' ? t('unsubscribe.working') : t('unsubscribe.confirm')}
+				{status === 'working' ? t('One moment…') : t('Stop these emails')}
 			</button>
 		{:else if status === 'done' && done}
 			<div class="alert alert-info" role="status">{unsubscribedText(done)}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('unsubscribe.manage')}</a>
+			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
 		{:else if status === 'dead'}
-			<div class="alert alert-error" role="alert">{t('unsubscribe.dead')}</div>
-			<a class="btn btn-primary" href="{base}/account/alerts">{t('unsubscribe.manage')}</a>
+			<div class="alert alert-error" role="alert">{t('This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment.')}</div>
+			<a class="btn btn-primary" href="{base}/account/alerts">{t('Manage alerts')}</a>
 		{:else if status === 'incomplete'}
-			<div class="alert alert-error" role="alert">{t('unsubscribe.noToken')}</div>
+			<div class="alert alert-error" role="alert">{t('This link is incomplete. Open it again from the email, or copy the whole link.')}</div>
 		{/if}
 	</div>
 	{#snippet footer()}
-		<a href="{base}/account/alerts">{t('unsubscribe.manage')}</a>
+		<a href="{base}/account/alerts">{t('Manage alerts')}</a>
 	{/snippet}
 </AuthCard>

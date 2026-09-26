@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { buildSheet, catalogueGroups, cell, helpGroup, helpHash, placeholders, renderSheet, sectionOf, SHEET } from './i18n_sheet.mjs';
+import { buildAll, catalogueGroups, cell, helpGroup, helpHash, IDS, placeholders, renderIds, renderSheet, report, sectionOf, SHEET, siteGroups, staleSite } from './i18n_sheet.mjs';
+import { messageId, pluralId } from './i18n_extract.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -57,6 +58,56 @@ test('the sheet renders a table row per string and counts them', () => {
 	assert.match(md, /^\| `k` \| E \\\| F \|  \|  \|$/m);
 });
 
-test(`the committed ${SHEET} is current (pnpm gen:i18n:sheet)`, async () => {
-	assert.equal(readFileSync(path.join(ROOT, SHEET), 'utf8'), await buildSheet());
+const site = (list) => new Map(list.map((m) => [m.id, m]));
+const text = (english, section, context) => ({ id: messageId(english, context), kind: 'text', english, context, section });
+const days = { id: pluralId({ one: 'day', other: 'days' }), kind: 'plural', forms: { one: 'day', other: 'days' }, section: 'b' };
+
+test('site messages are listed by id in section order, a counted word a row per form, with context, notes and placeholders', () => {
+	const messages = site([text('B first', 'b'), text('Hello {name}', 'a'), text('Create account', 'a', 'page title'), days]);
+	const groups = siteGroups({ messages, af: {}, sections: { a: 'Section A', b: 'Section B', c: 'Unused' }, notes: { 'Hello {name}': 'A greeting.', days: 'A count.' } });
+	assert.deepEqual(
+		groups.map((g) => [g.section, g.rows.map((r) => [r.key, r.english, r.context])]),
+		[
+			[
+				'a',
+				[
+					[messageId('Hello {name}'), 'Hello {name}', 'A greeting. Keep: {name}'],
+					[messageId('Create account', 'page title'), 'Create account', 'Meaning: page title. The same English elsewhere has its own row.']
+				]
+			],
+			[
+				'b',
+				[
+					[messageId('B first'), 'B first', ''],
+					[`${days.id}.one`, 'day', 'A count.'],
+					[`${days.id}.other`, 'days', '']
+				]
+			]
+		]
+	);
+});
+
+test('a translated site message leaves the sheet; a translation whose id no message has is stale and fails the check', () => {
+	const messages = site([text('Kept', 'a'), text('Edited English', 'a'), days]);
+	const af = { [messageId('Kept')]: 'x', [messageId('Old English')]: 'y', [days.id]: { one: 'x', other: 'y' } };
+	const groups = siteGroups({ messages, af, sections: { a: 'A', b: 'B' } });
+	assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => r.english)), ['Edited English']);
+	const stale = staleSite(messages, af);
+	assert.deepEqual(stale, [messageId('Old English')]);
+	const r = report({ site: groups, mail: [], help: [], helpAf: {}, staleSiteIds: stale });
+	assert.deepEqual(r.stale, stale);
+	assert.match(r.text, /Stale site translations/);
+});
+
+test('the id list is sorted and counted', () => {
+	const ids = renderIds(site([text('b', 'a'), text('a', 'a')]));
+	assert.match(ids, /^export const MESSAGE_COUNT = 2;$/m);
+	assert.ok(ids.indexOf(`'${messageId('a')}'`) < ids.indexOf(`'${messageId('b')}'`) === messageId('a') < messageId('b'));
+});
+
+test(`the committed ${SHEET} and ${IDS} are current (pnpm gen:i18n:sheet)`, async () => {
+	const { sheet, ids, src } = await buildAll();
+	assert.deepEqual(src.problems, []);
+	assert.equal(readFileSync(path.join(ROOT, SHEET), 'utf8'), sheet);
+	assert.equal(readFileSync(path.join(ROOT, IDS), 'utf8'), ids);
 });

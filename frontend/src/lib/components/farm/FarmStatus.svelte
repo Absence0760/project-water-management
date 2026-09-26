@@ -1,3 +1,4 @@
+<!-- i18n-section: farm -->
 <script lang="ts">
 	// The farm pages' non-figure states (design §6.5, boards 6 and 7): no
 	// publication yet, access removed, and the error with Try again (the
@@ -27,16 +28,16 @@
 	<div class="error" role="alert">
 		<h1>{stateText('errorTitle')}</h1>
 		<p>{stateText('errorText')}</p>
-		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('common.tryAgain')}</button>{/if}
+		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('Try again')}</button>{/if}
 		{#if attempts > 1}<p>{stillFailing(offline)}</p>{/if}
 	</div>
 {:else if kind === 'removed'}
-	<h1>{farmName ?? t('farm.yourFarm')}</h1>
+	<h1>{farmName ?? t('Your farm')}</h1>
 	<p role="alert">{stateText('removed')}</p>
-	<a class="link" href="{base}/farm">{t('farm.yourFarms')}</a>
+	<a class="link" href="{base}/farm">{t('Your farms')}</a>
 {:else}
 	<div>
-		<h1>{farmName ?? t('farm.yourFarm')}</h1>
+		<h1>{farmName ?? t('Your farm')}</h1>
 		{#if projectName}<p class="sub">{projectName}</p>{/if}
 	</div>
 	<section class="card empty" aria-labelledby="empty-h">
