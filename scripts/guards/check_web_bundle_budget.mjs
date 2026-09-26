@@ -752,6 +752,16 @@
 //             total, +0.1 on /farm, /share and sign-in) and `.stat dd.sub`
 //             (−0.07). Measurement + 5 would be 896, over the current
 //             ceiling, so it stays; headroom ~4 KB.
+// 2026-09-26  total 895 → 907 KB (measured 902, from 889 on main @
+//             1a8d058). Issue #53 R4's outcome matrix: the Runs tab's panel
+//             (outcomes/OutcomeMatrixPanel.svelte with its view model, 5.5
+//             KB), the engine's year classes and outcome matrix (0.9 + 2.0
+//             KB, first shipped now: nothing on the page side read them
+//             before), Settings → Outcome matrix (2.0 KB) and the sweeps API
+//             client. All three are lazy chunks: the panel loads when a run
+//             is shown, the section when Settings is; inline, the section
+//             took the Settings chunk over its 42 KB ceiling (it is 41.5 KB
+//             with the lazy hook). No new dependency. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -762,7 +772,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 895,
+	totalCodeKb: 907,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

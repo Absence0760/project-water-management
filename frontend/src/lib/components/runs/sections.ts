@@ -34,6 +34,8 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-ewr-grid', label: 'EWR by month' },
 				// The 5–95 % range on the EWR and Reserve findings (issue #4 phase 9): every run, beside the findings it qualifies.
 				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
+				// The run's inputs at a few demand levels by class of water year (issue #53 R4): every run; a scenario or forecast run says it can't.
+				{ id: 'res-outcomes', label: 'Outcome matrix' },
 				// Where the water went per water year (engine ≥ 0.32.0, WP-3.4); older runs say it wasn't computed.
 				{ id: 'res-water-account', label: 'Water account' }
 			]
