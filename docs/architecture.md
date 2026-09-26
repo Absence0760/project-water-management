@@ -121,10 +121,34 @@ that needs them.
 
 - `lib/components/common/lazy.ts` memoises each loader, so a hover prefetch,
   the render and a later remount share one request, and a remount renders at
-  once. A failed import is forgotten so "Try again" refetches.
+  once. A failed import isn't kept, so a later call runs the loader again,
+  but that almost never helps (below).
 - `lib/components/common/Lazy.svelte` renders the standard `LoadState` while
-  the chunk loads (or an error with "Try again"), then the component through a
-  typed snippet, so the tab's props are still type-checked.
+  the chunk loads, then the component through a typed snippet, so the tab's
+  props are still type-checked. A failed download renders `ChunkFailed`.
+- **A chunk that fails to download offers a reload, never "Try again"**
+  (`common/ChunkFailed.svelte`, the chosen behaviour since 2026-09-26). A
+  browser records a module script that failed to fetch in the page's module
+  map and fails every later `import()` of that URL at once, for the life of
+  the page (checked in Chromium), so re-running the import can't recover. A
+  cache-busting retry can't either: the URL is the hashed file name Vite
+  compiled into the loader, the chunk's own imports keep theirs, and after a
+  deploy the old files are gone. Only a reload, which fetches the current
+  `index.html` and its chunk names, gets a working copy. The message says
+  what failed and offers **Reload page**; nothing reloads by itself, so a
+  chunk that is really gone can't cause a reload loop. With unsaved changes
+  the message says so ("save them first, or the browser will ask before the
+  reload discards them"): the reload is a plain `location.reload()`, which
+  meets the page's existing `beforeunload` guard, so nothing is dropped
+  without the browser's prompt. A page reports unsaved changes to it with
+  `provideUnsaved()` (`common/chunkFailed.ts`, a Svelte context; nested
+  providers combine): the workspace page gives its model editor's `dirty`,
+  a scenario's override editor its own. Users: `Lazy`, the project list's
+  import dialog, the workbook reader in that dialog, Overview's alert email
+  settings, the printable report's human-impact tables (it waits for them
+  before it is ready), and the root layout's language catalogue.
+  `e2e/tests/lazy-chunk.spec.ts` blocks each chunk and pins the message, the
+  prompt with unsaved edits, and the recovery by reload.
 - The open tab's chunk starts downloading alongside the project data, and a
   tab link warms its chunk on hover or focus, so switching tabs rarely shows
   the loading state.
@@ -135,8 +159,8 @@ workbook review and the engine's series provenance and kinds code they use:
 18 KB gzip) the same way, without `Lazy`: hovering or focusing either import
 button warms the chunk, and a press opens the dialog as soon as it is there,
 with no loading state (the button keeps focus, so Escape returns to it). If
-the download fails the page says so and offers a reload, because a browser
-keeps a module that failed to fetch for the life of the page. Home's first
+the download fails the page says so and offers a reload (`ChunkFailed`,
+above). Home's first
 load fell 81.5 → 65.5 KB gzip (2026-09-26); the total rose 2 KB (889.4 →
 891.5), the cost of the extra chunks. `components/import/homeSplit.test.ts`
 fails if the page, or anything it imports statically, reaches the import

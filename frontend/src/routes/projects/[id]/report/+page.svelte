@@ -16,6 +16,7 @@
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
@@ -55,7 +56,7 @@
 	let sources = $state.raw<ObservedSources>({});
 	// The run's sign-offs and the statement a signer confirms (WP-3.13); part of what "ready" waits for.
 	let signoffs = $state.raw<SignoffList | null>(null);
-	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error'>('loading');
+	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error' | 'chunk-failed'>('loading');
 	let error = $state('');
 	let hydroDrawn = $state(false);
 	let ewrDrawn = $state(false);
@@ -100,7 +101,13 @@
 			]);
 			signoffs = so;
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
-			await loadOnce(loadHumanImpacts);
+			// If it fails to download, only a reload can fetch it (lazy.ts), so it gets its own message, not "Try again".
+			try {
+				await loadOnce(loadHumanImpacts);
+			} catch {
+				status = 'chunk-failed';
+				return;
+			}
 			flows = Object.fromEntries(pairs) as CatchmentFlows;
 			sources = observedSources(detail.series);
 			run = detail.run;
@@ -187,6 +194,8 @@
 			The report could not be loaded: {error}
 			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam)}>Try again</button>
 		</div>
+	{:else if status === 'chunk-failed'}
+		<ChunkFailed what="The report" />
 	{:else if status === 'no-runs' || status === 'no-run'}
 		<div class="alert alert-info" role="status">
 			{status === 'no-runs' ? 'This project has no runs yet, so there is nothing to report.' : 'This run doesn’t exist any more.'}
