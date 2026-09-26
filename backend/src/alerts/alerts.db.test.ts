@@ -12,7 +12,7 @@ import { hashToken } from '../auth/tokens.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { outbox, type Mail } from '../mail/transport.js';
-import { sendAlerts } from './send.js';
+import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, sendAlerts } from './send.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -428,12 +428,73 @@ describe('the daily cap and the digest', () => {
 		const digest = mails.at(-1)!;
 		expect(digest.subject).toBe('Your alerts for Alerts — Water Management');
 		expect(digest.text.match(/Dam low on Farm One/g)).toHaveLength(2);
+		// Positive control for the line limit below: a small digest writes every line, and no "more".
+		expect(digest.text).not.toContain('more alerts');
 		expect(digest.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
 		expect(await asOwner(`SELECT DISTINCT status, via FROM alert_delivery WHERE user_id = $1 AND via = 'digest'`, [lone.id])).toEqual([{ status: 'sent', via: 'digest' }]);
 		// The digest's one-click mutes the whole project for them.
 		const t = tokenIn(digest);
 		expect((await anon('POST', '/alerts/unsubscribe', { token: t })).body.kind).toBe('all');
 		expect((await rowsAs<{ mode: string | null }>(lone, 'SELECT app_alert_my_mode($1, $2, NULL) AS mode', [projectId, 'data_stale']))[0]!.mode).toBeNull();
+		await reset();
+	});
+});
+
+describe('the digest’s size limit', () => {
+	/** `n` cleared dam events for one editor, each a digest line queued an hour apart (newest last), as the schema owner. */
+	async function queueDigest(n: number) {
+		const u = await signUp('Adigest');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role: 'editor' })).status).toBe(201);
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, node_id, threshold) VALUES ($1, 'dam_below', $2, 0.5) RETURNING id`, [projectId, one.id]);
+		await asOwner(
+			`WITH e AS (
+				INSERT INTO alert_event (rule_id, project_id, state, value, detail)
+				SELECT $1, $2, 'cleared', 0.2, jsonb_build_object('source', 'latest', 'pct', 0.2, 'date', '2023-02-01', 'i', i) FROM generate_series(1, $4::int) i
+				RETURNING id, (detail->>'i')::int AS i
+			)
+			INSERT INTO alert_delivery (event_id, user_id, project_id, mode, status, created_at)
+			SELECT e.id, $3, $2, 'daily_digest', 'digest', now() - make_interval(hours => $4::int - e.i + 1) FROM e`,
+			[rule.id, projectId, u.id, n]
+		);
+		return u;
+	}
+	const statuses = (u: { id: string }) =>
+		asOwner(`SELECT status, reason, count(*)::int AS n FROM alert_delivery WHERE user_id = $1 GROUP BY status, reason ORDER BY status, reason`, [u.id]);
+	const tomorrow = () => new Date(Date.now() + 24 * 3600_000);
+
+	it('writes at most 20 lines and “…and 80 more” for 100 queued, marks all 100 sent, and sends nothing for them again', async () => {
+		await reset();
+		const u = await queueDigest(100);
+		await sendAlerts({ now: tomorrow() });
+		const mails = mailsTo(u);
+		expect(mails).toHaveLength(1);
+		expect(mails[0]!.text.match(/Dam low on Farm One:/g)).toHaveLength(DIGEST_MAX_LINES);
+		expect(mails[0]!.text).toContain('…and 80 more alerts. Open the catchment to see them all.');
+		expect(await statuses(u)).toEqual([{ status: 'sent', reason: null, n: 100 }]);
+		await sendAlerts({ now: tomorrow() });
+		expect(mailsTo(u)).toHaveLength(1);
+		await reset();
+	});
+
+	it('claims at most 200 lines a person; older ones are skipped as over the limit, never sent later', async () => {
+		await reset();
+		const u = await queueDigest(230);
+		await sendAlerts({ now: tomorrow() });
+		const mails = mailsTo(u);
+		expect(mails).toHaveLength(1);
+		expect(mails[0]!.text).toContain(`…and ${DIGEST_CLAIM_LINES - DIGEST_MAX_LINES} more alerts.`);
+		expect(await statuses(u)).toEqual([
+			{ status: 'sent', reason: null, n: DIGEST_CLAIM_LINES },
+			{ status: 'skipped', reason: 'over the digest limit', n: 30 }
+		]);
+		// The newest were kept: every skipped line is older than every sent one.
+		const [{ ok }] = await asOwner(
+			`SELECT max(created_at) FILTER (WHERE status = 'skipped') < min(created_at) FILTER (WHERE status = 'sent') AS ok FROM alert_delivery WHERE user_id = $1`,
+			[u.id]
+		);
+		expect(ok).toBe(true);
+		await sendAlerts({ now: tomorrow() });
+		expect(mailsTo(u)).toHaveLength(1);
 		await reset();
 	});
 });

@@ -60,6 +60,7 @@ export const en = {
 	'mail.alert.digest.subject': 'Your alerts for {project} — {product}',
 	'mail.alert.digest.heading': 'Your alerts for {project}',
 	'mail.alert.digest.intro': 'Since the last summary:',
+	'mail.alert.digest.more': '…and {more} more alerts. Open the catchment to see them all.',
 	'mail.alert.digest.why': 'You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day.',
 	'mail.alert.digest.unsubscribe': 'Stop all alert emails for this catchment',
 

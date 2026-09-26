@@ -46,6 +46,15 @@ export interface SendResult {
 
 const LEASE = '10 minutes';
 
+/**
+ * A digest email lists at most this many alerts per catchment, newest first,
+ * then "and N more" with a link to the app. The lines past it are counted,
+ * marked sent (in the digest), and never sent again.
+ */
+export const DIGEST_MAX_LINES = 20;
+/** Lines claimed per person for one digest (app_alert_claim_digest); older ones are skipped as over the limit. */
+export const DIGEST_CLAIM_LINES = 200;
+
 /** At most this many immediate mails per person per digest day (ALERTS_DAILY_CAP, default 5). */
 export function dailyCap(): number {
 	const n = Number(process.env.ALERTS_DAILY_CAP);
@@ -209,7 +218,13 @@ async function deliver(c: Claimed, secret: string, r: SendResult): Promise<void>
 	r.sent++;
 }
 
-/** One person's digest lines of one project: one email, each line checked as for an immediate mail. */
+/**
+ * One person's digest lines of one project (newest first): one email. The
+ * first DIGEST_MAX_LINES the person may still read are written out, each
+ * checked as for an immediate mail; the rest are counted ("and N more"),
+ * after one check of the person's choice per kind and one RLS read of the
+ * events, and marked sent with the email.
+ */
 async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): Promise<void> {
 	const first = lines[0]!;
 	type Ready = { mail: Mail; used: Claimed[]; skipped: { c: Claimed; why: string }[] } | { skip: string };
@@ -221,7 +236,9 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 			const items: AlertFacts[] = [];
 			const used: Claimed[] = [];
 			const skipped: { c: Claimed; why: string }[] = [];
-			for (const c of lines) {
+			let i = 0;
+			for (; i < lines.length && items.length < DIGEST_MAX_LINES; i++) {
+				const c = lines[i]!;
 				const f = await facts(db, c);
 				if (typeof f === 'string') skipped.push({ c, why: f });
 				else {
@@ -229,9 +246,19 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 					used.push(c);
 				}
 			}
+			const rest = await countable(db, lines.slice(i));
+			used.push(...rest.counted);
+			skipped.push(...rest.skipped);
 			if (!items.length) return { skip: skipped[0]?.why ?? 'nothing to send' };
 			const token = await subscriptionToken(db, first.project_id, 'all', null, 'immediate', secret);
-			const mail = digestMail(ctx.recipient, ctx.project, items, { pageUrl: unsubscribePageUrl(token), oneClickUrl: oneClickUrl(token) }, dailyCap());
+			const mail = digestMail(
+				ctx.recipient,
+				ctx.project,
+				items,
+				{ pageUrl: unsubscribePageUrl(token), oneClickUrl: oneClickUrl(token) },
+				dailyCap(),
+				rest.counted.length
+			);
 			return { mail, used, skipped };
 		});
 	} catch (err) {
@@ -260,6 +287,32 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 	r.digests++;
 }
 
+/**
+ * The digest lines past DIGEST_MAX_LINES, as the recipient: the ones they may
+ * still read and still get (counted in "and N more"), and the rest (skipped
+ * with why). One choice check per kind and farm, one RLS read for them all.
+ */
+async function countable(db: Db, lines: Claimed[]): Promise<{ counted: Claimed[]; skipped: { c: Claimed; why: string }[] }> {
+	if (!lines.length) return { counted: [], skipped: [] };
+	const { rows: visible } = await db.query<{ id: string }>('SELECT id FROM alert_event WHERE id = ANY($1::uuid[])', [lines.map((c) => c.event_id)]);
+	const seen = new Set(visible.map((v) => v.id));
+	const modes = new Map<string, AlertMode | null>();
+	const counted: Claimed[] = [];
+	const skipped: { c: Claimed; why: string }[] = [];
+	for (const c of lines) {
+		const key = `${c.kind}/${c.node_id ?? ''}`;
+		if (!modes.has(key)) {
+			const { rows } = await db.query<{ mode: AlertMode | null }>('SELECT app_alert_my_mode($1, $2, $3) AS mode', [c.project_id, c.kind, c.node_id]);
+			modes.set(key, rows[0]?.mode ?? null);
+		}
+		const mode = modes.get(key);
+		if (!mode || mode === 'off') skipped.push({ c, why: mode ? 'turned this alert off' : 'no longer gets this alert' });
+		else if (!seen.has(c.event_id)) skipped.push({ c, why: 'cannot see this alert' });
+		else counted.push(c);
+	}
+	return { counted, skipped };
+}
+
 /** Send what is due (see the header). Every transport's tick ends here. */
 export async function sendAlerts({ now = new Date(), limit = 100 }: { now?: Date; limit?: number } = {}): Promise<SendResult> {
 	const r: SendResult = { sent: 0, skipped: 0, failed: 0, digests: 0 };
@@ -284,7 +337,7 @@ export async function sendAlerts({ now = new Date(), limit = 100 }: { now?: Date
 	for (const c of due) await deliver(c, secret, r);
 
 	const { rows: digest } = await withoutUser((db) =>
-		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim_digest($1, $2, $3::interval)`, [start, limit, LEASE])
+		db.query<Claimed>(`SELECT event_id, user_id, project_id, kind, node_id FROM app_alert_claim_digest($1, $2, $3, $4::interval)`, [start, limit, DIGEST_CLAIM_LINES, LEASE])
 	);
 	const groups = new Map<string, Claimed[]>();
 	for (const c of digest) {

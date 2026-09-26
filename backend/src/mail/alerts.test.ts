@@ -94,6 +94,13 @@ describe('digestMail', () => {
 		expect(m.text).toContain('or had more than 5 alert emails in a day');
 		expect(m.text).toContain('Stop all alert emails for this catchment: http://localhost:7777/alerts/unsubscribe#t=TOKEN');
 		expect(m.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+		expect(m.text).not.toContain('more alerts');
+	});
+
+	it('ends a digest cut at its line limit with how many more, pointing at the app', () => {
+		const m = digestMail(farmer, project, [dam], unsub, 5, 80);
+		expect(m.text).toContain('…and 80 more alerts. Open the catchment to see them all.');
+		expect(m.text).toContain('Open your farm: http://localhost:7777/farm/p1');
 	});
 });
 

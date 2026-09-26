@@ -502,37 +502,57 @@ CREATE FUNCTION app_alert_claim(p_limit integer, p_since timestamptz, p_cap inte
 	$$;
 
 -- Claim the digest lines queued before p_before (the latest 06:00 SAST) for
--- up to p_people people at once: every such line of theirs, marked sending.
-CREATE FUNCTION app_alert_claim_digest(p_before timestamptz, p_people integer, p_lease interval)
+-- up to p_people people at once, marked sending: each person's newest
+-- p_lines at most. Their older lines beyond that are marked skipped ("over
+-- the digest limit"), so a flapping rule or a day of many crossings can
+-- neither build an unbounded email nor pile up for the next digest. The
+-- email itself shows fewer still (alerts/send.ts DIGEST_MAX_LINES, then
+-- "and N more").
+CREATE FUNCTION app_alert_claim_digest(p_before timestamptz, p_people integer, p_lines integer, p_lease interval)
 	RETURNS TABLE (event_id uuid, user_id uuid, project_id uuid, kind text, node_id uuid)
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 	AS $$
 	#variable_conflict use_column
+	DECLARE
+		v_people uuid[];
 	BEGIN
 		IF NOT alert_worker_context() THEN
 			RAISE EXCEPTION 'only the worker sends alerts' USING ERRCODE = 'insufficient_privilege';
 		END IF;
-		IF p_before IS NULL OR p_people IS NULL OR p_people < 1 OR p_people > 500
+		IF p_before IS NULL OR p_people IS NULL OR p_people < 1 OR p_people > 500 OR p_lines IS NULL OR p_lines < 1 OR p_lines > 1000
 			OR p_lease IS NULL OR p_lease < interval '10 seconds' OR p_lease > interval '1 hour' THEN
-			RAISE EXCEPTION 'claim digests for 1–500 people with a lease of 10 s to 1 h' USING ERRCODE = 'invalid_parameter_value';
+			RAISE EXCEPTION 'claim digests for 1–500 people, 1–1000 lines each, with a lease of 10 s to 1 h' USING ERRCODE = 'invalid_parameter_value';
 		END IF;
-		RETURN QUERY
-		WITH people AS (
+		SELECT array_agg(x.user_id) INTO v_people FROM (
 			SELECT DISTINCT a.user_id FROM alert_delivery a
 			WHERE a.status = 'digest' AND a.created_at < p_before
 			LIMIT p_people
-		), due AS (
-			SELECT a.event_id, a.user_id FROM alert_delivery a JOIN people p ON p.user_id = a.user_id
-			WHERE a.status = 'digest' AND a.created_at < p_before
+		) x;
+		IF v_people IS NULL THEN
+			RETURN;
+		END IF;
+		-- Lines past each person's newest p_lines: handled, never sent.
+		UPDATE alert_delivery a SET status = 'skipped', via = 'digest', locked_until = NULL, reason = 'over the digest limit'
+		FROM (
+			SELECT d.event_id, d.user_id, row_number() OVER (PARTITION BY d.user_id ORDER BY d.created_at DESC, d.event_id) AS rn
+			FROM alert_delivery d
+			WHERE d.status = 'digest' AND d.created_at < p_before AND d.user_id = ANY (v_people)
+		) r
+		WHERE a.event_id = r.event_id AND a.user_id = r.user_id AND r.rn > p_lines AND a.status = 'digest';
+		RETURN QUERY
+		WITH due AS (
+			SELECT a.event_id, a.user_id FROM alert_delivery a
+			WHERE a.status = 'digest' AND a.created_at < p_before AND a.user_id = ANY (v_people)
 			FOR UPDATE OF a SKIP LOCKED
 		), claimed AS (
 			UPDATE alert_delivery a SET status = 'sending', via = 'digest', claimed_at = now(),
 				locked_until = now() + p_lease, attempts = a.attempts + 1
 			FROM due WHERE a.event_id = due.event_id AND a.user_id = due.user_id
-			RETURNING a.event_id, a.user_id
+			RETURNING a.event_id, a.user_id, a.created_at
 		)
 		SELECT c.event_id, c.user_id, e.project_id, e.kind, e.node_id
-		FROM claimed c JOIN alert_event e ON e.id = c.event_id;
+		FROM claimed c JOIN alert_event e ON e.id = c.event_id
+		ORDER BY c.user_id, c.created_at DESC, c.event_id;
 	END
 	$$;
 
@@ -721,10 +741,10 @@ CREATE FUNCTION app_alert_schedule(p_project uuid, p_gap interval, p_limit integ
 	$$;
 
 REVOKE ALL ON FUNCTION app_alert_recipients(uuid, text, uuid), app_alert_my_mode(uuid, text, uuid), app_alert_fan_out(uuid),
-	app_alert_claim(integer, timestamptz, integer, interval), app_alert_claim_digest(timestamptz, integer, interval),
+	app_alert_claim(integer, timestamptz, integer, interval), app_alert_claim_digest(timestamptz, integer, integer, interval),
 	app_alert_finish(uuid, uuid, text, text), app_alert_skip_all(text), app_purge_alerts(interval),
 	app_alert_unsubscribe(bytea), app_alert_schedule(uuid, interval, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_alert_recipients(uuid, text, uuid), app_alert_my_mode(uuid, text, uuid), app_alert_fan_out(uuid),
-	app_alert_claim(integer, timestamptz, integer, interval), app_alert_claim_digest(timestamptz, integer, interval),
+	app_alert_claim(integer, timestamptz, integer, interval), app_alert_claim_digest(timestamptz, integer, integer, interval),
 	app_alert_finish(uuid, uuid, text, text), app_alert_skip_all(text), app_purge_alerts(interval),
 	app_alert_unsubscribe(bytea), app_alert_schedule(uuid, interval, integer) TO water_app;

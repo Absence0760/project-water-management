@@ -371,7 +371,11 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   - *At most 5 immediate alert emails per person per day*
     (`ALERTS_DAILY_CAP`), the day running from 06:00 to 06:00 South African
     time; the rest wait for that person's next 06:00 digest, one email per
-    catchment. The cap is applied when a delivery is claimed, one person at
+    catchment. A digest is bounded too: at most 20 alerts written out
+    (`DIGEST_MAX_LINES`, the newest), then "…and N more" with a link to the
+    app, all marked sent with it; and at most 200 lines a person are claimed
+    for one digest (`app_alert_claim_digest`), older ones skipped as over the
+    limit, so a flapping rule can't build a huge email or a backlog. The cap is applied when a delivery is claimed, one person at
     a time under an advisory lock, so two workers can't both send the sixth.
     This bounds what any source can send a person, a hostile editor
     flapping thresholds included (their edits are in the audit log).

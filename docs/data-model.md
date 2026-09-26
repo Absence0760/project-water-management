@@ -1791,8 +1791,10 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     to send (`sending`, leased), one person at a time under an advisory lock,
     turning each past `cap` immediate mails since `since` into `digest`; a
     delivery left `sending` past its lease becomes `failed`, never re-sent.
-  - `app_alert_claim_digest(before, people, lease)`: every digest line
-    queued before `before` for up to `people` people.
+  - `app_alert_claim_digest(before, people, lines, lease)`: each person's
+    newest `lines` digest lines queued before `before`, for up to `people`
+    people; their older lines past that are marked `skipped` ("over the
+    digest limit"), so nothing piles up for the next digest.
   - `app_alert_finish(event, user, status, reason)`: `sent`, `skipped`,
     `failed`, or `retry` (back to pending or digest, failed after 3 tries).
   - `app_alert_skip_all(reason)`: the kill switch: every pending or digest

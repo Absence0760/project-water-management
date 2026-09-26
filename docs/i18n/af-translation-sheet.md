@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-515 strings: 422 on the site, 69 in emails, 24 in the glossary.
+516 strings: 422 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -831,6 +831,7 @@ Alert emails: the daily summary (06:00), listing several alerts in one email.
 | `mail.alert.digest.subject` | Your alerts for {project} — {product} | Keep: {product}, {project} |  |
 | `mail.alert.digest.heading` | Your alerts for {project} | Keep: {project} |  |
 | `mail.alert.digest.intro` | Since the last summary: |  |  |
+| `mail.alert.digest.more` | …and {more} more alerts. Open the catchment to see them all. | Keep: {more} |  |
 | `mail.alert.digest.why` | You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day. | Keep: {cap}, {project} |  |
 | `mail.alert.digest.unsubscribe` | Stop all alert emails for this catchment |  |  |
 

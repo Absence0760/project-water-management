@@ -702,7 +702,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 - At most **5 immediate alert emails per person per day**, the day running
   from 06:00 to 06:00 South African time (`ALERTS_DAILY_CAP`). The rest, and
   everything a person chose to get daily, go out in one **digest** per
-  catchment after 06:00.
+  catchment after 06:00. A digest lists at most 20 alerts (the newest), then
+  "…and N more" pointing at the app; those are marked sent with it. At most
+  200 lines a person are taken per digest; older ones are dropped as over
+  the limit, never sent later.
 - The mail is built **as its recipient**, under RLS, when it is sent: their
   access and choice are checked again then (a member removed since the
   event, or who turned the alert off, gets nothing), and it can only name

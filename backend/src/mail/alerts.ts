@@ -149,14 +149,19 @@ export function alertMail(to: Recipient, project: { id: string; name: string }, 
 	return { ...mail, headers: headers(unsubscribe) };
 }
 
-/** Several alerts of one project in one email (the 06:00 digest). */
-export function digestMail(to: Recipient, project: { id: string; name: string }, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number): Mail {
+/**
+ * Several alerts of one project in one email (the 06:00 digest). `more`: the
+ * alerts left out past the digest's line limit (alerts/send.ts
+ * DIGEST_MAX_LINES), said as "and N more" pointing at the app.
+ */
+export function digestMail(to: Recipient, project: { id: string; name: string }, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0): Mail {
 	const { tr, lang } = translator(to.locale);
 	const paragraphs = [tr.t('mail.alert.digest.intro')];
 	for (const f of items) {
 		const { what, body } = alertLines(f, tr, project.name, lang);
 		paragraphs.push(`${what}: ${body.join(' ')}`);
 	}
+	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
 	if (items.some((f) => f.kind !== 'restriction_published')) paragraphs.push(tr.t('mail.alert.model'));
 	if (items.some((f) => f.kind === 'restriction_published')) paragraphs.push(tr.t('mail.alert.restriction.wua'));
 	const mail = render(
