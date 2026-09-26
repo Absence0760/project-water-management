@@ -11,14 +11,13 @@ const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sect
 const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catchment' });
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
-const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'History'];
-const SHORT = ['Overview', 'Data', 'Runs & results'];
+const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'History'];
+const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios'];
 
-/** The strip's tab names, in order. A Scenarios tab (issue #18) is left out, so this spec holds with or without it. */
+/** The strip's tab names, in order. */
 async function tabNames(page: Page) {
 	await expect(strip(page).getByRole('link', { name: 'Overview' })).toBeVisible();
-	const names = (await strip(page).getByRole('link').allInnerTexts()).map((t) => t.replace('(has problems)', '').trim());
-	return names.filter((n) => n !== 'Scenarios');
+	return (await strip(page).getByRole('link').allInnerTexts()).map((t) => t.replace('(has problems)', '').trim());
 }
 
 test('owners and editors see every tab, and no "Show model inputs"', async ({ page, owner, signIn }) => {
@@ -70,7 +69,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Network', 'Data', 'Runs & results']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Network', 'Data', 'Runs & results', 'Scenarios']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Overview' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);

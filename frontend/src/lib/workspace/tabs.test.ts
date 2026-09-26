@@ -12,7 +12,7 @@ import {
 
 const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'farmer', null, undefined];
 // What the page rendered before the Scenarios tab existed.
-const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'history'];
+const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'history'];
 
 describe('visibleTabs', () => {
 	it('shows owners and editors every tab, in order', () => {
@@ -27,8 +27,8 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Scenarios) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'scenarios']);
-		expect(visibleTabs('viewer', {}, PAGE)).toEqual(['overview', 'series', 'runs']);
-		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(['overview', 'series', 'runs']);
+		expect(visibleTabs('viewer', {}, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
+		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
@@ -56,7 +56,7 @@ describe('visibleTabs', () => {
 	});
 
 	it('lists Scenarios for owners, editors and viewers once the page renders it', () => {
-		const withScenarios: TabId[] = [...PAGE.slice(0, 7), 'scenarios', 'history'];
+		const withScenarios = PAGE;
 		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, withScenarios)).toContain('scenarios');
 		expect(visibleTabs('farmer', {}, withScenarios)).not.toContain('scenarios');
 	});
@@ -93,6 +93,6 @@ describe('stripTabs', () => {
 	});
 
 	it('ignores an open tab the page doesn’t render', () => {
-		expect(stripTabs(short, 'scenarios', PAGE)).toEqual(short);
+		expect(stripTabs(short, 'scenarios', PAGE.filter((id) => id !== 'scenarios'))).toEqual(short);
 	});
 });
