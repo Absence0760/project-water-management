@@ -4,8 +4,8 @@
 	// saved under the server's file name; errors (e.g. 413 too large) show inline.
 	// Build `items` with the helpers in $lib/export (runDownloadItems, downloads.*).
 	// An item with `workbook` builds the run's .xlsx in a Web Worker instead
-	// ($lib/spreadsheet/export, loaded on click so SheetJS never enters a page
-	// chunk), with progress per node and Cancel.
+	// ($lib/spreadsheet/export, loaded on click so the workbook writer never
+	// enters a page chunk), with progress per node and Cancel.
 	// An entry with `preview` also gets a Preview button beside it, which
 	// closes the menu and opens the in-page table (export/DailyTableDialog).
 	// Focus moves to the Download button first, so closing the dialog returns

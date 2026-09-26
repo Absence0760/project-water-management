@@ -929,9 +929,11 @@ In short:
   - it all runs in a module worker from `'self'` (`worker-src 'self'`), and
     only the extracted project reaches the server, through the same
     validation as any `.json` import.
-- The `.xlsx` export uses SheetJS CE 0.20.3 (the in-browser importer no
-  longer does; the tests still read workbooks with it, to compare the two
-  readers cell by cell), pinned in `frontend/package.json` to its official CDN tarball with the
+- No shipped code uses SheetJS any more: the `.xlsx` export writes its own
+  OOXML (since 2026-09-26) and the in-browser importer reads with its own
+  reader. The tests still use SheetJS CE 0.20.3 (a dev dependency), to
+  compare the two readers cell by cell and the export with what SheetJS
+  wrote byte for byte, pinned in `frontend/package.json` to its official CDN tarball with the
   integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
   which has known advisories. Dependabot and `pnpm audit` don't track a URL
   dependency, so check the SheetJS release notes and bump it by hand.
@@ -1002,7 +1004,7 @@ In short:
   both (no cell in the file has a formula). Sheet names are cleaned to
   Excel's rules (none of `[ ] : * ? / \`, at most 31 characters, unique), and
   the file name is the summary CSV's server-made ASCII slug. The worker loads
-  from `'self'` only (`worker-src 'self'`), and SheetJS only writes here; it
+  from `'self'` only (`worker-src 'self'`), and it only writes (`writer.ts`); it
   never parses anything uploaded.
 
 ### Import reports

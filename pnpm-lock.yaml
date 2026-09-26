@@ -104,9 +104,6 @@ importers:
       uplot:
         specifier: 1.6.32
         version: 1.6.32
-      xlsx:
-        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
-        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: 3.0.10
@@ -132,6 +129,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@25.6.0)
+      xlsx:
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
 
   packages/engine:
     devDependencies:

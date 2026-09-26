@@ -110,7 +110,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		ewr_shortfall_incremental: 0,
 		ewr_charge: 0,
 		ewr_charge_irrigation: 0,
-		// Present in a run with senior other water users (WP-1.33) or boreholes (WP-1.34, WP-3.9); none here.
+		// Present in a run with senior other water users (WP-1.33), boreholes (WP-1.34, WP-3.9) or a farm that pumps from the river (WP-3.8); none here.
 		senior_requirement: 0,
 		passed_for_senior: 0,
 		groundwater_used: 0,

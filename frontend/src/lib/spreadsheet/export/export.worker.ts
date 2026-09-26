@@ -1,6 +1,6 @@
 // Web Worker: fetches a run and builds its .xlsx workbook off the main
-// thread (WP-1.28). It is the only code that imports SheetJS for export, so
-// the library ships in this worker's bundle and never in a page chunk. Loaded
+// thread (WP-1.28), with ./writer.ts (no spreadsheet library: issue #9), so
+// none of it is in a page chunk. Loaded
 // as a module worker from 'self' (new Worker(new URL(…), { type: 'module' })),
 // which the CSP's `worker-src 'self'` allows; no blob: workers. Cancel = the
 // page terminates the worker, in-flight fetches included.

@@ -2,28 +2,21 @@
 // summary CSV spread over its sheets, the catchment and every node's daily
 // series, the EWR grid, the calibration's annual volumes and the run's
 // inputs. Pure (no I/O): the export worker fetches, this builds, and the unit
-// tests read the result back with the same library.
+// tests read the result back with SheetJS.
 //
-// SheetJS (`xlsx`, CDN tarball, decision D8) writes everything, but a
-// client-size run's daily sheets are millions of cells, and SheetJS holds a
-// JavaScript object per cell and a copy of each sheet's XML while writing:
-// ~4 GB for a 45-year, 13-node run, past what a browser tab can have. So a
-// daily sheet goes to SheetJS as a stub (its header row and one probe row with
-// every column's number format), and its rows are then streamed into the
-// sheet XML SheetJS wrote, in exactly the markup SheetJS writes for a numeric
-// cell (`<c r="B2" s="2"><v>1.5</v></c>`). workbook.test.ts pins the
-// equivalence: a daily sheet built this way is byte-for-byte the sheet
-// SheetJS writes from the same cells. SheetJS writes the parts uncompressed
-// and ./zip.ts packs them with the platform's real deflate (SheetJS's own
-// browser deflate is fixed-Huffman: ~2.5 times the size).
+// workbookPlan() decides the sheets and their rows; ./writer.ts writes them as
+// the OOXML parts SheetJS used to write, byte for byte (issue #9: the export
+// worker no longer ships SheetJS). A client-size run's daily sheets are
+// millions of cells, so the writer streams each daily sheet's rows into bytes
+// rather than holding an object or a string per cell, and ./zip.ts packs the
+// parts with the platform's real deflate.
 import type { RunSummary } from '@water-management/engine';
-import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import type { Cell } from './csv';
 import { parseCsv } from './csv';
 import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary, type SummarySheet } from './summary';
-import { zip, type ZipEntry } from './zip';
+import { XlsxWorkbook, type XlsxCell } from './writer';
 
 /** One daily column: the daily CSV's header and the series' unit and values. */
 export interface DailyColumn {
@@ -60,23 +53,24 @@ const waterYearText = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '
 /** Excel's serial for 1970-01-01 (the 1900 date system). */
 const EPOCH_SERIAL = 25569;
 
-// ── Generic rows → a sheet ────────────────────────────────────────────────
+// ── Generic rows → cells ───────────────────────────────────────────────────
 
 /**
- * A sheet of rows: text as string cells, numbers as numeric cells with a
- * display format from the unit in their column's header, or, without one,
- * from the nearest text cell to their left in the same row ("Mean natural
+ * A sheet's cells from its rows: text as text cells, numbers as numeric cells
+ * with a display format from the unit in their column's header, or, without
+ * one, from the nearest text cell to their left in the same row ("Mean natural
  * flow (m³/day)", 123.4). A header is a row of two or more cells that are all
- * text; it applies until the next blank row or header.
+ * text; it applies until the next blank row or header. `lastCol` is the
+ * sheet range's last column (0-based).
  */
-function rowsSheet(rows: readonly Row[], widths: number[] = [44]): XLSX.WorkSheet {
-	const data: XLSX.CellObject[][] = [];
+export function rowCells(rows: readonly Row[]): { cells: (XlsxCell | undefined)[][]; lastCol: number } {
+	const cells: (XlsxCell | undefined)[][] = [];
 	let header: Row | null = null;
 	let maxC = 0;
 	for (const row of rows) {
 		if (!row.length) header = null;
 		else if (row.length >= 2 && row.every((c) => c === null || typeof c === 'string') && row.some((c) => c !== null)) header = row;
-		const out: XLSX.CellObject[] = [];
+		const out: (XlsxCell | undefined)[] = [];
 		let label: string | null = null;
 		row.forEach((c, i) => {
 			if (typeof c === 'string') {
@@ -90,12 +84,9 @@ function rowsSheet(rows: readonly Row[], widths: number[] = [44]): XLSX.WorkShee
 			}
 		});
 		maxC = Math.max(maxC, row.length);
-		data.push(out);
+		cells.push(out);
 	}
-	const ws: XLSX.DenseWorkSheet = { '!data': data } as XLSX.DenseWorkSheet;
-	ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, rows.length - 1), c: Math.max(0, maxC - 1) } });
-	ws['!cols'] = widths.map((wch) => ({ wch }));
-	return ws;
+	return { cells, lastCol: Math.max(0, maxC - 1) };
 }
 
 // ── The sheets built from the run's JSON ───────────────────────────────────
@@ -211,161 +202,56 @@ export function inputRows(settings: Record<string, unknown> | null | undefined, 
 	return rows;
 }
 
-// ── Daily sheets: a SheetJS stub, then the rows streamed into its XML ──────
+// ── Daily sheets ───────────────────────────────────────────────────────────
 
-/** Days in a table: its longest column. */
-const tableDays = (t: DailyTable) => Math.max(0, ...t.columns.map((c) => c.values.length));
-
-/**
- * The stub SheetJS writes for a daily table: the header row, and when the
- * table has days a probe row with one cell per column in that column's
- * format, so SheetJS registers the formats and names their style ids. Both
- * rows are replaced by streamDailySheet, which keeps the header row as written.
- */
-export function dailyStub(t: DailyTable): XLSX.WorkSheet {
-	const header: XLSX.CellObject[] = [{ t: 's', v: 'date' }, ...t.columns.map((c): XLSX.CellObject => ({ t: 's', v: c.header }))];
-	const data: XLSX.CellObject[][] = [header];
-	if (tableDays(t) > 0) {
-		data.push([{ t: 'n', v: 0, z: DATE_FORMAT }, ...t.columns.map((c): XLSX.CellObject => cellWithFormat(0, numberFormat(c.unit)))]);
-	}
-	const ws = { '!data': data } as XLSX.DenseWorkSheet;
-	ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 1, c: t.columns.length } });
-	ws['!cols'] = [{ wch: 11 }, ...t.columns.map(() => ({ wch: 14 }))];
-	return ws;
-}
-
-const cellWithFormat = (v: number, z: string | undefined): XLSX.CellObject => (z ? { t: 'n', v, z } : { t: 'n', v });
-
-/** The full cells of a daily table: what SheetJS would be given without the stub (tests compare the two). */
-export function dailyCells(t: DailyTable): XLSX.WorkSheet {
-	const ws = dailyStub(t) as XLSX.DenseWorkSheet;
-	const days = tableDays(t);
-	const data = ws['!data'].slice(0, 1);
-	const formats = t.columns.map((c) => numberFormat(c.unit));
-	const day0 = Date.parse(`${t.startDate}T00:00:00Z`) / 86_400_000 + EPOCH_SERIAL;
-	for (let r = 0; r < days; r++) {
-		const row: XLSX.CellObject[] = [{ t: 'n', v: day0 + r, z: DATE_FORMAT }];
-		t.columns.forEach((c, i) => {
-			const v = c.values[r];
-			if (typeof v === 'number' && Number.isFinite(v)) row[i + 1] = cellWithFormat(v, formats[i]);
-		});
-		data.push(row);
-	}
-	ws['!data'] = data;
-	ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: days, c: t.columns.length } });
-	return ws;
-}
-
-const enc = new TextEncoder();
-const dec = new TextDecoder();
-
-/**
- * Replace the stub's rows in SheetJS's sheet XML with the table's: the header
- * row as SheetJS wrote it, then one row per day. Each number is `String(v)`
- * (full precision, as SheetJS writes it); a missing day is no cell at all.
- */
-export function streamDailySheet(stubXml: string, t: DailyTable): Uint8Array {
-	const days = tableDays(t);
-	const last = XLSX.utils.encode_col(t.columns.length);
-	const open = stubXml.indexOf('<sheetData>') + '<sheetData>'.length;
-	const close = stubXml.indexOf('</sheetData>');
-	const rows = stubXml.slice(open, close);
-	const headerEnd = rows.indexOf('</row>') + '</row>'.length;
-	const probe = rows.slice(headerEnd);
-	if (open < '<sheetData>'.length || close < 0 || !probe.startsWith('<row r="2"')) throw new Error('unexpected sheet XML from the spreadsheet library');
-	// Each column's style attribute, as SheetJS chose it for the probe cell.
-	const style = Array.from({ length: t.columns.length + 1 }, (_, c) => {
-		const m = new RegExp(`<c r="${XLSX.utils.encode_col(c)}2"( s="\\d+")?`).exec(probe);
-		if (!m) throw new Error('unexpected sheet XML from the spreadsheet library');
-		return m[1] ?? '';
-	});
-	const stubRef = `A1:${last}2`;
-	const fullRef = `A1:${last}${days + 1}`;
-	const chunks: Uint8Array[] = [enc.encode(stubXml.slice(0, open).split(stubRef).join(fullRef) + rows.slice(0, headerEnd))];
-	const letters = Array.from({ length: t.columns.length }, (_, i) => XLSX.utils.encode_col(i + 1));
-	const day0 = Date.parse(`${t.startDate}T00:00:00Z`) / 86_400_000 + EPOCH_SERIAL;
-	let buf = '';
-	for (let r = 0; r < days; r++) {
-		const R = r + 2;
-		buf += `<row r="${R}"><c r="A${R}"${style[0]}><v>${day0 + r}</v></c>`;
-		for (let i = 0; i < t.columns.length; i++) {
-			const v = t.columns[i]!.values[r];
-			if (typeof v === 'number' && Number.isFinite(v)) buf += `<c r="${letters[i]}${R}"${style[i + 1]}><v>${v}</v></c>`;
-		}
-		buf += '</row>';
-		if (buf.length > 1 << 20) {
-			chunks.push(enc.encode(buf));
-			buf = '';
-		}
-	}
-	chunks.push(enc.encode(buf + stubXml.slice(close).split(stubRef).join(fullRef)));
-	const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-	let o = 0;
-	for (const c of chunks) {
-		out.set(c, o);
-		o += c.length;
-	}
-	return out;
-}
+/** A daily sheet's header row: the date, then each column's header. */
+export const dailyHeader = (t: DailyTable): string[] => ['date', ...t.columns.map((c) => c.header)];
+/** A daily sheet's column widths in characters: the date, then 14 per column. */
+export const dailyWidths = (t: DailyTable): number[] => [11, ...t.columns.map(() => 14)];
+/** The Excel date serial of a table's first day. */
+export const dailyDay0 = (t: DailyTable): number => Date.parse(`${t.startDate}T00:00:00Z`) / 86_400_000 + EPOCH_SERIAL;
 
 // ── The workbook ───────────────────────────────────────────────────────────
 
 /** Sheet order: the summary, the daily tables, then the reports and inputs. */
 const AFTER_DAILY: SummarySheet[] = ['Curtailment', 'Reserve compliance', 'Annual volumes', 'Data checks'];
 
-/** The workbook as .xlsx bytes. */
-export async function buildWorkbook(input: WorkbookInput): Promise<Uint8Array> {
+/** One sheet of the workbook: rows of cells, or a daily table. */
+export type SheetPlan = { name: string; rows: Row[]; widths: number[] } | { name: string; daily: DailyTable };
+
+/** The workbook's sheets, in order, with their final (unique, Excel-safe) names. */
+export function workbookPlan(input: WorkbookInput): SheetPlan[] {
 	const byName = splitSummary(parseCsv(input.summaryCsv));
 	const name = sheetNamer();
 	const fixed = ['Summary', 'Catchment', ...AFTER_DAILY, 'EWR grid', 'Inputs', 'Warnings'];
 	for (const f of fixed) name(f);
 
-	const wb = XLSX.utils.book_new();
-	const add = (ws: XLSX.WorkSheet, sheet: string) => XLSX.utils.book_append_sheet(wb, ws, sheet);
-	add(rowsSheet(byName.get('Summary') ?? []), 'Summary');
-
-	const daily: { index: number; table: DailyTable }[] = [];
-	const tables = [...(input.catchment ? [{ ...input.catchment, sheet: 'Catchment' }] : []), ...input.nodes.map((t) => ({ ...t, sheet: name(t.name) }))];
-	for (const t of tables) {
-		daily.push({ index: wb.SheetNames.length, table: t });
-		add(dailyStub(t), t.sheet);
-	}
-
+	const plan: SheetPlan[] = [{ name: 'Summary', rows: byName.get('Summary') ?? [], widths: [44] }];
+	if (input.catchment) plan.push({ name: 'Catchment', daily: input.catchment });
+	for (const t of input.nodes) plan.push({ name: name(t.name), daily: t });
 	for (const s of AFTER_DAILY) {
 		let rows = byName.get(s) ?? [];
 		if (s === 'Annual volumes') rows = [...rows, ...(rows.length ? [[]] : []), ...annualVolumeRows(input.summary)];
-		if (rows.length) add(rowsSheet(rows), s);
-		if (s === 'Curtailment') add(rowsSheet(ewrGridRows(input.summary), [16]), 'EWR grid');
+		if (rows.length) plan.push({ name: s, rows, widths: [44] });
+		if (s === 'Curtailment') plan.push({ name: 'EWR grid', rows: ewrGridRows(input.summary), widths: [16] });
 	}
-	add(rowsSheet(inputRows(input.settings, input.model), [36]), 'Inputs');
+	plan.push({ name: 'Inputs', rows: inputRows(input.settings, input.model), widths: [36] });
 	const warnings = byName.get('Warnings');
-	if (warnings) add(rowsSheet(warnings, [120]), 'Warnings');
-
-	const raw = XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false }) as ArrayBuffer;
-	const cfb = XLSX.CFB.read(new Uint8Array(raw), { type: 'array' });
-	for (const { index, table } of daily) {
-		if (tableDays(table) === 0) continue;
-		const file = XLSX.CFB.find(cfb, `/xl/worksheets/sheet${index + 1}.xml`) as { content: Uint8Array; size: number } | null;
-		if (!file) throw new Error('unexpected workbook layout from the spreadsheet library');
-		const content = streamDailySheet(dec.decode(file.content), table);
-		file.content = content;
-		file.size = content.length;
-	}
-	return zip(workbookParts(cfb));
+	if (warnings) plan.push({ name: 'Warnings', rows: warnings, widths: [120] });
+	return plan;
 }
 
-/**
- * The parts of SheetJS's container, in its order, as its own zip writer picks
- * them: files with content, without the container's internal marker entry.
- */
-function workbookParts(cfb: { FullPaths: string[]; FileIndex: { type: number; content?: Uint8Array | number[]; size?: number }[] }): ZipEntry[] {
-	const root = cfb.FullPaths[0]!;
-	const out: ZipEntry[] = [];
-	for (let i = 1; i < cfb.FullPaths.length; i++) {
-		const f = cfb.FileIndex[i]!;
-		const name = cfb.FullPaths[i]!.slice(root.length);
-		if (f.type !== 2 || !f.size || !f.content || !f.content.length || name === '\u0001Sh33tJ5') continue;
-		out.push({ name, data: f.content instanceof Uint8Array ? f.content : Uint8Array.from(f.content) });
+/** The workbook as .xlsx bytes. */
+export async function buildWorkbook(input: WorkbookInput): Promise<Uint8Array> {
+	const book = new XlsxWorkbook();
+	for (const sheet of workbookPlan(input)) {
+		if ('daily' in sheet) {
+			const t = sheet.daily;
+			book.addDaily(sheet.name, dailyHeader(t), DATE_FORMAT, dailyDay0(t), t.columns.map((c) => ({ format: numberFormat(c.unit), values: c.values })), dailyWidths(t));
+		} else {
+			const { cells, lastCol } = rowCells(sheet.rows);
+			book.addRows(sheet.name, cells, lastCol, sheet.widths);
+		}
 	}
-	return out;
+	return book.bytes();
 }
