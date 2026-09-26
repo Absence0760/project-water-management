@@ -317,7 +317,7 @@ test.describe('phone', () => {
 		await expectNoViolations(page);
 
 		await page.goto('/help/guides/how-the-model-works');
-		await expect(page.getByRole('img', { name: /runoff model, GR4J or legacy/ })).toBeVisible();
+		await expect(page.getByRole('img', { name: /runoff model, GR4J, which makes/ })).toBeVisible();
 		await expectNoViolations(page);
 	});
 

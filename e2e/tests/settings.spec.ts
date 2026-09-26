@@ -156,7 +156,7 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 	await expect(record.getByRole('group', { name: /^Calibration exclusions/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Fit automatically/ })).toBeVisible();
 	const flow = page.getByRole('region', { name: 'Flow calibration (rain → natural flow)' });
-	await expect(flow.getByLabel('Runoff model', { exact: true })).toBeVisible();
+	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
 	await expect(flow.getByLabel('CHIRPS bias correction', { exact: true })).toHaveCount(0);
 
 	// An exclusion with no reason blocks Save, and the save bar sends you to the calibration record.
