@@ -159,10 +159,28 @@ describe('GET /compare/runs', () => {
 				area: 'series',
 				kind: 'changed',
 				subject: 'Rainfall (catchment)',
-				text: 'Rainfall (catchment) values changed (same dates, 2020-01-01 to 2020-02-29)'
+				text: 'Rainfall (catchment) values changed on 1 of the 60 days both runs cover (2020-01-01 to 2020-02-29); their total rose 30.6% (180 → 235)'
 			}
 		]);
 		expect((await compare(u, `${projectId}:${after}`, `${projectId}:${same}`)).body.changes).toEqual([]);
+	});
+
+	it('finds rain cut on the shared days even when a day was added (the date change no longer hides it)', async () => {
+		const u = await signUp('Hider');
+		const { projectId } = await runnableProject(u);
+		const before = await run(u, projectId, 'Before');
+		const series = (await u.call('GET', `/projects/${projectId}/series`)).body.series as { id: string; kind: string }[];
+		const rain = series.find((x) => x.kind === 'rain_catchment_mm')!;
+		const values = (await u.call('GET', `/projects/${projectId}/series/${rain.id}`)).body.values as number[];
+		const cut = [...values.map((v) => v * 0.85), 0];
+		expect(
+			(await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: cut })).status
+		).toBe(200);
+		const after = await run(u, projectId, 'Cut and extended');
+
+		const texts = (await compare(u, `${projectId}:${before}`, `${projectId}:${after}`)).body.changes.map((x: { text: string }) => x.text);
+		expect(texts).toContain('Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-29)');
+		expect(texts).toContain('Rainfall (catchment) values changed on 9 of the 60 days both runs cover (2020-01-01 to 2020-02-29); their total fell 15% (180 → 153)');
 	});
 
 	it('compares runs across a copied project, matching farms by name', async () => {

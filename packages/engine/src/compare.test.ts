@@ -3,6 +3,7 @@ import {
 	compareRuns,
 	describeCalendarMonths,
 	diffInputs,
+	sharedDaysChange,
 	matchByIdThenName,
 	metricDelta,
 	type ComparableRun,
@@ -664,7 +665,9 @@ describe('diffInputs', () => {
 			'Logger flow series added (2000-01-01 to 2000-01-31)',
 			'Observed flow series removed',
 			'Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)',
-			'Rainfall (catchment) series extended back to 1999-12-31 (was 2000-01-01)'
+			'Rainfall (catchment) series extended back to 1999-12-31 (was 2000-01-01)',
+			// Snapshots without stored values: the shared days can't be checked, and it says so.
+			'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)'
 		]);
 		const c = snapshot({ series: { rain_catchment_mm: { startDate: '2000-02-01', length: 30 } } });
 		expect(texts(a, c)).toContain('Rainfall (catchment) series now ends 2000-03-01 (was 2000-12-31)');
@@ -720,7 +723,7 @@ describe('diffInputs', () => {
 		try {
 			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC']) {
 				env.TZ = zone;
-				expect(texts(a, b), zone).toEqual(['Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-28)']);
+				expect(texts(a, b), zone).toEqual(['Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-28)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
 			}
 		} finally {
 			env.TZ = tz;
@@ -735,9 +738,43 @@ describe('diffInputs', () => {
 		expect(texts(s('aa'), s('aa'))).toEqual([]);
 		// Runs stored before hashes existed: nothing to compare, nothing reported.
 		expect(texts(s(), s('bb'))).toEqual([]);
-		// Different dates: only the date change (the hash can't isolate shared days).
+		// Different dates and no stored values: the hash can't isolate the shared days, and the diff says so.
 		const longer = snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 367, valuesSha256: 'cc' } } });
-		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)']);
+		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
+	});
+
+	it('compares the days both runs cover from their stored values, so an edit cannot hide behind a date change', () => {
+		// The licensing-authority finding: rain cut 15 % and one day added read only "series extended".
+		const rain = Array.from({ length: 366 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+		const cut = [...rain.map((v) => v * 0.85), 5];
+		const snap = (length: number, valuesSha256: string) => snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length, valuesSha256 } } });
+		const both = { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: cut } };
+		expect(diffInputs(snap(366, 'aa'), snap(367, 'bb'), both).map((c) => c.text)).toEqual([
+			'Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)',
+			'Rainfall (catchment) values changed on 53 of the 366 days both runs cover (2000-01-01 to 2000-12-31); their total fell 15% (1,060 → 901)'
+		]);
+		// Only extended, the shared days untouched: just the date change (positive control).
+		const extended = { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: [...rain, 5] } };
+		expect(diffInputs(snap(366, 'aa'), snap(367, 'cc'), extended).map((c) => c.text)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)']);
+		// Same dates: the stored values give the count and the total, not just "changed".
+		expect(diffInputs(snap(366, 'aa'), snap(366, 'dd'), { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: cut.slice(0, 366) } })[0]!.text).toMatch(/changed on 53 of the 366 days/);
+		// A gap opened counts as a change but stays out of the totals, which then match: no total quoted.
+		const gap = rain.map((v, i) => (i === 7 ? null : v));
+		expect(diffInputs(snap(366, 'aa'), snap(366, 'ee'), { a: { rain_catchment_mm: rain }, b: { rain_catchment_mm: gap } })[0]!.text).toBe(
+			'Rainfall (catchment) values changed on 1 of the 366 days both runs cover (2000-01-01 to 2000-12-31)'
+		);
+	});
+
+	it('shared days: none when the ranges do not meet, and a shift is compared day by day', () => {
+		expect(sharedDaysChange({ startDate: '2000-01-01', values: [1, 2] }, { startDate: '2000-01-03', values: [1] })).toBeNull();
+		expect(sharedDaysChange({ startDate: '2000-01-01', values: [1, 2, 3] }, { startDate: '2000-01-02', values: [2, 4] })).toEqual({
+			shared: 2,
+			changed: 1,
+			first: '2000-01-02',
+			last: '2000-01-03',
+			totalA: 5,
+			totalB: 6
+		});
 	});
 
 	it('describes every WR2012 input: the reference (each field and month), scaling, dry season, thresholds and penalty', () => {

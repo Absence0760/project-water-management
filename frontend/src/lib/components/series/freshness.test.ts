@@ -18,6 +18,21 @@ describe('freshness', () => {
 	});
 
 	it('is null without series', () => expect(freshness([], '2025-01-01')).toBeNull());
+
+	it('measures recorded rain only: a forecast or a gauge reaching later does not make the data fresh', () => {
+		const later = [...list, meta('fc', 'rain_forecast_mm', 'GFS', '2025-03-25', 30), meta('g', 'flow_observed_m3s', 'Gauge 2', '2025-01-01', 110)];
+		const f = freshness(later, '2025-04-12')!;
+		expect(f.latest).toBe('2025-03-31');
+		expect(f.stale).toBe(true);
+		// The table still lists every series, newest first.
+		expect(f.perSeries.map((s) => s.id)).toEqual(['fc', 'g', 'r', 'f']);
+		// CHIRPS is recorded rain too (positive control).
+		expect(freshness([...later, meta('ch', 'rain_chirps_mm', 'CHIRPS', '2025-01-01', 100)], '2025-04-12')!.latest).toBe('2025-04-10');
+	});
+
+	it('is stale with no date when there is no recorded rain at all', () => {
+		expect(freshness([meta('fc', 'rain_forecast_mm', '', '2025-04-01', 30)], '2025-04-12')).toMatchObject({ latest: null, age: null, stale: true });
+	});
 });
 
 describe('newDataSinceRun', () => {

@@ -40,6 +40,7 @@
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
 	import { KIND_ROLES, seriesInUse } from './roles';
+	import { isRecordedRain } from './freshness';
 	import { valuesCache } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 
@@ -169,7 +170,8 @@
 		Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageStats(values[s.id]!, s.kind) : null]))
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
-	const newestDate = $derived(list.reduce((m, s) => (endDate(s) > m ? endDate(s) : m), ''));
+	// Recorded rain drives a run, so it is what "up to" means (series/freshness.ts).
+	const rainUpTo = $derived(list.filter((s) => isRecordedRain(s.kind)).reduce((m, s) => (endDate(s) > m ? endDate(s) : m), ''));
 	const newerThanRun = $derived(
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
@@ -272,7 +274,7 @@
 {#if newerThanRun.length && latestRun}
 	<div class="alert alert-info" role="status">
 		New data since the latest run: {newerThanRun.map((s) => s.name || kindLabel(s.kind)).join(', ')} now run{newerThanRun.length === 1 ? 's' : ''}
-		to {newestDate}, but “{latestRun.label || 'the latest run'}” ends {latestRun.endDate}.
+		to {newerThanRun.reduce((m, s) => (endDate(s) > m ? endDate(s) : m), '')}, but “{latestRun.label || 'the latest run'}” ends {latestRun.endDate}.
 		<a href="?tab=runs">Re-run the model</a> to include it.
 	</div>
 {/if}
@@ -281,7 +283,7 @@
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
-			<span class="muted small">Daily values · {list.length} series{newestDate ? ` · data up to ${newestDate} (${describeAge(daysBetween(newestDate, today))})` : ''}</span>
+			<span class="muted small">Daily values · {list.length} series{rainUpTo ? ` · recorded rain up to ${rainUpTo} (${describeAge(daysBetween(rainUpTo, today))})` : ''}</span>
 			<button type="button" class="btn btn-sm" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
 		{/if}
 	</div>

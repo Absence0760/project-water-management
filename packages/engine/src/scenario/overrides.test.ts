@@ -103,6 +103,19 @@ describe('applyScenario: each op', () => {
 		expect(nodeOf(r.input, 'A')!.name).toBe('Farm A');
 	});
 
+	it('refuses flow shares over 100 % (the run would refuse them) and takes ones that fit', () => {
+		const b = base();
+		b.settings = { ...b.settings, flowShareMethod: 'manual' };
+		for (const [id, v] of [['A', 0.4], ['B', 0.3], ['C', 0.3]] as const) nodeOf(b, id)!.flowShareManual = v;
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.9 }, b);
+		expect(r.problems[0]).toMatch(/flow shares sum to 150\.00%, more than 100%/);
+		expect(nodeOf(r.input, 'A')!.flowShareManual).toBe(0.4);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.2 }, b).problems).toEqual([]);
+		const hiLo = base();
+		hiLo.settings = { ...hiLo.settings, flowShareMethod: 'hiLo' };
+		expect(one({ op: 'settings.set', path: 'hiLoSplit.hi', value: 0.95 }, hiLo).problems[0]).toMatch(/sum to 114\.00%/);
+	});
+
 	it('node.set refuses a drought borehole rule on a farm without a dam', () => {
 		const b = base();
 		nodeOf(b, 'B')!.boreholeCapacityM3Day = 100;
