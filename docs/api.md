@@ -1334,7 +1334,7 @@ CORS (gateways aren't browsers), JSON bodies only.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
-| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null }`, `Cache-Control: no-store` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist, only the days sent
@@ -1350,6 +1350,15 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
+  when days this push carried look wrong by the engine's data-quality rules
+  (a negative rain or flow; a value above the outlier limit of the series
+  it lands in, once that series has 100 or more non-zero days), else
+  `null`. The days are merged all the same, `series.held` is recorded as
+  the key (with the counts, up to 5 examples and the `source` label), no
+  re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
+  waits, doing nothing, until a person runs the model
+  ([security.md § API keys](./security.md#api-keys)).
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in

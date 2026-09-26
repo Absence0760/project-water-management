@@ -287,6 +287,24 @@ and nothing else.
   deleted (`created_by` NULL), the re-run is **skipped** (no job,
   `rerunQueuedFor: null`) and the ingest still commits: never a run as
   nobody, never lost data.
+- **A push that looks wrong holds the automatic runs** (WP-2.16, the
+  "leaked or mis-configured gateway key" abuse case; `series/hold.ts`). A
+  key's days that the engine's data-quality rules flag (a negative rain or
+  flow, or a value above its series' outlier limit) are merged, so nothing
+  is lost, but the merge records `series.held` as the key, queues no re-run
+  and answers `rerunHeld`; the re-run handler then does nothing while a
+  `series.held` event is newer than the project's latest run a person made,
+  so neither an already-queued re-run nor a later clean push can carry the
+  bad days into an automatic run, or an automatic publication. The hold
+  ends when a person runs the model. A person's own merge is never held; a
+  data feed's values are checked by its parser. Limits: a plausible wrong
+  value (inside the series' range) isn't caught, and the outlier rule needs
+  100 non-zero days in the series. Recovery is the runbook in
+  [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
+  days from the key's events, re-push; a key's merge keeps no series
+  revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
+  handler waiting, a person's run ending it, a person's merge not held),
+  `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route

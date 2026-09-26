@@ -8,7 +8,8 @@
 //     keeps only the newest unkept auto run (runs/execute.ts trimRuns), and
 //     then published if the project opted in (publish/autoPublish.ts).
 // An auto re-run whose project has turned automatic runs off since it was
-// queued does nothing.
+// queued does nothing, and so does one while an API key's anomalous push is
+// held for review (series/hold.ts heldSinceLastRun).
 //
 // WP-2.13 (alerts) queues `alert_eval` here after an auto run; the kind has
 // no handler yet, so queueing it now would only make dead jobs.
@@ -17,6 +18,7 @@ import { ApiError } from '../../http/errors.js';
 import { autoPublish } from '../../publish/autoPublish.js';
 import { autoRunLabel, NEW_DATA_CAUSES, resolveAutoRun } from '../../runs/autoRun.js';
 import { executeRun, trimRuns } from '../../runs/execute.js';
+import { heldSinceLastRun } from '../../series/hold.js';
 import { JobError } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
@@ -42,6 +44,8 @@ export const rerunHandler = defineHandler({
 			const { rows } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [job.projectId]);
 			const settings = resolveAutoRun(rows[0]?.settings);
 			if (!settings.enabled) return;
+			// An API key pushed days that look wrong since the last run a person made: wait for them (series/hold.ts).
+			if (await heldSinceLastRun(db, job.projectId)) return;
 			publish = settings.publish === 'if_no_new_warnings';
 		}
 		const { id } = await executeRun(db, job.projectId, auto ? autoRunLabel : payload.label, payload.trigger).catch((err: Error) => {

@@ -463,7 +463,10 @@ the result change?", and put back any earlier version.
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
-  PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
+  PATCH, `provenance: { from, to }`), `series.held` (WP-2.16: an API key's
+  pushed days the data-quality rules flag, with `negative`, `outlier`, up to
+  5 `examples` and the `source` label; automatic runs wait until a person
+  runs the model, `series/hold.ts`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`,
   `note.deleted` (a note hidden by its author or an editor: its target, the
