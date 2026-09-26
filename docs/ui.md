@@ -2333,7 +2333,7 @@ address, reset password, the farmer invite). The modeller workspace and the
   Choosing applies at once, is kept on the device and, signed in, saved with
   `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
   sends the page's language as the account's; an account created from an
-  invite takes the invite's (`invite.locale`, 049).
+  invite takes the invite's (`invite.locale`, 050).
 - **Catalogue.** `lib/i18n/messages/en.ts` is every string, flat keys
   (`farm.supply.title`), with a section note per key group and per-key notes
   for the translator. `messages/af.ts` holds only **reviewed** Afrikaans,

@@ -63,7 +63,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
 - **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit }`.
-  `locale` is `'en' | 'af' | null` (`app_user.locale`, 049_user_locale.sql,
+  `locale` is `'en' | 'af' | null` (`app_user.locale`, 050_user_locale.sql,
   WP-2.5): the language of the farmer-facing pages and of the emails the
   account receives; `null` means not chosen (the site follows the browser,
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
@@ -74,7 +74,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   is required. The email address isn't editable; other keys are ignored.
 - **`register`** takes an optional `locale` (the language the sign-up page
   was in). Without one, an account that accepts an invite takes the invite's
-  `locale` (`app_accept_invites`, 049); a chosen locale is never overwritten.
+  `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
   The verification, reset and farmer-invite emails go out in the account's
   (or the invite's) language, English where the Afrikaans isn't reviewed yet
   ([ui.md § Language](./ui.md#language)).

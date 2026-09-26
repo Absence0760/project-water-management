@@ -48,7 +48,7 @@ export async function markVerified(db: Db, userId: string): Promise<void> {
 export async function verificationMail(db: Db, userId: string, to: string): Promise<Mail | null> {
 	const raw = await issueEmailToken(db, userId, 'verify');
 	if (!raw) return null;
-	// In the person's language (app_user.locale, 049); English when unset.
+	// In the person's language (app_user.locale, 050); English when unset.
 	const { rows } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = $1', [userId]);
 	return verifyEmailMail(to, siteLink('/verify-email', raw), rows[0]?.locale);
 }

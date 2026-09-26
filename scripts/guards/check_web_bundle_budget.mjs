@@ -553,6 +553,19 @@
 //             (915); the merge measured 923 KB. No page's first load grew;
 //             no new dependency. Headroom ~6 KB. #9's engine split is still
 //             the way back down.
+// 2026-09-26  total 929 → 941 KB; other ceilings unchanged. The i18n
+//             foundation (WP-2.5): the farmer-facing message catalogue
+//             (English, ~8 KB gzip; Afrikaans loads lazily and is empty until
+//             translated), the language switchers and locale-aware farm
+//             formatting. The catalogue loads only on the sign-in, farm and
+//             account routes (a dynamic import from the root layout, guarded
+//             by lib/i18n/boundary.test.ts), so the workspace's and /share's
+//             first loads didn't grow; the total counts lazy chunks, so it
+//             rose by the catalogue plus ~2 KB of split overhead. The merge
+//             measured 935 KB. Ways back down, both in docs/followups.md:
+//             English-as-key (drop the English catalogue, ~5–7 KB) and #9's
+//             engine split (~20 KB). No new dependency; the largest page
+//             chunk is at its 43 KB ceiling. Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -563,7 +576,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 929,
+	totalCodeKb: 941,
 	largestChunkKb: 43,
 	largestWorkerKb: 64,
 	largestSpreadsheetWorkerKb: 95,

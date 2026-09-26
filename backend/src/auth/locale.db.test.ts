@@ -1,4 +1,4 @@
-// A person's language and volume unit (roadmap WP-2.5; 049_user_locale.sql):
+// A person's language and volume unit (roadmap WP-2.5; 050_user_locale.sql):
 // PATCH /auth/me, sign-up with a language, the language an accepted invite
 // gives a new account, and the emails that follow it.
 //
@@ -80,7 +80,7 @@ describe('emails follow the account’s language', () => {
 	});
 });
 
-describe('a new account takes its language from the invite it accepts (049, app_accept_invites)', () => {
+describe('a new account takes its language from the invite it accepts (050, app_accept_invites)', () => {
 	type User = Awaited<ReturnType<typeof signUp>>;
 	let owner: User;
 	let projectId: string;

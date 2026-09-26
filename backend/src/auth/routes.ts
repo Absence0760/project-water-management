@@ -14,9 +14,9 @@ import { LOCALES } from '../mail/i18n/index.js';
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
 const displayName = z.string().trim().min(1).max(100);
-/** app_user.locale (049): the farmer-facing pages' and emails' language; null = not chosen (follow the browser). */
+/** app_user.locale (050): the farmer-facing pages' and emails' language; null = not chosen (follow the browser). */
 const locale = z.enum(LOCALES).nullable();
-/** app_user.volume_unit (049): how the farm view shows volumes. */
+/** app_user.volume_unit (050): how the farm view shows volumes. */
 const volumeUnit = z.enum(['m3', 'ML']);
 
 const RegisterBody = z.object({
@@ -98,7 +98,7 @@ export const authRoutes = new Hono<AuthEnv>()
 				]);
 				if (inv[0] && inv[0].email.toLowerCase() === row.email.toLowerCase()) {
 					await markVerified(db, row.id);
-					// Accepting may have set the locale from the invite (049).
+					// Accepting may have set the locale from the invite (050).
 					const { rows: fresh } = await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id]);
 					return { row: fresh[0]!, mail: null };
 				}
