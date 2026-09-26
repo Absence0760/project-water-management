@@ -36,8 +36,12 @@
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
 		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">last run {fmtDate(p.lastRunAt)}</span>
-	{:else}
+	{:else if hasRole(p.role, 'viewer')}
+		<!-- A farmer sees no runs (lastRunAt is null for them), so "not run yet" would be wrong. -->
 		<span class="run">not run yet</span>
+	{/if}
+	{#if p.publishedAt}
+		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {fmtDate(p.publishedAt)}</span>
 	{/if}
 {/snippet}
 

@@ -22,6 +22,7 @@ const proj = (over: Partial<ProjectSummary>): ProjectSummary => ({
 	updatedAt: '2026-01-01T00:00:00Z',
 	dataUntil: null,
 	lastRunAt: null,
+	publishedAt: null,
 	...over
 });
 const team = (id: string, name: string): Team => ({

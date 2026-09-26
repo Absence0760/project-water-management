@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterRuns, runYears } from './runList';
+import { defaultRunId, filterRuns, runYears } from './runList';
 
 describe('runYears', () => {
 	it('shows the first and last year', () => {
@@ -25,5 +25,27 @@ describe('filterRuns', () => {
 	});
 	it('returns nothing when no label matches', () => {
 		expect(filterRuns(runs, 'transfer')).toEqual([]);
+	});
+});
+
+describe('defaultRunId', () => {
+	const runs = [{ id: 'newest' }, { id: 'middle', published: true }, { id: 'oldest', published: false }];
+
+	it('opens a viewer on the published run', () => {
+		expect(defaultRunId(runs, 'viewer')).toBe('middle');
+	});
+	it('opens an editor or an owner on the newest run, published or not', () => {
+		expect(defaultRunId(runs, 'editor')).toBe('newest');
+		expect(defaultRunId(runs, 'owner')).toBe('newest');
+	});
+	it('opens a viewer on the newest run when nothing is published', () => {
+		expect(defaultRunId([{ id: 'a' }, { id: 'b', published: false }], 'viewer')).toBe('a');
+	});
+	it('treats an unknown role like a viewer', () => {
+		expect(defaultRunId(runs, null)).toBe('middle');
+	});
+	it('has no default without runs', () => {
+		expect(defaultRunId([], 'viewer')).toBeNull();
+		expect(defaultRunId([], 'owner')).toBeNull();
 	});
 });

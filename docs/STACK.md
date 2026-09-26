@@ -123,6 +123,43 @@ pnpm test:guards            # node:test suites for scripts/guards and scripts/re
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 ```
 
+## Running tests
+
+**While you work, run only what you touched** (CLAUDE.md rule 12):
+
+```bash
+pnpm check                                                    # typecheck (fast; always)
+pnpm -C backend exec vitest run --project unit src/<area>     # backend unit files you changed
+pnpm -C backend exec vitest run --project db src/<area>       # backend DB/RLS files (needs dev:db:up)
+pnpm -C frontend exec vitest run src/lib/components/<area>    # frontend unit files
+pnpm -C packages/engine exec vitest run src/<area>            # engine unit files
+pnpm -C e2e e2e tests/<spec>.spec.ts                          # e2e specs for the screens you changed
+pnpm build:frontend && pnpm check:bundle                      # only when you added or moved frontend code
+```
+
+Also run the guard for anything the change touches: `src/routes.test.ts`
+for a new route, `src/db/catalogue.db.test.ts` for a migration,
+`pnpm test:scripts` for root scripts.
+
+**The full suite runs once**, before a merge or push to `main`: where branches
+meet is where they break each other. Its parts are independent (unit tests
+use no database; the DB tests use this checkout's `water_test…`; e2e uses
+its own `water_e2e…` database and ports, `e2e/support/env.ts`), so start them
+**in parallel**, e.g. as three background commands, and wait for all three:
+
+```bash
+pnpm test                   # engine + frontend + backend unit
+pnpm test:backend:db        # serial inside (one fork), ~2 min
+pnpm test:e2e               # ~2–3 min
+```
+
+then `pnpm test:guards`, `pnpm test:scripts`, and `pnpm build:frontend &&
+pnpm check:bundle`. The DB project must stay serial *inside* itself (its
+queue and feed tests claim jobs globally; `backend/vitest.workspace.ts`
+pins it to one fork), but it can run beside the other two. The perf
+projects (`test:*:perf`) are the exception: run them alone, never alongside
+anything, since they assert wall-clock budgets.
+
 Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main
 --generate-notes` deploys that component after a preflight and the
 `production` approval ([deployment.md § Releasing](./deployment.md#releasing)).

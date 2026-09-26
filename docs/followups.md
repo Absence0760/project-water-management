@@ -1388,10 +1388,12 @@ role and not before it.
   - [ ] **Audit events** for publishing and for notice changes: today only
         `published_by` and `updated_at` / `updated_by` record them. Needs
         WP-2.4's `audit_event`; add the writes in the same change.
-  - [ ] **Roadmap UI still to build around it:** the Overview's "Published
-        baseline" card, opening viewers on the published run by default, and
-        run-comparison's "compare with published". Trigger: the WP-2.6 farm
-        page lands (its preview button needs the same card).
+  - [x] **Roadmap UI around it** (2026-09-25): the Overview's "Published
+        baseline" card (read-only; editors link to the Runs tab's notice
+        editor), viewers opening the Runs tab on the published run, "compare
+        with published" (the compare page's default and offer, and the Runs
+        header link), and `publishedAt` on `GET /projects` for every member
+        ([ui.md § Overview](./ui.md#overview), [run-comparison.md](./run-comparison.md)).
   - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
         store which site bound a farm's charge each day, so the projection
         re-runs the engine's attribution on the stored flows. Exact, except
