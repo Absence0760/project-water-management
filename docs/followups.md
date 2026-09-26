@@ -2157,12 +2157,17 @@ Applicant view and the Applications tab. Left:
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
       are gauge data). Pending the hydrologist.
-- [ ] **Performance of `run_series_select`.** Every viewer read of run series
+- [x] **Performance of `run_series_select`.** Every viewer read of run series
       now evaluates `app_hidden_scenario_runs()` and the contributor policy's
       two helpers once per query (hashed subplans; the contributor ones exit
       after one index probe for a non-contributor). Measured ~6 ms per query
       on a loaded test database; run `pnpm test:backend:perf` alone on a quiet
       machine to confirm the budgets hold. Trigger: the next perf run.
+      **Checked 2026-09-26** after 046 (one more helper in the contributor
+      branch) on a quiet machine (load < 3), each suite alone:
+      `test:backend:perf:db` portfolio median 114 ms (budget 500);
+      `test:backend:perf`'s DB-free budgets unaffected by RLS (its GR4J
+      example-run budget fails for an engine reason, tracked under Pipelines).
 - [ ] **Invite as an applicant with farms.** A contributor's farm links are
       set by the owner after they join (`/farmers/:userId`); a farmer invite
       carries farms, a contributor invite doesn't. Trigger: the first client
