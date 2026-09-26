@@ -2449,8 +2449,8 @@ Where the volumes are current, the running-total counts match exactly.
 
 ### 2.9b EWR agreement with the observed record (engine ≥ 0.5.3, issue #4)
 
-The two runoff models can disagree strongly on how many days the EWR is not
-met at the outlet. The count alone can't say which is right, but the observed
+Two runoff models (GR4J and, until engine 1.0.0, legacy) can disagree
+strongly on how many days the EWR is not met at the outlet. The count alone can't say which is right, but the observed
 record can. A gauge or logger measures the same **impacted outflow** the
 outlet EWR test uses, so on every day with an observation the river can take
 the same test as the model. `ewrAgreement` (`network/ewrAgreement.ts`)

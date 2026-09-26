@@ -1367,7 +1367,7 @@ which checks every catchment tab).
     as evaporation, so a project with one isn't warned.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
-  per month, the default, or raw CHIRPS; it applies to both models and to
+  per month, the default, or raw CHIRPS; it applies to the runoff model and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
   days in its warnings. Below it, **CHIRPS fit period** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
