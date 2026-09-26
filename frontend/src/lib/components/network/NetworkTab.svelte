@@ -15,11 +15,16 @@
 	import { GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { formOffScreen } from './scroll';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+
+	// The Yield panel (WP-3.6) and its chart load only when a farm is focused.
+	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
 
 	let {
 		editor,
@@ -332,6 +337,10 @@
 									bind:value={node.name}
 									onfocus={() => (selectedId = node.id)}
 								/>
+								<!-- Notes on a saved node (WP-2.7); a node added since the last save has none yet. -->
+								{#if projectId && editor.savedNodeIds.has(node.id)}
+									<NotesDrawer {projectId} compact target={{ kind: 'node', nodeId: node.id, name: node.name, isFarm: node.kind === 'farm' }} />
+								{/if}
 								</div>
 							</th>
 							<td>
@@ -457,6 +466,13 @@
 				onaddcover={() => editor.addLandCover(selected.id)}
 				onremovecover={(id) => editor.removeLandCover(id)}
 			/>
+			{#if selected.kind === 'farm' && projectId}
+				<Lazy load={loadYield}>
+					{#snippet children(YieldPanel)}
+						<YieldPanel {projectId} nodeId={selected.id} nodeName={selected.name} {runs} canEdit={!readonly} hasDam={selected.damCapacityM3 > 0} />
+					{/snippet}
+				</Lazy>
+			{/if}
 		{/key}
 	{/if}
 </section>
@@ -680,6 +696,12 @@
 		flex: 1;
 		width: 120px;
 		min-width: 120px;
+	}
+	/* A saved node's notes button (24 px + the gap) comes out of the name, so
+	   the column keeps its width (the 1440 px layout test, model.spec.ts). */
+	.namecell:has(:global(.notes-btn)) input {
+		width: 92px;
+		min-width: 92px;
 	}
 	.net tr.dragging {
 		opacity: 0.5;

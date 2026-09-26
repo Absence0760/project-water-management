@@ -214,7 +214,7 @@ must build WP-2.15 Phase B.
 
 ### WP-3.1 Reproducible inputs and cited runs
 
-- **Status:** backend and engine core built (`021_series_blob.sql`,
+- **Status (2026-09-26): built** (`021_series_blob.sql`,
   [data-model.md § Stored run inputs](../data-model.md#stored-run-inputs-021_series_blobsql)),
   differently from the plan below in places:
   - engine `manifest.ts`: `canonicalJson` (RFC 8785, the Appendix B number
@@ -237,10 +237,17 @@ must build WP-2.15 Phase B.
     so trim and the `DELETE` route (`409 this run is cited by scenario "…",
     so it is kept`) keep it. Also built with WP-3.2: the unpin `409`, cited
     runs off the pin ceiling, and `RunMeta.citedBy`.
-  - Not built yet (tracked in [followups.md](../followups.md)): the
-    `…/reproduce` endpoint, `RunMeta.reproducible`, the Runs tab badge, lock
-    and "Check reproduction" action, and the publication-trim skip for cited
-    runs (nothing to act on until WP-2.3 lands).
+  - Built since (2026-09-26): `GET …/runs/:runId/reproduce`
+    (`backend/src/runs/reproduce.ts`: `identical`, `differs` with the list,
+    `not_reproducible`, `inconsistent`, `failed`), `RunMeta.reproducible`, and
+    the Runs tab's **Check reproduction** action (`runs/ReproducePanel.svelte`)
+    with an **Inputs not stored** tag on runs from before 021. The tag marks
+    the exception rather than badging nearly every run "Reproducible", and the
+    "Cited" lock is the existing **Published** / **Scenario base** tags with
+    no ✕ (both UI choices pending the hydrologist). The publication-trim skip
+    for cited runs landed with 024.
+  - Left for the WPs that add them: the evidence-pack and assessment clauses
+    of `model_run_cited` (WP-3.13, WP-3.14).
 - **Goal.** A run can be recomputed exactly years later, and a run that
   evidence cites can never disappear.
 - **What Steps 1–2 already give, and the gap that remains:**
@@ -601,6 +608,17 @@ must build WP-2.15 Phase B.
 
 ### WP-3.4 Assurance of supply, stress classes and the water account
 
+- **Status (2026-09-26): built** (engine 0.32.0; [model.md §2.11a–b](../model.md),
+  [followups.md](../followups.md) for what's left). Where the build differs
+  from the plan below: the three outputs sit in one sub-object,
+  `RunSummary.supplyAssurance.{reliability, stress, waterAccount}`, computed
+  by `network/reliability.ts`; the setting is the flat
+  `settings.assuranceAnnualThreshold`; time-based reliability counts demand
+  days only; stress grids cover the whole run and include a system grid and
+  other water users; seepage is a memo in the account (it rejoins the river),
+  dam releases wait for WP-3.5, and EWR required vs met uses the pragmatic
+  EWR at each site. `runModelWithoutChecks` (ensemble members) skips it. The
+  definitions are pending the hydrologist.
 - **Goal.** The standard planning outputs an assessor reads first. These
   are new outputs only; model results don't change.
 - **Changes**
@@ -757,6 +775,24 @@ must build WP-2.15 Phase B.
 
 ### WP-3.6 Firm yield and storage–yield curves
 
+- **Status (2026-09-26): built, first slice** (engine 0.34.0,
+  [model.md §2.13](../model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36),
+  [api.md § Yield](../api.md#yield), [ui.md § Yield](../ui.md#yield-wp-36)):
+  `packages/engine/src/network/yield.ts` (`prepareYield`, `firmYield`,
+  `storageYieldCurve`, patterns, assurance), `checkYield` invariants and a
+  perf budget; migration `040_yield.sql` (`yield` kind, `yield_result`,
+  job `progress` and cancel); `backend/src/jobs/handlers/yield.ts` and
+  `backend/src/yield/`; the Yield panel on a farm in the Network tab's One
+  node layout and under a scenario. Where the build differs from the plan:
+  a probe calls `simulateNetwork` on a plan built once (the calibration
+  pattern) rather than `runModelWith`, and simulates only the dam and what
+  is upstream of it when no transfer links them; the dam's boreholes don't
+  count towards its yield; a resized dam keeps its depth and its storage
+  fractions (pending the hydrologist). Not built yet, in
+  [followups.md § Firm yield](../followups.md#firm-yield-wp-36): the
+  contributor policies (waiting for WP-3.3's role), the in-browser preview
+  through WP-1.17's worker, and finding a job started elsewhere.
+
 - **Goal.** The yield of a proposed or raised dam, the headline number of
   a storage application.
 - **Definitions** (model.md):
@@ -845,6 +881,26 @@ must build WP-2.15 Phase B.
 
 ### WP-3.7 Full EWR tables and several EWR sites
 
+- **Status (2026-09-26): built, first slice** (engine 0.33.0,
+  [model.md §2.9d](../model.md)). Where the build differs from the plan
+  below: the tables stay in `settings.ewrRules` (one per EWR site: the
+  outlet and every gauge, engine 0.21.0 / 0.17.0) rather than an `ewr_site`
+  table, so there is no migration and no `ewrMethod` switch (a table adds a
+  report; the pragmatic EWR still drives the daily charge). Built: the
+  DRM's **low-flow table** (maintenance to drought) beside a total-flow
+  table, read at the same natural percentile, so each month is met / only the
+  high flows short / the low flows short; **freshet and flood components**
+  per site, checked per complete water year against the events the site's
+  natural flow had; entry by grid, paste or CSV file with synthetic example
+  layouts; API validation; a Reserve **heat map** per site in the Reserve
+  compliance panel; low-flow and high-flow rates in run comparison and the
+  summary CSV; the two-branch acceptance test (a dam on one branch changes
+  that gauge and the outlet, not the other branch). Left, in
+  [followups.md](../followups.md) under the Reserve item: low flows judged on
+  base flow, the daily charge from the rule table, per-site
+  source/confidence labels (gazetted / desktop), and showing a method switch
+  in red in scenarios and packs. All method choices are pending the
+  hydrologist.
 - **Goal.** Replace the single pragmatic EWR (quirk Q10) with the Reserve
   as it is actually determined: flow-dependent monthly requirements at more
   than one site.
@@ -1033,6 +1089,21 @@ must build WP-2.15 Phase B.
 
 ### WP-3.10 Water-use allocations: WARMS vs modelled use
 
+- **Status.** First slice built (2026-09-26): migration `038_allocations.sql`
+  (`allocation_source`, `allocation`, `allocation_holder` for names per D3 (b),
+  pending legal advice), engine `compareAllocations` (no `runModel` change, so
+  no engine bump; [model.md §2.12](../model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)),
+  `backend/src/allocations/` (CRUD, a stateless preview → commit CSV import
+  with WARMS header aliases, POPIA column refusal, SHA-256 provenance, undo an
+  import, CSV export, the run comparison), and the Allocations tab. Groundwater
+  uses the existing borehole series (`groundwater_used`, WP-1.34), so it
+  doesn't wait on WP-3.9. Deviations: the import sends the file as JSON text
+  (≤ 2 MB, CSV only), not multipart ≤ 5 MB with XLSX; preview and commit are
+  `…/import` and `…/import/commit` with no stored preview id. Left:
+  `allocationMode` (`cap`, `fullAllocation`), `settings.allocationTolerance`,
+  XLSX and column mapping, licence conditions, the farm view and the chart
+  ([followups.md § Allocations](../followups.md#allocations-wp-310),
+  [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to
   modelled use: over-use, under-use, and a **full-allocation** scenario
   ("if every lawful user took their entitlement").
@@ -1315,6 +1386,19 @@ must build WP-2.15 Phase B.
 
 ### WP-3.13 Liability and credibility: disclaimers, validation statement, sign-off
 
+- **Status (2026-09-26): first slice built**, on the report route
+  (`/projects/:id/report`): the draft disclaimer (pending the client's legal
+  review, followups.md § Blocking releases), `validationStatement` with the
+  limitations generated from engine-audit.md (`pnpm gen:limitations`, a
+  doc-parsing test), and the immutable sign-off on a **run**
+  (`036_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound
+  to the statement's SHA-256, `signoff.created` in the audit log, the run
+  cited so kept), with the dialog. Engine 0.31.2. Left
+  ([followups.md § Liability and sign-off](../followups.md#liability-and-sign-off-wp-313)):
+  `ENGINE_BUILD` from CI, the methodology statement and errata docs, the
+  pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
+  sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
+  scenario is signed through its run, which is what a pack cites.
 - **Goal.** A pack says exactly how far it can be trusted and who is
   professionally responsible for it.
 - **Changes**

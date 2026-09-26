@@ -18,8 +18,10 @@ import type {
 	RunComparison,
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
+	SignoffStatement,
 	RunSummary,
-	ScenarioOp
+	ScenarioOp,
+	YieldPoint
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
@@ -211,6 +213,58 @@ export interface Team {
 	projectCount: number;
 }
 
+/** GET /teams/:id/portfolio (WP-2.14, docs/api.md § Portfolio): one row per team catchment you can see. */
+export type PortfolioEwrStatus = 'green' | 'amber' | 'red' | 'unknown';
+
+export interface PortfolioProject {
+	id: string;
+	name: string;
+	role: 'viewer' | 'editor' | 'owner';
+	/** Newest day of recorded rain in the inputs (YYYY-MM-DD), or null. */
+	dataUntil: string | null;
+	lastRunAt: string | null;
+	publishedAt: string | null;
+	/** Where the figures come from: the current publication, the newest run (nothing published), or nothing. */
+	source: 'published' | 'run' | null;
+	sourceRunId: string | null;
+	/** The last day the figures cover, and its age in days on the server's `today`. */
+	figuresUntil: string | null;
+	figuresAgeDays: number | null;
+	stale: boolean;
+	/** Recorded rain after figuresUntil: the figures don't include the newest data yet. */
+	behindData: boolean;
+	/** A run newer than the published one exists. */
+	newerRun: boolean;
+	ewr: {
+		status: PortfolioEwrStatus;
+		daysNotMet30: number | null;
+		days30: number | null;
+		fraction30: number | null;
+		/** Why it is unknown (status 'unknown' only). */
+		reason?: 'no-figures' | 'no-ewr' | 'no-series';
+	};
+	/** null = unknown (not published, or published before the counts were stored). */
+	farmsShort7: number | null;
+	farmsShort30: number | null;
+	farmCount: number;
+	/** Lowest farm dam on figuresUntil, 0–1; null with no dams or when unknown (damsKnown). */
+	lowestDamPct: { nodeName: string; pct: number } | null;
+	damsKnown: boolean;
+	feeds: { total: number; ok: number; failing: number };
+	/** Firing alerts: always null until WP-2.13 (alerts) is built. */
+	alertsFiring: number | null;
+	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
+}
+
+export interface Portfolio {
+	team: { id: string; name: string; role: TeamRole };
+	/** The server's UTC date the ages are counted to. */
+	today: string;
+	/** The traffic-light thresholds: amber from this fraction of days not met, red from that. */
+	thresholds: { amber: number; red: number };
+	projects: PortfolioProject[];
+}
+
 export interface TeamMember {
 	userId: string;
 	email: string;
@@ -297,15 +351,38 @@ export interface RunMeta {
 	trigger?: 'manual' | 'auto' | 'forecast';
 	/** A forecast run's first forecast day (summary.forecast.from); null otherwise. Absent from an older API. */
 	forecastFrom?: string | null;
+	/**
+	 * Its input series are stored (021_series_blob), so GET …/reproduce can
+	 * re-run it; false for a run from before stored inputs. Absent from an older API.
+	 */
+	reproducible?: boolean;
 }
+
+/** GET …/runs/:runId/reproduce (WP-3.1): the run re-run from its stored inputs with today's engine. */
+export interface Reproduction {
+	/** identical; differs (with the list); not_reproducible (from before stored inputs); inconsistent (a stored input fails its check); failed (today's engine refuses the input). */
+	status: 'identical' | 'differs' | 'not_reproducible' | 'inconsistent' | 'failed';
+	identical: boolean;
+	engineVersionThen: string;
+	engineVersionNow: string;
+	differences: ReproductionDifference[];
+	/** Differences beyond the first 50, not listed. */
+	truncated: number;
+	message?: string;
+}
+
+export type ReproductionDifference =
+	| { kind: 'summary'; path: string }
+	| { kind: 'series'; key: string; nodeId: string | null; label: string; days: number; firstDate: string; maxAbsDiff: number | null }
+	| { kind: 'series_missing' | 'series_extra'; key: string; nodeId: string | null; label: string };
 
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
- * day it was published (YYYY-MM-DD, UTC). Evidence packs and assessments
- * (WP-3.13/3.14) will add kinds.
+ * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
+ * signer's name. Evidence packs and assessments (WP-3.14) will add kinds.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario';
+	kind: 'publication' | 'scenario' | 'signoff';
 	id: string;
 	name: string;
 }
@@ -692,6 +769,44 @@ export interface SeriesRevisionMeta {
 	unit: string;
 }
 
+/** Longest API key name, lifetime and series list (backend ingest/keys.ts, 039_api_keys.sql). */
+export const API_KEY_NAME_MAX = 100;
+export const API_KEY_DAYS_MAX = 3650;
+export const API_KEY_SERIES_MAX = 50;
+
+/** One series an API key may write. */
+export interface ApiKeySeries {
+	kind: string;
+	name: string;
+}
+
+/** A per-project API key as its owner sees it (docs/api.md § Ingest). Never the key or its hash. */
+export interface ApiKey {
+	id: string;
+	name: string;
+	/** The first 8 characters of the id: the `wm_<prefix>_…` part of the key. */
+	prefix: string;
+	scopes: string[];
+	/** null: any series of the project. */
+	allowedSeries: ApiKeySeries[] | null;
+	createdAt: string;
+	/** Display names; null once that account is gone. */
+	createdBy: string | null;
+	/** Bumped at most once a minute when the key is used. */
+	lastUsedAt: string | null;
+	/** null: until revoked. */
+	expiresAt: string | null;
+	revokedAt: string | null;
+	revokedBy: string | null;
+}
+
+/** POST /projects/:id/api-keys' body. */
+export interface ApiKeyCreate {
+	name: string;
+	allowedSeries?: ApiKeySeries[] | null;
+	expiresInDays?: number | null;
+}
+
 /** Longest share-link label and lifetime (backend share/links.ts, 025_share_links.sql). */
 export const SHARE_LABEL_MAX = 100;
 export const SHARE_DAYS_MAX = 365;
@@ -743,4 +858,258 @@ export interface ShareSeries {
 	unit: string;
 	monthly: { startMonth: string; values: (number | null)[] };
 	recent: { startDate: string; values: (number | null)[] };
+}
+
+/** Longest note, in characters (backend NOTE_MAX, 037_notes.sql). */
+export const NOTE_MAX = 4000;
+
+/** Who may read a note: the team (viewers and above), or also the farmers of its farm. */
+export type NoteVisibility = 'team' | 'farm';
+export type NoteTargetKind = 'project' | 'node' | 'run' | 'setting';
+
+/** A plain-text note on a node, run, setting or the project (WP-2.7; docs/api.md § Notes). */
+export interface Note {
+	id: string;
+	/** Plain text: render escaped, never as HTML or markdown. */
+	body: string;
+	/** Display name; null once that account is gone. */
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+	target: NoteTargetKind;
+	nodeId: string | null;
+	/** The node's name, when the caller can see the node. */
+	nodeName: string | null;
+	runId: string | null;
+	settingKey: string | null;
+	visibility: NoteVisibility;
+	/** The caller wrote it, and may edit it. */
+	mine: boolean;
+	/** The caller may delete it: its author, or an editor. */
+	canDelete: boolean;
+}
+
+/** GET /notes filters: one target, a settings group (`calibration` matches `calibration.*`), or a kind of target. */
+export interface NotesQuery {
+	nodeId?: string;
+	runId?: string;
+	settingKey?: string;
+	target?: NoteTargetKind;
+	limit?: number;
+}
+
+/** POST /notes: at most one target; `visibility: 'farm'` only on a farm. */
+export interface NoteCreate {
+	body: string;
+	nodeId?: string;
+	runId?: string;
+	settingKey?: string;
+	visibility?: NoteVisibility;
+}
+
+/** How many notes the caller can see on each target (the count badges). */
+export interface NoteCounts {
+	project: number;
+	nodes: Record<string, number>;
+	runs: Record<string, number>;
+	settings: Record<string, number>;
+}
+
+/** A professional sign-off on a run (036_signoff, docs/api.md § Sign-offs). Immutable. */
+export interface Signoff {
+	id: string;
+	runId: string;
+	fullName: string;
+	registrationBody: string;
+	registrationNo: string;
+	scope: string;
+	statementVersion: string;
+	statementSha256: string;
+	disclaimerVersion: string;
+	signedAt: string;
+	/** The caller signed it. */
+	mine: boolean;
+}
+
+/** GET /projects/:id/runs/:runId/signoffs. */
+export interface SignoffList {
+	statement: SignoffStatement;
+	/** SHA-256 of the statement's RFC 8785 text: sent back with a sign-off. */
+	statementSha256: string;
+	disclaimer: { version: string; status: 'draft' | 'agreed' };
+	/** Why the caller can't sign this run, or null when they can. */
+	cannotSign: string | null;
+	signoffs: Signoff[];
+}
+
+/** POST /projects/:id/runs/:runId/signoffs. */
+export interface SignoffRequest {
+	fullName: string;
+	registrationBody: string;
+	registrationNo: string;
+	scope: string;
+	/** Every confirmation id of the statement. */
+	confirmed: string[];
+	statementSha256: string;
+}
+
+// --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
+
+export type AllocationAuthorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
+export type AllocationWaterSourceKind = 'surface' | 'groundwater';
+export type AllocationImportKind = 'warms_extract' | 'csv';
+
+/** A registered or licensed volume (GET /projects/:id/allocations). */
+export interface Allocation {
+	id: string;
+	nodeId: string | null;
+	nodeName: string | null;
+	/** The import it came from; null = typed into the app. */
+	sourceId: string | null;
+	registrationNo: string;
+	propertyRef: string;
+	/** null when there is none, or the member may not see names (canSeeHolders false). */
+	holder: string | null;
+	authorisation: AllocationAuthorisation;
+	purpose: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind;
+	volumeM3PerYear: number;
+	storageM3: number | null;
+	validFrom: string | null;
+	validTo: string | null;
+	reference: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** An imported file: the provenance of its rows. */
+export interface AllocationSource {
+	id: string;
+	kind: AllocationImportKind;
+	fileName: string;
+	sha256: string;
+	reference: string;
+	importedAt: string;
+	importedBy: string | null;
+	rows: number;
+}
+
+export interface AllocationList {
+	allocations: Allocation[];
+	sources: AllocationSource[];
+	/** The farms and water users an allocation can be matched to. */
+	nodes: { id: string; name: string }[];
+	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
+	canSeeHolders: boolean;
+}
+
+/** The fields an editor sends to create or change an allocation. */
+export interface AllocationInput {
+	nodeId: string | null;
+	registrationNo?: string;
+	propertyRef?: string;
+	holder?: string;
+	authorisation: AllocationAuthorisation;
+	purpose?: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind;
+	volumeM3PerYear: number;
+	storageM3?: number | null;
+	validFrom?: string | null;
+	validTo?: string | null;
+	reference?: string;
+}
+
+/** One row of an import preview. */
+export interface AllocationPreviewRow {
+	line: number;
+	registrationNo: string;
+	propertyRef: string;
+	farm: string;
+	holder: string;
+	authorisation: AllocationAuthorisation | null;
+	purpose: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind | null;
+	volumeM3PerYear: number | null;
+	storageM3: number | null;
+	validFrom: string | null;
+	validTo: string | null;
+	reference: string;
+	errors: string[];
+	nodeId: string | null;
+	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;
+	alreadyInProject: boolean;
+}
+
+export interface AllocationImportRequest {
+	kind: AllocationImportKind;
+	fileName: string;
+	text: string;
+	reference?: string;
+}
+
+/** POST /projects/:id/allocations/import: nothing is written. */
+export interface AllocationPreview {
+	fileName: string;
+	kind: AllocationImportKind;
+	sha256: string;
+	columns: Record<string, string>;
+	ignoredColumns: string[];
+	rows: AllocationPreviewRow[];
+	/** The farms and water users a row can be matched to. */
+	nodes: { id: string; name: string }[];
+	summary: { rows: number; valid: number; invalid: number; matched: number; unmatched: number };
+}
+
+/** A background job as the status list shows it (GET /projects/:id/jobs, docs/api.md § Jobs). Never its payload. */
+export interface JobMeta {
+	id: string;
+	kind: string;
+	status: 'queued' | 'running' | 'done' | 'failed' | 'dead';
+	attempts: number;
+	maxAttempts: number;
+	runAfter: string;
+	createdAt: string;
+	startedAt: string | null;
+	finishedAt: string | null;
+	/** Why it failed, in our words (never database text). */
+	error: string | null;
+	createdBy: string;
+	/** 0–100 while a job that reports progress runs (yield); null otherwise. Absent from an older API. */
+	progress?: number | null;
+}
+
+/** A yield request's parameters (backend yield/store.ts YieldParams). */
+export interface YieldParams {
+	/** 'constant', 'demand' (the farm's own demand shape) or 12 factors, Oct–Sep. */
+	pattern: 'constant' | 'demand' | number[];
+	/** 0.5–1; 1 = the firm yield. */
+	assurance: number;
+	tolerance: number;
+	/** Curve points, 8–12. */
+	points: number;
+}
+
+/** POST /projects/:id/yield: exactly one of runId and scenarioId. */
+export interface YieldRequest {
+	nodeId: string;
+	runId?: string;
+	scenarioId?: string;
+	kind: 'firm' | 'curve';
+	params?: Partial<YieldParams>;
+}
+
+/** A stored firm yield or storage–yield curve (GET /projects/:id/yield, 040_yield). */
+export interface YieldResult {
+	id: string;
+	runId: string | null;
+	scenarioId: string | null;
+	nodeId: string;
+	jobId: string | null;
+	kind: 'firm' | 'curve';
+	params: YieldParams;
+	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean };
+	engineVersion: string;
+	createdBy: string | null;
+	createdAt: string;
 }

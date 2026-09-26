@@ -33,7 +33,7 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 				throw err;
 			});
 			const payload = handler.payload.parse(await readPayload(db, job.id));
-			await handler.run({ db, job, payload });
+			await handler.run({ db, job, payload, progress: (pct) => reportProgress(job, pct) });
 			// Same transaction as the work: both commit, or neither.
 			if ((await finishJob(db, job, { ok: true })) !== 'done') throw new LeaseLostError();
 			return 'done' as const;
@@ -51,6 +51,22 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 			console.error(JSON.stringify({ event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts }));
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
+	}
+}
+
+/**
+ * app_job_progress on its own connection, outside the job's transaction:
+ * false when the job was cancelled or its lease lost. Best effort: a failure
+ * to write is logged and the job carries on (true).
+ */
+async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
+	const v = Math.max(0, Math.min(100, Math.round(pct)));
+	try {
+		const { rows } = await withoutUser((db) => db.query<{ go: boolean }>('SELECT app_job_progress($1, $2, $3) AS go', [job.id, job.leaseToken, v]));
+		return rows[0]?.go !== false;
+	} catch (err) {
+		console.warn(JSON.stringify({ event: 'job_progress_failed', jobId: job.id, error: (err as Error).message }));
+		return true;
 	}
 }
 

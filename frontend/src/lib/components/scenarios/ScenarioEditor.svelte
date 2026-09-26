@@ -15,6 +15,10 @@
 	import OpList from './OpList.svelte';
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+
+	// The Yield panel (WP-3.6) and its chart load only once a dam is picked.
+	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
 
 	let {
 		projectId,
@@ -76,6 +80,11 @@
 	const list = $derived(opItems(s.ops, data.check?.classified ?? null, data.check, baseInput, names));
 	/** What a new op meets: the base with every listed op applied. */
 	const effective = $derived(baseInput ? stepInputs(baseInput, s.ops).after : null);
+
+	// --- yield (WP-3.6): a farm or dam of the scenario's own network ---------------
+	const yieldFarms = $derived((effective?.model.nodes ?? []).filter((n) => n.kind === 'farm'));
+	let yieldNodeId = $state('');
+	const yieldNode = $derived(yieldFarms.find((n) => n.id === yieldNodeId) ?? null);
 	const problems = $derived(data.check?.problems.length ?? 0);
 	const baseMeta = $derived(runs.find((r) => r.id === s.baseRunId));
 
@@ -381,6 +390,32 @@
 </section>
 
 <ScenarioCompare {projectId} scenario={s} />
+
+{#if yieldFarms.length}
+	<section class="panel" aria-labelledby="scenario-yield-h">
+		<div class="panel-head">
+			<h2 id="scenario-yield-h">Yield under this scenario</h2>
+		</div>
+		<div class="field">
+			<label for="scenario-yield-node">Dam</label>
+			<select id="scenario-yield-node" bind:value={yieldNodeId}>
+				<option value="">Pick a farm or dam…</option>
+				{#each yieldFarms as n (n.id)}
+					<option value={n.id}>{n.name || 'Unnamed'}{n.damCapacityM3 > 0 ? '' : ' (no dam)'}</option>
+				{/each}
+			</select>
+		</div>
+	</section>
+	{#if yieldNode}
+		{#key yieldNode.id}
+			<Lazy load={loadYield}>
+				{#snippet children(YieldPanel)}
+					<YieldPanel {projectId} nodeId={yieldNode.id} nodeName={yieldNode.name} scenarioId={s.id} {canEdit} hasDam={yieldNode.damCapacityM3 > 0} />
+				{/snippet}
+			</Lazy>
+		{/key}
+	{/if}
+{/if}
 
 <style>
 	.panel-head {

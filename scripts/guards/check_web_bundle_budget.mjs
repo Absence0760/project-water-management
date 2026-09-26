@@ -435,6 +435,88 @@
 //             ~1 KB in the project page. No new dependency; the largest page
 //             chunk stays under 41 KB. Headroom ~6 KB. #9 (engine shipped
 //             twice, help text loaded eagerly: ~50 KB) is now the next job.
+// 2026-09-26  ceilings unchanged (issue #9, second pass). main @ 61ef104
+//             measures 815 KB. Help text: already off the critical path
+//             since the first pass (HelpTip imports it lazily; help.spec.ts
+//             pins open, Escape and focus return), and it is counted once, so
+//             nothing is left to win on the total. Landed: the engine is
+//             side-effect free to Rollup (frontend/vite.config.ts
+//             treeshake.moduleSideEffects, guarded by
+//             src/lib/engineSideEffects.test.ts). The total doesn't move (815),
+//             but engine code no longer follows phantom barrel imports into
+//             pages that never call it. First loads, gzip: farm pages 76–86 →
+//             64–74 KB (−13), share 77 → 65, home 89 → 81, a catchment 126 →
+//             118; that engine code now loads with the tabs that call it
+//             (Data 61 → 67, Settings 76 → 81, Runs 114 → 120, Scenarios +3),
+//             so a catchment opened on Runs is 240 → 238. Compare 114 → 111,
+//             report 181 → 178. Measured and not landed:
+//             - Worker as a chunk of the page build (a plugin emitting
+//               autocal.worker.ts as a Rollup entry, the page taking its URL
+//               from a virtual module), so it shares the page's engine chunks:
+//               total 815 → 794 (−21), but a chunk holds whole modules, and
+//               the page's small imports from run.ts (prepareRun, ENGINE_VERSION,
+//               mergeSettings), calibrate.ts (CALIBRATION_PARAMS…), gr4j.ts and
+//               legacy.ts (their param tables) then drag the worker's whole
+//               run/network/calibration code in: Runs 120 → 147, Settings
+//               81 → 110, compare 111 → 144, report 178 → 210. With those
+//               exports moved to modules of their own (tried throwaway:
+//               prepare.ts, version.ts, calibrate/params.ts) the total is 798
+//               (−17) and, against the landed config, compare 111 → 102 and
+//               Runs 120 → 118 but a catchment +4, Data +6, Settings +3.5,
+//               report +3.5, farm +1 (the rest: gr4j.ts and legacy.ts param
+//               tables share a module with the runoff code, wr2012.ts and
+//               objective.ts mix page and fit code). A fuller engine split is
+//               the real fix; it waits for a quiet engine (docs/followups.md,
+//               "Stop shipping the engine twice").
+//             - experimentalMinChunkSize 5000: total −6 KB, every first load
+//               +3.5 to +8 KB. At 1500: −2 KB total, +2 KB on every page.
+//             - Svelte css: 'injected' (80 CSS files, 65 of them under 1 KB,
+//               cost ~23 KB of gzip overhead): total +6 KB, largest chunk 42.
+// 2026-09-26  total 821 → 837 KB for WP-3.1's reproduce panel and WP-3.13's
+//             validation statement, sign-off dialog and disclaimer (report
+//             sections), merged together on main. The reproduce panel and
+//             the sign-off dialog are lazy chunks; the report grows by its
+//             three closing sections. No new dependency; the largest page
+//             chunk stays under 41 KB. The engine split (#9) is still the
+//             way to win the total back.
+// 2026-09-26  total 837 → 844 KB; other ceilings unchanged. Notes and
+//             comments (WP-2.7): the notes drawer and its count badges on
+//             network rows, the run Record group and the settings groups,
+//             Recent notes on the Overview, and the farmer's notes card.
+//             Merged after #44's reporting-window picker and WP-3.1/3.13
+//             above; the merge measured 838 KB (the notes branch alone was
+//             +8 KB). The drawer is mounted from several tabs, so most of it
+//             sits in shared chunks. No new dependency; the largest page
+//             chunk stays 40 KB. Headroom ~6 KB. #9's engine split (~20 KB,
+//             docs/followups.md) is the way back down.
+// 2026-09-26  total 844 → 874 KB (measured 872 merged with the notes
+//             above; 866 before them), calibration worker 57 → 61 KB
+//             (measured 59); other ceilings unchanged. One batch
+//             merge: WP-3.10's Allocations tab (import, compare, table),
+//             WP-3.4's Assurance of supply and Water account panels plus the
+//             engine's reliability module (network/reliability.ts, part of
+//             every run summary, so it lands in the calibration worker too),
+//             and WP-3.7's low-flow / high-flow Reserve code in the engine
+//             (reserve/) with its settings editors and heat map. No new
+//             dependency; the largest page chunk stays at 41 KB. The engine
+//             split (#9) is the way back for both the total and the worker.
+// 2026-09-26  total 874 → 885 KB (measured 883 merged with main's WP-2.9
+//             API keys panel, which raised no ceiling of its own; 878
+//             before it); other ceilings unchanged.
+//             WP-3.6's firm yield: the Yield panel on a farm and under a
+//             scenario (its own lazy chunk), its helpers and the jobs/yield
+//             API client. The search itself runs in the job worker on the
+//             backend, so the engine's network/yield.ts adds little here. No
+//             new dependency; the largest page chunk stays 41 KB. The engine
+//             split (#9) is still the way back.
+// 2026-09-26  total 885 → 892 KB; other ceilings unchanged. The WUA
+//             portfolio dashboard (WP-2.14): /teams/:id/portfolio, its own
+//             lazy route chunk (~6 KB gzip: the table, the phone cards, the
+//             traffic-light wording and sorting), plus links from the team
+//             page and the project list. Merged on main after WP-3.6's yield
+//             panel (885); the merge measured 886 KB. No page's first load
+//             grew; no new dependency; the largest page chunk stays 40 KB.
+//             Headroom ~6 KB. #9's engine split is still the way back down.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -445,9 +527,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 821,
+	totalCodeKb: 892,
 	largestChunkKb: 41,
-	largestWorkerKb: 57,
+	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });

@@ -20,6 +20,7 @@ import {
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { recentShortfall, type RecentShortfall } from './recent.js';
 
 /** Newest publications kept per project (the run_publication_cap trigger, 022_publication.sql, keeps the same number). */
 export const PUBLICATION_HISTORY_MAX = 12;
@@ -32,6 +33,13 @@ export interface StoredCatchmentView extends CatchmentView {
 	runoffModel: string;
 	/** The run's calibration headline over its calibration window; null without observed flow. */
 	calibration: { nse: number | null; pbias: number | null; kge: number | null } | null;
+	/**
+	 * Farms short in the 7 and 30 days to dataUntil, for the portfolio
+	 * dashboard (WP-2.14). Staff only: a farmer's publication response leaves
+	 * it out (neighbours' shortfalls), and the share link's allowlist never
+	 * copies it. Absent on publications made before it existed.
+	 */
+	recent?: RecentShortfall;
 }
 
 export interface PublicationMeta {
@@ -122,6 +130,12 @@ const SELECT_PUBLICATION = `
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
+/** The catchment view without its staff-only part (recent farm shortfall counts), for a farmer. */
+function staffOnlyRemoved(cv: StoredCatchmentView): StoredCatchmentView {
+	const { recent: _recent, ...rest } = cv;
+	return rest;
+}
+
 function toPublication(r: PublicationRow, withNote: boolean): Publication {
 	return {
 		id: r.id,
@@ -131,7 +145,7 @@ function toPublication(r: PublicationRow, withNote: boolean): Publication {
 		...(withNote ? { note: r.note } : {}),
 		restriction: { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct), noticeEn: r.notice_en, noticeAf: r.notice_af },
 		nextExpectedOn: r.next_expected_on,
-		catchmentView: r.catchment_view,
+		catchmentView: withNote ? r.catchment_view : staffOnlyRemoved(r.catchment_view),
 		supersededAt: iso(r.superseded_at),
 		updatedAt: iso(r.updated_at),
 		updatedBy: r.updated_by_name
@@ -282,7 +296,8 @@ export async function publishRun(db: Db, projectId: string, body: z.infer<typeof
 		...catchmentView(loaded.run, analysis),
 		engineVersion: loaded.engineVersion,
 		runoffModel: loaded.runoffModel,
-		calibration: loaded.calibration
+		calibration: loaded.calibration,
+		recent: recentShortfall(loaded.run, analysis)
 	};
 	await db.query('UPDATE run_publication SET superseded_at = now() WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 	const r = body.restriction ?? { level: 'none' as const, pct: null, noticeEn: null, noticeAf: null };

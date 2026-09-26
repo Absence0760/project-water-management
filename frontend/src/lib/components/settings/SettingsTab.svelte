@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '$lib/components/notes/notes';
 	import {
 		CALIBRATION_FLOW_KINDS,
 		hasPotentialEvaporation,
@@ -60,6 +62,8 @@
 	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
+	// API keys for the ingest endpoint, owners only: likewise (docs/ui.md § API keys).
+	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 
 	let {
 		project,
@@ -284,6 +288,7 @@
 		<div class="panel-head">
 			<h2 id="dem-h">Demand</h2>
 			<span class="muted small">Gross irrigation need = A-pan × crop factor × area</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('demand')} />
 		</div>
 		<div class="table-wrap">
 			<table class="data compact monthly">
@@ -337,6 +342,7 @@
 		<div class="panel-head">
 			<h2 id="cal-h">Flow calibration (rain → natural flow)</h2>
 			<span class="muted small">Tune against observed flow; check NSE and PBIAS on Runs & results</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('flow')} />
 		</div>
 		<div class="fields">
 			<div class="field">
@@ -669,6 +675,7 @@
 		<div class="panel-head">
 			<h2 id="rain-h">Rain gaps and CHIRPS</h2>
 			<span class="muted small">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('rain')} />
 		</div>
 		<div class="fields">
 			<div class="field">
@@ -696,6 +703,7 @@
 		<div class="panel-head">
 			<h2 id="rec-h">Calibration record</h2>
 			<span class="muted small">The observed flow the parameters are scored against, and what is left out</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('record')} />
 		</div>
 		<CalibrationWindowFields
 			bind:start={s.calibrationStart}
@@ -741,6 +749,7 @@
 		<div class="panel-head">
 			<h2 id="share-h">Flow share between farms</h2>
 			<span class="muted small">Splits catchment natural flow and the EWR into per-farm parts</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
 		</div>
 		<div class="fields">
 			<div class="field">
@@ -778,6 +787,7 @@
 		<div class="panel-head">
 			<h2 id="ewr-h">Environmental water requirement (EWR)</h2>
 			<span class="muted small">Pragmatic EWR at the outflow gauge</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('ewr')} />
 		</div>
 		<p class="hint muted">
 			The flow that must stay in the river for the ecosystem (the Ecological Reserve). b023's <em>pragmatic</em> EWR is one fixed
@@ -827,9 +837,23 @@
 				</div>
 			</div>
 			<span class="hint">
-				Period the curtailment targets on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
+				Period the curtailment targets and the assurance of supply on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
 			</span>
 			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
+			<div class="field">
+				<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
+				<NumberInput
+					id="st-aat"
+					min={1}
+					max={100}
+					scale={100}
+					disabled={readonly}
+					value={s.assuranceAnnualThreshold ?? 0.9}
+					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
+					aria-describedby="st-aat-h"
+				/>
+				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a farm's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+			</div>
 		</fieldset>
 	</section>
 
@@ -840,7 +864,10 @@
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" id="set-period" aria-labelledby="per-h">
-		<div class="panel-head"><h2 id="per-h">Simulation period <HelpTip key="settings.simulationStart" /></h2></div>
+		<div class="panel-head">
+			<h2 id="per-h">Simulation period <HelpTip key="settings.simulationStart" /></h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('period')} />
+		</div>
 		<div class="form-row">
 			<div class="field">
 				<label for="st-start">Simulation start</label>
@@ -875,6 +902,7 @@
 		<div class="panel-head">
 			<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
 			<span class="muted small">Gauge vs logger check on the Data tab and in run warnings</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('quality')} />
 		</div>
 		<div class="fields">
 			<div class="field">
@@ -932,6 +960,14 @@
 		<DataFeedsPanel projectId={project.id} />
 	{/snippet}
 </Lazy>
+
+{#if project.role === 'owner'}
+	<Lazy load={loadApiKeys}>
+		{#snippet children(ApiKeysPanel)}
+			<ApiKeysPanel projectId={project.id} />
+		{/snippet}
+	</Lazy>
+{/if}
 
 <Lazy load={loadReportSchedules}>
 	{#snippet children(ReportSchedulesPanel)}

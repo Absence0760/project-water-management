@@ -93,6 +93,24 @@ const ImportQuery = z.object({
 });
 const IMPORT_MB = (IMPORT_MAX_BYTES / 1024 / 1024).toFixed(0);
 
+/** restrict_violation: the project_evidence_guard trigger (035) refusing a DELETE. */
+const PG_RESTRICT = '23001';
+
+/**
+ * DELETE /projects/:id's 409 for a project that has nominated evidence
+ * (issue #43). `details.evidenceRun` names the current nomination so the UI
+ * can link to it; null when the trigger caught a nomination made mid-request.
+ */
+function evidenceKept(run: { runId: string; runLabel: string; nominations: number } | null) {
+	const named = run ? `"${run.runLabel || 'Untitled run'}" is its nominated evidence run` : 'it has a nominated evidence run';
+	return new ApiError(
+		409,
+		`this project can't be deleted: ${named}, and a project keeps its evidence run and nomination history for good. ` +
+			'A nomination can be replaced but not withdrawn; copy the project to start again without it.',
+		{ evidenceRun: run ? { id: run.runId, label: run.runLabel } : null, nominations: run?.nominations ?? null }
+	);
+}
+
 async function getProject(db: import('../db/tx.js').Db, id: string) {
 	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
@@ -220,8 +238,25 @@ export const projectRoutes = new Hono<AuthEnv>()
 	})
 	.delete('/:id', async (c) =>
 		withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'owner');
-			await db.query('DELETE FROM project WHERE id = $1', [c.req.param('id')]);
+			const id = c.req.param('id');
+			await requireRole(db, id, 'owner');
+			// A project that has nominated an evidence run keeps it and its
+			// nomination history for good (issue #43); the project_evidence_guard
+			// trigger (035) refuses the DELETE too, whoever runs it.
+			const { rows: evidence } = await db.query<{ runId: string; runLabel: string; nominations: number }>(
+				`SELECT n.run_id AS "runId", r.label AS "runLabel", count(*) OVER ()::int AS nominations
+				 FROM run_nomination n JOIN model_run r ON r.id = n.run_id
+				 WHERE n.project_id = $1 ORDER BY n.nominated_at DESC LIMIT 1`,
+				[id]
+			);
+			if (evidence[0]) throw evidenceKept(evidence[0]);
+			try {
+				await db.query('DELETE FROM project WHERE id = $1', [id]);
+			} catch (err) {
+				// A nomination that landed after the check above.
+				if ((err as { code?: string }).code === PG_RESTRICT) throw evidenceKept(null);
+				throw err;
+			}
 			return c.body(null, 204);
 		})
 	)

@@ -20,13 +20,20 @@ describe('reportSections', () => {
 			'curtailment',
 			'ewr',
 			'farms',
-			'notes'
+			'notes',
+			'validation',
+			'signoff',
+			'disclaimer'
 		]);
 	});
 
 	it('leaves out a section whose data the run lacks, with no placeholder', () => {
 		const ids = reportSections(run()).map((s) => s.id);
-		expect(ids).toEqual(['cover', 'inputs', 'calibration', 'ewr', 'farms']);
+		expect(ids).toEqual(['cover', 'inputs', 'calibration', 'ewr', 'farms', 'validation', 'signoff', 'disclaimer']);
+	});
+
+	it('always closes with the validation statement, the sign-off and the disclaimer (WP-3.13), even when unsigned', () => {
+		expect(reportSections(run()).slice(-3).map((s) => s.title)).toEqual(['Validation statement', 'Professional sign-off', 'Disclaimer']);
 	});
 
 	it('treats whitespace-only notes as no notes', () => {

@@ -13,6 +13,7 @@
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import LookingBack from '$lib/components/farm/LookingBack.svelte';
 	import MonthlyChart from '$lib/components/farm/MonthlyChart.svelte';
@@ -81,6 +82,7 @@
 			<MonthlyChart farm={view.farm} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
+			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />
 			<nav class="more" aria-label="More">
 				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download>Download my figures (CSV)</a>
 				<a href="{base}/farm/words">What do these words mean?</a>

@@ -50,7 +50,9 @@
 		A Reserve determination gives the EWR as a table: for each month, the flow required at each assurance level (“% point”, the share of
 		time it should be equalled or exceeded; 10 % is the wet-condition flow, 99 % the drought flow). Each month’s <strong>natural flow</strong>
 		picks the point it sits at, and the run checks whether the simulated flow at the site met the EWR at that point. The result is a
-		monthly compliance rate on Runs & results; the pragmatic EWR above still sets the daily charge and curtailment.
+		monthly compliance rate on Runs & results; the pragmatic EWR above still sets the daily charge and curtailment. A total-flow table can
+		also carry the Desktop Reserve Model’s low-flow table (maintenance and drought low flows), to show whether a month failed its low flows or
+		only its high flows, and any site can list freshets and floods to check each water year. Paste from a spreadsheet or load a CSV file.
 	</p>
 
 	{#if value.length === 0}

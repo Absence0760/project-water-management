@@ -18,7 +18,10 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // `pinned` keeps it past the storage cap (015_run_pinned); `published` says
 // the project's current publication holds it (022_publication). `scenarioId` /
 // `scenarioName`: the scenario that made the run (024_scenarios; the name the
-// run recorded once the scenario is gone); `citedBy`: what keeps it for good.
+// run recorded once the scenario is gone); `citedBy`: what keeps it for good;
+// `reproducible`: its input series are stored (021_series_blob), so
+// GET …/reproduce can re-run it. The same test loadRunInput makes: a run
+// with input series but no stored references is from before 021.
 // `trigger` (038_run_trigger): manual, auto or forecast; `forecastFrom`: a
 // forecast run's first forecast day (summary.forecast.from), else null.
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
@@ -30,6 +33,8 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id AND p.superseded_at IS NULL) AS published,
 	r.scenario_id AS "scenarioId", COALESCE(sc.name, r.inputs->'scenario'->>'name') AS "scenarioName",
 	${CITED_BY_SQL} AS "citedBy",
+	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
+		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
 	r."trigger", r.summary->'forecast'->>'from' AS "forecastFrom"`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;

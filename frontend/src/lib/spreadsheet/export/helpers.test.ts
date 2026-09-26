@@ -84,4 +84,14 @@ describe('splitSummary', () => {
 		expect([...out.keys()]).toEqual(['Summary', 'Curtailment', 'Warnings']);
 		expect(out.get('Curtailment')).toEqual([['Curtailment targets'], ['x', 1], [], ['Something new'], ['y', 2]]);
 	});
+
+	it('puts the assurance of supply and stress classes with the curtailment, the water account with the annual volumes (engine ≥ 0.32.0)', () => {
+		const rows = parseCsv(
+			'Curtailment targets\r\nx,1\r\n\r\nWater balance by water year (Oct–Sep)\r\nb,1\r\n\r\nAssurance of supply (reporting window)\r\nr,1\r\n\r\nStress classes by month (supplied ÷ demand)\r\ns,1\r\n\r\nWater account by water year (Oct–Sep)\r\na,1\r\n\r\nCHIRPS bias correction\r\nc,1\r\n'
+		);
+		const out = splitSummary(rows);
+		expect(out.get('Curtailment')!.map((r) => r[0])).toEqual(['Curtailment targets', 'x', undefined, 'Assurance of supply (reporting window)', 'r', undefined, 'Stress classes by month (supplied ÷ demand)', 's']);
+		expect(out.get('Annual volumes')!.map((r) => r[0])).toEqual(['Water balance by water year (Oct–Sep)', 'b', undefined, 'Water account by water year (Oct–Sep)', 'a']);
+		expect(out.get('Data checks')!.map((r) => r[0])).toEqual(['CHIRPS bias correction', 'c']);
+	});
 });

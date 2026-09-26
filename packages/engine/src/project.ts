@@ -16,6 +16,7 @@ import type { SeriesProvenance } from './seriesProvenance';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
+import type { SupplyAssurance } from './network/reliability';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -233,6 +234,13 @@ export interface ProjectSettings {
 	 * 0 = no dam evaporation.
 	 */
 	lakeEvapFactor: number;
+	/**
+	 * Annual assurance of supply (engine ≥ 0.32.0, WP-3.4): a water year counts
+	 * as met when a farm's Σ supplied ÷ Σ demand reaches this fraction. A
+	 * project choice, not a standard; default 0.9 (network/reliability.ts
+	 * DEFAULT_ANNUAL_THRESHOLD). Optional so settings stored before it still type.
+	 */
+	assuranceAnnualThreshold?: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -376,6 +384,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		effectiveRainFraction: 0.65,
 		effectiveRainStoreMm: 25,
 		lakeEvapFactor: 0.75,
+		assuranceAnnualThreshold: 0.9,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -1450,6 +1459,12 @@ export interface RunSummary {
 	 * before `forecast.from` only. Absent on ordinary runs and older runs.
 	 */
 	forecast?: ForecastSummary;
+	/**
+	 * Assurance of supply per farm and user, stress classes and the water
+	 * account (engine ≥ 0.32.0, WP-3.4, ./network/reliability.ts, model.md
+	 * §2.11a–b). Absent on older runs.
+	 */
+	supplyAssurance?: SupplyAssurance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }

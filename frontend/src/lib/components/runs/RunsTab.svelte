@@ -9,7 +9,6 @@
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
 import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
@@ -23,10 +22,12 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
+	import ReportWindowPanel from './ReportWindowPanel.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { resultGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -34,10 +35,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { publishedRunIds } from './publication';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
+	// Assurance of supply and the water account (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
+	const loadSupplyAssurancePanel = () => import('$lib/components/reliability/AssurancePanel.svelte');
+	const loadWaterAccountPanel = () => import('$lib/components/reliability/WaterAccountPanel.svelte');
 	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
 	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
+	// "Check reproduction" (WP-3.1): its own chunk, like the evidence panel.
+	const loadReproducePanel = () => import('./ReproducePanel.svelte');
 	// Publishing a run and the WP-2.3 notice editor: their own chunk, like the evidence panel.
 	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
@@ -266,6 +272,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 
 	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
 	const citedByScenario = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'scenario');
+	const signedBy = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'signoff').map((c) => c.name);
 
 	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
 	async function togglePin(r: RunMeta) {
@@ -437,7 +444,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.trigger === 'forecast'}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'forecast'}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
 										{#if r.trigger === 'forecast'}<span class="tag tag-warn" title="A forecast run: the days from {r.forecastFrom} run on forecast rain and are shown apart; its other figures cover the record before them. The project keeps one.">Forecast</span>{/if}
@@ -446,6 +453,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
 										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
+										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
+										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
@@ -526,7 +535,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
+					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} startDate={detail.run.startDate} endDate={detail.run.endDate} />
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -576,10 +585,25 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							{/snippet}
 						</Lazy>
 					</div>
+					<div class="panel" id="res-water-account">
+						<Lazy load={loadWaterAccountPanel}>
+							{#snippet children(WaterAccountPanel)}
+								<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+							{/snippet}
+						</Lazy>
+					</div>
 				{/snippet}
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
-						<CurtailmentTable {summary} {farmNames} />
+						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
+						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} nodes={editor.model.nodes} {farmNames} />
+					</section>
+					<section class="panel" id="res-assurance">
+						<Lazy load={loadSupplyAssurancePanel}>
+							{#snippet children(AssurancePanel)}
+								<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+							{/snippet}
+						</Lazy>
 					</section>
 				{/snippet}
 				{#snippet modelTail()}
@@ -630,12 +654,21 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
 						{/key}
+						<!-- Comments on the run from anyone on the team (WP-2.7), beside its one written explanation above. -->
+						<p class="run-comments"><NotesDrawer {projectId} target={{ kind: 'run', runId: shownRun.id, label: shownRun.label || fmtDate(shownRun.createdAt, true) }} /></p>
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}
 								<Lazy load={loadEvidencePanel}>
 									{#snippet children(EvidencePanel)}
 										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+									{/snippet}
+								</Lazy>
+							{/key}
+							{#key shownRunId}
+								<Lazy load={loadReproducePanel}>
+									{#snippet children(ReproducePanel)}
+										<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
 									{/snippet}
 								</Lazy>
 							{/key}

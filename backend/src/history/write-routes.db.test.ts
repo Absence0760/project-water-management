@@ -211,6 +211,21 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['share_link.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/share-links/${c.shareLinkId}`)
 	},
+	// API keys (WP-2.9). What a key then writes through /ingest records series.* as the key (ingest/ingest.db.test.ts).
+	{
+		route: `POST ${P}/api-keys`,
+		records: ['api_key.created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/api-keys`, { name: 'Guard key' });
+			c.apiKeyId = r.body.key?.id;
+			return r;
+		}
+	},
+	{
+		route: `DELETE ${P}/api-keys/:keyId`,
+		records: ['api_key.revoked'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
+	},
 	{
 		route: `DELETE ${P}/runs/:runId`,
 		records: ['run.deleted'],
@@ -253,12 +268,63 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		route: `POST ${P}/runs/:runId/signoffs`,
+		records: ['signoff.created'],
+		call: async (c) => {
+			const path = `${at(c)}/runs/${c.scenarioRunId}/signoffs`;
+			const { statement, statementSha256 } = (await c.owner.call('GET', path)).body;
+			return c.owner.call('POST', path, {
+				fullName: 'Guard Signer',
+				registrationBody: 'SACNASP',
+				registrationNo: '1',
+				scope: 'guard',
+				confirmed: statement.confirmations.map((k: { id: string }) => k.id),
+				statementSha256
+			});
+		}
+	},
+	{
 		route: `DELETE ${P}/scenarios/:sid`,
 		records: ['scenario.deleted'],
 		call: async (c) => {
 			const r = await c.owner.call('POST', `${at(c)}/scenarios`, { name: 'Guard scenario two', baseRunId: c.runId, ops: [] });
 			return c.owner.call('DELETE', `${at(c)}/scenarios/${r.body.scenario.id}`);
 		}
+	},
+	// --- allocations (WP-3.10) ------------------------------------------------------
+	{
+		route: `POST ${P}/allocations`,
+		records: ['allocation.created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/allocations`, { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 });
+			c.allocationId = r.body.allocation?.id;
+			return r;
+		}
+	},
+	{
+		route: `PATCH ${P}/allocations/:aid`,
+		records: ['allocation.changed'],
+		call: (c) => c.owner.call('PATCH', `${at(c)}/allocations/${c.allocationId}`, { volumeM3PerYear: 2000 })
+	},
+	{
+		route: `DELETE ${P}/allocations/:aid`,
+		records: ['allocation.deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/${c.allocationId}`)
+	},
+	{
+		route: `POST ${P}/allocations/import/commit`,
+		records: ['allocation.imported'],
+		call: async (c) => {
+			const text = 'registration_no,farm,authorisation,water_source,volume_m3_year\nG-1,Farm A,licence,surface,500\n';
+			const r = await c.owner.call('POST', `${at(c)}/allocations/import/commit`, { kind: 'csv', fileName: 'guard.csv', text });
+			c.allocationSourceId = r.body.source?.id;
+			return r;
+		}
+	},
+	{
+		route: `DELETE ${P}/allocations/sources/:sourceId`,
+		records: ['allocation.import_deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
@@ -299,6 +365,15 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['report_schedule.configured'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/report-schedules/${c.scheduleId}`)
 	},
+	// --- notes ------------------------------------------------------------------------
+	{
+		route: `DELETE ${P}/notes/:noteId`,
+		records: ['note.deleted'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/notes`, { body: 'Guard note', nodeId: c.farmId });
+			return c.owner.call('DELETE', `${at(c)}/notes/${r.body.note.id}`);
+		}
+	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts runAndStore)' },
@@ -306,6 +381,11 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
+	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },
+	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (037_notes.sql)' },
+	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
+	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },
+	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
 ];
 

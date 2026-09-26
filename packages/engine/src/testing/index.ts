@@ -5,3 +5,4 @@ export * from './fuzz';
 export * from './invariants';
 export * from './scenarioFuzz';
 export * from './forecastInvariants';
+export * from './yieldInvariants';

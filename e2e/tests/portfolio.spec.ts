@@ -1,0 +1,171 @@
+// The team portfolio (WP-2.14, docs/ui.md § Portfolio): every catchment of a
+// team on one screen with its EWR status in words, where the figures come
+// from and how old they are; sortable; cards on a phone; a farmer never gets
+// in. axe in both themes, at desktop and phone width.
+import type { APIRequestContext, Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
+import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
+import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
+import { expect, test } from '../support/fixtures.ts';
+
+const PHONE = { width: 360, height: 740 };
+
+interface Row {
+	id: string;
+	name: string;
+	ewr: { status: 'green' | 'amber' | 'red' | 'unknown'; daysNotMet30: number | null; days30: number | null };
+}
+
+/** A team of three catchments (published, run only, empty) and a personal project that must stay out. */
+async function arrange(request: APIRequestContext, tag: string) {
+	const team = (await (await request.post(`${API_URL}/teams`, { data: { name: `Portfolio WUA ${tag}` } })).json()).team as { id: string };
+	const toTeam = async (id: string) => expect((await request.patch(`${API_URL}/projects/${id}`, { data: { teamId: team.id } })).status()).toBe(200);
+	const published = await seedRunnableProject(request, `Pf published ${tag}`);
+	await toTeam(published.id);
+	const runId = await createRun(request, published.id, 'Baseline');
+	const pub = await request.post(`${API_URL}/projects/${published.id}/publication`, { data: { runId, restriction: { level: 'advisory', pct: 15 } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const runOnly = await seedRunnableProject(request, `Pf run only ${tag}`);
+	await toTeam(runOnly.id);
+	await createRun(request, runOnly.id, 'Draft');
+	const empty = (await (await request.post(`${API_URL}/projects`, { data: { name: `Pf empty ${tag}`, teamId: team.id } })).json()).project as { id: string };
+	await createProject(request, `Pf personal ${tag}`);
+	const rows = (await (await request.get(`${API_URL}/teams/${team.id}/portfolio`)).json()).projects as Row[];
+	return { team, published, runOnly, empty, rows, farmId: published.model.nodes.find((n) => n.kind === 'farm')!.id as string };
+}
+
+const LABEL = { red: 'Red', amber: 'Amber', green: 'Green' } as const;
+/** What the page must say for a known status. */
+const statusText = (r: Row) =>
+	r.ewr.status === 'unknown' ? null : r.ewr.daysNotMet30 ? `${LABEL[r.ewr.status]}: EWR not met ${r.ewr.daysNotMet30} of ${r.ewr.days30} days` : `${LABEL[r.ewr.status]}: EWR met all ${r.ewr.days30} days`;
+
+const tableRow = (page: Page, name: string) => page.getByRole('table').getByRole('row').filter({ has: page.getByRole('rowheader', { name: new RegExp(`^${name}`) }) });
+
+test('a WUA sees every team catchment with its status, where the figures come from and how old they are', async ({ page, owner }) => {
+	void owner;
+	const a = await arrange(page.request, 'A');
+	const pubRow = a.rows.find((r) => r.id === a.published.id)!;
+	expect(pubRow.ewr.status).not.toBe('unknown');
+
+	// From the team page.
+	await page.goto(`/teams/${a.team.id}`);
+	await page.getByRole('link', { name: /^Portfolio/ }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Portfolio WUA A: portfolio' })).toBeVisible();
+	const table = page.getByRole('table', { name: 'Catchments of Portfolio WUA A' });
+	await expect(table.getByRole('rowheader')).toHaveCount(3);
+	await expect(page.getByText('Pf personal A')).toHaveCount(0);
+
+	// Published: the status in words, the source, the age, the restriction, and the farms link to the Runs tab.
+	const pr = tableRow(page, 'Pf published A');
+	await expect(pr).toContainText(statusText(pubRow)!);
+	await expect(pr).toContainText('Published run');
+	await expect(pr).toContainText(/Figures to \d+ \w{3} 20\d\d, [\d,]+ days ago/);
+	await expect(pr).toContainText('Stale: over 7 days old');
+	await expect(pr).toContainText('Advisory · 15 %');
+	await expect(pr).toContainText(/\d+ of \d+ farms? short this week/);
+
+	// Run only: the EWR from the run, farms and dams honestly unknown.
+	const rr = tableRow(page, 'Pf run only A');
+	await expect(rr).toContainText('Latest run, not published');
+	await expect(rr).toContainText('Unknown until a run is published');
+	await expect(rr).toContainText('Not published');
+
+	// Nothing run: unknown, and why.
+	const er = tableRow(page, 'Pf empty A');
+	await expect(er).toContainText('Unknown: no run yet');
+	await expect(er).toContainText('Not run yet');
+	await expect(er).toContainText('No rain yet');
+
+	// The row opens the project.
+	await pr.getByRole('link', { name: 'Pf published A' }).click();
+	await expect(page).toHaveURL(new RegExp(`/projects/${a.published.id}$`));
+});
+
+test('sorts by status (worst first) and by name, and keeps the sort in the address', async ({ page, owner }) => {
+	void owner;
+	const a = await arrange(page.request, 'B');
+	const RANK = { red: 0, amber: 1, unknown: 2, green: 3 } as const;
+	const worstFirst = [...a.rows]
+		.sort((x, y) => RANK[x.ewr.status] - RANK[y.ewr.status] || (y.ewr.daysNotMet30 ?? 0) / (y.ewr.days30 || 1) - (x.ewr.daysNotMet30 ?? 0) / (x.ewr.days30 || 1) || x.name.localeCompare(y.name))
+		.map((r) => r.name);
+
+	await page.goto(`/teams/${a.team.id}/portfolio`);
+	const heads = page.getByRole('table').getByRole('rowheader').getByRole('link');
+	await expect(heads).toHaveText(worstFirst);
+	const statusHead = page.getByRole('columnheader', { name: /EWR, last 30 days/ });
+	await expect(statusHead).toHaveAttribute('aria-sort', 'ascending');
+
+	await page.getByRole('button', { name: /^Catchment/ }).click();
+	await expect(page).toHaveURL(/[?&]sort=name/);
+	await expect(heads).toHaveText(['Pf empty B', 'Pf published B', 'Pf run only B']);
+	await expect(page.getByRole('columnheader', { name: /^Catchment/ })).toHaveAttribute('aria-sort', 'ascending');
+	await page.getByRole('button', { name: /^Catchment/ }).click();
+	await expect(page).toHaveURL(/[?&]dir=desc/);
+	await expect(heads).toHaveText(['Pf run only B', 'Pf published B', 'Pf empty B']);
+
+	// A reload keeps it; the status heading flips back to worst first.
+	await page.reload();
+	await expect(heads).toHaveText(['Pf run only B', 'Pf published B', 'Pf empty B']);
+	await page.getByRole('button', { name: /EWR, last 30 days/ }).click();
+	await expect(heads).toHaveText(worstFirst);
+	await expect(page).not.toHaveURL(/sort=/);
+});
+
+test('a farmer on a team catchment is sent to their farm, never the portfolio', async ({ page, owner, signIn }) => {
+	void owner;
+	const a = await arrange(page.request, 'C');
+	const farmer = await signIn('Portfolio farmer');
+	const add = await page.request.post(`${API_URL}/projects/${a.published.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [a.farmId] } });
+	expect(add.status(), await add.text()).toBe(201);
+	expect((await farmer.page.request.get(`${API_URL}/teams/${a.team.id}/portfolio`)).status()).toBe(404);
+	await farmer.page.goto(`/teams/${a.team.id}/portfolio`);
+	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${a.published.id}`));
+});
+
+test('the demo team shows its two examples, not the analyst’s own catchment', async ({ page }) => {
+	test.setTimeout(120_000);
+	await seedExamplesOnce(page.request);
+	expect((await page.request.post(`${API_URL}/auth/login`, { data: DEMO })).status()).toBe(200);
+	const teams = (await (await page.request.get(`${API_URL}/teams`)).json()).teams as { id: string; name: string }[];
+	const demo = teams.find((t) => t.name === 'Demo Catchment Consultants')!;
+	await page.goto('/');
+	await page.getByRole('region', { name: 'Demo Catchment Consultants' }).getByRole('link', { name: 'Portfolio' }).click();
+	await expect(page).toHaveURL(new RegExp(`/teams/${demo.id}/portfolio`));
+	for (const name of [KLEINBERG, DROEVLEI]) {
+		const row = tableRow(page, name.replace(/[()]/g, '\\$&'));
+		await expect(row).toContainText(/(Red|Amber|Green): EWR (not met \d+ of 30 days|met all 30 days)|Unknown: /);
+		await expect(row).toContainText('Published run');
+	}
+	await expect(page.getByRole('rowheader', { name: SANDSPRUIT })).toHaveCount(0);
+});
+
+// axe on the portfolio in both themes, at desktop (the table) and phone width (the cards).
+for (const colorScheme of ['light', 'dark'] as const) {
+	for (const [sizeName, viewport] of [
+		['desktop', { width: 1280, height: 800 }],
+		['phone', PHONE]
+	] as const) {
+		test.describe(`${colorScheme}, ${sizeName}`, () => {
+			test.use({ colorScheme, viewport });
+
+			test('the portfolio has no WCAG 2.2 AA violations', async ({ page, owner }) => {
+				void owner;
+				const a = await arrange(page.request, `axe ${colorScheme} ${sizeName}`);
+				await page.goto(`/teams/${a.team.id}/portfolio`);
+				await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+				if (sizeName === 'phone') {
+					const cards = page.getByRole('list', { name: /^Catchments of/ });
+					await expect(cards.getByRole('listitem')).toHaveCount(3);
+					await expect(page.getByRole('table')).toBeHidden();
+					await expect(page.getByLabel('Sort by')).toBeVisible();
+					const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+					expect(scroll).toBeLessThanOrEqual(inner);
+				} else {
+					await expect(page.getByRole('table').getByRole('rowheader')).toHaveCount(3);
+				}
+				await expectNoViolations(page);
+			});
+		});
+	}
+}

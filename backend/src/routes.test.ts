@@ -56,6 +56,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
+	// Reproduction (WP-3.1): auth-gated like every project route.
+	it('inventories the reproduce route as auth-gated', () => {
+		for (const r of ['GET /projects/:id/runs/:runId/reproduce']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts).
 	it('inventories the account routes as auth-gated', () => {
 		for (const r of ['PATCH /auth/me', 'POST /auth/change-password']) {
@@ -73,6 +81,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Sign-offs (WP-3.13, 036_signoff): auth-gated like every project route.
+	it('inventories the sign-off routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
 	it('inventories the scenario routes as auth-gated', () => {
 		const scenarios = [
@@ -85,6 +101,14 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/rebase'
 		];
 		for (const r of scenarios) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
+	// Firm yield (WP-3.6, 040_yield): auth-gated like every project route.
+	it('inventories the yield routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/yield', 'GET /projects/:id/yield', 'POST /projects/:id/yield/:jobId/cancel']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -132,6 +156,12 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The team portfolio (WP-2.14): team members only (portfolio/portfolio.db.test.ts, a farmer gets 404).
+	it('inventories the portfolio route as auth-gated', () => {
+		expect(routes).toContain('GET /teams/:id/portfolio');
+		expect(PUBLIC.has('GET /teams/:id/portfolio')).toBe(false);
+	});
+
 	// The change history (WP-2.4): auth-gated like every project route.
 	it('inventories the history routes as auth-gated', () => {
 		const history = [
@@ -149,6 +179,21 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Notes and comments (WP-2.7, 037_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
+	it('inventories the note routes as auth-gated', () => {
+		const notes = [
+			'GET /projects/:id/notes',
+			'GET /projects/:id/notes/counts',
+			'POST /projects/:id/notes',
+			'PATCH /projects/:id/notes/:noteId',
+			'DELETE /projects/:id/notes/:noteId'
+		];
+		for (const r of notes) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
 		for (const r of ['GET /projects/:id/share-links', 'POST /projects/:id/share-links', 'DELETE /projects/:id/share-links/:linkId']) {
@@ -157,6 +202,32 @@ describe('route auth inventory', () => {
 		}
 		expect(routes).toContain('POST /share/view');
 		expect(routes).toContain('POST /share/series');
+	});
+
+	// API keys (WP-2.9): the owner's routes need a session; the ingest routes
+	// need an API key instead (ingest/auth.ts), so they are neither public nor
+	// session-gated. Each answers 401 without a key (the loop below), and a
+	// malformed key is refused before any database work (this test runs without one).
+	it('inventories the API-key routes as auth-gated, and the ingest routes as key-gated', async () => {
+		for (const r of ['GET /projects/:id/api-keys', 'POST /projects/:id/api-keys', 'DELETE /projects/:id/api-keys/:keyId']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		const ingest = routes.filter((r) => r.split(' ')[1]!.startsWith('/ingest/'));
+		expect(ingest.sort()).toEqual(['GET /ingest/v1/whoami', 'POST /ingest/v1/series/merge']);
+		for (const r of ingest) {
+			expect(PUBLIC.has(r)).toBe(false);
+			const [method, path] = r.split(' ') as [string, string];
+			for (const authorization of ['Bearer not-a-key', 'Bearer wm_0000000_short', `Basic wm_00000000_${'a'.repeat(43)}`]) {
+				const res = await app.request(path, {
+					method,
+					headers: { authorization, 'content-type': 'application/json' },
+					body: method === 'GET' ? undefined : '{}'
+				});
+				expect(res.status, `${r} with ${authorization}`).toBe(401);
+				expect(await res.json()).toEqual({ error: 'invalid or missing API key' });
+			}
+		}
 	});
 
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {

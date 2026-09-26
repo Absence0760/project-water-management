@@ -989,6 +989,29 @@ forecast card later.
 
 ### WP-2.7 Notes and comments
 
+> **Status: built** (`037_notes.sql`, `backend/src/notes/`,
+> `frontend/src/lib/components/notes/`; [api.md § Notes](../api.md#notes),
+> [data-model.md § Notes](../data-model.md#notes-037_notessql),
+> [ui.md § Notes](../ui.md#notes)). Where the build departs from the plan
+> below, and why:
+> - **A deleted note stays readable to its author** as well as to editors, at
+>   the RLS level: Postgres checks an updated row against the SELECT
+>   policies, so an author who isn't an editor couldn't soft-delete their own
+>   note otherwise. The API lists no deleted note to anyone.
+> - **Editors moderate by deleting only**: the `note_guard` trigger lets only
+>   the author change the body, and column grants keep the target and
+>   visibility fixed.
+> - **`GET /notes/counts`** feeds the count badges (one call per project),
+>   and `GET /notes` also takes `target=` and `limit=`; `settingKey`
+>   matches a group and its sub-keys. Settings notes are kept per group
+>   (`flow`, `ewr`, …), not per parameter yet.
+> - **A farm note needs a farm node** (the API refuses `farm` visibility on
+>   a gauge or other user: no farmer could read it).
+> - **History:** deleting records `note.deleted`; adding and editing are
+>   exempt in the write-route guard (the row carries its author and dates).
+> - The report's "Notes" section (WP-2.15) still shows the run's own notes,
+>   not these comments.
+
 **Goal.** Knowledge that lives in people's heads today ("dam raised in 2019
 per owner", "logger moved in March") is kept against the farm, parameter or
 run it's about.
@@ -1180,6 +1203,33 @@ section), deployment.md (queues, the worker, alarms), run-locally.md
 ---
 
 ### WP-2.9 Per-project API keys and the ingest endpoint
+
+> **Status: built** (`039_api_keys.sql`, `backend/src/ingest/`,
+> `series/merge.ts` `mergeInto`, Settings → API keys,
+> `scripts/ingest/push-fixture.mjs` / `pnpm dev:ingest:push`;
+> [api.md § Ingest](../api.md#ingest), [security.md § API keys](../security.md#api-keys)).
+> Where the build departs from the design below, and why:
+> - **A key is found by its prefix, then its hash is compared in constant
+>   time** (`crypto.timingSafeEqual`, `app_api_key_lookup`), rather than
+>   looked up by hash in SQL: the comparison is then visibly constant-time,
+>   and `prefix` (a generated column, `UNIQUE`) is the row's handle. The
+>   hash is still `UNIQUE`.
+> - **No event for a no-op push.** Re-sending the same days records nothing
+>   (as the UI's merge does), not `series.merged` with `daysChanged = 0`: a
+>   gateway re-sending every few minutes would bury the History. The
+>   response says `daysChanged: 0`, and `lastUsedAt` shows the key is alive.
+> - **No series revision for a key's merge**, like a data feed's (the
+>   series_revision insert policy needs an editor anyway).
+> - **Re-run.** WP-2.8's enqueue doesn't exist yet: `mergeInto` calls a
+>   named no-op hook, `series/newData.ts` `onSeriesDaysChanged`, on every
+>   merge that changed days (the UI's and the ingest's), and the ingest
+>   returns its answer as `rerunQueuedFor` (always `null` for now). WP-2.11
+>   fills the hook (and adds the data feeds' ingest as a caller). The job
+>   table has **no key policy**: an enqueue from a key's transaction needs
+>   an acting user (`job.acting_user_id`) or a `SECURITY DEFINER` enqueue,
+>   which is WP-2.11's to decide.
+> - `expiresInDays` is 1–3650 or absent (until revoked); `scopes` may be
+>   sent (only `series:write` exists).
 
 **Goal.** A logger gateway or a script pushes daily readings without a user
 session. The key can write series to one project, and nothing else.
@@ -1739,6 +1789,27 @@ the forecast kinds.
 ---
 
 ### WP-2.14 Portfolio dashboard for a WUA
+
+> **Status: built** (2026-09-26; `backend/src/portfolio/`,
+> `frontend/src/routes/teams/[id]/portfolio/`, no migration;
+> [api.md § Portfolio](../api.md#portfolio), [ui.md § Portfolio](../ui.md#portfolio-teamsidportfolio)).
+> Departures from the plan below: figures come from the current publication,
+> or, when nothing is published, the newest baseline run (its outlet EWR
+> only, counted in SQL from one series per project; farms and dams stay
+> "unknown until a run is published"), because WP-2.11's auto runs aren't
+> merged yet; `unknown` carries a reason (no run, no EWR set, no series) so
+> it is never a false green; farm counts are stored at publish time as
+> `catchment_view.recent` (farms short in 7 / 30 days) and kept out of a
+> farmer's publication response; `alertsFiring` is always `null`, a marked
+> hook for WP-2.13; the D11 thresholds are fixed defaults, not yet a team
+> setting (followups.md); "farms short this week" links to the Runs tab's
+> Curtailment section of the run over the last 7 days (`window=last7`, #44;
+> it doesn't scroll there yet, followups.md); `seed:examples` still puts two of its three catchments in
+> the demo team (Sandspruit stays the analyst's own, which the e2e uses as
+> the negative control). Measured locally: 10 published catchments × 60
+> farms (10-year runs) answer in a median 51 ms of API time (7 calls), well
+> inside the 500 ms criterion; there is no DB perf guard for it yet
+> (followups.md).
 
 **Goal.** All of a team's catchments on one screen: is anything wrong, is
 the data current, who is short this week?

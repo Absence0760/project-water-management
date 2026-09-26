@@ -99,6 +99,13 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ runId: 'r1', reason: 'why' });
 	});
 
+	it('GETs a reproduction of a run', async () => {
+		const body = { status: 'identical', identical: true, engineVersionThen: '1.0.0', engineVersionNow: '1.0.0', differences: [], truncated: 0 };
+		const get = mockFetch(200, body);
+		await expect(createApi('', get).runs.reproduce('p1', 'r/1')).resolves.toEqual(body);
+		expect((get.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/runs/r%2F1/reproduce');
+	});
+
 	it('reads the publication, POSTs a publish and PATCHes the notice by publication id', async () => {
 		const body = { current: null, history: [] };
 		const get = mockFetch(200, body);
@@ -120,6 +127,30 @@ describe('createApi', () => {
 		expect(JSON.parse(pinit.body as string)).toEqual({ nextExpectedOn: null });
 	});
 
+	it('lists notes with only the filters given, counts them, and adds, edits and deletes one', async () => {
+		const note = { id: 'n1', body: 'Dam raised in 2019' };
+		const list = mockFetch(200, { notes: [note] });
+		await expect(createApi('', list).notes.list('p/1', { nodeId: 'a', runId: undefined, settingKey: '' })).resolves.toEqual([note]);
+		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/notes?nodeId=a');
+		const all = mockFetch(200, { notes: [] });
+		await createApi('', all).notes.list('p1');
+		expect((all.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/notes');
+		const counts = mockFetch(200, { project: 1, nodes: {}, runs: {}, settings: {} });
+		await expect(createApi('', counts).notes.counts('p1')).resolves.toMatchObject({ project: 1 });
+		expect((counts.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p1/notes/counts');
+		const post = mockFetch(201, { note });
+		await expect(createApi('', post).notes.create('p1', { body: 'x', nodeId: 'a', visibility: 'farm' })).resolves.toEqual(note);
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/notes', 'POST', { body: 'x', nodeId: 'a', visibility: 'farm' }]);
+		const patch = mockFetch(200, { note });
+		await expect(createApi('', patch).notes.edit('p1', 'n/1', 'y')).resolves.toEqual(note);
+		const [purl, pinit] = patch.mock.calls[0] as unknown as [string, RequestInit];
+		expect([purl, pinit.method, JSON.parse(pinit.body as string)]).toEqual(['/projects/p1/notes/n%2F1', 'PATCH', { body: 'y' }]);
+		const del = mockFetch(204);
+		await expect(createApi('', del).notes.remove('p1', 'n1')).resolves.toBeUndefined();
+		expect((del.mock.calls[0] as unknown as [string, RequestInit])[1].method).toBe('DELETE');
+	});
+
 	it('lists, makes and withdraws share links, and reads a share by token in the body, never the URL', async () => {
 		const link = { id: 'l1', label: 'Forum', url: 'http://x/share#t=abc' };
 		const list = mockFetch(200, { links: [link] });
@@ -139,6 +170,20 @@ describe('createApi', () => {
 		const series = mockFetch(404, { error: 'not found' });
 		await expect(createApi('', series).share.series('tok', 'ewr')).rejects.toMatchObject({ status: 404 });
 		expect(JSON.parse((series.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ token: 'tok', key: 'ewr' });
+	});
+
+	it('lists, makes and revokes API keys (the secret comes back once, from the create)', async () => {
+		const key = { id: 'k1', name: 'Gateway', prefix: 'k1k1k1k1' };
+		const list = mockFetch(200, { keys: [key] });
+		await expect(createApi('', list).apiKeys.list('p/1')).resolves.toEqual([key]);
+		expect((list.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/api-keys');
+		const post = mockFetch(201, { key, secret: 'wm_k1k1k1k1_x' });
+		await expect(createApi('', post).apiKeys.create('p1', { name: 'Gateway', expiresInDays: null })).resolves.toEqual({ key, secret: 'wm_k1k1k1k1_x' });
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/api-keys', 'POST', { name: 'Gateway', expiresInDays: null }]);
+		const del = mockFetch(204);
+		await expect(createApi('', del).apiKeys.revoke('p1', 'k/1')).resolves.toBeUndefined();
+		expect((del.mock.calls[0] as unknown as [string, RequestInit])[0]).toBe('/projects/p1/api-keys/k%2F1');
 	});
 
 	it('returns undefined for 204', async () => {
@@ -261,6 +306,13 @@ describe('teams client', () => {
 		const r = await createApi('', f).teams.get('t');
 		expect(r.members).toHaveLength(1);
 		expect(call(f).url).toBe('/teams/t');
+	});
+
+	it('reads the team portfolio as it comes (WP-2.14)', async () => {
+		const body = { team: { id: 't/1', name: 'WUA', role: 'viewer' }, today: '2026-09-26', thresholds: { amber: 0.05, red: 0.2 }, projects: [] };
+		const f = mockFetch(200, body);
+		expect(await createApi('', f).teams.portfolio('t/1')).toEqual(body);
+		expect(call(f)).toEqual({ url: '/teams/t%2F1/portfolio', method: 'GET', body: undefined });
 	});
 
 	it('builds member management requests with encoded ids', async () => {
@@ -469,5 +521,36 @@ describe('scenarios client', () => {
 		expect(scenarioProblems(refused)).toEqual(problems);
 		expect(scenarioProblems(new ApiError(409, 'x', { problems }))).toEqual([]);
 		expect(scenarioProblems(new Error('x'))).toEqual([]);
+	});
+});
+
+describe('jobs and yield client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('lists jobs with an optional filter', async () => {
+		const f = mockFetch(200, { jobs: [{ id: 'j' }] });
+		expect(await createApi('', f).jobs.list('p/1')).toEqual([{ id: 'j' }]);
+		expect(call(f).url).toBe('/projects/p%2F1/jobs');
+		const g = mockFetch(200, { jobs: [] });
+		await createApi('', g).jobs.list('p', { status: 'running', limit: 10 });
+		expect(call(g).url).toBe('/projects/p/jobs?status=running&limit=10');
+	});
+
+	it('queues a yield, lists results and cancels a job', async () => {
+		const start = mockFetch(202, { jobId: 'j', job: { id: 'j' }, created: true });
+		const body = { nodeId: 'n', runId: 'r', kind: 'curve' as const, params: { assurance: 0.95 } };
+		expect((await createApi('', start).yield.start('p', body)).jobId).toBe('j');
+		expect(call(start)).toEqual({ url: '/projects/p/yield', method: 'POST', body });
+
+		const list = mockFetch(200, { results: [{ id: 'y' }] });
+		expect(await createApi('', list).yield.list('p', { scenarioId: 's', nodeId: 'n' })).toEqual([{ id: 'y' }]);
+		expect(call(list).url).toBe('/projects/p/yield?scenarioId=s&nodeId=n');
+
+		const cancel = mockFetch(200, { status: 'dead', cancelled: true });
+		expect(await createApi('', cancel).yield.cancel('p', 'j/1')).toEqual({ status: 'dead', cancelled: true });
+		expect(call(cancel)).toEqual({ url: '/projects/p/yield/j%2F1/cancel', method: 'POST', body: undefined });
 	});
 });
