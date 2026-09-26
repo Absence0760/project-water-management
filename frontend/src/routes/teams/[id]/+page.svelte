@@ -334,7 +334,7 @@
 						{:else}
 							<p class="muted">
 								{canAddProjects
-									? 'No projects yet. Create one here, or move an existing project into the team from its Overview tab.'
+									? 'No projects yet. Create one here, or move an existing project into the team from its Summary tab.'
 									: 'No projects yet.'}
 							</p>
 						{/if}

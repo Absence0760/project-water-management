@@ -8,6 +8,7 @@
 	import { downloads } from '$lib/export';
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention } from './attention';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
@@ -21,6 +22,9 @@
 	import SetupChecklist from './SetupChecklist.svelte';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
+
+	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
+	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
 
 	let {
 		project,
@@ -132,6 +136,9 @@
 		});
 	});
 
+	// The latest run's stored series (its detail record, cached by fetchRun), for the flow chart.
+	const latestRefs = $derived(latestRun ? (detailCache.get(latestRun.id)?.series ?? []) : []);
+
 	const today = localIsoDate();
 	const attentionItems = $derived(
 		attention({
@@ -187,7 +194,9 @@
 	}
 </script>
 
-<SetupChecklist {steps} tabs={visibleTabs} />
+<!-- Summary (issue #17, option A): the results first. Before the first run
+     there are none, so the setup checklist leads instead. -->
+{#if !pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
 
 {#if pick}
 	<LatestRun
@@ -203,14 +212,25 @@
 	/>
 {/if}
 
-<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
-<PublishedBaseline projectId={project.id} {runs} {canEdit} />
-
 <NeedsAttention items={attentionItems} />
+
+{#if latestRun && latestRun.id === pick?.latest.id}
+	<Lazy load={loadFlowVsReserve}>
+		{#snippet children(FlowVsReserve)}
+			<FlowVsReserve projectId={project.id} runId={latestRun!.id} refs={latestRefs} forecastFrom={latestRun!.summary.forecast?.from ?? null} />
+		{/snippet}
+	</Lazy>
+{/if}
 
 <!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
 <AlertsPanel projectId={project.id} {canEdit} />
 
+<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
+<PublishedBaseline projectId={project.id} {runs} {canEdit} />
+
+{#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
+
+<h2 class="model-h">The model</h2>
 <!-- Each fact links to the tab where it is edited or looked at; the link is
      stretched over the whole tile, so the tile is the click target. -->
 <dl class="stats">
@@ -268,6 +288,10 @@
 </div>
 
 <style>
+	.model-h {
+		margin: 1.25rem 0 0.5rem;
+		font-size: 1.05rem;
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);

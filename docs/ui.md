@@ -39,16 +39,16 @@ characters.*, the two not matching).
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
-renders empty and then fills in. The Overview, Data and Runs tabs take those
+renders empty and then fills in. The Summary, Data and Runs tabs take those
 lists as props and report changes back, so an upload or a run made on one tab
-shows in the others (the Overview's counts and checklist included) without a
-refetch. Only the Overview ships with the page; every other tab's code is
+shows in the others (the Summary's counts and checklist included) without a
+refetch. Only the Summary ships with the page; every other tab's code is
 fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Overview, Runs & results, Scenarios, Allocations),
+first): **Outcomes** (Summary, Runs & results, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -56,12 +56,13 @@ whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
-- **1680 px and wider:** a sidebar beside the tab's content, with the section
+- **1100 px and wider:** a sidebar beside the tab's content, with the section
   labels shown, sticky under the app header. The page grows by the sidebar's
-  width, so the content column keeps its usual 1480 px maximum. Narrower
-  screens don't get the sidebar because the network's node table only just fits
-  1440 px on its own (`model.spec.ts`).
-- **900–1679 px:** one strip across the top, sections side by side with a
+  width, so on a wide screen the content column keeps its usual 1480 px
+  maximum. Narrower, the widest grids scroll inside their own box: the
+  network's node table fits beside the sidebar from about 1700 px and scrolls
+  below that, its name and remove columns kept in view (`model.spec.ts`).
+- **900–1099 px:** one strip across the top, sections side by side with a
   divider and a small label over each.
 - **Below 900 px (phones):** the same strip scrolling sideways; the section labels are read
   out (each section is a named group) but not shown.
@@ -71,7 +72,7 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
-| Overview | (none) | | `lib/components/overview/` |
+| Summary | (none) | `summary` | `lib/components/overview/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
 | Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
 | Allocations | `allocations` | | `lib/components/allocations/` |
@@ -90,13 +91,13 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
-| contributor, farmer, none | Overview only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
+| viewer | Summary, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
+| contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
 inputs; `assess`: the assessors' Applications list, owners and editors
 only), so adding a tab is one line; a tab the table doesn't know counts as
-an input, and a tab the page doesn't render is dropped. Overview can never be
+an input, and a tab the page doesn't render is dropped. Summary can never be
 hidden. Whether a viewer starts with the inputs shown is one constant,
 `VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT` (`false`; a client question). The
 checkbox isn't saved: it resets when the project is opened again.
@@ -104,7 +105,7 @@ checkbox isn't saved: it resets when the project is opened again.
 This is **presentation, not access control**: RLS still lets a viewer read
 every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
 opens it, and the strip then shows that tab in its place while it is open
-(`stripTabs`), so you can see where you are. The Overview checklist keeps a
+(`stripTabs`), so you can see where you are. The Summary's checklist keeps a
 hidden tab's step and its status, but as plain text rather than a link; its
 headline facts still link to their tabs (a deep link, as above). The
 per-member "choose your own tabs" preference is not built yet
@@ -173,16 +174,35 @@ shorter than the cap looks as before.
   (`autorun/autoRun.ts` `rerunQueuedText`). The page doesn't poll: the run
   shows in the Runs list on the next load.
 
-## Overview
+## Summary
 
-The setup checklist (`overview/checklist.ts`), the latest run's results,
-the published baseline, a "Needs attention" list, the active alerts ([§ Alerts](#alerts)), eight headline facts, project details, the import
-record (an imported project only), recent notes ([§ Notes](#notes)), team and members.
+The tab a project opens on (id `overview`, no `?tab=`; `?tab=summary` is an
+alias). It was called Overview until issue #17 (option A · Results first)
+put the results first. Top to bottom:
+
+1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
+   leads: there is nothing to summarise yet.
+2. The latest run's results, the "Needs attention" list, the **Flow vs
+   reserve** chart (below), the active alerts ([§ Alerts](#alerts)) and the
+   published baseline.
+3. **Once there is a run**, the setup checklist comes here, below the results
+   (usually as the one-line "Setup complete").
+4. **The model**: eight headline facts, then project details, the import
+   record (an imported project only), recent notes ([§ Notes](#notes)), team
+   and members.
+
+- **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
+  record is in: the Runs tab's *EWR vs simulated outflow* chart
+  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) over the last
+  year, shading a forecast run's forecast days. It is its own chunk, since it
+  pulls in uPlot, so the page's first paint doesn't wait for it. Its series
+  come through the Runs tab's `cachedSeries`, and it fetches only the series
+  the run stored ("This run stored no outflow or EWR series." otherwise).
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
   **newest run by `createdAt`**, even when an older run is the nominated
-  evidence: the Overview answers "what does the model say now?", and only
+  evidence: the Summary answers "what does the model say now?", and only
   the newest run reflects the latest data and edits. When the evidence run is
   a different run, a line under the context names and links it, so the two
   can't be confused. A context line gives the label, the run period
@@ -420,8 +440,8 @@ workbook part is `WorkbookReview.svelte`.
 
 The notes and unmapped report go with the import (`importReport`,
 `import/importReport.ts`, trimmed to the server's caps) and are kept with the
-project: its Overview's **Import record** shows them afterwards
-([Overview](#overview)). A `.json` import sends its own record
+project: its Summary's **Import record** shows them afterwards
+([Summary](#summary)). A `.json` import sends its own record
 (`source: 'project-file'`, with the notes the preview showed, if any).
 
 Everything from the file (farm and sheet names, notes, formula text, error
@@ -439,7 +459,7 @@ invites and the team's projects. Admins pick each member's role from
 disabled), and the page explains each role in a short list under the table:
 viewers read every team project, members edit them, admins own them and
 manage the team. A team viewer doesn't get "New project in this team"; the
-New project dialog and the Overview's *Move to* list offer only teams where
+New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
@@ -452,7 +472,7 @@ from each team group's heading on the project list. One row per catchment
 the user can see, from `GET /teams/:id/portfolio` ([api.md §
 Portfolio](./api.md#portfolio)):
 
-- **Catchment**: the name (opens the project's Overview) and where the
+- **Catchment**: the name (opens the project's Summary) and where the
   figures come from: *Published run*, *Published run (a newer run is not
   published)*, *Latest run, not published* or *Not run yet*, with a hint
   for editors to run or publish.
@@ -2065,7 +2085,7 @@ March") is kept against what it is about.
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
     gaps, Calibration record, Flow share, EWR, Simulation period, Data
     quality), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
-  - on the **Overview**: *Recent notes*, the newest 8 across the project,
+  - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
     button.
   One `GET /notes/counts` per project feeds every badge
@@ -2420,7 +2440,7 @@ Alerts](./security.md#alerts)). The workspace's words are in
 workspace never loads it), the translated pages' in `alerts/words.ts` (from
 the catalogue, [§ Language](#language)); both unit-tested.
 
-- **Overview → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
+- **Summary → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
   attention): the alerts firing now, each as a sentence ("Farm One: dam
   about 8 % on 20 Sep 2026 (alert below 30 %)", "EWR at the outlet at risk
   on 5 of 14 forecast days (alert at 3)", the late or failing feeds), or "No

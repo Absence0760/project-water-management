@@ -127,7 +127,7 @@
 			<div class="alert alert-success-ish" role="status">
 				This run’s inputs are restored. Run the model again to see them in the results.
 				{#if restored.length}
-					Farmers to link again (Overview tab): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
+					Farmers to link again (Summary tab): {restored.map((r) => `${r.displayName} to ${r.nodeName}`).join(', ')}.
 				{/if}
 			</div>
 		{/if}

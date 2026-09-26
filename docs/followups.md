@@ -1749,7 +1749,7 @@ role and not before it.
         editor), viewers opening the Runs tab on the published run, "compare
         with published" (the compare page's default and offer, and the Runs
         header link), and `publishedAt` on `GET /projects` for every member
-        ([ui.md § Overview](./ui.md#overview), [run-comparison.md](./run-comparison.md)).
+        ([ui.md § Summary](./ui.md#summary), [run-comparison.md](./run-comparison.md)).
   - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
         store which site bound a farm's charge each day, so the projection
         re-runs the engine's attribution on the stored flows. Exact, except
