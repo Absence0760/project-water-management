@@ -61,7 +61,7 @@ export function thresholdLabel(kind: AlertKind): string | null {
 		case 'ewr_forecast_fail':
 			return 'Alert at (forecast days at risk)';
 		case 'data_stale':
-			return 'Alert after (days later than usual)';
+			return 'Alert after (days later than usual for this feed)';
 		case 'feed_failing':
 			return 'Alert after (failures in a row)';
 		case 'job_dead':
@@ -91,11 +91,19 @@ export function thresholdProblem(kind: AlertKind, value: number): string | null 
 	return null;
 }
 
-/** The project-wide rules first (in the API's order), then the farms' dam rules; and whether any is on. */
-export function groupRules<R extends AlertRule>(rules: R[]): { catchment: R[]; farms: R[]; anyOn: boolean } {
+/**
+ * The project-wide rules first (in the API's order), then the farms' dam
+ * rules, then the data feeds' staleness rules (one per feed, each with its
+ * own level); and whether any is on.
+ */
+export function groupRules<R extends AlertRule>(rules: R[]): { catchment: R[]; farms: R[]; feeds: R[]; anyOn: boolean } {
 	return {
-		catchment: rules.filter((r) => r.kind !== 'dam_below'),
+		catchment: rules.filter((r) => r.kind !== 'dam_below' && r.kind !== 'data_stale'),
 		farms: rules.filter((r) => r.kind === 'dam_below'),
+		feeds: rules.filter((r) => r.kind === 'data_stale'),
 		anyOn: rules.some((r) => r.enabled)
 	};
 }
+
+/** A data feed's staleness rule, as the editor labels it: the feed, and "(switched off)" for a disabled feed. */
+export const feedRuleLabel = (r: Pick<AlertRule, 'feedName' | 'feedEnabled'>) => `${r.feedName ?? 'Data feed'}${r.feedEnabled === false ? ' (feed switched off)' : ''}`;

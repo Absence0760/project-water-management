@@ -17,8 +17,10 @@
 //                          its forecast days haven't all passed. Not while an
 //                          API key's anomalous push is held (series/hold.ts):
 //                          that forecast may rest on the held days.
-//   data_stale             the enabled data feeds: days past each one's usual
-//                          delay (feeds/health.ts staleAfterDays).
+//   data_stale             one rule per data feed (054 feed_id): days that
+//                          feed is past its usual delay (feeds/health.ts
+//                          staleAfterDays); a disabled feed, or one with no
+//                          data yet, has no value (a firing rule clears).
 //   feed_failing           the enabled data feeds' failures in a row.
 //   job_dead               the project's jobs that died in the last 24 hours.
 //   restriction_published  the current publication's restriction and notice:
@@ -38,6 +40,7 @@ interface RuleRow {
 	id: string;
 	kind: AlertKind;
 	node_id: string | null;
+	feed_id: string | null;
 	threshold: number;
 	enabled: boolean;
 	event_id: string | null;
@@ -73,9 +76,31 @@ export async function ensureFarmRules(db: Db, projectId: string): Promise<void> 
 			ORDER BY r.updated_at DESC LIMIT 1
 		 ) d
 		 WHERE n.project_id = $1 AND n.kind = 'farm'
-		 ON CONFLICT (project_id, kind, node_id) DO NOTHING`,
+		 ON CONFLICT (project_id, kind, node_id, feed_id) DO NOTHING`,
 		[projectId]
 	);
+}
+
+/**
+ * Once data_stale is on for any feed, a feed added later gets its own rule,
+ * on, at its source's default level (SOURCES[source].staleAlertDays); a feed
+ * whose rule an editor switched off keeps it off (the rule exists).
+ */
+export async function ensureFeedRules(db: Db, projectId: string): Promise<void> {
+	const { rows } = await db.query<{ id: string; source: FeedSource }>(
+		`SELECT f.id, f.source FROM data_feed f
+		 WHERE f.project_id = $1
+		   AND EXISTS (SELECT 1 FROM alert_rule r WHERE r.project_id = $1 AND r.kind = 'data_stale' AND r.enabled)
+		   AND NOT EXISTS (SELECT 1 FROM alert_rule r WHERE r.feed_id = f.id)`,
+		[projectId]
+	);
+	for (const f of rows) {
+		await db.query(
+			`INSERT INTO alert_rule (project_id, kind, feed_id, threshold, enabled) VALUES ($1, 'data_stale', $2, $3, true)
+			 ON CONFLICT (project_id, kind, node_id, feed_id) DO NOTHING`,
+			[projectId, f.id, SOURCES[f.source].staleAlertDays]
+		);
+	}
 }
 
 /** Whether any alert is switched on for the project (as the caller, RLS). */
@@ -85,16 +110,18 @@ export async function alertsOn(db: Db, projectId: string): Promise<boolean> {
 }
 
 const md5 = (s: string | null) => createHash('md5').update(s ?? '').digest('hex');
-const feedLabel = (source: FeedSource, targetName: string) => (targetName ? `${SOURCES[source].label} (${targetName})` : SOURCES[source].label);
+/** A feed as the feeds page, the rule editor and the alert mails name it. */
+export const feedLabel = (source: FeedSource, targetName: string) => (targetName ? `${SOURCES[source].label} (${targetName})` : SOURCES[source].label);
 
 /** Evaluate every rule of the project once. As an editor (RLS), inside the job's transaction. */
 export async function evaluateAlerts(db: Db, projectId: string, { now = new Date() }: { now?: Date } = {}): Promise<EvalOutcome> {
 	const today = now.toISOString().slice(0, 10);
 	await ensureFarmRules(db, projectId);
+	await ensureFeedRules(db, projectId);
 	const { rows: rules } = await db.query<RuleRow>(
-		`SELECT r.id, r.kind, r.node_id, r.threshold, r.enabled, e.id AS event_id, e.value AS event_value
+		`SELECT r.id, r.kind, r.node_id, r.feed_id, r.threshold, r.enabled, e.id AS event_id, e.value AS event_value
 		 FROM alert_rule r LEFT JOIN alert_event e ON e.rule_id = r.id AND e.state = 'firing'
-		 WHERE r.project_id = $1 ORDER BY r.kind, r.node_id`,
+		 WHERE r.project_id = $1 ORDER BY r.kind, r.node_id, r.feed_id`,
 		[projectId]
 	);
 	const out: EvalOutcome = { rules: rules.length, opened: 0, cleared: 0, queued: 0 };
@@ -137,8 +164,8 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 	});
 	const held = lazy(() => heldSinceLastRun(db, projectId));
 	const feeds = lazy(async () => {
-		const { rows } = await db.query<{ source: FeedSource; config: FeedConfig; target_name: string; last_data_date: string | null; consecutive_failures: number }>(
-			`SELECT source, config, target_name, to_char(last_data_date, 'YYYY-MM-DD') AS last_data_date, consecutive_failures
+		const { rows } = await db.query<{ id: string; source: FeedSource; config: FeedConfig; target_name: string; last_data_date: string | null; consecutive_failures: number }>(
+			`SELECT id, source, config, target_name, to_char(last_data_date, 'YYYY-MM-DD') AS last_data_date, consecutive_failures
 			 FROM data_feed WHERE project_id = $1 AND enabled ORDER BY source, target_kind, target_name`,
 			[projectId]
 		);
@@ -168,16 +195,13 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 				return { value: f.outletEwrDaysAtRisk, detail: { days: f.outletEwrDaysAtRisk, of: f.days, from: f.from, to: f.to, madeOn: f.madeOn }, runId: f.runId };
 			}
 			case 'data_stale': {
-				const t = toEpochDay(today);
-				const late = (await feeds())
-					.filter((f) => f.last_data_date)
-					.map((f) => {
-						const allow = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
-						return { label: feedLabel(f.source, f.target_name), newest: f.last_data_date!, overdue: t - toEpochDay(f.last_data_date!) - allow };
-					});
-				if (!late.length) return { value: null, detail: {}, runId: null };
-				const worst = Math.max(...late.map((x) => x.overdue));
-				return { value: worst, detail: { feeds: late.filter((x) => x.overdue > 0).sort((a, b) => b.overdue - a.overdue).slice(0, 5) }, runId: null };
+				// This rule's feed only, past its own usual delay (the feed's config, else its source's).
+				const f = (await feeds()).find((x) => x.id === r.feed_id);
+				if (!f?.last_data_date) return { value: null, detail: {}, runId: null };
+				const allow = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
+				const overdue = toEpochDay(today) - toEpochDay(f.last_data_date) - allow;
+				const late = { label: feedLabel(f.source, f.target_name), newest: f.last_data_date, overdue };
+				return { value: overdue, detail: { feedId: f.id, feeds: overdue > 0 ? [late] : [] }, runId: null };
 			}
 			case 'feed_failing': {
 				const all = await feeds();

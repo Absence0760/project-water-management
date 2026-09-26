@@ -25,17 +25,24 @@ export interface SourceSpec {
 	 * for a forecast, whose newest day is in the future.
 	 */
 	staleAfterDays: number;
+	/**
+	 * The data_stale alert's default level for a feed of this source: days
+	 * past staleAfterDays before it fires (WP-2.13; an editor changes it per
+	 * feed, alerts/routes.ts). A daily forecast matters within days; verified
+	 * DWS flow arrives in irregular batches, so a month.
+	 */
+	staleAlertDays: number;
 }
 
 export const SOURCES: Record<FeedSource, SourceSpec> = {
 	// Preliminary CHIRPS v3 comes out two days after each pentad ends, so the
 	// newest day is normally 2–7 days old.
-	chirps: { label: 'CHIRPS daily rainfall', kinds: ['rain_chirps_mm', 'rain_catchment_mm'], unit: 'mm', staleAfterDays: 12 },
+	chirps: { label: 'CHIRPS daily rainfall', kinds: ['rain_chirps_mm', 'rain_catchment_mm'], unit: 'mm', staleAfterDays: 12, staleAlertDays: 3 },
 	// A new 16-day forecast is issued daily; at least 12 days ahead means one
 	// was issued in the last few days.
-	chirps_gefs: { label: 'CHIRPS-GEFS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -12 },
+	chirps_gefs: { label: 'CHIRPS-GEFS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -12, staleAlertDays: 2 },
 	// Verified DWS flow lags by months (docs/architecture.md § Data feeds).
-	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240 }
+	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240, staleAlertDays: 30 }
 };
 
 const Lat = z.number().finite().min(-60).max(60);

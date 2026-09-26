@@ -36,7 +36,7 @@ const tick = () => runTick({ feeds: false, reports: false, alerts: false });
 /** Alert mails only (they carry List-Unsubscribe), not the sign-up confirmations. */
 const mailsTo = (u: { email: string }) => outbox.filter((m) => m.to === u.email && m.headers?.['List-Unsubscribe']);
 const tokenIn = (m: Mail) => m.text.match(/\/alerts\/unsubscribe#t=([A-Za-z0-9_-]{43})/)![1]!;
-const rules = (u: User, list: { kind: string; nodeId?: string | null; threshold: number; enabled: boolean }[], pid = projectId) =>
+const rules = (u: User, list: { kind: string; nodeId?: string | null; feedId?: string | null; threshold: number; enabled: boolean }[], pid = projectId) =>
 	u.call('PUT', `/projects/${pid}/alert-rules`, { rules: list });
 const damRules = (threshold: number, enabled = true) => farms.map((f) => ({ kind: 'dam_below', nodeId: f.id, threshold, enabled }));
 const rowsAs = async <T = Record<string, unknown>>(u: User, sql: string, params: unknown[] = []) =>
@@ -585,12 +585,12 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 	it('the tick queues a check for a project with a data_stale rule on, as an editor, and mails the owners and editors about a late feed', async () => {
 		await reset();
 		const { id: pid } = await makeProject(owner, 'Alerts stale');
-		await asOwner(
+		const [feed] = await asOwner(
 			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
-			 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', 'gauge', $2, $2, now(), now(), current_date - 250, 0)`,
+			 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', 'gauge', $2, $2, now(), now(), current_date - 250, 0) RETURNING id`,
 			[pid, owner.id]
 		);
-		expect((await rules(owner, [{ kind: 'data_stale', threshold: 3, enabled: true }], pid)).status).toBe(200);
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: feed.id, threshold: 3, enabled: true }], pid)).status).toBe(200);
 		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
 		// The worker's context queues it (the regular tick's schedule step).
 		const queued = await withoutUser(async (db) => (await db.query<{ n: number }>("SELECT app_alert_schedule($1, interval '0', 1) AS n", [pid])).rows[0]!.n);
@@ -604,5 +604,135 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 		expect(m.subject).toBe('Data feed behind — Alerts stale');
 		expect(m.text).toMatch(/DWS gauge flow \(gauge\): newest day .*, 10 days late/);
 		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
+	});
+});
+
+describe('per-feed staleness levels (054 feed_id)', () => {
+	/** A feed whose newest day is `ago` days old (as the schema owner: the feed's health is not what's under test). */
+	const feed = async (pid: string, source: 'dws' | 'chirps', name: string, ago: number, enabled = true) =>
+		(
+			await asOwner(
+				`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, now(), now(), current_date - $8::int) RETURNING id`,
+				[pid, source, source === 'dws' ? { station: 'X0H000' } : { cells: [{ lat: -33, lon: 19 }] }, source === 'dws' ? 'flow_observed_m3s' : 'rain_chirps_mm', name, enabled, owner.id, ago]
+			)
+		)[0].id as string;
+	const staleRules = async (pid: string) =>
+		(await owner.call('GET', `/projects/${pid}/alert-rules`)).body.rules.filter((r: { kind: string }) => r.kind === 'data_stale') as {
+			id: string | null;
+			feedId: string;
+			feedName: string;
+			threshold: number;
+			enabled: boolean;
+			firing: boolean;
+		}[];
+	const staleMails = (pid: string) => mailsTo(owner).filter((m) => m.subject === `Data feed behind — ${pid}`);
+
+	it('lists one data_stale rule per feed, off, at its source’s default level; the other kinds stay one per catchment', async () => {
+		const { id: pid } = await makeProject(owner, 'Stale defaults');
+		const gauge = await feed(pid, 'dws', 'gauge', 0);
+		const rain = await feed(pid, 'chirps', 'Upper', 0);
+		const got = await staleRules(pid);
+		expect(got.map((r) => [r.feedId, r.feedName, r.threshold, r.enabled, r.id])).toEqual([
+			[rain, 'CHIRPS daily rainfall (Upper)', 3, false, null],
+			[gauge, 'DWS gauge flow (gauge)', 30, false, null]
+		]);
+		const all = (await owner.call('GET', `/projects/${pid}/alert-rules`)).body.rules as { kind: string; feedId: string | null }[];
+		expect(all.filter((r) => r.kind === 'ewr_forecast_fail')).toHaveLength(1);
+		expect(all.filter((r) => r.kind !== 'data_stale').every((r) => r.feedId === null)).toBe(true);
+	});
+
+	it('refuses a data_stale rule without its feed, a feed on another kind, and another project’s feed', async () => {
+		const { id: pid } = await makeProject(owner, 'Stale refusals');
+		const { id: otherPid } = await makeProject(owner, 'Stale elsewhere');
+		const mine = await feed(pid, 'dws', 'gauge', 0);
+		const theirs = await feed(otherPid, 'dws', 'gauge', 0);
+		expect((await rules(owner, [{ kind: 'data_stale', threshold: 3, enabled: true }], pid)).status).toBe(400);
+		expect((await rules(owner, [{ kind: 'feed_failing', feedId: mine, threshold: 3, enabled: true }], pid)).status).toBe(400);
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: theirs, threshold: 3, enabled: true }], pid)).status).toBe(404);
+		// Straight past the route: the trigger refuses another project's feed too.
+		await expect(
+			withUser(owner.id, (db) => db.query(`INSERT INTO alert_rule (project_id, kind, feed_id, threshold) VALUES ($1, 'data_stale', $2, 3)`, [pid, theirs]))
+		).rejects.toMatchObject({ code: '23503' });
+		// Positive control: its own feed is fine, and a rule's feed never changes.
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: mine, threshold: 3, enabled: true }], pid)).status).toBe(200);
+		const another = await feed(pid, 'chirps', 'Other', 0);
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE alert_rule SET feed_id = $2 WHERE project_id = $1 AND kind = 'data_stale'`, [pid, another]))).rejects.toMatchObject({
+			code: '23514'
+		});
+		await asOwner(`DELETE FROM job WHERE project_id IN ($1, $2) AND kind = 'alert_eval'`, [pid, otherPid]);
+	});
+
+	it('each feed fires at its own level, past its own usual delay, and the mail names that feed only', async () => {
+		const { id: pid } = await makeProject(owner, 'Stale levels');
+		// DWS: 250 days old = 10 past its 240-day delay. CHIRPS: 17 days old = 5 past its 12.
+		const gauge = await feed(pid, 'dws', 'gauge', 250);
+		const rain = await feed(pid, 'chirps', 'Upper', 17);
+		const before = staleMails('Stale levels').length;
+		// The gauge at its default (30 days) is fine; the rain at 3 is late.
+		expect(
+			(
+				await rules(
+					owner,
+					[
+						{ kind: 'data_stale', feedId: gauge, threshold: 30, enabled: true },
+						{ kind: 'data_stale', feedId: rain, threshold: 3, enabled: true }
+					],
+					pid
+				)
+			).status
+		).toBe(200);
+		await tick();
+		let got = await staleRules(pid);
+		expect(got.map((r) => [r.feedName, r.firing])).toEqual([
+			['CHIRPS daily rainfall (Upper)', true],
+			['DWS gauge flow (gauge)', false]
+		]);
+		const first = staleMails('Stale levels').slice(before);
+		expect(first).toHaveLength(1);
+		expect(first[0]!.text).toMatch(/CHIRPS daily rainfall \(Upper\): newest day .*, 5 days late/);
+		expect(first[0]!.text).not.toContain('DWS gauge flow');
+		// Lower the gauge's level under its lateness: it fires on its own, with its own mail.
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: gauge, threshold: 5, enabled: true }], pid)).status).toBe(200);
+		await tick();
+		got = await staleRules(pid);
+		expect(got.every((r) => r.firing)).toBe(true);
+		const second = staleMails('Stale levels').slice(before + 1);
+		expect(second).toHaveLength(1);
+		expect(second[0]!.text).toMatch(/DWS gauge flow \(gauge\): newest day .*, 10 days late/);
+		expect(second[0]!.text).not.toContain('CHIRPS');
+		// The events say which feed.
+		const events = (await owner.call('GET', `/projects/${pid}/alert-events`)).body.events as { kind: string; feedId: string | null }[];
+		expect(events.filter((e) => e.kind === 'data_stale').map((e) => e.feedId).sort()).toEqual([gauge, rain].sort());
+		// A feed switched off clears its alert (no value), and the other keeps firing.
+		await asOwner('UPDATE data_feed SET enabled = false WHERE id = $1', [rain]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: gauge, threshold: 5, enabled: true }], pid)).status).toBe(200);
+		await tick();
+		expect((await staleRules(pid)).map((r) => [r.feedName, r.firing])).toEqual([
+			['CHIRPS daily rainfall (Upper)', false],
+			['DWS gauge flow (gauge)', true]
+		]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('a feed added once staleness alerts are on gets its own rule, on, at its source’s default (positive control: none while they are off)', async () => {
+		const { id: pid } = await makeProject(owner, 'Stale later');
+		const gauge = await feed(pid, 'dws', 'gauge', 0);
+		const { evaluateAlerts } = await import('./evaluate.js');
+		// Off: a new feed gets no rule.
+		await feed(pid, 'chirps', 'Early', 0);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		expect((await staleRules(pid)).every((r) => r.id === null)).toBe(true);
+		// On for the gauge: the next feed gets a rule at CHIRPS's 3 days, and so does the earlier one.
+		expect((await rules(owner, [{ kind: 'data_stale', feedId: gauge, threshold: 20, enabled: true }], pid)).status).toBe(200);
+		await feed(pid, 'chirps', 'Later', 0);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		expect((await staleRules(pid)).map((r) => [r.feedName, r.threshold, r.enabled, r.id !== null])).toEqual([
+			['CHIRPS daily rainfall (Early)', 3, true, true],
+			['CHIRPS daily rainfall (Later)', 3, true, true],
+			['DWS gauge flow (gauge)', 20, true, true]
+		]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 });

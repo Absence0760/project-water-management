@@ -2400,10 +2400,12 @@ the catalogue, [§ Language](#language)); both unit-tested.
   alert is firing". An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
-  data feed behind, restriction notice, background jobs failed, data feed
-  failing) and per farm dam, each with its level (dam % of capacity, days,
-  failures or jobs; range-checked in the form and by the API), a *Firing*
-  mark, and Save. It says that nothing is sent until a kind is switched on,
+  restriction notice, background jobs failed, data feed failing), per farm
+  dam, and, under **Data feeds behind**, per data feed ("CHIRPS daily
+  rainfall (Upper)", "(feed switched off)" when it is), each with its level
+  (dam % of capacity; days, a feed's past its own usual delay, defaulting by
+  source; failures or jobs; range-checked in the form and by the API), a
+  *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): per catchment you can open,

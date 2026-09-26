@@ -5,9 +5,10 @@
 // address bar; a replaced or tampered link says it no longer works. Both
 // pages pass axe, on a phone. A bounced address (SES, stood in for by
 // `pnpm dev:mail:bounce`) pauses a person's alert emails behind a banner on
-// the account and alert pages, which turns them back on.
+// the account and alert pages, which turns them back on. An editor sets a
+// staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
-import { seedRunnableProject } from '../support/api.ts';
+import { createProject, seedRunnableProject } from '../support/api.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -119,4 +120,34 @@ test('a bounced address pauses the alert emails behind a banner, which turns the
 	await p.goto('/account/alerts');
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+});
+
+test('an editor sets a staleness level per data feed, starting from its source’s default', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Stale levels catchment');
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/feeds`, { data: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] } } });
+	expect(res.status(), await res.text()).toBe(201);
+	const feedId = ((await res.json()) as { feed: { id: string } }).feed.id;
+
+	await page.goto(`/projects/${project.id}`);
+	const panel = page.getByRole('region', { name: 'Active alerts' });
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await panel.getByRole('button', { name: 'Set up alert emails' }).click();
+	const feeds = panel.getByRole('group', { name: 'Data feeds behind' });
+	await expect(feeds.getByText('Each feed has its own level: the days past that feed’s usual delay before it alerts.')).toBeVisible();
+	const on = feeds.getByRole('checkbox', { name: 'CHIRPS daily rainfall' });
+	const level = feeds.getByRole('spinbutton', { name: 'Alert after (days later than usual for this feed)' });
+	await expect(on).not.toBeChecked();
+	// CHIRPS's default level, off until switched on.
+	await expect(level).toHaveValue('3');
+	await expect(level).toBeDisabled();
+	await expectNoViolations(page, { include: '.alerts' });
+
+	await on.check();
+	await level.fill('5');
+	await panel.getByRole('button', { name: 'Save alert rules' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+	const saved = await page.request.get(`${API_URL}/projects/${project.id}/alert-rules`);
+	const rule = ((await saved.json()).rules as { kind: string; feedId: string | null; threshold: number; enabled: boolean }[]).find((r) => r.kind === 'data_stale')!;
+	expect(rule).toMatchObject({ feedId, threshold: 5, enabled: true });
 });

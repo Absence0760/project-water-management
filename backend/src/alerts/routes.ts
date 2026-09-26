@@ -21,7 +21,9 @@ import { releaseAddress } from '../mail/suppression.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
+import { SOURCES, type FeedSource } from '../feeds/config.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
+import { feedLabel } from './evaluate.js';
 import { queueAlertEval } from './queue.js';
 import { ALERT_KINDS, ALERT_MODES, DEFAULT_THRESHOLDS, defaultMode, THRESHOLD, type AlertKind, type AlertMode } from './rules.js';
 import { newNonce } from './tokens.js';
@@ -213,6 +215,11 @@ export interface AlertRuleView {
 	kind: AlertKind;
 	nodeId: string | null;
 	nodeName: string | null;
+	/** The data feed a data_stale rule watches (one rule per feed, 054); null for every other kind. */
+	feedId: string | null;
+	/** That feed as the feeds page names it ("CHIRPS daily rainfall (Upper)"), and whether it is enabled. */
+	feedName: string | null;
+	feedEnabled: boolean | null;
 	threshold: number;
 	enabled: boolean;
 	/** Firing now. */
@@ -224,12 +231,19 @@ export const RulesBody = z
 		rules: z
 			.array(
 				z
-					.object({ kind: z.enum(ALERT_KINDS), nodeId: z.string().regex(UUID).nullable().optional(), threshold: z.number().finite(), enabled: z.boolean() })
+					.object({
+						kind: z.enum(ALERT_KINDS),
+						nodeId: z.string().regex(UUID).nullable().optional(),
+						feedId: z.string().regex(UUID).nullable().optional(),
+						threshold: z.number().finite(),
+						enabled: z.boolean()
+					})
 					.strict()
 					.superRefine((r, ctx) => {
 						const t = THRESHOLD[r.kind].safeParse(r.threshold);
 						if (!t.success) ctx.addIssue({ code: 'custom', path: ['threshold'], message: `not a threshold for ${r.kind}` });
 						if ((r.kind === 'dam_below') !== !!r.nodeId) ctx.addIssue({ code: 'custom', path: ['nodeId'], message: 'a dam alert names its farm; no other kind does' });
+						if ((r.kind === 'data_stale') !== !!r.feedId) ctx.addIssue({ code: 'custom', path: ['feedId'], message: 'a data-feed alert names its feed; no other kind does' });
 					})
 			)
 			.min(1)
@@ -237,26 +251,43 @@ export const RulesBody = z
 	})
 	.strict();
 
-/** The project's rules, with a default (off, not saved) for every kind and farm that has none. */
+/**
+ * The project's rules, with a default (off, not saved) for every kind, farm
+ * and feed that has none: every project-wide kind, a dam_below per farm in
+ * network order, and a data_stale per data feed (at its source's default
+ * level, SOURCES[source].staleAlertDays) in the feeds page's order.
+ */
 async function listRules(db: Db, projectId: string): Promise<AlertRuleView[]> {
-	const { rows: saved } = await db.query<{ id: string; kind: AlertKind; node_id: string | null; threshold: number; enabled: boolean; firing: boolean }>(
-		`SELECT r.id, r.kind, r.node_id, r.threshold, r.enabled,
+	const { rows: saved } = await db.query<{ id: string; kind: AlertKind; node_id: string | null; feed_id: string | null; threshold: number; enabled: boolean; firing: boolean }>(
+		`SELECT r.id, r.kind, r.node_id, r.feed_id, r.threshold, r.enabled,
 			EXISTS (SELECT 1 FROM alert_event e WHERE e.rule_id = r.id AND e.state = 'firing') AS firing
 		 FROM alert_rule r WHERE r.project_id = $1`,
 		[projectId]
 	);
 	const { rows: farms } = await db.query<{ id: string; name: string }>("SELECT id, name FROM node WHERE project_id = $1 AND kind = 'farm' ORDER BY sort_order, name", [projectId]);
-	const key = (kind: string, node: string | null) => `${kind}/${node ?? ''}`;
-	const byKey = new Map(saved.map((r) => [key(r.kind, r.node_id), r]));
-	const view = (kind: AlertKind, nodeId: string | null, nodeName: string | null): AlertRuleView => {
-		const r = byKey.get(key(kind, nodeId));
+	const { rows: feeds } = await db.query<{ id: string; source: FeedSource; target_name: string; enabled: boolean }>(
+		'SELECT id, source, target_name, enabled FROM data_feed WHERE project_id = $1 ORDER BY source, target_kind, target_name',
+		[projectId]
+	);
+	const key = (kind: string, node: string | null, feed: string | null) => `${kind}/${node ?? ''}/${feed ?? ''}`;
+	const byKey = new Map(saved.map((r) => [key(r.kind, r.node_id, r.feed_id), r]));
+	const view = (
+		kind: AlertKind,
+		nodeId: string | null,
+		nodeName: string | null,
+		feed: { id: string; name: string; enabled: boolean; defaultThreshold: number } | null = null
+	): AlertRuleView => {
+		const r = byKey.get(key(kind, nodeId, feed?.id ?? null));
+		const where = { kind, nodeId, nodeName, feedId: feed?.id ?? null, feedName: feed?.name ?? null, feedEnabled: feed?.enabled ?? null };
 		return r
-			? { id: r.id, kind, nodeId, nodeName, threshold: r.threshold, enabled: r.enabled, firing: r.firing }
-			: { id: null, kind, nodeId, nodeName, threshold: DEFAULT_THRESHOLDS[kind], enabled: false, firing: false };
+			? { id: r.id, ...where, threshold: r.threshold, enabled: r.enabled, firing: r.firing }
+			: { id: null, ...where, threshold: feed?.defaultThreshold ?? DEFAULT_THRESHOLDS[kind], enabled: false, firing: false };
 	};
 	const out: AlertRuleView[] = [];
 	for (const kind of ALERT_KINDS) {
 		if (kind === 'dam_below') for (const f of farms) out.push(view(kind, f.id, f.name));
+		else if (kind === 'data_stale')
+			for (const f of feeds) out.push(view(kind, null, null, { id: f.id, name: feedLabel(f.source, f.target_name), enabled: f.enabled, defaultThreshold: SOURCES[f.source].staleAlertDays }));
 		else out.push(view(kind, null, null));
 	}
 	return out;
@@ -270,6 +301,8 @@ export interface AlertEventView {
 	threshold: number;
 	nodeId: string | null;
 	nodeName: string | null;
+	/** The feed a data_stale alert is about (its rule's); null for every other kind. */
+	feedId: string | null;
 	openedAt: string;
 	clearedAt: string | null;
 	detail: Record<string, unknown>;
@@ -292,14 +325,19 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			for (const r of body.rules) {
 				const nodeId = r.nodeId ?? null;
+				const feedId = r.feedId ?? null;
 				if (nodeId) {
 					const { rows } = await db.query("SELECT 1 FROM node WHERE id = $1 AND project_id = $2 AND kind = 'farm'", [nodeId, id]);
 					if (!rows[0]) throw new ApiError(404, 'not found');
 				}
+				if (feedId) {
+					const { rows } = await db.query('SELECT 1 FROM data_feed WHERE id = $1 AND project_id = $2', [feedId, id]);
+					if (!rows[0]) throw new ApiError(404, 'not found');
+				}
 				await db.query(
-					`INSERT INTO alert_rule (project_id, kind, node_id, threshold, enabled) VALUES ($1, $2, $3::uuid, $4, $5)
-					 ON CONFLICT (project_id, kind, node_id) DO UPDATE SET threshold = EXCLUDED.threshold, enabled = EXCLUDED.enabled`,
-					[id, r.kind, nodeId, r.threshold, r.enabled]
+					`INSERT INTO alert_rule (project_id, kind, node_id, feed_id, threshold, enabled) VALUES ($1, $2, $3::uuid, $4::uuid, $5, $6)
+					 ON CONFLICT (project_id, kind, node_id, feed_id) DO UPDATE SET threshold = EXCLUDED.threshold, enabled = EXCLUDED.enabled`,
+					[id, r.kind, nodeId, feedId, r.threshold, r.enabled]
 				);
 			}
 			const kinds = [...new Set(body.rules.map((r) => r.kind))];
@@ -330,11 +368,12 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 				threshold: number;
 				node_id: string | null;
 				node_name: string | null;
+				feed_id: string | null;
 				opened_at: Date;
 				cleared_at: Date | null;
 				detail: Record<string, unknown>;
 			}>(
-				`SELECT e.id, e.kind, e.state, e.value, r.threshold, e.node_id, n.name AS node_name, e.opened_at, e.cleared_at, e.detail - 'signature' AS detail
+				`SELECT e.id, e.kind, e.state, e.value, r.threshold, e.node_id, n.name AS node_name, r.feed_id, e.opened_at, e.cleared_at, e.detail - 'signature' AS detail
 				 FROM alert_event e JOIN alert_rule r ON r.id = e.rule_id LEFT JOIN node n ON n.id = e.node_id
 				 WHERE e.project_id = $1 AND ($2 = 'all' OR e.state = 'firing')
 				 ORDER BY e.opened_at DESC, e.id DESC LIMIT 100`,
@@ -348,6 +387,7 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 				threshold: r.threshold,
 				nodeId: r.node_id,
 				nodeName: r.node_name,
+				feedId: r.feed_id,
 				openedAt: r.opened_at.toISOString(),
 				clearedAt: r.cleared_at?.toISOString() ?? null,
 				detail: r.detail

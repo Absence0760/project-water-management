@@ -500,7 +500,8 @@ flowchart LR
    RLS). Values come from the current publication (dam level: the farm's
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
-   is held), the data feeds and the dead jobs. `alerts/rules.ts` decides
+   is held), the data feeds (staleness per feed, each at its own level) and
+   the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly
    opened event is fanned out (`app_alert_fan_out`) to one delivery per

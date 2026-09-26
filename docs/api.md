@@ -645,8 +645,8 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | GET | `/me/alerts` | – | `{ projects: ProjectAlerts[] }`: every catchment you can open (never an applicant's), by name | signed in |
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
 | POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
-| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, then a `dam_below` per farm in network order; one not saved yet is `{ id: null, enabled: false }` at its default threshold | editor |
-| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
+| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, and a `data_stale` per data feed (054); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's) | editor |
+| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
 
@@ -656,14 +656,16 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   | --- | --- | --- | --- | --- |
   | `dam_below` (per farm) | the published projection's dam level on its last day of data, or the published forecast's lowest, is below the threshold; re-arms at threshold + 5 points | 0 < t < 1 (0.3) | that farm's farmers, editors, owners | viewers |
   | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2 | whole days 1–60 (3) | editors, owners | viewers |
-  | `data_stale` | an enabled feed is more than t days past its usual delay (`feeds/health.ts` `staleAfterDays`); re-arms under t | whole days 1–60 (3) | editors, owners | – |
+  | `data_stale` (per feed) | that feed, enabled, is more than t days past its own usual delay (`feeds/health.ts` `staleAfterDays`, or the feed's config); re-arms under t | whole days 1–60 (by source: CHIRPS 3, CHIRPS-GEFS 2, DWS 30) | editors, owners | – |
   | `restriction_published` | the current publication's restriction level, percentage or notice changes (a lift too) | 0 | farmers, viewers and up | – |
   | `feed_failing` | an enabled feed failed t times in a row; re-arms at 0 | 1–20 (3) | owners | editors |
   | `job_dead` | t jobs died in the last 24 hours; re-arms at 0 | 1–100 (1) | owners | editors |
 
   Applicants (contributors) never get alerts. A `threshold` outside its
-  range, or a `dam_below` rule without a farm (or another kind with one),
-  is `400`; a farm of another project `404`.
+  range, a `dam_below` rule without a farm (or another kind with one), or a
+  `data_stale` rule without a feed (or another kind with one) is `400`; a
+  farm or feed of another project `404`. Once `data_stale` is on for any
+  feed, a feed added later gets its own rule, on, at its source's default.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
   `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
   `mode` is what you get now (the database's own rule,
@@ -679,12 +681,13 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   a farmer's dam alert, and `daily_digest` for `all`; a farmer naming a farm
   that isn't theirs gets `404`. Turning a choice back on (from `off`) draws a
   new unsubscribe token, so a link in an older email no longer works.
-- `AlertRule = { id, kind, nodeId, nodeName, threshold, enabled, firing }`.
-- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, openedAt, clearedAt, detail }`.
+- `AlertRule = { id, kind, nodeId, nodeName, feedId, feedName, feedEnabled, threshold, enabled, firing }`
+  (`feedName` as the feeds page names the feed, e.g. "CHIRPS daily rainfall (Upper)").
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, openedAt, clearedAt, detail }`.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
-  madeOn }`; `data_stale` `{ feeds: { label, newest, overdue }[] }`;
+  madeOn }`; `data_stale` `{ feedId, feeds: [{ label, newest, overdue }] }` (its one feed);
   `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
   `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
   While an event fires, its `value` and `detail` follow the figure.

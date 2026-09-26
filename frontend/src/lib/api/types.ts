@@ -337,6 +337,11 @@ export interface AlertRule {
 	kind: AlertKind;
 	nodeId: string | null;
 	nodeName: string | null;
+	/** data_stale: the feed it watches (one rule per feed); null for every other kind. */
+	feedId: string | null;
+	/** That feed as the feeds page names it, and whether it is enabled (null for other kinds). */
+	feedName: string | null;
+	feedEnabled: boolean | null;
 	/** dam_below: a fraction of capacity (0.3 = 30 %); the others whole days, failures or jobs; restriction_published 0. */
 	threshold: number;
 	enabled: boolean;
@@ -346,6 +351,7 @@ export interface AlertRule {
 export interface AlertRuleChange {
 	kind: AlertKind;
 	nodeId?: string | null;
+	feedId?: string | null;
 	threshold: number;
 	enabled: boolean;
 }
@@ -359,6 +365,8 @@ export interface AlertEvent {
 	threshold: number;
 	nodeId: string | null;
 	nodeName: string | null;
+	/** data_stale: the feed it is about; null for every other kind. */
+	feedId: string | null;
 	openedAt: string;
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */

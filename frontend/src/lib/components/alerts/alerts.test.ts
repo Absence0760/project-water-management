@@ -1,7 +1,7 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
-import { eventText, groupRules, thresholdFromInput, thresholdProblem, thresholdToInput } from './alerts';
+import { eventText, feedRuleLabel, groupRules, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '$lib/api/client';
 import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, unsubscribedText } from './words';
 
@@ -15,6 +15,7 @@ const event = (over: Partial<AlertEvent> = {}): AlertEvent => ({
 	threshold: 0.3,
 	nodeId: 'n1',
 	nodeName: 'Farm One',
+	feedId: null,
 	openedAt: '2026-09-26T08:00:00Z',
 	clearedAt: null,
 	detail: { source: 'latest', pct: 0.08, date: '2026-09-20' },
@@ -97,12 +98,30 @@ describe('the rule editor', () => {
 		expect(thresholdProblem('restriction_published', 0)).toBeNull();
 	});
 
-	it('puts the catchment’s rules before the farms’ dam rules', () => {
-		const r = (kind: AlertRule['kind'], enabled = false): AlertRule => ({ id: null, kind, nodeId: kind === 'dam_below' ? 'n' : null, nodeName: null, threshold: 1, enabled, firing: false });
-		const g = groupRules([r('dam_below'), r('data_stale'), r('dam_below', true)]);
-		expect(g.catchment.map((x) => x.kind)).toEqual(['data_stale']);
+	it('puts the catchment’s rules first, then the farms’ dam rules, then a staleness rule per data feed', () => {
+		const r = (kind: AlertRule['kind'], enabled = false): AlertRule => ({
+			id: null,
+			kind,
+			nodeId: kind === 'dam_below' ? 'n' : null,
+			nodeName: null,
+			feedId: kind === 'data_stale' ? 'f' : null,
+			feedName: kind === 'data_stale' ? 'DWS gauge flow (gauge)' : null,
+			feedEnabled: kind === 'data_stale' ? true : null,
+			threshold: 1,
+			enabled,
+			firing: false
+		});
+		const g = groupRules([r('dam_below'), r('data_stale'), r('ewr_forecast_fail'), r('dam_below', true)]);
+		expect(g.catchment.map((x) => x.kind)).toEqual(['ewr_forecast_fail']);
 		expect(g.farms).toHaveLength(2);
+		expect(g.feeds.map((x) => x.feedId)).toEqual(['f']);
 		expect(g.anyOn).toBe(true);
+	});
+
+	it('labels a feed’s staleness rule by the feed, and says when the feed is switched off', () => {
+		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: true })).toBe('CHIRPS daily rainfall (Upper)');
+		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: false })).toBe('CHIRPS daily rainfall (Upper) (feed switched off)');
+		expect(thresholdLabel('data_stale')).toBe('Alert after (days later than usual for this feed)');
 	});
 });
 

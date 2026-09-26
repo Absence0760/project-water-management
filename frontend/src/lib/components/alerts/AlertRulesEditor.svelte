@@ -1,11 +1,13 @@
 <script lang="ts">
 	// The catchment's alert rules (WP-2.13; editors): which kinds send email,
-	// and at what level. Loaded on demand by AlertsPanel. Saving evaluates the
+	// and at what level: catchment-wide kinds, a dam level per farm, and a
+	// staleness level per data feed (each past that feed's usual delay, 054).
+	// Loaded on demand by AlertsPanel. Saving evaluates the
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
 	import { onMount } from 'svelte';
 	import { api, type AlertRule } from '$lib/api';
-	import { groupRules, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+	import { feedRuleLabel, groupRules, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 
 	let { projectId, onClose, onSaved }: { projectId: string; onClose: () => void; onSaved: () => void } = $props();
 
@@ -18,8 +20,8 @@
 	const toRows = (rules: AlertRule[]): Row[] => rules.map((r) => ({ ...r, input: thresholdToInput(r.kind, r.threshold) }));
 	const groups = $derived(rows ? groupRules(rows) : null);
 	const problems = $derived(rows ? rows.map((r) => (r.enabled ? thresholdProblem(r.kind, r.input) : null)) : []);
-	const key = (r: AlertRule) => `${r.kind}/${r.nodeId ?? ''}`;
-	const idOf = (r: AlertRule) => `rule-${r.kind}-${r.nodeId ?? 'all'}`;
+	const key = (r: AlertRule) => `${r.kind}/${r.nodeId ?? ''}/${r.feedId ?? ''}`;
+	const idOf = (r: AlertRule) => `rule-${r.kind}-${r.nodeId ?? r.feedId ?? 'all'}`;
 
 	onMount(async () => {
 		try {
@@ -39,6 +41,7 @@
 			const changes = rows.map((r) => ({
 				kind: r.kind,
 				nodeId: r.nodeId,
+				feedId: r.feedId,
 				threshold: r.kind === 'restriction_published' ? 0 : thresholdFromInput(r.kind, r.input),
 				enabled: r.enabled
 			}));
@@ -97,6 +100,13 @@
 				{#each groups.farms as r (key(r))}{@render rule(r, r.nodeName ?? 'Farm')}{/each}
 			</fieldset>
 		{/if}
+		{#if groups.feeds.length}
+			<fieldset>
+				<legend>Data feeds behind</legend>
+				<p class="muted hint">Each feed has its own level: the days past that feed's usual delay before it alerts.</p>
+				{#each groups.feeds as r (key(r))}{@render rule(r, feedRuleLabel(r))}{/each}
+			</fieldset>
+		{/if}
 		<div class="actions">
 			<button type="submit" class="btn btn-primary btn-sm" disabled={saving || problems.some(Boolean)}>{saving ? 'Saving…' : 'Save alert rules'}</button>
 			<button type="button" class="btn btn-sm" onclick={onClose}>Close</button>
@@ -120,6 +130,10 @@
 		border-radius: 6px;
 		margin: 0 0 0.75rem;
 		padding: 0.5rem 0.75rem;
+	}
+	.hint {
+		margin: 0 0 0.25rem;
+		font-size: 0.85rem;
 	}
 	.rule {
 		display: flex;
