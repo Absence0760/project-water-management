@@ -514,6 +514,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Alerts firing now (or all recent ones), as the caller may see them. */
 			events: (id: string, state: 'firing' | 'all' = 'firing') =>
 				request<{ events: AlertEvent[] }>('GET', `${p(id)}/alert-events?state=${state}`).then((r) => r.events),
+			/** Turn alert emails back on after SES suppressed your address (429 when it bounced again within a day). */
+			resume: () => request<{ mailSuppressed: null }>('POST', '/me/alerts/resume'),
 			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
 			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
 		},

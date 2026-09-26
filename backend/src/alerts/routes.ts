@@ -2,6 +2,7 @@
 //
 //   GET  /me/alerts                       your alert choices, per project and kind
 //   PUT  /me/alerts/:projectId            change them (immediate / daily / off)
+//   POST /me/alerts/resume                turn alert mail back on after SES suppressed the address
 //   GET  /projects/:id/alert-rules        the project's rules (editor)
 //   PUT  /projects/:id/alert-rules        switch kinds on and set thresholds (editor)
 //   GET  /projects/:id/alert-events       firing (or recent) alerts, as RLS lets the caller see them (farmer+)
@@ -16,6 +17,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { parseToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
+import { releaseAddress } from '../mail/suppression.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
@@ -115,7 +117,52 @@ async function myProjects(db: Db, projectId?: string): Promise<{ id: string; nam
 	return rows;
 }
 
+/**
+ * After turning mail back on, a person waits this long before they can do it
+ * again: an address that keeps bouncing costs the sending account its SES
+ * reputation, so a bounce loop is held to one mail a day.
+ */
+export const RESUME_GAP_HOURS = 24;
+
+/**
+ * POST /me/alerts/resume: SES suppressed the caller's address (a bounce or a
+ * complaint, mail/suppression.ts), and they have fixed it. Takes the address
+ * off SES's suppression list (MAIL_TRANSPORT=ses; nothing locally), then
+ * clears the flag, so their alert choices apply again as they were. Only the
+ * caller's own flag. 429 within RESUME_GAP_HOURS of the last resume.
+ */
+async function resumeMail(userId: string): Promise<void> {
+	const me = await withUser(userId, async (db) => {
+		const { rows } = await db.query<{ email: string; suppressed: boolean; recent: boolean }>(
+			`SELECT email::text, mail_suppressed_at IS NOT NULL AS suppressed,
+				coalesce(mail_resumed_at > now() - make_interval(hours => $1), false) AS recent
+			 FROM app_user WHERE id = app_current_user_id()`,
+			[RESUME_GAP_HOURS]
+		);
+		return rows[0];
+	});
+	if (!me?.suppressed) return;
+	if (me.recent) throw new ApiError(429, 'you turned alert emails back on less than a day ago and the address was refused again: check it, then try again tomorrow');
+	try {
+		await releaseAddress(me.email);
+	} catch (err) {
+		// The flag stays (mail would be dropped and bounce again): a 500, without the SDK's text.
+		console.error(JSON.stringify({ event: 'mail_release_failed', userId, error: (err as { name?: string }).name ?? 'Error' }));
+		throw new Error('releasing the address from the SES suppression list failed');
+	}
+	await withUser(userId, (db) =>
+		db.query(
+			`UPDATE app_user SET mail_suppressed_at = NULL, mail_suppressed_reason = NULL, mail_resumed_at = now()
+			 WHERE id = app_current_user_id() AND mail_suppressed_at IS NOT NULL`
+		)
+	);
+}
+
 export const meAlertRoutes = new Hono<AuthEnv>()
+	.post('/alerts/resume', async (c) => {
+		await resumeMail(c.get('userId'));
+		return c.json({ mailSuppressed: null });
+	})
 	.get('/alerts', async (c) =>
 		withUser(c.get('userId'), async (db) => {
 			const projects = [];

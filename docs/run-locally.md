@@ -167,6 +167,20 @@ go to Mailpit like every other email, sent by the worker, so run
 `ALERTS_ENABLED=false` in `backend/.env.development.local` is the kill
 switch (restart the worker): nothing is sent, and waiting mails are dropped.
 
+**A bounce or complaint.** There is no SES locally, so nothing ever
+bounces. `pnpm dev:mail:bounce <email>` stands in for it: it builds the event
+SES would publish for that address and runs it through the worker's own
+handler (`mail/suppression.ts`) against the local database. Add
+`--complaint` for a spam complaint, or `--transient` for a full mailbox
+(which changes nothing). That person's alert emails pause, and their
+account and alert pages show why, with **Turn alert emails back on**
+(which, locally, just clears the flag; in production it also takes the
+address off SES's suppression list).
+
+```bash
+pnpm dev:mail:bounce farmer1@example.com
+```
+
 ## Background jobs
 
 Some work runs later, in a worker, instead of inside a request: a queued

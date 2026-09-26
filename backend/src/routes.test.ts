@@ -221,7 +221,7 @@ describe('route auth inventory', () => {
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	// Alerts (WP-2.13): preferences and rules need a session; only the unsubscribe is public.
 	it('inventories the alert routes as auth-gated, and the unsubscribe as public', () => {
-		for (const r of ['GET /me/alerts', 'PUT /me/alerts/:projectId', 'GET /projects/:id/alert-rules', 'PUT /projects/:id/alert-rules', 'GET /projects/:id/alert-events']) {
+		for (const r of ['GET /me/alerts', 'PUT /me/alerts/:projectId', 'POST /me/alerts/resume', 'GET /projects/:id/alert-rules', 'PUT /projects/:id/alert-rules', 'GET /projects/:id/alert-events']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Amazon SES — transactional email (verify, password reset, invitations)
+# Amazon SES — transactional email (verify, password reset, invitations, alerts)
 #
 # The API Lambda sends with the SES v2 API (`SendEmail`, backend/src/mail/
 # transport.ts, MAIL_TRANSPORT=ses) using its own IAM role: no SMTP password
@@ -16,6 +16,9 @@
 # Both DKIM (d=<domain>) and SPF (MAIL FROM is a subdomain, relaxed alignment)
 # align with the From domain, so DMARC can later be tightened to quarantine /
 # reject without losing mail.
+#
+# Bounces and complaints also reach the app (the mail-events queue below), so
+# a suppressed address's alert emails pause with a banner in the app.
 #
 # NOT done here — manual, one-time (infra/README.md § Operator steps):
 #   leaving the SES sandbox (production access is an AWS support review).
@@ -91,6 +94,208 @@ resource "aws_sesv2_configuration_set_event_destination" "cloudwatch" {
         default_dimension_value = local.project
       }
     }
+  }
+}
+
+# --- Bounces and complaints → the app (WP-2.13 follow-up) ------------------
+# The suppression list above keeps SES from mailing an address that
+# hard-bounced or complained, but on its own the app never knows: that
+# person's alert emails stay on and nothing tells them. So bounces and
+# complaints are also published to the app:
+#
+#   configuration set --BOUNCE, COMPLAINT--> SNS `ses-events`
+#     --raw message delivery--> SQS `mail-events` --event source--> worker Lambda
+#
+# The worker (backend/src/lambda-worker.ts, mail/suppression.ts) flags the
+# address's person and pauses their alert emails; the account and alert pages
+# show a banner, and turning mail back on (POST /me/alerts/resume) takes the
+# address off the suppression list (ses:DeleteSuppressedDestination, the API
+# role only). Trust runs down the chain: only SES, for this configuration set
+# in this account, may publish to the topic; only the topic may send to the
+# queue; and the worker reads a message as an SES event only when it came
+# from this queue (MAIL_EVENTS_QUEUE_ARN), never from its other queues.
+#
+# The topic is not KMS-encrypted: SES can publish to an encrypted topic only
+# through a customer-managed key whose policy admits it (about $1 a month and
+# a key policy to maintain), and SNS keeps nothing at rest past delivery. The
+# queue, where the events wait, is encrypted (SSE-SQS). Locally there is no
+# SES: `pnpm dev:mail:bounce <email>` runs the same handler.
+
+locals {
+  mail_events_visibility_seconds = 6 * local.worker_timeout_seconds
+}
+
+resource "aws_sns_topic" "ses_events" {
+  name = "${local.project}-ses-events"
+}
+
+data "aws_iam_policy_document" "ses_events_topic" {
+  statement {
+    sid       = "SesPublishesThisConfigurationSetOnly"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.ses_events.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["ses.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_sesv2_configuration_set.main.arn]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "ses_events" {
+  arn    = aws_sns_topic.ses_events.arn
+  policy = data.aws_iam_policy_document.ses_events_topic.json
+}
+
+resource "aws_sesv2_configuration_set_event_destination" "suppression" {
+  configuration_set_name = aws_sesv2_configuration_set.main.configuration_set_name
+  event_destination_name = "suppression"
+
+  event_destination {
+    enabled              = true
+    matching_event_types = ["BOUNCE", "COMPLAINT"]
+
+    sns_destination {
+      topic_arn = aws_sns_topic.ses_events.arn
+    }
+  }
+
+  # SES checks it may publish when the destination is created.
+  depends_on = [aws_sns_topic_policy.ses_events]
+}
+
+resource "aws_sqs_queue" "mail_events_dlq" {
+  name                      = "${local.project}-mail-events-dlq"
+  message_retention_seconds = 1209600 # 14 days, the maximum: time to look
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_sqs_queue" "mail_events" {
+  name                       = "${local.project}-mail-events"
+  visibility_timeout_seconds = local.mail_events_visibility_seconds
+  message_retention_seconds  = 345600 # 4 days
+  sqs_managed_sse_enabled    = true
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.mail_events_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_sqs_queue_redrive_allow_policy" "mail_events_dlq" {
+  queue_url = aws_sqs_queue.mail_events_dlq.id
+  redrive_allow_policy = jsonencode({
+    redrivePermission = "byQueue"
+    sourceQueueArns   = [aws_sqs_queue.mail_events.arn]
+  })
+}
+
+# Only the ses-events topic may send here.
+data "aws_iam_policy_document" "mail_events_queue" {
+  statement {
+    sid       = "SesEventsTopicOnly"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.mail_events.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_sns_topic.ses_events.arn]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "mail_events" {
+  queue_url = aws_sqs_queue.mail_events.id
+  policy    = data.aws_iam_policy_document.mail_events_queue.json
+}
+
+resource "aws_sns_topic_subscription" "mail_events" {
+  topic_arn = aws_sns_topic.ses_events.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.mail_events.arn
+  # The SES event itself is the message body (mail/suppression.ts parses it), not an SNS envelope.
+  raw_message_delivery = true
+
+  depends_on = [aws_sqs_queue_policy.mail_events]
+}
+
+# The worker consumes the queue (the event source mapping polls as its role).
+data "aws_iam_policy_document" "worker_mail_events" {
+  statement {
+    sid       = "ConsumeMailEvents"
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    resources = [aws_sqs_queue.mail_events.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_mail_events" {
+  name   = "mail-events-queue"
+  role   = aws_iam_role.worker_lambda.id
+  policy = data.aws_iam_policy_document.worker_mail_events.json
+}
+
+resource "aws_lambda_event_source_mapping" "worker_mail_events" {
+  event_source_arn                   = aws_sqs_queue.mail_events.arn
+  function_name                      = aws_lambda_function.worker.arn
+  batch_size                         = 10
+  maximum_batching_window_in_seconds = 5
+
+  scaling_config {
+    maximum_concurrency = 2
+  }
+
+  depends_on = [aws_iam_role_policy.worker_mail_events]
+}
+
+# Turning mail back on (POST /me/alerts/resume, the API) takes the person's
+# address off the account-level suppression list, or SES would drop the next
+# mail and report it as a bounce again. Suppression-list actions take no
+# resource ARN in IAM, so "*" is the only resource; the action is the only
+# one, and only the API role has it (the worker, which also sends mail, does
+# not). The route allows it once a day per person (a bounce loop costs
+# reputation).
+data "aws_iam_policy_document" "lambda_ses_release" {
+  statement {
+    sid       = "ReleaseSuppressedAddress"
+    actions   = ["ses:DeleteSuppressedDestination"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_ses_release" {
+  name   = "ses-release-suppressed"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.lambda_ses_release.json
+}
+
+resource "aws_cloudwatch_metric_alarm" "mail_events_dlq_depth" {
+  alarm_name          = "${local.project}-mail-events-dlq-depth"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 0
+  alarm_description   = "An SES bounce or complaint was dead-lettered: the worker failed 5 times to record it (usually the database was unreachable). That person's alert emails are still on; redrive the DLQ once the worker is healthy."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.mail_events_dlq.name
   }
 }
 

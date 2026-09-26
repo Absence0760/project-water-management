@@ -3,12 +3,15 @@
 // kept on reload); an alert email's unsubscribe link works signed out, asks
 // before it acts, says what it turned off and takes the token out of the
 // address bar; a replaced or tampered link says it no longer works. Both
-// pages pass axe, on a phone.
+// pages pass axe, on a phone. A bounced address (SES, stood in for by
+// `pnpm dev:mail:bounce`) pauses a person's alert emails behind a banner on
+// the account and alert pages, which turns them back on.
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { simulateBounce } from '../support/jobs.ts';
 
 const PHONE = { width: 360, height: 740 };
 
@@ -89,4 +92,31 @@ test('an alert email’s unsubscribe link works signed out, asks first, and a de
 	} finally {
 		await context.close();
 	}
+});
+
+test('a bounced address pauses the alert emails behind a banner, which turns them back on', async ({ signIn }) => {
+	const farmer = await signIn('Bounced farmer');
+	const email = farmer.user.email;
+	expect(await simulateBounce(email)).toContain('alert emails paused');
+
+	const p = farmer.page;
+	await p.setViewportSize(PHONE);
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	const banner = p.locator('[data-mail-suppressed="bounce"]');
+	await expect(banner.getByText(`Your alert emails are paused. Our emails to ${email} bounced back: the address may be wrong, or the mailbox full or closed.`)).toBeVisible();
+	await expect(banner.getByText(`Once ${email} can receive email again, turn alert emails back on. Your choices are kept.`)).toBeVisible();
+	await expectNoViolations(p);
+
+	// The account page says the same, and turns them back on.
+	await p.goto('/account');
+	const onAccount = p.locator('[data-mail-suppressed="bounce"]');
+	await expect(onAccount).toBeVisible();
+	await expectNoViolations(p);
+	await onAccount.getByRole('button', { name: 'Turn alert emails back on' }).click();
+	await expect(p.getByRole('status').filter({ hasText: 'Alert emails are back on.' })).toBeVisible();
+	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	await expect(p.locator('[data-mail-suppressed]')).toHaveCount(0);
 });

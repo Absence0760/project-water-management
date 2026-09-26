@@ -453,9 +453,32 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   published figures, not a measurement or an instruction, and to check with
   the WUA before acting; a forecast says forecasts change; a restriction
   notice says it is the WUA's own words.
-- **Not built yet.** SES suppression (a bounce or complaint turning the
-  address's alerts off, with a banner in the app) waits for the SES event
-  destination ([followups.md § Alerts](./followups.md)).
+- **A bounced or complaining address pauses its alerts.** SES drops mail
+  to an address on its suppression list; the app learns of it through the
+  configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
+  `ses-events` → SQS `mail-events` → the worker (`mail/suppression.ts`,
+  054). The person's `app_user.mail_suppressed_at` is set, they drop out of
+  `app_alert_recipients`, the deliveries waiting for them are skipped, and a
+  delivery already made is skipped when it's built (the worker checks the
+  flag as the recipient). Their choices are kept, so turning mail back on
+  restores them.
+  - *Trust.* Only SES, for this configuration set in this account, may
+    publish to the topic (`aws:SourceArn`, `aws:SourceAccount`); only the
+    topic may send to the queue; the worker reads a record as an SES event
+    only when it came from that queue (`MAIL_EVENTS_QUEUE_ARN`), and a
+    message on the mail queue is never read as a job message or the other
+    way round (`lambda-worker.test.ts`). The body is parsed strictly
+    (size, at most 50 recipients, only a permanent bounce or a complaint
+    suppresses), and `app_mail_suppress` runs only in the worker's own
+    context. The log line carries counts, never an address.
+  - *Stale events.* An event about a mail sent before the person last
+    turned mail back on (`mail_resumed_at`) suppresses nothing.
+  - *Turning it back on* (`POST /me/alerts/resume`) clears only the caller's
+    own flag and takes their address off SES's account-level suppression
+    list (`ses:DeleteSuppressedDestination`, the API role only; `*` is the
+    only resource IAM allows for it). At most once a day per person (`429`
+    otherwise), so an address that keeps bouncing costs the account one
+    bounce a day, not a loop.
 
 ## Authorization: per-project roles enforced by Postgres RLS
 
@@ -1041,7 +1064,7 @@ file), so a new column can't ship without a decision.
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, whether SES suppressed the address (054) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |

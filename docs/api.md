@@ -62,12 +62,16 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed }`.
   `locale` is `'en' | 'af' | null` (`app_user.locale`, 050_user_locale.sql,
   WP-2.5): the language of the farmer-facing pages and of the emails the
   account receives; `null` means not chosen (the site follows the browser,
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
-  the farm view shows volumes.
+  the farm view shows volumes. `mailSuppressed` is `null`, or
+  `{ reason: 'bounce' | 'complaint', at }` once SES reported a permanent
+  bounce or a spam complaint for the address (054): alert emails are paused
+  until the person turns them back on (`POST /me/alerts/resume`,
+  [§ Alerts](#alerts)).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
   1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
   following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one
@@ -640,6 +644,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | --- | --- | --- | --- | --- |
 | GET | `/me/alerts` | – | `{ projects: ProjectAlerts[] }`: every catchment you can open (never an applicant's), by name | signed in |
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
+| POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
 | GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, then a `dam_below` per farm in network order; one not saved yet is `{ id: null, enabled: false }` at its default threshold | editor |
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
@@ -713,6 +718,11 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 - `ALERTS_ENABLED=false` (the kill switch) stops all sending: events still
   open and clear in the app, and deliveries waiting to go out are dropped,
   not sent later ([deployment.md § Runbooks](./deployment.md#runbooks)).
+- **A bounced or complaining address** (SES's bounce and complaint events,
+  [deployment.md § Alert emails](./deployment.md#alert-emails)) pauses that
+  person's alert emails: no deliveries are made for them, waiting ones are
+  skipped, and `/auth/me`'s `mailSuppressed` says why, for the banner. A
+  transient bounce (a full mailbox) changes nothing.
 
 ## Model data
 

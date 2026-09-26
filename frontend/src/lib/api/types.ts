@@ -49,6 +49,12 @@ export interface User {
 	locale?: 'en' | 'af' | null;
 	/** How the farm view shows volumes (app_user.volume_unit, WP-2.5). */
 	volumeUnit?: 'm3' | 'ML';
+	/**
+	 * SES reported a permanent bounce or a complaint for the address (054): alert
+	 * emails are paused until the person turns them back on (api.alerts.resume;
+	 * the banner on the account and alert pages). null while mail flows.
+	 */
+	mailSuppressed?: { reason: 'bounce' | 'complaint'; at: string } | null;
 }
 
 /**

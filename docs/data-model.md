@@ -1810,8 +1810,18 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     `feed_failing` or `job_dead` rule and none queued or made in the last
     `gap`, as the first of: a rule's creator, a feed's acting user, the
     longest-standing owner, who is an editor or owner now.
-  - Every claim, finish, skip and schedule function refuses a signed-in or
-    API-key context (`alert_worker_context`): only the worker runs them.
+  - `app_mail_suppress(email, reason, sent_at)` (054): SES reported a
+    permanent bounce or a complaint for the address. Sets the person's
+    `app_user.mail_suppressed_at` / `mail_suppressed_reason` (unless already
+    set, or the event is about a mail sent before their `mail_resumed_at`:
+    stale) and skips their waiting deliveries. `app_alert_recipients` (054,
+    from its 051 definition) leaves a suppressed address out, and the worker
+    skips a delivery already made for one. A person clears their own flag
+    (`POST /me/alerts/resume`, which stamps `mail_resumed_at`); `app_user`
+    has no RLS, so the route updates only the session's own row.
+  - Every claim, finish, skip, schedule and suppress function refuses a
+    signed-in or API-key context (`alert_worker_context`): only the worker
+    runs them.
 - Indexes cover every foreign key: the rule's unique index (project), node
   and creator; the event's rule, project (with state: the firing counts),
   node and run; the subscription's unique index (user), project and node;
@@ -1825,6 +1835,9 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
   a re-enable, expired with a membership, the one-click form post), the
   daily cap and the digest, the kill switch, re-arming after recovery, the
   restriction notice in the reader's language, and the scheduled checks.
+  `alerts/suppression.db.test.ts` checks a bounce or complaint pausing
+  alerts (recipients, waiting and already-claimed deliveries, each with a
+  positive control), the stale-event rule and turning mail back on.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role

@@ -4,10 +4,13 @@
 	// their own farms' dam alerts and the WUA's restriction notices. Each
 	// choice saves as it is made. Its words come from $lib/i18n (farmers
 	// use it); linked from the account page and from every alert email.
+	// When SES stopped delivering to the address (a bounce or a complaint),
+	// a banner says every alert email is paused and turns them back on.
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '$lib/api';
-	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel } from '$lib/components/alerts/words';
+	import { session } from '$lib/auth/session.svelte';
+	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText } from '$lib/components/alerts/words';
 	import { t } from '$lib/i18n/locale.svelte';
 
 	let projects = $state<ProjectAlerts[] | null>(null);
@@ -27,6 +30,23 @@
 		}
 	}
 	onMount(load);
+
+	let resuming = $state(false);
+	let resumed = $state(false);
+	let resumeError = $state<string | null>(null);
+	async function resumeMail() {
+		resuming = true;
+		resumeError = null;
+		try {
+			await api.alerts.resume();
+			if (session.user) session.user = { ...session.user, mailSuppressed: null };
+			resumed = true;
+		} catch (e) {
+			resumeError = resumeProblem(e);
+		} finally {
+			resuming = false;
+		}
+	}
 
 	async function choose(p: ProjectAlerts, items: { kind: AlertChoice['kind'] | 'all'; nodeId?: string | null; mode: AlertMode }[]) {
 		status[p.id] = { saving: true };
@@ -49,6 +69,17 @@
 	<h1>{t('alerts.title')}</h1>
 	<p class="intro">{t('alerts.intro')}</p>
 	<p class="muted intro">{t('alerts.cap', { cap: DAILY_CAP })}</p>
+	{#if session.user?.mailSuppressed}
+		<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
+			<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>
+			<p>{t('alerts.suppressed.fix', { email: session.user.email })}</p>
+			{#if resumeError}<p class="resume-error" role="alert">{resumeError}</p>{/if}
+			<button type="button" class="btn btn-sm" onclick={resumeMail} disabled={resuming}>
+				{resuming ? t('alerts.suppressed.resuming') : t('alerts.suppressed.resume')}
+			</button>
+		</div>
+	{/if}
+	<p class="status" role="status" aria-live="polite">{resumed ? t('alerts.suppressed.resumed') : ''}</p>
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('common.tryAgain')}</button></div>
@@ -145,6 +176,16 @@
 		margin: 0;
 		font-size: 0.85rem;
 		color: var(--text-2);
+	}
+	.suppressed {
+		margin-bottom: 1rem;
+	}
+	.suppressed p {
+		margin: 0 0 0.5rem;
+		overflow-wrap: anywhere;
+	}
+	.resume-error {
+		font-weight: 600;
 	}
 	.status {
 		margin: 0 0 0.5rem;

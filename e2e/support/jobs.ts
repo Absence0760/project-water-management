@@ -43,3 +43,18 @@ export async function runJobsTick({ schedule = true }: { schedule?: boolean } = 
 	});
 	return stdout.trim();
 }
+
+/**
+ * Stand in for an SES bounce or complaint for `email`, the way `pnpm
+ * dev:mail:bounce` does locally (backend/scripts/mail-bounce.ts): the event
+ * SES would publish, through the worker's own handler, against the e2e
+ * database. The account's alert emails pause, behind the banner.
+ */
+export async function simulateBounce(email: string, kind: 'bounce' | 'complaint' = 'bounce'): Promise<string> {
+	const { stdout } = await promisify(execFile)('pnpm', ['exec', 'tsx', 'scripts/mail-bounce.ts', email, ...(kind === 'complaint' ? ['--complaint'] : [])], {
+		cwd: backendDir,
+		env: { ...process.env, DATABASE_URL: APP_E2E_URL },
+		timeout: 60_000
+	});
+	return stdout.trim();
+}

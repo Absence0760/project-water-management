@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
 import { eventText, groupRules, thresholdFromInput, thresholdProblem, thresholdToInput } from './alerts';
-import { choiceLabel, farmAlertText, fragmentToken, modeLabel, unsubscribedText } from './words';
+import { ApiError } from '$lib/api/client';
+import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, unsubscribedText } from './words';
 
 // A token's shape (43 base64url characters); low entropy, so no secret scanner mistakes it for a key.
 const TOKEN = 'a'.repeat(20) + '_-' + 'b'.repeat(21);
@@ -44,6 +45,25 @@ describe('the preferences page’s words', () => {
 	it('says what the unsubscribe turned off', () => {
 		expect(unsubscribedText({ kind: 'dam_below', project: { name: 'Rietvlei' }, farm: 'Farm One' })).toBe('You won’t get dam level emails for Rietvlei any more.');
 		expect(unsubscribedText({ kind: 'all', project: { name: 'Rietvlei' }, farm: null })).toBe('You won’t get any alert emails for Rietvlei any more.');
+	});
+});
+
+describe('the paused-alerts banner (SES suppressed the address)', () => {
+	it('says why, naming the address', () => {
+		expect(suppressedText({ reason: 'bounce', at: '2026-09-20T08:00:00Z' }, 'ann@example.com')).toBe(
+			'Your alert emails are paused. Our emails to ann@example.com bounced back: the address may be wrong, or the mailbox full or closed.'
+		);
+		expect(suppressedText({ reason: 'complaint', at: '2026-09-20T08:00:00Z' }, 'ann@example.com')).toBe(
+			'Your alert emails are paused. An email we sent to ann@example.com was marked as spam, so we stopped sending.'
+		);
+	});
+
+	it('explains the day’s wait (429), and passes any other failure’s message through', () => {
+		expect(resumeProblem(new ApiError(429, 'too soon'))).toBe(
+			'Emails to this address were refused again less than a day after you turned them back on. Check the address, then try again tomorrow.'
+		);
+		expect(resumeProblem(new ApiError(500, 'Internal error'))).toBe('Internal error');
+		expect(resumeProblem('offline')).toBe('offline');
 	});
 });
 

@@ -2416,6 +2416,16 @@ the catalogue, [§ Language](#language)); both unit-tested.
   alert on yet. A catchment muted by a digest's unsubscribe says so, with
   *Turn alert emails back on*. It notes the daily cap (5 right away, the rest
   in the next morning's summary).
+- **Paused alert emails** (translated; on `/account/alerts` and in the
+  account page's **Alert emails** panel): when SES stopped delivering to the
+  person's address (`user.mailSuppressed`), a warning banner says so and
+  why: "Your alert emails are paused. Our emails to <address> bounced back:
+  the address may be wrong, or the mailbox full or closed." (or "… was
+  marked as spam, so we stopped sending."), "Once <address> can receive
+  email again, turn alert emails back on. Your choices are kept.", and
+  **Turn alert emails back on** (`POST /me/alerts/resume`; "Alert emails are
+  back on." in a status line). Turned back on and refused again within a
+  day, it says to check the address and try tomorrow.
 - **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
   signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
   token from the fragment (`#t=…`) once, strips it from the address bar,

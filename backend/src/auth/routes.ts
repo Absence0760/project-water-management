@@ -67,6 +67,8 @@ type UserRow = {
 	email_verified_at: Date | null;
 	locale: 'en' | 'af' | null;
 	volume_unit: 'm3' | 'ML';
+	mail_suppressed_at: Date | null;
+	mail_suppressed_reason: 'bounce' | 'complaint' | null;
 };
 const toUser = (r: UserRow) => ({
 	id: r.id,
@@ -74,9 +76,11 @@ const toUser = (r: UserRow) => ({
 	displayName: r.display_name,
 	emailVerified: r.email_verified_at !== null,
 	locale: r.locale,
-	volumeUnit: r.volume_unit
+	volumeUnit: r.volume_unit,
+	// SES reported a bounce or complaint for the address (054): alert emails are paused (the banner, POST /me/alerts/resume).
+	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null
 });
-const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_unit';
+const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason';
 
 export const authRoutes = new Hono<AuthEnv>()
 	.post('/register', async (c) => {

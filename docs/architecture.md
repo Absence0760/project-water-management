@@ -525,6 +525,15 @@ The worker Lambda's metric line carries `AlertMailsSent` and
 `AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on
 failing sends.
 
+**Bounces and complaints** come back the other way: SES's configuration set
+publishes `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`,
+delivered raw to the SQS queue `mail-events`, which triggers the worker
+Lambda (`infra/ses.tf`). The worker reads a record as an SES event only when
+it came from that queue, and `mail/suppression.ts` flags the address
+(`app_mail_suppress`, 054): that person's alert emails pause, with a banner
+on their account and alert pages, until they turn mail back on. Locally,
+`pnpm dev:mail:bounce <email>` runs the same handler.
+
 ## Data feeds
 
 Rainfall and gauge flow that arrive by themselves (roadmap WP-2.10;

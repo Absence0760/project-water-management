@@ -468,6 +468,14 @@ export const en = {
 	'alerts.unmute': 'Turn alert emails back on',
 	'alerts.saving': 'Saving…',
 	'alerts.saved': 'Saved.',
+	// SES stopped delivering to the address (a bounce or a spam complaint): the banner on the account and alert pages.
+	'alerts.suppressed.bounce': 'Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed.',
+	'alerts.suppressed.complaint': 'Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending.',
+	'alerts.suppressed.fix': 'Once {email} can receive email again, turn alert emails back on. Your choices are kept.',
+	'alerts.suppressed.resume': 'Turn alert emails back on',
+	'alerts.suppressed.resuming': 'Turning them back on…',
+	'alerts.suppressed.resumed': 'Alert emails are back on.',
+	'alerts.suppressed.tooSoon': 'Emails to this address were refused again less than a day after you turned them back on. Check the address, then try again tomorrow.',
 
 	// ---- Alert emails: the unsubscribe page (/alerts/unsubscribe) ----------
 	'unsubscribe.title': 'Stop alert emails',

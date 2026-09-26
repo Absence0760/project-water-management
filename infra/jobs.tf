@@ -180,6 +180,9 @@ resource "aws_lambda_function" "worker" {
       ALERTS_TOKEN_SECRET = random_password.alerts_token_secret.result
       ALERTS_ENABLED      = var.alerts_enabled ? "true" : "false"
       ALERTS_DAILY_CAP    = "5"
+      # SES bounces and complaints (ses.tf): a record is read as one only
+      # when it came from this queue (lambda-worker.ts fromMailEventsQueue).
+      MAIL_EVENTS_QUEUE_ARN = aws_sqs_queue.mail_events.arn
     }
   }
 
@@ -350,6 +353,16 @@ data "aws_iam_policy_document" "sqs_endpoint" {
     sid       = "WorkerConsumesRenderResults"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
     resources = [aws_sqs_queue.render_results.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  # SES bounces and complaints (ses.tf): the worker reads them.
+  statement {
+    sid       = "WorkerConsumesMailEvents"
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    resources = [aws_sqs_queue.mail_events.arn]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]

@@ -50,6 +50,14 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ locale: null, volumeUnit: 'ML' });
 	});
 
+	it('POSTs /me/alerts/resume to turn alert emails back on after a bounce', async () => {
+		const f = mockFetch(200, { mailSuppressed: null });
+		await expect(createApi('http://x', f).alerts.resume()).resolves.toEqual({ mailSuppressed: null });
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/me/alerts/resume');
+		expect(init.method).toBe('POST');
+	});
+
 	it('posts both passwords to /auth/change-password and surfaces a wrong current password as ApiError 403', async () => {
 		const user = { id: '1', email: 'a@b.c', displayName: 'A', emailVerified: true };
 		const f = mockFetch(200, { user });
