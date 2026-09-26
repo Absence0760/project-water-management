@@ -1,4 +1,4 @@
-// Afrikaans versions of the farmer glossary entries (content.ts, category
+// Afrikaans versions of the farmer glossary entries (farmer.ts, category
 // 'farmer'; shown on /farm/words), WP-2.5. Only reviewed text goes here.
 //
 // `sourceHash` is the SHA-256 (hex) of the English `term + "\n" + short +
