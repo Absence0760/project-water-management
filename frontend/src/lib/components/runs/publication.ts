@@ -18,7 +18,7 @@ export function damsWithoutStopLevel(nodes: readonly { kind?: string; damCapacit
 
 /** Why this run can't be published, or null. The server refuses the same (audit H1). */
 export function publishBlocker(run: Pick<RunMeta, 'legacy'>): string | null {
-	return run.legacy ? 'This run used the legacy runoff model (a workbook comparison), so it can’t be published. Run a conceptual model to publish.' : null;
+	return run.legacy ? 'This run used the legacy runoff model (a workbook comparison), so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.' : null;
 }
 
 /** The runs any publication in the history holds: the server keeps them (409 on delete). */

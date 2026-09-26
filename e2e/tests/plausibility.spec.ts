@@ -1,9 +1,11 @@
 // Hydrologist plausibility checks (engine 0.25.0, docs/model.md §2.10d): a run
 // on a synthetic catchment shows the four checks in their own Runs & results
-// panel, with the latest run of the other runoff model overlaid on the
-// dry-season low-flow curves. Names and numbers are invented.
+// panel, with the latest run of another runoff model overlaid on the
+// dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
+// API can't make one any more). Names and numbers are invented.
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('a run shows the plausibility checks, with the other runoff model overlaid on the low-flow curves', async ({ page, owner }) => {
@@ -13,8 +15,7 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await putModel(page.request, project.id, sampleModel());
 	await updateSettings(page.request, project.id, {
 		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
-		ewrPragmaticM3PerDay: [2000, 1500, 1000, 1000, 1000, 1500, 2500, 4000, 5000, 5000, 4000, 3000],
-		runoffModel: 'gr4j'
+		ewrPragmaticM3PerDay: [2000, 1500, 1000, 1000, 1000, 1500, 2500, 4000, 5000, 5000, 4000, 3000]
 	});
 	const days = 1096;
 	const rain = syntheticRain(days);
@@ -22,8 +23,7 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2019-10-01', values: rain });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: syntheticFlow(days) });
 	const gr4j = await createRun(page.request, project.id, 'GR4J run');
-	await updateSettings(page.request, project.id, { runoffModel: 'legacy' });
-	await createRun(page.request, project.id, 'Legacy run');
+	await plantLegacyRun(await createRun(page.request, project.id, 'Legacy run'));
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'GR4J run' })).toBeVisible();

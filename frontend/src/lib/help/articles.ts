@@ -26,7 +26,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §6'
 	},
 	'evidence-run': {
-		long: 'On Runs & results, Notes & evidence, an editor can nominate the run shown with Nominate as evidence and a required reason. Nominating another run later replaces it; both stay in the nomination history, with who nominated each, when and why. In the runs list the current one carries an Evidence badge and a replaced one Former evidence, and comparing runs says when either side is or was the evidence.\n\nA run of the legacy runoff model can’t be nominated: it is workbook comparison only. When a run made after the nominated one uses a different runoff model, the results say so: the nomination still stands until another run is nominated, with a reason.',
+		long: 'On Runs & results, Notes & evidence, an editor can nominate the run shown with Nominate as evidence and a required reason. Nominating another run later replaces it; both stay in the nomination history, with who nominated each, when and why. In the runs list the current one carries an Evidence badge and a replaced one Former evidence, and comparing runs says when either side is or was the evidence.\n\nA run of the legacy runoff model (removed in engine 1.0.0) can’t be nominated: it is workbook comparison only. When the nominated run is such a legacy run and a later run uses GR4J, the results say so: the nomination still stands until another run is nominated, with a reason.',
 		aliases: ['nominate', 'nominated run', 'nomination history', 'former evidence'],
 		related: ['run', 'runoff-model', 'roles'],
 		source: 'docs/ui.md § Evidence nomination; docs/data-model.md'
@@ -377,9 +377,9 @@ export const ARTICLES: Record<string, HelpArticle> = {
 
 	// ---- Natural flow and calibration -----------------------------------------
 	'natural-flow': {
-		long: 'The runoff model turns daily rain into natural flow: GR4J by default, or the legacy b023 routine (a calibrated rain → peak → recession routine and a slowly receding base flow). The workbook fell back to a Pitman flow column on days the rain model gave nothing (quirk Q7); the app does not, so natural flow always comes from the runoff model.\n\nNatural flow is then split into farm runoff by the flow shares.',
+		long: 'The runoff model, GR4J, turns daily rain into natural flow. The workbook fell back to a Pitman flow column on days the rain model gave nothing (quirk Q7); the app does not, so natural flow always comes from the runoff model.\n\nNatural flow is then split into farm runoff by the flow shares.',
 		aliases: ['naturalised flow', 'virgin flow'],
-		related: ['calibration', 'flow-share', 'base-flow'],
+		related: ['calibration', 'flow-share', 'runoff-model'],
 		source: 'b023 Flow data sheet; docs/model.md §2.4'
 	},
 	'farm-runoff': {
@@ -400,14 +400,14 @@ export const ARTICLES: Record<string, HelpArticle> = {
 	'calibration': {
 		long: 'Tune by hand (change a parameter, run, and compare simulated with observed flow: hydrograph and statistics such as NSE and PBIAS), or let Fit automatically search for the parameters. Calibrate over a period with a good observed record; the workbook uses its own calibration date window, separate from the main run.',
 		aliases: ['flow calibration', 'tuning'],
-		related: ['peak-coefficient', 'nse', 'pbias', 'observed-flow'],
+		related: ['gr4j', 'nse', 'pbias', 'observed-flow'],
 		source: 'b023 Help (Calibration function; Flow Calibration Cfg)'
 	},
 	'runoff-model': {
-		long: 'Legacy is the workbook’s empirical recession model, ported unchanged. The engine audit found that it does not conserve water: one small storm can return several times its own volume as flow (docs/engine-audit.md H1). Decided (persona recommendation, 2026-09-24; pending the hydrologist): legacy stays unchanged and is kept for workbook comparison only — not evidence for a licence, Reserve or compliance assessment. A legacy run carries this warning, an amber “Workbook comparison” badge, and a leading comment on its CSV exports.\n\nThe setting only changes how rain becomes natural flow. Flow shares, farms, dams, transfers and the EWR are the same whichever model made the flow, so two runs that differ only in the runoff model compare directly.',
-		aliases: ['rain-runoff model', 'rainfall-runoff', 'legacy model'],
-		related: ['calibration', 'natural-flow', 'gr4j'],
-		source: 'docs/model.md §2.4; issue #4'
+		long: 'GR4J is the only runoff model since engine 1.0.0 (issue #16), so there is nothing to choose. The workbook’s own model, the legacy runoff model, did not conserve water (docs/engine-audit.md H1) and was removed; runs made with it before then still open, labelled “Workbook comparison”, but can’t be re-run.\n\nThe runoff model only changes how rain becomes natural flow. Flow shares, farms, dams, transfers and the EWR are the same whichever model made the flow, so an old legacy run and a GR4J run compare directly.',
+		aliases: ['rain-runoff model', 'rainfall-runoff'],
+		related: ['calibration', 'natural-flow', 'gr4j', 'legacy-runoff-model'],
+		source: 'docs/model.md §2.4; issues #4, #16'
 	},
 	'gr4j': {
 		long: 'GR4J (Perrin, Michel & Andréassian 2003) is used worldwide. Rain first meets evaporation; what is left partly fills a soil-moisture (production) store of capacity X1. The rest, plus what percolates out of that store, is spread in time by two unit hydrographs of time base X4 days. 90 % goes through a routing store (reference capacity X3), and 10 % goes straight to the outlet.\n\nX2 exchanges water with groundwater outside the catchment. It is fixed at 0 by default, so the catchment is closed and the balance rain − evaporation − flow = change in storage holds every day. The model first runs a warm-up (a year by default) over the start of the record, so the stores begin at a realistic level; warm-up days are never shown or scored.\n\nTypical values: X1 100–1 200 mm, X3 20–300 mm, X4 1.1–2.9 days.',
@@ -476,53 +476,25 @@ export const ARTICLES: Record<string, HelpArticle> = {
 	},
 	'catchment-area': {
 		long: 'Set it only when the modelled farms don’t cover the whole catchment and you want rain over the full area. 1 mm over 1 km² = 1 000 m³.',
-		related: ['farm-area', 'peak-coefficient'],
+		related: ['farm-area', 'gr4j'],
 		source: 'b023 Farm spec (total area)'
 	},
-	'peak-coefficient': {
-		long: 'The core of the rain → flow routine. a scales every event; b > 1 makes big storms produce disproportionately more flow than small ones. b023 defaults: a = 0.09, b = 1.2.',
-		aliases: ['a', 'b', 'peak flow'],
-		related: ['season-factors', 'rain-threshold', 'calibration'],
-		source: 'b023 Flow Calibration Cfg'
-	},
 	'rain-threshold': {
-		long: 'Filters out drizzle that the soil absorbs. In the legacy model the same thresholded rain drives both runoff and the effective-rain offset (quirk Q6). GR4J uses all the rain; with GR4J the setting only applies to demand (“Rain threshold for demand”).',
-		related: ['peak-coefficient', 'effective-rainfall'],
+		long: 'Filters out drizzle that the soil absorbs, so it doesn’t reduce irrigation demand (“Rain threshold for demand”). GR4J uses all the rain. In the legacy runoff model (removed in engine 1.0.0) the same thresholded rain also drove runoff (quirk Q6).',
+		related: ['effective-rainfall', 'legacy-runoff-model'],
 		source: 'b023 Flow Calibration Cfg; docs/model.md §3 Q6'
 	},
-	'season-factors': {
-		long: 'Summer months always use the summer factor. In other months the catchment responds as in summer until a large storm (today’s or yesterday’s rain above the winter thresholds) switches it to winter response, which then persists.',
-		aliases: ['summer factor', 'winter factor', 'seasonal response'],
-		related: ['summer-months', 'winter-thresholds'],
-		source: 'b023 Flow Calibration Cfg; docs/model.md §2.4'
-	},
-	'summer-months': {
-		long: 'For a winter-rainfall catchment in the Western Cape these are roughly November to May. Check them per project: the defaults differ between workbooks (quirk Q9).',
-		related: ['season-factors'],
-		source: 'b023 Flow Calibration Cfg; docs/model.md §3 Q9'
-	},
-	'winter-thresholds': {
-		long: 'Models the wetting-up of the catchment at the start of the rainy season: one big storm, or a moderate one yesterday, and runoff from then on behaves like winter. b023 defaults: 35 mm today, 9 mm yesterday.',
-		related: ['season-factors'],
-		source: 'b023 Flow Calibration Cfg'
-	},
 	'base-flow': {
-		long: 'In b023 base flow recedes day by day along the recession curve. A big enough rain pulse (above the reset ratio) resets it to the pulse size; otherwise it keeps receding. The initial value sets the first day.',
+		long: 'Under GR4J it is what the routing store (X3) releases between storms. The Base flow column of a daily table belongs to a legacy run (engine < 1.0.0): there base flow receded day by day along the recession curve, and a big enough rain pulse reset it to the pulse size.',
 		aliases: ['baseflow', 'low flow', 'quickflow'],
-		related: ['recession-curve'],
+		related: ['gr4j', 'legacy-runoff-model'],
 		source: 'b023 Flow data; docs/model.md §2.4'
 	},
-	'recession-curve': {
-		long: 'Each flow is placed on the curve by its size (its recession index) and multiplied by the factor for that index each day, so high flows fall fast and low flows slowly. The curve, factors and maximum index are usually derived from the observed record and are rarely changed.',
-		aliases: ['recession', 'decay', 'recession factors', 'recession index'],
-		related: ['base-flow', 'pulse-index'],
-		source: 'b023 Flow Calibration Cfg'
-	},
-	'pulse-index': {
-		long: 'A pulse of the amplitude size starts at the low index; a vanishingly small pulse starts at the high index; sizes in between are interpolated. Together they shape how peaky the hydrograph is. b023 defaults: 0.9 and 3.5.',
-		aliases: ['shift peak index', 'amplitude'],
-		related: ['recession-curve'],
-		source: 'b023 Flow Calibration Cfg'
+	'legacy-runoff-model': {
+		long: 'The workbook’s empirical model: rain above the threshold made a peak a · rain^b × catchment area × a summer or winter factor (a summer month, or a winter month before a big storm switched it to winter response), which then receded along a recession curve, next to a slowly receding base flow. The engine audit found that it does not conserve water: one small storm could return several times its own volume as flow (docs/engine-audit.md H1), so it was never evidence and engine 1.0.0 removed it (issue #16).\n\nRuns made with it before then still open read-only, badged “Workbook comparison”: they can be compared and exported, but not re-run, nominated as evidence, signed or published. Their daily table keeps the model’s own columns (summer flag, rain flow, response flow, base flow). A project still set to it runs GR4J, with a warning to check the GR4J parameters.',
+		aliases: ['legacy model', 'b023 recession', 'peak coefficient', 'summer factor', 'winter factor', 'summer months', 'recession curve', 'workbook comparison'],
+		related: ['runoff-model', 'gr4j', 'base-flow'],
+		source: 'docs/model.md §2.4 (retired); docs/engine-audit.md H1; issue #16'
 	},
 
 	// ---- EWR ----------------------------------------------------------------
@@ -664,7 +636,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Flow data'
 	},
 	'rain-final': {
-		long: 'One value per day from the first source that has one. CHIRPS is the corrected value when the CHIRPS bias correction is on. This is before any rain threshold: the legacy model then treats rain at or below the threshold as 0 (see Rain used). A day with no value from any source is left empty; the model treats it as dry.\n\nIn the daily CSV export it sits beside CHIRPS as uploaded and bias-corrected CHIRPS, so the filled days can be checked against both.',
+		long: 'One value per day from the first source that has one. CHIRPS is the corrected value when the CHIRPS bias correction is on. This is before any rain threshold (see Rain used). A day with no value from any source is left empty; the model treats it as dry.\n\nIn the daily CSV export it sits beside CHIRPS as uploaded and bias-corrected CHIRPS, so the filled days can be checked against both.',
 		aliases: ['rain after gap filling', 'patched rainfall', 'infilled rainfall'],
 		related: ['rain-catchment', 'chirps', 'chirps-bias', 'rain-threshold'],
 		source: 'docs/model.md §2.4, §2.4b'

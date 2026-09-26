@@ -1,47 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { calibrationFields, humanise, parseNumberList } from './calibration';
-
-describe('humanise', () => {
-	it('splits camelCase and pulls unit suffixes', () => {
-		expect(humanise('rainThresholdMm')).toBe('Rain threshold (mm)');
-		expect(humanise('baseFlowInitial')).toBe('Base flow initial');
-		expect(humanise('recessionM3Day')).toBe('Recession (m³/day)');
-		expect(humanise('a')).toBe('a');
-	});
-});
-
-describe('calibrationFields', () => {
-	it('classifies values by type', () => {
-		const f = calibrationFields({ a: 0.1, summerMonths: [10, 11], on: true, table: { x: 1 } });
-		expect(f.map((x) => x.kind)).toEqual(['number', 'list', 'boolean', 'other']);
-	});
-});
-
-describe('parseNumberList', () => {
-	it('parses comma lists', () => {
-		expect(parseNumberList('10, 11,12')).toEqual([10, 11, 12]);
-		expect(parseNumberList('')).toEqual([]);
-		expect(parseNumberList('1, x')).toBeNull();
-	});
-});
+import { defaultProjectSettings, GR4J_PARAMS, RETIRED_CALIBRATION_KEYS, RUNOFF_MODELS } from '@water-management/engine';
+import { GR4J_FIELDS, KNOWN_CAL_KEYS, RUNOFF_MODEL_HELP, typicalRange } from './calibration';
 
 describe('known calibration parameters', () => {
-	it('cover every engine default key with help text', async () => {
-		const { defaultProjectSettings } = await import('@water-management/engine');
-		const { KNOWN_CAL_KEYS, FLOW_PARAMS, ADVANCED_PARAMS, TABLE_PARAMS } = await import('./calibration');
-		for (const key of Object.keys(defaultProjectSettings().calibration)) expect(KNOWN_CAL_KEYS.has(key)).toBe(true);
-		for (const p of [...FLOW_PARAMS, ...ADVANCED_PARAMS, ...TABLE_PARAMS]) expect(p.help.length).toBeGreaterThan(20);
+	it('cover every engine default key, and none of the legacy model’s', () => {
+		expect([...KNOWN_CAL_KEYS].sort()).toEqual(Object.keys(defaultProjectSettings().calibration).sort());
+		for (const k of RETIRED_CALIBRATION_KEYS) expect(KNOWN_CAL_KEYS.has(k)).toBe(false);
 	});
 });
 
 describe('GR4J fields', () => {
-	it('cover every engine GR4J parameter, with its bounds and help', async () => {
-		const { GR4J_PARAMS } = await import('@water-management/engine');
-		const { GR4J_FIELDS, RUNOFF_MODEL_OPTIONS, typicalRange } = await import('./calibration');
+	it('cover every engine GR4J parameter, with its bounds and help', () => {
 		expect(GR4J_FIELDS.map((f) => f.key)).toEqual(GR4J_PARAMS.map((p) => p.key));
 		for (const f of GR4J_FIELDS) expect(f.help.length, f.key).toBeGreaterThan(20);
 		expect(typicalRange(GR4J_FIELDS[0]!)).toBe('Typical 100–1200 mm; allowed 10–3000.');
-		const { RUNOFF_MODELS } = await import('@water-management/engine');
-		expect(RUNOFF_MODEL_OPTIONS.map((o) => o.value)).toEqual([...RUNOFF_MODELS]);
+	});
+
+	it('GR4J is the only runoff model, and the help says the legacy one is gone', () => {
+		expect([...RUNOFF_MODELS]).toEqual(['gr4j']);
+		expect(RUNOFF_MODEL_HELP).toMatch(/removed in engine 1\.0\.0/);
 	});
 });

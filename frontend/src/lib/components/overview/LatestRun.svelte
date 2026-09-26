@@ -40,7 +40,7 @@
 	const cards = $derived(run ? headlines(run.summary, runDays(run), previous?.summary ?? null) : []);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
 	const LEGACY_TITLE =
-		'Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
+		'Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
 </script>
 
 <section class="latest" aria-labelledby="latest-h" aria-busy={loading}>
@@ -59,7 +59,8 @@
 	{#if meta.legacy}
 		<p class="alert alert-warning" role="note">
 			This run used the legacy runoff model of the b023 workbook, which does not conserve water at the event scale. Its
-			figures are for comparison with the workbook only, not evidence.
+			figures are for comparison with the workbook only, not evidence. Engine 1.0.0 removed that model, so the run can’t be
+			re-run: a new run uses GR4J.
 		</p>
 	{/if}
 	{#if evidence}
