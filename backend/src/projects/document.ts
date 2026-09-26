@@ -9,6 +9,7 @@ import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
+import { toCanonicalUnit } from '../series/merge.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
@@ -33,6 +34,8 @@ export const ProjectFile = z.object({
 				startDate: SeriesStartDate,
 				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES)
 			})
+			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
+			.transform(toCanonicalUnit)
 		)
 		.default([])
 });

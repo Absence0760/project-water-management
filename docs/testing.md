@@ -11,7 +11,7 @@ suites once, before committing. Measured on the 20-core dev laptop
 | `pnpm test:engine` | engine unit | ~35 s |
 | `pnpm test:frontend` | frontend unit (37 s of it is the local-only workbook parity test) | ~40 s |
 | `pnpm test:backend` | backend unit | ~15 s |
-| `pnpm test:backend:db` | API + RLS against Postgres | ~5 min |
+| `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 
 ## The loop
@@ -35,6 +35,10 @@ suites once, before committing. Measured on the 20-core dev laptop
 - **Workbook parity** (`frontend/src/lib/spreadsheet/import/sourceWorkbooks.test.ts`):
   local only (it skips without the client workbooks and Python/openpyxl); each
   case spawns `extract_project.py` for ~30 s, so the cases run concurrently.
+- **Backend db suite**: runs serially (one Postgres test database). It took
+  ~5 min until the RLS role functions moved to PL/pgSQL (026, security.md:
+  policies were re-planning them for every row) and passwords were hashed at
+  bcrypt's minimum cost under vitest (`auth/password.ts`; 12 elsewhere).
 - A new test that loops over many random or real inputs should follow the
   same pattern: shard it across files, or run its child processes
   concurrently, rather than one long `it` in one file.

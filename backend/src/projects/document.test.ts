@@ -1,11 +1,11 @@
-import { SERIES_KINDS } from '@water-management/engine';
+import { canonicalUnit, SERIES_KINDS } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { ProjectFile } from './document.js';
 
 const doc = (kind: string) => ({
 	name: 'P',
 	model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
-	series: [{ kind, name: 'x', unit: 'm³/s', startDate: '2020-01-01', values: [1, null] }]
+	series: [{ kind, name: 'x', unit: canonicalUnit(kind), startDate: '2020-01-01', values: [1, null] }]
 });
 
 describe('ProjectFile.series[].kind', () => {

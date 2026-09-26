@@ -1,23 +1,20 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { hashCost, hashPassword, verifyPassword } from './password.js';
+import { DUMMY_HASH, hashPassword, PASSWORD_COST, verifyPassword } from './password';
 
-describe('hashCost', () => {
-	it('is 12 outside vitest, whatever PASSWORD_HASH_COST says', () => {
-		expect(hashCost({ PASSWORD_HASH_COST: '4' })).toBe(12);
-		expect(hashCost({})).toBe(12);
+describe('password hashing', () => {
+	it('uses bcrypt’s minimum cost under test, and a dummy hash of the same cost', async () => {
+		expect(PASSWORD_COST).toBe(4);
+		const h = await hashPassword('correct horse');
+		expect(h.slice(0, 7)).toBe('$2b$04$');
+		expect(DUMMY_HASH.slice(0, 7)).toBe(h.slice(0, 7));
+		expect(await verifyPassword('correct horse', h)).toBe(true);
+		expect(await verifyPassword('correct horse', DUMMY_HASH)).toBe(false);
 	});
 
-	it('under vitest takes PASSWORD_HASH_COST between 4 and 12, else 12', () => {
-		expect(hashCost({ VITEST: 'true', PASSWORD_HASH_COST: '4' })).toBe(4);
-		expect(hashCost({ VITEST: 'true', PASSWORD_HASH_COST: '12' })).toBe(12);
-		for (const bad of [undefined, '', '3', '13', '4.5', 'x']) expect(hashCost({ VITEST: 'true', PASSWORD_HASH_COST: bad })).toBe(12);
-	});
-
-	it('the test setup lowers it, and the hash still verifies', async () => {
-		expect(hashCost()).toBe(4);
-		const hash = await hashPassword('correct horse');
-		expect(hash).toMatch(/^\$2[aby]\$04\$/);
-		expect(await verifyPassword('correct horse', hash)).toBe(true);
-		expect(await verifyPassword('wrong', hash)).toBe(false);
+	it('keeps cost 12 outside tests (the production work factor, and its dummy hash)', () => {
+		const src = readFileSync(new URL('./password.ts', import.meta.url), 'utf8');
+		expect(src).toMatch(/PASSWORD_COST = UNDER_TEST \? 4 : 12;/);
+		expect(src).toMatch(/: '\$2b\$12\$[./A-Za-z0-9]{53}';/);
 	});
 });

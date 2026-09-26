@@ -8,8 +8,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 ## Authentication
 
 - **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12; only under vitest may `PASSWORD_HASH_COST` lower it,
-  which the test setup does to 4, so no deployment can weaken it) and are 8–200 characters. Emails are `citext`, so
+  (`bcryptjs`, cost 12; 4 under vitest only, `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
@@ -238,7 +237,13 @@ In short:
   **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
   explicit and an unrecognised team role grants nothing, in SQL
   (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
-  later can't silently become an editor.
+  later can't silently become an editor. The role functions every policy
+  calls (`app_current_user_id`, `app_team_role`, `app_project_role`,
+  `app_has_role`) are PL/pgSQL since 026_rls_role_plpgsql: a SQL function with
+  `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
+  again on every call, and a policy calls them once per row (writing a run's
+  ~200 series spent 0.8 ms a row on them). Keep new role helpers in PL/pgSQL
+  for the same reason.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every

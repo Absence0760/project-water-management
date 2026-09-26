@@ -17,6 +17,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun } from './cache';
+	import { runDamCapacity } from './results';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
@@ -103,7 +104,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		const inRun = new Set((detail?.series ?? []).map((s) => s.nodeId));
 		return editor.model.nodes.filter((n) => inRun.has(n.id)).map((n) => ({ id: n.id, name: n.name, kind: n.kind }));
 	});
-	const damCapacity = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.damCapacityM3] as [string, number])));
+	// The shown run's own dam sizes (its model snapshot), not today's (runs/results.ts).
+	const damCapacity = $derived(runDamCapacity(detail?.run.model as Parameters<typeof runDamCapacity>[0], editor.model.nodes));
 	const runDays = (r: { startDate: string; endDate: string }) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));

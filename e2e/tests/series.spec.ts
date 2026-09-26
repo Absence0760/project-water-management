@@ -215,3 +215,21 @@ test('on a wide screen the upload form stays to the right of "What the model use
 	expect(upload.x).toBeGreaterThanOrEqual(uses.x + uses.width);
 	expect(Math.abs(upload.y - uses.y)).toBeLessThan(2);
 });
+
+test('a flow uploaded in l/s is converted to m³/s, the unit the model reads', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series in l/s');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = await upload(page, 'Flow — observed gauge', 'observed-flow-daily.csv');
+	await form.getByLabel('Unit').selectOption('l/s');
+	await expect(form.getByTestId('unit-converted')).toHaveText('Values in l/s are converted to m³/s when saved.');
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toContainText('Uploaded 92 days');
+
+	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; unit: string }[];
+	expect(list[0]!.unit).toBe('m³/s');
+	const values = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()).values as (number | null)[];
+	// The fixture's first reading, read as litres a second.
+	const first = Number((await import('node:fs')).readFileSync(fixture('observed-flow-daily.csv'), 'utf8').split('\n')[1]!.split(',')[1]);
+	expect(values[0]).toBeCloseTo(first / 1000, 9);
+});
