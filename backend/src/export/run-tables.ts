@@ -7,6 +7,10 @@ import {
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
 	fitPeriodText,
+	provenanceLabel,
+	rainSourceFactorOrigin,
+	rainSourceFallbackText,
+	rainSourceKindName,
 	FLOW_DM_MIN_DAYS,
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
@@ -43,6 +47,7 @@ const CATCHMENT_ORDER = [
 	'chirps_factor',
 	'rain_catchment_missing',
 	'rain_catchment_spread',
+	'rain_source',
 	'is_summer',
 	'rain_flow',
 	'base_flow',
@@ -452,6 +457,47 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 	for (const k of z.keptDry) yield csvRow(['Kept as recorded (dry)', k.start, k.end, k.reason, k.days]);
 }
 
+const WY_CALENDAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/**
+ * The rain-source periods (engine ≥ 0.30.0, model.md §2.4e, issue #40 (b)):
+ * one row per period with its reason, where its days' rain came from, and
+ * its factors (Oct … Sep) with their origin and the fallback.
+ */
+export function* rainSourceCsvLines(r: RunSummary['rainSource']): Generator<string> {
+	yield csvRow(['Rain-source periods']);
+	if (r === undefined) {
+		yield csvRow(['Run made before engine 0.30.0: the catchment series throughout']);
+		return;
+	}
+	if (r === null || !r.periods.length) {
+		yield csvRow(['None: the catchment series throughout']);
+		return;
+	}
+	yield csvRow([
+		'Start',
+		'End',
+		'Series',
+		'Reason',
+		'Run days',
+		'From the series',
+		'From CHIRPS',
+		'From reanalysis',
+		'From forecast',
+		'No value',
+		'Series rain (mm)',
+		'Rain used from it (mm)',
+		'Factors',
+		'Gaps from'
+	]);
+	for (const p of r.periods) {
+		const series = `${rainSourceKindName(p.series)}${p.seriesProvenance !== undefined ? ` (${provenanceLabel(p.seriesProvenance)})` : ''}`;
+		yield csvRow([p.start, p.end, series, p.reason, p.runDays, p.seriesDays, p.chirpsDays, p.reanalysisDays, p.forecastDays, p.noneDays, p.seriesRawMm, p.seriesMm, rainSourceFactorOrigin(p), rainSourceFallbackText(p.fallback)]);
+	}
+	yield csvRow(['Factor per month', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+	for (const p of r.periods) yield csvRow([`${p.start} to ${p.end}`, ...WY_CALENDAR_MONTHS.map((m) => p.factors[m - 1] ?? '')]);
+}
+
 const ACCUMULATION_STATUS: Record<string, string> = {
 	spread: 'spread by CHIRPS',
 	noChirps: 'left on the reading day (no CHIRPS rain)',
@@ -604,6 +650,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* zeroRainLines(summary.zeroRainInfill);
+	yield '';
+
+	yield* rainSourceCsvLines(summary.rainSource);
 	yield '';
 
 	yield* accumulationLines(summary.rainAccumulation);

@@ -787,6 +787,15 @@ export interface LandCoverPatch {
 	factors: { mar: number; lowFlow: number } | null;
 }
 
+/**
+ * How an upload of sub-daily readings was added up into days
+ * (time_series.day_boundary, 033_series_day_boundary.sql, issue #40 (b)):
+ * '08:00' = 08:00 to 08:00, booked to the day it starts (the manual-gauge
+ * convention); '00:00' = midnight to midnight.
+ */
+export const DAY_BOUNDARIES = ['00:00', '08:00'] as const;
+export type DayBoundary = (typeof DAY_BOUNDARIES)[number];
+
 /** A daily series: values[i] is the value on startDate + i days; null = missing. */
 export interface DailySeries {
 	startDate: string;
@@ -809,6 +818,8 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/** Sub-daily readings added up into days in this window (033_series_day_boundary.sql); null = daily values as uploaded. */
+	dayBoundary?: DayBoundary | null;
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;

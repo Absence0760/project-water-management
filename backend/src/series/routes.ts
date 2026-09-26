@@ -82,6 +82,23 @@ export async function replaceSeries(
 	return meta;
 }
 
+/**
+ * Record how a written series' days were built from sub-daily readings
+ * (033_series_day_boundary.sql): `boundary` null = daily values. Returns the
+ * meta as it now stands.
+ */
+async function setDayBoundary(db: Db, projectId: string, meta: SeriesMetaRow, boundary: string | null): Promise<SeriesMetaRow> {
+	if ((meta.dayBoundary ?? null) === boundary) return meta;
+	const { rows } = await db.query<SeriesMetaRow>(`UPDATE time_series SET day_boundary = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [
+		projectId,
+		meta.id,
+		boundary
+	]);
+	return rows[0]!;
+}
+
+const boundaryText = (b: string | null) => (b ? `${b}–${b} days` : 'daily values');
+
 /** PATCH …/series/:seriesId: say what an existing series holds, without touching its values. */
 const LabelBody = z
 	.object({ ...ProvenanceFields })
@@ -117,7 +134,9 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			return c.json(await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null }));
+			// A replace says how its days were built (a sub-daily upload's day boundary), or clears it.
+			const meta = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null });
+			return c.json(await setDayBoundary(db, id, meta, body.dayBoundary ?? null));
 		});
 	})
 	// Say which product and version a series holds (a CHIRPS column imported
@@ -159,7 +178,21 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const r = await mergeSeries(db, id, body, { provenance: bodyProvenance(body) });
+			// The day-boundary guard (033): days added up in one window never go into a series of the other, like 032's version guard.
+			const { rows: held } = await db.query<{ dayBoundary: string | null; filled: boolean }>(
+				`SELECT day_boundary AS "dayBoundary", EXISTS (SELECT 1 FROM unnest("values") v WHERE v IS NOT NULL) AS filled
+				 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+				[id, body.kind, body.name]
+			);
+			const was = held[0];
+			if (body.dayBoundary !== undefined && was?.filled && (was.dayBoundary ?? null) !== body.dayBoundary) {
+				throw new ApiError(
+					409,
+					`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
+				);
+			}
+			const r0 = await mergeSeries(db, id, body, { provenance: bodyProvenance(body) });
+			const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, id, r0.meta, body.dayBoundary) } : r0;
 			const subject = seriesSubject(r.meta, r.before, r.after);
 			if (!r.before) await recordAudit(db, id, 'series.created', subject);
 			else if (subject.daysChanged || r.before.unit !== r.meta.unit) {

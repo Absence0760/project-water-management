@@ -1,4 +1,4 @@
-import { provenanceError, provenanceLabel, sameProvenance, scaleValues, SERIES_KINDS, seriesUnit, type SeriesProvenance } from '@water-management/engine';
+import { DAY_BOUNDARIES, provenanceError, provenanceLabel, sameProvenance, scaleValues, SERIES_KINDS, seriesUnit, type SeriesProvenance } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -45,7 +45,9 @@ export const SeriesBody = z
 		unit: z.string().trim().min(1).max(20),
 		startDate: SeriesStartDate,
 		values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES),
-		...ProvenanceFields
+		...ProvenanceFields,
+		// How sub-daily readings were added up into these days (033_series_day_boundary.sql); null = daily values, absent = not said.
+		dayBoundary: z.enum(DAY_BOUNDARIES).nullable().optional()
 	})
 	.superRefine(checkProvenance)
 	.transform(toCanonicalUnit);
@@ -73,7 +75,7 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
-	product, product_version AS "productVersion",
+	product, product_version AS "productVersion", day_boundary AS "dayBoundary",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
 
@@ -231,6 +233,7 @@ export interface SeriesMetaRow {
 	updatedAt: string;
 	product: string | null;
 	productVersion: string | null;
+	dayBoundary: string | null;
 	rebuilding: boolean;
 }
 
