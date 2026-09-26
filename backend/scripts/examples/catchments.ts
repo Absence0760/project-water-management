@@ -19,6 +19,7 @@
 //                window, a reference gauge, a forecast and a WR2012 reference.
 import {
 	DAM_AREA_EXPONENT,
+	DAM_STORAGE_DEFAULTS,
 	ENGINE_VERSION,
 	IRRIGATION_SYSTEMS,
 	NEW_FARM_IRRIGATION,
@@ -222,9 +223,10 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damAreaFullM2: cap > 0 && depth !== null ? Math.round(cap / depth) : null,
 			damAreaExponent: DAM_AREA_EXPONENT,
 			damSeepagePerDay: f.seepage ?? 0,
-			// Not an other water user (WP-1.33), no boreholes (WP-1.34): the inert defaults.
+			// Not an other water user (WP-1.33), no boreholes (WP-1.34), no dam survey curve or release rule (WP-3.5): the inert defaults.
 			...USER_DEFAULTS,
-			...BOREHOLE_DEFAULTS
+			...BOREHOLE_DEFAULTS,
+			...DAM_STORAGE_DEFAULTS
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>

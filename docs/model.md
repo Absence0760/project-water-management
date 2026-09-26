@@ -3326,10 +3326,11 @@ it never changes a run's results.
   `verifyPaired`; [security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Storage:
   [data-model.md](./data-model.md) (`run_uncertainty`).
 - **Cost.** Every member is a full model run, `runModelWithoutChecks`:
-  `runModel` less the plausibility checks (§2.10d), which no member result
-  reads, so a member's series and summary are otherwise identical and the
-  checks' code stays out of the calibration worker. 25–55 ms on the example
-  catchments, so 300 members take 8–16 s in the browser's calibration worker.
+  `runModel` less the plausibility checks (§2.10d) and the assurance of
+  supply (§2.11a–b), neither of which any member result reads, so a member's
+  series and summary are otherwise identical and that code stays out of the
+  calibration worker. 25–55 ms on the example catchments, so 300 members take
+  8–16 s in the browser's calibration worker.
 - **For the hydrologist** (plan.md question 18): the default thresholds
   (KGE′ ≥ 0.5, ±50 % low-flow bias, WR2012 up to *query*), the pan
   coefficient's ±0.1, and whether 300 members suffice, are defaults to
