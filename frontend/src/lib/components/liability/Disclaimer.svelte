@@ -20,7 +20,4 @@
 		border-left: 3px solid var(--warning, currentColor);
 		padding-left: 0.6rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 </style>

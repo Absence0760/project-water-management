@@ -417,8 +417,9 @@ as one background job. The main use is demand levels: `demand.scale` at
 1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
 and R5's seasonal outlook read. Built as backend and API only
 (`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
-migration 062); the UI waits for R4's matrix view, the first screen that
-needs one.
+migration 062). The first screen that starts and reads one is R4's
+outcome matrix on the Runs tab ([ui.md § Outcome matrix](./ui.md#outcome-matrix)):
+demand levels only, one `demand.scale` op per member.
 
 - **Not a scenario.** A member has no row in `scenario` and makes no
   `model_run`: it stores its **run summary** (the `RunSummary` a run
@@ -458,8 +459,11 @@ needs one.
   with its base run.
 - **Base run.** An ordinary run of the model only, as for a scenario: not a
   scenario run, not a forecast run (a sweep is judged on history).
-  R5's outlook will need a sweep from a run's state on a decision date;
-  that is R5's to add.
+  R5's outlook needs a sweep from a run's state on a decision date: the
+  engine builds those members (`outlookMemberInput`, [model.md
+  §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)),
+  the job that runs and stores them is not built yet
+  ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml)).
 
 API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 ([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`
@@ -512,7 +516,9 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
-  headline, farm and daily-overlay components (issue #8); the compare page
+  headline, farm and daily-overlay components (issue #8), where a feature
+  only one side has (a river pump, boreholes, a release rule, land cover)
+  reads as 0 on the other ([run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has)); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
 - **Override mode** (`OverrideEditor.svelte`, `overrideDiff.ts`, its own
   chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on

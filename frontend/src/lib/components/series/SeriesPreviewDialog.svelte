@@ -317,10 +317,6 @@
 		padding: 0.1rem 0;
 		white-space: nowrap;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.scroll {
 		flex: 1;
 		min-height: 0;

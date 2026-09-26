@@ -105,13 +105,6 @@
 		/* A 44px touch target without leaving display: list-item (which keeps the disclosure marker). */
 		padding: 0.75rem 0;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
-	.small {
-		font-size: 0.8rem;
-	}
 	h2 {
 		display: inline-flex;
 		align-items: center;

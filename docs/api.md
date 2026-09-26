@@ -239,7 +239,20 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `debounceMinutes` a whole number 0–120, `publish` `never` |
   `if_no_new_warnings` (no other value, no other key; `400`). It is not a
   model input: runs don't record it, and a `PATCH` that changes nothing but
-  `autoRun` leaves `updatedAt` alone. `rerunQueuedFor` is when the project's
+  `autoRun` leaves `updatedAt` alone. `settings.outcomes = { yearClassMethod,
+  riskCutoffs: { reserveMonthsMet, daysBelowEwr } }` (issue #53 R4,
+  `projects/outcomeSettings.ts`, [ui.md § Outcome matrix](./ui.md#outcome-matrix))
+  is always present too, defaults `{ yearClassMethod: 'auto', riskCutoffs:
+  { reserveMonthsMet: null, daysBelowEwr: null } }` (null = the engine's
+  `DEFAULT_OUTCOME_RISK_CUTOFFS`, placeholders pending the hydrologist,
+  plan.md O1). `PATCH` takes either field: `yearClassMethod` `auto` |
+  `terciles` | `quintiles`; `riskCutoffs` whole, both metrics, each null or
+  `{ lower, increasing }` shares 0–1 in the metric's own order (months met:
+  `lower ≥ increasing`; days below the EWR: `lower ≤ increasing`), checked
+  by the engine's `validateOutcomeCutoffs` (`400` with its message). Like
+  `autoRun` it is no model input: runs don't record it, and a `PATCH` that
+  changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
+  `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
   `{ project }`, not on the list.

@@ -155,9 +155,6 @@
 	.head > :global(h4) {
 		margin: 0;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		max-width: 85ch;
 	}

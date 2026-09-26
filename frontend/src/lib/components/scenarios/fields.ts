@@ -14,6 +14,7 @@ import {
 	RUNOFF_MODELS,
 	SETTINGS_PATHS,
 	SUPPLY_RULES,
+	SUPPLY_RULE_LABEL,
 	TRANSFER_SET_FIELDS,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
@@ -116,7 +117,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	// Supply rule and river pump (WP-3.8, docs/model.md §2.7e): the rule's words are run comparison's (engine compare.ts).
 	supplyRule: {
 		label: 'Supply rule',
-		spec: { t: 'enum', options: plain(SUPPLY_RULES, { damFirst: 'dam only', riverFirst: 'river first', trigger: 'dam, river when low', runOfRiver: 'run of river' }) }
+		spec: { t: 'enum', options: plain(SUPPLY_RULES, SUPPLY_RULE_LABEL) }
 	},
 	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },

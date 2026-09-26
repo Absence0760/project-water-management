@@ -8,6 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
 
 	import '../app.css';
@@ -80,7 +81,10 @@
 			await m.setLocale(m.resolveLocale(chosen, m.readStoredLocale()));
 			i18nReady = true;
 		} catch {
-			i18nFailed = true; // the chunk didn't arrive: shown with Try again
+			// The i18n module or the catalogue chunk didn't arrive. Only a reload
+			// can fetch it again (common/lazy.ts), so ChunkFailed, in English:
+			// the catalogue is what failed.
+			i18nFailed = true;
 		}
 	}
 	$effect(() => {
@@ -113,10 +117,7 @@
 	</main>
 {:else if i18nFailed && translated}
 	<main class="page">
-		<div class="alert alert-error" role="alert">
-			This page could not be loaded. Check your connection and try again.
-			<button type="button" class="btn btn-sm" onclick={() => applyLocale(accountLocale)}>Try again</button>
-		</div>
+		<ChunkFailed what="This page" />
 	</main>
 {:else if ready}
 	<div id="main" tabindex="-1">{@render children()}</div>

@@ -2,8 +2,22 @@
 // Vite turns into its own chunk. loadOnce memoises the import per loader, so a
 // hover prefetch, the render that needs it and a later remount all share one
 // request, and peek lets a remount render synchronously with no loading flash.
+//
 // A failed import (a network blip, or a deploy that removed the old chunk) is
-// forgotten so the next attempt tries again.
+// not kept, so a later call runs the loader again, but that almost never
+// recovers: the browser records a module script that failed to fetch in the
+// page's module map (HTML spec, "fetch a single module script") and fails
+// every later import of that URL at once, for the life of the page. The one
+// case a rerun helps is a chunk whose own CSS failed (Vite's preload helper
+// rejects before importing the JS; the rerun imports it, unstyled). So
+// callers offer a reload, never "Try again" (ChunkFailed.svelte), and never
+// reload by themselves, which would loop if the chunk is really gone.
+//
+// A cache-busting retry isn't possible either: the loader's URL is the
+// hashed file name Vite compiled into it, the chunk's own static imports
+// (shared chunks, possibly the ones that failed) keep their URLs, and after a
+// deploy the old hashed files are gone, so only a reload, which fetches the
+// new index.html and its new chunk names, gets a working copy.
 
 export type Loader<T> = () => Promise<{ default: T }>;
 

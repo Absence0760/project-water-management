@@ -10,6 +10,8 @@
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
 	import BoreholeFields from './BoreholeFields.svelte';
+	import SupplyFields from './SupplyFields.svelte';
+	import { hasSupplySettings } from './supply';
 
 	let {
 		node,
@@ -194,6 +196,14 @@
 		</fieldset>
 	{/each}
 
+	<!-- A farm's; a farm turned into a gauge or user keeps its settings, shown so they can be reset (WP-3.8). -->
+	{#if node.kind === 'farm' || hasSupplySettings(node)}
+		<fieldset>
+			<legend>Supply</legend>
+			<SupplyFields {node} {readonly} />
+		</fieldset>
+	{/if}
+
 	{#if hasDam(node)}
 		<fieldset>
 			<legend>Dam survey and releases</legend>
@@ -259,10 +269,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
 		gap: 0 1rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	.lbl {
 		display: inline-flex;

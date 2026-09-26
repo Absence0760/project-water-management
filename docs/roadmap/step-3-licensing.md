@@ -1038,8 +1038,7 @@ must build WP-2.15 Phase B.
 > Default output is byte-identical (tests on random networks and an example;
 > the examples and the client catchment regression suite unchanged).
 > **Still to do:** hands-off flow, drought restrictions (`restricted_demand`),
-> the Supply section in the node form (pumps × m³/h × 24 calculator), a pump
-> capacity on other water users (issue #54
+> a pump capacity on other water users (issue #54
 > item 2b), and moving the client catchment's run-of-river units (issue #54
 > item 2d) once the hydrologist confirms.
 >
@@ -1052,6 +1051,14 @@ must build WP-2.15 Phase B.
 > for no limit, the levels in %), and override mode records them
 > ([scenarios.md](../scenarios.md)). So "what if this farm pumps from the
 > river at 1,200 m³/day" is a scenario.
+>
+> **The node form's Supply section built 2026-09-26.** A farm's one-node form
+> sets the rule, the river pump (number of pumps × m³/h per pump, × 24, into
+> the stored m³/day, which can also be typed straight in; blank = no limit)
+> and, for the trigger rule, the two levels in %, with the save rules shown
+> inline and blocking Save, and the run's no-dam hint on a dam-only farm
+> without a dam ([ui.md](../ui.md), `SupplyFields.svelte`). So the modeller
+> no longer needs a scenario to change how a farm takes water.
 
 - **Goal.** Model how water is actually taken. These rules are often
   licence conditions: hands-off flows, pump capacity, restrictions.

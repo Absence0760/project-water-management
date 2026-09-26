@@ -151,16 +151,9 @@
 	.share-board h4 {
 		margin-top: 0.9rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.note {
 		margin-top: 0.5rem;
 		max-width: 80ch;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	.stages {
 		list-style: none;

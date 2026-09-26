@@ -70,9 +70,6 @@
 </div>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		max-width: 85ch;
 		margin-top: 0;

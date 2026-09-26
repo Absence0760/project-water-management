@@ -82,10 +82,6 @@
 		font-size: 0.8rem;
 		margin-top: 0.15rem;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.scroll {
 		max-height: 320px;
 		overflow-y: auto;
