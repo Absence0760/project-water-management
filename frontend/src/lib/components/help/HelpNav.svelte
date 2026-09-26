@@ -1,6 +1,7 @@
 <script lang="ts">
-	// The help sidebar, on every /help page: search, the landing page, each
-	// guide by group, and the glossary with its topics. On the glossary page
+	// The help contents, on every /help page: the landing page, each guide by
+	// group, and the glossary with its topics (the search box heads the page,
+	// routes/help/+layout.svelte). On the glossary page
 	// it marks the topic and term being read (aria-current) and lists that
 	// topic's terms.
 	import { base } from '$app/paths';

@@ -1,6 +1,7 @@
 // The app sidebar's page slot (AppShell): a page fills it with its own
 // navigation while it is shown on a wide screen (the workspace: the catchment
-// and its sections; Help: its search and contents), and clears it on leave.
+// and its sections), and clears it on leave. Help doesn't: a long contents list
+// made the sidebar scroll, so Help keeps them in the page.
 // One instance of that navigation ever exists: on a phone the page renders it
 // in the page instead, and doesn't fill the slot.
 import type { Snippet } from 'svelte';

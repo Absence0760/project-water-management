@@ -14,11 +14,13 @@ session exists. A **Skip to content** link comes first.
   the URL is in; the project workspace counts as Projects), the page's own
   navigation in the slot (below), and the account menu at the foot. Nothing
   is fixed across the top, so `--header-h` (`app.css`) is 0 and sticky bars
-  and in-page link targets stop at the top edge.
+  and in-page link targets stop at the top edge. A page (`.page`) starts at
+  the sidebar's edge rather than centring in the width left, which left a
+  dead gap between the sidebar and the content.
 - **Below 900 px (phones):** a slim sticky bar, 52 px (`--header-h`): a
   **Menu** button that opens the Main navigation under the bar, the brand,
   and a compact account button (initials only). The Menu closes on a
-  navigation or Escape (Escape puts focus back on the button).
+  navigation, a click outside it, or Escape (Escape puts focus back on the button).
 
 **The page slot** (`layout/sidebar.svelte.ts`): a page puts its own
 navigation in the sidebar with `fillSidebar(snippet, on)`, called from an
@@ -2766,8 +2768,8 @@ Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
 (`help/HelpNav.svelte`: the overview, every guide by group, *Start here*,
 *How it works*, *How to*, and the glossary) marks the page you're on
-(`aria-current`). From 900 px the contents are a 15rem column in the page
-beside the text, sticky while you read, scrolling on their own only when
+(`aria-current`). From 900 px the contents are a 13rem column in the page,
+against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
 taller than the window (a short window, or the glossary's term list). They
 don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
@@ -2805,7 +2807,10 @@ under the search box, and close again when you pick a page.
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
-  or one idea each, with an "On this page" list, numbered steps, tip and
+  or one idea each, with an "On this page" list (a box under the intro; when
+  the Help text column is at least 56rem wide, a container query on
+  `help-main`, a sticky rail right of the 42rem article instead, so the
+  article keeps its reading width and the right-hand space is used), numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
   stores under the ground, the outlet gauge, the transfer, the EWR reach), the
   glossary terms it uses, related guides and previous / next. Guide text is

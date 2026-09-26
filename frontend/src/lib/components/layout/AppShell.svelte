@@ -4,9 +4,8 @@
 	// the page's own navigation in the slot, and the account at the foot)
 	// instead of a bar across the top; on a phone, a slim bar whose Menu
 	// opens the same main sections. Pages fill the slot through
-	// sidebar.svelte.ts (the workspace: its catchment and sections; Help: its
-	// search and contents). The farmer view and the sign-in pages have their
-	// own frames and don't use this.
+	// sidebar.svelte.ts (the workspace: its catchment and sections). The farmer
+	// view and the sign-in pages have their own frames and don't use this.
 	import type { Snippet } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { base } from '$app/paths';
@@ -36,8 +35,14 @@
 		void page.url.pathname;
 		menuOpen = false;
 	});
+	let barEl: HTMLElement | undefined = $state();
 	$effect(() => {
 		if (!menuOpen) return;
+		// A click outside the bar and its menu closes it too, as the account menu does.
+		const onDoc = (e: PointerEvent) => {
+			if (barEl && !barEl.contains(e.target as Node)) menuOpen = false;
+		};
+		document.addEventListener('pointerdown', onDoc);
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
 			e.preventDefault();
@@ -45,7 +50,10 @@
 			menuButton?.focus();
 		};
 		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
+		return () => {
+			window.removeEventListener('keydown', onKey);
+			document.removeEventListener('pointerdown', onDoc);
+		};
 	});
 </script>
 
@@ -74,7 +82,7 @@
 			<div class="foot"><AccountMenu up /></div>
 		</aside>
 	{:else}
-		<header class="phone-bar">
+		<header class="phone-bar" bind:this={barEl}>
 			<button type="button" class="menu-btn" aria-expanded={menuOpen} aria-controls="app-menu" bind:this={menuButton} onclick={() => (menuOpen = !menuOpen)}>
 				<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
 				<span class="visually-hidden">Menu</span>
