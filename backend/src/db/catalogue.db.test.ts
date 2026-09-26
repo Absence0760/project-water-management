@@ -4,6 +4,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
+const APP_URL = process.env.DATABASE_URL!;
 /** Tables deliberately without RLS: app_user is needed before sign-in. */
 const NO_RLS = new Set(['app_user', 'schema_migrations']);
 /**
@@ -212,6 +213,55 @@ describe('schema catalogue', () => {
 			   )`
 		);
 		expect(rows.map((r) => r.fk)).toEqual([]);
+	});
+
+	it('lets no role but the owner and water_app execute a SECURITY DEFINER function (027_definer_grants)', async () => {
+		// A SECURITY DEFINER function runs as its owner, so a PUBLIC EXECUTE grant
+		// (Postgres's default) hands the owner's rights to any role that can log in.
+		const { rows } = await db.query<{ fn: string; grantee: string }>(
+			`SELECT p.oid::regprocedure::text AS fn, CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS grantee
+			 FROM pg_proc p
+			 LEFT JOIN pg_depend d ON d.objid = p.oid AND d.deptype = 'e'
+			 CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+			 WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef AND d.objid IS NULL
+			   AND a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner
+			   AND (a.grantee = 0 OR pg_get_userbyid(a.grantee) <> 'water_app')
+			 ORDER BY 1, 2`
+		);
+		expect(rows.map((r) => `${r.fn} → ${r.grantee}`)).toEqual([]);
+	});
+
+	it('lets water_app execute every non-trigger SECURITY DEFINER function, and call one (positive control)', async () => {
+		const { rows } = await db.query<{ fn: string; ok: boolean }>(
+			`SELECT p.oid::regprocedure::text AS fn, has_function_privilege('water_app', p.oid, 'EXECUTE') AS ok
+			 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef AND p.prorettype <> 'trigger'::regtype`
+		);
+		// The guard above must have something to look at: the auth, invite and farm-scope helpers at least.
+		expect(rows.map((r) => r.fn)).toEqual(expect.arrayContaining(['app_has_role(uuid,project_role)', 'app_accept_invites(uuid)', 'app_farm_nodes(uuid)']));
+		expect(rows.filter((r) => !r.ok).map((r) => r.fn)).toEqual([]);
+		// And water_app really can call one (RLS policies call app_has_role as water_app).
+		const app = new pg.Client({ connectionString: APP_URL });
+		await app.connect();
+		try {
+			const { rows: called } = await app.query<{ ok: boolean }>(`SELECT app_has_role(gen_random_uuid(), 'viewer') AS ok`);
+			expect(called[0]!.ok).toBe(false);
+		} finally {
+			await app.end();
+		}
+	});
+
+	it('closes new functions to PUBLIC by default: the owner’s default privileges grant EXECUTE to water_app only', async () => {
+		await db.query('BEGIN');
+		try {
+			await db.query(`CREATE FUNCTION catalogue_probe() RETURNS int LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 1'`);
+			const { rows } = await db.query<{ pub: boolean; app: boolean }>(
+				`SELECT has_function_privilege('public', 'catalogue_probe()', 'EXECUTE') AS pub,
+				        has_function_privilege('water_app', 'catalogue_probe()', 'EXECUTE') AS app`
+			);
+			expect(rows[0]).toEqual({ pub: false, app: true });
+		} finally {
+			await db.query('ROLLBACK');
+		}
 	});
 
 	it('positive control: the two guards above see a recent migration’s objects (018_feeds)', async () => {

@@ -730,6 +730,12 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `app_current_user_id()` reads that setting. `app_has_role(project, minRole)`
   is `SECURITY DEFINER` and compares the effective role from
   `app_project_role()` (direct `project_member` row or team membership).
+- Every `SECURITY DEFINER` function in `public` is executable by `water_app`
+  only (trigger functions by nobody but the owner): `PUBLIC` is revoked, and
+  the owner's default privileges (027_definer_grants) grant a new function to
+  `water_app`, never `PUBLIC`. A migration that adds one should still write its
+  own `REVOKE ALL … FROM PUBLIC` / `GRANT EXECUTE … TO water_app`; the
+  catalogue guard fails if one is left open to `PUBLIC`.
 - Policies on `project`, `project_member` and every model-data table (`node`,
   `crop`, `crop_area`, `transfer`, `time_series`, `model_run`, `run_series`):
   SELECT needs `viewer`; INSERT/UPDATE/DELETE on model data and project UPDATE

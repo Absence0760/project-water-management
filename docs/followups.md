@@ -1455,6 +1455,15 @@ role and not before it.
 
 ## Housekeeping
 
+- `SECURITY DEFINER` grants (issue #37, 027_definer_grants): the catalogue
+  guard now fails any `SECURITY DEFINER` function executable by a role other
+  than the owner and `water_app`. The in-flight `025_share_links.sql` branch
+  may add such functions; when it merges, run `pnpm test:backend:db` and make
+  sure its functions revoke `PUBLIC` (the owner's default privileges already
+  close them if 027 has applied first, but a database migrated in file order
+  applies 025 before 027's default-privilege change, so 025 needs its own
+  `REVOKE`).
+
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.
 - Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database.
