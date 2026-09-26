@@ -928,7 +928,9 @@ consultant: a direct project member (`POST /projects/:id/members` with
 `role: 'contributor'`; the UI calls it "Applicant"), ranked `farmer <
 contributor < viewer < editor < owner`. `044_contributor_role.sql` adds the
 enum value alone (it can't be used in the transaction that adds it);
-`045_contributor_scope.sql` adds everything else.
+`045_contributor_scope.sql` adds everything else, and
+`046_contributor_runs.sql` takes every run row (and other farms' run series)
+away from a contributor.
 
 - **Below viewer, like a farmer.** Every existing policy and every
   `requireRole(…, 'viewer')` refuses a contributor untouched (fail closed);
@@ -990,23 +992,43 @@ enum value alone (it can't be used in the transaction that adds it);
   contributors or above), editors once not a draft, viewers once decided.
   Writes: a team scenario, editors; an application, its owner, and an
   editor for the move to `decided`.
-- **`model_run`**: `model_run_select` (from 001) now reads a scenario run
-  only through `app_scenario_readable`, so an application's draft runs are
-  hidden from the editors too. A contributor may insert runs of the
-  scenarios they read (as themselves) and delete their own applications'
-  runs that nothing keeps (`app_run_kept`, `RUN_KEPT_SQL`'s rule past RLS). A
-  published run is **not** readable as a row: its `inputs` and `summary`
-  hold every farm.
+- **`model_run`**: `model_run_select` (from 001, rewritten by 045 and
+  046) reads a run for a viewer and above only, a scenario run only through
+  `app_scenario_readable` too, so an application's draft runs are hidden
+  from the editors. **A contributor reads no run row at all**, not even
+  their own application's: its `inputs` snapshot is the whole base with the
+  ops applied (every farm's parameters) and its `summary` names every farm,
+  and RLS can't hide a column (046). A contributor may insert runs of the
+  scenarios they read (as themselves; the id is made by the server, since
+  `RETURNING` would need the row read). What they get of their runs comes
+  through `SECURITY DEFINER` functions: `app_scenario_run_meta(project,
+  scenario)` (id, label, engine version, dates, scenario; for whoever reads
+  the scenario, never `inputs` or `summary`), used by the scenario list's
+  run count and last run and a new run's response; and
+  `app_trim_application_runs(project, scenario, keep)`, the owner's
+  per-application cap (a `DELETE` needs its rows readable, so 045's
+  `model_run_delete_contributor` policy is gone), which spares a kept run
+  (`app_run_kept`, `RUN_KEPT_SQL`'s rule past RLS) and deletes nothing for
+  anyone but the owner. A published run is **not** readable as a row either.
 - **`run_series`**: `run_series_select` (from 001) excludes
-  `app_hidden_scenario_runs()` (applications the caller can't read);
-  `run_series_select_contributor` reads the contributor's applications' runs
-  and the share links' catchment keys (`natural_flow`, `simulated_outflow`,
-  `observed_flow`, `ewr`, `ewr_shortfall`, `node_id IS NULL`) of a published
-  run (current or in the history) when the catchment has at least 5 farm
-  holders, counted as `app_share_series` counts them. Both helpers are
-  uncorrelated set-returning functions, so a query evaluates each once (a
-  hashed subplan), not per row. `series_blob` / `run_input_series` gain a
-  contributor insert policy for their runs' stored inputs.
+  `app_hidden_scenario_runs()` (applications the caller can't read).
+  `run_series_select_contributor` (046) reads, of an application run the
+  contributor reads, the application's own nodes' series
+  (`app_contributor_run_nodes()`: its `owned_node_ids`, the owner's farm
+  links, so the consultant reads them too) and no other farm's (their
+  demand, supply and storage carry the areas and dams the projection
+  blanks); and the share links' catchment keys (`natural_flow`,
+  `simulated_outflow`, `observed_flow`, `ewr`, `ewr_shortfall`, `node_id IS
+  NULL`) of a published run (current or in the history) or of an
+  application run they read, when the catchment has at least 5 farm holders
+  (`app_contributor_k_projects()`, counted as `app_share_series` counts
+  them). The helpers are uncorrelated set-returning functions, so a query
+  evaluates each once (a hashed subplan), not per row. `series_blob` /
+  `run_input_series` gain a contributor insert policy for their runs'
+  stored inputs; it and `run_series_insert_contributor` check "a scenario
+  run I made in this transaction" through `app_own_new_scenario_run`, since
+  the contributor can't read the row. `run_input_series` itself stays
+  unreadable to a contributor.
 - **The published baseline for the server**:
   `app_published_run_input(project, run)` and `app_published_run_series`
   return a published run's snapshot and stored series to a contributor or

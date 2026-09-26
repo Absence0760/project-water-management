@@ -380,7 +380,8 @@ dark and on a phone).
 
 An **application** is a scenario a **contributor** makes: a licence applicant
 or their consultant, the project role ranked between `farmer` and `viewer`
-(migrations `044_contributor_role.sql`, `045_contributor_scope.sql`;
+(migrations `044_contributor_role.sql`, `045_contributor_scope.sql`,
+`046_contributor_runs.sql`;
 [data-model.md § Applicants](./data-model.md#applicants-044045),
 [security.md § Applicants](./security.md#applicants-the-contributor-role)).
 It is the same table, ops, check and run as any scenario, with
@@ -426,7 +427,12 @@ scenario is `'team'`, and behaves exactly as above).
   summary names every farm); each application keeps its newest 5 runs
   (`APPLICATION_RUNS_KEPT`, trimmed as its owner: the project's 20-run cap
   counts only the runs the editor trimming can see). Deleting a draft or
-  withdrawn application deletes its runs that nothing keeps.
+  withdrawn application deletes its runs that nothing keeps. A contributor
+  can't read any run row, their own application's included (its `inputs`
+  are the whole base): its metadata, the run count and the cap go through
+  `app_scenario_run_meta` and `app_trim_application_runs`, and of its series
+  they read the application's own nodes and the catchment allowlist only
+  (046, [data-model.md § Applicants](./data-model.md#applicants-044045)).
 - **Names kept with the ops** (`op_names`, above) are captured from the full
   published base, server-side, and a contributor is only ever shown those of
   the scenario's own nodes (`names.ts` `applicantOpNames`): a neighbour's

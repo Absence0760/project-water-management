@@ -5,7 +5,7 @@
 # in $WBT_SOURCE_DIR/Original/ that isn't the Blank sample. Its file name names
 # the client, so it is never written into the repo.
 #
-#   pnpm seed:demo            # uses $PYTHON or python3 with openpyxl installed
+#   pnpm seed:demo            # uses $PYTHON, else .venv/bin/python, else python3 (needs openpyxl)
 #
 # Local dev only — the demo password is not a secret and the user only exists
 # in your docker Postgres.
@@ -26,7 +26,14 @@ cd "$(dirname "$0")/.."
 # Must match backend/scripts/seed-examples.ts (DEMO).
 EMAIL="${DEMO_EMAIL:-demo@example.com}"
 PASSWORD="${DEMO_PASSWORD:-demo-password}"
-PY="${PYTHON:-python3}"
+# Python with openpyxl: $PYTHON, else the checkout's .venv (scripts/wbt-import/README.md), else python3.
+if [ -n "${PYTHON:-}" ]; then
+	PY="$PYTHON"
+elif [ -x .venv/bin/python ]; then
+	PY=.venv/bin/python
+else
+	PY=python3
+fi
 # Client workbooks live OUTSIDE the repo (never committed): by default in a
 # sibling folder, ../project-water-management-source/{Original,AI}/.
 WBT_SOURCE_DIR="${WBT_SOURCE_DIR:-../project-water-management-source}"

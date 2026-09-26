@@ -589,11 +589,18 @@ In short:
     leaves is the applicant projection (`scenarios/applicant.ts`: their own
     farms and the gauges in full, every other node anonymised and blanked,
     engine messages renamed). The DB test scans everything the applicant
-    received for another farm's name. RLS still lets a contributor `SELECT`
-    their own application runs' rows, whose `inputs` snapshot holds the base
-    (every farm), as it does for a farmer's publication note: the API never
-    returns them, and the durable fix, a per-run projection so RLS itself
-    can't hand them over, is tracked in [followups.md § Applicants](./followups.md#applicants-wp-33).
+    received for another farm's name. RLS gives a contributor no run row
+    at all, their own application's included (046_contributor_runs), since
+    its `inputs` snapshot is the whole base with the ops applied: the run
+    count, last run and a new run's metadata come through the `SECURITY
+    DEFINER` `app_scenario_run_meta` (never `inputs` or `summary`), and the
+    owner's run cap through `app_trim_application_runs`. Of an application
+    run's series they read its own nodes' and the catchment allowlist
+    (under the share links' k), never another farm's. The one deliberate
+    path to a full input in a contributor's transaction is
+    `app_published_run_input` / `app_published_run_series`, which the
+    server needs to run the application and projects before anything
+    leaves.
   - **Drafts are private, even from the assessors.** Who reads an
     application is one function (`app_scenario_visible`), and its runs and
     their series follow it; editors see it once submitted, viewers once

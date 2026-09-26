@@ -52,7 +52,9 @@ export type ScenarioOrigin = 'team' | 'applicant';
 export const APPLICATION_RUNS_KEPT = 5;
 
 // The base run through app_run_brief (045): an applicant can't read the
-// published run's row, only its label and date.
+// published run's row, only its label and date. The scenario's own runs
+// through app_scenario_run_meta (046): an applicant reads no run row at all,
+// not even their own application's (its inputs hold every farm).
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
@@ -61,9 +63,9 @@ export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_i
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
 	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
 	s.created_at AS "createdAt", s.updated_at AS "updatedAt",
-	(SELECT count(*)::int FROM model_run r WHERE r.scenario_id = s.id) AS "runCount",
-	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM model_run r
-	 WHERE r.scenario_id = s.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"
+	(SELECT count(*)::int FROM app_scenario_run_meta(s.project_id, s.id)) AS "runCount",
+	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM app_scenario_run_meta(s.project_id, s.id) r
+	 ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"
 	FROM scenario s JOIN app_user u ON u.id = s.owner_user_id LEFT JOIN app_user du ON du.id = s.decided_by`;
 
 /** One scenario of a project, or 404. `lock` holds it against a concurrent delete until the transaction ends. */
@@ -171,20 +173,15 @@ export async function executeScenarioRun(
 }
 
 /**
- * Keep an application's newest APPLICATION_RUNS_KEPT runs, as its owner (RLS:
- * model_run_delete_contributor, which also spares a kept run). Its owner's
- * runs are hidden from the editors whose runs trimRuns counts, so they have
- * a cap of their own. Returns the ids removed.
+ * Keep an application's newest APPLICATION_RUNS_KEPT runs, as its owner
+ * (app_trim_application_runs, 046: SECURITY DEFINER, since a contributor
+ * can't read the rows a DELETE needs; it spares a kept run and deletes
+ * nothing for anyone but the owner). Its owner's runs are hidden from the
+ * editors whose runs trimRuns counts, so they have a cap of their own.
+ * Returns the ids removed.
  */
 export async function trimApplicationRuns(db: Db, projectId: string, scenarioId: string, keep = APPLICATION_RUNS_KEPT): Promise<string[]> {
 	await lockProjectRuns(db, projectId);
-	const { rows } = await db.query<{ id: string }>(
-		`DELETE FROM model_run WHERE id IN (
-			SELECT r.id FROM model_run r
-			WHERE r.project_id = $1 AND r.scenario_id = $2 AND NOT app_run_kept(r.id)
-			ORDER BY r.created_at DESC, r.id DESC OFFSET $3
-		) RETURNING id`,
-		[projectId, scenarioId, keep]
-	);
+	const { rows } = await db.query<{ id: string }>('SELECT t AS id FROM app_trim_application_runs($1, $2, $3) AS t', [projectId, scenarioId, keep]);
 	return rows.map((r) => r.id);
 }

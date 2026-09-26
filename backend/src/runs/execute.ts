@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
 	forecastSplit,
 	resolveFitRecord,
@@ -114,9 +114,9 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * 021_series_blob.sql), as 024_scenarios.sql did for a scenario's base run,
  * and this expression, trimRuns and the DELETE route pick it up unchanged.
  * `app_run_kept` (045_contributor_scope.sql) is the same rule as a SECURITY
- * DEFINER function, for the contributor's delete policy on their own
- * application runs (a contributor can't read run_nomination): change both
- * together.
+ * DEFINER function, for the trim of a contributor's own application runs
+ * (app_trim_application_runs, 046; a contributor reads neither the run nor
+ * run_nomination): change both together.
  */
 export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
 
@@ -316,12 +316,15 @@ export async function runAndStore(
 		),
 		...(scenario ? { scenario } : {})
 	};
-	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
-		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
+	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
+	// a SELECT policy, and a contributor running their application reads no
+	// run row (046_contributor_runs).
+	const runId = randomUUID();
+	await db.query(
+		`INSERT INTO model_run (id, project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
+		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9, $10)`,
+		[runId, projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);
-	const runId = rows[0]!.id;
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).
 	const BATCH = 25;
 	for (let i = 0; i < output.series.length; i += BATCH) {
