@@ -146,7 +146,15 @@ that needs them.
   a scenario's override editor its own. Users: `Lazy`, the project list's
   import dialog, the workbook reader in that dialog, Overview's alert email
   settings, the printable report's human-impact tables (it waits for them
-  before it is ready), and the root layout's language catalogue.
+  before it is ready), the run's workbook download (the alert sits below
+  the Download menu), the account's data download, the verify-email banner
+  (said in the banner's place, since an unconfirmed address holds back
+  pending invitations) and the root layout's language catalogue. On a
+  translated page the wording is the page's: `ChunkFailed` takes `text` and
+  `reload` already worded with `t()` (the account page), or the layout words
+  `msg()` messages through the i18n module when the page loaded it (the
+  banner's failure; English on the workspace). `ChunkFailed` itself stays
+  off the i18n module, so the workspace never loads it.
   `e2e/tests/lazy-chunk.spec.ts` blocks each chunk and pins the message, the
   prompt with unsaved edits, and the recovery by reload.
 - The open tab's chunk starts downloading alongside the project data, and a

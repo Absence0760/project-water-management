@@ -10,6 +10,7 @@
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
+	import { msg, type Msg } from '$lib/i18n/msg';
 
 	import '../app.css';
 
@@ -72,6 +73,17 @@
 	let i18nModule = $state.raw<I18n | null>(null);
 	let i18nReady = $state(false);
 	let i18nFailed = $state(false);
+
+	// The "confirm your email" banner is its own chunk (it carries the i18n
+	// module). If it fails to download, say so in its place rather than drop
+	// the reminder: an unconfirmed address holds back pending invitations.
+	// Worded here with msg(), since the banner's own t() calls are in the chunk
+	// that failed: through the i18n module where the page loaded it (the
+	// translated pages), else the English (the workspace is English).
+	// i18n-section: banner
+	const BANNER_FAILED = msg('The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.');
+	const RELOAD_PAGE = msg('Reload page');
+	const words = (m: Msg): string => (i18nModule ? i18nModule.t(m) : m);
 	const accountLocale = $derived(session.user?.locale ?? null);
 	async function applyLocale(chosen: string | null) {
 		i18nFailed = false;
@@ -104,7 +116,11 @@
 	{#if !farmScreen}<AppHeader />{/if}
 	<!-- Loaded only for an unconfirmed address: it is worded from the catalogue, which the workspace doesn't load otherwise. -->
 	{#if session.user?.emailVerified === false}
-		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}<banner.default />{/await}
+		{#await import('$lib/components/auth-extras/VerifyEmailBanner.svelte') then banner}
+			<banner.default />
+		{:catch}
+			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
+		{/await}
 	{/if}
 {/if}
 
@@ -124,3 +140,10 @@
 {:else}
 	<main class="page"><p class="muted" role="status">Loading…</p></main>
 {/if}
+
+<style>
+	/* In the verify-email banner's place, under the header. */
+	.verify-failed {
+		padding: 0.5rem var(--gutter) 0;
+	}
+</style>

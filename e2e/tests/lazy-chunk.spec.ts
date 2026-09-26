@@ -4,11 +4,12 @@
 // only a reload recovers (common/lazy.ts, ChunkFailed.svelte). With unsaved
 // model edits the message warns first, and the reload meets the page's
 // beforeunload guard, so the edits are only dropped once the user agrees.
-// The printable report, the alert email settings and the workbook reader
-// (their own import() calls, not Lazy) say the same.
+// The printable report, the alert email settings, the workbook reader, the
+// run's workbook download, the account's data download and the verify-email
+// banner (their own import() calls, not Lazy) say the same.
 import { readFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, register, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 // Every code chunk the page asks for once this is routed is the one under test.
@@ -18,6 +19,14 @@ const UNSAVED = 'You have unsaved changes: save them first, or the browser will 
 
 const WORKBOOK = new URL('../../scripts/wbt-import/fixtures/synthetic_b023.xlsx', import.meta.url);
 const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+
+/** A route handler that aborts only the chunk whose code holds `marker` (chunk file names are only hashes). */
+const blockChunkWith = (marker: string) => async (route: Route) => {
+	const res = await route.fetch();
+	const body = await res.text();
+	if (body.includes(marker)) return route.abort();
+	return route.fulfill({ response: res, body });
+};
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -95,12 +104,7 @@ test('a report whose tables fail to download offers a reload, and the reload rec
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Chunk failure, report');
 	const runId = await createRun(page.request, project.id, 'Baseline');
-	const blockTables = async (route: Route) => {
-		const res = await route.fetch();
-		const body = await res.text();
-		if (body.includes('Groundwater by water year')) return route.abort();
-		return route.fulfill({ response: res, body });
-	};
+	const blockTables = blockChunkWith('Groundwater by water year');
 	await page.route(BLOCKED, blockTables);
 	await page.goto(`/projects/${project.id}/report?run=${runId}`);
 	const alert = page.getByRole('alert');
@@ -156,4 +160,77 @@ test('a workbook reader that fails to download says so and frees the file input'
 	await dialog.getByRole('button', { name: 'Reload page' }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Import b023 workbook' })).toBeVisible();
+});
+
+// The run's workbook download loads its writer on click. A failed download
+// used to show the browser's own "Failed to fetch dynamically imported
+// module" text, and pressing again failed the same way.
+test('a workbook download whose writer fails to download says so below the menu, and a reload recovers', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Chunk failure, workbook');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
+	const trigger = page.getByRole('button', { name: 'Download', exact: true });
+	const menu = page.locator('.download', { has: trigger });
+	const openMenu = async () => {
+		await trigger.scrollIntoViewIfNeeded();
+		await expect(trigger).toBeInViewport();
+		await trigger.click();
+		await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+	};
+
+	await openMenu();
+	await page.route(BLOCKED, (r) => r.abort());
+	await page.getByRole('button', { name: /^Workbook \(\.xlsx\)/ }).click();
+	const alert = menu.getByRole('alert');
+	await expect(alert).toHaveText('The workbook download could not be loaded. Check your connection, then reload the page. Reload page');
+	await expect(menu.getByRole('status')).toHaveText('');
+
+	await page.unroute(BLOCKED);
+	await alert.getByRole('button', { name: 'Reload page' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
+	await openMenu();
+	const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Workbook \(\.xlsx\)/ }).click()]);
+	expect(file.suggestedFilename()).toMatch(/\.xlsx$/);
+	await expect(menu.getByRole('alert')).toHaveCount(0);
+});
+
+// The account page is translated, so its wording is its own (t()).
+test('the account’s data download failing to load says so, and a reload recovers', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/account');
+	const panel = page.getByRole('region', { name: 'Your data' });
+	await expect(panel.getByRole('button', { name: 'Download my data' })).toBeEnabled();
+
+	await page.route(BLOCKED, (r) => r.abort());
+	await panel.getByRole('button', { name: 'Download my data' }).click();
+	const alert = panel.getByRole('alert');
+	await expect(alert).toHaveText('The download could not be loaded. Check your connection, then reload the page. Reload page');
+	await expect(panel.getByRole('button', { name: 'Download my data' })).toBeEnabled();
+
+	await page.unroute(BLOCKED);
+	await alert.getByRole('button', { name: 'Reload page' }).click();
+	const [file] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download my data' }).click()]);
+	expect(file.suggestedFilename()).toMatch(/^my-data_.*\.json$/);
+	await expect(panel.getByRole('alert')).toHaveCount(0);
+});
+
+// The verify-email banner is its own chunk. It used to vanish when that
+// failed, hiding that an unconfirmed address holds back pending invitations.
+test('a verify-email banner that fails to download says so in its place, and a reload recovers', async ({ page }) => {
+	const user = await register(page.context().request, 'Unconfirmed chunk', { verified: false });
+	const blockBanner = blockChunkWith('Please confirm your email address');
+	await page.route(BLOCKED, blockBanner);
+	await page.goto('/');
+	const alert = page.getByRole('alert');
+	await expect(alert).toHaveText(
+		'The reminder to confirm your email address could not be loaded. Check your connection, then reload the page. Reload page'
+	);
+	await expect(page.getByRole('region', { name: 'Email confirmation' })).toHaveCount(0);
+
+	await page.unroute(BLOCKED, blockBanner);
+	await alert.getByRole('button', { name: 'Reload page' }).click();
+	await expect(page.getByRole('region', { name: 'Email confirmation' })).toContainText(`We sent a link to ${user.email}`);
+	await expect(page.getByRole('alert')).toHaveCount(0);
 });
