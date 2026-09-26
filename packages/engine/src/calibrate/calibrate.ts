@@ -31,6 +31,7 @@ import { LEGACY_PARAMS } from '../runoff/legacy';
 import type { ParamSpec, RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation, resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
+import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
 import { excludedDayMask, exclusionRanges } from './provenance';
 import { fitScores, OBJECTIVE_LABELS, objectiveLoss, type FitScores, type ObjectiveId } from './objective';
@@ -206,6 +207,8 @@ export interface CalibrationReport {
 	marPenalty?: MarPenaltyResult | null;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
+	/** The CHIRPS factors the fit's rain used, per fit segment (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
+	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** Model runs used, over every stage. */
 	evaluations: number;
 	cancelled: boolean;
@@ -244,6 +247,8 @@ export interface CalibrationProblem {
 	marPenalty: Wr2012Penalty | null;
 	/** The exclusions applied: settings.calibrationExclusions, then the caller's. */
 	exclusions: DateRange[];
+	/** The CHIRPS factors the rain used (engine ≥ 0.29.0), for fit provenance. */
+	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
 	/**
@@ -353,6 +358,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1)
 		),
 		exclusions: allExclusions,
+		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
 		simulate: simulator(idx[idx.length - 1]! + 1),
 		record(k) {
 			if (!input.series?.[k]) return null;
@@ -747,6 +753,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		marPenalty,
 		notes,
 		exclusions: pb.exclusions,
+		chirpsFactors: pb.chirpsFactors ?? null,
 		evaluations,
 		cancelled
 	};

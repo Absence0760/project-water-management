@@ -23,10 +23,10 @@
 // rain up to 0.19), and are left out of the CHIRPS factor fit (§2.4b): their
 // recorded days are wrong and their spread days are CHIRPS-shaped, so
 // fitting on either would be circular.
-import { fromEpochDay, monthOfEpochDay, toEpochDay } from './calendar';
+import { fromEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, type ExclusionRange } from './calibrate/provenance';
 import type { AccumulationMode, ChirpsBiasMode, DailySeries, SeriesKind, ZeroRainSettings } from './project';
-import { chirpsBiasFactors, type ChirpsCorrection } from './rain';
+import { chirpsBiasFactors, chirpsFactorOn, type ChirpsCorrection, type ChirpsFitOptions } from './rain';
 
 /** A reading must be at least this, mm, to be judged. */
 export const ACC_MIN_MM = 20;
@@ -168,7 +168,7 @@ const overlaps = (xs: readonly Span[], a: number, b: number) => xs.some(([x, y])
  * - Listed windows (`addAccumulations`) come first, in date order. One that
  *   overlaps a missing period or an earlier listed window is skipped.
  * - Detections are judged against CHIRPS × the §2.4b factors fitted without
- *   any accumulation left out (the factors in every mode, since the test
+ *   any accumulation left out, with the run's fit period (the factors in every mode, since the test
  *   compares amounts; raw CHIRPS when no month has a factor). A detection is
  *   dropped when its window overlaps a listed window or a missing period (the
  *   hydrologist has said what those days are) or, in zero-run mode
@@ -179,7 +179,8 @@ const overlaps = (xs: readonly Span[], a: number, b: number) => xs.some(([x, y])
 export function rainAccumulations(
 	series: Partial<Record<SeriesKind, DailySeries>>,
 	zr: ZeroRainSettings,
-	chirpsMode: ChirpsBiasMode
+	chirpsMode: ChirpsBiasMode,
+	fit: ChirpsFitOptions = {}
 ): RainAccumulations | null {
 	const sa = series.rain_catchment_mm;
 	if (!sa) return null;
@@ -236,8 +237,9 @@ export function rainAccumulations(
 	}
 
 	if (sb) {
-		const fit = chirpsBiasFactors(series, chirpsMode, zr);
-		const factor = (day: number) => fit?.months[monthOfEpochDay(day) - 1]!.factor ?? 1;
+		// The run's fit period too (engine ≥ 0.29.0): a window is judged with its own segment's factors.
+		const pre = chirpsBiasFactors(series, chirpsMode, zr, [], fit);
+		const factor = (day: number) => chirpsFactorOn(pre, day) ?? 1;
 		for (const c of detectAccumulations(sa, sb, factor)) {
 			if (overlaps(listed, c.from, c.to) || overlaps(missing, c.from, c.to) || overlaps(keepDry, c.from, c.to)) continue;
 			const k = keep.find((r) => c.to >= toEpochDay(r.start) && c.to <= toEpochDay(r.end));
@@ -278,7 +280,7 @@ export function spreadAccumulations(acc: RainAccumulations, chirps: DailySeries 
 	const weight = (day: number) => {
 		const v = chirps?.values[day - h0];
 		if (!isReading(v)) return 0;
-		const f = corr && corr.mode === 'monthly' ? (corr.months[monthOfEpochDay(day) - 1]!.factor ?? 1) : 1;
+		const f = corr && corr.mode === 'monthly' ? (chirpsFactorOn(corr, day) ?? 1) : 1;
 		return v * f;
 	};
 	for (const w of acc.windows) {

@@ -285,7 +285,8 @@ Tick items off (or move them into an issue) as they are done.
       model.md §2.10a).** Water-year totals, up to two breaks, a data check,
       a Data-tab chart, a summary-CSV block and a run warning when CHIRPS
       fills an era whose ratio differs from the fit. It only warns; the
-      response to a real break is the *CHIRPS fit period* item below. The
+      response to a real break is the *CHIRPS fit period* item below (done,
+      engine 0.29.0). The
       same release made the CHIRPS fit leave flagged runs out day by day and
       keep kept-dry days in (the *CHIRPS bias correction* item above).
 
@@ -302,25 +303,28 @@ Tick items off (or move them into an issue) as they are done.
       blank run, on a day CHIRPS is dry). None of this is applied: the
       hydrologist decides what to list
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)).
-- [ ] **CHIRPS fit period / per-segment factors (tracked from audit B3,
-      2026-09-24).** The double-mass check (model.md §2.10a) warns when the
-      catchment / CHIRPS ratio breaks part-way through the record, but the
-      CHIRPS factors are still one set fitted over all eras, so a gap in the
-      latest era is filled with a blend of older ratios. The simulated
-      hydrologist review suggests two durable responses, never applied
-      silently:
-      1. a setting `chirpsFitPeriod`: `'all'` (the default), `'latestSegment'`,
-         or explicit water-year ranges, each with a reason, recorded in fit
-         provenance (`forcing`) and in run comparison;
-      2. better, **per-segment factors**: fit the monthly factors within
-         each double-mass segment and fill a gap with its own segment's
-         factors, which keeps the monthly shape and removes the blend.
-
-      Trigger: the hydrologist confirms a break on the client catchment is
-      the catchment series changing (station attrition, a new averaging),
-      not CHIRPS, or a project's fallback days mostly fall in a segment the
-      run warning names. Needs an `ENGINE_VERSION` bump, a Settings control,
-      docs (model.md §2.4b, §2.10a) and tests on synthetic broken records.
+- [x] **CHIRPS fit period / per-segment factors (tracked from audit B3,
+      2026-09-24; done, engine 0.29.0, issue #40 (a)).** The double-mass
+      check (model.md §2.10a) found the catchment / CHIRPS ratio breaking
+      part-way through the record, but the CHIRPS factors were one set
+      fitted over all eras, so a gap in the latest era was filled with a
+      blend of older ratios. `settings.chirpsFitPeriod` now chooses: `'all'`
+      (the default, unchanged), `'segments'` (one set per double-mass
+      segment, each gap filled with its own segment's factors, the nearest
+      segment outside the judged years) or water-year ranges, each with a
+      reason (one set per range, fitted only on its years; years outside
+      every range stay out of every fit). The minimum sample and clamp hold
+      per segment, falling back to the segment's pooled factor, then the
+      whole record's. Recorded in `summary.chirpsCorrection.fitPeriod`, the
+      summary CSV, run comparison and fit provenance (`forcing.chirpsFitPeriod`,
+      `forcing.chirpsFactors`; a change flags "Forcing changed since fit");
+      the double-mass run warning names the segment whose factors filled each
+      gap; Settings → Rain gaps and CHIRPS → *CHIRPS fit period*
+      ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-segment-factors-engine--0290-issue-40)).
+      Never applied silently: the default stays `'all'`, and the docs steer
+      to listed ranges where the break may be CHIRPS's (issue #12). The rest
+      of issue #40 (a per-period rain source, CHIRPS version provenance) is
+      separate work.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no

@@ -146,7 +146,7 @@ planned.
 | --- | --- | --- | --- | --- |
 | CR-18 | **A quality flag on each day of a series.** For flow: in the gauged range, extrapolated above the highest gauging, below the lowest gauging, human use dominant, missing or infilled, or suspect. For rain: missing or infilled. Derive the extrapolated flag from the rating's gauged maximum where it is known. | Coxon et al. 2015; Kiang et al. 2018; Wessels & Rooseboom 2009 (SA weirs ±5 % in range, over 40 % beyond it). Roadmap WP-1.32's `filled` mask generalises to this. | 2–3 d | P1 |
 | CR-19 | **An objective that reads the flags.** By default, leave extrapolated, missing and suspect days out of KGE′/NSE, or censor extrapolated days (the only condition is simulated ≥ the highest gauged flow). Down-weight the other flagged classes. Show days used and excluded, and the fit on all days next to the fit on clean days only. | Beven & Westerberg 2011; Westerberg et al. 2011. | 2 d | P1 |
-| CR-20 | **Treat suspect zero-rain runs as missing.** Today a flagged zero run still drives the model as dry, and it blocks the CHIRPS fallback (issue #3). Treat a flagged run as missing so that corrected CHIRPS fills it, with an infill flag. Add a double-mass check against CHIRPS. **Done (engine 0.15.0, audit B2, [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)):** on by default, with keep-dry and missing periods; the per-day flag is `rain_catchment_missing`. **Double-mass check done (engine 0.18.0, [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)):** water-year totals of catchment rain against CHIRPS, up to two breaks chosen by BIC, reported at a slope change of 20 % or more confirmed by Pettitt or the BIC gain; a warning and a Data-tab chart, never a change to the fit. The same release fits the CHIRPS factors around flagged runs day by day and keeps kept-dry days in. Per-segment factors or a fit period are a followup. | Hunziker et al. 2017. It is exactly the "disinformative data" case. | 2–3 d | P1 |
+| CR-20 | **Treat suspect zero-rain runs as missing.** Today a flagged zero run still drives the model as dry, and it blocks the CHIRPS fallback (issue #3). Treat a flagged run as missing so that corrected CHIRPS fills it, with an infill flag. Add a double-mass check against CHIRPS. **Done (engine 0.15.0, audit B2, [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)):** on by default, with keep-dry and missing periods; the per-day flag is `rain_catchment_missing`. **Double-mass check done (engine 0.18.0, [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)):** water-year totals of catchment rain against CHIRPS, up to two breaks chosen by BIC, reported at a slope change of 20 % or more confirmed by Pettitt or the BIC gain; a warning and a Data-tab chart, never a change to the fit. The same release fits the CHIRPS factors around flagged runs day by day and keeps kept-dry days in. **Per-segment factors and a fit period done (engine 0.29.0, issue #40 (a), `settings.chirpsFitPeriod`).** | Hunziker et al. 2017. It is exactly the "disinformative data" case. | 2–3 d | P1 |
 | CR-21 | **Sensitivity runs and compliance as a range.** Rain × 0.9/1.1, pan coefficient ± 15 %, dam-evaporation coefficient, abstraction × 0.7/1.3, and initial dam storage empty against full. Report EWR compliance as a central value with a low–high range, plus a tornado chart. Label a result whose range crosses the decision threshold "not determinable with current data". | Oudin et al. 2006; Hughes & Mantel 2010; Renard et al. 2010 (a rain multiplier is a sensitivity factor, never a free parameter). Not built; until it is, `pnpm pan-sensitivity` is a manual check of the pan coefficient alone (model.md §2.4a). | 2–3 d harness + 1–2 d chart | P1 |
 | CR-22 | **A data-quality panel on every calibration report.** Show the share of days by flag, rain infilled, suspect zero runs, and how wet the calibration period is against the long-term record, with a note on what the record can't support. | Finding 4. | 1 d | P1 |
 | CR-23 | **Quantile-mapping option for CHIRPS**, by season with a wet-day threshold. Keep today's monthly scaling as the fallback when there are too few overlapping wet days. | Teutschbein & Seibert 2012; Du Plessis & Kibii 2021. Monthly scaling fixes the monthly volume, not wet-day frequency or intensity. | 2–3 d | P2 |
@@ -312,8 +312,11 @@ arbiter:
   references (step 2): era factor = (station ÷ reference over the era) ÷
   (station ÷ reference over the reference era), per reference.
   - If the factors from the different references agree, and the difference
-    from 1 is larger than the year-to-year scatter of the ratio, scale that
-    era by their mean.
+    from 1 is large against the **standard error** of the era's ratio (its
+    year-to-year scatter over the square root of the number of years), or a
+    change-point test (Pettitt, Buishand) calls the step, scale that era by
+    their mean. The year-to-year coefficient of variation alone is the wrong
+    yardstick: it measures single years, not an era's mean.
   - If they straddle 1 or disagree, **leave the era as recorded** and carry
     the spread as uncertainty. Scaling on a disputed break adds error.
 - **Replace, don't scale, an era whose seasonal shape changed.** Use an
@@ -327,8 +330,12 @@ arbiter:
   of monthly CHIRPS factors is fitted over every era (§2.4b), so a gap is
   filled with a blend of ratios. Factors fitted in the reference era, or in
   the gap's own double-mass segment, keep the fill consistent with the
-  calibration forcing. This is the *CHIRPS fit period / per-segment
-  factors* followup.
+  calibration forcing. **Done, engine 0.29.0 (issue #40 (a)):**
+  `settings.chirpsFitPeriod`, per double-mass segment or per listed
+  water-year range with a reason ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-segment-factors-engine--0290-issue-40)).
+  Prefer listed ranges: the automatic segments place the break where the
+  double-mass check estimates it, which can be a few years off, and a break
+  that is partly CHIRPS's moves it too.
 - **Don't mix product versions in one series.** A CHIRPS series built from
   v2 for the past and v3 for new days has a break at the join that the
   double-mass check will attribute to the catchment. Replace the whole

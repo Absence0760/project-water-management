@@ -20,14 +20,17 @@
 // by DOUBLE_MASS_MIN_CHANGE and either a Pettitt test on the annual ratios
 // either side of it or the BIC gain of keeping it says it is real.
 //
-// The check only warns. It never changes the fit or the rain a run uses: a
-// slope break doesn't say which record is wrong. A run also warns when CHIRPS
-// fills days in a segment whose slope differs from the fit's pooled ratio.
+// The check on its own never changes the fit or the rain a run uses: a slope
+// break doesn't say which record is wrong. A run warns when CHIRPS fills days
+// in a segment whose slope differs from the ratio of the factors that filled
+// them. The hydrologist can fit the factors per segment instead
+// (settings.chirpsFitPeriod 'segments', engine ≥ 0.29.0, ./rain.ts); the run
+// warning then names the segment whose factors filled each gap.
 import { toEpochDay } from './calendar';
 import { waterYearOf } from './network/stats';
 import { defaultZeroRainSettings, type DailySeries, type SeriesKind, type ZeroRainSettings } from './project';
 import { waterYearLabel, type SeriesCheck } from './quality';
-import { suspectRainDays, type ChirpsCorrection } from './rain';
+import { chirpsFitSegmentFor, fitSegmentFillText, fitSegmentName, suspectRainDays, type ChirpsCorrection, type ChirpsFitPeriodInfo } from './rain';
 
 /** A water year is judged with this many shared days … */
 export const DOUBLE_MASS_MIN_DAYS = 300;
@@ -313,8 +316,13 @@ export function doubleMassSegments(points: readonly DoubleMassPoint[]): { wholeS
 const signedPct = (x: number) => (Number.isFinite(x) ? `${x >= 0 ? '+' : '−'}${Math.abs(Math.round(x * 100))} %` : 'from 0');
 const f2 = (x: number) => x.toFixed(2);
 
-/** The breaks as a data check (SeriesCheck 'doublemass'), or null when there are none. */
-export function doubleMassCheck(dm: DoubleMass | null): SeriesCheck | null {
+/**
+ * The breaks as a data check (SeriesCheck 'doublemass'), or null when there
+ * are none. `fitPeriod` (settings.chirpsFitPeriod, engine ≥ 0.29.0; 'ranges'
+ * for a list) says whether the factors blend the segments or are fitted per
+ * segment or listed range.
+ */
+export function doubleMassCheck(dm: DoubleMass | null, fitPeriod: ChirpsFitPeriodInfo['period'] = 'all'): SeriesCheck | null {
 	if (!dm || dm.breaks.length === 0) return null;
 	const parts = dm.breaks.map((b) => `after ${waterYearLabel(b.afterWaterYear)} (${f2(b.slopeBefore)} → ${f2(b.slopeAfter)}, ${signedPct(b.change)})`);
 	return {
@@ -328,7 +336,12 @@ export function doubleMassCheck(dm: DoubleMass | null): SeriesCheck | null {
 		text:
 			`Rainfall (catchment): on the double-mass curve against CHIRPS (${dm.years.length} water years, whole-record slope ${f2(dm.wholeSlope)}), ` +
 			`catchment rain changes slope ${parts.join(' and ')}. A station change, a moved gauge or a change in how the catchment average is built can do this; ` +
-			'so can a change in CHIRPS. The CHIRPS factors are fitted over all segments: this check does not change them (see the Data tab\'s double-mass chart)'
+			'so can a change in CHIRPS. ' +
+			(fitPeriod === 'segments'
+				? 'The CHIRPS factors are fitted per segment (Settings → CHIRPS fit period; see the Data tab\'s double-mass chart)'
+				: fitPeriod === 'ranges'
+					? 'The CHIRPS factors are fitted per listed water-year range (Settings → CHIRPS fit period; see the Data tab\'s double-mass chart)'
+					: 'The CHIRPS factors are fitted over all segments: this check does not change them, Settings → CHIRPS fit period can (see the Data tab\'s double-mass chart)')
 	};
 }
 
@@ -340,12 +353,20 @@ function segmentOf(dm: DoubleMass, wy: number): number {
 }
 
 /**
- * The run warning when CHIRPS fills days in a double-mass segment whose slope
- * differs from the fit's pooled ratio by DOUBLE_MASS_RUN_WARN_CHANGE or more,
- * or null. `catchment` is the run's catchment rain after the zero-rain
+ * The run warning for CHIRPS filling gaps across a double-mass break, or
+ * null. `catchment` is the run's catchment rain after the zero-rain
  * blanking, `chirps` its CHIRPS as stored, both aligned to the run from
- * epoch day `start`. Only with a reported break, in mode 'monthly' with a
- * pooled ratio.
+ * epoch day `start`. Mode 'monthly' only.
+ *
+ * With whole-record factors (fit period 'all'): only with a reported break,
+ * when CHIRPS fills days in a segment whose slope differs by
+ * DOUBLE_MASS_RUN_WARN_CHANGE or more from the fit's pooled ratio.
+ *
+ * With fit segments (engine ≥ 0.29.0): whenever CHIRPS fills a day, naming
+ * the fit segment whose factors filled each gap, and adding the double-mass
+ * segments whose slope still differs by DOUBLE_MASS_RUN_WARN_CHANGE or more
+ * from the pooled ratio of the factors that filled them (a listed range that
+ * doesn't follow the breaks).
  */
 export function doubleMassRunWarning(
 	dm: DoubleMass | null,
@@ -354,29 +375,88 @@ export function doubleMassRunWarning(
 	chirps: readonly (number | null)[],
 	start: number
 ): string | null {
-	const pooled = corr?.pooled.ownFactor ?? null;
-	if (!dm || dm.breaks.length === 0 || !corr || corr.mode !== 'monthly' || pooled === null || !(pooled > 0)) return null;
+	if (!corr || corr.mode !== 'monthly') return null;
+	const fitSegs = corr.fitPeriod?.segments ?? [];
+	if (fitSegs.length) return segmentedRunWarning(dm, corr, catchment, chirps, start);
+	const pooled = corr.pooled.ownFactor;
+	if (!dm || dm.breaks.length === 0 || pooled === null || !(pooled > 0)) return null;
 	const days = new Array<number>(dm.segments.length).fill(0);
 	for (let t = 0; t < chirps.length; t++) {
 		if (catchment[t] != null || chirps[t] == null) continue;
 		days[segmentOf(dm, waterYearOf(start + t))]!++;
 	}
-	const last = dm.segments.length - 1;
-	const span = (k: number) => {
-		const s = dm.segments[k]!;
-		if (k === 0) return `up to ${waterYearLabel(dm.segments[1]!.fromWaterYear - 1)}`;
-		if (k === last) return `from ${waterYearLabel(s.fromWaterYear)} on`;
-		return `${waterYearLabel(s.fromWaterYear)} to ${waterYearLabel(dm.segments[k + 1]!.fromWaterYear - 1)}`;
-	};
 	const parts = dm.segments.flatMap((s, k) => {
 		const change = s.slope / pooled - 1;
 		if (days[k] === 0 || Math.abs(change) < DOUBLE_MASS_RUN_WARN_CHANGE) return [];
-		return [`${days[k]} days ${span(k)}, where catchment rain reads ${f2(s.slope)} × CHIRPS (${signedPct(change)})`];
+		return [`${days[k]} days ${dmSpan(dm, k)}, where catchment rain reads ${f2(s.slope)} × CHIRPS (${signedPct(change)})`];
 	});
 	if (!parts.length) return null;
 	return (
 		`CHIRPS fills catchment-rain gaps with factors fitted on the whole record (pooled catchment / CHIRPS ${f2(pooled)}), ` +
 		`but the double-mass check finds the ratio changed: ${parts.join('; ')}. ` +
-		'Those days may run too wet or too dry. The Data tab\'s double-mass chart shows the segments.'
+		"Those days may run too wet or too dry. The Data tab's double-mass chart shows the segments; " +
+		'Settings → CHIRPS fit period can fit the factors per segment instead.'
+	);
+}
+
+/** The water years of double-mass segment k, open at the ends: "up to 2004/05", "2005/06 to 2011/12", "from 2012/13 on". */
+function dmSpan(dm: DoubleMass, k: number): string {
+	const s = dm.segments[k]!;
+	const last = dm.segments.length - 1;
+	if (last === 0) return 'in every year';
+	if (k === 0) return `up to ${waterYearLabel(dm.segments[1]!.fromWaterYear - 1)}`;
+	if (k === last) return `from ${waterYearLabel(s.fromWaterYear)} on`;
+	return `${waterYearLabel(s.fromWaterYear)} to ${waterYearLabel(dm.segments[k + 1]!.fromWaterYear - 1)}`;
+}
+
+function segmentedRunWarning(
+	dm: DoubleMass | null,
+	corr: ChirpsCorrection,
+	catchment: readonly (number | null)[],
+	chirps: readonly (number | null)[],
+	start: number
+): string | null {
+	const fitSegs = corr.fitPeriod!.segments;
+	const byFit = new Array<number>(fitSegs.length).fill(0);
+	// Days per (fit segment, double-mass segment) pair.
+	const pairs = new Map<string, { fit: number; dm: number; days: number }>();
+	for (let t = 0; t < chirps.length; t++) {
+		if (catchment[t] != null || chirps[t] == null) continue;
+		const wy = waterYearOf(start + t);
+		const seg = chirpsFitSegmentFor(corr, wy);
+		const i = seg ? fitSegs.indexOf(seg) : -1;
+		if (i < 0) continue;
+		byFit[i]!++;
+		if (dm && dm.breaks.length) {
+			const k = segmentOf(dm, wy);
+			const key = `${i}:${k}`;
+			const p = pairs.get(key) ?? { fit: i, dm: k, days: 0 };
+			p.days++;
+			pairs.set(key, p);
+		}
+	}
+	const total = byFit.reduce((a, b) => a + b, 0);
+	if (total === 0) return null;
+	const ratioOf = (i: number) => fitSegs[i]!.pooled.ownFactor ?? corr.pooled.ownFactor;
+	const filled = fitSegs.flatMap((s, i) => {
+		if (!byFit[i]) return [];
+		const r = ratioOf(i);
+		return [`${byFit[i]} days ${fitSegmentFillText(s)} with the factors of ${fitSegmentName(s)}${r !== null ? ` (pooled catchment / CHIRPS ${f2(r)})` : ''}`];
+	});
+	const off = dm
+		? [...pairs.values()].flatMap((p) => {
+				const r = ratioOf(p.fit);
+				const slope = dm.segments[p.dm]!.slope;
+				if (r === null || !(r > 0)) return [];
+				const change = slope / r - 1;
+				if (Math.abs(change) < DOUBLE_MASS_RUN_WARN_CHANGE) return [];
+				return [`${p.days} days ${dmSpan(dm, p.dm)} filled by ${fitSegmentName(fitSegs[p.fit]!)}, where catchment rain reads ${f2(slope)} × CHIRPS (${signedPct(change)})`];
+			})
+		: [];
+	const what = corr.fitPeriod!.period === 'segments' ? 'double-mass segment' : 'listed water-year range';
+	return (
+		`CHIRPS fills catchment-rain gaps with factors fitted per ${what} (Settings → CHIRPS fit period): ${filled.join('; ')}.` +
+		(off.length ? ` But the double-mass check finds the ratio differs from the factors that filled: ${off.join('; ')}. Those days may run too wet or too dry.` : '') +
+		" The Data tab's double-mass chart shows the segments."
 	);
 }

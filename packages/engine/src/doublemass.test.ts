@@ -211,7 +211,8 @@ describe('doubleMassRunWarning', () => {
 			`CHIRPS fills catchment-rain gaps with factors fitted on the whole record (pooled catchment / CHIRPS ${pooled.toFixed(2)}), ` +
 				`but the double-mass check finds the ratio changed: ${days - gap} days from ${last.fromWaterYear}/${String((last.fromWaterYear + 1) % 100).padStart(2, '0')} on, ` +
 				`where catchment rain reads ${last.slope.toFixed(2)} × CHIRPS (−${Math.round((1 - last.slope / pooled) * 100)} %). ` +
-				"Those days may run too wet or too dry. The Data tab's double-mass chart shows the segments."
+				"Those days may run too wet or too dry. The Data tab's double-mass chart shows the segments; " +
+				'Settings → CHIRPS fit period can fit the factors per segment instead.'
 		);
 	});
 
