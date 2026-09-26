@@ -55,7 +55,7 @@ erDiagram
 
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
-| `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
+| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 049_user_locale.sql (WP-2.5) | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
@@ -1230,7 +1230,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   invite (`farm_link` from `invite_node`, only where the membership really is
   `farmer`: someone already on the project with another role keeps it and
   gets no link), records `member.added` and `farmer.linked` (cause `invite`),
-  and deletes those invites. Invites cascade away with their project or team.
+  gives an account with no `locale` yet the `locale` of the most recently
+  sent invite it accepts (049_user_locale.sql, WP-2.5; a chosen locale is
+  never overwritten), and deletes those invites. Invites cascade away with their project or team.
 - `invite_node` RLS mirrors `invite`: project owners only, for every
   operation. Farmers never read it (the catalogue's "farmers never read"
   list).
