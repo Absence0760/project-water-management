@@ -98,6 +98,7 @@ describe('starting an ensemble', () => {
 		const chirps = await start(editor, runA, { request: { rainSources: ['chirps'] } });
 		expect(chirps.status).toBe(400);
 		expect(chirps.body.error).toMatch(/CHIRPS-only rain source is not available/);
+		// The legacy model was removed in engine 1.0.0: GR4J is the only one an ensemble can vary.
 		expect((await start(editor, runA, { request: { model: 'legacy' } })).status).toBe(400);
 		expect((await start(editor, runA, { request: {}, extra: 1 })).status).toBe(400);
 	});
