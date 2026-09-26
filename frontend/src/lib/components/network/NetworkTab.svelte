@@ -769,9 +769,13 @@
 	.seg .btn:first-child {
 		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 	}
+	/* Three buttons: the middle one joins both neighbours, square and overlapping. */
+	.seg .btn:not(:first-child) {
+		margin-left: -1px;
+		border-radius: 0;
+	}
 	.seg .btn:last-child {
 		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-		margin-left: -1px;
 	}
 	.seg .btn[aria-pressed='true'] {
 		background: var(--accent-soft);
