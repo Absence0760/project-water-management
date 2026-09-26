@@ -2,7 +2,7 @@
 // inputs (loadRunInput, 021_series_blob.sql) with the engine the server has
 // now, and say whether the summary and every daily output come out the same.
 // docs/api.md § Runs, docs/data-model.md § Stored run inputs.
-import { canonicalJson, ENGINE_VERSION, fromEpochDay, runModelChecked, toEpochDay, type ModelOutput } from '@water-management/engine';
+import { canonicalJson, ENGINE_VERSION, fromEpochDay, runModelChecked, toEpochDay, type ModelInput, type ModelOutput } from '@water-management/engine';
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -78,7 +78,7 @@ export function jsonDifferences(a: unknown, b: unknown, path = '', out: string[]
 /**
  * Compare a reproduction's output with the stored run: the summary (as JSON
  * storage normalises it) and each daily output (non-finite stored as null,
- * as runAndStore writes them). Pure, so it is unit-tested without a database.
+ * as storeRun writes them). Pure, so it is unit-tested without a database.
  */
 export function reproductionDifferences(
 	stored: { summary: unknown; startDate: string; series: readonly StoredSeries[] },
@@ -114,8 +114,21 @@ export function reproductionDifferences(
 	return { differences: all.slice(0, REPRODUCE_DIFFERENCES_MAX), total: all.length };
 }
 
-/** Re-run `runId` from its stored inputs and compare (runs under the caller's RLS). */
-export async function reproduceRun(db: Db, projectId: string, runId: string): Promise<Reproduction> {
+/** What a reproduction needs from the database (loadReproduction): the stored run, its input and its daily outputs. */
+interface StoredForReproduction {
+	base: Omit<Reproduction, 'status' | 'message'>;
+	summary: unknown;
+	startDate: string;
+	input: ModelInput;
+	series: StoredSeries[];
+}
+
+/**
+ * Read what re-running `runId` needs, under the caller's RLS: the stored run,
+ * its input (loadRunInput) and its daily outputs. A finished Reproduction
+ * when the input can't be rebuilt, else what reproduceStored needs.
+ */
+export async function loadReproduction(db: Db, projectId: string, runId: string): Promise<Reproduction | StoredForReproduction> {
 	const { rows } = await db.query<{ engineVersion: string; startDate: string; summary: unknown }>(
 		'SELECT engine_version AS "engineVersion", start_date AS "startDate", summary FROM model_run WHERE project_id = $1 AND id = $2',
 		[projectId, runId]
@@ -131,25 +144,38 @@ export async function reproduceRun(db: Db, projectId: string, runId: string): Pr
 		if (err.problem === 'not_found') throw new ApiError(404, 'not found');
 		return { ...base, status: err.problem, message: err.message };
 	}
+	const { rows: series } = await db.query<StoredSeries>(
+		`SELECT node_id AS "nodeId", key, meta->>'label' AS label, "values" FROM run_series WHERE run_id = $1`,
+		[runId]
+	);
+	return { base, summary: run.summary, startDate: run.startDate, input, series };
+}
+
+/** Re-run a stored run with today's engine and compare. No database: the route calls it with no transaction open. */
+export function reproduceStored(stored: StoredForReproduction): Reproduction {
+	const { base, input } = stored;
 	let again: ModelOutput;
 	try {
 		again = runModelChecked(input);
 	} catch (err) {
 		return { ...base, status: 'failed', message: `the current engine refuses this run's stored input: ${err instanceof Error ? err.message : String(err)}` };
 	}
-	const { rows: series } = await db.query<StoredSeries>(
-		`SELECT node_id AS "nodeId", key, meta->>'label' AS label, "values" FROM run_series WHERE run_id = $1`,
-		[runId]
-	);
-	const { differences, total } = reproductionDifferences({ summary: run.summary, startDate: run.startDate, series }, again);
+	const { differences, total } = reproductionDifferences(stored, again);
 	return { ...base, status: total ? 'differs' : 'identical', identical: total === 0, differences, truncated: total - differences.length };
 }
 
+// The run is read in one transaction and re-run with none open, so a long
+// run holds no pooled connection (docs/architecture.md § A model run).
 export const reproduceRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/reproduce', async (c) => {
 	const { id, runId } = c.req.param();
-	return withUser(c.get('userId'), async (db) => {
-		await requireRole(db, id, 'viewer');
-		if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-		return c.json(await reproduceRun(db, id, runId));
-	});
+	const stored = await withUser(
+		c.get('userId'),
+		async (db) => {
+			await requireRole(db, id, 'viewer');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			return loadReproduction(db, id, runId);
+		},
+		{ readOnly: true }
+	);
+	return c.json('status' in stored ? stored : reproduceStored(stored));
 });

@@ -210,14 +210,18 @@ bodies), `execute.ts` (`executeScenarioRun`).
   plus `classifyScenario`: which ops applied, which don't (`problems`) and how
   each is classed. `GET`, `POST` and `PATCH` return it beside the scenario,
   so the editor shows it without running anything.
-- **The run.** `executeScenarioRun` = `loadRunInput(base)` → `applyScenario` →
-  `runAndStore`, the one save path `executeRun` also uses (the engine's
+- **The run.** `runScenario` = `loadRunInput(base)` → `applyScenario` →
+  `storeRun`, the one save path `executeRun` also uses (the engine's
   checked run, the outputs, the stored inputs), with `model_run.scenario_id`
   set and `inputs.scenario = { id, name, baseRunId, ops, opsSha256,
   ownedNodeIds, classified }` in the run's snapshot. It refuses (`422`, the
   problems listed) when any op doesn't apply: a result with an op silently
   skipped would not be the scenario its name says. The run then counts toward
-  the project's 20-run cap like any other (`trimRuns`).
+  the project's 20-run cap like any other (`trimRuns`). The engine runs
+  between two transactions, with no connection held; the storing one checks
+  the caller's right to run it again and refuses (`409`) if the scenario's
+  ops, base run, owned nodes or origin changed meanwhile, or `404` if it was
+  deleted ([architecture.md § A model run](./architecture.md#a-model-run)).
 - **Why the result can't drift.** The base is a stored snapshot and the ops
   are stored, so running a scenario again gives the same result whatever has
   happened to the live model since, even a node deleted from it
