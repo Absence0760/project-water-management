@@ -1,4 +1,4 @@
-import { defaultProjectSettings, resolveChirpsFitPeriod, resolveRainSource } from '@water-management/engine';
+import { defaultProjectSettings, PE_SOURCE_MAX, resolveChirpsFitPeriod, resolveRainSource } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -196,6 +196,63 @@ describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
 	it('is recorded in a fit record’s forcing, optionally', () => {
 		expect(FitRecord.shape.forcing.unwrap().shape.rainSource.safeParse([fixed]).success).toBe(true);
 		expect(FitRecord.shape.forcing.unwrap().shape.rainSource.safeParse([{ ...fixed, reason: '' }]).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
+	const parse = (pe: unknown) => SettingsPatch.safeParse({ pe });
+	const ok = (pe: unknown) => parse(pe).success;
+	const monthlyPe = { kind: 'monthly', mm: [90, 120, 150, 170, 150, 130, 90, 60, 45, 45, 55, 70], source: 'Station ET₀ (FAO-56) × 1.0' };
+
+	it('accepts both kinds, the 0 and 10 000 mm bounds, a zero row, and a source at the limit; trims the source', () => {
+		expect(ok({ kind: 'pan' })).toBe(true);
+		expect(ok(monthlyPe)).toBe(true);
+		expect(ok({ ...monthlyPe, mm: new Array(12).fill(0) })).toBe(true);
+		expect(ok({ ...monthlyPe, mm: new Array(12).fill(10_000) })).toBe(true);
+		expect(ok({ ...monthlyPe, source: 'x'.repeat(PE_SOURCE_MAX) })).toBe(true);
+		const r = parse({ ...monthlyPe, source: '  ERA5 ET₀  ' });
+		expect(r.success && (r.data.pe as { source: string }).source).toBe('ERA5 ET₀');
+		expect(mergeSettings({}).pe).toEqual({ kind: 'pan' });
+		expect(mergeSettings({ pe: monthlyPe }).pe).toEqual(monthlyPe);
+	});
+
+	it('rejects an unknown kind, a bad row, a missing/blank/too-long source, and extra keys', () => {
+		for (const [name, bad] of [
+			['unknown kind', { kind: 'et0' }],
+			['no kind', { mm: monthlyPe.mm, source: 'x' }],
+			['pan with a row', { kind: 'pan', mm: monthlyPe.mm }],
+			['11 values', { ...monthlyPe, mm: monthlyPe.mm.slice(1) }],
+			['13 values', { ...monthlyPe, mm: [...monthlyPe.mm, 1] }],
+			['a negative month', { ...monthlyPe, mm: [...monthlyPe.mm.slice(1), -1] }],
+			['over 10 000 mm', { ...monthlyPe, mm: [...monthlyPe.mm.slice(1), 10_001] }],
+			['NaN', { ...monthlyPe, mm: [...monthlyPe.mm.slice(1), NaN] }],
+			['Infinity', { ...monthlyPe, mm: [...monthlyPe.mm.slice(1), Infinity] }],
+			['a string month', { ...monthlyPe, mm: [...monthlyPe.mm.slice(1), '50'] }],
+			['no source', { kind: 'monthly', mm: monthlyPe.mm }],
+			['a blank source', { ...monthlyPe, source: '   ' }],
+			['a too-long source', { ...monthlyPe, source: 'x'.repeat(PE_SOURCE_MAX + 1) }],
+			['an extra key', { ...monthlyPe, factor: 1 }],
+			['null', null],
+			['a bare string', 'pan']
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+		}
+	});
+
+	it('is replaced whole by a patch, so switching back to pan drops the monthly row', () => {
+		const stored = patchSettings({}, { pe: monthlyPe });
+		expect(stored.pe).toEqual(monthlyPe);
+		expect(patchSettings(stored, { pe: { kind: 'pan' } }).pe).toEqual({ kind: 'pan' });
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).pe).toEqual(monthlyPe);
+	});
+
+	it('is recorded in a fit record’s forcing, optionally', () => {
+		const forcing = FitRecord.shape.forcing.unwrap();
+		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
+		expect(forcing.safeParse(base).success).toBe(true);
+		expect(forcing.safeParse({ ...base, pe: { kind: 'pan' } }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, pe: monthlyPe }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, pe: { ...monthlyPe, source: '' } }).success).toBe(false);
 	});
 });
 
