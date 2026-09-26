@@ -2,7 +2,7 @@
 // for the winter-rainfall area, for the Crops tab's "Load crop factors"
 // dialog. Reference data only: nothing here changes a project until a
 // modeller loads it, reviews the diff and saves (docs/model.md §2.3,
-// docs/ui.md § Crops). Which crop set a catchment uses is the hydrologist's
+// docs/ui.md § Load crop factors). Which crop set a catchment uses is the hydrologist's
 // call (issue #54 Q9/Q10, docs/engine-audit.md).
 //
 // Every factor is copied exactly from the source table as printed (Jan–Dec)

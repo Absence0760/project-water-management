@@ -918,6 +918,53 @@ the rest are grouped as "Other" in grey. The chart is an image whose label
 names the crops and the peak month; the table stays the accessible data
 source. It is hidden while there is no demand (no A-pan, crops or areas).
 
+### Load crop factors
+
+**Load crop factors…**, under the crop table (editors only), opens a dialog
+that fills the project's crop factors from a source, shows what changes and
+what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
+`crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
+logic in `crops/loadFactors.ts`, data in `crops/library.ts`). Which crop set a
+catchment uses is the hydrologist's call (issue #54 Q9/Q10).
+
+- **Source:** the **reference library** (ARC/SABI Irrigation Design Manual
+  ch. 4 A-pan design factors, winter rainfall area; [model.md §2.3
+  item 8](./model.md) lists the crops, sources and conversions), or **a b023
+  workbook** the user picks: its [Crop demand] factors, read by the browser
+  importer in its worker (`spreadsheet/import/`, the same reader and
+  failure messages as Import a b023 workbook; it reads the whole workbook,
+  so a large one takes a few seconds). Client workbooks never leave the
+  browser. The AI workbook v004 (node-based, no b023 named ranges) can't be
+  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
+- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
+  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+- **Match crops:** a row per project crop with a **Load factors from**
+  select, preset by name (`matchByName`: the same name ignoring case,
+  accents, punctuation and a plural s, or the one source whose words hold the
+  crop's or the other way round, "Lucerne" → "Alfalfa (lucerne), frost
+  areas"; ambiguous or unknown names stay on **Keep current**). A library
+  vegetable (staged by portion of the season) asks for a planting month and
+  day and a season length, preset from the manual's Table 4.7 where it gives
+  one; until the month is set it has no factors. An **irrigation system**
+  select sets the crop's own efficiency (engine ≥ 0.43.0) from the SABI 2021
+  values, default **Keep**; the library crop's typical system is shown as a
+  hint, never applied unasked.
+- **Diff:** per mapped crop, its current and new factors month by month
+  (changed cells highlighted) and the efficiency, with the source table and
+  page and the entry's notes, and an **Apply to <crop>** tick (on) to accept
+  or reject that crop.
+- **Demand difference:** for the accepted changes, the mean gross irrigation
+  demand (m³/day, before rain, at the saved A-pan) now and new per farm and
+  for the catchment with the change in %, the same ÷ each farm's irrigation
+  efficiency (its crops' blend, `farmIrrigationEfficiency`), and the
+  catchment's demand by month. The engine's own functions, so it is what a
+  run would use before effective rain.
+- **Apply** replaces the accepted crops' factors (and efficiency) in the
+  shared `ModelEditor` and closes; the save bar then saves them with the
+  optional reason, and History records the change. Cancel, Esc or unticking
+  every crop leaves the model untouched. It loads into the project's existing
+  crops only: add a crop first to load into it.
+
 ### Farm drawer
 
 One farm's planted areas in a side sheet over whichever tab is open

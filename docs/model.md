@@ -288,7 +288,7 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    fraction is used).
 
 8. **Reference crop library (issue #54 item 1).** Reference data for the
-   Crops tab's *Load crop factors* dialog (docs/ui.md § Crops tab), in
+   Crops tab's *Load crop factors* dialog ([ui.md § Load crop factors](./ui.md#load-crop-factors)), in
    `frontend/src/lib/components/crops/library.ts`. It is not part of the
    engine and changes no project on its own: a modeller loads it into the
    crop table, sees the diff and the demand change, and saves (History records
