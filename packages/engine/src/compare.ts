@@ -17,6 +17,7 @@ import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
 	resolvePe,
+	SUPPLY_RULE_LABEL,
 	upgradeLegacyModel,
 	type Borehole,
 	type CalibrationFitStatus,
@@ -1020,7 +1021,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damOutletCapacityM3Day', 'dam outlet capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['damSeepageReturnPct', 'share of dam seepage returning', pct],
 	// Supply rule and river pump (WP-3.8).
-	['supplyRule', 'supply rule', (v) => ({ damFirst: 'dam only', riverFirst: 'river first', trigger: 'dam, river when low', runOfRiver: 'run of river' })[String(v)] ?? String(v)],
+	['supplyRule', 'supply rule', (v) => (SUPPLY_RULE_LABEL as Record<string, string>)[String(v)] ?? String(v)],
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct]
