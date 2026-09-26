@@ -67,6 +67,7 @@ export * from './views/fdc';
 export * from './views/yearClasses';
 export * from './views/outcomeMatrix';
 export * from './outlook';
+export * from './outlook/triggers';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';

@@ -9,8 +9,9 @@ describes them generically. The build is tracked in
 Built so far: R1 (`demand.scale`, engine 0.41.0,
 [scenarios.md](../scenarios.md)), R2's sweeps (§3.2), R3's equal-share board
 ([ui.md § Share the pain](../ui.md#share-the-pain)), R4 in full (§3.4: the
-engine, the settings and the matrix screen) and R5's engine core (§3.5,
-engine 0.44.0); the rest is not yet.
+engine, the settings and the matrix screen), R5's engine core (§3.5,
+engine 0.44.0) and R6's engine half (§3.6, engine 0.46.0); the rest is not
+yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -219,6 +220,54 @@ below → 70 %") should be **computed**: re-run the outlook from each storage
 band at the review date and pick, per band, the highest demand level that
 meets R5's rule. Once WP-3.8's drought restriction rule exists, the table
 becomes that rule's parameters, so a scenario can simulate following it.
+
+**Status: engine half built** (`packages/engine/src/outlook/triggers.ts`,
+engine 0.46.0 for `settings.damStorageReset`; method, bands, start storage,
+monotonicity and wording in
+[model.md §2.15a](../model.md#215a-review-triggers-from-the-outlook-issue-53-r6-engine-half)).
+`runReviewTriggers(input, { reviewDate, seasonEnd, levels, edgesM3?,
+representative?, analogueYears?, planningShare?, … })` runs the outlook
+from the review date to the season end once per storage band, with the
+farm dams set to the band's storage on the review date, and returns the
+table fullest band first: per band the level picked (or none), the years
+met of the years run, every level's count and percentiles, and the band's
+whole outlook, with monotonicity notes and warnings (too few years, a band
+where no level meets the rule, a table that isn't monotone: reported, not
+smoothed). `describeTriggerRow` words a row: "At or above 400 000 m³ on
+1 January 2013: 70 % met the EWR on every day of the season in 10 of 12
+analogue years." Choices, each marked in model.md:
+- **the review date** defaults to the first of the month holding the
+  season's middle day (1 January for the default season)
+  **(judgement, pending O3)**;
+- **the bands** are given as edges in m³ of total farm dam storage, or
+  default to the terciles of the base run's storage on the review date
+  across the record, three bands as S3 has **(judgement**, the tercile
+  convention of seasonal forecasts, finding 3; pending the hydrologist);
+- **a band runs from its lower edge** (the lowest from empty dams), so
+  "at or above X" is what was run for the band's least favourable start,
+  the cautious reading of finding 4; a midpoint option exists
+  **(judgement, pending the hydrologist)**; the total is shared over the
+  dams pro rata to capacity (every dam at the same fill);
+- **starting from a storage** needed an engine setting,
+  `damStorageReset` (the engine can't start from a saved state): the dams
+  start the review date at the set volume, the rest of the state is the
+  history's, and the step is counted in every balance; runs without it are
+  unchanged to the bit.
+
+Cost: bands × years × levels full runs (3 × 12 × 4 in about 1.3 s on the
+test catchment); sharing the history across bands needs the engine to
+start from a stored state, the durable fix if a record makes it slow.
+WP-3.8's drought restriction rule isn't in the engine yet, so the table's
+mapping to its parameters is a typed shape only
+(`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:
+- **the backend half**: a job like R5's outlook job, bands × years ×
+  levels members (`outlookMemberInput(…, { storageM3 })` per band, then
+  `reviewTriggerTable`), with its own member limits; the project settings
+  for the review date (O3) and, if the WUA sets them, the band edges;
+- **the WUA screen**: the table beside the outlook, each row in
+  `describeTriggerRow`'s words, the pending defaults marked, the notes and
+  warnings shown, and each band's per-level spread on demand;
+- **WP-3.8's drought restriction rule**, which takes the table's steps.
 
 ### 3.7 R7: licence impact by year class (**M**, inside the evidence report)
 

@@ -4346,6 +4346,159 @@ isn't whole in floating point), ranking by demand, the metric choice and
 fallback, too few years, levels that aren't demand.scale, a monthly plan,
 the wording; `run.demandFactorFrom.test.ts` for the engine setting.
 
+### 2.15a Review triggers from the outlook (issue #53 R6, engine half)
+
+"Above x m³ on the review date → 100 %, between → 85 %, below → 70 %"
+(the client's sketch S3) **computed**, not asserted
+([design/planning-outputs.md §3.6](./design/planning-outputs.md#36-r6-review-triggers-from-the-outlook-not-asserted-m-with-wp-38)):
+for each band of total farm dam storage on the review date, the seasonal
+outlook (§2.15) from the review date to the season end, started with the
+dams at a storage in the band, and the band's row is that outlook's
+planning figure. Pure, in `packages/engine/src/outlook/triggers.ts`
+(`runReviewTriggers`, and its parts `reviewStorageHistory`,
+`tercileEdges`, `storageBands`, `bandStartStorage`, `reviewTriggerTable`
+for a job that runs the members one by one, `describeTriggerRow`). The
+backend job and the screen are not built yet (design §3.6).
+
+**Starting from a storage: `settings.damStorageReset` (engine ≥ 0.46.0).**
+The engine can't start a run from a saved state (§2.15), so the band's
+storage is set inside the member run: `{ date, storageM3: { nodeId: m³ } }`
+makes each listed farm dam start `date` holding that volume (clamped to
+0 … its capacity, with a warning when it had to be) instead of what the
+day before left. Everything else carries on from the history: soil water,
+GR4J's stores, stream-depletion lag stores, the supply rule's switch,
+borehole annual caps. The step (the storage set − the day before's
+storage, m³, + added / − taken) is published per dam as the series
+`dam_storage_set`, and counted as an input by every balance: the
+self-checks (farm balance, transfer limits, the working columns start that
+day from Q[t−1] + the step), the water balance (`storageSetM3`, in the
+residual), the water account (`storageSetM3`, an in term) and the
+plausibility checks' dam term; so a run with a reset passes every check
+and invariant (random-network tests). A date outside the run, a node that
+isn't a farm with a dam and a value that isn't a number are left out with
+a warning. Without the setting (or with nothing it can set) a run is the
+plain run to the bit, and setting each dam to the storage the run had is
+the plain run with a zero step (`run.damStorageReset.test.ts`). Not a
+project setting: only `outlookMemberInput(…, { storageM3 })` sets it, on
+the decision date; the outlook refuses a base input that already carries
+one. A new model mechanism rather than a member-input trick because none
+existed: starting the run on the review date with `damInitialPct` would
+lose the catchment's state and refit the record-wide statistics on a
+shorter record.
+
+**The review date.** Any day after the season's decision date and up to
+its end (`runReviewTriggers` checks it against `decisionDate` when given).
+`defaultReviewDate(season)` gives the first day of the calendar month
+holding the season's middle day (1 January for the default 1 October –
+30 April season), or the middle day itself when that month starts on or
+before the decision date: half the season left to act on a cut, and a
+month's first day so a monthly plan and the Reserve's whole months start
+there. A **judgement pending the client's O3** (`REVIEW_DATE_PENDING_CLIENT`).
+
+**The bands.** Total farm dam storage (Σ over farms with a dam), in m³.
+Given as inner edges (thresholds): `[200 000, 400 000]` makes
+[0, 200 000), [200 000, 400 000) and [400 000, capacity]. An edge ≤ 0,
+above the capacity, repeated or not a number is left out with a warning;
+an edge at the capacity makes a top band of full dams only. By default
+the edges are the **terciles** (33⅓ and 66⅔ percentiles, type 7) of the
+base run's total storage at the end of the day before the review date's
+month and day, in every year the run holds it (`reviewStorageHistory`,
+the analogues' day mapping: 29 February is 28 February in a common year):
+three bands as S3's table has, and terciles because that is how SAWS
+states a seasonal forecast (below / near / above normal, design §2
+finding 3); a **judgement** following that convention, pending the
+hydrologist. With fewer than `TRIGGER_MIN_HISTORY_YEARS` (10) years a
+warning says the terciles rest on few years; with fewer than three there
+is one band over the whole range (`wholeRange`).
+
+**The storage a band runs from** (`bandStartStorage`). By default the
+band's **lower edge**: a row reads "at or above X m³", and the run is then
+the band's least favourable start, the cautious reading (design §2
+finding 4, after Kaune et al. 2020); the lowest band runs from empty dams. `midpoint`
+is the other choice. Both are **judgements pending the hydrologist**. The
+total is shared over the dams **pro rata to capacity**, so every dam is at
+the same share of its capacity: with no per-dam level on the review date
+the same fill everywhere is the plain reading of "the dams hold x m³", and
+a total inside 0 … Σ capacity never puts a dam over its capacity or below
+empty (a total outside it is clamped). A dam's dead storage isn't treated
+apart: below it the dam just can't irrigate. Dams without a capacity take
+no share; with no farm dam there are no bands and `runReviewTriggers`
+throws.
+
+**A band's row** (`reviewTriggerTable`). Each band's members are the
+outlook's (§2.15: analogue years × demand levels, `demand.scale` only)
+with the band's start, summarised by `summariseOutlook`; the metric is the
+first band's choice for every band, so all are judged alike. The row
+holds the band, the start (total and per dam), the level picked (the
+highest by mean season demand meeting the requirement in at least the
+planning share of the years, default 80 % pending O6) or null, the reason
+(`met`, `noLevelMeets`, `notEnoughYears`, `noLevels`), the years met and
+the number of years, every level's years met, whether it clears the share,
+season-end storage and demand met (percentiles), and the band's whole
+outlook. Rows are listed fullest band first, as S3's table reads.
+
+**Monotonicity is reported, not assumed.** `monotone` is false, a note
+names the bands and a warning says so when a fuller band picked a lower
+level than an emptier one (no level counts as lower than any); a note also
+names a level whose years met fell as the band filled. Nothing is
+smoothed. On the model as built a fuller start should never do worse for
+the river: a fuller dam spills sooner and irrigates more (more return
+flow), an emptier one captures more inflow, switches sooner to a river
+pump (§2.7e) and runs drought and dam-target boreholes (§2.7d) whose
+stream depletion takes from the river. `triggers.invariants.test.ts`
+checks it on random networks, member by member (a fuller band never adds a
+day below the EWR, in any analogue year at any level, so a level's years
+met never fall and the pick never drops), where demand only takes water
+out as §2.15's invariants do, and on the full networks with return flows
+and groundwater as well (1 000 networks each in a soak, 2026-09-26). A
+table that isn't monotone on a real catchment is therefore worth reading
+before it is used.
+
+**Warnings**: too few analogue years (every row `notEnoughYears`, as
+§2.15), a band where no level meets the rule, a table that isn't
+monotone, band edges left out, tercile bands from a short history.
+
+**Wording** (`describeTriggerRow`): counted years only, never "recommend",
+"likely" or "should": "At or above 400 000 m³ on 1 January 2013: 70 % met
+the EWR on every day of the season in 10 of 12 analogue years." The lowest
+band reads "Below 200 000 m³ on … (run from empty dams): …"; a band run
+from its middle names that storage; a band where no level meets the rule
+gives the most any level met.
+
+**Cost.** Bands × analogue years × levels member runs, each a full run of
+the history and the season: 3 bands × 12 years × 4 levels (144 runs) on
+the 13-year test catchment take about 1.3 s (Node, 2026-09-26). The
+history can't be shared between bands (or levels, or years) because the
+engine can't start from a saved state; that engine change (store the
+state at the review date, run only the season) would take the history out
+of every member of both the outlook and the triggers, and is the durable
+fix if a catchment's record makes the table slow.
+
+**WP-3.8's drought restriction rule.** The roadmap's rule ("cut demand by
+x % when storage < y %", `NetworkNode.restriction`) isn't in the engine
+yet, so no function turns a table into its parameters. The typed shape
+`DroughtRestrictionTriggerParameters` records the intended mapping: the
+review date's month and day; the basis (total farm dam storage, as the
+bands); and one step per row, fullest first, with the band's lower edge
+(`atOrAboveM3`, and ÷ Σ capacity as `atOrAboveShare`) and the row's level
+(its id and `demand.scale` ops, applied from the review date to the season
+end), or null where no level met the rule (the WUA decides). When the rule
+is built it takes these steps; a scenario can then simulate following the
+table.
+
+**Tests** (`outlook/triggers.test.ts`, `triggers.invariants.test.ts`,
+`run.damStorageReset.test.ts`, synthetic): the default review date and a
+skewed `TZ`; the storage history, tercile edges, band drawing with bad
+edges and a full band, the start at the lower edge and middle, pro rata,
+clamped past either end; a table on the invented catchment with its farms
+on the trigger supply rule (picks fall with storage, a band where no level
+meets the rule, the wording), too few years, default tercile bands, a
+short history and one too short for bands, a level that isn't
+demand.scale, no farm dam, determinism under a skewed `TZ`; with the review
+date on the decision date the band holding the base run's storage (full
+dams) reproduces the plain outlook; a member reset to the history's own
+storage is the plain member; hand-made members for the monotonicity notes.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs
