@@ -775,6 +775,24 @@ must build WP-2.15 Phase B.
 
 ### WP-3.6 Firm yield and storage–yield curves
 
+- **Status (2026-09-26): built, first slice** (engine 0.34.0,
+  [model.md §2.13](../model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36),
+  [api.md § Yield](../api.md#yield), [ui.md § Yield](../ui.md#yield-wp-36)):
+  `packages/engine/src/network/yield.ts` (`prepareYield`, `firmYield`,
+  `storageYieldCurve`, patterns, assurance), `checkYield` invariants and a
+  perf budget; migration `040_yield.sql` (`yield` kind, `yield_result`,
+  job `progress` and cancel); `backend/src/jobs/handlers/yield.ts` and
+  `backend/src/yield/`; the Yield panel on a farm in the Network tab's One
+  node layout and under a scenario. Where the build differs from the plan:
+  a probe calls `simulateNetwork` on a plan built once (the calibration
+  pattern) rather than `runModelWith`, and simulates only the dam and what
+  is upstream of it when no transfer links them; the dam's boreholes don't
+  count towards its yield; a resized dam keeps its depth and its storage
+  fractions (pending the hydrologist). Not built yet, in
+  [followups.md § Firm yield](../followups.md#firm-yield-wp-36): the
+  contributor policies (waiting for WP-3.3's role), the in-browser preview
+  through WP-1.17's worker, and finding a job started elsewhere.
+
 - **Goal.** The yield of a proposed or raised dam, the headline number of
   a storage application.
 - **Definitions** (model.md):

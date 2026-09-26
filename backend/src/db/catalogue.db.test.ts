@@ -78,13 +78,20 @@ const APPEND_ONLY = new Set([
  */
 const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
 /**
+ * Written once, never changed, but trimmed: a yield result is what its job
+ * computed on its run or scenario, and the job keeps only the newest few per
+ * dam (040_yield.sql).
+ */
+const NO_UPDATE = new Set(['yield_result']);
+/**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
- * (034_farmer_invites.sql). Every table with a node column needs a
+ * (034_farmer_invites.sql). yield_result is a dam's yield on a whole-catchment
+ * run or scenario, viewers and above like model_run (040_yield.sql). Every table with a node column needs a
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node']);
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'yield_result']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
@@ -124,6 +131,7 @@ describe('schema catalogue', () => {
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
+				if (NO_UPDATE.has(t.relname) && priv === 'UPDATE') continue;
 				if (NO_DELETE.has(t.relname) && priv === 'DELETE') continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
@@ -169,6 +177,20 @@ describe('schema catalogue', () => {
 				`public.${table}`
 			]);
 			expect(policies.map((p) => p.polname), `${table} delete policies`).toEqual([]);
+		}
+	});
+
+	it('grants water_app no UPDATE, table or column, and has no update policy, on write-once tables (yield_result)', async () => {
+		for (const table of NO_UPDATE) {
+			const { rows } = await db.query<{ ok: boolean }>(
+				`SELECT has_table_privilege('water_app', $1, 'UPDATE')
+					OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped
+						AND has_column_privilege('water_app', a.attrelid, a.attnum, 'UPDATE')) AS ok`,
+				[`public.${table}`]
+			);
+			expect(rows[0]!.ok, `${table} UPDATE`).toBe(false);
+			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('w', '*')`, [`public.${table}`]);
+			expect(policies.map((p) => p.polname), `${table} update policies`).toEqual([]);
 		}
 	});
 

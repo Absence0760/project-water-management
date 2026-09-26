@@ -1737,6 +1737,37 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Firm yield (WP-3.6)
+
+- [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
+      `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
+      they own". The `contributor` role is WP-3.3's and doesn't exist yet,
+      so 040_yield gives editors and viewers only. Trigger: WP-3.3 lands its
+      role; its migration adds those policies from 040's definitions (and
+      023's `job_insert`), with the positive-control DB test (a contributor
+      queues a yield for their own scenario, not another's or a run) and the
+      fail-closed test (the job dies once they lose the role).
+- [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
+      browser for an instant preview, through WP-1.17's preview worker
+      (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
+      in this tree yet, and one yield takes about a second in the job.
+      Trigger: WP-1.17's worker lands; the engine's `firmYield` is pure and
+      ready for it.
+- [ ] **A job started elsewhere.** The Yield panel follows only the jobs it
+      queued itself; open it in another tab (or reload) mid-job and it shows
+      the last stored result, not the running job. `GET /jobs` has no
+      payload, so it can't say which dam a job is for. Durable fix: return
+      `nodeId` and the target for `yield` jobs (a column, not the payload),
+      or a `GET /yield/jobs?nodeId=` that reads the payload under RLS.
+      Trigger: a user reports a "lost" calculation, or WP-3.11 queues yields
+      from the assessment.
+- [ ] **A resized dam's shape** (pending the hydrologist). The storage–yield
+      curve scales a dam's full-supply area with its capacity (constant mean
+      depth) and keeps its initial and minimum levels as fractions. A real
+      raise changes the area–capacity curve differently. Durable fix: read the
+      dam's surveyed area–capacity table once WP-3.5 adds one. Trigger:
+      WP-3.5 merges.
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue

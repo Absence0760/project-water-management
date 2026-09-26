@@ -18,9 +18,14 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * worker's own headless Chromium, stores the PDF in the local MinIO
  * (`pnpm dev:s3:up`), and mails through Mailpit (`pnpm dev:mail:up`), with
  * links to the e2e site.
+ *
+ * `schedule: false` runs only jobs already queued: no feed or report
+ * schedule queues anything, so a spec that queues its own work (a yield)
+ * never runs another spec's feed mid-test.
  */
-export async function runJobsTick(): Promise<string> {
-	const { stdout } = await promisify(execFile)('pnpm', ['exec', 'tsx', 'src/jobs/worker.ts', '--once'], {
+export async function runJobsTick({ schedule = true }: { schedule?: boolean } = {}): Promise<string> {
+	const args = ['exec', 'tsx', 'src/jobs/worker.ts', '--once', ...(schedule ? [] : ['--no-schedule'])];
+	const { stdout } = await promisify(execFile)('pnpm', args, {
 		cwd: backendDir,
 		env: {
 			...process.env,
