@@ -337,7 +337,10 @@ put the results first; its first screen follows board A1 of the redesign
   the first day of that low, and the days in that year at or below the
   minimum. Capacity and minimum come from the run's own model
   (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them. The run summary has no dam figures, so `OverviewTab` fetches each
+  them. The model keeps the minimum as a fraction of capacity (`damMinPct`
+  0.1 = 10 %) and only a farm's dam has one, so `damsInRun` turns it into a
+  % and gives any other node's dam none (until 2026-09-26 it passed the
+  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The run summary has no dam figures, so `OverviewTab` fetches each
   dam's daily series through the Runs tab's `cachedSeries`, four at a time
   (`loadDamLevels`), for this table and the **Dams today** card, with
   "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
