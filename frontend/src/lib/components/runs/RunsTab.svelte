@@ -420,9 +420,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.trigger === 'auto'}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
+										{#if r.trigger === 'auto'}<span class="tag" title="Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.">Auto</span>{/if}
 										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
 										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}

@@ -4,9 +4,13 @@
 	WUA's notice and the next expected update. Read-only for everyone; an
 	editor changes the notice or publishes another run in the Runs tab's
 	Publication panel, which this card links to (one notice editor, not two).
+	A newer automatic run (WP-2.11) asks the editor "New auto run: publish?",
+	with the comparison against the published run.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
+	import { autoRunToPublish } from '$lib/components/autorun/autoRun';
 	import { api, type Publication, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { restrictionSummary } from '$lib/components/runs/publication';
@@ -44,6 +48,11 @@
 	const run = $derived(current ? (runs?.find((r) => r.id === current!.runId) ?? null) : null);
 	// The Runs tab on the published run, at its Publication panel.
 	const panelHref = $derived(current ? `${runHref(current.runId)}#res-publication` : '?tab=runs');
+	// Publication stays a person's act (D5): a newer auto run is offered, never published here.
+	const autoRun = $derived(canEdit && current ? autoRunToPublish(runs, current.runId) : null);
+	const compareHref = $derived(
+		autoRun && current ? `${base}/compare?a=${encodeURIComponent(`${projectId}:${current.runId}`)}&b=${encodeURIComponent(`${projectId}:${autoRun.id}`)}` : ''
+	);
 </script>
 
 <section class="panel baseline" aria-labelledby="baseline-h" aria-busy={loading}>
@@ -68,6 +77,13 @@
 				<dt>Next update</dt>
 				<dd>{current.nextExpectedOn ? fmtDay(current.nextExpectedOn) : 'Not set'}</dd>
 			</dl>
+			{#if autoRun}
+				<div class="alert alert-info auto" role="status" data-testid="auto-publish-offer">
+					<span><strong>New auto run: publish?</strong> “{autoRun.label || 'Auto'}” is newer than the published run.</span>
+					<a href={compareHref}>Compare with the published run</a>
+					<a href="{runHref(autoRun.id)}#res-publication">Review and publish</a>
+				</div>
+			{/if}
 			{#if canEdit}
 				<p class="small"><a href={panelHref}>Change the notice or publish another run</a> in the Runs tab.</p>
 			{/if}
@@ -104,5 +120,12 @@
 	.small {
 		font-size: 0.85rem;
 		margin: 0;
+	}
+	.auto {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1rem;
+		align-items: baseline;
+		margin: 0 0 0.5rem;
 	}
 </style>

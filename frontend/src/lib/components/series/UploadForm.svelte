@@ -15,6 +15,7 @@
 	import { mergePreview, type Daily } from './coverage';
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
 	import type { UploadResult } from './upload';
+	import type { SeriesWriteResult } from '$lib/api/types';
 	import { valuesCache } from './valuesCache';
 
 	let {
@@ -184,7 +185,7 @@
 				// stored, so a partial file adds and corrects but never erases.
 				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: parsed.values });
 				const off = toEpochDay(parsed.startDate) - toEpochDay(p.result.startDate);
-				const meta = await api.request<SeriesMeta>('POST', `/projects/${encodeURIComponent(projectId)}/series/merge`, {
+				const meta = await api.request<SeriesWriteResult>('POST', `/projects/${encodeURIComponent(projectId)}/series/merge`, {
 					kind,
 					name: name.trim(),
 					unit: unit.trim(),

@@ -35,6 +35,7 @@
 	import { describeAge } from '$lib/components/series/coverage';
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
+	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
 	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
@@ -115,6 +116,12 @@
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
 	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
+	// Automatic runs (WP-2.11): with a re-run queued, the banners say when instead of offering the button.
+	const rerunQueued = $derived(resolveAutoRun(project?.settings).enabled && !!project?.rerunQueuedFor);
+	const queuedSentence = $derived.by(() => {
+		const t = rerunQueuedText(project?.rerunQueuedFor);
+		return `${t[0]!.toUpperCase()}${t.slice(1)}.`;
+	});
 	let addOpen = $state(false);
 	// The dialog's chunk is fetched the first time it's wanted; then it stays mounted.
 	let addMounted = $state(false);
@@ -155,6 +162,8 @@
 	}
 
 	async function onUploaded(r: UploadResult) {
+		// The merge or replace says when the automatic re-run it queued is due (absent from an older API).
+		if (project && r.meta.rerunQueuedFor !== undefined) project = { ...project, rerunQueuedFor: r.meta.rerunQueuedFor };
 		await loadLists();
 		const what = r.meta.name || kindLabel(r.meta.kind);
 		banner = {
@@ -370,7 +379,9 @@
 			{#if banner}
 				<div class="alert alert-success-ish" role="status">
 					<span>{banner.text}</span>
-					{#if canEdit && banner.added > 0}
+					{#if banner.added > 0 && rerunQueued}
+						<span data-testid="rerun-queued">{queuedSentence}</span>
+					{:else if canEdit && banner.added > 0}
 						<button type="button" class="btn btn-primary btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>
 					{/if}
 					<button type="button" class="btn btn-ghost btn-sm" onclick={() => (banner = null)}>Dismiss</button>
@@ -379,7 +390,7 @@
 			{:else if behindRun.length && tab !== 'runs' && tab !== 'series'}
 				<div class="alert alert-info behind" role="status">
 					<span>New data since the last run ({behindRun.map((s) => s.name || kindLabel(s.kind)).join(', ')}).</span>
-					{#if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
+					{#if rerunQueued}<span data-testid="rerun-queued">{queuedSentence}</span>{:else if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
 				</div>
 			{/if}
 
