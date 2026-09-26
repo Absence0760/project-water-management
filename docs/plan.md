@@ -14,11 +14,18 @@ and [data-model.md](./data-model.md)):
   generator*. *Since superseded:* the engine fixes the workbook's bugs rather
   than copying them (see Risks), so correctness is judged by documented
   hydrology and invariant tests ([engine-audit.md](./engine-audit.md)), and
-  GR4J, not the AI module, became the alternative and then the default runoff
-  model (engine 0.11.0, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+  GR4J, not the AI module, became the alternative, then the default runoff
+  model (engine 0.11.0, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)),
+  then the only one (engine 1.0.0).
 - **Runoff model on record: GR4J (issue #4 Phase 6 decision gate, 2026-09-25).**
-  GR4J is the primary daily model; legacy stays for workbook comparison only,
-  never as evidence, until Phase 10 removes it (issue #16, by 2026-11-30). The
+  GR4J is the daily model. **The legacy model was removed on 2026-09-26 in
+  engine 1.0.0** (issue #4 Phase 10, issue #16, ahead of its 2026-11-30
+  deadline): GR4J is the only runoff model, migration 063 moved every project
+  to it, and stored legacy runs stay readable, badged, never re-run and never
+  evidence ([model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data),
+  [audit H1](./engine-audit.md), closed). The planned trigger, the
+  hydrologist seeing the client catchment's GR4J results with the Phase 9
+  bands in a review session first, was **waived by the operator**. The
   hydrologist's sign-off, and their acceptance of the client catchment's
   validation (weak split-sample and dry → wet scores, too wet at low flow by the
   plausibility checks, so every client figure carries the Phase 9 bands), are
@@ -82,9 +89,10 @@ a second and third project (empty, or copied) side by side.
   pulse index, response flow (the Pitman fallback was dropped in engine
   0.10.0, [audit P1](./engine-audit.md)). This needs the extra calibration
   settings: recession curve and factors, shift-peak indices, reset ratio, winter
-  thresholds, amplitude, max days. Since engine 0.11.0 this model is the
-  `legacy` runoff model, kept for workbook comparison only ([audit H1](./engine-audit.md));
-  GR4J is the default.
+  thresholds, amplitude, max days. From engine 0.11.0 this model was the
+  `legacy` runoff model, kept for workbook comparison only ([audit H1](./engine-audit.md)),
+  with GR4J the default; engine 1.0.0 removed it (issue #16). Its last
+  end-to-end comparison with the workbook passed (engine 0.45.0).
 - ✅ Net irrigation demand per day (§2.3). The workbook's rounding was
   dropped in the engine audit (R1).
 - ✅ Flow shares by the Area, Hi/Lo and Specific methods, plus fragmented flow
@@ -327,8 +335,9 @@ writing, or gives a ranked change list.
   stations.
 - ⬜ A `flowGenerator` project setting: `b023-recession` (default) or
   `bucket-v1`. Both produce natural flow per node for the same farm balance.
-  The seam now exists as `settings.runoffModel` (`legacy` or `gr4j`, the
-  default since engine 0.11.0); the bucket model would be a third option.
+  The seam now exists as `settings.runoffModel` (`gr4j`, the only model
+  since engine 1.0.0 removed `legacy`); the bucket model would be a second
+  option.
 - ⬜ Calibration metrics (NSE, PBIAS, KGE) and the annual water-balance table,
   as in the module's TODO list P1–P5.
 
