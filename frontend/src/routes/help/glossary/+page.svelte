@@ -5,6 +5,7 @@
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
+	import { holdAnchor } from '$lib/help/anchor';
 	import { CATEGORY_TITLES, HELP, helpFor, type HelpCategory } from '$lib/help/content';
 	import { glossaryPosition } from '$lib/help/nav.svelte';
 
@@ -15,19 +16,23 @@
 	const paragraphs = (s: string) => s.split(/\n{2,}/);
 
 	// The SPA renders after navigation, so the browser's own jump to #id has
-	// nothing to land on yet: scroll (and move focus) once the list exists.
-	async function jumpToHash() {
+	// nothing to land on yet: scroll (and move focus) once the list exists,
+	// and hold the entry there while the page settles (lib/help/anchor.ts).
+	$effect(() => {
 		const id = decodeURIComponent(page.url.hash.slice(1));
 		if (!id) return;
-		await tick();
-		const el = document.getElementById(id);
-		if (!el) return;
-		el.scrollIntoView({ block: 'start' });
-		if (el.tabIndex === -1) el.focus({ preventScroll: true });
-	}
-	$effect(() => {
-		void page.url.hash;
-		jumpToHash();
+		let live = true;
+		let release: (() => void) | undefined;
+		tick().then(() => {
+			const el = live ? document.getElementById(id) : null;
+			if (!el) return;
+			release = holdAnchor(el);
+			if (el.tabIndex === -1) el.focus({ preventScroll: true });
+		});
+		return () => {
+			live = false;
+			release?.();
+		};
 	});
 
 	// The current section is the last one whose top has passed just below the

@@ -400,7 +400,8 @@ collected as a checklist in issue #46; tick it there as they answer.
       hydrologist applies a rain-source period to the client record and the
       share of rain on heavy days (≥ 20 mm) in the period differs from the
       reference era by more than the calibration band allows.
-- [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
+- [ ] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
+      `articles.ts` and `farmer.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
@@ -1229,20 +1230,19 @@ No Afrikaans wording ships yet: none is reviewed.
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its
       `aria-label` says so.
-- [ ] **Reporting window picker: move the re-windowing into the engine**
-      (issue #44, [ui.md § Reporting window](./ui.md#report-window)). The
-      Runs tab re-windows the curtailment table in the browser with
-      `computeCurtailment`, but mirrors two things the engine doesn't export
-      (`otherUserCurtailment` and the consumptive share k) and can't give the
-      EWR site setting each farm's charge over another window, since the
-      per-day binding site isn't stored. Durable fix: generalise
-      `analyseSeason` (`views/farmProjection.ts`, which already recomputes
-      the binding site from the stored flows) into a
-      `curtailmentOverWindow(run, window)` the frontend and the farmer
-      projection share, and drop the mirrors in
-      `runs/windowedCurtailment.ts`. Trigger: the next engine change to
-      curtailment or the farmer projection, or when the binding-site column
-      is asked for over a picked window.
+- [x] **Reporting window picker: move the re-windowing into the engine**
+      (issue #44, [ui.md § Reporting window](./ui.md#report-window); done
+      2026-09). `analyseSeason`'s recompute is now the engine's
+      `curtailmentOverWindow(run, window)` / `prepareCurtailment`
+      (`views/farmProjection.ts`): farms, other water users and EWR sites
+      over any window of a saved run, the EWR site binding each farm's
+      charge included, recomputed from the stored flows. The farmer
+      projection's season and the Runs tab share it; the frontend's
+      mirrors of `otherUserCurtailment` and the consumptive share are gone
+      from `runs/windowedCurtailment.ts`, and the binding-site column is
+      back for every window. A view over a saved run, so no
+      `ENGINE_VERSION` bump; `curtailmentOverWindow.test.ts` checks it
+      against `runModel` on seeded networks.
 
 ## Roles and what each member sees
 
@@ -1769,6 +1769,27 @@ role and not before it.
 - [x] Dependabot's `pip` entry watched the repo root, which has no Python
       manifest; since 2026-09-25 it watches `brand/` and `scripts/wbt-import/`
       (the openpyxl pin the importer CI job installs).
+<<<<<<< HEAD
+- [x] **`help.spec.ts:289` flake under heavy load** (fixed 2026-09-26): "an
+      old /help#term link goes on to the glossary entry" once found the
+      article scrolled out of view at 10 workers. The glossary scrolled to
+      the entry once, after the first render; the heading font
+      (`font-display: swap`) landing later re-flowed everything above it.
+      Now `lib/help/anchor.ts` (`holdAnchor`) holds the entry at the top:
+      it scrolls again when `document.fonts.ready` resolves and whenever
+      the page's height changes (a ResizeObserver on the body), until the
+      reader scrolls, taps or presses a key themselves, or the hash changes.
+      /farm/words had the same one-shot scroll and uses it too. Tests:
+      `anchor.test.ts`; help.spec.ts's hash tests passed 45/45 at
+      `--repeat-each=15 --workers=8`.
+- [ ] **`POST /projects/:id/runs` holds a DB connection for the whole engine
+      run** (found by #41): the engine runs inside the request's
+      transaction, so a long run pins a pooled connection and its slot on the
+      one Node thread. Durable fix: load inputs, run the engine outside the
+      transaction, then write results in a second one (session B's
+      `runs/`). Trigger: connection waits in production, or a Lambda serving
+      concurrent requests.
+=======
 - [ ] **`help.spec.ts:289` flake under heavy load** ("an old /help#term
       link goes on to the glossary entry"): seen once at 10 workers on a
       loaded machine after #41's fixes; the article existed but was scrolled
@@ -1794,6 +1815,7 @@ role and not before it.
       concurrent requests per process (it doesn't on Lambda).
       [architecture.md § A model run](./architecture.md#a-model-run),
       `runs/connection.db.test.ts`.
+>>>>>>> origin/main
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
@@ -2074,15 +2096,25 @@ Applicant view and the Applications tab. Left:
   applies 025 before 028's default-privilege change, so 025 needs its own
   `REVOKE`).
 
-- [ ] **Split the help content chunk.** `lib/help/content.ts` (every help
-      entry and the glossary, one module) is the largest page chunk at 42 KB
-      gzip, over the 41 KB it held since 2026-09-24; the per-chunk ceiling was
-      raised to 43 KB when WP-3.5's dam entries landed (2026-09-26,
-      `check_web_bundle_budget.mjs`). Durable fix: one module per help
-      category behind a small index (id → category), so a HelpTip loads its
-      own category and only the glossary and search pages load them all.
-      Trigger: the next help entries that push it past 43 KB, or #9's engine
-      split, whichever comes first.
+- [x] **Split the help content chunk** (done 2026-09-26). `lib/help/
+      content.ts` (every entry, one module) was the largest page chunk at
+      42.2 KB gzip, at the 43 KB ceiling. Built differently from the plan
+      here (one module per category behind an id → category index): measured
+      first, that split costs ~9 KB of total (11 chunks compress worse, plus
+      a 2.3 KB index) while a tip still fetches ~7–11 KB. Landed instead: the
+      text is split by what reads it. `tips.ts` (term, short text, units,
+      field keys; 10.4 KB) is all a HelpTip loads; `articles.ts` (the long
+      text, aliases, related, source by id) is joined in by `content.ts` for
+      the /help pages (32.3 KB with it); `farmer.ts` (the farm words, whole,
+      2.2 KB) is all /farm/words and the translation sheet load. A tooltip
+      fetches 10 KB instead of 42, a farmer's words page 2 instead of 42.
+      Total 928 → 931 KB on main @ 3ada6d9 (+3: smaller chunks compress
+      worse; the guard counts every chunk, so no split lowers it; 934 merged
+      over 3af5d05, ceiling 940); largest page chunk 42.2 KB → 41.4 KB (now the Settings
+      tab), ceiling 43 → 42. Guards: `content.test.ts` ("the help text
+      split"): HelpTip imports only `$lib/help/tips`, the text modules have
+      no run-time imports, tips and articles cover the same ids in order.
+      Issue #9's last checkbox.
 
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.

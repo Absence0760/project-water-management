@@ -14,7 +14,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
+import { ARTICLES } from './articles';
 import { CATEGORY_TITLES, HELP, helpFieldKeys, helpFor, searchHelp } from './content';
+import { FARMER_HELP } from './farmer';
+import { TIPS, tipFor } from './tips';
 
 // Exhaustive `Record<keyof T, true>` objects: the typecheck fails if the engine
 // renames a field, so help keys can't silently drift from the model.
@@ -178,7 +181,54 @@ describe('help content', () => {
 			// Components that place the HelpTip themselves take the key as a helpKey prop (PeriodList).
 			for (const m of src.matchAll(/\bhelpKey=["']([^"']+)["']/g)) used.push(m[1]!);
 		}
-		for (const k of used) expect(helpFor(k), `HelpTip key "${k}"`).toBeDefined();
+		// HelpTip looks keys up in the tips alone (tipFor), so that is what must find them.
+		for (const k of used) expect(tipFor(k), `HelpTip key "${k}"`).toBeDefined();
+	});
+});
+
+// A HelpTip loads tips.ts alone; the glossary's long text (articles.ts) and
+// the farm words (farmer.ts) load only where they're read (tips.ts header).
+describe('the help text split', () => {
+	const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+	// Static and dynamic import specifiers, and whether each is type-only.
+	const imports = (src: string) => [
+		...[...src.matchAll(/^\s*import\s+(type\s+)?[^'"]*?\bfrom\s*['"]([^'"]+)['"]/gm)].map((m) => ({ type: Boolean(m[1]), from: m[2]! })),
+		...[...src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => ({ type: false, from: m[1]! }))
+	];
+
+	it('gives every tip an article and every article a tip, in the same order', () => {
+		expect(Object.keys(ARTICLES)).toEqual(TIPS.map((t) => t.id));
+	});
+
+	it('keeps the farm words whole in farmer.ts, with no field keys (no HelpTip shows them)', () => {
+		expect(FARMER_HELP.length).toBeGreaterThan(0);
+		for (const e of FARMER_HELP) {
+			expect(e.category, e.id).toBe('farmer');
+			expect(e.fields, e.id).toBeUndefined();
+		}
+		expect(TIPS.filter((t) => t.category === 'farmer').map((t) => t.id)).toEqual([]);
+		expect(HELP.filter((e) => e.category === 'farmer')).toEqual(FARMER_HELP);
+	});
+
+	it('joins tips and articles into whole entries for the glossary', () => {
+		expect(HELP).toHaveLength(TIPS.length + FARMER_HELP.length);
+		const dam = helpFor('node.damCapacityM3')!;
+		expect(dam.term).toBe(tipFor('node.damCapacityM3')!.term);
+		expect(dam.long).toBe(ARTICLES['dam-capacity']!.long);
+	});
+
+	it('has HelpTip load only the tips, never the glossary text', () => {
+		const from = imports(read('../components/help/HelpTip.svelte')).map((i) => i.from);
+		expect(from).toContain('$lib/help/tips');
+		expect(from.filter((f) => /^\$lib\/help\/(content|articles|farmer)\b/.test(f))).toEqual([]);
+	});
+
+	it('keeps the text modules free of run-time imports (their own chunks, loadable by Node)', () => {
+		for (const f of ['./tips.ts', './articles.ts', './farmer.ts', './types.ts']) {
+			const src = read(f);
+			expect(imports(src).filter((i) => !i.type), f).toEqual([]);
+			expect(src, f).not.toMatch(/\bimport\s*\(/);
+		}
 	});
 });
 
