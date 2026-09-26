@@ -868,7 +868,7 @@ matched.
   a: { project: { id, name }, run: RunMeta & { summary: RunSummary, inputs: RunInputsSnapshot } },
   b: { … same shape … },
   comparison: RunComparison,    // compareRuns(a.run, b.run) — every delta is b − a
-  changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs)
+  changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs, both runs' stored values of each differing series)
   catchmentSeries: { key, label, unit }[]  // catchment series present in both runs, same unit
 }
 ```
