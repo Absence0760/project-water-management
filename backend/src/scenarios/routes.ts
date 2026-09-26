@@ -105,10 +105,18 @@ const subject = (s: Pick<ScenarioRow, 'id' | 'name' | 'origin'>, extra: Record<s
 /** Move a scenario's status after the caller's right to has been checked; the guard trigger checks the move again. */
 async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatus, extra: { outcome?: string; note?: string } = {}) {
 	if (!STATUS_MOVES[s.status].includes(to)) throw new ApiError(409, `a ${s.status} scenario can't become ${to}`);
-	await db.query(
-		`UPDATE scenario SET status = $3, outcome = COALESCE($4, outcome), decision_note = COALESCE($5, decision_note) WHERE project_id = $1 AND id = $2`,
-		[projectId, s.id, to, extra.outcome ?? null, extra.note ?? null]
+	// Only from the status the caller read: a concurrent move (the applicant
+	// withdrawing while the assessor decides) makes this match no row, and RLS
+	// filters an UPDATE silently, so a zero count is the 409, never a success.
+	const { rowCount } = await db.query(
+		`UPDATE scenario SET status = $3, outcome = COALESCE($4, outcome), decision_note = COALESCE($5, decision_note)
+		 WHERE project_id = $1 AND id = $2 AND status = $6`,
+		[projectId, s.id, to, extra.outcome ?? null, extra.note ?? null, s.status]
 	);
+	if (!rowCount) {
+		const now = await loadScenario(db, projectId, s.id).catch(() => null);
+		throw new ApiError(409, `this scenario is ${now?.status ?? 'no longer available'}; it can't become ${to}`);
+	}
 }
 
 export const scenarioRoutes = new Hono<AuthEnv>()

@@ -295,6 +295,12 @@ describe('withdraw, reopen and delete', () => {
 		expect(run.status, JSON.stringify(run.body)).toBe(201);
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/submit`)).body.scenario.status).toBe('submitted');
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/withdraw`)).body.scenario.status).toBe('withdrawn');
+		// A decision racing the withdrawal: RLS filters the assessor's UPDATE to no
+		// row, silently (why the route's move() checks the count and answers 409).
+		const raced = await withUser(assessor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'approved' WHERE id = $1`, [sid]));
+		expect(raced.rowCount).toBe(0);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(409);
+		expect((await asOwner('SELECT status FROM scenario WHERE id = $1', [sid]))[0].status).toBe('withdrawn');
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/reopen`)).body.scenario).toMatchObject({ status: 'draft', submittedAt: null });
 		// Hidden again from the assessor once a draft.
 		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
