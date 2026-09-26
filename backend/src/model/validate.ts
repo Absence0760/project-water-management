@@ -1,4 +1,4 @@
-import { BOREHOLE_RULES, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -91,7 +91,24 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			})
 		)
 		.max(5_000)
-		.default([])
+		.default([]),
+	// Individual boreholes (WP-3.9): part of the model document, like land cover. Absent = none.
+	boreholes: z
+		.array(
+			z.object({
+				id: uuid,
+				nodeId: uuid,
+				name: z.string().trim().min(1).max(200),
+				capacityM3Day: nonNeg,
+				annualCapM3: nonNeg.nullable().default(null),
+				mode: z.enum(BOREHOLE_MODES).default('supplemental'),
+				emergencyBelowPct: frac.default(0.3),
+				target: z.enum(BOREHOLE_TARGETS).default('direct'),
+				depletionFactor: frac.default(0)
+			})
+		)
+		.max(5_000)
+		.optional()
 }));
 
 /**

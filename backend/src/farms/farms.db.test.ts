@@ -26,6 +26,7 @@ const apples = { id: crypto.randomUUID(), name: 'Apples', cropFactor: monthly(0.
 const transferAB = { id: crypto.randomUUID(), fromNodeId: farmA.id, toNodeId: farmB.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
 const transferBC = { id: crypto.randomUUID(), fromNodeId: farmB.id, toNodeId: farmC.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
 const patchB = { id: crypto.randomUUID(), nodeId: farmB.id, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null };
+const boreholeB = { id: crypto.randomUUID(), nodeId: farmB.id, name: 'BH B1', capacityM3Day: 50, annualCapM3: 15_000, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0.2 };
 
 beforeAll(async () => {
 	[owner, viewer, farmer, farmer2, stranger] = (await Promise.all(['Fowner', 'Fviewer', 'Farmer', 'Farmertwo', 'Fstranger'].map((n) => signUp(n)))) as [User, User, User, User, User];
@@ -38,7 +39,8 @@ beforeAll(async () => {
 			{ nodeId: farmB.id, cropId: apples.id, areaM2: 30_000 }
 		],
 		transfers: [transferAB, transferBC],
-		landCover: [patchB]
+		landCover: [patchB],
+		boreholes: [boreholeB]
 	};
 	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150), ewrPragmaticM3PerDay: monthly(300) } })).status).toBe(200);
@@ -70,7 +72,7 @@ describe('farm-scoped RLS', () => {
 		expect((await rowsAs(viewer, 'SELECT id FROM node WHERE project_id = $1', [projectId])).length).toBe(4);
 	});
 
-	it('limits crops, crop areas, transfers and land cover to the linked farms', async () => {
+	it('limits crops, crop areas, transfers, land cover and boreholes to the linked farms', async () => {
 		expect(ids(await rowsAs(farmer, 'SELECT node_id FROM crop_area WHERE project_id = $1', [projectId]), 'node_id')).toEqual([farmA.id]);
 		// Only crops planted on their own farm: Apples (grown only on B) stays hidden.
 		expect((await rowsAs(farmer, 'SELECT name FROM crop WHERE project_id = $1', [projectId])).map((r) => r.name)).toEqual(['Citrus']);
@@ -78,6 +80,10 @@ describe('farm-scoped RLS', () => {
 		expect(ids(await rowsAs(farmer2, 'SELECT id FROM transfer WHERE project_id = $1', [projectId]))).toEqual([transferAB.id, transferBC.id].sort());
 		expect(await rowsAs(farmer, 'SELECT id FROM land_cover WHERE project_id = $1', [projectId])).toEqual([]);
 		expect(ids(await rowsAs(farmer2, 'SELECT id FROM land_cover WHERE project_id = $1', [projectId]))).toEqual([patchB.id]);
+		// Boreholes (WP-3.9): a neighbour's pumping stays hidden; positive controls, the farm's own farmer and a viewer see it.
+		expect(await rowsAs(farmer, 'SELECT id FROM borehole WHERE project_id = $1', [projectId])).toEqual([]);
+		expect(ids(await rowsAs(farmer2, 'SELECT id FROM borehole WHERE project_id = $1', [projectId]))).toEqual([boreholeB.id]);
+		expect(ids(await rowsAs(viewer, 'SELECT id FROM borehole WHERE project_id = $1', [projectId]))).toEqual([boreholeB.id]);
 		expect((await rowsAs(viewer, 'SELECT name FROM crop WHERE project_id = $1', [projectId])).length).toBe(2);
 	});
 

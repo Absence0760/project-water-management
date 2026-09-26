@@ -109,6 +109,82 @@ describe('boreholes (WP-1.34)', () => {
 	});
 });
 
+describe('individual boreholes (WP-3.9)', () => {
+	async function withBoreholes(u: User, name: string) {
+		const projectId = await project(u, name);
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id, { damCapacityM3: 20_000, damInitialPct: 0.5, streamDepletionLagDays: 10 });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const bh = (over: object = {}) => ({ id: crypto.randomUUID(), nodeId: farm.id, name: 'BH1', capacityM3Day: 300, annualCapM3: 20_000, mode: 'primary', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0.4, ...over });
+		const boreholes = [bh(), bh({ name: 'BH2', mode: 'emergency', target: 'dam', annualCapM3: null, emergencyBelowPct: 0.4, depletionFactor: 0 })];
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 50_000 }], transfers: [], boreholes };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		return { projectId, model, farm, outlet, boreholes, bh };
+	}
+
+	it('stores boreholes in the model document, runs them with annual use in the summary, copies them, and refuses bad ones', async () => {
+		const u = await signUp('Boreholes');
+		const { projectId, model, farm, outlet, boreholes, bh } = await withBoreholes(u, 'With boreholes');
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.boreholes as Record<string, unknown>[];
+		expect([...got].sort((a, b) => String(a.name).localeCompare(String(b.name)))).toEqual(boreholes);
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'pumping' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		const years = summary.groundwaterAnnualUse as { nodeId: string; abstractionM3: number; gaLimitM3: number; annualCapM3: number | null; boreholes: { id: string; abstractionM3: number; annualCapM3: number | null }[] }[];
+		expect(years.length).toBeGreaterThan(0);
+		expect(years.every((y) => y.nodeId === farm.id && y.gaLimitM3 === 40_000 && y.annualCapM3 === null)).toBe(true);
+		// The primary borehole pumps and stays within its annual cap.
+		const primary = years.map((y) => y.boreholes.find((b) => b.id === boreholes[0]!.id)!);
+		expect(primary.some((b) => b.abstractionM3 > 0)).toBe(true);
+		expect(primary.every((b) => b.abstractionM3 <= 20_000 + 1e-6)).toBe(true);
+		const want = ['groundwater_used', 'groundwater_to_dam', 'baseflow_depletion'];
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, want)).toEqual(want);
+
+		const copy = await u.call('POST', `/projects/${projectId}/copy`, { name: 'Copied boreholes' });
+		expect(copy.status).toBe(201);
+		const copied = (await u.call('GET', `/projects/${copy.body.project.id}/model`)).body;
+		expect(copied.boreholes).toHaveLength(2);
+		expect(copied.boreholes.every((b: { id: string; nodeId: string }) => !boreholes.some((x) => x.id === b.id) && b.nodeId === copied.nodes.find((n: { name: string }) => n.name === 'Upper').id)).toBe(true);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, boreholes: [bh({ nodeId: outlet.id })] }, /a gauge can't have boreholes/);
+		await bad({ ...model, boreholes: [bh({ nodeId: crypto.randomUUID() })] }, /unknown node/);
+		await bad({ ...model, nodes: [outlet, { ...farm, damCapacityM3: 0 }], boreholes: [bh({ target: 'dam' })] }, /pumps into a dam, and there is none/);
+		await bad({ ...model, boreholes: [bh({ mode: 'sometimes' })] }, /mode/);
+		await bad({ ...model, boreholes: [bh({ depletionFactor: 1.5 })] }, /depletionFactor/);
+		await bad({ ...model, boreholes: [bh({ annualCapM3: -1 })] }, /annualCapM3/);
+		// The database refuses a bad mode even past the API.
+		await expect(asOwner('UPDATE borehole SET mode = $2 WHERE node_id = $1', [farm.id, 'always'])).rejects.toThrow(/check/i);
+		// A model saved without boreholes (an older document) has none.
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { nodes: model.nodes, crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.boreholes).toBeUndefined();
+	});
+
+	it('RLS: a member sees a project’s boreholes, a non-member sees none and can’t attach one to another project’s farm', async () => {
+		const owner = await signUp('BoreOwner');
+		const { projectId, farm } = await withBoreholes(owner, 'Private boreholes');
+		const count = (userId: string) => withUser(userId, async (db) => (await db.query('SELECT id FROM borehole WHERE project_id = $1', [projectId])).rowCount);
+		// Positive control: the owner sees both.
+		expect(await count(owner.id)).toBe(2);
+		const stranger = await signUp('BoreStranger');
+		expect(await count(stranger.id)).toBe(0);
+		const theirs = await project(stranger, 'Theirs');
+		await expect(
+			withUser(stranger.id, (db) => db.query('INSERT INTO borehole (project_id, node_id, name, capacity_m3_day) VALUES ($1, $2, $3, 1)', [theirs, farm.id, 'Sneaky']))
+		).rejects.toThrow(/different project|row-level security|violates/);
+		expect(await count(owner.id)).toBe(2);
+		// Boreholes go with their farm.
+		await asOwner('DELETE FROM node WHERE id = $1', [farm.id]);
+		expect(await count(owner.id)).toBe(0);
+	});
+});
+
 describe('land cover (WP-1.35)', () => {
 	async function withCover(u: User, name: string) {
 		const projectId = await project(u, name);
