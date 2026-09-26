@@ -5,6 +5,7 @@ import {
 	CHIRPS_FIRST_DAYS,
 	CHIRPS_MAX_DAYS,
 	CHIRPS_REVISION_DAYS,
+	FEED_META_MAX_BYTES,
 	FetchRequestSchema,
 	FetchResult,
 	fetchWindow,
@@ -127,7 +128,12 @@ describe('FetchResult (the fetcher’s output is untrusted)', () => {
 		['a nested meta value', { ok: true, startDate: '2026-01-01', values: [1], meta: { a: { b: 1 } } }],
 		['over 60 000 days', { ok: true, startDate: '2026-01-01', values: new Array(60_001).fill(0), meta: {} }],
 		['an empty error', { ok: false, error: '' }],
-		['a huge error', { ok: false, error: 'x'.repeat(501) }]
+		['a huge error', { ok: false, error: 'x'.repeat(501) }],
+		// What data_feed would refuse after the merge (the job would die retrying instead of recording a failure).
+		['meta over its byte budget in multi-byte characters', { ok: true, startDate: '2026-01-01', values: [1], meta: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${i}`.padEnd(40, '€'), ''.padEnd(100, '€')])) }],
+		['a NUL in a meta value', { ok: true, startDate: '2026-01-01', values: [1], meta: { a: 'x\u0000' } }],
+		['a NUL in a meta key', { ok: true, startDate: '2026-01-01', values: [1], meta: { 'a\u0000': 1 } }],
+		['a NUL in the error', { ok: false, error: 'x\u0000' }]
 	])('refuses %s', (_, value) => {
 		expect(FetchResult.safeParse(value).success).toBe(false);
 	});
@@ -135,6 +141,12 @@ describe('FetchResult (the fetcher’s output is untrusted)', () => {
 	it('accepts a result with gaps, and an empty one', () => {
 		expect(FetchResult.safeParse({ ok: true, startDate: '2026-01-01', values: [1, null, 0], meta: { days: 3 } }).success).toBe(true);
 		expect(FetchResult.safeParse({ ok: true, startDate: null, values: [], meta: {} }).success).toBe(true);
+	});
+
+	it('accepts the largest ASCII meta the per-field limits allow (the byte budget only bites on multi-byte text)', () => {
+		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${i}`.padEnd(40, 'k'), ''.padEnd(100, 'v')]));
+		expect(Buffer.byteLength(JSON.stringify(meta))).toBeLessThanOrEqual(FEED_META_MAX_BYTES);
+		expect(FetchResult.safeParse({ ok: true, startDate: '2026-01-01', values: [1], meta }).success).toBe(true);
 	});
 });
 
