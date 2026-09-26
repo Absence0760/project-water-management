@@ -13,6 +13,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { issueSession } from '../auth/session.js';
 import { parseToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/transport.js';
@@ -116,6 +117,14 @@ async function setRecipients(db: Db, scheduleId: string, ids: string[]): Promise
 	);
 }
 
+/** A schedule's timing as the history records it; recipients by count only (they are members' addresses). */
+const scheduleSubject = (
+	scheduleId: string,
+	action: 'created' | 'changed' | 'removed',
+	s: { frequency: string; hour: number; timezone: string; enabled: boolean },
+	recipients?: number
+) => ({ scheduleId, action, frequency: s.frequency, hour: s.hour, timezone: s.timezone, enabled: s.enabled, ...(recipients !== undefined ? { recipients } : {}) });
+
 const scheduleId = (raw: string | undefined): string => {
 	if (!raw || !UUID.test(raw)) throw new ApiError(404, 'not found');
 	return raw;
@@ -189,7 +198,9 @@ export const reportRoutes = new Hono<AuthEnv>()
 				[id, body.frequency, t.weekday, t.monthDay, body.hour, body.timezone, body.enabled ?? true]
 			);
 			await setRecipients(db, rows[0]!.id, recipients);
-			return (await listSchedules(db, id, rows[0]!.id))[0];
+			const created = (await listSchedules(db, id, rows[0]!.id))[0]!;
+			await recordAudit(db, id, 'report_schedule.configured', scheduleSubject(created.id, 'created', created, recipients.length));
+			return created;
 		});
 		return c.json({ schedule }, 201);
 	})
@@ -213,7 +224,9 @@ export const reportRoutes = new Hono<AuthEnv>()
 				[sid, id, next.frequency, t.weekday, t.monthDay, next.hour, next.timezone, next.enabled]
 			);
 			if (body.recipients) await setRecipients(db, sid, await checkRecipients(db, id, body.recipients));
-			return (await listSchedules(db, id, sid))[0];
+			const updated = (await listSchedules(db, id, sid))[0]!;
+			await recordAudit(db, id, 'report_schedule.configured', scheduleSubject(sid, 'changed', next, body.recipients?.length));
+			return updated;
 		});
 		return c.json({ schedule });
 	})
@@ -222,8 +235,12 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const sid = scheduleId(c.req.param('scheduleId'));
 		await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const { rowCount } = await db.query('DELETE FROM report_schedule WHERE id = $1 AND project_id = $2', [sid, id]);
-			if (!rowCount) throw new ApiError(404, 'not found');
+			const { rows } = await db.query<{ frequency: string; hour: number; timezone: string; enabled: boolean }>(
+				'DELETE FROM report_schedule WHERE id = $1 AND project_id = $2 RETURNING frequency, hour, timezone, enabled',
+				[sid, id]
+			);
+			if (!rows[0]) throw new ApiError(404, 'not found');
+			await recordAudit(db, id, 'report_schedule.configured', scheduleSubject(sid, 'removed', rows[0]));
 		});
 		return c.body(null, 204);
 	});

@@ -9,6 +9,7 @@ import { readJson } from '../http/body.js';
 import { feedFetchDedupeKey } from '../jobs/handlers/feed-fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/transport.js';
+import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { FEED_SCHEDULES, FEED_SOURCES, FeedInput, FeedPatch, SOURCES } from './config.js';
 import { utcToday } from './fetch.js';
@@ -28,6 +29,13 @@ const conflict = (err: unknown): never => {
 	if ((err as { code?: string }).code === '23505') throw new ApiError(409, 'another feed already writes that series');
 	throw err;
 };
+
+/** A feed's configuration as the history records it (never its credentials: feeds carry none). */
+const feedSubject = (
+	feedId: string,
+	action: 'created' | 'changed' | 'removed',
+	f: { source: string; targetKind: string; targetName: string; schedule: string; enabled: boolean }
+) => ({ feedId, action, source: f.source, targetKind: f.targetKind, targetName: f.targetName, schedule: f.schedule, enabled: f.enabled });
 
 export const feedRoutes = new Hono<AuthEnv>()
 	.get('/:id/feeds', async (c) =>
@@ -52,7 +60,9 @@ export const feedRoutes = new Hono<AuthEnv>()
 			const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [id]);
 			if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
 			const fid = await createFeed(db, id, input).catch(conflict);
-			return getFeed(db, id, fid, utcToday());
+			const feed = await getFeed(db, id, fid, utcToday());
+			await recordAudit(db, id, 'feed.configured', feedSubject(fid, 'created', input));
+			return feed;
 		});
 		return c.json({ feed }, 201);
 	})
@@ -77,6 +87,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 				enabled: patch.enabled ?? cur.enabled
 			});
 			if (!(await updateFeed(db, id, fid, input).catch(conflict))) throw new ApiError(404, 'not found');
+			await recordAudit(db, id, 'feed.configured', feedSubject(fid, 'changed', input));
 			return getFeed(db, id, fid, utcToday());
 		});
 		return c.json({ feed });
@@ -86,7 +97,9 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const fid = feedId(c.req.param('feedId'));
 		await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
-			if (!(await deleteFeed(db, id, fid))) throw new ApiError(404, 'not found');
+			const cur = await getFeed(db, id, fid, utcToday());
+			if (!cur || !(await deleteFeed(db, id, fid))) throw new ApiError(404, 'not found');
+			await recordAudit(db, id, 'feed.configured', feedSubject(fid, 'removed', cur));
 		});
 		return c.body(null, 204);
 	})

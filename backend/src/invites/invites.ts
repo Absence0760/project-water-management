@@ -15,6 +15,7 @@ import { issueEmailToken } from '../auth/email-routes.js';
 import { newToken, RESEND_COOLDOWN, TOKEN_TTL } from '../auth/tokens.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
+import { maskEmail, recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { inviteMail, siteLink } from '../mail/templates.js';
 import { trySendMail } from '../mail/transport.js';
@@ -151,11 +152,13 @@ function inviteRoutes(kind: InviteKind, authorize: (db: Db, id: string) => Promi
 				const { id, inviteId } = c.req.param();
 				await authorize(db, id);
 				if (!UUID.test(inviteId)) throw new ApiError(404, 'not found');
-				const { rowCount } = await db.query(`DELETE FROM invite WHERE id = $1 AND ${COLS[kind].target} = $2`, [
-					inviteId,
-					id
-				]);
-				if (!rowCount) throw new ApiError(404, 'not found');
+				const { rows } = await db.query<{ email: string; role: string }>(
+					`DELETE FROM invite WHERE id = $1 AND ${COLS[kind].target} = $2 RETURNING email, ${COLS[kind].role}::text AS role`,
+					[inviteId, id]
+				);
+				if (!rows[0]) throw new ApiError(404, 'not found');
+				// A project's history (026_history.sql); teams have none.
+				if (kind === 'project') await recordAudit(db, id, 'invite.revoked', { inviteId, email: maskEmail(rows[0].email), role: rows[0].role });
 				return c.body(null, 204);
 			})
 		);

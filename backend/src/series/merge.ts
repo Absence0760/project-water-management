@@ -72,16 +72,24 @@ export interface SeriesMetaRow {
 	updatedAt: string;
 }
 
+/** What a merge did: the series' meta after it, and its values before (null when the merge created it) and after. */
+export interface MergeResult {
+	meta: SeriesMetaRow;
+	before: { id: string; unit: string; startDate: string; values: (number | null)[] } | null;
+	after: Daily;
+}
+
 /**
  * Merge days into a project's series (creating it if needed), as the
  * transaction's user under RLS. POST /projects/:id/series/merge and the data
  * feeds' ingest (feeds/ingest.ts) both go through here, so the lock and merge
- * sequence stay one. The caller checks the role.
+ * sequence stay one. The caller checks the role, and records the change in
+ * the history (it knows whether a series revision is wanted: not for a feed).
  */
-export async function mergeInto(db: Db, projectId: string, body: SeriesBody, options: MergeOptions = {}): Promise<SeriesMetaRow> {
+export async function mergeSeries(db: Db, projectId: string, body: SeriesBody, options: MergeOptions = {}): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
-	const { rows: cur } = await db.query<{ start_date: string; values: (number | null)[] }>(
-		`SELECT start_date, "values" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+	const { rows: cur } = await db.query<{ id: string; unit: string; start_date: string; values: (number | null)[] }>(
+		`SELECT id, unit, start_date, "values" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, body.kind, body.name]
 	);
 	const existing = cur[0] ? { startDate: cur[0].start_date, values: cur[0].values } : null;
@@ -95,5 +103,6 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 		 RETURNING ${SERIES_META}`,
 		[projectId, body.kind, body.name, body.unit, merged.startDate, merged.values]
 	);
-	return rows[0]!;
+	const c = cur[0];
+	return { meta: rows[0]!, before: c ? { id: c.id, unit: c.unit, startDate: c.start_date, values: c.values } : null, after: merged };
 }

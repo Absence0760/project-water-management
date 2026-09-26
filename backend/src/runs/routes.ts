@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
@@ -220,6 +221,8 @@ export const runRoutes = new Hono<AuthEnv>()
 			}
 			// Only the columns sent: a pin leaves the note (and its stamp) alone, and the other way round.
 			const set = Object.entries({ notes: body.notes, pinned: body.pinned }).filter(([, v]) => v !== undefined);
+			// The note's text stays on the run (notes_updated_by/at stamp it); the log says what changed.
+			await recordAudit(db, id, 'run.changed', { runId, fields: set.map(([k]) => k), ...(body.pinned !== undefined ? { pinned: body.pinned } : {}) });
 			await db
 				.query(`UPDATE model_run SET ${set.map(([k], i) => `${k} = $${i + 3}`).join(', ')} WHERE project_id = $1 AND id = $2`, [
 					id,
@@ -260,8 +263,12 @@ export const runRoutes = new Hono<AuthEnv>()
 							? 'this run is pinned; unpin it before deleting it'
 							: 'this run is or was nominated as evidence, so it is kept'
 				);
-			const { rowCount } = await db.query('DELETE FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
-			if (!rowCount) throw new ApiError(404, 'not found');
+			const { rows: gone } = await db.query<{ label: string; created_at: Date }>(
+				'DELETE FROM model_run WHERE project_id = $1 AND id = $2 RETURNING label, created_at',
+				[id, runId]
+			);
+			if (!gone[0]) throw new ApiError(404, 'not found');
+			await recordAudit(db, id, 'run.deleted', { runIds: [runId], label: gone[0].label, runCreatedAt: gone[0].created_at.toISOString(), reason: 'deleted' });
 			return c.body(null, 204);
 		});
 	});
