@@ -1,7 +1,8 @@
 // View model for CurtailmentTable: turns RunSummary.curtailment (engine,
 // b023 [Shortfalls]) into display rows. Kept free of Svelte so it can be
-// unit-tested. Sign convention throughout: negative = reduce, positive = below
-// the equitable share. The equitable share is a fairness benchmark, not an
+// unit-tested. Sign convention for changes: negative = reduce, positive = below
+// the equitable share. EWR charges and shortfalls are volumes, shown positive
+// (fmtCharged), as the Farms table shows them (issue #45). The equitable share is a fairness benchmark, not an
 // allocation (audit Q11), so no displayed text calls a positive value a gain.
 import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type EwrSiteSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
@@ -47,6 +48,17 @@ export function fmtDemandLeft(demandM3Day: number, fraction: number | null | und
 	if (p > 0 && p < 0.5) return { text: '<1%', title: null };
 	if (p >= 99.5 && p < 100) return { text: '>99%', title: null };
 	return { text: `${Math.round(p)}%`, title: null };
+}
+
+/**
+ * An EWR charge or shortfall as the positive volume charged (m³/day, whole
+ * numbers). The engine keeps the curtailment fields ≤ 0 (the workbook's
+ * column R sign, so S = N + R holds); every table shows the volume, the same
+ * way the Farms table shows FarmSummary.avgEwrShortfallM3Day (issue #45).
+ */
+export function fmtCharged(n: number | null | undefined): string {
+	if (n == null || !Number.isFinite(n)) return '–';
+	return fmtNum(0 - n, 0, true);
 }
 
 /** Plain volume (m³/day), at most one decimal. */
@@ -120,9 +132,9 @@ export function curtailmentRows(c: CurtailmentSummary, names: Record<string, str
 			target: fmtVol(f.targetM3Day),
 			reduceGain: fmtSigned(f.reduceGainM3Day),
 			reduceGainLs: fmtSigned(f.reduceGainLs),
-			ewrShortfall: fmtSigned(f.ewrShortfallM3Day, 0),
-			ewrIrrigation: fmtSigned(f.ewrChargeIrrigationM3Day, 0),
-			ewrStorage: fmtSigned(f.ewrChargeStorageM3Day, 0),
+			ewrShortfall: fmtCharged(f.ewrShortfallM3Day),
+			ewrIrrigation: fmtCharged(f.ewrChargeIrrigationM3Day),
+			ewrStorage: fmtCharged(f.ewrChargeStorageM3Day),
 			supplyCut: fmtSigned(f.ewrSupplyCutM3Day),
 			supplyCutLs: fmtSigned(f.ewrSupplyCutLs),
 			bindingSite: f.ewrBindingSiteId ? (siteName.get(f.ewrBindingSiteId) ?? names[f.ewrBindingSiteId] ?? f.ewrBindingSiteId) : '',
@@ -157,9 +169,9 @@ export function ewrSiteRows(c: CurtailmentSummary, names: Record<string, string>
 		name: `${names[s.nodeId] ?? s.name}${s.isOutlet ? ' (outlet)' : ''}`,
 		farmCount: s.farmCount,
 		daysNotMet: fmtNum(s.daysNotMet),
-		shortfall: fmtSigned(s.shortfallM3Day, 0),
-		charged: fmtSigned(s.chargedM3Day, 0),
-		natural: fmtSigned(s.naturalM3Day, 0)
+		shortfall: fmtCharged(s.shortfallM3Day),
+		charged: fmtCharged(s.chargedM3Day),
+		natural: fmtCharged(s.naturalM3Day)
 	}));
 }
 

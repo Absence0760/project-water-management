@@ -17,6 +17,7 @@
 		metricRows,
 		waterYearLabel
 	} from './metrics';
+	import { calibrationSample } from './sample';
 
 	let {
 		calibration,
@@ -31,6 +32,8 @@
 
 	const uid = $props.id();
 	const rows = $derived(calibration ? metricRows(calibration) : []);
+	// In-sample only when the parameters were fitted on these days (issue #45).
+	const sample = $derived(calibrationSample(calibration));
 	const legacy = $derived(calibration ? isLegacyStats(calibration) : false);
 	const years = $derived(calibration?.annualVolumes ?? []);
 	const yearTotals = $derived({
@@ -57,10 +60,8 @@
 			Settings.
 		</p>
 	{:else}
-		<p class="note muted in-sample">
-			<strong>Calibration period (in-sample).</strong> These scores are for the same days the parameters were tuned on, so they
-			show how well the model fits, not how well it predicts. When the parameters came from Fit automatically, the fit's
-			validation scores (split-sample, wet/dry years, independent record) are under Where the parameters came from.
+		<p class="note muted in-sample" data-fit-status={sample.status}>
+			<strong>{sample.label}.</strong> {sample.note}
 		</p>
 		<dl class="window">
 			<div>

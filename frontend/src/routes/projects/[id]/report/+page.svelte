@@ -29,7 +29,7 @@
 	import { isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
+	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import { loadHumanImpacts } from '$lib/components/runs/humanImpacts';
@@ -49,6 +49,8 @@
 	let series = $state.raw<SeriesMeta[]>([]);
 	// $state.raw: daily arrays, replaced and never mutated (as in RunCharts).
 	let flows = $state.raw<CatchmentFlows>({});
+	/** Gauge or logger behind each observed series (issue #45). */
+	let sources = $state.raw<ObservedSources>({});
 	// The run's sign-offs and the statement a signer confirms (WP-3.13); part of what "ready" waits for.
 	let signoffs = $state.raw<SignoffList | null>(null);
 	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error'>('loading');
@@ -98,6 +100,7 @@
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			await loadOnce(loadHumanImpacts);
 			flows = Object.fromEntries(pairs) as CatchmentFlows;
+			sources = observedSources(detail.series);
 			run = detail.run;
 			status = 'loaded';
 		} catch (e) {
@@ -136,7 +139,7 @@
 	const settings = $derived(effectiveSettings(run?.settings));
 	const conv = (d: { values: readonly (number | null)[] }) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
 	// The printed report has no legend to click, so natural flow shows from the start.
-	const hydro = $derived(hydrographSeries(flows, conv, false));
+	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
 	const ewrLines = $derived(ewrChartSeries(flows, conv));
 	const days = $derived(run ? toEpochDay(run.endDate) - toEpochDay(run.startDate) + 1 : 0);
 	const farmNames = $derived(Object.fromEntries(nodes.map((n) => [n.id, n.name])));
@@ -278,7 +281,7 @@
 							unit="m³/s"
 							height={300}
 							series={hydro}
-							caption="The whole run. Observed flow is broken wherever the record has no reading."
+							caption="The whole run. {observedCaption(flows, sources)}"
 						/>
 					{:else if s.id === 'curtailment'}
 						<CurtailmentTable {summary} {farmNames} />

@@ -117,9 +117,12 @@ The page has these sections, top to bottom:
    not met and their share, mean outflow and natural flow, the runoff
    coefficient (natural flow ÷ rain)) and a **Calibration against observed
    flow** table (KGE, NSE, percent bias, RMSE and the overlapping days) for A
-   and B side by side, with the change. The calibration table is labelled **calibration
-   period (in-sample)**: each run is scored on the days its parameters were
-   tuned on. Under it, **Fit and validation** sets each run's fit record side
+   and B side by side, with the change. The calibration table says whether
+   the scores are in-sample (issue #45, `comparison.calibration.fitStatus`):
+   **calibration period (in-sample)** when both runs' parameters were fitted
+   on the days scored, the shared reason when neither was ("parameters not
+   fitted", "parameters edited since the fit", "not the period fitted"), and
+   "run A …, run B …" when they differ. Under it, **Fit and validation** sets each run's fit record side
    by side: the fit (model, time, objective, seed), the bounds it searched
    (wide or typical, model.md §2.10b), its in-sample score, its split-sample,
    wet-year and independent-record scores ("not run" when that test wasn't),
