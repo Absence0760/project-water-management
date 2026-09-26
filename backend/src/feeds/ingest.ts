@@ -39,12 +39,18 @@
 // the confirmation used up, the stage deleted). The fit record then flags the
 // forcing as changed (engine fitRecordStatus), and the run comparison notes
 // the new version.
+//
+// Days that changed in the live series (a merge, or the swap) go through the
+// new-data hook (runs/autoRun.ts onNewData), which queues the project's
+// debounced automatic re-run when it has them on (WP-2.11). Staged days don't:
+// a run can't see them yet.
 import { provenanceKey, provenanceLabel, type SeriesProvenance } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
 import { hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
+import { onNewData } from '../runs/autoRun.js';
 import { replaceSeries } from '../series/routes.js';
 import { type FeedSource, feedProvenance, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
@@ -151,8 +157,9 @@ async function stageReplacement(
 	let meta: Record<string, string | number>;
 	if (done) {
 		// Caught up: the new record goes in whole, in this transaction.
+		let replaced;
 		try {
-			await replaceSeries(
+			replaced = await replaceSeries(
 				db,
 				feed.projectId,
 				{ kind: feed.targetKind, name: feed.targetName, unit, startDate: stage!.startDate, values: stage!.values, provenance: writes },
@@ -164,6 +171,8 @@ async function stageReplacement(
 		}
 		await db.query('DELETE FROM feed_stage WHERE feed_id = $1', [feed.id]);
 		await feedReplaceDone(db, feed.id);
+		// The whole new record went in: the new-data hook (runs/autoRun.ts).
+		if (replaced.changed) await onNewData(db, feed.projectId, 'feed');
 		meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
 	} else {
 		meta = { ...result.meta, merged, staged: stage?.values.length ?? 0, through: window.end };
@@ -251,7 +260,11 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id, ...(writes ? { provenance: writes } : {}) });
 				({ written: merged, kept } = r);
 				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
-				if (subject.daysChanged) await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
+				if (subject.daysChanged) {
+					await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
+					// The new-data hook (runs/autoRun.ts): the project's automatic re-run, if it has them on.
+					await onNewData(db, feed.projectId, 'feed');
+				}
 			} catch (err) {
 				// The merge refuses before writing (e.g. the series would pass 60 000 days).
 				if (!(err instanceof ApiError)) throw err;

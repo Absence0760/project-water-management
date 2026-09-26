@@ -18,6 +18,8 @@ import {
 	type SeriesMetaRow
 } from './merge.js';
 import { readJson } from '../http/body.js';
+import { wakeWorker } from '../jobs/wake.js';
+import { onNewData, type QueuedRerun } from '../runs/autoRun.js';
 
 // Moved to merge.ts beside mergeSeries (shared with the data feeds);
 // re-exported for the project document (projects/document.ts).
@@ -39,13 +41,15 @@ const provenanceChange = (before: SeriesProvenance | null, after: SeriesProvenan
  * null or absent = not recorded: a replace says what it holds or clears it).
  * `revisionReason` / `audit`: a data feed's confirmed replacement
  * (feeds/ingest.ts) keeps the old values as `feed_replace` and adds its feed.
+ * `changed`: the values, their dates or unit, or the label changed (or the
+ * series is new), which is what the new-data hook (runs/autoRun.ts) keys on.
  */
 export async function replaceSeries(
 	db: Db,
 	projectId: string,
 	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null },
 	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
-): Promise<SeriesMetaRow> {
+): Promise<{ meta: SeriesMetaRow; changed: boolean }> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
 	const provenance = body.provenance ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
@@ -67,10 +71,11 @@ export async function replaceSeries(
 	const restore = opts.restoredFrom ? { target: 'series', restoredFrom: opts.restoredFrom } : null;
 	if (!existing) {
 		await recordAudit(db, projectId, restore ? 'restore' : 'series.created', seriesSubject(meta, null, body, { ...restore, ...opts.audit }));
-		return meta;
+		return { meta, changed: true };
 	}
 	const held = rowProvenance({ product: existing.product ?? null, productVersion: existing.productVersion ?? null });
-	if (!sameValues(existing, body.unit, body.startDate, body.values) || !sameProvenance(held, provenance)) {
+	const changed = !sameValues(existing, body.unit, body.startDate, body.values) || !sameProvenance(held, provenance);
+	if (changed) {
 		const revisionId = await recordSeriesRevision(db, projectId, existing, opts.revisionReason ?? 'replace');
 		await recordAudit(
 			db,
@@ -79,7 +84,16 @@ export async function replaceSeries(
 			seriesSubject(meta, existing, body, { revisionId, ...restore, ...provenanceChange(held, provenance), ...opts.audit })
 		);
 	}
-	return meta;
+	return { meta, changed };
+}
+
+/**
+ * After the transaction that ran the new-data hook commits: a re-run due at
+ * once (a debounce of 0) is worth waking the worker for; a debounced one is
+ * found by the worker's next poll or tick when it falls due.
+ */
+async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
+	if (queued?.created && Date.parse(queued.runAfter) <= Date.now()) await wakeWorker(queued.jobId);
 }
 
 /**
@@ -132,12 +146,15 @@ export const seriesRoutes = new Hono<AuthEnv>()
 	.put('/:id/series', async (c) => {
 		const body = PutBody.parse(await readJson(c));
 		const id = c.req.param('id');
-		return withUser(c.get('userId'), async (db) => {
+		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// A replace says how its days were built (a sub-daily upload's day boundary), or clears it.
-			const meta = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null });
-			return c.json(await setDayBoundary(db, id, meta, body.dayBoundary ?? null));
+			const r = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null });
+			const queued = r.changed ? await onNewData(db, id, 'series') : null;
+			return { meta: await setDayBoundary(db, id, r.meta, body.dayBoundary ?? null), queued };
 		});
+		await wakeForRerun(queued);
+		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });
 	})
 	// Say which product and version a series holds (a CHIRPS column imported
 	// before the version was asked, or one whose version was only found out
@@ -176,7 +193,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 	.post('/:id/series/merge', async (c) => {
 		const body = PutBody.parse(await readJson(c));
 		const id = c.req.param('id');
-		return withUser(c.get('userId'), async (db) => {
+		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// The day-boundary guard (033): days added up in one window never go into a series of the other, like 032's version guard.
 			const { rows: held } = await db.query<{ dayBoundary: string | null; filled: boolean }>(
@@ -199,8 +216,12 @@ export const seriesRoutes = new Hono<AuthEnv>()
 				const revisionId = await recordSeriesRevision(db, id, { ...r.before, kind: r.meta.kind, name: r.meta.name, dayBoundary: was?.dayBoundary ?? null }, 'manual_merge');
 				await recordAudit(db, id, 'series.merged', { ...subject, revisionId });
 			}
-			return c.json(r.meta);
+			// New days (or new values for old ones): the new-data hook (runs/autoRun.ts). A re-send that changes nothing queues nothing.
+			const queued = (subject.daysChanged as number) > 0 ? await onNewData(db, id, 'series') : null;
+			return { meta: r.meta, queued };
 		});
+		await wakeForRerun(queued);
+		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });
 	})
 	.delete('/:id/series/:seriesId', async (c) => {
 		const { id, seriesId } = c.req.param();
