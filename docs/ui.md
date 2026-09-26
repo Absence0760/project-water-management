@@ -2383,7 +2383,15 @@ invite, the alert emails and their digest). The modeller workspace and the
   `sourceHash` of the English so a later English edit makes the translation
   stale). `catalogue.test.ts` (frontend and backend) and
   `content.af.test.ts` fail when an untranslated key is missing from the
-  sheet; `pnpm check:i18n` fails when the sheet is out of date.
+  sheet; `pnpm check:i18n` prints what has no Afrikaans yet and lists any
+  stale glossary translation, and fails when the sheet is out of date or a
+  translation is stale. When the English of a translated glossary entry
+  changes, the entry goes back on the sheet (marked "the English changed");
+  once the translator has re-checked it (and any fix is in
+  `content.af.ts`), `pnpm gen:i18n:stamp <id>`
+  (`scripts/guards/i18n_stamp.mjs`) writes the current English's hash into
+  its `sourceHash` and rewrites the sheet. It never writes a translation: an
+  id without one is refused.
 
 ## Alerts
 

@@ -398,8 +398,9 @@ pnpm test                   # unit tests (engine, frontend, backend) with no DB
 pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF when MinIO is up, and skips (saying so) when it isn't
 pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
-pnpm check:i18n             # the Afrikaans translation sheet (docs/i18n/af-translation-sheet.md) is current
+pnpm check:i18n             # what has no Afrikaans yet, and any stale glossary translation; fails if the sheet (docs/i18n/af-translation-sheet.md) is out of date or a translation is stale
 pnpm gen:i18n:sheet         # rewrite it after adding or changing a message, or landing an Afrikaans translation
+pnpm gen:i18n:stamp <id>    # re-stamp a glossary translation from the current English, once the translator has re-checked it
 ```
 
 **Afrikaans locally.** Pick "Afrikaans" on the sign-in page, the farm view

@@ -800,9 +800,10 @@ audit log of model changes yet" from Known gaps).
 > - **`invite.locale`** already existed (034); 050 adds `app_user.locale`
 >   (NULL = not chosen) and `volume_unit`, and `app_accept_invites` gives a
 >   new account its invite's locale. Sign-up takes the page's `locale`.
-> - **Help:** `content.af.ts` with `sourceHash` and its test are built; the
->   `gen:i18n:stamp` script isn't (the sheet prints the hash). The root
->   scripts are `gen:i18n:sheet` and `check:i18n`.
+> - **Help:** `content.af.ts` with `sourceHash` and its test are built, and
+>   so are `pnpm gen:i18n:stamp <id>` (re-stamps an entry, then rewrites the
+>   sheet) and the stale listing in `pnpm check:i18n`. The root scripts are
+>   `gen:i18n:sheet`, `gen:i18n:stamp` and `check:i18n`.
 > - Left over: [followups.md § Afrikaans](../followups.md#afrikaans-wp-25).
 
 **Goal.** English and Afrikaans for everything a farmer touches, with no

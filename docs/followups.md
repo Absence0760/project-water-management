@@ -1206,10 +1206,12 @@ No Afrikaans wording ships yet: none is reviewed.
       ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
       raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
       this branch merges to main.
-- [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
-      `check:i18n` listing of stale entries): today `content.af.test.ts`
-      fails on a stale `sourceHash` and the sheet names the new hash.
-      Trigger: the first translated glossary entry.
+- [x] **Help drift tooling** from the plan: `pnpm gen:i18n:stamp <id>`
+      (`scripts/guards/i18n_stamp.mjs`) re-stamps a glossary translation's
+      `sourceHash` from the current English and rewrites the sheet;
+      `pnpm check:i18n` lists what has no Afrikaans and any stale
+      translation, and fails on a stale one ([ui.md §
+      Language](./ui.md#language)).
 
 ## UI
 

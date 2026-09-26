@@ -6,7 +6,9 @@
 // the English has changed since (the translation is stale), when an entry
 // isn't a farmer entry, and when a farmer entry has neither a translation nor
 // a row on docs/i18n/af-translation-sheet.md. An entry without a translation
-// shows in English (marked lang="en").
+// shows in English (marked lang="en"). Once the translator has re-checked a
+// stale entry, `pnpm gen:i18n:stamp <id>` writes the current English's hash
+// here and rewrites the sheet; `pnpm check:i18n` lists the stale ones.
 //
 // Only type imports: scripts/guards/i18n_sheet.mjs loads this file directly.
 

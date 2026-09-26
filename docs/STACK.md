@@ -131,6 +131,8 @@ pnpm check:terms            # no client-identifying term in any tracked file (ne
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release and scripts/ingest
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
+pnpm gen:i18n:sheet         # rewrite the Afrikaans translation sheet (after changing a message or landing a translation); check:i18n checks it
+pnpm gen:i18n:stamp <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it
 ```
 
 ## Running tests

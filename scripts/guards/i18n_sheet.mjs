@@ -5,7 +5,13 @@
 // an empty Afrikaans column for the client's translator.
 //
 //   node scripts/guards/i18n_sheet.mjs          write the sheet  (pnpm gen:i18n:sheet)
-//   node scripts/guards/i18n_sheet.mjs --check  exit 1 if it is out of date (pnpm check:i18n)
+//   node scripts/guards/i18n_sheet.mjs --check  list what the translator has left, and exit 1 if the
+//                                               sheet is out of date or a glossary translation is stale
+//                                               (pnpm check:i18n)
+//
+// A glossary translation is stale when the English changed after it was made
+// (its sourceHash no longer matches): once the translator has re-checked it,
+// `pnpm gen:i18n:stamp <id>` (i18n_stamp.mjs) stamps it from the new English.
 //
 // Sources (loaded as TypeScript through Node's type stripping, so they keep
 // to erasable syntax and type-only imports):
@@ -81,6 +87,30 @@ export function helpGroup(help, helpAf) {
 	return { section: 'help', description: 'The glossary, “What do these words mean?”, linked from every farm page. Plain words for farmers.', rows };
 }
 
+/** Farmer glossary ids whose Afrikaans was made from older English (sourceHash no longer matches). */
+export function staleHelp(help, helpAf) {
+	return help.filter((e) => e.category === 'farmer' && helpAf[e.id] && helpAf[e.id].sourceHash !== helpHash(e)).map((e) => e.id);
+}
+
+/** Farmer glossary ids with no Afrikaans at all. */
+export function missingHelp(help, helpAf) {
+	return help.filter((e) => e.category === 'farmer' && !helpAf[e.id]).map((e) => e.id);
+}
+
+/** What `check:i18n` prints for the translator and the developer: untranslated counts, then stale glossary entries. */
+export function report({ site, mail, help, helpAf }) {
+	const count = (groups) => groups.reduce((n, g) => n + g.rows.length, 0);
+	const stale = staleHelp(help, helpAf);
+	const lines = [
+		`No Afrikaans yet: ${count(site)} site strings, ${count(mail)} email strings, ${missingHelp(help, helpAf).length} glossary entries (all on ${SHEET}).`
+	];
+	if (stale.length) {
+		lines.push(`Stale glossary translations (the English changed after they were made; on the sheet again): ${stale.join(', ')}.`);
+		lines.push('Once the translator has re-checked each one (and any fix is in content.af.ts), run pnpm gen:i18n:stamp <id>.');
+	}
+	return { text: lines.join('\n'), stale };
+}
+
 export function renderSheet(parts) {
 	const all = parts.flatMap((p) => p.groups.flatMap((g) => g.rows));
 	const lines = [
@@ -118,7 +148,7 @@ export function renderSheet(parts) {
 
 const load = (rel) => import(pathToFileURL(path.join(ROOT, rel)).href);
 
-export async function buildSheet() {
+async function sources() {
 	const [siteEn, siteAf, mailEn, mailAf, help, helpAf] = await Promise.all([
 		load('frontend/src/lib/i18n/messages/en.ts'),
 		load('frontend/src/lib/i18n/messages/af.ts'),
@@ -127,15 +157,28 @@ export async function buildSheet() {
 		load('frontend/src/lib/help/content.ts'),
 		load('frontend/src/lib/help/content.af.ts')
 	]);
-	return renderSheet([
-		{ name: 'on the site', title: 'The site (farm pages, sign-in pages, account)', groups: catalogueGroups({ en: siteEn.en, af: siteAf.af, sections: siteEn.sections, notes: siteEn.notes }) },
-		{ name: 'in emails', title: 'Emails', groups: catalogueGroups({ en: mailEn.en, af: mailAf.af, sections: mailEn.sections, notes: mailEn.notes }) },
-		{ name: 'in the glossary', title: 'Glossary', groups: [helpGroup(help.HELP, helpAf.HELP_AF)] }
+	return {
+		site: catalogueGroups({ en: siteEn.en, af: siteAf.af, sections: siteEn.sections, notes: siteEn.notes }),
+		mail: catalogueGroups({ en: mailEn.en, af: mailAf.af, sections: mailEn.sections, notes: mailEn.notes }),
+		help: help.HELP,
+		helpAf: helpAf.HELP_AF
+	};
+}
+
+const sheetOf = (s) =>
+	renderSheet([
+		{ name: 'on the site', title: 'The site (farm pages, sign-in pages, account)', groups: s.site },
+		{ name: 'in emails', title: 'Emails', groups: s.mail },
+		{ name: 'in the glossary', title: 'Glossary', groups: [helpGroup(s.help, s.helpAf)] }
 	]);
+
+export async function buildSheet() {
+	return sheetOf(await sources());
 }
 
 async function main() {
-	const want = await buildSheet();
+	const src = await sources();
+	const want = sheetOf(src);
 	const file = path.join(ROOT, SHEET);
 	if (process.argv.includes('--check')) {
 		let have = '';
@@ -144,11 +187,14 @@ async function main() {
 		} catch {
 			// missing: out of date
 		}
+		const { text, stale } = report(src);
+		console.log(text);
+		let failed = stale.length > 0;
 		if (have !== want) {
 			console.error(`${SHEET} is out of date: run pnpm gen:i18n:sheet and commit it.`);
-			process.exit(1);
-		}
-		console.log(`${SHEET} is current.`);
+			failed = true;
+		} else console.log(`${SHEET} is current.`);
+		if (failed) process.exit(1);
 		return;
 	}
 	writeFileSync(file, want);
