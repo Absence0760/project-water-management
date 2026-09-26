@@ -660,6 +660,28 @@ must build WP-2.15 Phase B.
 
 ### WP-3.5 Dam storage: area–volume curves, losses and releases
 
+- **Status (2026-09-26): built** (engine 0.32.0, migration
+  `035_dam_storage.sql`; [model.md §2.7a](../model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0160-audit-n2)
+  "Dam geometry, losses and releases"): survey curves (linear in volume,
+  replacing the power law), releases (pass inflow / fixed, outlet cap),
+  monthly lake factors, and the seepage destination, all off by default and
+  bit-identical when off. Engine, API validation, the node form (paste,
+  table, chart), Settings, scenario ops, help, e2e. Where the build differs
+  from the plan below:
+  - the curve is a `jsonb` column on `node` (`dam_curve`), not a `dam_curve`
+    child table: a handful of rows always read and written with the node,
+    covered by the node's RLS (members, and a farmer's own linked nodes)
+    with no new table, trigger or grant;
+  - no `deadStorageM3` field: dead storage stays `damMinPct` (Q5), which
+    already does what item 2 asks;
+  - pass inflow's default target is the EWR **required at the node** (Z,
+    its own and upstream shares), less the flow already bypassing the dam,
+    not the node's own share Y (pending the hydrologist);
+  - pass inflow passes inflow whatever the dam's level; a fixed release
+    draws only above dead storage;
+  - not built: capacity loss to sediment (item 5), and the survey curve as
+    a scenario `node.set` op; both in [followups.md](../followups.md). The
+    `FUZZ_CASES=20000` soak was run at 2 000 cases per runoff model.
 - **Goal.** Dam behaviour good enough for a storage licence (s21(b)).
 - **[WP-1.21](./step-1-hydrologist-tool.md#wp-121-n2-dam-areavolume-evaporation-seepage) delivers** (landed, engine 0.16.0):
   - evaporation `E = k_lake × A-pan(month)/days × A(S)`, with a
