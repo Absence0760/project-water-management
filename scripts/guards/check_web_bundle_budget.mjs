@@ -297,6 +297,21 @@
 //             plain legend, synchronous light redraw on beforeprint) and the
 //             panels' print props are ~0.5 KB. No new dependency; no page's
 //             first load grows. Headroom ~6 KB.
+// 2026-09-25  total 665 → 673 KB; other ceilings unchanged. Server-side PDF
+//             reports (WP-2.15 Phase B, issue #26). Measured on the base
+//             3eb0bb8 (658.7 KB, as the entry above left it) → this change:
+//             667.4 KB (+8.7). All of it is lazy: the report page's "Generate
+//             PDF / Email me the PDF" control and its status polling
+//             (report/ServerPdf.svelte, 1.0 KB, loaded with the report's
+//             bar), the shared report-API helpers (report/serverPdf.ts,
+//             1.2 KB), Settings → Scheduled reports
+//             (report/ReportSchedulesPanel.svelte, 3.3 KB, loaded with the
+//             Settings tab like the data feeds panel), and the emailed
+//             link's download page, routes/projects/[id]/reports/[jobId]
+//             (1.4 KB). The rest, ~1.8 KB, is the Lazy wrappers in the report
+//             page and the Settings tab, and the route manifest. No new
+//             dependency; no page's first load grows except the report's by
+//             ~0.3 KB. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -308,7 +323,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 665,
+	totalCodeKb: 673,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,
