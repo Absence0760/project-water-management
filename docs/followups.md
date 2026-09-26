@@ -147,8 +147,9 @@ collected as a checklist in issue #46; tick it there as they answer.
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
       **not** client sign-off. Put each to the hydrologist as "confirm or change":
-      - H1: legacy kept unchanged but labelled workbook comparison only, never
-        evidence (warning, badge, CSV comment); GR4J is the model of record.
+      - H1: closed. Engine 1.0.0 removed the legacy model (2026-09-26,
+        issue #16); GR4J is the only runoff model, and the operator waived
+        the review that was to come first. Nothing left to confirm.
       - N3 (engine 0.14.0): a 25 mm soil-water store carries effective rain
         over; 0 reproduces the workbook. Confirm the size per soil/root depth.
       - Q5 (0.16.0): `damMinPct` is the dam's minimum operating level;
@@ -241,9 +242,10 @@ collected as a checklist in issue #46; tick it there as they answer.
         else the pooled factor) and the 0.25–4 clamp;
       - whether a neighbouring gauge should fill gaps before CHIRPS does.
 
-      Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
-      catchment with the correction on (condition 1), and record the result
-      in the issue.
+      The issue #4 phase 6 GR4J-vs-legacy comparison can no longer be re-run:
+      engine 1.0.0 removed the legacy model (issue #16). The last client
+      record of legacy against the workbook is the regression run on engine
+      0.45.0 (`run.test.ts`, engine-audit.md § Regression suite).
 - [ ] **Multi-day rain accumulations (issue #2, audit B4). Built (engine
       0.20.0, model.md §2.4d): detection, spreading by bias-corrected CHIRPS
       (default on), keep-as-recorded and listed windows in Settings → Rain
@@ -588,7 +590,8 @@ the reports):
   desirable, not mandatory; the app removed it as an input in engine 0.10.0,
   audit P1.) Legacy is not acceptable as evidence at all, because it
   doesn't conserve water (H1). If both models run, declare the primary one
-  before seeing results.
+  before seeing results. (Settled: engine 1.0.0 removed legacy, so GR4J is
+  the only model, issue #16.)
 - **Q2: WR2012.** Always report it; never make it a hard constraint. Keep
   the soft MAR penalty off by default and record its weight when it's on
   (an applied fit's record keeps the weight and the MAR ratio with and without it).
@@ -748,9 +751,11 @@ the reports):
             failing years nor the Q90 ratio side by side. Trigger: the
             hydrologist asks to compare the checks between runs (for
             example before and after a refit).
-- [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
-      hydrologist asks for it. Phase 10 (remove legacy) is issue #16, due by
-      2026-11-30 (sign-off assumed 2026-09-25, issue #4 closed).
+- [x] **Phase 10 of issue #4: remove legacy** (issue #16). Done 2026-09-26,
+      engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
+      hydrologist-review trigger ([plan.md](./plan.md) Decisions,
+      [model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)).
+- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it.
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -1096,7 +1101,14 @@ the suggested order (the IDs carry the detail):
       English. `lazy-chunk.spec.ts` covers each. Total bundle 894.0 KB gzip
       (the guard rounds up and prints 895, its ceiling: under 1 KB left).
 - [ ] Soak the fuzz tests after any engine change:
-      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
+      (the random cases moved from `run.invariants.test.ts` into the shard
+      files; GR4J only since engine 1.0.0). **Engine 1.0.0 (2026-09-26,
+      issue #16): 20 000 cases with `FUZZ_MAX_FAILURES=100` passed** once
+      seed 2909 was fixed: the doubled-crop-area law is now checked with
+      annual borehole caps off, since more demand uses a cap up earlier and
+      moves the lagged stream depletion in time (the cap working, present
+      on main before #16; `checkGroundwater` still checks the caps).
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
       0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
@@ -1113,7 +1125,7 @@ the suggested order (the IDs carry the detail):
       so later seeds are unscanned. **20 000-case soak on 0.21.1
       (2026-09-25, `FUZZ_MAX_FAILURES=100`, seeds 1–20 000):** GR4J passed;
       legacy failed on one seed, 14313 (order invariance, below). Repro any seed with
-      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/fuzz`.
 - [x] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
       9681).** Fixed in engine 0.19.1 (2026-09-25). The cause was not the
       summing order of E but which farms counted as having an impact at all.
