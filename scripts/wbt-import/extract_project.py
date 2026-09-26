@@ -217,10 +217,23 @@ RUN_OF_RIVER_POOL_MAX_M3 = 1.0
 SECONDS_PER_DAY = 86400
 
 
+def no_dam_note(name: str) -> str:
+    """The WARNING for a farm with no dam that takes 100 % of the upstream inflow (same text in the browser importer)."""
+    return (
+        f"WARNING: farm {name}: probable run-of-river, for the modeller to confirm: it has no dam but takes 100 % of the "
+        "upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. "
+        "Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)"
+    )
+
+
 def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: float, pct_runoff: float) -> str | None:
     """A WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d)."""
-    if pct_upstream < RUN_OF_RIVER_PCT_UPSTREAM or capacity <= 0:
+    if pct_upstream < RUN_OF_RIVER_PCT_UPSTREAM:
         return None
+    # No dam at all: the engine lets a dam-less farm irrigate from the river routed to it, with no limit
+    # (docs/model.md §2.7e); the second configuration's hydrology check found two (issue #54).
+    if capacity <= 0:
+        return no_dam_note(name)
     if capacity < RUN_OF_RIVER_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert:
         why = f"is a pool of {capacity:g} m³"
         if divert > 0:
@@ -402,8 +415,75 @@ def gross_demand_note(
     )
 
 
+# A draw formula that is the constant 0 ("=0", or "0" in the text copy): the
+# hydrologist switched the transfer off in the workbook, which never moved
+# that water (issue #54, the second configuration).
+_ZERO_FORMULA = re.compile(r"^=?\s*0+(?:\.0*)?\s*$")
+
+
+def is_zero_formula(v: Any) -> bool:
+    """True for a [Transfers] text-copy formula that is the constant 0."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return v == 0
+    return isinstance(v, str) and bool(_ZERO_FORMULA.match(v.strip()))
+
+
+def transfer_off_note(frm: str, to: str, column: str) -> str:
+    """The WARNING for a transfer whose draw formula is the constant 0 (same text in the browser importer)."""
+    return (
+        f"WARNING: transfer {frm} -> {to} (column {column}): its draw formula is the constant 0, so the workbook never "
+        "moved this water; it is imported switched off (Transfers tab, Enabled) (issue #54)"
+    )
+
+
+def model_window(wb: Workbook, dates: list[str]) -> tuple[str | None, str | None, str | None]:
+    """simulationStart / End from [Home] zHome_CalcDate1 / CalcDateN (issue #54), and a note.
+
+    The window the workbook last calculated. [Flow data] can hold a gauge
+    record decades longer than the rain (the second configuration: flow from
+    1951, rain from 1996), and a run over all of it has decades with no rain.
+    Each end is used only when it lies inside [Flow data] and cuts some of it
+    off; otherwise the run covers the flow record, as before.
+    """
+    def at(name: str) -> str | None:
+        try:
+            s, c, r, _, _ = wb.ref(name)
+            v = wb.block(s, c, r, c, r)[0][0]
+        except (KeyError, ValueError):  # no such name, a missing sheet or an odd range: no window
+            return None
+        return iso(v) if isinstance(v, (dt.datetime, dt.date)) else None
+
+    if not dates:
+        return None, None, None
+    d1, dn = at("zHome_CalcDate1"), at("zHome_CalcDateN")
+    start = d1 if d1 and dates[0] < d1 <= dates[-1] else None
+    end = dn if dn and dates[0] <= dn < dates[-1] else None
+    if start and end and start > end:
+        return None, None, None
+    if not start and not end:
+        return None, None, None
+    note = (
+        f"[Home] the workbook calculates {start or dates[0]} to {end or dates[-1]}, inside [Flow data]'s {dates[0]} to "
+        f"{dates[-1]}: runs cover that window (settings.simulationStart / End); every series keeps its full record"
+    )
+    return start, end, note
+
+
+def series_span(series: list[dict[str, Any]]) -> str:
+    """'N days from D': the span the imported series cover (the summary line; expected.json's window can be shorter)."""
+    if not series:
+        return "no days"
+    first = min(dt.date.fromisoformat(s["startDate"]) for s in series)
+    last = max(dt.date.fromisoformat(s["startDate"]) + dt.timedelta(days=len(s["values"]) - 1) for s in series)
+    return f"{(last - first).days + 1} days from {first.isoformat()}"
+
+
 def read_transfers(wb: Workbook) -> list[dict[str, Any]]:
     sheet, c1, hr, c2, _ = wb.ref("zTransfers_HeaderFarmsFrom")
+    try:
+        txt_sheet, _, txt_row, _, _ = wb.ref("zTransfers_FormulasAsTxt")
+    except KeyError:
+        txt_sheet, txt_row = None, None
     label_col = c1  # the first column of the From block holds the row labels
     labels = {}
     for i, (v,) in enumerate(wb.block(sheet, label_col, 1, label_col, hr - 1), start=1):
@@ -440,6 +520,10 @@ def read_transfers(wb: Workbook) -> list[dict[str, Any]]:
                 f"transfer {clean(v)} -> {to}: the workbook's substring match also runs it in months {extra}, "
                 f"which {months_raw!r} doesn't list; the app uses the listed months only (audit M1)"
             )
+        formula = wb.block(txt_sheet, c, txt_row, c, txt_row)[0][0] if txt_sheet else None
+        off = is_zero_formula(formula)
+        if off:
+            wb.notes.append(transfer_off_note(clean(v), to, get_column_letter(c)))
         out.append(
             {
                 "from": clean(v),
@@ -448,6 +532,7 @@ def read_transfers(wb: Workbook) -> list[dict[str, Any]]:
                 "maxRateM3s": rate,
                 "minStoragePct": num(cfg.get("min")),
                 "column": get_column_letter(c),
+                "enabled": not off,
             }
         )
     return out
@@ -868,7 +953,7 @@ def extract(
                     "maxRateM3s": t["maxRateM3s"],
                     "dailyCapM3": None,
                     "minStoragePct": t["minStoragePct"],
-                    "enabled": True,
+                    "enabled": t["enabled"],
                     # The workbook's columns ran in order; equal priorities would share a dam (Q18).
                     "priority": len(model_transfers),
                 }
@@ -903,6 +988,10 @@ def extract(
 
         flow = read_flow_data(wb)
         dates = flow["dates"]
+        sim_start, sim_end, window_note = model_window(wb, dates)
+        if window_note:
+            settings["simulationStart"], settings["simulationEnd"] = sim_start, sim_end
+            wb.notes.append(window_note)
         zero_note = zero_rain_note(flow["series"])
         if zero_note:
             wb.notes.append(zero_note)
@@ -1004,8 +1093,8 @@ def main(argv: list[str]) -> int:
     m = project["model"]
     print(
         f"{project['name']}: {len(m['nodes'])} nodes, {len(m['crops'])} crops, {len(m['cropAreas'])} crop areas, "
-        f"{len(m['transfers'])} transfers, {len(project['series'])} series x {expected['days']} days "
-        f"from {expected['startDate']} -> {out}"
+        f"{len(m['transfers'])} transfers, {len(project['series'])} series ({series_span(project['series'])}); "
+        f"expected.json {expected['days']} days from {expected['startDate']} -> {out}"
     )
     for n in notes:
         if n.startswith("WARNING: "):

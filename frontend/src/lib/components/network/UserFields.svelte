@@ -93,10 +93,6 @@
 		font-size: 0.85rem;
 		color: var(--text-2);
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.months {
 		display: block;
 		overflow-x: auto;

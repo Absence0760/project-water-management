@@ -5,13 +5,12 @@
 	// fetched through the Runs tab's cache, a few at a time. Capacity and the
 	// minimum level come from the run's own model, so a later edit doesn't skew
 	// them. Its own chunk, loaded by OverviewTab once the run's record is in.
-	import type { DailySeries } from '@water-management/engine';
 	import { api, type Run, type RunSeriesRef } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import { runHref } from './attention';
-	import { damLevel, levelBand, LOW_PCT, sortDamLevels, type DamLevel } from './damLevels';
+	import { levelBand, loadDamLevels, LOW_PCT, type DamLevel } from './damLevels';
 
 	let {
 		projectId,
@@ -58,20 +57,16 @@
 		error = null;
 		loading = list.length > 0;
 		if (!list.length) return;
-		let next = 0;
-		const out: DamLevel[] = [];
-		const worker = async () => {
-			while (next < list.length && id === run.id) {
-				const d = list[next++]!;
-				const s: DailySeries = await cachedSeries(id, 'dam_storage', d.nodeId, () => api.runs.series(projectId, id, 'dam_storage', d.nodeId));
-				const l = damLevel(d, s);
-				if (l) out.push(l);
-				if (id === run.id) done++;
+		loadDamLevels(
+			list,
+			(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(projectId, id, 'dam_storage', nodeId)),
+			AT_ONCE,
+			(n) => {
+				if (id === run.id) done = n;
 			}
-		};
-		Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, worker))
-			.then(() => {
-				if (id === run.id) levels = sortDamLevels(out);
+		)
+			.then((l) => {
+				if (id === run.id) levels = l;
 			})
 			.catch((e) => {
 				if (id === run.id) error = e instanceof Error ? e.message : String(e);

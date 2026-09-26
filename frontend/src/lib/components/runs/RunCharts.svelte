@@ -397,28 +397,11 @@
 		background: var(--surface-2);
 		border-radius: var(--radius-sm);
 	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-		margin-left: -1px;
-	}
 	.days {
 		margin-top: 0.5rem;
 	}
 	.q {
 		margin-top: 0.5rem;
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
-	.small {
 		font-size: 0.8rem;
 	}
 	.inline {

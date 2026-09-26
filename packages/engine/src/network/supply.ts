@@ -40,7 +40,15 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 			warnings.push(`${n.kind === 'user' ? 'user' : 'gauge'} "${n.name}": only a farm has a supply rule and river pump; ignored`);
 		return {};
 	}
-	if (rule === 'damFirst') return {};
+	if (rule === 'damFirst') {
+		// A farm with no dam irrigates from the river routed to it (K, M, O pass through the absent
+		// dam), with no pump limit: b023's stand-in for a river pump, kept, but said (issue #54).
+		if (!(n.damCapacityM3 > 0) && (n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || n.divertCapacityM3Day > 0))
+			warnings.push(
+				`farm "${n.name}": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity`
+			);
+		return {};
+	}
 	if (rule !== 'riverFirst' && rule !== 'trigger' && rule !== 'runOfRiver') {
 		warnings.push(`farm "${n.name}": unknown supply rule "${String(rule)}"; the dam only`);
 		return {};

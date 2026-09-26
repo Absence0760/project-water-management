@@ -214,19 +214,6 @@
 		max-width: 80ch;
 		font-size: 0.9rem;
 	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	.seg .btn:not(:first-child) {
-		margin-left: -1px;
-		border-radius: 0;
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-	}
 	.seg .btn[aria-pressed='true'] {
 		background: var(--accent-soft);
 		border-color: var(--accent);

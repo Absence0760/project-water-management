@@ -222,9 +222,6 @@
 	section + section {
 		margin-top: 1.25rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.alert.ok {
 		background: var(--success-soft);
 		color: var(--success);

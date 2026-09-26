@@ -6,10 +6,11 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { damLevel } from '$lib/components/overview/damLevels';
+	import { damLevel, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
-	import { ranAgo, supplyByNode, type SchematicSupply } from './supplyColour';
+	import { ranAgo, supplyByNode } from './supplyColour';
+	import { areaColouring, damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
@@ -67,9 +68,10 @@
 	const shareOf = (i: number) => (nodes[i]?.kind === 'farm' ? (shares.share[i] ?? 0) : null);
 	const METHOD_LABEL = { area: 'by area', hiLo: 'high/low MAP split', manual: 'manual shares' } as const;
 
-	// --- colour farms by the latest run's supply (view option, component state) ---
+	// --- colour farms by (view option, component state): the latest run's supply, how full each dam
+	// ended it, or the irrigated area as edited (farmColour.ts). Supply by default once there's a run. ---
 	// On by default once there is a run (the map answers "who is short?" first, issue #17).
-	let colourBy = $state<'none' | 'supply'>(untrack(() => (runs?.length ? 'supply' : 'none')));
+	let colourBy = $state<'none' | ColourMode>(untrack(() => (runs?.length ? 'supply' : 'none')));
 	const latestRun = $derived(runs?.[0] ?? null);
 	let supplyRun = $state<{ id: string; summary: RunSummary } | null>(null);
 	let supplyLoading = $state(false);
@@ -99,21 +101,55 @@
 	// Fetch when colouring is switched on or a newer run lands; only then, so
 	// a failed load doesn't retry itself (the status line offers a retry).
 	$effect(() => {
-		// The Map layout's node card shows a farm's supply too.
-		const id = colourBy === 'supply' || view === 'map' ? latestRun?.id : undefined;
+		// The Map layout's node card shows a farm's supply too; dam levels need the run's series list.
+		const id = colourBy === 'supply' || colourBy === 'dam' || view === 'map' ? latestRun?.id : undefined;
 		untrack(() => {
 			if (id && id !== supplyFor) void loadSupply(id);
 		});
 	});
 
-	const supply = $derived.by((): SchematicSupply | null => {
-		if (colourBy !== 'supply' || !latestRun || !farms.length || supplyRun?.id !== latestRun.id) return null;
-		return {
-			byNode: supplyByNode(nodes, supplyRun.summary),
-			runName: latestRun.label || fmtDate(latestRun.createdAt, true),
-			ago: ranAgo(latestRun.createdAt),
-			unsaved: editor.dirty
-		};
+	// Dam levels at the end of the latest run: every dam's storage series, fetched only while
+	// "Dam level" is picked (overview/damLevels.ts loadDamLevels, as the Summary's panel).
+	let damLevels = $state.raw<{ runId: string; levels: DamLevel[] } | null>(null);
+	let damLoading = $state<{ done: number; of: number } | null>(null);
+	let damError = $state(false);
+	let damAttempt = $state(0);
+	$effect(() => {
+		const run = colourBy === 'dam' && latestRun && supplyRun?.id === latestRun.id ? latestRun.id : null;
+		void damAttempt;
+		untrack(() => {
+			if (!run || damLevels?.runId === run) return;
+			const detail = detailCache.get(run);
+			const refs = detail?.series ?? [];
+			const snap = (detail?.run.model?.nodes as { id: string; name: string; damCapacityM3?: unknown; damMinPct?: unknown }[] | undefined) ?? [];
+			const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
+			const dams = (snap.length ? snap : nodes)
+				.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
+				.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
+			damError = false;
+			damLoading = { done: 0, of: dams.length };
+			loadDamLevels(dams, (nodeId) => cachedSeries(run, 'dam_storage', nodeId, () => api.runs.series(projectId, run, 'dam_storage', nodeId)), 4, (n) => {
+				if (damLoading) damLoading = { done: n, of: dams.length };
+			})
+				.then((levels) => {
+					if (latestRun?.id === run) damLevels = { runId: run, levels };
+				})
+				.catch(() => {
+					if (latestRun?.id === run) damError = true;
+				})
+				.finally(() => {
+					damLoading = null;
+				});
+		});
+	});
+
+	const colouring = $derived.by((): Colouring | null => {
+		if (colourBy === 'none' || !farms.length) return null;
+		if (colourBy === 'area') return areaColouring(editor.model);
+		if (!latestRun || supplyRun?.id !== latestRun.id) return null;
+		const run = { name: latestRun.label || fmtDate(latestRun.createdAt, true), ago: ranAgo(latestRun.createdAt) };
+		if (colourBy === 'supply') return supplyColouring(nodes, supplyRun.summary, run, editor.dirty);
+		return damLevels?.runId === latestRun.id ? damColouring(nodes, damLevels.levels, run, editor.dirty) : null;
 	});
 
 	// The Network is one page, the map (issue #17, option A · A2): the node
@@ -278,7 +314,7 @@
 		['transfers', 'Transfers']
 	];
 	const GRID_ALL: [GridId, string][] = [['nodes', 'Node table'], ...GRID_LINKS];
-	const dotBand = (id: string) => (colourBy === 'supply' ? (latestSupply?.get(id)?.band ?? null) : null);
+	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
 	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
 	// less whatever the page keeps below it (its bottom padding, which makes room for the save bar),
@@ -361,20 +397,27 @@
 </script>
 
 {#snippet colourByControl()}
-	{#if latestRun && farms.length}
+	{#if farms.length}
 		<div class="colour-by">
 			<label for="sch-colour">Colour farms by</label>
 			<select id="sch-colour" bind:value={colourBy}>
 				<option value="none">Nothing</option>
-				<option value="supply">Supply, latest run</option>
+				{#if latestRun}<option value="supply">Supply, latest run</option>{/if}
+				{#if latestRun && farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
+				<option value="area">Irrigated area</option>
 			</select>
-			{#if colourBy === 'supply'}
+			{#if colourBy === 'supply' || colourBy === 'dam'}
 				<span class="muted small" role="status">
 					{#if supplyLoading}
 						Loading the latest run’s results…
 					{:else if supplyError}
 						Couldn’t load the latest run’s results.
 						<button type="button" class="btn btn-sm" onclick={() => latestRun && loadSupply(latestRun.id)}>Retry</button>
+					{:else if colourBy === 'dam' && damLoading}
+						Loading dam levels ({damLoading.done} of {damLoading.of})…
+					{:else if colourBy === 'dam' && damError}
+						Couldn’t load the dam levels.
+						<button type="button" class="btn btn-sm" onclick={() => { damLevels = null; damAttempt++; }}>Retry</button>
 					{/if}
 				</span>
 			{/if}
@@ -390,7 +433,7 @@
 		onselect={select}
 		editable={!readonly}
 		onreparent={reparent}
-		{supply}
+		{colouring}
 		{fill}
 	/>
 {/snippet}
@@ -752,15 +795,8 @@
 	.user-name-field input {
 		width: 100%;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: -0.25rem 0 0.6rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	/* Keep the table as narrow as it can readably be: field headers wrap
 	   instead of setting the column width, cells are tighter, and 0–100 %
@@ -1160,6 +1196,26 @@
 	}
 	.dot[data-band='low'] {
 		background: var(--danger);
+	}
+	/* No dam, nothing planted, no demand: hollow, as the dashed symbol on the map. */
+	.dot[data-band='none'] {
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--text-muted);
+	}
+	.dot[data-band='absent'] {
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--text-muted);
+		border-radius: 2px;
+	}
+	.dot[data-band='area1'] {
+		background: color-mix(in srgb, var(--accent) 35%, var(--surface));
+		box-shadow: inset 0 0 0 1px var(--accent);
+	}
+	.dot[data-band='area2'] {
+		background: color-mix(in srgb, var(--accent) 65%, var(--surface));
+	}
+	.dot[data-band='area3'] {
+		background: var(--accent);
 	}
 	@media (max-width: 899px) {
 		.map-layout {

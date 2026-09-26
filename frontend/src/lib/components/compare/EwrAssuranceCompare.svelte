@@ -91,9 +91,6 @@
 {/each}
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: 0 0 0.5rem;
 	}

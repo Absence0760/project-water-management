@@ -19,6 +19,7 @@ import { projectIds } from './ids';
 import { downstreamLinks, readNetwork } from './network';
 import { type ImportNote, Report, type UnmappedItem } from './report';
 import { checkTransferFormulas } from './transferFormulas';
+import { modelWindow } from './modelWindow';
 import { readTransfers } from './transfers';
 import { B023Workbook } from './workbook';
 import { zeroRainNote } from './zeroRain';
@@ -228,7 +229,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			maxRateM3s: t.maxRateM3s,
 			dailyCapM3: null,
 			minStoragePct: t.minStoragePct,
-			enabled: true,
+			enabled: t.enabled,
 			// The workbook's columns ran in order; equal priorities would share a dam (Q18).
 			priority: modelTransfers.length
 		});
@@ -262,8 +263,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		hiLoSplit: spec.hiLoSplit,
 		calibration,
 		ewrPragmaticM3PerDay: ewr,
-		simulationStart: null,
-		simulationEnd: null,
+		simulationStart: null as string | null,
+		simulationEnd: null as string | null,
 		calibrationStart: window.calibrationStart,
 		calibrationEnd: window.calibrationEnd,
 		calibrationFlowKind: window.calibrationFlowKind
@@ -272,6 +273,12 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	step(6);
 	const flow = readFlowData(wb, report);
 	if (!flow.dates.length) throw new InvalidWorkbookError('[Flow data] has no dated rows below its header', 'Flow data');
+	const runWindow = modelWindow(wb, flow.dates);
+	if (runWindow) {
+		settings.simulationStart = runWindow.simulationStart;
+		settings.simulationEnd = runWindow.simulationEnd;
+		report.note('model-window', runWindow.note, { sheet: 'Home' });
+	}
 	const zero = zeroRainNote(flow.series);
 	if (zero) report.note('zero-rain-runs', zero, { sheet: 'Flow data' });
 	if (reference !== false) gaugeAsReference(flow.series, settings, scaling, report);

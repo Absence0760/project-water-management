@@ -183,6 +183,22 @@ describe('supplyOf (WP-3.8)', () => {
 		expect(w[0]).toMatch(/only a farm has a supply rule/);
 	});
 
+	// Issue #54: a dam-less farm irrigates from the river routed to its (absent) dam with no limit; the run says so.
+	it('warns about a dam-only farm with no dam that has river routed to it, and nothing else', () => {
+		const warned = (over: Partial<NetworkNode>) => {
+			const w: string[] = [];
+			supplyOf(farm(over), w);
+			return w;
+		};
+		for (const over of [{ pctUpstreamToDam: 1 }, { pctRunoffToDam: 0.3 }, { divertCapacityM3Day: 8640 }])
+			expect(warned({ damCapacityM3: 0, ...over }), JSON.stringify(over)).toEqual([
+				'farm "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity'
+			]);
+		expect(warned({ damCapacityM3: 50_000, pctUpstreamToDam: 1 })).toEqual([]); // a real dam
+		expect(warned({ damCapacityM3: 0 })).toEqual([]); // nothing routed to it
+		expect(warned({ damCapacityM3: 0, pctUpstreamToDam: 1, supplyRule: 'runOfRiver', pumpCapacityM3Day: 500 })).toEqual([]); // capped
+	});
+
 	it('trigger without a dam and run of river with one run as river first, with a warning', () => {
 		const w: string[] = [];
 		expect(supplyOf(farm({ supplyRule: 'trigger', pumpCapacityM3Day: 10 }), w).supply!.rule).toBe(1);

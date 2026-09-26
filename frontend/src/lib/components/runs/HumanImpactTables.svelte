@@ -197,13 +197,6 @@
 		font-size: 0.85rem;
 		min-height: 24px;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	td.short,
 	td.neg {
 		color: var(--warning);

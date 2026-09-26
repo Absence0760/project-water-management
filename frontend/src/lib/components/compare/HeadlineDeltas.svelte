@@ -127,9 +127,6 @@
 		color: var(--text-muted);
 		font-weight: 400;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.in-sample {
 		margin: 0 0 0.5rem;
 	}

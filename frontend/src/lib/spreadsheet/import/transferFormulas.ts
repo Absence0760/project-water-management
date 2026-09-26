@@ -103,7 +103,9 @@ export function checkTransferFormulas(wb: B023Workbook, transfers: WorkbookTrans
 	}
 
 	// Draw from dam: fGetTrfVolCapped(<source farm>!Q<yesterday>, own column's settings …).
+	// A constant-0 draw is a switched-off transfer, imported disabled with its own warning.
 	for (const t of transfers) {
+		if (!t.enabled) continue;
 		const f = text(wb.cell(sheet, t.col, txt.r1));
 		const problems = drawProblems(f, t, formulaRow);
 		if (problems.length) {

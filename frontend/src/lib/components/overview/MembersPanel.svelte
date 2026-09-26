@@ -266,9 +266,6 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.add {
 		margin-top: 1rem;
 	}

@@ -82,9 +82,6 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.grid {
 		display: grid;
 		grid-template-columns: minmax(0, 360px) minmax(0, 1fr);

@@ -1009,12 +1009,26 @@ the suggested order (the IDs carry the detail):
       chunk (`svelteRuntimeChunk`): −12 KB total and every first load 3–6 KB
       lighter. The spreadsheet workers now get the engine treeshake rule
       (−0.7 KB). Ceilings: total 892, spreadsheet worker 32.
-- [ ] **Bundle weight still on the table** (issue #9; measured estimates,
-      none started).
-      Component CSS repeated across files (`.small`, `.u`, `.seg .btn`,
-      `.stat dd.sub`: ~17 KB raw, an estimated 2–3 KB gzip) could move to
-      the global stylesheet, but it changes cascade order in 26 components,
-      so it needs the e2e visual pins first. Trigger: the next ceiling raise.
+- [x] **Component CSS repeated across files** (issue #9, 2026-09-26):
+      `.small` (53 copies), `.u` (22) and the `.seg` segmented control (5)
+      now live once at the end of `app.css` (architecture.md § Shared CSS),
+      pinned first by `e2e/tests/shared-css.spec.ts` (light/dark,
+      phone/desktop, the report in print, the override editor's
+      three-button switch). Total −1.0 KB gzip (over origin/main @ 1a8d058:
+      891.7 → 890.7 KB, 913 069 → 912 108 bytes), not the 2–3 KB estimated:
+      most copies sat in shared chunks where gzip already folded them. Runs
+      and the report load 0.2 KB less, Network, Data and Settings 0.1; pages
+      that use none of them (home, sign-in, /farm, /share) ~0.06 KB more. A
+      computed-style crawl of 15 screens × 2 themes × 2 widths (1 328
+      elements) matched before and after except two intended changes: the
+      Network tab's three-button layout switch (since replaced by the map,
+      issue #17) squared its middle button, which had all four corners
+      rounded, and four components that wrote `class="muted small"` with
+      no `.small` rule (History, the Runs tab's run-inputs panel, Yield,
+      Forecast) now render it small. Measured and not moved: the spinner
+      (−0.3 KB total, +0.1 KB on /farm, /share and sign-in), `.stat dd.sub`
+      (−0.07 KB; would leak into three components that style it their own
+      way), the Settings sections' repeats (one lazy chunk already).
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →

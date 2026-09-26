@@ -319,16 +319,9 @@
 {/if}
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: -0.25rem 0 0.75rem;
 		max-width: 75ch;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	th.sticky {
 		position: sticky;
