@@ -1044,6 +1044,23 @@ role and not before it.
 
 ## Features left half-way
 
+- **Scenarios** (issue #18, WP-3.2, 2026-09-25;
+  [scenarios.md](./scenarios.md)). Built: the engine part,
+  `packages/engine/src/scenario/` (`applyScenario`, `classifyOp`,
+  `classifyScenario`, `validateScenarioOps`), with the invariant and
+  no-silent-change fuzz. Left open:
+  - [ ] **Backend, data model, API and the Scenarios tab** (the rest of
+        WP-3.2). Needs WP-3.1's stored run inputs for the base.
+  - [ ] **One home for the model's save rules.** `scenario/structure.ts`
+        repeats `backend/src/model/validate.ts` `modelProblems`, so a rule
+        added to one can miss the other. Move the rules into the engine and
+        have `modelProblems` call them. Trigger: the backend scenario routes,
+        which must accept exactly what `applyScenario` produces.
+  - [ ] **Later ops**: `ewrSite.set`, `allocation.set`, moving a node or
+        inserting one mid-river, `crop.set`, `landCover.set`
+        ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
+        Trigger: the scenario editor needing them.
+
 - **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
   [ui.md § Report](./ui.md#report)). Built: the print route
   `/projects/:id/report?run=`, the Runs tab's **Report** button, A4 print

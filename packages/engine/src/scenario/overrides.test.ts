@@ -1,0 +1,450 @@
+// Scenario overrides (roadmap WP-3.2): each op applies, bad targets become
+// problems, node.remove keeps a valid tree, the base is never mutated, the
+// classifier's rules, the validator, and a dam raise run end to end.
+// Synthetic catchment: invented names and values only (public repo).
+import { describe, expect, it } from 'vitest';
+import { buildTopology } from '../network/topology';
+import { blankEwrRuleTable } from '../reserve/rules';
+import { runModel } from '../run';
+import type { ModelInput, NetworkNode, RunSeries } from '../project';
+import { scrambleOrder } from '../testing/fuzz';
+import { checkAll } from '../testing/invariants';
+import { applyScenario, classifyOp, classifyScenario } from './overrides';
+import { validateScenarioOps, type ScenarioOp } from './ops';
+
+function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
+	return {
+		id,
+		name: `Farm ${id}`,
+		kind: 'farm',
+		downstreamNodeId: null,
+		sortOrder: 0,
+		areaKm2: 5,
+		areaHiKm2: 2.5,
+		areaLoKm2: 2.5,
+		flowShareManual: null,
+		pctUpstreamToDam: 0.5,
+		pctRunoffToDam: 0.8,
+		damCapacityM3: 0,
+		damInitialPct: 0.5,
+		damMinPct: 0,
+		divertCapacityM3Day: 5000,
+		irrigationEfficiency: 0.8,
+		lossReturnFraction: 0,
+		damAreaFullM2: null,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
+		...over
+	};
+}
+
+/** Outlet gauge G; farms A (dam) and B drain into it; farm C drains into A. */
+function base(): ModelInput {
+	const days = 500;
+	const rain = Array.from({ length: days }, (_, t) => (t % 17 === 0 ? 40 : t % 5 === 0 ? 6 : 0));
+	return {
+		settings: {
+			runoffModel: 'legacy',
+			apanMm: [150, 180, 210, 220, 190, 160, 110, 80, 60, 60, 80, 110],
+			ewrPragmaticM3PerDay: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+			ewrRules: [blankEwrRuleTable('G'), blankEwrRuleTable('A')]
+		},
+		model: {
+			nodes: [
+				node('G', { name: 'Outlet gauge', kind: 'gauge', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }),
+				node('A', { downstreamNodeId: 'G', damCapacityM3: 200_000, sortOrder: 1 }),
+				node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
+				node('C', { downstreamNodeId: 'A', damCapacityM3: 50_000, sortOrder: 3 })
+			],
+			crops: [{ id: 'c1', name: 'Lucerne', cropFactor: [0.8, 0.9, 1, 1, 1, 0.9, 0.8, 0.6, 0.5, 0.5, 0.6, 0.7] }],
+			cropAreas: [
+				{ nodeId: 'A', cropId: 'c1', areaM2: 400_000 },
+				{ nodeId: 'C', cropId: 'c1', areaM2: 200_000 }
+			],
+			transfers: [{ id: 't1', fromNodeId: 'C', toNodeId: 'A', months: [1, 2, 3], maxRateM3s: 0.05, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 }],
+			landCover: [{ id: 'lc1', nodeId: 'B', coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null }]
+		},
+		series: { rain_catchment_mm: { startDate: '2020-10-01', values: rain } }
+	};
+}
+
+function deepFreeze<T>(v: T): T {
+	if (v && typeof v === 'object') {
+		for (const x of Object.values(v)) deepFreeze(x);
+		Object.freeze(v);
+	}
+	return v;
+}
+
+const one = (op: ScenarioOp, b = base()) => applyScenario(b, [op]);
+const nodeOf = (x: ModelInput, id: string) => x.model.nodes.find((n) => n.id === id);
+
+describe('applyScenario: each op', () => {
+	it('node.set changes one whitelisted field', () => {
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 240_000 });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')!.damCapacityM3).toBe(240_000);
+		expect(r.applied).toHaveLength(1);
+	});
+
+	it('node.set rejects a missing node, a field the kind lacks and an out-of-range value', () => {
+		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
+		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'damInitialPct', value: 1.5 }).problems[0]).toMatch(/at most 1/);
+		// Not a field at all (a caller bypassing the types): refused, not written.
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'downstreamNodeId', value: 'B' } as unknown as ScenarioOp);
+		expect(r.problems).toHaveLength(1);
+		expect(nodeOf(r.input, 'A')!.downstreamNodeId).toBe('G');
+	});
+
+	it('node.set refuses a duplicate name (compare matches by name across copies)', () => {
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'name', value: 'farm b' });
+		expect(r.problems[0]).toMatch(/duplicate node name/);
+		expect(nodeOf(r.input, 'A')!.name).toBe('Farm A');
+	});
+
+	it('node.set refuses a drought borehole rule on a farm without a dam', () => {
+		const b = base();
+		nodeOf(b, 'B')!.boreholeCapacityM3Day = 100;
+		expect(one({ op: 'node.set', nodeId: 'B', field: 'boreholeRule', value: 'drought' }, b).problems[0]).toMatch(/drought borehole rule needs a farm dam/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'boreholeRule', value: 'drought' }, b).problems).toEqual([]);
+	});
+
+	it('node.add adds a leaf with the engine defaults for fields it leaves out', () => {
+		const add = node('N', { name: 'New dam', downstreamNodeId: 'B', damCapacityM3: 30_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const r = one({ op: 'node.add', node: add });
+		expect(r.problems).toEqual([]);
+		const n = nodeOf(r.input, 'N')!;
+		expect(n.boreholeRule).toBe('supplemental');
+		expect(n.userPriority).toBe('senior');
+		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
+	});
+
+	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
+		expect(one({ op: 'node.add', node: node('A', { name: 'X', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/already in use/);
+		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown node nowhere/);
+		expect(one({ op: 'node.add', node: node('N', { name: 'Farm A', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/duplicate node name/);
+	});
+
+	it('node.remove re-links upstream nodes and drops every reference to the node', () => {
+		const r = one({ op: 'node.remove', nodeId: 'A' });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')).toBeUndefined();
+		expect(nodeOf(r.input, 'C')!.downstreamNodeId).toBe('G');
+		expect(r.input.model.cropAreas.map((a) => a.nodeId)).toEqual(['C']);
+		expect(r.input.model.transfers).toEqual([]);
+		expect((r.input.settings.ewrRules ?? []).map((t) => t.siteNodeId)).toEqual(['G']);
+		expect(r.applied[0]!.notes.join('; ')).toMatch(/now drains into G.*1 crop area.*1 transfer.*1 EWR rule table/);
+		const topo = buildTopology(r.input.model.nodes);
+		expect(r.input.model.nodes[topo.outflow]!.id).toBe('G');
+	});
+
+	it('node.remove drops land cover on the node, and refuses the outflow node and a missing one', () => {
+		expect(one({ op: 'node.remove', nodeId: 'B' }).input.model.landCover).toEqual([]);
+		expect(one({ op: 'node.remove', nodeId: 'G' }).problems[0]).toMatch(/outflow node and can't be removed/);
+		expect(one({ op: 'node.remove', nodeId: 'nope' }).problems[0]).toMatch(/not found/);
+	});
+
+	it('node.remove keeps a valid tree on a deep chain with a fan above the removed node', () => {
+		const b = base();
+		b.model.nodes.push(node('D', { downstreamNodeId: 'C' }), node('E', { downstreamNodeId: 'C' }), node('F', { downstreamNodeId: 'E' }));
+		let x = b;
+		for (const id of ['C', 'E', 'A']) {
+			const r = applyScenario(x, [{ op: 'node.remove', nodeId: id }]);
+			expect(r.problems).toEqual([]);
+			expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
+			x = r.input;
+		}
+		expect(x.model.nodes.map((n) => `${n.id}→${n.downstreamNodeId}`).sort()).toEqual(['B→G', 'D→G', 'F→G', 'G→null']);
+	});
+
+	it('cropArea.set upserts one row, 0 removes it, and it refuses non-farms and unknown crops', () => {
+		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 }).input.model.cropAreas[0]).toEqual({ nodeId: 'A', cropId: 'c1', areaM2: 1 });
+		expect(one({ op: 'cropArea.set', nodeId: 'B', cropId: 'c1', areaM2: 5 }).input.model.cropAreas).toHaveLength(3);
+		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 0 }).input.model.cropAreas.map((a) => a.nodeId)).toEqual(['C']);
+		expect(one({ op: 'cropArea.set', nodeId: 'G', cropId: 'c1', areaM2: 5 }).problems[0]).toMatch(/crops grow on farms/);
+		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'zz', areaM2: 5 }).problems[0]).toMatch(/crop zz not found/);
+	});
+
+	it('crop.add adds a crop and refuses a used id or name', () => {
+		const crop = { id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.7) };
+		expect(one({ op: 'crop.add', crop }).input.model.crops.map((c) => c.id)).toEqual(['c1', 'c2']);
+		expect(one({ op: 'crop.add', crop: { ...crop, id: 'c1' } }).problems[0]).toMatch(/already in use/);
+		expect(one({ op: 'crop.add', crop: { ...crop, name: 'lucerne' } }).problems[0]).toMatch(/duplicate crop name/);
+	});
+
+	it('transfer.add / set / remove', () => {
+		const t = { id: 't2', fromNodeId: 'A', toNodeId: 'B', months: [12, 1, 1], maxRateM3s: 0.1, dailyCapM3: 500, minStoragePct: 0.3, enabled: true, priority: 1 };
+		const added = one({ op: 'transfer.add', transfer: t });
+		expect(added.input.model.transfers[1]!.months).toEqual([1, 12]);
+		expect(one({ op: 'transfer.add', transfer: { ...t, toNodeId: 'A' } }).problems[0]).toMatch(/from a node to itself/);
+		expect(one({ op: 'transfer.add', transfer: { ...t, toNodeId: 'zz' } }).problems[0]).toMatch(/toNodeId zz not found/);
+		expect(one({ op: 'transfer.add', transfer: { ...t, id: 't1' } }).problems[0]).toMatch(/already in use/);
+
+		expect(one({ op: 'transfer.set', transferId: 't1', field: 'maxRateM3s', value: 0.2 }).input.model.transfers[0]!.maxRateM3s).toBe(0.2);
+		expect(one({ op: 'transfer.set', transferId: 't1', field: 'toNodeId', value: 'C' }).problems[0]).toMatch(/itself/);
+		expect(one({ op: 'transfer.set', transferId: 'zz', field: 'enabled', value: false }).problems[0]).toMatch(/transfer zz not found/);
+
+		expect(one({ op: 'transfer.remove', transferId: 't1' }).input.model.transfers).toEqual([]);
+		expect(one({ op: 'transfer.remove', transferId: 'zz' }).problems).toHaveLength(1);
+	});
+
+	it('landCover.add / remove', () => {
+		const p = { id: 'lc2', nodeId: 'A', coverClass: 'invasive' as const, areaKm2: 0.5, densityPct: 1, factors: null };
+		expect(one({ op: 'landCover.add', patch: p }).input.model.landCover).toHaveLength(2);
+		expect(one({ op: 'landCover.add', patch: { ...p, nodeId: 'G' } }).problems[0]).toMatch(/lies on a farm/);
+		expect(one({ op: 'landCover.add', patch: { ...p, id: 'lc1' } }).problems[0]).toMatch(/already in use/);
+		expect(one({ op: 'landCover.remove', patchId: 'lc1' }).input.model.landCover).toEqual([]);
+		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
+	});
+
+	it('settings.set writes a whitelisted path, nested ones over what is there', () => {
+		const r = applyScenario(base(), [
+			{ op: 'settings.set', path: 'lakeEvapFactor', value: 0.7 },
+			{ op: 'settings.set', path: 'calibration.a', value: 0.2 },
+			{ op: 'settings.set', path: 'calibration.summerMonths', value: [12, 1, 1, 2] }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.settings.lakeEvapFactor).toBe(0.7);
+		expect(r.input.settings.calibration).toEqual({ a: 0.2, summerMonths: [1, 2, 12] });
+	});
+
+	it('settings.set refuses an unknown path, a bad value and a window that ends before it starts', () => {
+		expect(one({ op: 'settings.set', path: 'fitRecord', value: null } as unknown as ScenarioOp).problems[0]).toMatch(/not a setting a scenario can change/);
+		expect(one({ op: 'settings.set', path: 'runoffModel', value: 'pitman' } as unknown as ScenarioOp).problems[0]).toMatch(/must be one of/);
+		const r = applyScenario(base(), [
+			{ op: 'settings.set', path: 'reportStart', value: '2021-06-01' },
+			{ op: 'settings.set', path: 'reportEnd', value: '2021-01-01' }
+		]);
+		expect(r.applied).toHaveLength(1);
+		expect(r.problems[0]).toMatch(/op 2 \(settings\.set\): the reporting window starts/);
+	});
+
+	it('series.scale scales the days in range, keeps missing days, and copies only that series', () => {
+		const b = base();
+		b.series.rain_catchment_mm!.values[34] = null;
+		const r = one({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2020-11-04', to: '2020-11-06' }, b);
+		const [before, after] = [b.series.rain_catchment_mm!.values, r.input.series.rain_catchment_mm!.values];
+		// 2020-11-04 is day 34 (missing), 35 is 6 mm, 36 is 0.
+		expect(after.slice(33, 38)).toEqual([before[33], null, 6 * 0.9, 0, before[37]]);
+		expect(r.applied[0]!.notes).toEqual(['2 day(s) scaled']);
+		expect(after).not.toBe(before);
+		const whole = one({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 2 }, b);
+		expect(whole.input.series.rain_catchment_mm!.values[0]).toBe(80);
+	});
+
+	it('series.scale refuses a series the base lacks, a range outside it and an unscalable kind', () => {
+		expect(one({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 2 }).problems[0]).toMatch(/no rain_chirps_mm series/);
+		expect(one({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 2, from: '2030-01-01' }).problems[0]).toMatch(/no day/);
+		expect(one({ op: 'series.scale', kind: 'flow_observed_m3s', factor: 2 } as unknown as ScenarioOp).problems[0]).toMatch(/can't be scaled/);
+	});
+});
+
+describe('applyScenario: the whole list', () => {
+	it('never mutates the base (deep-frozen), whatever the ops do', () => {
+		const b = deepFreeze(base());
+		const ops: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 },
+			{ op: 'transfer.set', transferId: 't1', field: 'months', value: [4, 2] },
+			{ op: 'node.remove', nodeId: 'A' },
+			{ op: 'cropArea.set', nodeId: 'C', cropId: 'c1', areaM2: 9 },
+			{ op: 'landCover.remove', patchId: 'lc1' },
+			{ op: 'settings.set', path: 'calibration.a', value: 0.3 },
+			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.5 }
+		];
+		const snapshot = JSON.stringify(b);
+		const r = applyScenario(b, ops);
+		expect(r.problems).toEqual([]);
+		expect(JSON.stringify(b)).toBe(snapshot);
+		expect(r.input.model).not.toBe(b.model);
+	});
+
+	it('applies in order: a later op sees an earlier one, and one on a removed target is a problem', () => {
+		const r = applyScenario(base(), [
+			{ op: 'node.set', nodeId: 'A', field: 'name', value: 'Upper dam' },
+			{ op: 'node.remove', nodeId: 'C' },
+			{ op: 'cropArea.set', nodeId: 'C', cropId: 'c1', areaM2: 1 },
+			{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 }
+		]);
+		expect(r.applied.map((a) => a.index)).toEqual([0, 1, 3]);
+		expect(r.problems).toEqual(['op 3 (cropArea.set): node C not found']);
+	});
+
+	it('an empty list returns an equal input', () => {
+		const b = base();
+		const r = applyScenario(b, []);
+		expect(r.input).toEqual(b);
+		expect(r).toMatchObject({ applied: [], problems: [] });
+	});
+
+	it('refuses to remove the last land: runModel needs a catchment area', () => {
+		const b = base();
+		for (const id of ['A', 'C']) Object.assign(nodeOf(b, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		expect(one({ op: 'node.remove', nodeId: 'B' }, b).problems[0]).toMatch(/no area left/);
+		expect(one({ op: 'node.set', nodeId: 'B', field: 'areaKm2', value: 0 }, b).problems[0]).toMatch(/no area left/);
+		// With the area set by hand the land can go.
+		b.settings.calibration = { catchmentAreaKm2: 20 } as never;
+		expect(one({ op: 'node.remove', nodeId: 'B' }, b).problems).toEqual([]);
+	});
+
+	it('a renamed node whose name has parentheses still passes every invariant', () => {
+		// The order-invariance check sorts the name lists in warnings; a "(…)" in a name once broke that.
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'name', value: 'Farm A (upper)' });
+		expect(runModel(r.input).summary.warnings.join(' ')).toMatch(/\(Farm A \(upper\); Farm C\)/);
+		for (const seed of [1, 2, 3, 4, 5, 6]) expect(checkAll(r.input, seed)).toBeNull();
+	});
+
+	it('an op on a base that already has a structural issue still applies when it adds none', () => {
+		const b = base();
+		b.model.transfers.push({ ...b.model.transfers[0]!, id: 't9', fromNodeId: 'G' });
+		b.model.nodes[0]!.kind = 'user';
+		// The base has a transfer from a user; renaming a farm doesn't make that worse.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'name', value: 'Renamed' }, b).problems).toEqual([]);
+	});
+});
+
+describe('a dam raise', () => {
+	const series = (out: { series: RunSeries[] }, nodeId: string) =>
+		Object.fromEntries(out.series.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.values]));
+
+	it('raising A’s dam 20 % changes A and what is downstream of it, never C upstream or B beside it', () => {
+		const b = base();
+		// Nothing else couples them: no transfer (t1 would let C send more into a bigger dam) and no EWR to share.
+		b.model.transfers = [];
+		const r = applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 200_000 * 1.2 }]);
+		expect(r.problems).toEqual([]);
+		const before = runModel(b);
+		const after = runModel(r.input);
+		expect(series(after, 'C')).toEqual(series(before, 'C'));
+		expect(series(after, 'B')).toEqual(series(before, 'B'));
+		expect(series(after, 'A').dam_storage).not.toEqual(series(before, 'A').dam_storage);
+		const peak = (xs: number[]) => Math.max(...xs);
+		expect(peak(series(after, 'A').dam_storage!)).toBeGreaterThan(peak(series(before, 'A').dam_storage!));
+		expect(peak(series(after, 'A').dam_storage!)).toBeLessThanOrEqual(240_000);
+	});
+
+	it('gives identical results whatever the node order after applying (model.md §6)', () => {
+		const r = applyScenario(base(), [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 240_000 }]);
+		const a = runModel(r.input);
+		for (const seed of [1, 2, 3]) {
+			const s = runModel(scrambleOrder(r.input, seed));
+			const key = (x: RunSeries) => `${x.nodeId}|${x.key}`;
+			expect(new Map(s.series.map((x) => [key(x), x.values]))).toEqual(new Map(a.series.map((x) => [key(x), x.values])));
+		}
+	});
+});
+
+describe('classifyOp', () => {
+	const owned = ['A'];
+	const b = base();
+	const cls = (op: ScenarioOp) => classifyOp(op, owned, b);
+
+	it('the applicant’s own dam, crops, transfers and land cover are the proposal', () => {
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 })).toBe('proposal');
+		expect(cls({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 })).toBe('proposal');
+		expect(cls({ op: 'crop.add', crop: { id: 'x', name: 'x', cropFactor: new Array(12).fill(1) } })).toBe('proposal');
+		expect(cls({ op: 'landCover.add', patch: { id: 'p', nodeId: 'A', coverClass: 'pine', areaKm2: 1, densityPct: 1, factors: null } })).toBe('proposal');
+		expect(classifyOp({ op: 'transfer.remove', transferId: 't1' }, ['A', 'C'], b)).toBe('proposal');
+	});
+
+	it('settings, series, other parties’ nodes and the own farm’s land and flow share are baseline', () => {
+		expect(cls({ op: 'settings.set', path: 'lakeEvapFactor', value: 0.5 })).toBe('baseline');
+		expect(cls({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('baseline');
+		expect(cls({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 1 })).toBe('baseline');
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 9 })).toBe('baseline');
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.9 })).toBe('baseline');
+		expect(cls({ op: 'landCover.remove', patchId: 'lc1' })).toBe('baseline');
+		// t1 runs C → A: it touches C, which A's owner doesn't own.
+		expect(cls({ op: 'transfer.set', transferId: 't1', field: 'enabled', value: false })).toBe('baseline');
+		expect(classifyOp({ op: 'transfer.set', transferId: 't1', field: 'fromNodeId', value: 'B' }, ['A', 'C'], b)).toBe('baseline');
+	});
+
+	it('new nodes: a pump or dam without land is a proposal, a gauge or new land is baseline', () => {
+		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		expect(cls({ op: 'node.add', node: pump })).toBe('proposal');
+		expect(cls({ op: 'node.add', node: { ...pump, areaKm2: 1 } })).toBe('baseline');
+		expect(cls({ op: 'node.add', node: { ...pump, kind: 'gauge' } })).toBe('baseline');
+		expect(cls({ op: 'node.add', node: { ...pump, flowShareManual: 0.9 } })).toBe('baseline');
+	});
+
+	it('removing a node needs the input, and is baseline for land or a gauge', () => {
+		const noLand = base();
+		Object.assign(nodeOf(noLand, 'A')!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		noLand.settings.ewrRules = [blankEwrRuleTable('G')];
+		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, noLand)).toBe('proposal');
+		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned)).toBe('baseline');
+		expect(cls({ op: 'node.remove', nodeId: 'A' })).toBe('baseline');
+		// A (land-free) still hosts an EWR rule table, which the removal drops.
+		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, { ...noLand, settings: { ...noLand.settings, ewrRules: [blankEwrRuleTable('A')] } })).toBe('baseline');
+		Object.assign(nodeOf(noLand, 'A')!, { flowShareManual: 0.3 });
+		expect(classifyOp({ op: 'node.remove', nodeId: 'A' }, owned, noLand)).toBe('baseline');
+	});
+
+	it('classifyScenario counts nodes the scenario added as owned', () => {
+		const pump = node('N', { downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, damCapacityM3: 1000 });
+		const ops: ScenarioOp[] = [
+			{ op: 'node.add', node: pump },
+			{ op: 'node.set', nodeId: 'N', field: 'damCapacityM3', value: 2000 },
+			{ op: 'transfer.add', transfer: { id: 't2', fromNodeId: 'N', toNodeId: 'A', months: [1], maxRateM3s: 0.1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 } },
+			{ op: 'transfer.set', transferId: 't2', field: 'maxRateM3s', value: 0.2 },
+			{ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 1 }
+		];
+		expect(classifyScenario(base(), ops, owned)).toEqual(['proposal', 'proposal', 'proposal', 'proposal', 'baseline']);
+	});
+});
+
+describe('validateScenarioOps', () => {
+	it('accepts every op kind and rebuilds it from known fields only', () => {
+		const raw = [
+			{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1, extra: 'dropped' },
+			{ op: 'node.add', node: { ...node('N', { downstreamNodeId: 'A' }), junk: 1 } },
+			{ op: 'node.remove', nodeId: 'A' },
+			{ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 0 },
+			{ op: 'crop.add', crop: { id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.7) } },
+			{ op: 'transfer.add', transfer: { id: 't2', fromNodeId: 'A', toNodeId: 'B', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 } },
+			{ op: 'transfer.set', transferId: 't1', field: 'dailyCapM3', value: null },
+			{ op: 'transfer.remove', transferId: 't1' },
+			{ op: 'landCover.add', patch: { id: 'p', nodeId: 'A', coverClass: 'pine', areaKm2: 1, densityPct: 1, factors: { mar: 0.1, lowFlow: 0.2 } } },
+			{ op: 'landCover.remove', patchId: 'lc1' },
+			{ op: 'settings.set', path: 'reportStart', value: null },
+			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2021-01-01', to: '2021-12-31' }
+		];
+		const { ops, errors } = validateScenarioOps(raw);
+		expect(errors).toEqual([]);
+		expect(ops).toHaveLength(raw.length);
+		expect(ops[0]).toEqual({ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 });
+		expect('junk' in (ops[1] as { node: object }).node).toBe(false);
+	});
+
+	it('names every error by path and drops the bad entries', () => {
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: 'kind', value: 'gauge' },
+			{ op: 'node.set', nodeId: 'A', field: 'damMinPct', value: 2 },
+			{ op: 'settings.set', path: 'simulationStart', value: '2021-02-30' },
+			{ op: 'series.scale', kind: 'flow_observed_m3s', factor: 1 },
+			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 11, from: '2022-01-01', to: '2021-01-01' },
+			{ op: 'crop.add', crop: { id: 'c', name: '', cropFactor: [1] } },
+			{ op: 'teleport' },
+			'node.remove',
+			{ op: 'node.remove', nodeId: 'A' }
+		]);
+		expect(ops).toEqual([{ op: 'node.remove', nodeId: 'A' }]);
+		expect(errors).toEqual([
+			'ops[0].field: is not a node field a scenario can set',
+			'ops[1].value: must be at most 1',
+			'ops[2].value: must be an ISO date (YYYY-MM-DD)',
+			'ops[3].kind: must be one of rain_catchment_mm, rain_chirps_mm, rain_forecast_mm',
+			'ops[4].factor: must be at most 10',
+			'ops[4]: from 2022-01-01 is after to 2021-01-01',
+			'ops[5].crop.name: must be a name of 1–100 characters',
+			'ops[5].crop.cropFactor: must be 12 crop factors ≥ 0',
+			expect.stringMatching(/^ops\[6\]\.op: must be one of node\.set/),
+			'ops[7]: must be an object'
+		]);
+	});
+
+	it('rejects a non-list and an over-long list', () => {
+		expect(validateScenarioOps({}).errors).toEqual(['ops: must be a list']);
+		expect(validateScenarioOps(new Array(501).fill({ op: 'node.remove', nodeId: 'A' })).errors[0]).toMatch(/at most 500/);
+	});
+});
