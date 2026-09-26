@@ -101,3 +101,38 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 	if (visible.includes(open) || !rendered.includes(open)) return [...visible];
 	return rendered.filter((id) => id === open || visible.includes(id));
 }
+
+/**
+ * The sidebar's sections (issue #17, option A · Results first): what the
+ * model produced first, then what it's made of, then the review work. Purely
+ * layout: which tabs a role sees is still `visibleTabs`, and the URLs stay
+ * `?tab=<id>`.
+ */
+export const NAV_SECTIONS = [
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] },
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+	{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
+] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
+
+export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];
+
+export interface NavSection<T extends string> {
+	id: NavSectionId;
+	label: string;
+	tabs: T[];
+}
+
+/**
+ * `shown` split into the sidebar's sections, in section order and, inside a
+ * section, in `NAV_SECTIONS` order. Empty sections are dropped. A tab no
+ * section lists goes at the end of "Build the model", as `groupOf` counts an
+ * unknown tab as an input.
+ */
+export function navSections<T extends string>(shown: readonly T[]): NavSection<T>[] {
+	const known = new Set<string>(NAV_SECTIONS.flatMap((s) => s.tabs));
+	return NAV_SECTIONS.map((s) => {
+		const listed = (s.tabs as readonly string[]).filter((id) => shown.includes(id as T)) as T[];
+		const extra = s.id === 'model' ? shown.filter((id) => !known.has(id)) : [];
+		return { id: s.id, label: s.label, tabs: [...listed, ...extra] };
+	}).filter((s) => s.tabs.length > 0);
+}

@@ -2517,10 +2517,10 @@ research on issue #1 found exactly this: its gauge column is a neighbouring
 river's gauge (area-scaled for part of the record), and the logger's magnitude
 is verified against independent field gaugings, so the **logger is the
 calibration target**, which is also what the workbook and the imported settings
-already use. This is **pending the hydrologist's sign-off**, now put to them
-as a confirmation with three follow-on questions (rating, area, the short
-record) rather than an open choice between records
-([plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
+already use. **Decided** (issue #1, closed 2026-09-25): the operator assumed
+the hydrologist's agreement, which is not yet in writing; reopen #1 if they
+disagree. Three follow-on questions stay open (rating, area, the short
+record; [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
 logger: high flows above the highest field gauging come from an extrapolated
 rating curve, so peak days and wet-season volumes are uncertain, and the record
 is short and mostly dry, so wet-year behaviour is weakly constrained.
@@ -3089,8 +3089,8 @@ On the client catchment the two records roughly agree in the early shared
 years, then several consecutive years fall far below the lower limit and are
 flagged (figures in the private source repo). Here the records are two different rivers, so the
 flag is expected and is not evidence of a fault in either; the logger is the
-calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and the
-first hydrologist question in
+calibration target (decided in issue #1; the hydrologist's agreement is
+assumed, not yet in writing; §2.10 and the first hydrologist question in
 [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
