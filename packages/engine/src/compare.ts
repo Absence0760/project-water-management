@@ -515,6 +515,16 @@ function monthlyChange(a: unknown, b: unknown, unit: string): string | null {
 	return `changed in ${changed.length} months`;
 }
 
+/** A monthly row that may be absent (null = off): set or cleared reads as the whole row, Oct–Sep; otherwise as monthlyChange. */
+function optionalMonthlyChange(a: unknown, b: unknown, unit: string, none: string): string | null {
+	const has = (x: unknown) => Array.isArray(x) && x.length > 0;
+	const row = (x: unknown) => `${(x as unknown[]).map((v) => fmtValue(v)).join(', ')}${unit ? ` ${unit}` : ''} (Oct–Sep)`;
+	if (!has(a) && !has(b)) return null;
+	if (!has(a)) return `${none} → ${row(b)}`;
+	if (!has(b)) return `${row(a)} → ${none}`;
+	return monthlyChange(a, b, unit);
+}
+
 function arrayChange(a: unknown, b: unknown): string {
 	const xa = Array.isArray(a) ? a : [];
 	const xb = Array.isArray(b) ? b : [];
@@ -686,6 +696,9 @@ function diffSettings(
 		const c = monthlyChange(a[k], b[k], f.unit);
 		if (c) push(f.label, `${f.label}: ${c}`);
 	}
+	// Monthly lake factors (WP-3.5); null = the one factor in every month.
+	const lk = optionalMonthlyChange(a.lakeEvapFactorMonthly, b.lakeEvapFactorMonthly, '', 'the one factor');
+	if (lk) push('Monthly dam evaporation factors', `Monthly dam evaporation factors: ${lk}`);
 	const pe = peChange(a.pe, b.pe);
 	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
@@ -747,7 +760,8 @@ function diffSettings(
 		'calibrationExclusions',
 		'zeroRainRuns',
 		'fitRecord',
-		'pe'
+		'pe',
+		'lakeEvapFactorMonthly'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -947,7 +961,11 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['boreholeRule', 'borehole rule', plain],
 	['boreholeTriggerPct', 'borehole drought trigger', pct],
 	['streamDepletionFrac', 'stream depletion share', pct],
-	['streamDepletionLagDays', 'stream depletion lag', withUnit('days')]
+	['streamDepletionLagDays', 'stream depletion lag', withUnit('days')],
+	// Dam storage (WP-3.5); the curve and the monthly release are diffed below.
+	['damReleaseRule', 'dam release rule', (v) => (v === 'passInflow' ? 'pass inflow' : v === 'fixed' ? 'fixed' : 'none')],
+	['damOutletCapacityM3Day', 'dam outlet capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
+	['damSeepageReturnPct', 'share of dam seepage returning', pct]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
@@ -990,6 +1008,13 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.kind === 'user' || y.kind === 'user') {
 			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
 			if (d) parts.push(`demand ${d}`);
+		}
+		// Dam storage (WP-3.5).
+		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
+		if (rel) parts.push(`dam release ${rel}`);
+		if (!same(x.damCurve ?? null, y.damCurve ?? null)) {
+			const rows = (c: typeof x.damCurve) => (c && c.length ? `${c.length} rows` : 'none (power law)');
+			parts.push(`dam survey curve ${rows(x.damCurve)} → ${rows(y.damCurve)}${x.damCurve?.length && y.damCurve?.length ? ' (values changed)' : ''}`);
 		}
 		const da = na.node(x.downstreamNodeId);
 		const db = nb.node(y.downstreamNodeId);

@@ -232,6 +232,14 @@ export interface ProjectSettings {
 	 * 0 = no dam evaporation.
 	 */
 	lakeEvapFactor: number;
+	/**
+	 * Monthly lake-evaporation factors, × A-pan per water-year month (Oct–Sep)
+	 * (engine ≥ 0.32.0, WP-3.5, docs/model.md §2.7a). null / absent = the one
+	 * `lakeEvapFactor` in every month. Open water lags the pan through the
+	 * seasons (a deep dam stores heat in autumn and evaporates relative to the
+	 * pan more in winter), which one factor can't show.
+	 */
+	lakeEvapFactorMonthly?: Monthly | null;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -645,6 +653,31 @@ export interface NetworkNode {
 	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
 	damSeepagePerDay: number;
 	/**
+	 * Dam survey curve (engine ≥ 0.32.0, WP-3.5, docs/model.md §2.7a): level,
+	 * area and volume rows, as on the DWS dam technical data form (DW789).
+	 * With two or more rows the dam's surface area on a day is interpolated
+	 * linearly in volume and replaces the power law (damAreaFullM2,
+	 * damAreaExponent). null / absent = the power law.
+	 */
+	damCurve?: DamCurvePoint[] | null;
+	/** Release rule from the dam, before irrigation (WP-3.5). Default 'none'. */
+	damReleaseRule?: DamReleaseRule;
+	/**
+	 * m³/day per water-year month (Oct–Sep) for the release rule: the release
+	 * under 'fixed', the flow to keep below the dam under 'passInflow'. null =
+	 * under 'passInflow', the EWR required at this node (its own and upstream
+	 * shares); under 'fixed', no release.
+	 */
+	damReleaseM3Day?: number[] | null;
+	/** Most the dam's outlet can release per day (m³/day); null / absent = no limit (WP-3.5). */
+	damOutletCapacityM3Day?: number | null;
+	/**
+	 * Share (0–1) of the dam's seepage that returns to the river below the
+	 * dam the same day (WP-3.5); the rest is lost from the catchment (to deep
+	 * groundwater). Default 1, every engine before 0.32.0.
+	 */
+	damSeepageReturnPct?: number;
+	/**
 	 * kind 'user' only (engine ≥ 0.22.0, WP-1.33): demand from the river, m³/day
 	 * per water-year month (Oct–Sep). null / absent = no demand.
 	 */
@@ -689,6 +722,36 @@ export const BOREHOLE_DEFAULTS = {
 
 /** What a user node without the fields runs as (WP-1.33). */
 export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
+
+/** One row of a dam's survey curve (WP-3.5): water level (m), surface area (m²) and volume stored (m³) at that level. */
+export interface DamCurvePoint {
+	levelM: number;
+	areaM2: number;
+	volumeM3: number;
+}
+
+/**
+ * How a dam releases water below its wall before irrigation (WP-3.5,
+ * docs/model.md §2.7a):
+ * 'none' — no release;
+ * 'passInflow' — pass today's inflow to the dam, up to what the river below
+ *   the dam still needs (a compensation or EWR flow), capped by the outlet;
+ * 'fixed' — release a fixed m³/day by month from storage above dead storage, capped by the outlet.
+ */
+export const DAM_RELEASE_RULES = ['none', 'passInflow', 'fixed'] as const;
+export type DamReleaseRule = (typeof DAM_RELEASE_RULES)[number];
+
+/** What a node without the WP-3.5 dam fields runs as: the power law, no release, all seepage returning. */
+export const DAM_STORAGE_DEFAULTS = {
+	damCurve: null,
+	damReleaseRule: 'none',
+	damReleaseM3Day: null,
+	damOutletCapacityM3Day: null,
+	damSeepageReturnPct: 1
+} as const;
+
+/** Most rows a dam survey curve may have. */
+export const DAM_CURVE_MAX_ROWS = 200;
 
 /** Default exponent of the dam area–storage relation (Liebe et al. 2005). */
 export const DAM_AREA_EXPONENT = 0.7;
@@ -763,6 +826,12 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				n.boreholeTriggerPct ??= BOREHOLE_DEFAULTS.boreholeTriggerPct;
 				n.streamDepletionFrac ??= BOREHOLE_DEFAULTS.streamDepletionFrac;
 				n.streamDepletionLagDays ??= BOREHOLE_DEFAULTS.streamDepletionLagDays;
+				// Dam curve, releases and seepage destination (WP-3.5): off unless set.
+				if (n.damCurve === undefined) n.damCurve = DAM_STORAGE_DEFAULTS.damCurve;
+				n.damReleaseRule ??= DAM_STORAGE_DEFAULTS.damReleaseRule;
+				if (n.damReleaseM3Day === undefined) n.damReleaseM3Day = DAM_STORAGE_DEFAULTS.damReleaseM3Day;
+				if (n.damOutletCapacityM3Day === undefined) n.damOutletCapacityM3Day = DAM_STORAGE_DEFAULTS.damOutletCapacityM3Day;
+				n.damSeepageReturnPct ??= DAM_STORAGE_DEFAULTS.damSeepageReturnPct;
 				return n;
 			})
 		: model.nodes;
@@ -1517,10 +1586,14 @@ export interface WaterBalanceRow {
 	streamDepletionM3?: number;
 	/** Runoff removed by land cover before it reached the farms (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
 	landCoverReductionM3?: number;
+	/** Dam seepage lost from the catchment rather than returned below the dam (engine ≥ 0.32.0, WP-3.5); absent when all seepage returns. */
+	damSeepageLostM3?: number;
+	/** Released below the dams before irrigation (WP-3.5); part of the outflow, shown for information. Absent without a release rule. */
+	damReleaseM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater − consumptive use − dam evaporation − other use − stream depletion − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater − consumptive use − dam evaporation − other use − stream depletion − seepage lost − outflow − closing. */
 	residualM3: number;
 }
 

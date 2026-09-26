@@ -5,7 +5,7 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, LAND_COVER_CLASSES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, LAND_COVER_CLASSES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
@@ -35,6 +35,12 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			return g.pick([null, 0, g.logFloat(1, 1e5)]);
 		case 'boreholeRule':
 			return g.pick(BOREHOLE_RULES);
+		case 'damReleaseRule':
+			return g.pick(DAM_RELEASE_RULES);
+		case 'damReleaseM3Day':
+			return g.bool(0.3) ? null : monthly(g, () => (g.bool(0.2) ? 0 : g.float(0, 1e4)));
+		case 'damOutletCapacityM3Day':
+			return g.pick([null, 0, g.logFloat(1, 1e5)]);
 		case 'streamDepletionLagDays':
 			return g.pick([0, g.float(0, 30)]);
 		case 'userDemandM3Day':

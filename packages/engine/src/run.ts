@@ -60,6 +60,7 @@ import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf } from './network/boreholes';
+import { damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -102,7 +103,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.31.1';
+export const ENGINE_VERSION = '0.32.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -356,6 +357,9 @@ function runNetwork(
 		if (!w) return;
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
+		// Dam releases and seepage lost from the catchment (WP-3.5): only on a dam that has them.
+		if (plan.nodes[i]!.release) push(node.id, 'dam_release', 'Released below the dam (before irrigation; joins the outflow)', 'm³/day', w.damRelease);
+		if (plan.nodes[i]!.seepageReturn !== undefined) push(node.id, 'dam_seepage_lost', 'Dam seepage lost from the catchment (the rest joins the outflow)', 'm³/day', w.damSeepageLost);
 		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
 		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
 		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
@@ -634,7 +638,7 @@ function runPlausibility(r: {
 		const q = sim.nodes[i]!.storage;
 		let prev = plan.nodes[i]!.initialStorageM3;
 		for (let t = 0; t < days; t++) {
-			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]!;
+			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
 			prev = q[t]!;
 		}
 	}
@@ -885,13 +889,21 @@ export function buildNetworkPlan(
 	// surface is the day's rain before any threshold (missing = 0).
 	const monthDays = daysPerMonth(settings.februaryDays);
 	const lakeEvapMmDay = new Float64Array(days);
+	// Monthly lake factors (WP-3.5), when set, replace the one factor month by month.
+	const lakeK = settings.lakeEvapFactorMonthly;
 	for (let t = 0; t < days; t++) {
 		const m = waterYearIndex(month[t]!);
-		lakeEvapMmDay[t] = (settings.lakeEvapFactor * settings.apanMm[m]!) / monthDays[m]!;
+		lakeEvapMmDay[t] = ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
 	}
 	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
-	const estimated = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0 && (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined));
+	// A dam with a survey curve (WP-3.5) takes its area from it; one the run can't use says why and runs on the power law.
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) continue;
+		const bad = damCurveProblem(n.damCurve);
+		if (bad) warnings.push(`farm "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
+	}
+	const estimated = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0 && (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined) && !resolveDamCurve(n));
 	if (estimated.length) {
 		warnings.push(
 			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
@@ -929,6 +941,7 @@ export function buildNetworkPlan(
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings),
 				...damLosses(n, warnings),
+				...damStorage(n, warnings),
 				demand: u?.demand ?? demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
@@ -1131,6 +1144,20 @@ function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number;
 	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;
 	if (seep !== s) warnings.push(`farm "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
 	return { damAreaFullM2: area, damAreaExponent: b, damSeepagePerDay: seep };
+}
+
+/**
+ * A dam's survey curve, release rule and seepage destination (WP-3.5,
+ * ./network/dam.ts). Only the fields that are on: a node with the defaults
+ * gets none, and runs exactly as before.
+ */
+function damStorage(n: NetworkNode, warnings: string[]): { damCurve?: DamCurve; release?: PlanRelease; seepageReturn?: number } {
+	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return {};
+	const curve = resolveDamCurve(n);
+	const release = resolveRelease(n, warnings);
+	const ret = seepageReturnOf(n);
+	if (n.damSeepageReturnPct !== undefined && ret !== n.damSeepageReturnPct) warnings.push(`farm "${n.name}": seepage return ${String(n.damSeepageReturnPct)} is not in [0, 1]; using ${ret}`);
+	return { ...(curve ? { damCurve: curve } : {}), ...(release ? { release } : {}), ...(ret < 1 ? { seepageReturn: ret } : {}) };
 }
 
 /**
@@ -1472,6 +1499,14 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
 		warnings.push(`dam evaporation factor "${String(s.lakeEvapFactor)}" is not a number ≥ 0; using ${d.lakeEvapFactor}`);
 		s.lakeEvapFactor = d.lakeEvapFactor;
+	}
+	// Monthly lake factors (WP-3.5): 12 numbers ≥ 0, or none.
+	if (s.lakeEvapFactorMonthly != null) {
+		const k = s.lakeEvapFactorMonthly;
+		if (!Array.isArray(k) || k.length !== 12 || !k.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0)) {
+			warnings.push(`monthly dam evaporation factors should be 12 numbers ≥ 0; using ${s.lakeEvapFactor} in every month`);
+			s.lakeEvapFactorMonthly = null;
+		}
 	}
 	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
 		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);

@@ -9,6 +9,7 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf } from '../network/boreholes';
+import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
@@ -26,7 +27,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * - routed inflow = Σ upstream outflow (gauges pass it through);
  * - farm balance H + I + J + rain on dam + Q[t−1] = U + G − T + evaporation
  *   + Q (T = return flow β·(1 − e)·G, audit N1; rain on the dam and
- *   evaporation from it, audit N2; seepage is part of U), each loss ≥ 0;
+ *   evaporation from it, audit N2; seepage is part of U, less the share lost
+ *   from the catchment, WP-3.5, which is a loss here), each loss ≥ 0;
  * - 0 ≤ storage ≤ capacity, spill only from a full dam, 0 ≤ supplied ≤ demand,
  *   deficit = demand − supplied, EWR shortfall = MIN(U − Z, 0) ≤ 0;
  * - transfers net to zero across farms each day;
@@ -89,6 +91,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
 		const Sp = get.get(`${n.id}|dam_seepage`);
+		// Seepage lost from the catchment (WP-3.5): present only when a share of it is.
+		const SPL = get.get(`${n.id}|dam_seepage_lost`);
 		// Boreholes (WP-1.34): groundwater comes in with the supply, stream depletion leaves with the river.
 		const GW = get.get(`${n.id}|groundwater_used`);
 		const DEP = get.get(`${n.id}|baseflow_depletion`);
@@ -98,10 +102,12 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const ev = Ev?.[t] ?? 0;
 			const gw = GW?.[t] ?? 0;
 			const dep = DEP?.[t] ?? 0;
+			const spl = SPL?.[t] ?? 0;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
+			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
 			if (Q![t]! < -1e-9 || Q![t]! > cap + 1e-9) return `${where}: storage ${Q![t]} outside [0, ${cap}]`;
 			if (R![t]! < 0 || (R![t]! > 0 && Math.abs(Q![t]! - cap) > 1e-9)) return `${where}: spill ${R![t]} with storage ${Q![t]}/${cap}`;
@@ -121,7 +127,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
 			totIn += I![t]! + pd + gw;
-			totOut += G![t]! - T + ev + dep;
+			totOut += G![t]! - T + ev + dep + spl;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -579,15 +585,23 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
  * - the dam's surface A = A_full × (Q[t−1] / capacity)^b (A_full as entered,
- *   or capacity ÷ 3 m); rain on it Pd = rain × A / 1000; evaporation
- *   E = MIN(lake factor × A-pan ÷ days in month × A / 1000, Q[t−1] + Pd + J),
- *   and for b > 1 also ≤ (1 − seepage) × Q[t−1] / b (engine 0.21.1);
+ *   or capacity ÷ 3 m), or linear in the survey curve when there is one
+ *   (WP-3.5); rain on it Pd = rain × A / 1000; evaporation
+ *   E = MIN(lake factor (that month's, when monthly) × A-pan ÷ days in month
+ *   × A / 1000, Q[t−1] + Pd + J), and for b > 1 also ≤ (1 − seepage) ×
+ *   Q[t−1] / b (engine 0.21.1; a curve's local b = Q·A′/A);
  *   seepage Sp = MIN(seepage × Q[t−1], Q[t−1] + Pd + J − E) (audit N2), and
  *   S0 = Q[t−1] + Pd − E − Sp is what the day starts from;
- * - G = MIN(MAX(S0 + M + O + K + J − dead storage, 0), D): irrigation
+ * - the release (WP-3.5) X ≤ the outlet: under pass inflow X = MIN(K + M + O,
+ *   required below the dam − S, outlet, S0 + M + O + K + J), the requirement
+ *   being the rule's monthly amount or the EWR required at the node (Z);
+ *   under fixed X = MIN(the month's amount, outlet, S0 + M + O + K + J −
+ *   dead storage), never < 0; no rule, no release column;
+ * - G = MIN(MAX(S0 + M + O + K + J − X − dead storage, 0), D): irrigation
  *   takes what is above the minimum operating level, up to demand (Q5);
- * - P = S0 + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
- * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T + Sp;
+ * - P = S0 + M + O + K + J − X − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
+ * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T + returned seepage + X,
+ *   returned seepage = Sp × the seepage return share (WP-3.5), the rest lost;
  * - V is the recomputed balance residual and is float noise.
  */
 export function checkWorkings(input: ModelInput, out: ModelOutput): string | null {
@@ -596,13 +610,16 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	const d0 = defaultProjectSettings();
 	const st = input.settings ?? {};
 	const lakeK = typeof st.lakeEvapFactor === 'number' && Number.isFinite(st.lakeEvapFactor) && st.lakeEvapFactor >= 0 ? st.lakeEvapFactor : d0.lakeEvapFactor;
+	// Monthly lake factors (WP-3.5): used only when all twelve are numbers ≥ 0, as runModel does.
+	const lakeM = st.lakeEvapFactorMonthly;
+	const lakeMonthly = Array.isArray(lakeM) && lakeM.length === 12 && lakeM.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) ? lakeM : null;
 	const feb = typeof st.februaryDays === 'number' ? st.februaryDays : d0.februaryDays;
 	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)) : [...d0.apanMm];
 	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
 	const day0 = toEpochDay(out.startDate);
 	const evapMmDay = Array.from({ length: out.days }, (_, t) => {
 		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
-		return (lakeK * (apan[wy] ?? 0)) / monthLen[wy]!;
+		return ((lakeMonthly ? lakeMonthly[wy]! : lakeK) * (apan[wy] ?? 0)) / monthLen[wy]!;
 	});
 	const rainFinal = get.get('null|rain_final');
 	const damRain = (t: number) => {
@@ -630,6 +647,16 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream node has no senior_requirement series`;
 		// The dam's area–storage relation, as runModel resolves it (audit N2).
 		const areaFull = n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0;
+		// Survey curve, release and seepage destination (WP-3.5).
+		const curve = n.damCapacityM3 > 0 ? resolveDamCurve(n) : null;
+		const rel = resolveRelease(n, []);
+		const REL = g('dam_release');
+		const SPL = g('dam_seepage_lost');
+		// A farm without a dam has no seepage to split (runModel ignores the share there).
+		const seepRet = n.damCapacityM3 > 0 ? seepageReturnOf(n) : 1;
+		if (!!rel !== !!REL) return `${n.id}: dam_release column ${REL ? 'without' : 'missing for'} a release rule`;
+		if ((seepRet < 1) !== !!SPL) return `${n.id}: dam_seepage_lost column ${SPL ? 'with all seepage returning' : 'missing'}`;
+		const Zc = g('ewr_cumulative')!;
 		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
 		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
 		const e = n.irrigationEfficiency;
@@ -649,19 +676,40 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
 			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
-			const a = cap > 0 && qPrev > 0 ? areaFull * Math.pow(Math.min(qPrev / cap, 1), b) : 0;
-			if (!near(area, a, a)) return `${where}: dam area ${area} ≠ A_full ${areaFull} × (Q[t−1] ${qPrev} / capacity ${cap})^${b}`;
+			const onCurve = curve && cap > 0 && qPrev > 0 ? curveAreaAt(curve, qPrev) : null;
+			const a = !(cap > 0 && qPrev > 0) ? 0 : onCurve ? onCurve.area : areaFull * Math.pow(Math.min(qPrev / cap, 1), b);
+			if (!near(area, a, a)) return `${where}: dam area ${area} ≠ ${onCurve ? 'the survey curve at' : `A_full ${areaFull} × (`}Q[t−1] ${qPrev}${onCurve ? '' : ` / capacity ${cap})^${b}`}`;
 			const pdWant = (damRain(t) * a) / 1000;
 			const there = Math.max(qPrev + pdWant + j, 0);
 			const evRaw = (evapMmDay[t]! * a) / 1000;
-			const evWant = Math.min(b > 1 ? Math.min(evRaw, ((1 - seep) * qPrev) / b) : evRaw, there);
+			const limited = onCurve
+				? a > 0 && qPrev * onCurve.slope > a
+					? Math.min(evRaw, ((1 - seep) * a) / onCurve.slope)
+					: evRaw
+				: b > 1
+					? Math.min(evRaw, ((1 - seep) * qPrev) / b)
+					: evRaw;
+			const evWant = Math.min(limited, there);
 			const spWant = Math.min(seep * qPrev, there - evWant);
 			if (!near(pd, pdWant, qPrev) || !near(ev, evWant, qPrev) || !near(sp, spWant, qPrev))
 				return `${where}: rain on dam ${pd} / evaporation ${ev} / seepage ${sp} ≠ ${pdWant} / ${evWant} / ${spWant}`;
 			const s0 = qPrev + pd - ev - sp;
 			if (s0 + j < -tol(qPrev)) return `${where}: the dam losses and transfers take it below empty (${s0 + j})`;
-			const avail = s0 + m + o + k + j;
+			const avail0 = s0 + m + o + k + j;
 			const availScale = Math.max(Math.abs(qPrev), pd, ev, sp, m, o, k, Math.abs(j), dead, d);
+			// Release (WP-3.5), before irrigation.
+			const x = REL?.[t] ?? 0;
+			if (rel) {
+				const month = monthOfEpochDay(day0 + t);
+				const passing = l + nn - o;
+				const want =
+					rel.rule === 1
+						? Math.max(0, Math.min(m + o + k, (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) - passing, rel.outletM3Day, Math.max(avail0, 0)))
+						: Math.max(0, Math.min(rel.m3DayByMonth![month]!, rel.outletM3Day, Math.max(avail0, 0) - dead));
+				if (x < 0 || x > rel.outletM3Day + tol(x)) return `${where}: release ${x} outside [0, outlet ${rel.outletM3Day}]`;
+				if (!near(x, want, availScale)) return `${where}: release ${x} ≠ ${want} (${rel.rule === 1 ? 'pass inflow' : 'fixed'} rule)`;
+			}
+			const avail = avail0 - x;
 			const surface = Math.max(avail - dead, 0);
 			const gw = GW?.[t] ?? 0;
 			const dep = DEP?.[t] ?? 0;
@@ -689,8 +737,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (pass < -tol(0) || (zs === 0 && pass !== 0)) return `${where}: kept back ${pass} for a senior requirement of ${zs}`;
 			}
 			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
-			if (!near(u, r + ss + tt + sp - dep, Math.max(r, ss, tt, sp))) return `${where}: outflow ${u} ≠ R + S + T + seepage${bore ? ' − stream depletion' : ''}`;
-			const vv = h + i + j + pd + gw - (gg - tt) - ev - (q - qPrev) - u - dep;
+			const spl = SPL?.[t] ?? 0;
+			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
+			if (!near(u, r + ss + tt + (sp - spl) + x - dep, Math.max(r, ss, tt, sp, x))) return `${where}: outflow ${u} ≠ R + S + T + returned seepage${rel ? ' + release' : ''}${bore ? ' − stream depletion' : ''}`;
+			const vv = h + i + j + pd + gw - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
 			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
