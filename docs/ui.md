@@ -1099,7 +1099,7 @@ the workbook…", with **Cancel**, which stops at once and saves nothing. A
 failed fetch shows "Workbook failed: …" with the server's reason (a `413`
 included) in the menu's status line. The phone layout keeps the same menu and
 progress, wrapped under the button. Leaving the tab stops an export still
-running. SheetJS loads only then, in a worker, never with the page.
+running. The workbook code loads only then, in a worker, never with the page.
 
 ## Settings & calibration
 

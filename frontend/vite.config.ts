@@ -51,8 +51,40 @@ function autocalWorkerChunk(): Plugin {
 	};
 }
 
+/**
+ * The engine is pure (no I/O, and no module does anything when it loads:
+ * src/lib/engineSideEffects.test.ts guards that), so an engine module whose
+ * exports a chunk doesn't use is no dependency of that chunk. Without this,
+ * Rollup keeps every engine module a chunk reaches through the
+ * `@water-management/engine` barrel "in case it has side effects".
+ */
+const engineIsPure = (id: string) => !id.includes('/packages/engine/src/');
+
+/**
+ * Svelte's runtime in one chunk of its own (issue #9). Left to Rollup, the
+ * runtime was cut into ~15 chunks by which pages use which piece (snippets,
+ * `bind:this`, `<svelte:head>`, stores…), several under 0.5 KB gzip, with the
+ * largest part merged into an app chunk; every component chunk then imported
+ * a long list of runtime names from several files. One chunk: total −12 KB
+ * and every page's first load 3–6 KB lighter, although a page now also gets
+ * the few runtime pieces it doesn't use. The chunk imports nothing, so it
+ * can't join an import cycle. src/lib/svelteRuntimeChunk.test.ts checks this
+ * rule stays in place.
+ */
+export function svelteRuntimeChunk(id: string): string | undefined {
+	return /\/node_modules\/svelte\/src\//.test(id) && !id.includes('/svelte/src/compiler/') ? 'svelte' : undefined;
+}
+
 export default defineConfig({
 	plugins: [autocalWorkerChunk(), sveltekit()],
+	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
+	// builds that don't read build.rollupOptions, so they need the same
+	// treeshake rule: without it the import worker kept engine code it never
+	// calls (scenario ops, fit provenance) because it reaches those modules
+	// through the barrel: 26.6 → 25.9 KB gzip (issue #9).
+	worker: {
+		rollupOptions: { treeshake: { moduleSideEffects: engineIsPure } }
+	},
 	build: {
 		// Ship ES2022 as written. Vite's default target ('modules': Safari 14,
 		// Chrome 87) down-levels class fields, and Svelte 5's runtime and
@@ -63,18 +95,14 @@ export default defineConfig({
 		// the page build.
 		target: 'es2022',
 		rollupOptions: {
+			output: { manualChunks: svelteRuntimeChunk },
 			treeshake: {
-				// The engine is pure (no I/O, and no module does anything when it
-				// loads: src/lib/engineSideEffects.test.ts guards that), so an
-				// engine module whose exports a chunk doesn't use is no dependency
-				// of that chunk. Without this, Rollup keeps every engine module a
-				// page reaches through the `@water-management/engine` barrel as a
-				// dependency "in case it has side effects", and groups engine code
-				// by those phantom edges: the farm and share pages loaded ~13 KB of
-				// engine code they never call and the catchment page ~8 KB, which
-				// now loads with the Data, Settings and Runs tabs that call it
-				// (issue #9; numbers in the bundle guard's change log).
-				moduleSideEffects: (id) => !id.includes('/packages/engine/src/')
+				// See engineIsPure. Rollup otherwise groups engine code by phantom
+				// edges: the farm and share pages loaded ~13 KB of engine code they
+				// never call and the catchment page ~8 KB, which now loads with the
+				// Data, Settings and Runs tabs that call it (issue #9; numbers in
+				// the bundle guard's change log).
+				moduleSideEffects: engineIsPure
 			}
 		}
 	}

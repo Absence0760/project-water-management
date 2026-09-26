@@ -1,6 +1,6 @@
 // Starts a workbook export in a Web Worker (./export.worker.ts). The Download
-// menu imports this module dynamically, so neither it nor the worker (which
-// carries SheetJS) is in any page chunk. cancel() terminates the worker at
+// menu imports this module dynamically, so neither it nor the worker (the
+// workbook writer and its fetching, ~10 KB gzip) is in any page chunk. cancel() terminates the worker at
 // once, fetches and all; nothing is saved.
 import type { WorkbookRequest } from '$lib/export/urls';
 import type { ExportProgress } from './collect';

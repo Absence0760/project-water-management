@@ -999,6 +999,24 @@ the suggested order (the IDs carry the detail):
       no project-page component imports `lib/help` now. If PictureTour comes
       back to an app page, give it a small `id → title` map for its guide links
       first, so it stops importing `guides.ts`.
+- [x] **Win back bundle weight** (issue #9 third pass, 2026-09-26): total
+      977 → 887 KB gzip merged over main @ ed1d29a (970 → 880 on 1ded742),
+      from a per-module attribution of a sourcemapped build (numbers in the
+      bundle guard's change log). The
+      run export writes its own OOXML (`spreadsheet/export/writer.ts`, the
+      bytes SheetJS wrote, pinned by a byte-for-byte test against the old
+      path): export worker 88 → 10.5 KB. Svelte's runtime ships as one
+      chunk (`svelteRuntimeChunk`): −12 KB total and every first load 3–6 KB
+      lighter. The spreadsheet workers now get the engine treeshake rule
+      (−0.7 KB). Ceilings: total 892, spreadsheet worker 32.
+- [ ] **Bundle weight still on the table** (issue #9; measured estimates,
+      none started).
+      Component CSS repeated across files (`.small`, `.u`, `.seg .btn`,
+      `.stat dd.sub`: ~17 KB raw, an estimated 2–3 KB gzip) could move to
+      the global stylesheet, but it changes cascade order in 26 components,
+      so it needs the e2e visual pins first. The home page loads the import
+      dialog (~7.5 KB gzip) on first paint; loading it on demand would cut
+      home's first load, not the total. Trigger: the next ceiling raise.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

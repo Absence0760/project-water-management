@@ -1,9 +1,9 @@
 // A minimal zip writer for the workbook: every part deflated with the
 // platform's own `CompressionStream('deflate-raw')` (real zlib deflate, in
 // every browser the app supports, in Node and in workers). SheetJS's zip
-// writer uses a fixed-Huffman deflate in the browser, which left a
-// client-size workbook ~2.5 times larger (~100 MB vs ~41 MB). SheetJS still
-// writes every part; this only packs them.
+// writer, which the export used before ./writer.ts, uses a fixed-Huffman
+// deflate in the browser, which left a client-size workbook ~2.5 times larger
+// (~100 MB vs ~41 MB). ./writer.ts writes every part; this only packs them.
 //
 // The container is plain PKZIP as OOXML requires (ECMA-376 Part 2): local
 // file headers, the central directory and its end record; method 8 (deflate)

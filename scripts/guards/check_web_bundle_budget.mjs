@@ -37,12 +37,13 @@
 //                   the largest spreadsheet worker: `export.worker.ts` (the
 //                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
 //                   in-browser workbook import, WP-1.31) in
-//                   frontend/src/lib/spreadsheet/. The export worker carries
-//                   SheetJS, which dwarfs the engine (the import worker has
-//                   read workbooks with its own streaming reader since
-//                   2026-09-25 and is far smaller); both load only when
-//                   someone asks for a workbook, so they get a ceiling of
-//                   their own rather than lifting the calibration worker's.
+//                   frontend/src/lib/spreadsheet/. Neither carries a
+//                   spreadsheet library any more: the import reads workbooks
+//                   with its own streaming reader (since 2026-09-25) and the
+//                   export writes them with its own OOXML writer (since
+//                   2026-09-26; with SheetJS it was 88 KB). Both load only
+//                   when someone asks for a workbook, so they keep a ceiling
+//                   of their own rather than lifting the calibration worker's.
 //                   Still counted in totalCodeKb; not in largestWorkerKb.
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
@@ -694,7 +695,27 @@
 //             sign-in 71.5 → 63.0, /share 74.3 → 65.7). New measurement + 5
 //             would be 974, over the current ceiling, so it stays; headroom
 //             ~4 KB. Build-time key shortening is moot: no keys are left.
-// Run:  pnpm build:frontend && pnpm check:bundle
+// 2026-09-26  total 973 → 892 KB, spreadsheet worker 95 → 32 KB (both
+//             down). Issue #9: origin/main @ ed1d29a measured 977 KB (over
+//             973, with the i18n trim above and the WP-3.8 / #53 work);
+//             merged with this work it measures 887 KB (908 107 bytes).
+//             Found with a per-module attribution of a sourcemapped build;
+//             each step measured alone on main @ 1ded742 (970 KB): the
+//             spreadsheet workers get the engine treeshake rule (worker.
+//             rollupOptions; import worker −0.7), the run export writes its
+//             own OOXML instead of shipping SheetJS (spreadsheet/export/
+//             writer.ts, byte for byte the files SheetJS wrote; export worker
+//             88.4 → 10.5 KB, total 970 → 892) and Svelte's runtime ships as
+//             one chunk (vite.config.ts svelteRuntimeChunk; 892 → 880, and
+//             every first load 3–6 KB lighter: on the merged tree home 84.4
+//             → 81.3, a catchment 137.2 → 132.8, Runs 273.6 → 267.9, farm
+//             91.8 → 88.1, /share 65.7 → 63.2, sign-in 63.0 → 59.5). The
+//             largest spreadsheet worker is now the import's, 27 KB.
+//             Measured and rejected: experimentalMinChunkSize 2000 (−4 KB
+//             total, +1.5–4 KB on every first load) and grouping the small
+//             page-side engine modules (−2 KB total, farm +6, home +2).
+//             Headroom ~5 KB.
+// Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
@@ -704,10 +725,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 973,
+	totalCodeKb: 892,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
-	largestSpreadsheetWorkerKb: 95,
+	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 });
 
@@ -787,7 +808,7 @@ export function violations(m, budget = BUDGET) {
 	}
 	if (m.largestSpreadsheetWorker.kb > budget.largestSpreadsheetWorkerKb) {
 		out.push(
-			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. The export worker carries SheetJS (the import worker must not: it has its own reader); check a new import (or the full SheetJS build) is needed before raising the ceiling.`,
+			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. Neither spreadsheet worker carries a spreadsheet library (the import has its own reader, the export its own writer, frontend/src/lib/spreadsheet/); check a new import (above all SheetJS, ~85 KB) is needed before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
