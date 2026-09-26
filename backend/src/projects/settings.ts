@@ -422,6 +422,8 @@ export const SettingsPatch = z
 		// Open-water evaporation ÷ A-pan for the farm dams (engine N2); 2 is
 		// far above any open-water factor, 0 turns dam evaporation off.
 		lakeEvapFactor: z.number().finite().min(0).max(2),
+		// Monthly lake factors (WP-3.5), water-year months; null = lakeEvapFactor every month.
+		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

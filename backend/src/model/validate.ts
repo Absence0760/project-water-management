@@ -1,4 +1,4 @@
-import { BOREHOLE_RULES, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_RULES, DAM_CURVE_MAX_ROWS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -47,7 +47,19 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				boreholeRule: z.enum(BOREHOLE_RULES).default('supplemental'),
 				boreholeTriggerPct: frac.default(0.3),
 				streamDepletionFrac: frac.default(0),
-				streamDepletionLagDays: nonNeg.max(36_500).default(0)
+				streamDepletionLagDays: nonNeg.max(36_500).default(0),
+				// Dam storage (WP-3.5): survey rows (shape and monotonicity are a model rule,
+				// modelRuleProblems), a release rule by water-year month, the outlet, the
+				// share of seepage returning below the dam.
+				damCurve: z
+					.array(z.object({ levelM: z.number().finite(), areaM2: nonNeg, volumeM3: nonNeg }).strict())
+					.max(DAM_CURVE_MAX_ROWS)
+					.nullable()
+					.default(null),
+				damReleaseRule: z.enum(DAM_RELEASE_RULES).default('none'),
+				damReleaseM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				damOutletCapacityM3Day: nonNeg.nullable().default(null),
+				damSeepageReturnPct: frac.default(1)
 			})
 		)
 		.max(500),

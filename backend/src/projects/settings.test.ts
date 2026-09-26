@@ -736,6 +736,24 @@ describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
 	});
 });
 
+describe('SettingsPatch.lakeEvapFactorMonthly (WP-3.5)', () => {
+	const ok = (lakeEvapFactorMonthly: unknown) => SettingsPatch.safeParse({ lakeEvapFactorMonthly }).success;
+
+	it('accepts 12 factors of 0–2, or null for the one factor every month', () => {
+		expect(ok(null)).toBe(true);
+		expect(ok([0.7, 0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.75, 0.7, 0.65, 0.65, 0.7])).toBe(true);
+		expect(ok(new Array(12).fill(0))).toBe(true);
+	});
+
+	it('rejects a short row, a negative or oversized factor', () => {
+		for (const v of [[0.7], new Array(13).fill(0.7), [...new Array(11).fill(0.7), -0.1], [...new Array(11).fill(0.7), 2.5], 'monthly']) expect(ok(v), JSON.stringify(v)).toBe(false);
+	});
+
+	it('is absent for a project that never set it (the run uses lakeEvapFactor)', () => {
+		expect(mergeSettings({}).lakeEvapFactorMonthly).toBeUndefined();
+	});
+});
+
 describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 	const issues = (ewrRules: unknown) => {
 		const r = SettingsPatch.safeParse({ ewrRules });

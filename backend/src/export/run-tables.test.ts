@@ -504,6 +504,14 @@ describe('water balance block', () => {
 		expect(lines[header + 1]!.split(',').slice(1, 9)).toEqual(['365', '500', '50', '0.1', '', '', '', '']);
 	});
 
+	it('adds the dam seepage lost and release columns only when a run has them (WP-3.5)', () => {
+		const header = (w: WaterBalance) => [...waterBalanceLines(w)].find((l) => l.startsWith('Water year,'))!;
+		expect(header(wb)).not.toContain('seepage lost');
+		const withDams: WaterBalance = { ...wb, total: row(null, { damSeepageLostM3: 12, damReleaseM3: 3000 }) };
+		expect(header(withDams)).toContain('Dam seepage lost from the catchment (m³),Released below dams (part of outflow) (m³)');
+		expect([...waterBalanceLines(withDams)].at(-1)).toContain(',12,3000,');
+	});
+
 	it('says an old run has none', () => {
 		expect([...waterBalanceLines(undefined)][1]).toMatch(/before engine 0\.12\.0/);
 	});
@@ -514,7 +522,7 @@ describe('farm column guide', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
-		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)');
+		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW and Dep only with boreholes)');
 	});
 });
 
