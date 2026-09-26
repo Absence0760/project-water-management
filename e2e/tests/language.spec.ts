@@ -94,7 +94,7 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 
 test('the account page sets the language and the farm view’s volume unit', async ({ page, owner }) => {
 	await page.goto('/account');
-	await expect(page.getByRole('region', { name: 'Profile' })).toContainText(owner.email);
+	await expect(page.getByRole('region', { name: 'Account', exact: true })).toContainText(owner.email);
 	const prefs = page.getByRole('region', { name: 'Language and units' });
 	await expect(prefs).toBeVisible();
 	await prefs.getByRole('button', { name: 'Afrikaans' }).click();
