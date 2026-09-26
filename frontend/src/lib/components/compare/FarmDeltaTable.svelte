@@ -1,13 +1,30 @@
 <script lang="ts">
 	// Per-farm results of run B with the change from run A, sortable by name or
 	// by any metric's change. Farms are matched by name (ids differ across a
-	// copied project); farms in only one run are listed underneath.
+	// copied project); farms in only one run are listed underneath. With both
+	// runs' farm summaries, a feature column (river pumping, groundwater) joins
+	// when either run has it, a farm without the feature reading as 0
+	// (delta.ts farmFeatureMetrics).
 	import type { FarmSummary, RunComparison } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
-	import { FARM_COLUMNS, fmtMetric, nextSort, sortFarms, type SortDir, type SortKey } from './delta';
+	import { FARM_COLUMNS, farmFeatureMetrics, fmtMetric, nextSort, sortFarms, type SortDir, type SortKey } from './delta';
 
-	let { comparison }: { comparison: RunComparison } = $props();
+	let {
+		comparison,
+		farmsA = [],
+		farmsB = []
+	}: {
+		comparison: RunComparison;
+		/** Each run's farm summaries (run.summary.farms), for the feature columns. */
+		farmsA?: FarmSummary[];
+		farmsB?: FarmSummary[];
+	} = $props();
+	const features = $derived(farmFeatureMetrics(comparison.farms, farmsA, farmsB));
+	/** The feature columns where some farm reads as 0 for lack of the feature, for the note. */
+	const zeroNotes = $derived(
+		features.columns.filter((c) => [...features.cells.values()].some((row) => row[c.key]?.noneA || row[c.key]?.noneB))
+	);
 
 	let sort = $state<{ key: SortKey; dir: SortDir } | null>(null);
 	// Default: model order (B's), as the engine returns it.
@@ -61,6 +78,9 @@
 							</button>
 						</th>
 					{/each}
+					{#each features.columns as c (c.key)}
+						<th scope="col" class="num">{c.label}<br /><span class="u">{c.unit}</span></th>
+					{/each}
 				</tr>
 			</thead>
 			<tbody>
@@ -76,11 +96,26 @@
 								<Delta m={f[c.key]} spec={c} />
 							</td>
 						{/each}
+						{#each features.columns as c (c.key)}
+							{@const cell = features.cells.get(f.nodeIdB)?.[c.key]}
+							<td class="num" data-testid="farm-feature-{c.key}">
+								{#if cell}
+									<span class="val">{fmtMetric(cell.m.b, c)}{#if cell.noneB}<span class="muted small"> (none)</span>{/if}</span>
+									<Delta m={cell.m} spec={c} />
+									{#if cell.noneA}<span class="none-a muted small">A: none (0)</span>{/if}
+								{:else}–{/if}
+							</td>
+						{/each}
 					</tr>
 				{/each}
 			</tbody>
 		</table>
 	</div>
+	{#if zeroNotes.length}
+		<p class="muted small" data-testid="farm-feature-note">
+			{#each zeroNotes as c, i (c.key)}{i ? ' ' : ''}{c.label}: a run with {c.none} at a farm reads as 0 there (“none”).{/each}
+		</p>
+	{/if}
 {/if}
 
 {#if comparison.onlyInA.length || comparison.onlyInB.length}
@@ -113,7 +148,8 @@
 	td.num {
 		line-height: 1.25;
 	}
-	td .val {
+	td .val,
+	td .none-a {
 		display: block;
 	}
 	td :global(.delta) {
