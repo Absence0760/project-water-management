@@ -2536,7 +2536,7 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   farm dams' storage on the day before the decision date, which every year
   starts from.
 - **The table**: one row per demand level, in the order given: **dam
-  storage at season end**, **farm demand met** and **days below the EWR**
+  storage at season end**, **unit demand met** and **days below the EWR**
   (or **Reserve months met**), each the median in bold with its 10–90 %
   range under it, and **years met in full** ("EWR met on every day in 7 of
   12 years"). The planning figure's level carries a **Planning figure**
