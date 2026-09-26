@@ -194,6 +194,10 @@ by those phantom edges (the farm and share pages carried ~13 KB of it). The
 engine has no module that does anything when it loads, and
 `frontend/src/lib/engineSideEffects.test.ts` keeps it that way: it fails on
 any top-level statement in `packages/engine/src` other than a declaration.
+The spreadsheet workers are Rollup builds of their own that don't read
+`build.rollupOptions`, so the same rule is set again under `worker` (the
+import worker kept scenario-op and fit-provenance code it never calls without
+it); the same test checks both.
 
 The `.xlsx` run export has a worker of its own
 (`lib/spreadsheet/export/export.worker.ts`, 87 KB gzip), because it carries

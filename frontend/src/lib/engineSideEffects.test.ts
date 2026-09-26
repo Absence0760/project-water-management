@@ -68,3 +68,16 @@ describe('the engine has no module side effects (vite.config.ts treeshake.module
 		expect(probe.statements.filter((s) => !DECLARATIONS.has(s.kind)).map((s) => s.getText())).toEqual(['x.register(a);']);
 	});
 });
+
+describe('vite.config.ts applies the rule to every build', () => {
+	type Treeshake = { treeshake?: { moduleSideEffects?: (id: string) => boolean } };
+	it('treats engine modules as pure in the page build and in the spreadsheet workers', async () => {
+		const config = (await import('../../vite.config')).default as { build: { rollupOptions: Treeshake }; worker: { rollupOptions: Treeshake } };
+		// The workers built with `new Worker(new URL(…))` are separate Rollup builds that ignore
+		// build.rollupOptions; without their own rule the import worker kept engine code it never calls.
+		for (const rule of [config.build.rollupOptions.treeshake?.moduleSideEffects, config.worker.rollupOptions.treeshake?.moduleSideEffects]) {
+			expect(rule?.('/repo/packages/engine/src/run.ts')).toBe(false);
+			expect(rule?.('/repo/frontend/src/lib/api/client.ts')).toBe(true);
+		}
+	});
+});
