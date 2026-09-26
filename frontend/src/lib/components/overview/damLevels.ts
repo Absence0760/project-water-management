@@ -82,3 +82,30 @@ export function levelBand(l: Pick<DamLevel, 'endPct' | 'minPct'>): 'at-min' | 'l
 
 /** Below this share of capacity a dam counts as low on the Summary. */
 export const LOW_PCT = 30;
+
+/**
+ * Each dam's levels from its daily series, `atOnce` fetches at a time (the
+ * Summary's Dam levels panel and the Network's colour by dam level share it).
+ * `get` fetches one dam's series (through the Runs cache); `onDone` reports
+ * progress. Emptiest first; a dam whose series has no value is left out.
+ */
+export async function loadDamLevels(
+	dams: readonly { nodeId: string; name: string; capacityM3: number; minPct: number }[],
+	get: (nodeId: string) => Promise<DailySeries>,
+	atOnce = 4,
+	onDone?: (done: number) => void
+): Promise<DamLevel[]> {
+	const out: DamLevel[] = [];
+	let next = 0;
+	let done = 0;
+	const worker = async () => {
+		while (next < dams.length) {
+			const d = dams[next++]!;
+			const l = damLevel(d, await get(d.nodeId));
+			if (l) out.push(l);
+			onDone?.(++done);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(atOnce, dams.length) }, worker));
+	return sortDamLevels(out);
+}

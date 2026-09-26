@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damLevel, levelBand, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
+import { damLevel, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
 const series = (startDate: string, values: (number | null)[]) => ({ startDate, values });
@@ -55,5 +55,30 @@ describe('sortDamLevels and levelBand', () => {
 		expect(levelBand(l('x', LOW_PCT - 1, 10))).toBe('low');
 		expect(levelBand(l('x', LOW_PCT, 10))).toBe('ok');
 		expect(levelBand(l('x', 0))).toBe('low');
+	});
+});
+
+describe('loadDamLevels', () => {
+	it('fetches every dam at most `atOnce` at a time, reports progress, and sorts emptiest first', async () => {
+		const dams = ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ nodeId: id, name: id.toUpperCase(), capacityM3: 100, minPct: 0, end: 90 - i * 20 }));
+		let inFlight = 0;
+		let most = 0;
+		const progress: number[] = [];
+		const levels = await loadDamLevels(
+			dams,
+			async (id) => {
+				inFlight++;
+				most = Math.max(most, inFlight);
+				await new Promise((r) => setTimeout(r, 1));
+				inFlight--;
+				return { startDate: '2025-01-01', values: id === 'c' ? [null] : [dams.find((d) => d.nodeId === id)!.end] };
+			},
+			2,
+			(n) => progress.push(n)
+		);
+		expect(most).toBe(2);
+		expect(progress).toEqual([1, 2, 3, 4, 5]);
+		// 'c' has no value: left out.
+		expect(levels.map((l) => [l.nodeId, l.endPct])).toEqual([['e', 10], ['d', 30], ['b', 70], ['a', 90]]);
 	});
 });

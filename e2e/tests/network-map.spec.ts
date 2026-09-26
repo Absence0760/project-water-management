@@ -108,6 +108,51 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]edit=/);
 });
 
+test('colour farms by dam level (end of the latest run) or by irrigated area, each with its own words', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network colours');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const colourBy = page.getByLabel('Colour farms by');
+	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
+	const lower = page.locator('svg.schematic g.node').filter({ hasText: 'Lower farm' });
+
+	// Dam level: fetched when picked; every farm here has a dam.
+	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
+	await expect(upper.locator('text.meta')).toHaveText(/^\d+(% full|%, at its minimum)$/);
+	await expect(upper).toHaveAttribute('data-supply', /^(met|short|low)$/);
+	await expect(page.getByText(/^Farms coloured by how full their dam was at the end of run “Baseline”, ran today\./)).toBeVisible();
+	// The node list's dots follow the colours.
+	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ }).locator('.dot')).toHaveAttribute('data-band', /^(met|short|low)$/);
+	await expectNoViolations(page);
+
+	// Irrigated area, as edited: the largest farm in the top band, the words on the label.
+	await colourBy.selectOption({ label: 'Irrigated area' });
+	await expect(upper.locator('text.meta')).toHaveText('20.0 ha planted');
+	await expect(upper).toHaveAttribute('data-supply', 'area3');
+	await expect(lower.locator('text.meta')).toHaveText('12.0 ha planted');
+	await expect(lower).toHaveAttribute('data-supply', 'area2');
+	await expect(page.getByText('Farms coloured by their irrigated (planted) area, as edited.')).toBeVisible();
+
+	// It follows an unsaved edit at once.
+	const grid = await (async () => {
+		await (await gridLink(page, 'Planted areas')).click();
+		return page.getByRole('dialog', { name: 'Planted areas' });
+	})();
+	await grid.getByLabel('Orchard on Lower farm, ha').fill('0');
+	await grid.getByLabel('Orchard on Lower farm, ha').press('Tab');
+	await grid.getByRole('button', { name: 'Done' }).click();
+	await expect(lower.locator('text.meta')).toHaveText('nothing planted');
+	await expect(lower).toHaveAttribute('data-supply', 'none');
+});
+
+test('without a run, only irrigated area is offered', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network colours no run');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await expect(page.getByLabel('Colour farms by').locator('option')).toHaveText(['Nothing', 'Irrigated area']);
+});
+
 test('a note’s link opens the map with its node picked', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network map node link');

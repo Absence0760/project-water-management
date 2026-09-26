@@ -76,13 +76,3 @@ export function ranAgo(createdAt: string, now: Date = new Date()): string {
 	return `${days} days ago`;
 }
 
-/** What the schematic needs to colour its farms by a run's supply. */
-export interface SchematicSupply {
-	byNode: ReadonlyMap<string, FarmSupply>;
-	/** The run's label (or its date when unlabelled). */
-	runName: string;
-	/** From `ranAgo`, e.g. "2 days ago". */
-	ago: string;
-	/** The model has unsaved edits the colours don't reflect. */
-	unsaved: boolean;
-}
