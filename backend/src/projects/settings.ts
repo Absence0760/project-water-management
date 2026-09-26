@@ -14,6 +14,10 @@ import {
 	EWR_RULE_POINTS_MAX,
 	EWR_RULE_SCALE_MAX,
 	EWR_RULE_SOURCE_MAX,
+	EWR_HIGH_FLOW_DURATION_MAX,
+	EWR_HIGH_FLOW_LABEL_MAX,
+	EWR_HIGH_FLOW_PER_YEAR_MAX,
+	EWR_HIGH_FLOWS_MAX,
 	EWR_RULE_TABLES_MAX,
 	EWR_RULE_UNITS,
 	EWR_RULE_VALUE_MAX,
@@ -150,6 +154,19 @@ const Wr2012CalibrationPenalty = z
  * it names a gauge is checked by the run, which knows the network.
  */
 const ruleGrid = z.array(z.array(z.number().finite().min(0).max(EWR_RULE_VALUE_MAX)).max(EWR_RULE_POINTS_MAX)).length(12);
+/**
+ * A freshet or flood component (engine ≥ 0.33.0, model.md §2.9d); the ranges
+ * and the "fits in a year" check are the engine's (ewrRuleTableIssues).
+ */
+const EwrHighFlow = z
+	.object({
+		label: z.string().trim().min(1).max(EWR_HIGH_FLOW_LABEL_MAX),
+		months: z.array(z.number().int().min(1).max(12)).min(1).max(12),
+		peakM3s: z.number().finite().gt(0).max(EWR_RULE_VALUE_MAX),
+		durationDays: z.number().int().min(1).max(EWR_HIGH_FLOW_DURATION_MAX),
+		perYear: z.number().int().min(1).max(EWR_HIGH_FLOW_PER_YEAR_MAX)
+	})
+	.strict();
 const EwrRuleTable = z
 	.object({
 		siteNodeId: z.string().min(1).max(100).nullable(),
@@ -160,7 +177,10 @@ const EwrRuleTable = z
 		ewr: ruleGrid,
 		naturalSource: z.enum(EWR_NATURAL_SOURCES),
 		natural: ruleGrid.nullable(),
-		scale: z.number().finite().gt(0).max(EWR_RULE_SCALE_MAX)
+		scale: z.number().finite().gt(0).max(EWR_RULE_SCALE_MAX),
+		// Engine ≥ 0.33.0, both optional so a table saved before stays valid: the low-flow grid of a total table, and the high-flow components.
+		lowFlow: ruleGrid.nullable().optional(),
+		highFlows: z.array(EwrHighFlow).max(EWR_HIGH_FLOWS_MAX).optional()
 	})
 	.strict()
 	.superRefine((t, ctx) => {
@@ -422,6 +442,9 @@ export const SettingsPatch = z
 		// Open-water evaporation ÷ A-pan for the farm dams (engine N2); 2 is
 		// far above any open-water factor, 0 turns dam evaporation off.
 		lakeEvapFactor: z.number().finite().min(0).max(2),
+		// Annual assurance of supply (engine ≥ 0.32.0, WP-3.4): a water year is
+		// met when supplied ÷ demand reaches it. A fraction in (0, 1].
+		assuranceAnnualThreshold: z.number().finite().gt(0).max(1),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

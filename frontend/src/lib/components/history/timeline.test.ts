@@ -74,6 +74,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('something.new'))).toBe('something.new');
 	});
 
+	it('writes the allocation events (WP-3.10) without holder names', () => {
+		expect(eventLine(ev('allocation.created', { registrationNo: 'R-1' }))).toBe('Added a registered volume (R-1)');
+		expect(eventLine(ev('allocation.changed', { registrationNo: '' }))).toBe('Changed a registered volume');
+		expect(eventLine(ev('allocation.deleted', { registrationNo: 'R-2' }))).toBe('Deleted a registered volume (R-2)');
+		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
+		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
+	});
+
 	it('gives an event one line and a revision its changes', () => {
 		expect(itemLines(ev('invite.revoked', { email: 'j•••@example.com' }))).toEqual(['Revoked the invite for j•••@example.com']);
 		expect(itemLines(rev())).toHaveLength(1);

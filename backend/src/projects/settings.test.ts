@@ -736,6 +736,18 @@ describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
 	});
 });
 
+describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', () => {
+	const ok = (assuranceAnnualThreshold: unknown) => SettingsPatch.safeParse({ assuranceAnnualThreshold }).success;
+
+	it('accepts a fraction in (0, 1]', () => {
+		for (const v of [0.01, 0.5, 0.9, 1]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects 0, above 1, a percentage or a non-number', () => {
+		for (const v of [0, -0.1, 1.01, 90, Infinity, '0.9', null]) expect(ok(v), String(v)).toBe(false);
+	});
+});
+
 describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 	const issues = (ewrRules: unknown) => {
 		const r = SettingsPatch.safeParse({ ewrRules });
@@ -778,6 +790,25 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues([table(), table()])).toEqual(['ewrRules: Each EWR site can have one rule table.']);
 		expect(issues(Array.from({ length: 21 }, (_, i) => table({ siteNodeId: `g${i}` }))).length).toBeGreaterThan(0);
 		expect(issues({ siteNodeId: null }).length).toBeGreaterThan(0);
+	});
+
+	it('accepts a low-flow grid and high-flow components, and runs the engine checks on them (engine ≥ 0.33.0)', () => {
+		const lowFlow = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
+		const fresh = { label: 'Class II freshet', months: [11, 12], peakM3s: 8, durationDays: 3, perYear: 2 };
+		expect(issues([table({ lowFlow, highFlows: [fresh] })])).toEqual([]);
+		// Optional: a table saved before 0.33.0 has neither, and null / [] mean none.
+		expect(issues([table({ lowFlow: null, highFlows: [] })])).toEqual([]);
+		expect(issues([table({ component: 'lowFlow', lowFlow })])).toEqual([
+			'ewrRules.0.lowFlow: A low-flow table already is the low flows: clear the separate low-flow values, or say the table covers the total flow.'
+		]);
+		expect(issues([table({ lowFlow: lowFlow.map((r) => r.slice(1)) })])).toEqual(['ewrRules.0.lowFlow: Each low-flow row needs one value per % point (Oct has 2 of 3).']);
+		expect(issues([table({ highFlows: [{ ...fresh, durationDays: 90, perYear: 5 }] })])).toEqual(["ewrRules.0.highFlows: High flow 1: 5 events of 90 days don't fit in a year."]);
+		expect(issues([table({ highFlows: [{ ...fresh, months: [11, 11] }] })])).toEqual(['ewrRules.0.highFlows: High flow 1: pick the months it may start in (each once).']);
+		// The shape: whole days, months 1–12, a peak above 0, no unknown keys, at most 12.
+		for (const bad of [{ durationDays: 1.5 }, { months: [0] }, { peakM3s: 0 }, { perYear: 13 }, { label: '' }, { extra: 1 }]) {
+			expect(issues([table({ highFlows: [{ ...fresh, ...bad }] })]).length, JSON.stringify(bad)).toBeGreaterThan(0);
+		}
+		expect(issues([table({ highFlows: Array.from({ length: 13 }, () => fresh) })]).length).toBeGreaterThan(0);
 	});
 
 	it('defaults to none for settings stored before it, and a patch replaces the whole list', () => {

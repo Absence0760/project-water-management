@@ -144,13 +144,22 @@ describe('anonymised farm context and the holder count', () => {
 	});
 });
 
-/** The project routes a farmer may call (WP-2.3 publication read, WP-2.6 farm view); every other one refuses them. */
+/**
+ * The project routes a farmer may call (WP-2.3 publication read, WP-2.6 farm
+ * view, WP-2.7 notes, where RLS limits a farmer to farm notes on their own
+ * farms: notes/notes.db.test.ts); every other one refuses them.
+ */
 const FARMER_ALLOWED = new Set([
 	'GET /projects/:id/publication',
 	'GET /projects/:id/farm',
 	'GET /projects/:id/farm/:nodeId',
 	'GET /projects/:id/farm/:nodeId/export.csv',
-	'GET /projects/:id/farm/:nodeId/access'
+	'GET /projects/:id/farm/:nodeId/access',
+	'GET /projects/:id/notes',
+	'GET /projects/:id/notes/counts',
+	'POST /projects/:id/notes',
+	'PATCH /projects/:id/notes/:noteId',
+	'DELETE /projects/:id/notes/:noteId'
 ]);
 
 describe('project routes for a farmer', () => {
@@ -183,6 +192,13 @@ describe('project routes for a farmer', () => {
 		expect(await farmer.call('GET', `/projects/${projectId}/farm/${farmA.id}`)).toEqual({ status: 404, body: { error: 'not published yet' } });
 		// Positive control: a viewer's index lists every farm.
 		expect((await viewer.call('GET', `/projects/${projectId}/farm`)).body.farms).toHaveLength(3);
+	});
+
+	// Notes admit a farmer; with no farm note on their farm they see none (the scoping itself is notes.db.test.ts).
+	it('lets a farmer list notes, empty here, and refuses a note off their farm', async () => {
+		expect(await farmer.call('GET', `/projects/${projectId}/notes`)).toEqual({ status: 200, body: { notes: [] } });
+		expect((await farmer.call('POST', `/projects/${projectId}/notes`, { body: 'x' })).status).toBe(403);
+		expect((await farmer.call('PATCH', `/projects/${projectId}/notes/${ZERO}`, { body: 'x' })).status).toBe(404);
 	});
 
 	// requireRole(…, 'viewer') and above refuse the farmer rank (fail closed). A

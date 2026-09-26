@@ -58,6 +58,7 @@ import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
+import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf } from './network/boreholes';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -102,7 +103,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.31.2';
+export const ENGINE_VERSION = '0.34.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -115,15 +116,16 @@ export function runModel(input: ModelInput): ModelOutput {
 }
 
 /**
- * runModel without the hydrologist plausibility checks: `summary.plausibility`
- * is absent and their warnings aren't added; every other series and summary
- * figure is identical. For the uncertainty ensemble, whose hundreds of member
+ * runModel without the hydrologist plausibility checks and the assurance of
+ * supply: `summary.plausibility` and `summary.supplyAssurance` are absent and
+ * the checks' warnings aren't added; every other series and summary figure is
+ * identical. For the uncertainty ensemble, whose hundreds of member
  * runs read none of it (ensemble.ts memberMetrics / memberScores). Nothing
- * here references ./plausibility, so a bundle that only runs ensembles (the
- * browser's calibration worker) leaves that code out.
+ * here references ./plausibility or ./network/reliability, so a bundle that
+ * only runs ensembles (the browser's calibration worker) leaves that code out.
  */
 export function runModelWithoutChecks(input: ModelInput): ModelOutput {
-	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null);
+	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null, null);
 }
 
 /**
@@ -158,18 +160,20 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	return runNetwork(input, naturalFlow, runPlausibility);
+	return runNetwork(input, naturalFlow, runPlausibility, supplyAssurance);
 }
 
 /**
- * The model run itself. `plausibility` is the checks step (runPlausibility),
- * passed in rather than called directly so that runModelWithoutChecks, which
- * passes null, doesn't reference it and a bundler can drop it.
+ * The model run itself. `plausibility` is the checks step (runPlausibility)
+ * and `assuranceOf` the assurance of supply (WP-3.4, supplyAssurance), passed
+ * in rather than called directly so that runModelWithoutChecks, which passes
+ * null for both, doesn't reference them and a bundler can drop them.
  */
 function runNetwork(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput,
-	plausibility: typeof runPlausibility | null
+	plausibility: typeof runPlausibility | null,
+	assuranceOf: typeof supplyAssurance | null
 ): ModelOutput {
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource } = prepareRun(input);
 
@@ -556,6 +560,55 @@ function runNetwork(
 	});
 	if (checked) warnings.push(...checked.warnings);
 
+	// Assurance of supply, stress classes and the water account (engine ≥ 0.32.0, WP-3.4): new outputs only.
+	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	const assurance = assuranceOf?.({
+		startDate,
+		days,
+		window,
+		annualThreshold: settings.assuranceAnnualThreshold ?? DEFAULT_ANNUAL_THRESHOLD,
+		demandNodes: [...nodes.flatMap((n, i) => (n.kind === 'farm' ? [i] : [])), ...nodes.flatMap((n, i) => (n.kind === 'user' ? [i] : []))].map((i) => ({
+			nodeId: nodes[i]!.id,
+			name: nodes[i]!.name,
+			kind: nodes[i]!.kind as 'farm' | 'user',
+			demand: sim.nodes[i]!.demand,
+			supplied: sim.nodes[i]!.supplied
+		})),
+		accountNodes: byId.map((i) => {
+			const r = sim.nodes[i]!;
+			const w = sim.workings?.[i];
+			const kind = plan.nodes[i]!.kind;
+			return {
+				kind,
+				runoff: r.runoff,
+				landCover: r.landCoverReduction,
+				transfer: r.transfer,
+				supplied: r.supplied,
+				returned: kind === 'user' ? r.userReturn : (w?.returnFlow ?? new Float64Array(days)),
+				rainOnDam: w?.rainOnDam,
+				evaporation: w?.damEvaporation,
+				seepage: w?.damSeepage,
+				groundwater: r.groundwater,
+				depletion: r.depletion,
+				storage: r.storage,
+				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
+			};
+		}),
+		natural,
+		outflow: simOutflow,
+		rainMm: finalRain,
+		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
+		sites: attribution.sites.map((site, si) => {
+			const outlet = si === 0 && topo.outflow >= 0;
+			return {
+				nodeId: outlet ? null : nodes[site.node]!.id,
+				name: nodes[site.node]!.name,
+				required: outlet ? ewr : sim.nodes[site.node]!.ewrCumulative,
+				shortfall: outlet ? ewrShort : sim.nodes[site.node]!.ewrShortfall
+			};
+		})
+	});
+
 	return {
 		engineVersion: ENGINE_VERSION,
 		startDate,
@@ -587,6 +640,7 @@ function runNetwork(
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
+			...(assurance ? { supplyAssurance: assurance } : {}),
 			warnings
 		}
 	};
@@ -1521,6 +1575,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
+	}
+	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {
+		warnings.push(`annual assurance threshold "${String(s.assuranceAnnualThreshold)}" is not a fraction in (0, 1]; using ${DEFAULT_ANNUAL_THRESHOLD}`);
+		delete s.assuranceAnnualThreshold;
 	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);

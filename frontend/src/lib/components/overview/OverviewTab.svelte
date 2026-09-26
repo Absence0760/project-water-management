@@ -13,6 +13,7 @@
 	import LatestRun from './LatestRun.svelte';
 	import { pickRuns } from './latestRun';
 	import MembersPanel from './MembersPanel.svelte';
+	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
@@ -248,6 +249,8 @@
 		</section>
 		<!-- An imported project's record of what the importer flagged; nothing for any other. -->
 		<ImportReportPanel projectId={project.id} />
+		<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
+		<RecentNotes projectId={project.id} />
 	</div>
 
 	<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->

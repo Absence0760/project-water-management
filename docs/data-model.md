@@ -38,6 +38,7 @@ erDiagram
   model_run ||--o{ scenario : "base run of (cited)"
   scenario |o--o{ model_run : "ran as (nullable)"
   project  ||--o{ job : "background jobs"
+  project  ||--o{ yield_result : "dam yields (040)"
   project  ||--o{ project_import : "import reports"
   app_user ||--o{ project_import : "imported"
   app_user ||--o{ job : "acts as"
@@ -45,6 +46,9 @@ erDiagram
   app_user |o--o{ data_feed : "acts as (nullable)"
   project_member ||--o{ farm_link : "farmer's farms"
   node     ||--o{ farm_link : "linked farmers"
+  project  ||--o{ note : "notes"
+  node     |o--o{ note : "about (nullable)"
+  model_run |o--o{ note : "about (nullable)"
 ```
 
 ## Tables and their workbook origin
@@ -54,7 +58,7 @@ erDiagram
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
+| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
@@ -64,6 +68,7 @@ erDiagram
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, and `scenario_id` (024), the scenario that made it (null for a run of the live model) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
+| `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
@@ -431,9 +436,10 @@ the result change?", and put back any earlier version.
   `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
   values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with
-  `actor_user_id` (must be the caller), `actor_label` (the display name then),
-  `kind`, `subject jsonb`, `change_set`, and `actor_api_key_id` (reserved,
-  unused until API keys exist). Kinds recorded: `member.added/removed/role`
+  `actor_user_id` (must be the caller), `actor_label` (the display name then,
+  or `API key “<name>”`), `kind`, `subject jsonb`, `change_set`, and
+  `actor_api_key_id` (→ `api_key` SET NULL, 039: the key that acted, with
+  `actor_user_id` NULL; see [§ API keys](#api-keys-039_api_keyssql)). Kinds recorded: `member.added/removed/role`
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
@@ -446,8 +452,16 @@ the result change?", and put back any earlier version.
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`,
+  `note.deleted` (a note hidden by its author or an editor: its target, the
+  author's name and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
-  registration, statement version and hash), and restores. `api_key.*` is reserved.
+  registration, statement version and hash),
+  `allocation.created/changed/deleted/imported/import_deleted` (038:
+  registration numbers, file name and hash, counts; never a holder's name),
+  `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
+  series, lifetime; never the key or its hash), and restores. A key's ingest
+  records `series.created/merged` as the key, with its optional `source`
+  label in the subject, and no series revision (like a data feed).
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -479,7 +493,9 @@ the result change?", and put back any earlier version.
   reason. A new write route fails the inventory until it's listed. Exempt
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
-  ensembles, `POST /reports`.
+  ensembles, `POST /reports`, the allocation import preview (writes
+  nothing), notes (each is its own record), and queuing or cancelling a
+  yield job (the `yield_result` row keeps who asked).
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -685,6 +701,49 @@ appropriate, and that they read its known limitations
   on signing (Step 4), sign-off in the data export (the POPIA export,
   WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
+
+### Allocations (038_allocations.sql)
+
+Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
+water-use volumes per farm or water user.
+
+- **`allocation_source`**: an imported file. `id`, `project_id` (→ `project`,
+  cascade), `kind` (`warms_extract` | `csv`), `file_name` (1–255), `sha256`
+  (hex of the file's UTF-8 text), `reference` (≤ 500), `imported_by` (→
+  `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
+  file is imported once per project (the index also covers the project key).
+  Deleting a source deletes its allocations (undo an import).
+- **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
+  composite key `(source_id, project_id)` → `allocation_source (id,
+  project_id)`, cascade, so a source is always the same project's), `node_id`
+  (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
+  `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
+  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
+  `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
+  `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
+  `reference` (≤ 500), `created_at`, `updated_at`. No names. Indexes cover
+  every key.
+- **`allocation_holder`**: `allocation_id` (primary key; composite key
+  `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
+  `user_display` (1–200). The registered user's name, in its own table so RLS
+  can hide it (decision D3 (b), pending legal advice).
+- **Triggers.** `allocation_same_project` (the node is the project's);
+  `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
+  and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
+  a gauge leaves its allocations unmatched, as a deleted node does).
+- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
+  editor; `allocation_select_farmer` lets a farmer read the allocations on
+  their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
+  policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
+  on their own farm; **viewers read no names**; writes editor. `water_app` has
+  `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **No personal identifiers.** No ID-number, phone or email column exists;
+  the importer refuses files that carry them ([security.md](./security.md)).
+- Guards: `backend/src/allocations/allocations.db.test.ts` (positive
+  controls: an editor reads names, the owner reads the rows a stranger can't,
+  a farmer reads their own farm's), the catalogue tests and the route
+  inventories.
 
 ### Import reports (017_project_import.sql)
 
@@ -920,6 +979,97 @@ Read-only links to the current publication for people outside the project
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
 
+### Notes (037_notes.sql)
+
+Plain-text notes and comments kept against what they are about (WP-2.7;
+[api.md § Notes](./api.md#notes), [ui.md § Notes](./ui.md#notes)).
+
+- `note (id, project_id → project CASCADE, author_id → app_user SET NULL,
+  created_at, edited_at, deleted_at, deleted_by → app_user SET NULL, body
+  text 1..4000, node_id → node CASCADE, run_id → model_run CASCADE,
+  setting_key text, visibility 'team' | 'farm')`.
+  - **The target** is a nullable typed foreign key, not a polymorphic id, so
+    the foreign keys and the same-project trigger (`assert_same_project
+    ('node_id', 'run_id')`) work. `note_one_target` allows at most one of
+    `node_id`, `run_id`, `setting_key`; none is a project-level note.
+    `setting_key` is a settings group (`flow`, `ewr`, …) or path
+    (`flow.a`), `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`, ≤ 100.
+  - **A note goes with its target**: a deleted node or run, or a trimmed
+    run, takes its notes (cascade). Saving the model upserts nodes by id, so
+    a save keeps them.
+  - **`visibility`**: `team` (viewers and above) or `farm` (also the farmers
+    linked to the note's node). `note_farm_on_node` requires a node for
+    `farm`; the API also requires the node to be a farm.
+  - Indexed on `(project_id, created_at DESC)` and each foreign key.
+- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
+  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
+  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
+  trigger lets only the author change the body, stamps `edited_at` and
+  `deleted_by` itself, and refuses to touch a deleted note.
+- **RLS.**
+  - SELECT: viewers and above see every note that isn't deleted; editors, and
+    a note's author, also see deleted ones (Postgres checks an updated row
+    against the SELECT policies, so an author who isn't an editor couldn't
+    otherwise delete their own note). A farmer sees `farm` notes on their
+    linked nodes (`app_farm_nodes`), never a `team` note, a run, settings or
+    project note, or another farm's.
+  - INSERT, as yourself (`author_id = app_current_user_id()`), never already
+    edited or deleted: a viewer and above anywhere; a farmer only on a linked
+    node and only with `visibility = 'farm'`.
+  - UPDATE: a visible, undeleted note, by its author or an editor. Editors
+    moderate: they soft-delete, they can't rewrite (`note_guard`).
+  - No DELETE policy.
+- The API lists no deleted note to anyone. Deleting records `note.deleted`
+  in the audit log; adding and editing don't (the row carries its author,
+  `created_at` and `edited_at`).
+
+### API keys (039_api_keys.sql)
+
+Per-project keys for the ingest endpoint: a logger gateway or a script
+merges daily readings without a session (WP-2.9;
+[api.md § Ingest](./api.md#ingest), [security.md § API keys](./security.md#api-keys)).
+
+- `api_key (id, project_id → project CASCADE, name 1–100, prefix (generated:
+  the first 8 characters of id, UNIQUE), key_hash bytea UNIQUE (SHA-256 of
+  the whole key, CHECK 32 bytes), scopes text[] (CHECK ⊆ {series:write},
+  non-empty; default {series:write}), allowed_series jsonb NULL (NULL: any
+  series; else an array of 1–50 { kind, name }), created_by → app_user SET
+  NULL, created_at, last_used_at, expires_at NULL (≤ 3650 days after
+  created_at, CHECK), revoked_at, revoked_by → app_user SET NULL)`. Indexed on
+  `(project_id, created_at DESC)`, `created_by` and `revoked_by`. The
+  `api_key_issue` trigger stamps `created_by` / `created_at` and clears the
+  revocation and use stamps on insert.
+- The key is `wm_<prefix>_<43-char base64url secret>`: the prefix finds the
+  row, the secret is 32 random bytes. Only the hash is stored.
+- **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
+  `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
+  catalogue test's column-only and keep-forever lists): a key is revoked,
+  never removed, so the audit events that name it keep their link.
+- `api_key_throttle (key_id PK → api_key CASCADE, tokens, refilled_at)`: a
+  token bucket per key, the `login_throttle` pattern (deny-all policy,
+  reached only through `app_api_key_take`).
+- **Key context.** `withApiKey` (`db/tx.ts`) sets `app.current_api_key_id`
+  (transaction-local) and no user. `app_current_api_key_id()` reads it;
+  `app_api_key_project(p_scope)` (`SECURITY DEFINER`) is the key's project
+  while the key is live (not revoked, not expired) and holds the scope (NULL:
+  any), and NULL in a transaction that also has a user;
+  `app_api_key_allows(kind, name)` checks `allowed_series`;
+  `app_api_key_label()` is the audit actor label.
+- **Key policies** (permissive, beside the role policies):
+  `time_series_api_key_select/insert/update` (`project_id =
+  app_api_key_project('series:write') AND app_api_key_allows(kind, name)`;
+  no delete), and `audit_event_api_key_insert` (`actor_user_id IS NULL`,
+  `actor_api_key_id` the transaction's key, the key's project). Every other
+  table's policies need a user, so a key sees nothing else.
+- `app_api_key_lookup(p_prefix)` (`SECURITY DEFINER`): the row for a prefix
+  (id, project id and name, hash, name, scopes, allowed series, live) for
+  the backend's constant-time hash comparison.
+- `app_api_key_take(p_key, p_capacity, p_per_minute)` (`SECURITY DEFINER`):
+  takes one request from the key's bucket under a row lock (0: go ahead, and
+  `last_used_at` is bumped at most once a minute; > 0: seconds to wait; -1:
+  the key is dead).
+
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
 Users and groups work across many catchments. A **team** (e.g. a consultancy
@@ -961,7 +1111,7 @@ the mapping compares the role as text for that reason.
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -1010,6 +1160,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Share links (025): `share_link` read, created and revoked by owners only,
   never deleted; the public reads only through `app_share_view` /
   `app_share_series` (see § Share links above).
+- API keys (039): `api_key` read, created and revoked by owners only, never
+  deleted. A key request (no user) writes its own project's allowed series
+  and adds audit events naming itself, nothing else (see § API keys above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
@@ -1075,7 +1228,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change) |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
 | `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running` |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
@@ -1083,6 +1236,8 @@ The background job queue's source of truth ([architecture.md § Background work]
 | `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
 | `acting_user_id` | The member who queued it (stamped by the insert trigger): an editor, or any viewer for `report_render` (`023_reports.sql`). The job runs as this user under RLS |
 | `created_at`, `started_at`, `finished_at` | `finished_at` is set exactly when `done` or `dead` |
+| `progress` | 0–100 while a running job reports it (040_yield), else NULL. Written only by `app_job_progress`; cleared by the enqueue trigger and when a worker claims the job (`job_progress_reset`); a finished job keeps its last value |
+| `cancel_requested_at` | When someone cancelled the job while it ran (040_yield, `app_cancel_job`); NULL otherwise. Cleared by the enqueue trigger |
 
 - **Enqueue** is a plain INSERT as the signed-in editor. The `job_enqueue`
   trigger stamps the acting user and resets every lifecycle column (a forged
@@ -1105,10 +1260,48 @@ The background job queue's source of truth ([architecture.md § Background work]
     than `age` (at least a day; the tick passes 30 days).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
+  - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
+    job, only with the current lease; returns false for anyone else, or once
+    the job was cancelled, which tells the handler to stop.
+  - `app_cancel_job(id)` (040): as the session's user, the one who queued
+    it or an editor of its project, and for `yield` jobs only: a `queued` or
+    `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
+    one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
+    cancel.
 - Cascades: a job goes with its project or its acting user's account.
 - Indexes: `(status, run_after)` for the claim; `(project_id, created_at)`,
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
+
+### Yield results (040_yield.sql)
+
+A dam's firm yield or storage–yield curve (roadmap WP-3.6, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
+written by a `yield` job ([architecture.md § Background work](./architecture.md#background-work)).
+No job table of its own: `job` holds status, progress and errors.
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `run_id`, `scenario_id` | What it was computed on: exactly one (CHECK). `ON DELETE CASCADE` from either: a result goes with its run or scenario |
+| `node_id` | The dam node as the run's or scenario's input names it. No foreign key: a scenario can add nodes, and a run can name nodes deleted since |
+| `job_id` | The job that computed it (`ON DELETE SET NULL` when the 30-day purge deletes the job) |
+| `kind` | `firm` or `curve` |
+| `params` | The request's parameters with their defaults: `pattern`, `assurance`, `tolerance`, `points` (≤ 4 KB) |
+| `points` | `{ point }` for `firm`, `{ baseCapacityM3, assurance, points, monotone }` for `curve`, engine `YieldPoint`s (≤ 64 KB) |
+| `engine_version`, `created_by`, `created_at` | `created_by` and `created_at` are stamped by the insert trigger |
+
+- **RLS**: SELECT for viewers (farmers read nothing: listed in the catalogue
+  guard's `FARMERS_NEVER_READ`), INSERT and DELETE for editors. No UPDATE
+  (grant or policy): a result is written once; the job trims to the newest
+  5 per run or scenario and dam. `water_app` has SELECT, INSERT, DELETE.
+- **`yield_result_guard`** (INSERT, `SECURITY DEFINER`): the run, the
+  scenario and the job belong to the row's project, and the job is a `yield`
+  job; stamps the author.
+- **Indexes**: `(run_id, created_at DESC)` and `(scenario_id, created_at
+  DESC)` (partial; they serve the list and cover those keys), `project_id`,
+  `job_id`, `created_by`.
+- **Not yet**: the roadmap's "a contributor reads and inserts for their own
+  scenario" waits for WP-3.3's `contributor` role ([followups.md](./followups.md)).
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 

@@ -68,6 +68,8 @@ export class ModelEditor {
 	saveError = $state<string | null>(null);
 
 	dirty = $derived(JSON.stringify(this.model) !== this.#saved);
+	/** Nodes as last loaded or saved: the ones the server knows, so notes (WP-2.7) can be kept on them. */
+	savedNodeIds = $derived(new Set((JSON.parse(this.#saved) as ProjectModel).nodes.map((n) => n.id)));
 	issues = $derived<ModelIssue[]>(validateModel(this.model));
 
 	load(m: ProjectModel) {

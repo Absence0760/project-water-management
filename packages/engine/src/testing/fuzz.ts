@@ -310,6 +310,22 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 				scale: er.pick([1, 1, er.logFloat(0.01, 100)])
 			};
 		});
+		// Low flows and high-flow components (engine ≥ 0.33.0), from their own stream so the
+		// tables above are what they were: a low-flow grid on some total tables (now and then
+		// above the total), freshets and floods of any peak, length and count.
+		const eh = new Rng(seed ^ 0x9b05688d);
+		for (const t of settings.ewrRules) {
+			if (t.component === 'total' && eh.bool(0.4)) t.lowFlow = t.ewr.map((row) => row.map((v) => v * eh.pick([0.3, 0.6, 1, eh.float(0, 1.3)])));
+			if (eh.bool(0.4)) {
+				t.highFlows = Array.from({ length: eh.int(1, 3) }, (_, k) => ({
+					label: `fuzz ${k + 1}`,
+					months: [...new Set(Array.from({ length: eh.int(1, 6) }, () => eh.int(1, 12)))],
+					peakM3s: eh.logFloat(1e-4, 100),
+					durationDays: eh.int(1, 10),
+					perYear: eh.int(1, 3)
+				}));
+			}
+		}
 	}
 
 	// Flow shares over 100 % are refused by the run (engine 0.27.1: they make

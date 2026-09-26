@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
+import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
@@ -11,11 +12,13 @@ import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
 import { farmViewRoutes } from './farms/view.js';
 import { historyRoutes } from './history/routes.js';
+import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
+import { noteRoutes } from './notes/routes.js';
 import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
@@ -28,6 +31,7 @@ import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
 import { signoffRoutes } from './signoffs/routes.js';
 import { teamRoutes } from './teams/routes.js';
+import { yieldRoutes } from './yield/routes.js';
 
 export function createApp() {
 	const app = new Hono<AuthEnv>();
@@ -102,6 +106,7 @@ export function createApp() {
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
+	projects.route('/', yieldRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
@@ -109,10 +114,16 @@ export function createApp() {
 	projects.route('/', publicationRoutes);
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
+	projects.route('/', allocationRoutes);
+	projects.route('/', noteRoutes);
+	projects.route('/', apiKeyRoutes);
 	app.route('/projects', projects);
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.
 	app.route('/share', sharePublicRoutes);
+
+	// The ingest endpoint (WP-2.9): no session, a per-project API key is the credential (ingest/auth.ts).
+	app.route('/ingest', ingestRoutes);
 
 	const teams = new Hono<AuthEnv>();
 	teams.use('*', requireUser);

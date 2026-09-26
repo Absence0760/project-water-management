@@ -47,6 +47,34 @@ export const EWR_RULE_TABLES_MAX = 20;
 export const EWR_RULE_VALUE_MAX = 1e6;
 export const EWR_RULE_SCALE_MAX = 1000;
 export const EWR_RULE_SOURCE_MAX = 500;
+/** At most this many high-flow (freshet / flood) components per table (engine ≥ 0.33.0). */
+export const EWR_HIGH_FLOWS_MAX = 12;
+export const EWR_HIGH_FLOW_LABEL_MAX = 100;
+/** Longest event duration a high-flow component may ask for, days. */
+export const EWR_HIGH_FLOW_DURATION_MAX = 90;
+/** Most events a component may ask for in one water year. */
+export const EWR_HIGH_FLOW_PER_YEAR_MAX = 12;
+
+/**
+ * A high-flow component of a Reserve (engine ≥ 0.33.0, WP-3.7, docs/model.md
+ * §2.9d): a freshet or flood the river should carry, `perYear` times a water
+ * year, each an unbroken run of `durationDays` days at or above `peakM3s`
+ * (× the table's scale) starting in one of `months`. The requirement in a
+ * water year is capped by what the site's natural flow did that year: a flood
+ * that would not have happened naturally is not asked of the river.
+ */
+export interface EwrHighFlowEvent {
+	/** "Class II freshet", "1:2-year flood". */
+	label: string;
+	/** Calendar months (1–12) an event may start in, each once. */
+	months: number[];
+	/** Daily mean flow the event reaches, m³/s (> 0). */
+	peakM3s: number;
+	/** Consecutive days at or above the peak, 1 … 90. */
+	durationDays: number;
+	/** Events required in a water year, 1 … 12. */
+	perYear: number;
+}
 
 /** One EWR site's assurance rules. Rows are water-year months (Oct … Sep), columns the % points. */
 export interface EwrRuleTable {
@@ -69,6 +97,17 @@ export interface EwrRuleTable {
 	 * table's. Default 1.
 	 */
 	scale: number;
+	/**
+	 * The low-flow part of a total-flow table (engine ≥ 0.33.0, WP-3.7): the
+	 * Desktop Reserve Model's low-flow assurance rules, maintenance low flows
+	 * at the wetter points down to the drought low flow at the driest, same
+	 * shape and unit as `ewr`, read at the same natural percentile. Only on a
+	 * `total` table (a `lowFlow` table is the low flows already). Absent or
+	 * null = none; the high-flow part of a month is then not split out.
+	 */
+	lowFlow?: number[][] | null;
+	/** Freshet and flood components (engine ≥ 0.33.0). Absent = none. */
+	highFlows?: EwrHighFlowEvent[];
 }
 
 export interface EwrRuleIssue {
@@ -77,6 +116,7 @@ export interface EwrRuleIssue {
 	message: string;
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const WY_MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 
@@ -92,17 +132,19 @@ export function blankEwrRuleTable(siteNodeId: string | null = null): EwrRuleTabl
 		ewr: Array.from({ length: 12 }, () => points.map(() => 0)),
 		naturalSource: 'run',
 		natural: null,
-		scale: 1
+		scale: 1,
+		lowFlow: null,
+		highFlows: []
 	};
 }
 
-function gridIssue(grid: unknown, cols: number, label: 'EWR' | 'natural flow'): string | null {
+function gridIssue(grid: unknown, cols: number, label: 'EWR' | 'natural flow' | 'low-flow'): string | null {
 	if (!Array.isArray(grid) || grid.length !== 12) return `Enter 12 rows of ${label} values (Oct … Sep).`;
 	for (let m = 0; m < 12; m++) {
 		const row = grid[m];
 		if (!Array.isArray(row) || row.length !== cols) return `Each ${label} row needs one value per % point (${WY_MONTHS[m]} has ${Array.isArray(row) ? row.length : 0} of ${cols}).`;
 		if (!row.every((v) => isNum(v) && v >= 0 && v <= EWR_RULE_VALUE_MAX)) {
-			return `${label === 'EWR' ? 'EWR' : 'Natural flow'} values must be numbers from 0 to ${EWR_RULE_VALUE_MAX.toLocaleString('en')} (${WY_MONTHS[m]} has one that isn't).`;
+			return `${label === 'EWR' ? 'EWR' : label === 'low-flow' ? 'Low-flow' : 'Natural flow'} values must be numbers from 0 to ${EWR_RULE_VALUE_MAX.toLocaleString('en')} (${WY_MONTHS[m]} has one that isn't).`;
 		}
 	}
 	return null;
@@ -138,7 +180,40 @@ export function ewrRuleTableIssues(t: EwrRuleTable): EwrRuleIssue[] {
 		const n = gridIssue(t.natural, p.length, 'natural flow');
 		if (n) out.push({ field: 'natural', message: n });
 	}
+	if (t.lowFlow !== null && t.lowFlow !== undefined) {
+		if (t.component !== 'total') out.push({ field: 'lowFlow', message: 'A low-flow table already is the low flows: clear the separate low-flow values, or say the table covers the total flow.' });
+		else {
+			const l = gridIssue(t.lowFlow, p.length, 'low-flow');
+			if (l) out.push({ field: 'lowFlow', message: l });
+		}
+	}
+	const h = highFlowsIssue(t.highFlows);
+	if (h) out.push({ field: 'highFlows', message: h });
 	return out;
+}
+
+const isInt = (v: unknown, lo: number, hi: number): v is number => isNum(v) && Number.isInteger(v) && v >= lo && v <= hi;
+
+/** Why a table's high-flow components aren't usable, or null (absent is fine). */
+export function highFlowsIssue(list: unknown): string | null {
+	if (list === undefined) return null;
+	if (!Array.isArray(list)) return 'The high-flow components must be a list.';
+	if (list.length > EWR_HIGH_FLOWS_MAX) return `At most ${EWR_HIGH_FLOWS_MAX} high-flow components per table.`;
+	for (const [i, e] of list.entries()) {
+		const n = `High flow ${i + 1}`;
+		if (!isObj(e)) return `${n} isn't a component.`;
+		if (typeof e.label !== 'string' || !e.label.trim()) return `${n}: name it (e.g. “Class II freshet”).`;
+		if (e.label.length > EWR_HIGH_FLOW_LABEL_MAX) return `${n}: keep the name under ${EWR_HIGH_FLOW_LABEL_MAX} characters.`;
+		const months = e.months;
+		if (!Array.isArray(months) || !months.length || !months.every((m) => isInt(m, 1, 12)) || new Set(months).size !== months.length) {
+			return `${n}: pick the months it may start in (each once).`;
+		}
+		if (!(isNum(e.peakM3s) && e.peakM3s > 0 && e.peakM3s <= EWR_RULE_VALUE_MAX)) return `${n}: the peak must be above 0 and at most ${EWR_RULE_VALUE_MAX.toLocaleString('en')} m³/s.`;
+		if (!isInt(e.durationDays, 1, EWR_HIGH_FLOW_DURATION_MAX)) return `${n}: the duration must be a whole number of days from 1 to ${EWR_HIGH_FLOW_DURATION_MAX}.`;
+		if (!isInt(e.perYear, 1, EWR_HIGH_FLOW_PER_YEAR_MAX)) return `${n}: the events per year must be a whole number from 1 to ${EWR_HIGH_FLOW_PER_YEAR_MAX}.`;
+		if (e.durationDays * e.perYear > 366) return `${n}: ${e.perYear} events of ${e.durationDays} days don't fit in a year.`;
+	}
+	return null;
 }
 
 /** Problems with the list: at most EWR_RULE_TABLES_MAX, one table per site. */
@@ -171,6 +246,19 @@ export function ewrRuleTableNotes(t: EwrRuleTable): string[] {
 	const rising = (rows: number[][]) => rows.flatMap((row, m) => (row.some((v, i) => i > 0 && v > row[i - 1]! * (1 + 1e-9)) ? [WY_MONTHS[m]!] : []));
 	const er = rising(t.ewr);
 	if (er.length) out.push(`the EWR rises with the % point in ${er.join(', ')} (a drought flow above a wetter one); check the table`);
+	if (t.lowFlow) {
+		const lr = rising(t.lowFlow);
+		if (lr.length) out.push(`the low flows rise with the % point in ${lr.join(', ')} (a drought flow above a maintenance one); check the table`);
+		const above: string[] = [];
+		t.lowFlow.forEach((row, m) => row.forEach((v, i) => {
+			if (v > t.ewr[m]![i]! * (1 + 1e-9)) above.push(`${WY_MONTHS[m]} ${t.points[i]} %`);
+		}));
+		if (above.length) {
+			out.push(
+				`the low flows are above the total flow at ${above.length} point${above.length === 1 ? '' : 's'} (${above.slice(0, 4).join(', ')}${above.length > 4 ? ', …' : ''}), so the high flows there count as 0`
+			);
+		}
+	}
 	if (t.naturalSource === 'table' && t.natural) {
 		const nr = rising(t.natural);
 		if (nr.length) out.push(`the natural flow rises with the % point in ${nr.join(', ')}; the run uses each row's running minimum`);
@@ -191,8 +279,6 @@ export function ewrRuleTableNotes(t: EwrRuleTable): string[] {
 	}
 	return out;
 }
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * Stored rule tables as the run uses them: anything that isn't an object or
@@ -222,7 +308,9 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			ewr: r.ewr as number[][],
 			naturalSource: r.naturalSource as EwrNaturalSource,
 			natural: (r.natural as number[][] | null | undefined) ?? null,
-			scale: r.scale === undefined ? 1 : (r.scale as number)
+			scale: r.scale === undefined ? 1 : (r.scale as number),
+			lowFlow: (r.lowFlow as number[][] | null | undefined) ?? null,
+			highFlows: r.highFlows === undefined ? [] : (r.highFlows as EwrHighFlowEvent[])
 		};
 		const where = t.siteNodeId === null ? 'the outlet' : `site ${t.siteNodeId}`;
 		const issues = ewrRuleTableIssues(t);
@@ -244,6 +332,8 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			continue;
 		}
 		if (t.naturalSource === 'run') t.natural = null;
+		// Copies, sorted: the months an event may start in are a set.
+		t.highFlows = t.highFlows!.map((e) => ({ label: e.label, months: [...e.months].sort((a, b) => a - b), peakM3s: e.peakM3s, durationDays: e.durationDays, perYear: e.perYear }));
 		out.push(t);
 	}
 	if (raw.length > EWR_RULE_TABLES_MAX) warnings.push(`only the first ${EWR_RULE_TABLES_MAX} EWR rule tables are used`);

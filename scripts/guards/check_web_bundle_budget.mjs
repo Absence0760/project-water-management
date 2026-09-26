@@ -479,6 +479,36 @@
 //             three closing sections. No new dependency; the largest page
 //             chunk stays under 41 KB. The engine split (#9) is still the
 //             way to win the total back.
+// 2026-09-26  total 837 → 844 KB; other ceilings unchanged. Notes and
+//             comments (WP-2.7): the notes drawer and its count badges on
+//             network rows, the run Record group and the settings groups,
+//             Recent notes on the Overview, and the farmer's notes card.
+//             Merged after #44's reporting-window picker and WP-3.1/3.13
+//             above; the merge measured 838 KB (the notes branch alone was
+//             +8 KB). The drawer is mounted from several tabs, so most of it
+//             sits in shared chunks. No new dependency; the largest page
+//             chunk stays 40 KB. Headroom ~6 KB. #9's engine split (~20 KB,
+//             docs/followups.md) is the way back down.
+// 2026-09-26  total 844 → 874 KB (measured 872 merged with the notes
+//             above; 866 before them), calibration worker 57 → 61 KB
+//             (measured 59); other ceilings unchanged. One batch
+//             merge: WP-3.10's Allocations tab (import, compare, table),
+//             WP-3.4's Assurance of supply and Water account panels plus the
+//             engine's reliability module (network/reliability.ts, part of
+//             every run summary, so it lands in the calibration worker too),
+//             and WP-3.7's low-flow / high-flow Reserve code in the engine
+//             (reserve/) with its settings editors and heat map. No new
+//             dependency; the largest page chunk stays at 41 KB. The engine
+//             split (#9) is the way back for both the total and the worker.
+// 2026-09-26  total 874 → 885 KB (measured 883 merged with main's WP-2.9
+//             API keys panel, which raised no ceiling of its own; 878
+//             before it); other ceilings unchanged.
+//             WP-3.6's firm yield: the Yield panel on a farm and under a
+//             scenario (its own lazy chunk), its helpers and the jobs/yield
+//             API client. The search itself runs in the job worker on the
+//             backend, so the engine's network/yield.ts adds little here. No
+//             new dependency; the largest page chunk stays 41 KB. The engine
+//             split (#9) is still the way back.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -489,9 +519,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 837,
+	totalCodeKb: 885,
 	largestChunkKb: 41,
-	largestWorkerKb: 57,
+	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });

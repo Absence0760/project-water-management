@@ -20,6 +20,15 @@ describe('ModelEditor', () => {
 		expect(ed.model.nodes).toHaveLength(0);
 	});
 
+	it('knows which nodes the server has: the loaded ones, not one added since (notes go only on those)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const outlet = ed.addNode();
+		expect(ed.savedNodeIds.has(outlet.id)).toBe(false);
+		ed.load(ed.snapshot());
+		expect(ed.savedNodeIds.has(outlet.id)).toBe(true);
+	});
+
 	it('starts a new farm with all upstream inflow entering its dam (Q1: 1 = on-river dam)', () => {
 		// Since engine 0.9.0 the share means water INTO the dam; 0 would make a
 		// new farm's dam an off-channel one that only the diversion fills.

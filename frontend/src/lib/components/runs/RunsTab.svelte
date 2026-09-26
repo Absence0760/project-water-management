@@ -27,6 +27,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { resultGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -34,6 +35,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { publishedRunIds } from './publication';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
+	// Assurance of supply and the water account (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
+	const loadSupplyAssurancePanel = () => import('$lib/components/reliability/AssurancePanel.svelte');
+	const loadWaterAccountPanel = () => import('$lib/components/reliability/WaterAccountPanel.svelte');
 	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
 	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
@@ -554,11 +558,25 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							{/snippet}
 						</Lazy>
 					</div>
+					<div class="panel" id="res-water-account">
+						<Lazy load={loadWaterAccountPanel}>
+							{#snippet children(WaterAccountPanel)}
+								<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+							{/snippet}
+						</Lazy>
+					</div>
 				{/snippet}
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
 						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} nodes={editor.model.nodes} {farmNames} />
+					</section>
+					<section class="panel" id="res-assurance">
+						<Lazy load={loadSupplyAssurancePanel}>
+							{#snippet children(AssurancePanel)}
+								<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
+							{/snippet}
+						</Lazy>
 					</section>
 				{/snippet}
 				{#snippet modelTail()}
@@ -609,6 +627,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
 						{/key}
+						<!-- Comments on the run from anyone on the team (WP-2.7), beside its one written explanation above. -->
+						<p class="run-comments"><NotesDrawer {projectId} target={{ kind: 'run', runId: shownRun.id, label: shownRun.label || fmtDate(shownRun.createdAt, true) }} /></p>
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}

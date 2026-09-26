@@ -189,6 +189,40 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 [Shortfalls] "Set reporting period"; docs/model.md §2.11'
 	},
 
+	{
+		id: 'assurance-of-supply',
+		term: 'Assurance of supply',
+		short: 'How reliably each farm’s irrigation demand was met over the reporting window: by days, by volume and by water years.',
+		long: 'Three measures per farm and other water user (engine 0.32.0). Days met: the share of days with demand when the whole demand was supplied (days without demand don’t count). Volume supplied: Σ supplied ÷ Σ demand, the same figure as the curtailment table. Water years met: the share of water years whose supply reached the annual threshold (Settings, default 90 %, a project choice rather than a standard).\n\nAfter Hashimoto et al. (1982), a failure is a run of consecutive demand days not fully met: the table gives the number of failures, their mean and longest length (resilience) and the mean and largest deficit per failure (vulnerability).\n\nThe definitions are pending review by the project hydrologist.',
+		units: '% ; days; m³',
+		category: 'results',
+		aliases: ['reliability', 'assurance', 'resilience', 'vulnerability', 'Hashimoto'],
+		fields: ['settings.assuranceAnnualThreshold'],
+		related: ['report-window', 'stress-class', 'water-account'],
+		source: 'docs/model.md §2.11a; Hashimoto, Stedinger & Loucks 1982'
+	},
+	{
+		id: 'stress-class',
+		term: 'Stress class',
+		short: 'A month’s supply as a class: Low (≥ 95 % of demand supplied), Moderate (≥ 85 %), High (≥ 70 %), Severe (≥ 50 %) or Critical.',
+		long: 'The classes and thresholds come from the client’s experimental node-based workbook (v004 DEV), which reported them per farm and per month. The app grids them per farm, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
+		category: 'results',
+		aliases: ['stress', 'supply ratio', 'Low', 'Moderate', 'High', 'Severe', 'Critical'],
+		related: ['assurance-of-supply'],
+		source: 'docs/model.md §4 and §2.11a'
+	},
+	{
+		id: 'water-account',
+		term: 'Water account',
+		short: 'Per water year: what entered the river network, where it went, what the dams kept, and a residual that should be 0.',
+		long: 'In: natural flow, rain on the dams, groundwater pumped and net transfers. Out: runoff removed by land cover, natural flow no farm received (flow shares not summing to 1), consumptive irrigation (supplied − return flow), other users’ net take, dam evaporation, stream depletion from boreholes and the outflow at the outlet. In − out − change in dam storage is the residual, float noise. Dam seepage is shown as a memo: it rejoins the river below the dam. The EWR required and met at each site close the account.',
+		units: 'm³',
+		category: 'results',
+		aliases: ['water balance', 'account', 'closure'],
+		related: ['assurance-of-supply', 'dam-evaporation', 'dam-seepage'],
+		source: 'docs/model.md §2.11b'
+	},
+
 	// ---- Network ------------------------------------------------------------
 	{
 		id: 'network',
@@ -1124,8 +1158,30 @@ export const HELP: HelpEntry[] = [
 		category: 'ewr',
 		aliases: ['Reserve compliance', 'assurance compliance', 'months met', 'contiguity', 'FDC check'],
 		fields: ['run.ewr_rule'],
-		related: ['reserve-rules', 'ewr-days-not-met', 'ewr-agreement'],
+		related: ['reserve-rules', 'ewr-days-not-met', 'ewr-agreement', 'reserve-low-flows', 'reserve-high-flows'],
 		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
+	},
+	{
+		id: 'reserve-low-flows',
+		term: 'Maintenance and drought low flows',
+		short: 'The low-flow part of the Reserve: the base flow a river needs in normal years (maintenance) down to the least it needs in a drought.',
+		long: 'The Desktop Reserve Model gives two assurance tables for a site: the total flow (low flows plus high flows) and the low flows alone, each per month at the 10 % … 99 % points. The low flows fall from the maintenance low flow at the wetter points to the drought low flow at 99 %.\n\nEnter the low-flow table beside a total-flow table and each month is judged twice at the same natural percentile: against the total and against the low flows. A month that meets its low flows but not the total failed only its high flows (the heat map shows ◐); one below its low flows (●) is the more serious failure. The difference between the two requirements is the month’s high-flow part. Pending the hydrologist: both are judged on the month’s total flow volume.',
+		units: 'Mm³ per month or m³/s',
+		category: 'ewr',
+		aliases: ['maintenance low flow', 'drought low flow', 'low-flow table', 'low flows', 'base flow requirement'],
+		related: ['reserve-rules', 'reserve-compliance', 'reserve-high-flows', 'desktop-reserve-model'],
+		source: 'Hughes & Hannart (2003); Hughes et al. (2014); docs/model.md §2.9d'
+	},
+	{
+		id: 'reserve-high-flows',
+		term: 'High flows: freshets and floods',
+		short: 'Reserve high-flow events: a peak flow held for some days, a number of times each water year, in given months.',
+		long: 'Reserve determinations ask for high flows as well as low flows: small freshets that reset the riverbed and cue fish to spawn, and larger floods that scour pools and reach the floodplain. Each component here is a name, the months it may start in, a peak (m³/s, daily mean), how many days in a row the flow must stay at or above it, and how many such events a water year needs.\n\nThe check runs on every complete water year at the site. An event is an unbroken run of days at or above the peak, at least the duration long, starting in one of the months. A year is asked for no more events than the site’s natural flow had that year: a dry year that would have had no flood is not failed for it, while a dam that holds back a flood the river would have had is. The table’s scale multiplies the peak too.',
+		units: 'm³/s; days; events per water year',
+		category: 'ewr',
+		aliases: ['freshet', 'flood', 'high flow', 'flood pulse', 'maintenance high flows'],
+		related: ['reserve-rules', 'reserve-compliance', 'reserve-low-flows'],
+		source: 'Hughes & Hannart (2003); Pollard et al. (2011); docs/model.md §2.9d'
 	},
 	{
 		id: 'plausibility-checks',
