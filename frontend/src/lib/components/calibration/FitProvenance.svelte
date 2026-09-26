@@ -79,6 +79,9 @@
 					<dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt>
 					<dd>{monthsText(record.forcing.panCoefficient)}{recordedPe.kind === 'monthly' ? ' (not used by GR4J under a monthly PE)' : ''}</dd>
 				</div>
+				{#if record.forcing.panCoefficientSource}
+					<div data-testid="fit-pan-source"><dt>Pan coefficient source</dt><dd>{record.forcing.panCoefficientSource}</dd></div>
+				{/if}
 				<div><dt>A-pan evaporation <HelpTip key="settings.apanMm" /></dt><dd>{monthsText(record.forcing.apanMm, 0)} mm</dd></div>
 				<div>
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>

@@ -300,6 +300,19 @@ describe('fit record', () => {
 		expect(fitRecordStatus(base, { ...rec, forcing: pre030 }).forcingChanged).toBe(false);
 	});
 
+	it('records where the pan-coefficient row came from, and never counts an edit to it as a forcing change (engine ≥ 0.31.1)', () => {
+		const note = 'FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: invented station, 2010–2020';
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const, rainSource: [], panCoefficientSource: note };
+		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficientSource: note } });
+		expect(rec.forcing!.panCoefficientSource).toBe(note);
+		// Positive control: the same settings are no change; then only the note differs, still no change.
+		expect(fitRecordStatus(base, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, panCoefficientSource: 'reworded' }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, panCoefficientSource: '' }, rec).forcingChanged).toBe(false);
+		// No note, nothing recorded (a record made before 0.31.1 looks the same).
+		expect(fitRecordFromReport(report(), ctx).forcing).not.toHaveProperty('panCoefficientSource');
+	});
+
 	it('records the PE input and flags a change of its kind or row, not of its source note or of A-pan alone under a monthly PE (engine ≥ 0.31.0)', () => {
 		const mm: Monthly = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];
 		const monthlyPe = { kind: 'monthly' as const, mm, source: 'station FAO-56 ET₀ × 1.0' };

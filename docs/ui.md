@@ -737,8 +737,8 @@ which checks every catchment tab).
       0.70), Winter rainfall (e.g. Western Cape), Summer rainfall —
       indicative, from FAO-56 Table 5 climate classes, Allen et al. 1998;
       model.md §2.4a) fills the pan-coefficient row with a starting point;
-      the row stays editable after, and nothing is stored about which preset
-      (or whether one) was picked. Below it, a collapsed **Suggest from
+      the row stays editable after, and the preset's name goes into the
+      **Pan coefficient source** note below the row. Below it, a collapsed **Suggest from
       FAO-56 Table 5 (humidity, wind, siting)** helper
       (`settings/PanCoefficientHelper.svelte`, loaded as its own chunk and
       hidden on a read-only view): the pan siting (Case A, green crop, or
@@ -746,13 +746,20 @@ which checks every catchment tab).
       100 or 1000 m), an optional reduction for bare surroundings (0–20 %),
       the mean RH (%) and wind at 2 m (m/s) for each of the 12 months, and a
       required "Where the RH and wind came from" note. **Fill the
-      pan-coefficient row** replaces the 12 values in the form only: nothing
-      is saved until Save, and the values stay editable. The button stays
+      pan-coefficient row** replaces the 12 values in the form only, and
+      writes the table cells used plus the RH and wind note into the **Pan
+      coefficient source** note: nothing is saved until Save, and the values
+      and note stay editable. The button stays
       disabled, with the reason beside it, until every month has a valid RH
       and wind and the note is written. Then the monthly **pan coefficient**
       row. A warning appears under the row when a month sits outside
       FAO-56's usual 0.6–0.85 range for a Class A pan — a plausibility
-      check, not a hard limit, so a value further out still saves.
+      check, not a hard limit, so a value further out still saves. Under
+      the row, an optional **Pan coefficient source** text field (up to 600
+      characters, engine ≥ 0.31.1): where the row came from. Fit provenance
+      shows it as a "Pan coefficient source" row when a fit recorded one,
+      and the report's inputs add it to the GR4J potential evaporation line
+      under pan coefficient × A-pan.
     - **Under monthly PE**: the preset, the helper, the pan-coefficient row
       and its warning are hidden. A 12-month **Monthly PE (mm)** row, with a
       Year total, and a required **Source** field take their place.

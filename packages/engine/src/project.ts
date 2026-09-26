@@ -256,6 +256,13 @@ export interface ProjectSettings {
 	 */
 	panCoefficient: Monthly;
 	/**
+	 * Where the pan-coefficient row came from (engine ≥ 0.31.1, issue #39):
+	 * free text, e.g. the FAO-56 Table 5 cells and the humidity and wind
+	 * behind them, which the Settings helper fills in. Provenance only: the
+	 * model never reads it, and editing it is not a forcing change. '' = none.
+	 */
+	panCoefficientSource: string;
+	/**
 	 * Where GR4J's potential evaporation comes from (engine ≥ 0.31.0, issue
 	 * #39). `{ kind: 'pan' }` (the default, and what every earlier run did):
 	 * PE = `panCoefficient` × `apanMm`. `{ kind: 'monthly' }`: PE is `mm` per
@@ -374,6 +381,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
+		panCoefficientSource: '',
 		pe: { kind: 'pan' },
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',

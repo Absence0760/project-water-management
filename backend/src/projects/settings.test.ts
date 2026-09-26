@@ -199,6 +199,31 @@ describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
 	});
 });
 
+describe('SettingsPatch.panCoefficientSource (engine ≥ 0.31.1, issue #39)', () => {
+	const parse = (v: unknown) => SettingsPatch.safeParse({ panCoefficientSource: v });
+
+	it('accepts a note up to the limit, and empty (none); trims it', () => {
+		expect(parse('FAO-56 Table 5, Case A, 10 m green crop fetch').success).toBe(true);
+		expect(parse('').success).toBe(true);
+		expect(parse('x'.repeat(PE_SOURCE_MAX)).success).toBe(true);
+		const r = parse('  FAO-56 Table 5  ');
+		expect(r.success && r.data.panCoefficientSource).toBe('FAO-56 Table 5');
+		expect(mergeSettings({}).panCoefficientSource).toBe('');
+	});
+
+	it('rejects a too-long note or a non-string', () => {
+		expect(parse('x'.repeat(PE_SOURCE_MAX + 1)).success).toBe(false);
+		expect(parse(7).success).toBe(false);
+		expect(parse(null).success).toBe(false);
+	});
+
+	it('is recorded in a fit record’s forcing, optionally', () => {
+		const forcing = FitRecord.shape.forcing.unwrap().shape;
+		expect(forcing.panCoefficientSource.safeParse('FAO-56 Table 5').success).toBe(true);
+		expect(forcing.panCoefficientSource.safeParse(undefined).success).toBe(true);
+	});
+});
+
 describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
 	const parse = (pe: unknown) => SettingsPatch.safeParse({ pe });
 	const ok = (pe: unknown) => parse(pe).success;

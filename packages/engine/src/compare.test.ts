@@ -711,6 +711,8 @@ describe('diffInputs', () => {
 		delete (old.settings as Record<string, unknown>).runoffModel;
 		expect(diffInputs(old, a)).toEqual([]);
 		expect(texts(old, { ...a, settings: { ...a.settings, runoffModel: 'gr4j' } })).toEqual(['Runoff model: legacy (b023 recession) → GR4J']);
+		// Provenance only, but a changed note is still a difference between the two runs' records (engine ≥ 0.31.1).
+		expect(texts(a, { ...a, settings: { ...a.settings, panCoefficientSource: 'FAO-56 Table 5' } })).toEqual(['Pan coefficient source: none → "FAO-56 Table 5"']);
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

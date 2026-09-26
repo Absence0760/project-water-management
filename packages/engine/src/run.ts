@@ -83,6 +83,7 @@ import {
 	ESTIMATED_DAM_DEPTH_M,
 	panCoefficientOutOfRange,
 	resolvePe,
+	PE_SOURCE_MAX,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
 	upgradeLegacyModel,
@@ -101,7 +102,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.31.0';
+export const ENGINE_VERSION = '0.31.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -1503,6 +1504,8 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		s.runoffModel = d.runoffModel;
 	}
 	s.pe = resolvePe(raw?.pe, warnings);
+	// Provenance only (never read by the model): a string, capped like the PE source.
+	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
 	if (s.runoffModel === 'gr4j' && s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);
