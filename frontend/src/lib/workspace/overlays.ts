@@ -21,13 +21,14 @@ export function isGridId(v: string | null): v is GridId {
 /**
  * The workspace tab a grid is also shown on, where the modal isn't opened
  * (the grid is already on the page); null: only ever in the modal (the node
- * table, since the Network became a map, issue #17).
+ * table, since the Network became a map, and the crop grids, since Crops &
+ * demand became cards and bars, issue #17).
  */
 export const GRID_TAB: Record<GridId, string | null> = {
 	nodes: null,
-	'crop-factors': 'crops',
-	'planted-areas': 'crops',
-	demand: 'crops',
+	'crop-factors': null,
+	'planted-areas': null,
+	demand: null,
 	transfers: 'transfers'
 };
 

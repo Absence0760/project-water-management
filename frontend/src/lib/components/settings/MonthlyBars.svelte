@@ -3,7 +3,9 @@
 	// pragmatic EWR or A-pan evaporation. Decorative: the table beside it holds
 	// the same numbers. Pass `stacks` instead of `values` for stacked bars (one
 	// part per series, bottom first) with a legend; each stack takes a CSS
-	// colour, and the bar height is the parts' sum.
+	// colour, and the bar height is the parts' sum. `width`/`height` draw it
+	// at a caller's measured size (the Crops page's chart card), so it fills
+	// the card without scaling its text; the default is a small fixed figure.
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 
@@ -13,16 +15,19 @@
 		stacks,
 		unit,
 		label,
-		ariaLabel
-	}: { values?: number[]; stacks?: Stack[]; unit: string; label: string; ariaLabel?: string } = $props();
+		ariaLabel,
+		width,
+		height
+	}: { values?: number[]; stacks?: Stack[]; unit: string; label: string; ariaLabel?: string; width?: number; height?: number } = $props();
 
-	const W = 360;
-	const H = 110;
+	const fit = $derived(width !== undefined);
+	const W = $derived(Math.max(240, width ?? 360));
+	const H = $derived(height ?? 110);
 	const PAD_B = 16;
 	const series = $derived<Stack[]>(stacks ?? [{ id: 'v', name: label, values, color: 'var(--brand-outlet)' }]);
 	const totals = $derived(WATER_YEAR_MONTHS.map((_, i) => series.reduce((s, x) => s + Math.max(0, x.values[i] || 0), 0)));
 	const max = $derived(Math.max(1e-9, ...totals));
-	const bw = W / 12;
+	const bw = $derived(W / 12);
 	const scale = (v: number) => (v / max) * (H - PAD_B - 14);
 	const fmt = (v: number) => fmtNum(v, v < 10 ? 2 : 0);
 	/** Each month's parts, bottom up: [series index, value, y, height]. */
@@ -39,7 +44,7 @@
 	);
 </script>
 
-<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label={ariaLabel ?? `${label} by month (the table holds the values)`}>
+<svg viewBox="0 0 {W} {H}" class="bars" class:fit role="img" aria-label={ariaLabel ?? `${label} by month (the table holds the values)`}>
 	{#each parts as month, i (i)}
 		<g>
 			<title>{WATER_YEAR_MONTHS[i]}: {fmt(totals[i]!)} {unit}</title>
@@ -58,14 +63,14 @@
 					</rect>
 				{/if}
 			{/each}
-			<text x={i * bw + bw / 2} y={H - 3} class="m">{WATER_YEAR_MONTHS[i]![0]}</text>
+			<text x={i * bw + bw / 2} y={H - 3} class="m">{fit && bw >= 28 ? WATER_YEAR_MONTHS[i] : WATER_YEAR_MONTHS[i]![0]}</text>
 		</g>
 	{/each}
 	<line x1="0" x2={W} y1={H - PAD_B} y2={H - PAD_B} class="base" />
 	<text x="2" y="10" class="max">max {fmt(max)} {unit}</text>
 </svg>
 {#if stacks}
-	<ul class="legend" aria-hidden="true">
+	<ul class="legend" class:fit aria-hidden="true">
 		{#each series as s (s.id)}<li><span class="key" style="background: {s.color}"></span>{s.name}</li>{/each}
 	</ul>
 {/if}
@@ -76,6 +81,10 @@
 		max-width: 420px;
 		height: auto;
 		display: block;
+	}
+	.fit,
+	.legend.fit {
+		max-width: none;
 	}
 	/* A thin surface-coloured gap between stacked parts, so neighbouring colours
 	   stay apart without relying on hue alone. */

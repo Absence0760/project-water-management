@@ -46,7 +46,8 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeVisible();
 	const nav = page.getByRole('navigation', { name: 'Project sections' });
 	await nav.getByRole('link', { name: 'Crops & demand' }).click();
-	await expect(page.getByLabel('Orchard on Upper farm, ha')).toHaveValue('35');
+	// Its bar on Crops & demand follows the unsaved edit.
+	await expect(page.getByRole('img', { name: 'Upper farm: 35 ha, Orchard 35 ha' })).toBeVisible();
 
 	// Reopened from the card, now with the unsaved 35 ha, it saves through the page's save, with the reason.
 	await nav.getByRole('link', { name: 'Network' }).click();

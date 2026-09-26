@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
 import { createProject, createRun, register, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal } from '../support/network.ts';
 
 // Every code chunk the page asks for once this is routed is the one under test.
 const BLOCKED = '**/_app/immutable/**/*.js';
@@ -62,7 +63,9 @@ test('with unsaved model edits the failure warns, and the reload asks before dis
 	void owner;
 	const project = await createProject(page.request, 'Chunk failure, unsaved');
 	await page.goto(`/projects/${project.id}?tab=crops`);
-	await page.getByRole('button', { name: 'Add crop' }).click();
+	await page.getByRole('button', { name: 'Add crop', exact: true }).click();
+	// The new crop's sheet opens; Done leaves the edit for the save bar.
+	await closeModal(page);
 	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
 
 	await page.route(BLOCKED, (r) => r.abort());

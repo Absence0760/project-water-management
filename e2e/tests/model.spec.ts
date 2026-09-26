@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { addCrop, openCropGrid, openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeForm, openNodeTable, saveModelChanges } from '../support/network.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -44,19 +45,27 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 
 	// --- crops, factors and planted areas ------------------------------------
 	await tab(page, 'Crops').click();
-	await page.getByRole('button', { name: 'Add crop' }).click();
-	await page.getByRole('textbox', { name: 'Crop name' }).fill('Vines');
-	await page.getByLabel('Vines crop factor, Jan').fill('0.8');
-	await page.getByLabel('Vines crop factor, Feb').fill('0.75');
-	const unplanted = page.getByText(/(has|have) no planted area, so (its|their) irrigation demand counts as zero\.$/);
-	await expect(unplanted).toHaveText('Hilltop farm and Valley farm have no planted area, so their irrigation demand counts as zero.');
-	await page.getByLabel('Vines on Hilltop farm, ha').fill('25');
+	// + Add crop opens the new crop's sheet: its name and 12 factors.
+	const sheet = await addCrop(page);
+	await sheet.getByRole('textbox', { name: 'Crop name' }).fill('Vines');
+	await sheet.getByLabel('Vines crop factor, Jan').fill('0.8');
+	await sheet.getByLabel('Vines crop factor, Feb').fill('0.75');
+	await closeModal(page);
+	const unplanted = /(has|have) no planted area, so (its|their) irrigation demand counts as zero\.$/;
+	await expect(page.getByText(unplanted)).toHaveText('Hilltop farm and Valley farm have no planted area, so their irrigation demand counts as zero.');
+	// Planted areas: the full grid, from the page's Edit areas.
+	await page.getByRole('link', { name: 'Edit areas' }).click();
+	const areas = page.getByRole('dialog', { name: 'Planted areas' });
+	await areas.getByLabel('Vines on Hilltop farm, ha').fill('25');
 	// The note follows the unsaved edit.
-	await expect(unplanted).toHaveText('Valley farm has no planted area, so its irrigation demand counts as zero.');
-	await page.getByLabel('Vines on Valley farm, ha').fill('8');
-	await expect(unplanted).toBeHidden();
-	const totals = page.getByRole('row', { name: /^Total/ });
-	await expect(totals).toContainText('33.00 ha');
+	await expect(areas.getByText(unplanted)).toHaveText('Valley farm has no planted area, so its irrigation demand counts as zero.');
+	await areas.getByLabel('Vines on Valley farm, ha').fill('8');
+	await expect(areas.getByText(unplanted)).toBeHidden();
+	await expect(areas.getByRole('row', { name: /^Total/ })).toContainText('33.00 ha');
+	await closeModal(page);
+	// The page's bars and header follow.
+	await expect(page.getByTestId('crops-summary')).toHaveText('1 crop · 33 ha irrigated on 2 farms · water year October to September');
+	await expect(page.getByRole('img', { name: 'Hilltop farm: 25 ha, Vines 25 ha' })).toBeVisible();
 
 	// --- a transfer from Hilltop to Valley in Dec + Jan ----------------------
 	await tab(page, 'Transfers').click();
@@ -88,12 +97,20 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(page.getByLabel('transfer 1 enabled')).toBeChecked();
 
 	await tab(page, 'Crops').click();
-	await expect(page.getByRole('textbox', { name: 'Crop name' })).toHaveValue('Vines');
-	await expect(page.getByLabel('Vines crop factor, Jan')).toHaveValue('0.8');
-	await expect(page.getByLabel('Vines crop factor, Feb')).toHaveValue('0.75');
-	await expect(page.getByLabel('Vines crop factor, Mar')).toHaveValue('0');
-	await expect(page.getByLabel('Vines on Hilltop farm, ha')).toHaveValue('25');
-	await expect(page.getByLabel('Vines on Valley farm, ha')).toHaveValue('8');
+	const factors = await openCropGrid(page, 'crop-factors');
+	await expect(factors.getByRole('textbox', { name: 'Crop name' })).toHaveValue('Vines');
+	await expect(factors.getByLabel('Vines crop factor, Jan')).toHaveValue('0.8');
+	await expect(factors.getByLabel('Vines crop factor, Feb')).toHaveValue('0.75');
+	await expect(factors.getByLabel('Vines crop factor, Mar')).toHaveValue('0');
+	await closeModal(page);
+	const areasAfter = await openCropGrid(page, 'planted-areas');
+	await expect(areasAfter.getByLabel('Vines on Hilltop farm, ha')).toHaveValue('25');
+	await expect(areasAfter.getByLabel('Vines on Valley farm, ha')).toHaveValue('8');
+	await closeModal(page);
+	// The sheet shows the same saved factors.
+	const vines = await openCropSheet(page, 'Vines');
+	await expect(vines.getByLabel('Vines crop factor, Jan')).toHaveValue('0.8');
+	await closeModal(page);
 
 	await tab(page, 'Network').click();
 	const table = await openNodeTable(page);

@@ -571,7 +571,7 @@
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
 					<Lazy load={LOAD.crops}>
-						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} />{/snippet}
+						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} />{/snippet}
 					</Lazy>
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />

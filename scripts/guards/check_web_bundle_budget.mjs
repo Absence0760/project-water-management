@@ -775,6 +775,13 @@
 //             the sidebar slot; AppHeader removed) landed at exactly 912; pages
 //             starting at the sidebar, Help's "On this page" rail and the phone
 //             Menu's outside-click close add 1: 913. Headroom ~5 KB.
+// 2026-09-26  total 918 → 925 KB (measured 920, from 913 at b4d1923d).
+//             Issue #17 A3: Crops & demand becomes a page of crop cards
+//             (factor sparklines), the demand chart and per-farm stacked
+//             bars, with a crop sheet (crops/CropsTab, CropSheet, cards.ts);
+//             the old tab body moved unchanged to CropGrids for the grid
+//             modal and override mode, the demand table to DemandTable.
+//             Lazy with the Crops tab; no new dependency. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -785,7 +792,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 918,
+	totalCodeKb: 925,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

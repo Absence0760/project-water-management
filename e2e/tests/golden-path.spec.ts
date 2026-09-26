@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { PASSWORD, uniqueEmail } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { addCrop } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
@@ -71,13 +72,19 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 
 	// --- crops: one crop with monthly factors, planted on every farm -------------
 	await tab(page, 'Crops').click();
-	await page.getByRole('button', { name: 'Add crop' }).click();
-	await page.getByRole('textbox', { name: 'Crop name' }).fill('Citrus');
-	for (const [i, m] of MONTHS.entries()) await page.getByLabel(`Citrus crop factor, ${m}`).fill(CROP_FACTORS[i]!);
-	await page.getByLabel('Citrus on Ridge farm, ha').fill('20');
-	await page.getByLabel('Citrus on Middle farm, ha').fill('15');
-	await page.getByLabel('Citrus on River farm, ha').fill('10');
-	await expect(page.getByRole('row', { name: /^Total/ })).toContainText('45.00 ha');
+	// + Add crop opens the crop's sheet (name and 12 factors); Edit areas opens the planted-areas grid.
+	const sheet = await addCrop(page);
+	await sheet.getByRole('textbox', { name: 'Crop name' }).fill('Citrus');
+	for (const [i, m] of MONTHS.entries()) await sheet.getByLabel(`Citrus crop factor, ${m}`).fill(CROP_FACTORS[i]!);
+	await closeModal(page);
+	await page.getByRole('link', { name: 'Edit areas' }).click();
+	const areas = page.getByRole('dialog', { name: 'Planted areas' });
+	await areas.getByLabel('Citrus on Ridge farm, ha').fill('20');
+	await areas.getByLabel('Citrus on Middle farm, ha').fill('15');
+	await areas.getByLabel('Citrus on River farm, ha').fill('10');
+	await expect(areas.getByRole('row', { name: /^Total/ })).toContainText('45.00 ha');
+	await closeModal(page);
+	await expect(page.getByTestId('crop-card').filter({ hasText: 'Citrus' })).toContainText('45 ha · peak need in');
 
 	// --- transfers: Ridge → River in summer ------------------------------------
 	await tab(page, 'Transfers').click();
