@@ -384,6 +384,17 @@ export interface DataQualitySettings {
 export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] as const;
 export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
+/**
+ * The label of a run's observed-flow series by the record it holds: the
+ * calibration record (`observed_flow`) and, when the project has both, the
+ * other one (`observed_flow_other`, engine ≥ 0.38.0). A caller can tell the
+ * gauge from the logger by it (the stored series ref carries the label).
+ */
+export const OBSERVED_SERIES_LABEL: Record<CalibrationFlowKind, string> = {
+	flow_observed_m3s: 'Observed flow',
+	flow_logger_m3s: 'Observed flow (logger)'
+};
+
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 /** Defaults taken from the blank b023 workbook. */
@@ -1225,7 +1236,26 @@ export interface CalibrationStats {
 	exclusions?: ExclusionRange[];
 	/** Observed days inside the window that the exclusions left out (engine ≥ 0.8.0). */
 	excludedDays?: number;
+	/**
+	 * Whether these are in-sample scores: were the run's parameters fitted on
+	 * the days scored? (engine ≥ 0.38.0, calibrationFitStatus in
+	 * ./calibrate/provenance.ts). Absent on older runs.
+	 */
+	fitStatus?: CalibrationFitStatus;
 }
+
+/**
+ * How a run's parameters relate to its calibration period:
+ * - `fitted`: fitted automatically on these days (the run's fit record, for
+ *   its runoff model, its window, exclusions and record, parameters as
+ *   fitted): the scores are in-sample.
+ * - `notFitted`: no fit record for the run's runoff model; the parameters
+ *   were set by hand, imported or left at their defaults.
+ * - `edited`: a fit exists but parameters were changed by hand since.
+ * - `otherPeriod`: fitted, but on another window, other exclusions or the
+ *   other flow record, so the days scored are not the days fitted.
+ */
+export type CalibrationFitStatus = 'fitted' | 'notFitted' | 'edited' | 'otherPeriod';
 
 /** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */
 export interface EwrComplianceGrid {
@@ -1315,7 +1345,7 @@ export interface EwrAgreement {
 export interface CurtailmentFarm {
 	nodeId: string;
 	name: string;
-	/** [H] Average net irrigation demand. */
+	/** [H] Average abstraction demand D = F / e (engine ≥ 0.16.0; the workbook: net irrigation demand F). */
 	demandM3Day: number;
 	/** [I] Average irrigation supplied. */
 	suppliedM3Day: number;

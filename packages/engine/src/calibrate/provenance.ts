@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
-import { resolvePe, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { resolvePe, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS, LEGACY_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -450,6 +450,21 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
 		chirpsSourceChanged
 	};
+}
+
+/**
+ * Were these settings' parameters fitted on the days a run scores (issue
+ * #45)? Only then are the calibration statistics in-sample. `flowKind` is
+ * the record the run scored (the default pick resolved). A change of forcing
+ * since the fit doesn't count here: the days are still the ones fitted.
+ */
+export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind): CalibrationFitStatus {
+	const record = resolveFitRecord(settings as Partial<ProjectSettings> & Record<string, unknown>);
+	if (!record || record.model !== (settings.runoffModel ?? 'legacy')) return 'notFitted';
+	const status = fitRecordStatus(settings, record);
+	if (status.editedParams.length) return 'edited';
+	if (status.windowChanged || status.exclusionsChanged || record.flowKind !== flowKind) return 'otherPeriod';
+	return 'fitted';
 }
 
 /** Plain-language caveats for a fit record in these settings; empty when it describes them exactly. */
