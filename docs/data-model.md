@@ -326,7 +326,7 @@ B on … because …". A run can be nominated again later (A, B, A).
   the statement, is what would let a project delete cascade to both tables;
   the guard below refuses that delete first.)
 - **A project with a nomination is kept for good** (issue #43,
-  040_project_evidence_guard.sql). The `project_evidence_guard` BEFORE DELETE
+  035_project_evidence_guard.sql). The `project_evidence_guard` BEFORE DELETE
   trigger on `project` (`SECURITY DEFINER`, `search_path` pinned) raises
   `restrict_violation` when the project has **any** `run_nomination` row,
   whoever deletes and however (the route, direct SQL as `water_app`, the

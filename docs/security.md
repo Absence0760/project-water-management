@@ -334,7 +334,7 @@ In short:
   - The history shows everywhere a reader weighs results: the Runs tab, the
     run header, compare, the summary CSV; a later run of another runoff model
     raises a warning.
-  - The **project is kept too** (issue #43, 040_project_evidence_guard): a
+  - The **project is kept too** (issue #43, 035_project_evidence_guard): a
     project with any nomination, current or since replaced, can't be deleted.
     The `project_evidence_guard` BEFORE DELETE trigger (`SECURITY DEFINER`,
     `search_path` pinned) refuses it for every role, the schema owner

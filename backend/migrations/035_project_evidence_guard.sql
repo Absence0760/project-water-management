@@ -1,4 +1,4 @@
--- 040_project_evidence_guard — a project that has nominated an evidence run
+-- 035_project_evidence_guard — a project that has nominated an evidence run
 -- can't be deleted (issue #43; docs/data-model.md § Evidence nomination,
 -- docs/security.md § Tamper evidence).
 --
@@ -52,4 +52,4 @@ CREATE TRIGGER project_evidence_guard BEFORE DELETE ON project
 REVOKE ALL ON FUNCTION project_evidence_guard() FROM PUBLIC, water_app;
 
 COMMENT ON FUNCTION project_evidence_guard() IS
-	'Refuses to delete a project with any run_nomination row, so its evidence run and nomination history are kept (040_project_evidence_guard, issue #43).';
+	'Refuses to delete a project with any run_nomination row, so its evidence run and nomination history are kept (035_project_evidence_guard, issue #43).';
