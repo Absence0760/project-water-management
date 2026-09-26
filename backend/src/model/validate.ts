@@ -69,7 +69,10 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				id: uuid,
 				name: z.string().trim().min(1).max(100),
 				sortOrder: z.number().int().optional(),
-				cropFactor: z.array(z.number().finite().min(0)).length(12)
+				cropFactor: z.array(z.number().finite().min(0)).length(12),
+				// The crop's own irrigation efficiency (engine ≥ 0.41.0, issue #54): 0 < e ≤ 1,
+				// as the farm's; null / absent = the farm's.
+				irrigationEfficiency: z.number().gt(0).max(1).nullable().optional()
 			})
 		)
 		.max(200),

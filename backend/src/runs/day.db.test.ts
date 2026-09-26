@@ -107,6 +107,24 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(res.body.params.irrigationEfficiency).toBe(0.8);
 	});
 
+	it('gives the efficiency the run used when a crop carries its own (engine 0.41.0), so D = F ÷ e redoes the day', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Trace crop efficiency' })).body.project.id;
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		const out2 = node('Outlet', null);
+		const farm2 = node('Upper', out2.id, { damCapacityM3: 50_000, damInitialPct: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 });
+		const drip = { ...crop, id: crypto.randomUUID(), irrigationEfficiency: 0.9 };
+		const model = { nodes: [out2, farm2], crops: [drip], cropAreas: [{ nodeId: farm2.id, cropId: drip.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: new Array(10).fill(0) });
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Drip' });
+		expect(run.status).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/day?${new URLSearchParams({ date: '2020-01-03', nodeId: farm2.id })}`);
+		expect(res.status).toBe(200);
+		// The farm's own 0.8 is overridden by its only crop's 0.9.
+		expect(res.body.params.irrigationEfficiency).toBeCloseTo(0.9, 12);
+		expect(valueOf(res.body, 'demand')).toBeCloseTo(valueOf(res.body, 'crop_requirement') / 0.9, 9);
+	});
+
 	it('reads a run saved before engine 0.16.0 with its return flow % as migration 006 maps it', async () => {
 		// Rewrite the stored snapshot as an engine 0.14 run held it (as the owner role: runs are immutable to the app).
 		const pg = (await import('pg')).default;

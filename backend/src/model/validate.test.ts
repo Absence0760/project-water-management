@@ -139,6 +139,17 @@ describe('ModelBody (PUT /model, project documents)', () => {
 		expect(ModelBody.safeParse(body([out, { ...farm, lossReturnFraction: -0.1 }])).success).toBe(false);
 	});
 
+	it('takes an optional own irrigation efficiency per crop, 0 < e ≤ 1 or null (engine 0.41.0)', () => {
+		const out = node('Gauge', null);
+		const crop = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: new Array(12).fill(0.5) };
+		const m = (c: Record<string, unknown>) => ({ ...body([out]), crops: [c] });
+		expect(ModelBody.parse(m(crop)).crops[0]).not.toHaveProperty('irrigationEfficiency');
+		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: 0.9 })).crops[0]!.irrigationEfficiency).toBe(0.9);
+		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: 1 })).crops[0]!.irrigationEfficiency).toBe(1);
+		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: null })).crops[0]!.irrigationEfficiency).toBeNull();
+		for (const bad of [0, -0.1, 1.01, 85, '0.9', Infinity]) expect(ModelBody.safeParse(m({ ...crop, irrigationEfficiency: bad })).success, String(bad)).toBe(false);
+	});
+
 	it('needs a whole-number transfer priority, and gives a transfer from an older document its list position (Q18)', () => {
 		const out = node('Gauge', null);
 		const a = node('A', out.id);
