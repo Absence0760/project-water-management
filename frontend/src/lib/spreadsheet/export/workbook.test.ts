@@ -2,7 +2,11 @@ import type { RunSummary } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { parseCsv } from './csv';
-import { annualVolumeRows, buildWorkbook, dailyCells, dailyStub, inputRows, streamDailySheet, type DailyTable, type WorkbookInput } from './workbook';
+import { createRequire } from 'node:module';
+import { dailyCells, dailyStub, sheetjsWorkbook, streamDailySheet } from './sheetjsReference';
+import { annualVolumeRows, buildWorkbook, inputRows, type DailyColumn, type DailyTable, type WorkbookInput } from './workbook';
+
+const require = createRequire(import.meta.url);
 
 // Synthetic run data only (the repo is public).
 const CSV_LINES = [
@@ -261,24 +265,66 @@ describe('buildWorkbook', () => {
 	});
 });
 
-describe('daily sheets streamed into SheetJS XML', () => {
-	/** Sheet XML SheetJS writes for `ws` in a one-sheet workbook. */
-	const sheetXml = (ws: XLSX.WorkSheet) => {
-		const wb = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(wb, ws, 'S');
-		const cfb = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false })), { type: 'array' });
-		return new TextDecoder().decode(XLSX.CFB.find(cfb, '/xl/worksheets/sheet1.xml').content);
+describe('the workbook is byte for byte what SheetJS wrote (issue #9: ./writer.ts replaced it)', () => {
+	/**
+	 * A SheetJS module as the export worker had it: SheetJS keeps its number
+	 * format table in module state, and the worker was new for every export,
+	 * so each reference build gets a freshly loaded copy.
+	 */
+	const freshSheetJS = (): typeof XLSX => {
+		const path = require.resolve('xlsx/dist/xlsx.mini.min.js');
+		delete require.cache[path];
+		return require(path) as typeof XLSX;
 	};
+	/** The zip's parts by name, as text. */
+	const partsOf = (bytes: Uint8Array) => {
+		const cfb = XLSX.CFB.read(bytes, { type: 'array' });
+		return cfb.FullPaths.flatMap((p: string, i: number) => {
+			const f = cfb.FileIndex[i];
+			return f.type === 2 && f.content?.length ? [[p.slice(cfb.FullPaths[0].length), new TextDecoder().decode(f.content)]] : [];
+		});
+	};
+	const same = async (x: WorkbookInput) => {
+		const [mine, reference] = [await buildWorkbook(x), await sheetjsWorkbook(freshSheetJS(), x)];
+		// Part by part first, so a difference reads as XML rather than as a byte offset.
+		expect(partsOf(mine)).toEqual(partsOf(reference));
+		expect(Buffer.from(mine).equals(Buffer.from(reference))).toBe(true);
+	};
+	const col = (header: string, unit: string | null, values: (number | null)[]): DailyColumn => ({ header, unit, values });
 
-	it('is byte-for-byte the sheet SheetJS writes from the same cells', () => {
-		for (const t of [catchment, farm('F')]) {
-			const streamed = new TextDecoder().decode(streamDailySheet(sheetXml(dailyStub(t)), t));
-			expect(streamed).toBe(sheetXml(dailyCells(t)));
-		}
+	it('for the full test run: 12 sheets, every number format, formula-looking names', () => same(input()));
+
+	it('for a bare run, a legacy run and one with small-flow formats', async () => {
+		await same(input({ summary: { farms: [], warnings: [] } as unknown as RunSummary, catchment: null, nodes: [], settings: null, model: null }));
+		await same(input({ summaryCsv: '# runoff_model=legacy; workbook comparison only; not evidence (audit H1)\r\n' + summaryCsv }));
+		const fdc = ['Flow-duration percentiles', 'Days ranked,Q10 (m³/s),Q95 (Mm³)', 'Whole run,0.00042,0.0000123', 'Wet,12.5,0.009'];
+		await same(input({ summaryCsv: summaryCsv + fdc.join('\r\n') + '\r\n' }));
 	});
 
-	it('refuses sheet XML it does not recognise rather than writing a broken file', () => {
-		expect(() => streamDailySheet('<worksheet><sheetData><row r="1"></row></sheetData></worksheet>', catchment)).toThrow(/unexpected sheet XML/);
+	it('for awkward text: whitespace, line breaks, control characters, markup and non-Latin script', () =>
+		same(
+			input({
+				summaryCsv: '﻿' + ['Project," lead space"', 'Run,"trail space "', 'Notes,"two\nlines"', 'Tab,"a\tb"', 'Bell,"x\u0007y"', 'Markup,"<b>&amp;\'q\'""</b>"', 'Name,Ωμέγα 水 😀', '', 'Warnings', ' '].join('\r\n') + '\r\n',
+				catchment: { name: 'Catchment', startDate: '2000-02-28', columns: [col(' Flow\nnext (m³/day)', 'm³/day', [1, NaN, Infinity, -0, 1e21, 1.5e-300])] },
+				nodes: [
+					{ name: 'No days', startDate: '2000-01-01', columns: [col('Dam storage (m³)', 'm³', [])] },
+					{ name: 'No columns', startDate: '2000-01-01', columns: [] },
+					{ name: '  Farm & <co> "x" ', startDate: '1999-12-31', columns: [col('Share (%)', '%', [50, 12.25]), col('Ratio (×)', '×', [0.5]), col('Flag (flag)', 'flag', [1, 0])] }
+				]
+			})
+		));
+
+	it('for a multi-year run (thousands of rows per sheet, more than nine sheets)', () => same(input(syntheticRun(2, 8))), 60_000);
+
+	it('the reference itself: streaming a SheetJS stub gives the sheet SheetJS writes from every cell', () => {
+		const sheetXml = (ws: XLSX.WorkSheet) => {
+			const wb = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(wb, ws, 'S');
+			const cfb = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false })), { type: 'array' });
+			return new TextDecoder().decode(XLSX.CFB.find(cfb, '/xl/worksheets/sheet1.xml').content);
+		};
+		for (const t of [catchment, farm('F')]) expect(streamDailySheet(XLSX, sheetXml(dailyStub(XLSX, t)), t)).toBe(sheetXml(dailyCells(XLSX, t)));
+		expect(() => streamDailySheet(XLSX, '<worksheet><sheetData><row r="1"></row></sheetData></worksheet>', catchment)).toThrow(/unexpected sheet XML/);
 	});
 
 	it('handles thousands of rows and reads back every value', async () => {
@@ -354,7 +400,7 @@ describe('the zip container', () => {
 		// Sheet 2 (the farm) holds the same XML SheetJS writes from the full cells.
 		const wb = XLSX.utils.book_new();
 		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x']]), 'Summary');
-		XLSX.utils.book_append_sheet(wb, dailyCells(t), 'F');
+		XLSX.utils.book_append_sheet(wb, dailyCells(XLSX, t), 'F');
 		const full = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false })), { type: 'array' });
 		const expected = new TextDecoder().decode(XLSX.CFB.find(full, '/xl/worksheets/sheet2.xml').content);
 		expect(p.get('xl/worksheets/sheet2.xml')!.replace(/ s="\d+"/g, '')).toBe(expected.replace(/ s="\d+"/g, ''));

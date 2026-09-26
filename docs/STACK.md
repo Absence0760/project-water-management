@@ -39,12 +39,14 @@ sides share.
   query's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
-  charts, vitest. SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) writes the `.xlsx`
-  run export (the b023 import reads workbooks with its own streaming reader,
-  `lib/spreadsheet/import/`; the tests use SheetJS to check it), pinned as a URL dependency on its official CDN tarball
+  charts, vitest. No spreadsheet library ships: the `.xlsx` run export
+  writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
+  import reads workbooks with its own streaming reader
+  (`lib/spreadsheet/import/`). SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) is a
+  dev dependency the tests check both against (`writer.test.ts` fails if app
+  code imports it), pinned as a URL dependency on its official CDN tarball
   (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`, integrity hash in
-  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand
-  and only load it lazily (a worker or a lazy chunk), never in a page chunk. Dev port `7777`. `frontend/.env.production` sets
+  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),

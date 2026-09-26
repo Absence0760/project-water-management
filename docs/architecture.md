@@ -200,9 +200,8 @@ import worker kept scenario-op and fit-provenance code it never calls without
 it); the same test checks both.
 
 The `.xlsx` run export has a worker of its own
-(`lib/spreadsheet/export/export.worker.ts`, 87 KB gzip), because it carries
-SheetJS: a spreadsheet library in a page chunk would cost every visitor more
-than the whole workspace page. Nothing on a page imports it. The Download
+(`lib/spreadsheet/export/export.worker.ts`, 10.5 KB gzip), so the workbook
+code never lands in a page chunk. Nothing on a page imports it. The Download
 menu's "Workbook (.xlsx)" item dynamically imports a 0.5 KB runner
 (`lib/spreadsheet/export/runner.ts`), which starts the worker with
 `new Worker(new URL('./export.worker.ts', import.meta.url), { type: 'module' })`:
@@ -210,15 +209,20 @@ a same-origin script, so the CSP's `worker-src 'self'` allows it (no `blob:`
 workers; `infra/scripts/check-csp.mjs` passes on the build). The worker does
 the fetching (one bulk request per node, [api.md § Bulk run
 series](./api.md#bulk-run-series)) and the building, posts progress per node,
-and transfers the finished file back; Cancel terminates it. The zip itself
-is written by `zip.ts` with the browser's `CompressionStream('deflate-raw')`,
-since SheetJS's own browser deflate made files ~2.5 times larger. It imports
-SheetJS's mini build (`xlsx/dist/xlsx.mini.min`: `.xlsx` without the legacy
-formats and codepages, 87 KB instead of 112 KB). The bundle guard gives
-spreadsheet workers (`export.worker` and the workbook import's
-`import.worker`) their own ceiling, apart from the calibration worker's;
-since the import stopped carrying SheetJS, that ceiling is the export
-worker's.
+and transfers the finished file back; Cancel terminates it. The parts are
+written by `writer.ts`, the OOXML SheetJS CE 0.20.3 wrote for this workbook,
+byte for byte, without SheetJS (issue #9: the worker was 88 KB gzip with its
+mini build, 10.5 KB now). The export only ever wrote text cells, numeric
+cells with a number format, and column widths, so the parts are few and
+fixed; `workbook.test.ts` builds each test workbook both ways (the SheetJS
+path, kept as test-only `sheetjsReference.ts`) and compares the zips byte for
+byte, and `writer.test.ts` fails if app code imports `xlsx` again. The zip
+itself is written by `zip.ts` with the browser's
+`CompressionStream('deflate-raw')`, since SheetJS's own browser deflate made
+files ~2.5 times larger. The bundle guard gives spreadsheet workers
+(`export.worker` and the workbook import's `import.worker`) their own
+ceiling, apart from the calibration worker's; neither carries a spreadsheet
+library now, and the import worker is the larger.
 
 The in-browser b023 workbook import (WP-1.31) is built the same way:
 `lib/spreadsheet/import/import.worker.ts` (25 KB gzip) is the only code that

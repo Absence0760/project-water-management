@@ -2161,12 +2161,13 @@ or French locale, "1,234.56" in a US one), so the workbook doesn't prejudge
 D10, the app's own thousands separator, which is still open. The CSVs stay
 unformatted and ungrouped (machine-readable).
 
-The parts are SheetJS output (CE 0.20.3, its mini build): SheetJS writes the
-workbook uncompressed, and a daily sheet's rows are streamed into the sheet
-XML SheetJS wrote for a stub of it, in SheetJS's own cell markup (a whole
-client-size run as SheetJS cell objects needs ~4 GB, past a browser tab). A
-unit test pins that a streamed sheet is byte-for-byte the sheet SheetJS
-writes from the same cells. The zip container is written by
+The parts are what SheetJS CE 0.20.3 wrote for this workbook, byte for
+byte, written by the app's own `lib/spreadsheet/export/writer.ts` since
+2026-09-26 (issue #9: SheetJS was 78 KB of the worker's 88 KB gzip). Each
+daily sheet's rows are streamed into bytes (a whole client-size run as
+cell objects needs ~4 GB, past a browser tab). A unit test builds each test
+workbook both ways, with the writer and with the SheetJS path it replaced,
+and compares the files byte for byte. The zip container is written by
 `lib/spreadsheet/export/zip.ts`: every part deflated with the platform's
 `CompressionStream('deflate-raw')` (real zlib deflate), plain PKZIP headers
 and central directory, no zip64. SheetJS's own browser deflate is

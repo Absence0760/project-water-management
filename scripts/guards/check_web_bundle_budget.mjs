@@ -37,12 +37,13 @@
 //                   the largest spreadsheet worker: `export.worker.ts` (the
 //                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
 //                   in-browser workbook import, WP-1.31) in
-//                   frontend/src/lib/spreadsheet/. The export worker carries
-//                   SheetJS, which dwarfs the engine (the import worker has
-//                   read workbooks with its own streaming reader since
-//                   2026-09-25 and is far smaller); both load only when
-//                   someone asks for a workbook, so they get a ceiling of
-//                   their own rather than lifting the calibration worker's.
+//                   frontend/src/lib/spreadsheet/. Neither carries a
+//                   spreadsheet library any more: the import reads workbooks
+//                   with its own streaming reader (since 2026-09-25) and the
+//                   export writes them with its own OOXML writer (since
+//                   2026-09-26; with SheetJS it was 88 KB). Both load only
+//                   when someone asks for a workbook, so they keep a ceiling
+//                   of their own rather than lifting the calibration worker's.
 //                   Still counted in totalCodeKb; not in largestWorkerKb.
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
@@ -777,7 +778,7 @@ export function violations(m, budget = BUDGET) {
 	}
 	if (m.largestSpreadsheetWorker.kb > budget.largestSpreadsheetWorkerKb) {
 		out.push(
-			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. The export worker carries SheetJS (the import worker must not: it has its own reader); check a new import (or the full SheetJS build) is needed before raising the ceiling.`,
+			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. Neither spreadsheet worker carries a spreadsheet library (the import has its own reader, the export its own writer, frontend/src/lib/spreadsheet/); check a new import (above all SheetJS, ~85 KB) is needed before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
