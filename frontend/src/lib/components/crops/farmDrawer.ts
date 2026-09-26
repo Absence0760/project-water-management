@@ -2,6 +2,7 @@
 // crops and areas, opened over any workspace tab with `farm=<nodeId>` in the
 // URL. The drawer edits the shared ModelEditor, like the Crops tab.
 import type { ProjectModel } from '@water-management/engine';
+import { overlayHref, withoutParam } from '$lib/workspace/overlays';
 
 export interface FarmPlanting {
 	/** Every crop in the model, in its order, with this farm's area (m², 0 when unplanted). */
@@ -22,22 +23,8 @@ export function farmPlanting(model: ProjectModel, nodeId: string): FarmPlanting 
 	};
 }
 
-/**
- * The link that opens the drawer for a farm over `tab` (the workspace's
- * `?tab=` id; Summary, the default tab, has none), keeping any other
- * parameters the tab needs out: the drawer is its own state.
- */
-export function farmDrawerHref(tab: string | null, nodeId: string): string {
-	const q = new URLSearchParams();
-	if (tab && tab !== 'overview') q.set('tab', tab);
-	q.set('farm', nodeId);
-	return `?${q}`;
-}
+/** The link that opens the drawer for a farm over `tab` (lib/workspace/overlays.ts). */
+export const farmDrawerHref = (tab: string | null, nodeId: string) => overlayHref(tab, 'farm', nodeId);
 
 /** The URL with the drawer closed: `farm` dropped, everything else kept. */
-export function withoutFarm(url: URL): string {
-	const q = new URLSearchParams(url.search);
-	q.delete('farm');
-	const s = q.toString();
-	return `${url.pathname}${s ? `?${s}` : ''}${url.hash}`;
-}
+export const withoutFarm = (url: URL) => withoutParam(url, 'farm');

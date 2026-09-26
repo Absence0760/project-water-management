@@ -8,6 +8,7 @@
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
@@ -42,7 +43,6 @@
 	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, [nodeId])[0] ?? null);
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
 	const peak = $derived(demand ? demand.monthlyM3Day.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0) : 0);
-	const blocking = $derived(editor.issues.length);
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);
 </script>
 
@@ -99,31 +99,7 @@
 		{#if readonly || !node}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
 		{:else}
-			<div class="save">
-				<p class="status small" aria-live="polite">
-					{#if editor.saving}
-						Saving…
-					{:else if editor.saveError}
-						<span class="err">Save failed: {editor.saveError}</span>
-					{:else if editor.dirty && blocking}
-						Unsaved changes · <span class="err">{blocking} problem{blocking === 1 ? '' : 's'} to fix before saving</span>
-					{:else if editor.dirty}
-						Unsaved changes to the model
-					{:else}
-						<span class="muted">No unsaved changes</span>
-					{/if}
-				</p>
-				{#if editor.dirty}
-					<label class="reason">
-						<span class="visually-hidden">Reason for this change (optional)</span>
-						<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={editor.saving} />
-					</label>
-				{/if}
-				<div class="buttons">
-					<button type="button" class="btn" onclick={() => (open = false)}>Done</button>
-					<button type="button" class="btn btn-primary" onclick={onsave} disabled={editor.saving || blocking > 0 || !editor.dirty}>Save changes</button>
-				</div>
-			</div>
+			<ModelSaveRow {editor} {onsave} ondone={() => (open = false)} bind:reason />
 		{/if}
 	{/snippet}
 </Dialog>
@@ -141,22 +117,6 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-	}
-	.save {
-		display: grid;
-		gap: 0.5rem;
-		width: 100%;
-	}
-	.status {
-		margin: 0;
-	}
-	.err {
-		color: var(--danger);
-	}
-	.buttons {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
 	}
 	.small {
 		font-size: 0.85rem;
