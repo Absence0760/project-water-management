@@ -1071,6 +1071,15 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **The Sandspruit example fails `catchments.test.ts` on main** (seen
+      2026-09-25 on origin/main at 9590fa1, before the scenario merge): engine
+      0.28.0's forecast-rain warning (3ae50b9) fires on the example's last 10
+      days (2025-01-01 … 2025-01-10), which the test's expected-warnings list
+      doesn't include. Either the example's rain source for those days is
+      wrong, or the list needs the new warning with a reason. Owner: the
+      forecast-rain change.
+
+
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
   scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
