@@ -2,6 +2,7 @@
 // feeds). The types mirror backend/src/feeds/store.ts FeedMeta; the calls go
 // through the app's API client, and the form helpers are pure so they can be
 // tested without a page.
+import type { SeriesMeta } from '@water-management/engine';
 import type { Api } from '$lib/api';
 import { ApiError } from '$lib/api/client';
 import { fmtDate, fmtDay } from '$lib/format/number';
@@ -34,7 +35,25 @@ export interface FeedMeta {
 	consecutiveFailures: number;
 	lastError: string | null;
 	lastMeta: Record<string, string | number> | null;
-	health: { state: FeedState; stale: boolean; staleAfterDays: number; message: string };
+	health: FeedHealth;
+}
+
+/** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
+export type HealthReason =
+	| { code: 'off'; newest: string | null }
+	| { code: 'failing'; failures: number; error: string | null; newest: string | null }
+	| { code: 'old-forecast'; newest: string }
+	| { code: 'old-data'; newest: string }
+	| { code: 'no-data' }
+	| { code: 'not-fetched'; since: string; after: 'attached' | 'changed' }
+	| { code: 'waiting' }
+	| { code: 'ok'; newest: string | null; checked: string };
+
+export interface FeedHealth {
+	state: FeedState;
+	stale: boolean;
+	staleAfterDays: number;
+	reason: HealthReason;
 }
 
 export interface SourceOption {
@@ -180,13 +199,71 @@ export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'
 }
 
 /**
- * The server's health sentence (backend/src/feeds/health.ts) with its calendar
- * days written the way the rest of the panel writes them: "newest data
- * 2026-09-01" → "newest data 1 Sep 2026". Only bare YYYY-MM-DD days are
- * rewritten (never a timestamp), read from the string, so no time zone
- * shifts them.
+ * The health sentence for a feed, from the server's reason code and its facts
+ * (backend/src/feeds/health.ts). Days are calendar days, written with fmtDay
+ * ("1 Sep 2026") straight from their YYYY-MM-DD, so no time zone shifts them.
+ * A code this client doesn't know (a newer server) falls back to the state.
  */
-export const healthMessage = (message: string) => message.replace(/\b\d{4}-\d{2}-\d{2}\b(?![T:\d])/g, (d) => fmtDay(d));
+export function healthMessage(h: FeedHealth): string {
+	const r = h.reason;
+	const newest = (d: string | null) => (d ? `newest data ${fmtDay(d)}` : 'no data yet');
+	switch (r.code) {
+		case 'off':
+			return `Switched off; ${newest(r.newest)}.`;
+		case 'failing': {
+			const what = r.failures === 1 ? 'The last fetch failed' : `The last ${r.failures} fetches failed`;
+			const n = newest(r.newest);
+			return `${what}: ${r.error ?? 'unknown error'}. ${n.charAt(0).toUpperCase()}${n.slice(1)}.`;
+		}
+		case 'old-forecast':
+			return `No new forecast: it reaches only ${fmtDay(r.newest)}, less than ${-h.staleAfterDays} days ahead.`;
+		case 'old-data':
+			return `No new data: the newest day, ${fmtDay(r.newest)}, is more than ${h.staleAfterDays} days old.`;
+		case 'no-data':
+			return 'Fetches succeed but have found no data yet: check the cells or station.';
+		case 'not-fetched':
+			return `Not fetched since it was ${r.after} on ${fmtDay(r.since)}: the background worker may not be running.`;
+		case 'waiting':
+			return 'Waiting for its first fetch.';
+		case 'ok':
+			return `OK; ${newest(r.newest)}, checked ${fmtDay(r.checked)}.`;
+		default:
+			return `${STATE_LABELS[h.state] ?? 'Unknown state'}.`;
+	}
+}
+
+/**
+ * The existing series a new feed would take over, or null. A feed replaces
+ * its target's values on every day it fetches, uploaded and imported ones
+ * included (docs/architecture.md § Data feeds), so the form asks first when
+ * the target already holds data. A series another feed already writes is not
+ * a takeover: the server refuses a second feed for it with its own message.
+ */
+export function takeoverOf(
+	series: readonly Pick<SeriesMeta, 'kind' | 'name' | 'length'>[],
+	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[],
+	target: Pick<FeedBody, 'targetKind' | 'targetName'>
+): Pick<SeriesMeta, 'kind' | 'name' | 'length'> | null {
+	if (feeds.some((f) => f.targetKind === target.targetKind && f.targetName === target.targetName)) return null;
+	return series.find((s) => s.kind === target.targetKind && s.name === target.targetName && s.length > 0) ?? null;
+}
+
+/**
+ * A series name for the feed that no series or feed of that kind uses yet
+ * ("CHIRPS", "CHIRPS 2", "DWS A2H012"), so the feed's values sit beside the
+ * existing record instead of replacing it.
+ */
+export function separateName(
+	body: Pick<FeedBody, 'source' | 'config' | 'targetKind'>,
+	series: readonly Pick<SeriesMeta, 'kind' | 'name'>[],
+	feeds: readonly Pick<FeedMeta, 'targetKind' | 'targetName'>[]
+): string {
+	const base = 'station' in body.config ? `DWS ${body.config.station}` : body.source === 'chirps_gefs' ? 'CHIRPS-GEFS' : 'CHIRPS';
+	const taken = new Set([...series.filter((s) => s.kind === body.targetKind).map((s) => s.name), ...feeds.filter((f) => f.targetKind === body.targetKind).map((f) => f.targetName)]);
+	let name = base;
+	for (let i = 2; taken.has(name); i++) name = `${base} ${i}`;
+	return name;
+}
 
 /** How many feeds need attention (stale or failing), for the section's warning. */
 export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>

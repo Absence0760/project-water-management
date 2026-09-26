@@ -292,13 +292,14 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
 		expect(feed).toMatchObject({ consecutiveFailures: 1, lastDataDate: null, health: { state: 'failing' } });
 		expect(feed.lastError).toMatch(/^the source’s data could not be read: the grid has no data at -20.27, 25.37/);
-		expect(feed.health.message).toMatch(/^The last fetch failed: /);
+		expect(feed.health.reason).toEqual({ code: 'failing', failures: 1, error: feed.lastError, newest: null });
+		expect(feed.health).not.toHaveProperty('message');
 
 		// Fixing the cell clears the failure (a new place) and the next fetch succeeds.
 		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()] } });
 		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null });
 		// The old place's fetch says nothing about the new one: waiting, not "ok, no data".
-		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health).toMatchObject({ state: 'pending', message: 'Waiting for its first fetch.' });
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health).toMatchObject({ state: 'pending', reason: { code: 'waiting' } });
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
 		await tick();
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].health.state).toBe('ok');
