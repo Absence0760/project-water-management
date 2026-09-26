@@ -100,6 +100,8 @@ describe('importing a WARMS extract', () => {
 		expect(res.body.source).toMatchObject({ kind: 'warms_extract', fileName: 'warms-synthetic.csv', sha256: preview.sha256, rows: 10, reference: 'synthetic' });
 		const list = (await editor.call('GET', `/projects/${projectId}/allocations`)).body;
 		expect(list.allocations).toHaveLength(10);
+		// What an allocation can be matched to: the farms, never the outlet gauge.
+		expect(list.nodes.map((n: { name: string }) => n.name)).toEqual(['Farm A', 'Farm B', 'Farm C', 'Farm D', 'Farm E']);
 		expect(list.allocations.find((a: { registrationNo: string }) => a.registrationNo === 'SYN-0010')).toMatchObject({ nodeId: farmB.id, sourceId, holder: 'Nobody Z' });
 		const [{ kind }] = await asOwner('SELECT kind FROM audit_event WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
 		expect(kind).toBe('allocation.imported');
