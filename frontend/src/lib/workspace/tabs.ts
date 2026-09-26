@@ -24,6 +24,8 @@ export const TAB_GROUP = {
 	series: 'core',
 	settings: 'inputs',
 	runs: 'core',
+	// Two runs side by side (the /compare page's view, issue #17): anyone who can read runs.
+	compare: 'core',
 	// Viewers can read scenarios (and compare them with the base run).
 	scenarios: 'core',
 	// Registered volumes vs modelled use (WP-3.10): viewers read volumes, not names.
@@ -109,7 +111,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  * `?tab=<id>`.
  */
 export const NAV_SECTIONS = [
-	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] },
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'compare', 'scenarios', 'allocations'] },
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
 	{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];

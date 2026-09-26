@@ -69,6 +69,17 @@ export function compareSearch(a: RunRef | null, b: RunRef | null, project?: stri
 }
 
 /**
+ * The workspace's Compare runs tab for a pair (issue #17): `?tab=compare`
+ * plus the pair, never `project=` (the tab's project is the page's).
+ */
+export function compareTabHref(a: RunRef | null, b: RunRef | null): string {
+	const q = new URLSearchParams({ tab: 'compare' });
+	if (a) q.set('a', formatRef(a));
+	if (b) q.set('b', formatRef(b));
+	return `?${q}`;
+}
+
+/**
  * A run in a picker, with what the Runs list shows beside it: "Baseline ·
  * 2026-09-23 14:05 · 1981–2025 · latest · published · evidence · pinned ·
  * workbook comparison" (each tag only when it applies). A native option holds text

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
-import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
+import { compareSearch, compareTabHref, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, runOptionLabel } from './picker';
 
 const run = (id: string, label = ''): RunMeta => ({
 	id,
@@ -99,5 +99,15 @@ describe('publishedBaseline (the "Compare with published" offer)', () => {
 		expect(publishedBaseline([run('r3'), run('r1')], ref('r1'), ref('r3'))).toBeNull(); // nothing published
 		expect(publishedBaseline(undefined, ref('r1'), ref('r3'))).toBeNull(); // runs not loaded yet
 		expect(publishedBaseline(runs, ref('r1'), null)).toBeNull(); // no B
+	});
+});
+
+describe('compareTabHref', () => {
+	it('opens the workspace tab with the pair, and never names the project', () => {
+		const a = { projectId: 'p', runId: 'r1' };
+		const b = { projectId: 'q', runId: 'r2' };
+		expect(compareTabHref(a, b)).toBe('?tab=compare&a=p%3Ar1&b=q%3Ar2');
+		expect(compareTabHref(null, b)).toBe('?tab=compare&b=q%3Ar2');
+		expect(compareTabHref(null, null)).toBe('?tab=compare');
 	});
 });

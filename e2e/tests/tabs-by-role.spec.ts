@@ -13,9 +13,9 @@ const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
 // In sidebar order: Outcomes, Build the model, Review (issue #17, lib/workspace/tabs.ts NAV_SECTIONS).
-const EVERY_TAB = ['Summary', 'Runs & results', 'Scenarios', 'Allocations', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Applications', 'History'];
+const EVERY_TAB = ['Summary', 'Runs & results', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Applications', 'History'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
-const SHORT = ['Summary', 'Runs & results', 'Scenarios', 'Allocations', 'Data'];
+const SHORT = ['Summary', 'Runs & results', 'Compare runs', 'Scenarios', 'Allocations', 'Data'];
 
 /** The strip's tab names, in order. */
 async function tabNames(page: Page) {
@@ -34,8 +34,8 @@ test('owners and editors see every tab, and no "Show model inputs"', async ({ pa
 		await expect.poll(() => tabNames(p)).toEqual(EVERY_TAB);
 		await expect(toggle(p)).toHaveCount(0);
 		// Grouped into named sections.
-		await expect(strip(p).getByRole('group', { name: 'Outcomes' }).getByRole('link')).toHaveText(EVERY_TAB.slice(0, 4));
-		await expect(strip(p).getByRole('group', { name: 'Build the model' }).getByRole('link')).toHaveText(EVERY_TAB.slice(4, 9));
+		await expect(strip(p).getByRole('group', { name: 'Outcomes' }).getByRole('link')).toHaveText(EVERY_TAB.slice(0, 5));
+		await expect(strip(p).getByRole('group', { name: 'Build the model' }).getByRole('link')).toHaveText(EVERY_TAB.slice(5, 10));
 		await expect(strip(p).getByRole('group', { name: 'Review' }).getByRole('link')).toHaveText(['Applications', 'History']);
 		// Every checklist step links to its tab.
 		await expect(setup(p).getByRole('link')).toHaveCount(5);
@@ -76,7 +76,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'Runs & results', 'Scenarios', 'Allocations', 'Network', 'Data']);
+	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'Runs & results', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Data']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Summary' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -93,7 +93,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body.
-	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'Runs & results', 'Scenarios', 'Allocations', 'Data', 'Settings & calibration']);
+	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'Runs & results', 'Compare runs', 'Scenarios', 'Allocations', 'Data', 'Settings & calibration']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();

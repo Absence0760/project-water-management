@@ -33,6 +33,8 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
 	},
+	// One seeded run, so the tab says there is nothing to compare yet.
+	{ id: 'compare', ready: (p) => expect(p.getByRole('heading', { name: 'Only one run so far' })).toBeVisible() },
 	{ id: 'history', ready: (p) => expect(p.getByTestId('history-entry').first()).toBeVisible() }
 ];
 

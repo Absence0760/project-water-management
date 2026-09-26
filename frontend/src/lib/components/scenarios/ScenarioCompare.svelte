@@ -5,8 +5,9 @@
 	// the farms, and the per-node daily overlay (issue #8's CompareOverlay and
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
-	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
+	import { compareSearch, compareTabHref } from '$lib/components/compare/picker';
+	import { untrack } from 'svelte';
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -16,7 +17,16 @@
 
 	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
 
-	let { projectId, scenario }: { projectId: string; scenario: Scenario } = $props();
+	let {
+		projectId,
+		scenario,
+		applicant = false
+	}: {
+		projectId: string;
+		scenario: Scenario;
+		/** An applicant has no workspace tabs, so the full comparison is the /compare page for them. */
+		applicant?: boolean;
+	} = $props();
 
 	let data = $state<RunCompareResponse | null>(null);
 	let loading = $state(false);
@@ -57,7 +67,11 @@
 
 	/** The scenario's ops changed since this run: its results are of the older list. */
 	const stale = $derived(!!data?.b.scenario && data.b.scenario.opsSha256 !== scenario.opsSha256);
-	const compareHref = $derived(data ? `${base}/compare?a=${encodeURIComponent(ref(data.a.run.id))}&b=${encodeURIComponent(ref(data.b.run.id))}` : '');
+	const compareHref = $derived.by(() => {
+		if (!data) return '';
+		const [a, b] = [{ projectId, runId: data.a.run.id }, { projectId, runId: data.b.run.id }];
+		return applicant ? `${base}/compare${compareSearch(a, b)}` : compareTabHref(a, b);
+	});
 </script>
 
 <section class="panel" aria-labelledby="sc-compare-h">

@@ -48,7 +48,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, Runs & results, Scenarios, Allocations),
+first): **Outcomes** (Summary, Runs & results, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -74,6 +74,7 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 | --- | --- | --- | --- |
 | Summary | (none) | `summary` | `lib/components/overview/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
+| Compare runs | `compare` (`&a=<projectId>:<runId>&b=…`) | | `lib/components/compare/CompareView.svelte` ([run-comparison.md](./run-comparison.md)) |
 | Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
 | Allocations | `allocations` | | `lib/components/allocations/` |
 | Network | `network` | | `lib/components/network/` |
@@ -91,7 +92,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
+| viewer | Summary, Data, Runs & results, Compare runs, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -240,7 +241,7 @@ put the results first. Top to bottom:
   **New auto run: publish?** (WP-2.11, editors): when the newest automatic
   run is newer than the published run (`autorun/autoRun.ts`
   `autoRunToPublish`), the card names it with **Compare with the published
-  run** (the compare page, published run as A) and **Review and publish**
+  run** (the Compare runs tab, published run as A) and **Review and publish**
   (the Runs tab on the auto run, at its Publication panel). Publication stays
   a person's act unless the project chose "Publish if there are no new
   warnings" in Settings; nothing here publishes.
@@ -1474,15 +1475,15 @@ run's report to chosen members every week or month.
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
   whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
-  runs** (`/compare?project=<id>`, [run-comparison.md](./run-comparison.md)).
+  runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
   **Which run opens** when the URL names none (`defaultRunId` in
   `runs/runList.ts`): for an editor or owner the newest run, the one they are
   working on; for a viewer the published baseline when there is one (the run
   stakeholders are meant to read), else the newest. An explicit `?run=`
   always wins. Viewing any run other than the published one, the results
-  header offers **Compare with published** (`/compare?a=<published>&b=<this
-  run>`, [run-comparison.md](./run-comparison.md)).
+  header offers **Compare with published** (the Compare runs tab,
+  `?tab=compare&a=<published>&b=<this run>`, [run-comparison.md](./run-comparison.md)).
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Pinned runs** (015_run_pinned). Each row has a pin toggle for editors
@@ -1970,7 +1971,8 @@ them scenarios).
   of a rebased scenario is still compared with its own base), through
   `GET /compare/runs`: headline results, the farms table and the per-node
   daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
-  #8), with **Open the full comparison**. A note says when the changes were
+  #8), with **Open the full comparison** (the Compare runs tab; for an
+  applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
   edited since that run.
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
   based on is tagged **Scenario base** and has no ✕ (it is cited: kept, no
