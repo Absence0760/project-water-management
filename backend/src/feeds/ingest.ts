@@ -22,15 +22,27 @@
 // fetch before ~08:30 UTC reads yesterday's issue) is dropped without
 // touching the series, so it never overwrites a newer forecast's days; the
 // feed records only that it was checked (last_attempt_at).
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+//
+// A CHIRPS feed writes one product and version (feeds/config.ts
+// feedProvenance) and the series records it (031_series_provenance.sql). A
+// target that holds values of another product or version, or an unrecorded
+// one, is never merged into: the fetch is recorded as failed, saying so,
+// unless an owner confirmed replacing the series (data_feed.replace_series_from
+// names what it held then). While it still holds exactly that, the ingest
+// replaces the series whole with the fetched days, keeping the old values as
+// a `feed_replace` series revision, and uses up the confirmation. The fit
+// record then flags the forcing as changed (engine fitRecordStatus), and the
+// run comparison notes the new version.
+import { fromEpochDay, provenanceKey, provenanceLabel, toEpochDay } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { recordAudit, seriesSubject } from '../history/record.js';
-import { mergeSeries, SeriesBody } from '../series/merge.js';
-import { type FeedSource, SOURCES } from './config.js';
+import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
+import { hasValues, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
+import { replaceSeries } from '../series/routes.js';
+import { type FeedSource, feedProvenance, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
-import { type FeedRow, lockFeedIssued, recordFeedChecked, recordFeedResult } from './store.js';
+import { type FeedRow, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
 
 /** The newest day a source can have on `today` (UTC): a forecast's 16th day, else today. */
 export function latestDay(source: FeedSource, today: string): string {
@@ -110,9 +122,42 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				startDate: result.startDate,
 				values: result.values
 			});
+			const writes = feedProvenance(feed.source, feed.config);
+			// The version guard, on the locked row: nothing can relabel or refill it between the check and the write.
+			const cur = writes ? await lockSeries(db, feed.projectId, feed.targetKind, feed.targetName) : null;
+			const held = cur ? rowProvenance({ product: cur.product ?? null, productVersion: cur.productVersion ?? null }) : null;
+			if (writes && !seriesAccepts(writes, cur ? { filled: hasValues(cur.values), provenance: held } : null)) {
+				if (feed.replaceFrom !== provenanceKey(held)) {
+					return failed(
+						db,
+						feed,
+						`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
+					);
+				}
+				// Confirmed: the series becomes the fetched days, whole, in the feed's version.
+				try {
+					await replaceSeries(
+						db,
+						feed.projectId,
+						{ ...body, provenance: writes },
+						{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source } }
+					);
+				} catch (err) {
+					if (!(err instanceof ApiError)) throw err;
+					return failed(db, feed, `the series could not take the new days: ${err.message}`);
+				}
+				await feedReplaceDone(db, feed.id);
+				merged = result.values.filter((v) => v !== null).length;
+				lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
+				lastValue = result.values[lastIdx]!;
+				const meta = { ...result.meta, merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
+				await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
+				return { merged, lastDate };
+			}
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
-				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true });
+				// provenance: labels a new or empty series with what the feed writes.
+				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, ...(writes ? { provenance: writes } : {}) });
 				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
 				if (subject.daysChanged) await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
 			} catch (err) {

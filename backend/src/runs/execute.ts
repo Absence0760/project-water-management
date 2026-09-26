@@ -9,7 +9,8 @@ import {
 	type OpClass,
 	type RunVerification,
 	type ScenarioOp,
-	type SeriesKind
+	type SeriesKind,
+	type SeriesProvenance
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
@@ -28,12 +29,16 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const model = await loadModel(db, projectId);
 	// First series of each kind (ordered by name) — the engine takes one per kind.
-	const { rows: s } = await db.query<{ kind: SeriesKind; start_date: string; values: (number | null)[] }>(
-		`SELECT DISTINCT ON (kind) kind, start_date, "values" FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
+	const { rows: s } = await db.query<{ kind: SeriesKind; start_date: string; values: (number | null)[]; product: string | null; product_version: string | null }>(
+		`SELECT DISTINCT ON (kind) kind, start_date, "values", product, product_version FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
 	const series: Partial<Record<SeriesKind, DailySeries>> = {};
-	for (const r of s) series[r.kind] = { startDate: r.start_date, values: r.values };
+	for (const r of s) {
+		// The product and version (031_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
+		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
+		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
+	}
 	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
 }
 
@@ -180,6 +185,8 @@ interface SnapshotSeries {
 	length: number;
 	/** SHA-256 of seriesDigest(values); absent on runs saved before the hash existed. */
 	valuesSha256?: string;
+	/** The series' product and version (031_series_provenance.sql), null = not recorded; absent on runs saved before it. */
+	provenance?: SeriesProvenance | null;
 }
 
 /**
@@ -241,7 +248,13 @@ export async function runAndStore(
 		series: Object.fromEntries(
 			Object.entries(input.series).map(([k, v]) => [
 				k,
-				{ startDate: v.startDate, length: v.values.length, valuesSha256: hashes[k]! } satisfies SnapshotSeries
+				{
+					startDate: v.startDate,
+					length: v.values.length,
+					valuesSha256: hashes[k]!,
+					// Absent when the input didn't know it (a scenario rerun of a run from before 031).
+					...(v.provenance !== undefined ? { provenance: v.provenance } : {})
+				} satisfies SnapshotSeries
 			])
 		),
 		...(scenario ? { scenario } : {})
@@ -385,7 +398,7 @@ export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
 		if (got.start_date !== want.startDate) throw bad(`starts on ${got.start_date}, not ${want.startDate} as the run recorded`);
 		if (got.values.length !== want.length) throw bad(`has ${got.values.length} days, not ${want.length} as the run recorded`);
 		if (got.sha256 !== want.valuesSha256 || seriesHash(got.values) !== got.sha256) throw bad('fails its SHA-256 check');
-		series[kind as SeriesKind] = { startDate: got.start_date, values: got.values };
+		series[kind as SeriesKind] = { startDate: got.start_date, values: got.values, ...(want.provenance !== undefined ? { provenance: want.provenance } : {}) };
 	}
 	const extra = refs.find((x) => !(x.kind in snap));
 	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);

@@ -3,8 +3,10 @@
 // fixtures are re-dated to "now", like the real products' publishing lags,
 // so a feed attached in dev or e2e fills with recent days and shows healthy:
 //
-//   CHIRPS  final up to finalLagDays before today, preliminary up to
-//           prelimLagDays before it, 404 after (chirps-sample.json)
+//   CHIRPS  sat: from 1998, final up to finalLagDays before today,
+//           preliminary up to prelimLagDays before it, 404 after; rnl: from
+//           1981, final only, up to rnlLagDays before today, the pattern a
+//           day later (chirps-sample.json)
 //   GEFS    an issue every day, 16 forecast days (gefs-sample.json)
 //   DWS     the sample page's values replayed for the requested window,
 //           ending DWS_FIXTURE_LAG_DAYS before today (dws-sample.html)
@@ -31,10 +33,15 @@ interface GridFixture {
 	pattern: number[];
 	finalLagDays?: number;
 	prelimLagDays?: number;
+	rnlLagDays?: number;
 	exampleCell?: { lat: number; lon: number };
 }
 
 const load = <T>(name: string): T => JSON.parse(readFileSync(`${FIXTURE_DIR}${name}`, 'utf8')) as T;
+
+// The first days the fixture serves each CHIRPS v3 daily product, as the real ones start.
+const SAT_FIRST = toEpochDay('1998-01-01');
+const RNL_FIRST = toEpochDay('1981-01-01');
 
 /** The DWS fixture's newest day is this many days before today. */
 export const DWS_FIXTURE_LAG_DAYS = 90;
@@ -82,9 +89,17 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 
 	const file = (url: string): Uint8Array | null => {
 		const t = toEpochDay(today());
-		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/(final|prelim)\/sat\/\d{4}\/chirps-v3\.0\.(?:sat|prelim)\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
+		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
+		if (m && url.startsWith(CHC_BASE)) {
+			const day = toEpochDay(`${m[1]}-${m[2]}-${m[3]}`);
+			if (day < RNL_FIRST || day > t - (chirps.rnlLagDays ?? 6)) return null;
+			// The same pentads, other daily timing: the pattern a day later.
+			return cached(`crnl${day}`, () => gridFile(chirps, day - 1));
+		}
+		m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/(final|prelim)\/sat\/\d{4}\/chirps-v3\.0\.(?:sat|prelim)\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
 			const day = toEpochDay(`${m[2]}-${m[3]}-${m[4]}`);
+			if (day < SAT_FIRST) return null;
 			const final = day <= t - (chirps.finalLagDays ?? 40);
 			const prelim = !final && day <= t - (chirps.prelimLagDays ?? 3);
 			if (m[1] === 'final' ? !final : !prelim) return null;

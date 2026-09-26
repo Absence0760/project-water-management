@@ -149,7 +149,7 @@ describe('runFetch on the fixtures', () => {
 
 	it('CHIRPS with nothing published yet: ok, no days', async () => {
 		const r = await runFetch({ source: 'chirps', config: grid, start: '2026-03-09', end: '2026-03-09', today: '2026-03-10' }, http);
-		expect(r).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0 } });
+		expect(r).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, product: 'sat' } });
 	});
 });
 

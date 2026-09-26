@@ -407,7 +407,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.chirpsSourceChanged) {
 		out.push(
-			'The CHIRPS series holds another product version than the fit ran on, so the monthly CHIRPS factors and the rain on every day CHIRPS fills have changed. Refit before relying on the parameters.'
+			'The CHIRPS series holds another product or version than the fit ran on, so the monthly CHIRPS factors and the rain on every day CHIRPS fills have changed. Refit before relying on the parameters.'
 		);
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged) {

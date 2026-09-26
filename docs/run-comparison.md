@@ -254,6 +254,15 @@ dates add *the days both runs cover were not checked for edits*, so the limit
 is said rather than implied. Runs stored before the hash existed show
 nothing for an in-place edit. If the results changed and the list shows
 nothing, that is the likely reason.
+Each series' **product and version** is in the snapshot too
+(`provenance`, 031_series_provenance; null = not recorded). When both runs
+recorded it and it differs, the diff says so on its own line, whatever the
+dates and values do: *Rainfall (CHIRPS) is now CHIRPS sat v3.0 (was CHIRPS
+v2.0): the monthly CHIRPS factors are fitted on the new values, and a
+calibration made on the old ones no longer holds* (issue #40 part c). A run
+saved before it was recorded has nothing to compare, so it shows no line.
+The fit record's "Forcing changed since fit" row reads the same label
+(model.md §2.10b).
 A model from a run saved before engine 0.16.0 is read as migration 006 stored
 it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
 1 − r with every loss returning), so a project that only went through the

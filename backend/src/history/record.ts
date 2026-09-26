@@ -184,6 +184,7 @@ export type AuditKind =
 	| 'series.replaced'
 	| 'series.merged'
 	| 'series.deleted'
+	| 'series.labelled'
 	| 'run.created'
 	| 'run.changed'
 	| 'run.deleted'
@@ -223,12 +224,15 @@ export interface SeriesRow {
 	unit: string;
 	startDate: string;
 	values: (number | null)[];
+	/** The product and version (031_series_provenance.sql); both null = not recorded. Absent = null. */
+	product?: string | null;
+	productVersion?: string | null;
 }
 
 /** The series (kind, name) of a project, locked for the change about to be made; null when there is none. */
 export async function lockSeries(db: Db, projectId: string, kind: string, name: string): Promise<SeriesRow | null> {
 	const { rows } = await db.query<SeriesRow>(
-		`SELECT id, kind, name, unit, start_date AS "startDate", "values" FROM time_series
+		`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion" FROM time_series
 		 WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, kind, name]
 	);
@@ -239,11 +243,17 @@ export async function lockSeries(db: Db, projectId: string, kind: string, name: 
 export const valuesSha256 = (values: readonly (number | null)[]): string => createHash('sha256').update(seriesDigest(values)).digest('hex');
 
 /** Keep a series' values before they change, so they can be restored (within the retention). Returns the revision id. */
-export async function recordSeriesRevision(db: Db, projectId: string, s: SeriesRow, reason: 'replace' | 'delete' | 'manual_merge'): Promise<string> {
+export async function recordSeriesRevision(
+	db: Db,
+	projectId: string,
+	s: SeriesRow,
+	reason: 'replace' | 'delete' | 'manual_merge' | 'feed_replace'
+): Promise<string> {
+	// The product and version go with the values, so a restore puts the label back too (031_series_provenance.sql).
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9) RETURNING id`,
-		[projectId, s.id, s.kind, s.name, s.unit, s.startDate, s.values, valuesSha256(s.values), reason]
+		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11) RETURNING id`,
+		[projectId, s.id, s.kind, s.name, s.unit, s.startDate, s.values, valuesSha256(s.values), reason, s.product ?? null, s.productVersion ?? null]
 	);
 	return String(rows[0]!.id);
 }

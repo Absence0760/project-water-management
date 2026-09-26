@@ -7,6 +7,7 @@
 // DB test files run one at a time, so this file owns the data_feed table
 // while it runs: afterEach removes every feed, so no other file's tick finds
 // one due.
+import { fitRecordStatus, type FitRecord } from '@water-management/engine';
 import pg from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,6 +42,8 @@ const cell = () => ({ ...FIXTURE_CELL(), weight: 1 });
 const gefs = () => ({ source: 'chirps_gefs', config: { cells: [cell()] } });
 const chirps = (over: Record<string, unknown> = {}) => ({ source: 'chirps', config: { cells: [cell()], startDate: addDays(-20) }, ...over });
 const addDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+/** What a CHIRPS feed writes (the default, sat product): a series labelled so takes the feed's days without a confirmation. */
+const V3 = { product: 'CHIRPS sat', productVersion: '3.0' };
 
 async function project(owner: User, name = 'Feeds') {
 	return (await owner.call('POST', '/projects', { name })).body.project.id as string;
@@ -257,7 +260,7 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		const owner = await signUp('Keeper');
 		const pid = await project(owner);
 		// A user-entered value on a day the fixture hasn't published yet (yesterday).
-		const put = await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-1), values: [42] });
+		const put = await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-1), values: [42], ...V3 });
 		expect(put.status).toBe(200);
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
 		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
@@ -275,7 +278,7 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		const owner = await signUp('Floor');
 		const pid = await project(owner);
 		// The owner's own rainfall before the feed takes over.
-		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-30), values: [7, 7] })).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-30), values: [7, 7], ...V3 })).status).toBe(200);
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
 		for (let i = 0; i < 2; i++) {
 			// The second fetch has a newest day, so it re-reads revisions: not across startDate.
@@ -809,7 +812,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 
 	it('a merge the series can’t take (past 60 000 days) is a recorded failure that leaves the series whole', async () => {
 		const { owner, pid, id, ingest } = await setup('TooLong');
-		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1850-01-01', values: [7] })).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '1850-01-01', values: [7], ...V3 })).status).toBe(200);
 		expect(await ingest(ok('2026-01-01', [1]))).toEqual({ merged: 0, lastDate: null });
 		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '1850-01-01', values: [7] });
 		expect(await feedRow(id)).toMatchObject({
@@ -839,7 +842,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 
 	it('user-entered days: the source’s value replaces the user’s on the same day (the feed owns its series), a gap never erases one, another series is untouched', async () => {
 		const { owner, pid, ingest } = await setup('UserData');
-		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, 20, 30] });
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, 20, 30], ...V3 });
 		// The user's own record under another name: a feed writes only the series it targets.
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'My gauge', unit: 'mm', startDate: '2026-01-01', values: [5, 5, 5] });
 		await ingest(ok('2025-12-31', [0, 1, null, 3, 4]));
@@ -907,5 +910,165 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		// An older window never moves the newest date back.
 		await ingest(ok('2025-12-01', [4]));
 		expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-01-02', last_value: 2 });
+	});
+});
+
+// Issue #40 part c: a CHIRPS feed writes one product and version (CHIRPS sat
+// v3.0 by default), and never splices it onto a series holding another.
+describe('the CHIRPS version guard (031_series_provenance)', () => {
+	const V2 = { product: 'CHIRPS', productVersion: '2.0' };
+	/** A project whose CHIRPS series holds three days of v2.0, as a b023 import leaves it. */
+	async function withV2(name: string) {
+		const owner = await signUp(name);
+		const pid = await project(owner);
+		const put = await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2001-01-01', values: [1, 2, 3], ...V2 });
+		expect(put.body).toMatchObject({ product: 'CHIRPS', productVersion: '2.0' });
+		return { owner, pid, seriesId: put.body.id as string };
+	}
+	const chirpsLabel = async (pid: string) =>
+		(await asOwner(`SELECT product, product_version FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND name = ''`, [pid]))[0];
+
+	it('a new feed labels the series it creates with what it writes', async () => {
+		const owner = await signUp('Labeller');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		await tick();
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
+		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
+		expect(feed).toMatchObject({ writes: { product: 'CHIRPS sat', version: '3.0' }, series: { filled: true }, versionConflict: false, replaceFrom: null });
+	});
+
+	it('refuses to attach a feed to a series of another version, or an unrecorded one, without a confirmation; nothing is created', async () => {
+		const { owner, pid } = await withV2('Refuser');
+		const res = await owner.call('POST', `/projects/${pid}/feeds`, chirps());
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/^the series holds CHIRPS v2\.0 rainfall and this feed writes CHIRPS sat v3\.0/);
+		expect(res.body.details).toMatchObject({ code: 'series_version', holds: { product: 'CHIRPS', version: '2.0' }, writes: { product: 'CHIRPS sat', version: '3.0' } });
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds).toEqual([]);
+		// The rnl product is another forcing too, not a fix for it.
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], product: 'rnl' } }))).status).toBe(409);
+		// An unrecorded version with values is asked about as well …
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'Old', unit: 'mm', startDate: '2001-01-01', values: [1] })).status).toBe(200);
+		const unrecorded = await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: 'Old' }));
+		expect(unrecorded.status).toBe(409);
+		expect(unrecorded.body.error).toMatch(/holds an unrecorded version rainfall/);
+		// … and positive controls: a series of the same version, an empty one, and another name all attach.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'Same', unit: 'mm', startDate: '2001-01-01', values: [1], ...V3 })).status).toBe(200);
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: 'Same' }))).status).toBe(201);
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'Blank', unit: 'mm', startDate: '2001-01-01', values: [null] })).status).toBe(200);
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: 'Blank' }))).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: 'CHIRPS v3' }))).status).toBe(201);
+		// A person saying what the unrecorded one is (PATCH …/series/:id) is enough when it matches.
+		const old = ((await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; name: string }[]).find((s) => s.name === 'Old')!;
+		expect((await owner.call('PATCH', `/projects/${pid}/series/${old.id}`, V3)).body).toMatchObject({ product: 'CHIRPS sat', productVersion: '3.0' });
+		expect((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: 'Old' }))).status).toBe(201);
+	});
+
+	it('refuses every fetch into a series that became another version after the feed attached: nothing written, the failure says why', async () => {
+		const owner = await signUp('LateV2');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		// The workbook's v2 column arrives after the feed was set up.
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2001-01-01', values: [1, 2, 3], ...V2 });
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2001-01-01', values: [1, 2, 3] });
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS', product_version: '2.0' });
+		expect(await feedRow(id)).toMatchObject({
+			consecutive_failures: 1,
+			last_data_date: null,
+			last_error:
+				'the series holds CHIRPS v2.0 rainfall and this feed writes CHIRPS sat v3.0, so nothing was written: an owner must confirm replacing the series, or point the feed at another one'
+		});
+		const feed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
+		expect(feed).toMatchObject({ versionConflict: true, replaceFrom: null, series: { filled: true, provenance: { product: 'CHIRPS', version: '2.0' } } });
+		// A save that doesn't touch where or what the feed writes is still allowed (and still refused at fetch time).
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' })).status).toBe(200);
+	});
+
+	it('the confirmed path: replaces the series whole in the feed’s version, keeps the old values as a restorable revision, uses up the confirmation, and flags the fit', async () => {
+		const { owner, pid, seriesId } = await withV2('Replacer');
+		const confirm = await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true });
+		expect(confirm.status).toBe(201);
+		const id = confirm.body.feed.id;
+		expect(confirm.body.feed).toMatchObject({ versionConflict: true, replaceFrom: 'CHIRPS/2.0' });
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		// The series is the fetched days only, from the feed's start date: no v2 day is left to splice.
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe(addDays(-20));
+		expect(s.values.length).toBeLessThanOrEqual(20);
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
+		const row = await feedRow(id);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0' } });
+		expect((await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [id]))[0]).toEqual({ replace_series_from: null });
+		// The v2 values are kept, with their label, as a feed_replace revision …
+		const revs = await asOwner(`SELECT id, reason, product, product_version, "values" FROM series_revision WHERE project_id = $1 ORDER BY id DESC`, [pid]);
+		expect(revs[0]).toMatchObject({ reason: 'feed_replace', product: 'CHIRPS', product_version: '2.0', values: [1, 2, 3] });
+		// … the history says what happened …
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'series.replaced' ORDER BY id DESC LIMIT 1`, [pid]);
+		expect(ev.subject).toMatchObject({ feedId: id, source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } });
+		// … the feed is healthy and the next fetch merges as usual.
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null });
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect((await feedRow(id)).consecutive_failures).toBe(0);
+		// The refit: the live input (what the in-browser fit and Settings read) carries the new label, which
+		// fitRecordStatus compares with the one a fit recorded (engine provenance.test.ts), so a fit on v2.0 is flagged.
+		const live = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
+		expect(live.series.rain_chirps_mm.provenance).toEqual({ product: 'CHIRPS sat', version: '3.0' });
+		// Only the fields fitRecordStatus reads: a fit made under these settings, on the v2.0 series.
+		const fit = {
+			model: 'gr4j',
+			free: [],
+			params: {},
+			calibrationStart: null,
+			calibrationEnd: null,
+			exclusions: [],
+			flowKind: 'flow_observed_m3s',
+			forcing: { panCoefficient: live.settings.panCoefficient, apanMm: live.settings.apanMm, chirpsSource: { product: 'CHIRPS', version: '2.0' } }
+		} as unknown as FitRecord;
+		expect(fitRecordStatus(live.settings, fit, { chirpsSource: live.series.rain_chirps_mm.provenance })).toMatchObject({ chirpsSourceChanged: true, forcingChanged: true });
+		expect(fitRecordStatus(live.settings, fit, { chirpsSource: { product: 'CHIRPS', version: '2.0' } })).toMatchObject({ chirpsSourceChanged: false, forcingChanged: false });
+		// Restoring the kept values brings their label back with them (and the feed would refuse to write again).
+		expect((await owner.call('POST', `/projects/${pid}/series/${seriesId}/revisions/${revs[0].id}/restore`, {})).status).toBe(200);
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS', product_version: '2.0' });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2001-01-01', values: [1, 2, 3] });
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: true });
+	});
+
+	it('a confirmation names what the series held: a series relabelled since is refused again, and re-targeting drops it', async () => {
+		const { owner, pid, seriesId } = await withV2('Specific');
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), replaceSeries: true })).body.feed.id;
+		// Someone says the series is the rnl product after all: not what the owner agreed to replace.
+		expect((await owner.call('PATCH', `/projects/${pid}/series/${seriesId}`, { product: 'CHIRPS rnl', productVersion: '3.0' })).status).toBe(200);
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		await tick();
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ values: [1, 2, 3] });
+		expect((await feedRow(id)).last_error).toMatch(/^the series holds CHIRPS rnl v3\.0 rainfall/);
+		// A confirmation against the series as it now stands works (PATCH replaceSeries) …
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { replaceSeries: true })).body.feed).toMatchObject({ replaceFrom: 'CHIRPS rnl/3.0' });
+		// … and re-targeting the feed drops it: it named the old target's contents.
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { targetName: 'Elsewhere' })).body.feed).toMatchObject({ replaceFrom: null });
+	});
+
+	it('an rnl feed reads the rnl product from 1981, and is another forcing than sat: switching product asks again', async () => {
+		const owner = await signUp('Rnl');
+		const pid = await project(owner);
+		const res = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()], startDate: '1985-01-01', product: 'rnl' } });
+		expect(res.status).toBe(201);
+		expect(res.body.feed.writes).toEqual({ product: 'CHIRPS rnl', version: '3.0' });
+		const id = res.body.feed.id;
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const s = (await series(owner, pid, 'rain_chirps_mm'))!;
+		expect(s.startDate).toBe('1985-01-01');
+		expect(s.values.every((v) => v !== null)).toBe(true);
+		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS rnl', product_version: '3.0' });
+		expect((await feedRow(id)).last_meta).toMatchObject({ product: 'rnl', prelimDays: 0 });
+		// sat can't reach 1985, and switching the product is a version question like any other.
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()], startDate: '1985-01-01', product: 'sat' } })).status).toBe(400);
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { cells: [cell()], startDate: addDays(-20) } })).status).toBe(409);
 	});
 });

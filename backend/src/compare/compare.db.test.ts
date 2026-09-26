@@ -61,7 +61,8 @@ describe('GET /compare/runs', () => {
 		expect(res.body.b.run.inputs.series.rain_catchment_mm).toEqual({
 			startDate: '2020-01-01',
 			length: 60,
-			valuesSha256: expect.stringMatching(/^[0-9a-f]{64}$/)
+			valuesSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+			provenance: null
 		});
 		expect(res.body.b.run.summary.farms[0].name).toBe('Rooikloof');
 		expect(res.body.changes).toEqual([
@@ -163,6 +164,31 @@ describe('GET /compare/runs', () => {
 			}
 		]);
 		expect((await compare(u, `${projectId}:${after}`, `${projectId}:${same}`)).body.changes).toEqual([]);
+	});
+
+	it('notes a change of CHIRPS product or version between two runs (issue #40 part c)', async () => {
+		const u = await signUp('Versioner');
+		const { projectId } = await runnableProject(u);
+		const chirps = (product: string, productVersion: string) =>
+			u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2020-01-01', values: new Array(60).fill(1), product, productVersion });
+		expect((await chirps('CHIRPS', '2.0')).status).toBe(200);
+		const v2 = await run(u, projectId, 'On v2');
+		expect((await chirps('CHIRPS sat', '3.0')).status).toBe(200);
+		const v3 = await run(u, projectId, 'On v3');
+		const res = await compare(u, `${projectId}:${v2}`, `${projectId}:${v3}`);
+		expect(res.body.b.run.inputs.series.rain_chirps_mm.provenance).toEqual({ product: 'CHIRPS sat', version: '3.0' });
+		// The same values under another label: only the version line.
+		expect(res.body.changes).toEqual([
+			{
+				area: 'series',
+				kind: 'changed',
+				subject: 'Rainfall (CHIRPS)',
+				text: 'Rainfall (CHIRPS) is now CHIRPS sat v3.0 (was CHIRPS v2.0): the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds'
+			}
+		]);
+		// "Changes since this run" says it too.
+		const since = await u.call('GET', `/projects/${projectId}/runs/${v2}/changes-since`);
+		expect(since.body.changes.map((c: { text: string }) => c.text)).toEqual([expect.stringMatching(/^Rainfall \(CHIRPS\) is now CHIRPS sat v3\.0 \(was CHIRPS v2\.0\)/)]);
 	});
 
 	it('finds rain cut on the shared days even when a day was added (the date change no longer hides it)', async () => {

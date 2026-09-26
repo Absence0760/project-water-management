@@ -8,7 +8,7 @@
 // untrusted input and validates it (FetchResult below) before anything merges.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import { z } from 'zod';
-import { configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
+import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError } from './errors.js';
 import type { FeedHttp } from './http.js';
 import { fetchChirps, fetchGefs } from './sources/chirps.js';
@@ -151,10 +151,11 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 	try {
 		switch (req.source) {
 			case 'chirps': {
-				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end);
+				const product = chirpsProduct(req.config);
+				const r = await fetchChirps(http, (req.config as GridConfig).cells, req.start, req.end, product);
 				return r.values.length
-					? { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, prelimDays: r.prelimDays } }
-					: { ok: true, startDate: null, values: [], meta: { days: 0 } };
+					? { ok: true, startDate: r.startDate, values: r.values, meta: { days: r.values.length, prelimDays: r.prelimDays, product } }
+					: { ok: true, startDate: null, values: [], meta: { days: 0, product } };
 			}
 			case 'chirps_gefs': {
 				const r = await fetchGefs(http, (req.config as GridConfig).cells, req.today);
