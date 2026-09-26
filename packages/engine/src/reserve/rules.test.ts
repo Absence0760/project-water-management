@@ -123,7 +123,7 @@ describe('resolveEwrRules', () => {
 		// first made a run depend on the list's order).
 		for (const list of [[table(), table({ scale: 2 })], [table({ scale: 2 }), table()]]) {
 			const w2: string[] = [];
-			expect(resolveEwrRules([...list, table({ siteNodeId: 'g1' })], w2)).toEqual([table({ siteNodeId: 'g1' })]);
+			expect(resolveEwrRules([...list, table({ siteNodeId: 'g1' })], w2)).toEqual([table({ siteNodeId: 'g1', lowFlow: null, highFlows: [] })]);
 			expect(w2).toEqual(['2 EWR rule tables for the outlet: none is used, because each site has one']);
 		}
 	});
@@ -133,5 +133,53 @@ describe('resolveEwrRules', () => {
 		const [t] = resolveEwrRules([noScale], []);
 		expect(t!.scale).toBe(1);
 		expect(t!.natural).toBeNull();
+		// Engine ≥ 0.32.0: a table stored before low and high flows existed has neither.
+		expect(t!.lowFlow).toBeNull();
+		expect(t!.highFlows).toEqual([]);
+	});
+
+	it('copies the high-flow components with their months sorted', () => {
+		const e = { label: 'Freshet', months: [12, 1, 11], peakM3s: 5, durationDays: 2, perYear: 1 };
+		const [t] = resolveEwrRules([table({ highFlows: [e] })], []);
+		expect(t!.highFlows).toEqual([{ ...e, months: [1, 11, 12] }]);
+		expect(e.months).toEqual([12, 1, 11]);
+	});
+});
+
+describe('low flows and high-flow components (engine ≥ 0.32.0)', () => {
+	const freshet = { label: 'Class I freshet', months: [11, 12], peakM3s: 12.5, durationDays: 3, perYear: 2 };
+
+	it('accepts a low-flow grid on a total table and valid high-flow components', () => {
+		expect(ewrRuleTableIssues(table({ lowFlow: Array.from({ length: 12 }, () => [1, 0.6, 0.2]), highFlows: [freshet] }))).toEqual([]);
+		expect(blankEwrRuleTable()).toMatchObject({ lowFlow: null, highFlows: [] });
+	});
+
+	it('refuses a low-flow grid on a low-flow table, or one of the wrong shape', () => {
+		const low = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
+		expect(ewrRuleTableIssues(table({ component: 'lowFlow', lowFlow: low }))[0]!.field).toBe('lowFlow');
+		expect(ewrRuleTableIssues(table({ lowFlow: low.slice(1) }))[0]).toEqual({ field: 'lowFlow', message: 'Enter 12 rows of low-flow values (Oct … Sep).' });
+		expect(ewrRuleTableIssues(table({ lowFlow: low.map((r, m) => (m === 0 ? [1, -1, 0] : r)) }))[0]!.message).toMatch(/^Low-flow values must be numbers from 0/);
+	});
+
+	it('refuses high-flow components that are unnamed, out of range or cannot fit in a year', () => {
+		const msg = (e: object) => ewrRuleTableIssues(table({ highFlows: [e as never] })).map((i) => [i.field, i.message]);
+		expect(msg({ ...freshet, label: ' ' })).toEqual([['highFlows', 'High flow 1: name it (e.g. “Class II freshet”).']]);
+		expect(msg({ ...freshet, months: [] })[0]![1]).toMatch(/pick the months/);
+		expect(msg({ ...freshet, months: [11, 11] })[0]![1]).toMatch(/pick the months/);
+		expect(msg({ ...freshet, months: [13] })[0]![1]).toMatch(/pick the months/);
+		expect(msg({ ...freshet, peakM3s: 0 })[0]![1]).toMatch(/the peak must be above 0/);
+		expect(msg({ ...freshet, durationDays: 1.5 })[0]![1]).toMatch(/whole number of days/);
+		expect(msg({ ...freshet, durationDays: 91 })[0]![1]).toMatch(/whole number of days from 1 to 90/);
+		expect(msg({ ...freshet, perYear: 0 })[0]![1]).toMatch(/events per year/);
+		expect(msg({ ...freshet, durationDays: 90, perYear: 5 })[0]![1]).toBe("High flow 1: 5 events of 90 days don't fit in a year.");
+		expect(ewrRuleTableIssues(table({ highFlows: Array.from({ length: 13 }, () => freshet) }))[0]!.message).toBe('At most 12 high-flow components per table.');
+		expect(ewrRuleTableIssues(table({ highFlows: 'x' as never }))[0]!.field).toBe('highFlows');
+	});
+
+	it('notes low flows that rise or sit above the total', () => {
+		const t = table({ lowFlow: Array.from({ length: 12 }, (_, m) => (m === 0 ? [0.2, 0.6, 0.1] : m === 1 ? [2, 0.5, 0.1] : [1, 0.5, 0.1])) });
+		const notes = ewrRuleTableNotes(t);
+		expect(notes).toContain('the low flows rise with the % point in Oct (a drought flow above a maintenance one); check the table');
+		expect(notes).toContain('the low flows are above the total flow at 1 point (Nov 10 %), so the high flows there count as 0');
 	});
 });

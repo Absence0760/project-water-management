@@ -1059,4 +1059,40 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		delete (old.settings as Record<string, unknown>).ewrRules;
 		expect(texts(old, a)).toEqual([]);
 	});
+
+	it('compares low-flow and high-flow compliance, and flags a changed component as a changed table (engine ≥ 0.32.0)', () => {
+		const withLow = rule({ lowFlow: Array.from({ length: 12 }, () => [1, 0.6, 0.2]) });
+		// B: Jan–Mar at 40 % of natural (0.8 Mm³): below the 1 Mm³ total, above the 0.6 low flow.
+		const a = site(1, { table: withLow });
+		const b = site(0.4, { table: withLow });
+		const [row] = compareRuns(run(summary([], { ewrAssurance: [a] })), run(summary([], { ewrAssurance: [b] }))).ewrAssurance!;
+		expect(row!.tableChanged).toBe(false);
+		expect(row!.lowFlowRate).toEqual({ a: 1, b: 1, delta: 0 });
+		expect(row!.rate.b).toBe(18 / 24);
+		expect(row!.highFlowRate).toEqual({ a: null, b: null, delta: null });
+		const fresh = { label: 'Freshet', months: [10], peakM3s: 0.5, durationDays: 3, perYear: 1 };
+		const c = site(1, { table: { ...withLow, highFlows: [fresh] } });
+		const [changed] = compareRuns(run(summary([], { ewrAssurance: [a] })), run(summary([], { ewrAssurance: [c] }))).ewrAssurance!;
+		expect(changed!.tableChanged).toBe(true);
+		// Flat 2 Mm³ a month is ~0.75 m³/s, above the 0.5 m³/s peak all year: one event a year, starting 1 October, both years met.
+		expect(changed!.highFlowRate).toEqual({ a: null, b: 1, delta: null });
+	});
+
+	it('lists low-flow values and high-flow components changed in the inputs (engine ≥ 0.32.0)', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.lowFlow = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
+		b.settings.ewrRules![0]!.highFlows = [{ label: 'Freshet', months: [11], peakM3s: 5, durationDays: 3, perYear: 1 }];
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: low-flow values added', 'EWR rule table at the outlet: high-flow components none → Freshet']);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.lowFlow![4] = [1, 0.5, 0.2];
+		c.settings.ewrRules![0]!.highFlows![0]!.peakM3s = 6;
+		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: low-flow values changed in Feb', 'EWR rule table at the outlet: high-flow components Freshet → Freshet (values changed)']);
+		// Absent, null and [] are all none: a table saved before 0.32.0 compares equal to a blank one.
+		const d = structuredClone(a);
+		d.settings.ewrRules![0]!.lowFlow = null;
+		d.settings.ewrRules![0]!.highFlows = [];
+		expect(texts(a, d)).toEqual([]);
+	});
 });

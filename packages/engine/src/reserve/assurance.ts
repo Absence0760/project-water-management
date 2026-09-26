@@ -26,7 +26,7 @@
 // depends only on natural flow, so more abstraction can only lose months.
 import { toEpochDay, waterYearIndex } from '../calendar';
 import { waterYearOf } from '../network/stats';
-import type { EwrNaturalSource, EwrRuleComponent, EwrRuleTable, EwrRuleUnit } from './rules';
+import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleTable, EwrRuleUnit } from './rules';
 
 const SEC_PER_DAY = 86_400;
 /** Years of a calendar month below which the run's natural-flow percentiles are coarse. */
@@ -55,6 +55,56 @@ export interface EwrAssuranceMonth {
 	met: boolean;
 	/** MAX(R − A, 0) as a volume, m³. */
 	deficitM3: number;
+	/**
+	 * With a low-flow grid on a total table (engine ≥ 0.32.0, §2.9d): the
+	 * low-flow requirement at the same percentile, whether the month's flow met
+	 * it, and the high-flow part of the requirement, MAX(R − R_low, 0).
+	 * Absent without a low-flow grid.
+	 */
+	requiredLowFlow?: number;
+	lowFlowMet?: boolean;
+	requiredHighFlow?: number;
+}
+
+/** Months met against one requirement (the low flows of a total table). */
+export interface EwrMonthsMet {
+	months: number;
+	met: number;
+	/** met ÷ months; null without a complete month. */
+	rate: number | null;
+	deficitM3: number;
+	longestNotMetRun: number;
+}
+
+/** One water year of a high-flow component. */
+export interface EwrHighFlowYear {
+	/** By the calendar year its 1 October falls in. */
+	waterYear: number;
+	/** Events the site's natural flow had. */
+	natural: number;
+	/** Events the simulated flow had. */
+	actual: number;
+	/** MIN(perYear, natural): nothing is asked that natural flow didn't give. */
+	required: number;
+	/** actual ≥ required. */
+	met: boolean;
+}
+
+/** A high-flow component's compliance over the run's complete water years (engine ≥ 0.32.0, §2.9d). */
+export interface EwrHighFlowReport extends EwrHighFlowEvent {
+	/** The peak as applied: peakM3s × the table's scale. */
+	peakAppliedM3s: number;
+	years: EwrHighFlowYear[];
+	overall: {
+		/** Complete water years assessed. */
+		years: number;
+		/** Years with required > 0. */
+		required: number;
+		/** Of those, the years met. */
+		met: number;
+		/** met ÷ required; null when no year required an event. */
+		rate: number | null;
+	};
 }
 
 export interface EwrFdcPoint {
@@ -81,6 +131,8 @@ export interface EwrAssuranceMonthOfYear {
 	/** The natural curve used at the points (the run's or the table's, × scale); null with no complete month in 'run' mode. */
 	naturalCurve: number[] | null;
 	fdc: EwrFdcPoint[];
+	/** Low flows met ÷ years (engine ≥ 0.32.0); absent without a low-flow grid, null when years = 0. */
+	lowFlowRate?: number | null;
 }
 
 export interface EwrAssuranceSite {
@@ -111,6 +163,10 @@ export interface EwrAssuranceSite {
 	fdc: { cells: number; met: number; rate: number | null };
 	/** Fewest complete years of any calendar month (0 when one is missing). */
 	minYears: number;
+	/** The low flows of a total table, month by month (engine ≥ 0.32.0); absent without a low-flow grid. */
+	lowFlow?: EwrMonthsMet;
+	/** The freshet and flood components (engine ≥ 0.32.0); absent when the table has none. */
+	highFlows?: EwrHighFlowReport[];
 }
 
 /** A site to assess: its table, and its daily natural and simulated flow (m³/day). */
@@ -243,23 +299,24 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 	const byW = Array.from({ length: 12 }, (_, w) => rows.filter((r) => r.w === w));
 	const curves = byW.map((list, w) => {
 		const ewr = table.ewr[w]!.map((v) => v * table.scale);
+		const low = table.lowFlow ? table.lowFlow[w]!.map((v) => v * table.scale) : null;
 		const natural =
 			table.naturalSource === 'table'
 				? runningMin(table.natural![w]!.map((v) => v * table.scale))
 				: list.length
 					? runningMin(P.map((p) => durationQuantile(list.map((r) => r.natural), p)!))
 					: null;
-		return { ewr, natural };
+		return { ewr, natural, low };
 	});
 
 	const months: EwrAssuranceMonth[] = rows.map((r) => {
 		const c = curves[r.w]!;
 		const look = lookupRequirement(r.natural, P, c.natural!, c.ewr);
-		const met = r.actual >= look.required - MET_TOLERANCE * Math.max(Math.abs(look.required), Math.abs(r.actual));
+		const met = isMet(r.actual, look.required);
 		const deficitM3 = met ? 0 : toM3(look.required - r.actual, r.days, unit);
 		const reqM3Day = toM3(look.required, r.days, unit) / r.days;
 		for (let t = r.from; t < r.from + r.days; t++) requiredM3Day[t] = reqM3Day;
-		return {
+		const month: EwrAssuranceMonth = {
 			year: r.year,
 			month: r.month,
 			waterYear: waterYearOf(d0 + r.from),
@@ -272,6 +329,14 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 			met,
 			deficitM3
 		};
+		if (c.low) {
+			// The same natural curve, so the same point and interpolation weight as the total.
+			const low = lookupRequirement(r.natural, P, c.natural!, c.low).required;
+			month.requiredLowFlow = low;
+			month.lowFlowMet = isMet(r.actual, low);
+			month.requiredHighFlow = Math.max(look.required - low, 0);
+		}
+		return month;
 	});
 
 	const byMonth: EwrAssuranceMonthOfYear[] = byW.map((list, w) => {
@@ -285,7 +350,7 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 			return { point: p, required, impacted: q, met: q === null ? null : q >= required - MET_TOLERANCE * Math.max(required, q) };
 		});
 		const met = ms.filter((m) => m.met).length;
-		return {
+		const row: EwrAssuranceMonthOfYear = {
 			month: ((w + 9) % 12) + 1,
 			years: n,
 			met,
@@ -296,44 +361,149 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 			naturalCurve: c.natural,
 			fdc
 		};
+		if (table.lowFlow) row.lowFlowRate = n ? ms.filter((m) => m.lowFlowMet).length / n : null;
+		return row;
 	});
 
-	let longest = 0;
-	let run = 0;
-	for (const m of months) {
-		run = m.met ? 0 : run + 1;
-		longest = Math.max(longest, run);
-	}
+	const longest = longestRun(months.map((m) => m.met));
 	const short = months.filter((m) => !m.met && m.required > 0);
 	const met = months.filter((m) => m.met).length;
 	const cells = byMonth.flatMap((m) => m.fdc.filter((f) => f.met !== null));
 	const cellsMet = cells.filter((f) => f.met).length;
 
-	return {
-		requiredM3Day,
-		report: {
-			nodeId: site.nodeId,
-			name: site.name,
-			isOutlet: site.isOutlet,
-			source: table.source,
-			component: table.component,
-			unit,
-			naturalSource: table.naturalSource,
-			scale: table.scale,
-			points: [...P],
-			months,
-			byMonth,
-			overall: {
-				months: months.length,
-				met,
-				rate: months.length ? met / months.length : null,
-				deficitM3: months.reduce((s, m) => s + m.deficitM3, 0),
-				longestNotMetRun: longest,
-				meanShortfallPct: short.length ? (100 * short.reduce((s, m) => s + (m.required - m.actual) / m.required, 0)) / short.length : null
-			},
-			fdc: { cells: cells.length, met: cellsMet, rate: cells.length ? cellsMet / cells.length : null },
-			minYears: Math.min(...byMonth.map((m) => m.years))
+	const report: EwrAssuranceSite = {
+		nodeId: site.nodeId,
+		name: site.name,
+		isOutlet: site.isOutlet,
+		source: table.source,
+		component: table.component,
+		unit,
+		naturalSource: table.naturalSource,
+		scale: table.scale,
+		points: [...P],
+		months,
+		byMonth,
+		overall: {
+			months: months.length,
+			met,
+			rate: months.length ? met / months.length : null,
+			deficitM3: months.reduce((s, m) => s + m.deficitM3, 0),
+			longestNotMetRun: longest,
+			meanShortfallPct: short.length ? (100 * short.reduce((s, m) => s + (m.required - m.actual) / m.required, 0)) / short.length : null
+		},
+		fdc: { cells: cells.length, met: cellsMet, rate: cells.length ? cellsMet / cells.length : null },
+		minYears: Math.min(...byMonth.map((m) => m.years))
+	};
+	if (table.lowFlow) {
+		const lowMet = months.filter((m) => m.lowFlowMet).length;
+		report.lowFlow = {
+			months: months.length,
+			met: lowMet,
+			rate: months.length ? lowMet / months.length : null,
+			deficitM3: months.reduce((s, m) => s + (m.lowFlowMet ? 0 : toM3(m.requiredLowFlow! - m.actual, m.days, unit)), 0),
+			longestNotMetRun: longestRun(months.map((m) => m.lowFlowMet!))
+		};
+	}
+	if (table.highFlows?.length) {
+		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, blocks, site.natural, site.impacted));
+	}
+	return { requiredM3Day, report };
+}
+
+const isMet = (actual: number, required: number) => actual >= required - MET_TOLERANCE * Math.max(Math.abs(required), Math.abs(actual));
+
+/** Most consecutive false values. */
+function longestRun(met: readonly boolean[]): number {
+	let longest = 0;
+	let run = 0;
+	for (const m of met) {
+		run = m ? 0 : run + 1;
+		longest = Math.max(longest, run);
+	}
+	return longest;
+}
+
+/**
+ * The run's complete water years (1 Oct … 30 Sep all inside the run), from
+ * its complete months: first day index, days, and the water year.
+ */
+export function completeWaterYears(startDate: string, blocks: readonly MonthBlock[]): { from: number; days: number; waterYear: number }[] {
+	const d0 = toEpochDay(startDate);
+	const out: { from: number; days: number; waterYear: number }[] = [];
+	for (let i = 0; i + 11 < blocks.length; i++) {
+		const b = blocks[i]!;
+		if (b.month !== 10) continue;
+		const last = blocks[i + 11]!;
+		// Complete months are consecutive within a run, so October and the September eleven blocks on bound one water year.
+		if (last.month === 9 && last.year === b.year + 1) out.push({ from: b.from, days: last.from + last.days - b.from, waterYear: waterYearOf(d0 + b.from) });
+	}
+	return out;
+}
+
+/**
+ * Events of a high-flow component in days [from, from + days) of a daily
+ * series (m³/day): maximal runs of days with the mean flow at or above the
+ * peak (m³/s; relative tolerance 1e-9), at least `durationDays` long, whose
+ * first day falls in one of `months`. A run is cut at the window's ends, so
+ * each water year counts its own events.
+ */
+export function countHighFlowEvents(
+	flow: ArrayLike<number>,
+	from: number,
+	days: number,
+	startDate: string,
+	peakM3s: number,
+	durationDays: number,
+	months: readonly number[]
+): number {
+	const d0 = toEpochDay(startDate);
+	const threshold = peakM3s * SEC_PER_DAY * (1 - MET_TOLERANCE);
+	let count = 0;
+	let runStart = -1;
+	const close = (end: number) => {
+		if (runStart >= 0 && end - runStart >= durationDays) {
+			const m = new Date((d0 + runStart) * SEC_PER_DAY * 1000).getUTCMonth() + 1;
+			if (months.includes(m)) count++;
 		}
+		runStart = -1;
+	};
+	for (let t = from; t < from + days; t++) {
+		const v = flow[t]!;
+		if (Number.isFinite(v) && v >= threshold) {
+			if (runStart < 0) runStart = t;
+		} else close(t);
+	}
+	close(from + days);
+	return count;
+}
+
+/** One high-flow component over the complete water years: required = MIN(perYear, natural events). */
+function assessHighFlow(
+	e: EwrHighFlowEvent,
+	scale: number,
+	startDate: string,
+	blocks: readonly MonthBlock[],
+	natural: ArrayLike<number>,
+	impacted: ArrayLike<number>
+): EwrHighFlowReport {
+	const peak = e.peakM3s * scale;
+	const years: EwrHighFlowYear[] = completeWaterYears(startDate, blocks).map((y) => {
+		const n = countHighFlowEvents(natural, y.from, y.days, startDate, peak, e.durationDays, e.months);
+		const a = countHighFlowEvents(impacted, y.from, y.days, startDate, peak, e.durationDays, e.months);
+		const required = Math.min(e.perYear, n);
+		return { waterYear: y.waterYear, natural: n, actual: a, required, met: a >= required };
+	});
+	const req = years.filter((y) => y.required > 0);
+	const met = req.filter((y) => y.met).length;
+	return {
+		label: e.label,
+		months: [...e.months],
+		peakM3s: e.peakM3s,
+		durationDays: e.durationDays,
+		perYear: e.perYear,
+		peakAppliedM3s: peak,
+		years,
+		overall: { years: years.length, required: req.length, met, rate: req.length ? met / req.length : null }
 	};
 }
 
