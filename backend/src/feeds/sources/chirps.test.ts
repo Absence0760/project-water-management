@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FeedFormatError } from '../errors.js';
+import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
 import { chirpsFinalUrl, chirpsPrelimUrl, fetchChirps, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
@@ -115,9 +116,30 @@ describe('fetchGefs', () => {
 		expect(await fetchGefs(served({}), [cell(0, 0)], '2026-03-10')).toBeNull();
 	});
 
-	it('keeps only the leading days of a partly published issue', async () => {
-		const http = served({ [gefsUrl('2026-03-10', '2026-03-10')]: grid(new Array(8).fill(1)), [gefsUrl('2026-03-10', '2026-03-11')]: grid(new Array(8).fill(2)), [gefsUrl('2026-03-10', '2026-03-13')]: grid(new Array(8).fill(4)) });
-		expect((await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!.values).toEqual([1, 2]);
+	// CHC writes an issue's 16 files one after another over a minute or so
+	// (the 2026-09-20 directory: 08:26 to 08:27 UTC). A fetch in that window
+	// sees the leading days only; merging them would leave the previous
+	// issue's tail in the series, two issues mixed, until the next fetch.
+	const issue = (issued: string, days: number[], value = (i: number) => i) =>
+		Object.fromEntries(days.map((i) => [gefsUrl(issued, fromEpochDay(toEpochDay(issued) + i)), grid(new Array(8).fill(value(i)))]));
+
+	it('skips a partly published issue for yesterday’s complete one', async () => {
+		const http = served({ ...issue('2026-03-10', [0, 1, 2, 3], () => 99), ...issue('2026-03-09', Array.from({ length: 16 }, (_, i) => i)) });
+		const f = (await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!;
+		expect(f).toEqual({ issued: '2026-03-09', startDate: '2026-03-09', values: Array.from({ length: 16 }, (_, i) => i) });
+	});
+
+	it('a day missing inside an issue makes it partial too', async () => {
+		const days = Array.from({ length: 16 }, (_, i) => i).filter((i) => i !== 7);
+		const http = served({ ...issue('2026-03-10', days, () => 99), ...issue('2026-03-09', Array.from({ length: 16 }, (_, i) => i)) });
+		expect((await fetchGefs(http, [cell(0, 0)], '2026-03-10'))!.issued).toBe('2026-03-09');
+	});
+
+	it('fails as unavailable (retried soon) when no complete issue is out, rather than merging a partial one', async () => {
+		const http = served({ ...issue('2026-03-10', [0, 1, 2]), ...issue('2026-03-09', [0, 1, 2, 3, 4]) });
+		const err = await fetchGefs(http, [cell(0, 0)], '2026-03-10').catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(FeedUnavailableError);
+		expect((err as Error).message).toBe('the newest forecast (issued 2026-03-10) is still being published: 3 of its 16 days are out');
 	});
 });
 
