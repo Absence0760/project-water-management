@@ -6,6 +6,10 @@
 //   pnpm dev:jobs:tick     one tick, print what it did, exit (scripts, e2e)
 //   pnpm dev:feeds:run     one tick that first queues EVERY enabled data feed,
 //                          due or not, then runs it all and exits (--all-feeds)
+//   --once --no-schedule   one tick that only runs jobs already queued: no
+//                          feed or report schedule queues anything (e2e specs
+//                          that queue their own work, so they never run
+//                          another spec's feed)
 //
 // It connects as water_app (DATABASE_URL), like the API, and runs each job as
 // its acting user (runner.ts). Killing it mid-job is safe: the job's lease
@@ -28,7 +32,8 @@ const summary = (r: TickResult) =>
 
 if (process.argv.includes('--once')) {
 	try {
-		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds') })));
+		const schedule = !process.argv.includes('--no-schedule');
+		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds'), feeds: schedule, reports: schedule })));
 	} finally {
 		await closePool();
 	}

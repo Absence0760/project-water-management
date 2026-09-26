@@ -1256,8 +1256,11 @@ A job runs later, in the worker, as the editor who queued it.
 | GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
 | POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field | editor |
 
-- `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy }`.
-  Never the payload, and nothing about the worker's lease.
+- `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.
+  Never the payload, and nothing about the worker's lease. `progress`
+  (039_yield) is 0–100 while a job that reports it runs (a `yield` job),
+  null otherwise; it resets when the job is claimed again, and a finished
+  job keeps its last value.
 - `status`: `queued` (due at `runAfter`) → `running` → `done`; or `failed`
   (an attempt failed; the next is due at `runAfter`, `2^attempts` minutes on)
   → … → `dead` (out of attempts, or a failure no retry can fix).
@@ -1274,7 +1277,53 @@ A job runs later, in the worker, as the editor who queued it.
   `GET /runs` once the job is `done`.
 - `GET /jobs` also lists the data feeds' `feed_fetch` / `feed_ingest` jobs
   ([§ Data feeds](#data-feeds)); they are queued by the server, never through
-  `POST /jobs`.
+  `POST /jobs`. It lists `yield` jobs too, queued through `POST /yield`
+  ([§ Yield](#yield)).
+
+## Yield
+
+A dam's historical firm yield, its yield at an assurance level, or its
+storage–yield curve (roadmap WP-3.6, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
+worked out by a background `yield` job on a saved run's stored inputs or on a
+scenario (its ops on its base run's inputs), never the live model.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job | editor |
+| GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node | viewer |
+| POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }`: a queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
+
+- `kind`: `firm` (one yield at the dam's own capacity) or `curve` (the yield
+  at `points` capacities evenly from 0 to 2 × the dam's).
+- `params` (strict; every field optional): `pattern` `constant` (default),
+  `demand` (the farm's own irrigation demand by month) or 12 non-negative
+  factors Oct–Sep; `assurance` 0.5–1 (default 1, the firm yield: no failure
+  day in the record; below 1, the share of water years allowed a failure is
+  1 − assurance); `tolerance` 0.00001–0.05 (default 0.001, relative);
+  `points` 8–12 (default 11).
+- Checked before anything is queued: exactly one of `runId` and
+  `scenarioId` (`400`), a run or scenario of this project (`404`), a run
+  rebuilt from stored inputs (`409`, as for a scenario's base), a scenario
+  whose ops all apply (`422 { details: { problems } }`), a node of that run
+  or scenario (`400 that node is not in this run or scenario`), a farm or dam,
+  not a gauge or other user (`400`), and a dam with a capacity above 0 for a
+  curve (`400`).
+- **At most 2 yield jobs queued or running per user** (`429`); a repeat of a
+  pending request is never refused. A job gets 2 attempts.
+- `YieldResult = { id, runId, scenarioId, nodeId, jobId, kind, params,
+  points, engineVersion, createdBy, createdAt }`. `params` is the request's,
+  with its defaults. `points` is `{ point: YieldPoint }` for `firm`, or
+  `{ baseCapacityM3, assurance, points: YieldPoint[], monotone }` for
+  `curve`. `YieldPoint = { capacityM3, yieldM3Day, yieldM3Year, failsAtM3Day,
+  failureDays, failedYears, boundM3Day, probes }` (model.md §2.13).
+  `monotone: false` says the yield falls somewhere as the dam grows, which
+  can be real (evaporation, a dam starting below its minimum level).
+- The job's `error` when it fails: `the model can't run this input: …`,
+  `the yield search failed: …` (the engine's words, e.g. `this node has no
+  irrigation demand to shape the draft; use a constant pattern`),
+  `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
+  newest 5 results per run or scenario and dam.
+- Every number is **historical** (it replays the one record); the UI says so.
 
 ## Data feeds
 

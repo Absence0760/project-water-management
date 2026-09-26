@@ -131,7 +131,7 @@ describe('GET / POST /projects/:id/jobs', () => {
 		expect(list.status).toBe(200);
 		expect(list.body.jobs.map((j: { id: string }) => j.id)).toEqual([res.body.job.id]);
 		expect(Object.keys(list.body.jobs[0]).sort()).toEqual(
-			['attempts', 'createdAt', 'createdBy', 'error', 'finishedAt', 'id', 'kind', 'maxAttempts', 'runAfter', 'startedAt', 'status'].sort()
+			['attempts', 'createdAt', 'createdBy', 'error', 'finishedAt', 'id', 'kind', 'maxAttempts', 'progress', 'runAfter', 'startedAt', 'status'].sort()
 		);
 		expect((await viewer.call('GET', `/projects/${pid}/jobs?status=done`)).body.jobs).toEqual([]);
 		expect((await viewer.call('GET', `/projects/${pid}/jobs?status=bogus`)).status).toBe(400);
