@@ -29,7 +29,8 @@ before this app. It runs a
 answers three questions:
 
 1. How much natural flow does the catchment produce each day? Rain is turned
-   into flow by a calibrated recession model.
+   into flow by a calibrated recession model (the app runs GR4J instead,
+   §2.4a; the recession model was removed in engine 1.0.0, §2.4).
 2. How much of each farm's irrigation demand can be met from its runoff,
    upstream inflow, dam storage and transfers?
 3. After irrigation, is the **Environmental Water Requirement (EWR)** still met
@@ -117,7 +118,7 @@ exports round for display.
 | `[Crop demand]` | WR90 A-pan evaporation by month, effective-rainfall %, crop factors by month | `settings.apanMm`, `settings.effectiveRainFraction`, `crop` |
 | `[Farm demand]` | Crop area (m²) per farm per crop, days per month (Feb = 28.25 by default) | `crop_area`, `settings.februaryDays` |
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
-| `[Flow Calibration Cfg]` | The rain→flow parameters and the recession curve | `settings.calibration` |
+| `[Flow Calibration Cfg]` | The rain→flow parameters and the recession curve | `settings.calibration`: only the rain threshold and the catchment area since engine 1.0.0 (§2.4) |
 | `[EWR Cfg]` | Desktop Reserve Model tables, and the percentile pick with overrides that produce the **pragmatic EWR** (m³/day per month) | `settings.ewrPragmaticM3PerDay` (V1 stores the final table) |
 | `[Flow data]` (left block) | Daily inputs: Pitman natural flow, observed gauge flow, logger flow (all m³/s), catchment-average rain, CHIRPS rain, forecast rain (mm) | `time_series` rows by `kind`; the Pitman column is not imported (engine ≥ 0.10.0, [audit P1](./engine-audit.md)) |
 
@@ -307,8 +308,7 @@ month, exactly as a run without the series. Wherever the model reads A-pan:
 | GR4J PE under `pe.kind: 'pan'` (§2.4a), mm/day | pan coefficient[month] × `apan[t]` | pan coefficient[month] × `apanMm[month]` ÷ calendar days in month |
 
 Under `pe.kind: 'monthly'` GR4J runs on the monthly PE row and reads neither
-the A-pan means nor the daily series; demand and dams still read both. The
-legacy runoff model never reads evaporation. A daily record doesn't change
+the A-pan means nor the daily series; demand and dams still read both. A daily record doesn't change
 the crop factors, the lake factors or the pan coefficient: they multiply the
 day's A-pan the same way they multiply the monthly mean.
 
@@ -364,72 +364,70 @@ are still the fitted ones.
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
-This is the calibrated rain→runoff routine, the engine's `legacy` runoff model
-(`settings.runoffModel = 'legacy'`; GR4J, §2.4a, has been the default since
-engine 0.11.0. `packages/engine/src/runoff/` holds the seam every runoff model
-plugs into). **Decided (persona recommendation, 2026-09-24; pending the
-hydrologist): legacy is kept exactly as it is — no numeric change — but every
-run it produces is labelled workbook comparison only, not evidence** ([audit
-H1](./engine-audit.md)): it doesn't conserve water at the event scale, so a
-run can't be relied on for a licence, Reserve or compliance assessment. Every
-legacy run's `summary.warnings` carries `LEGACY_NOT_EVIDENCE: …`
-(`packages/engine/src/run.ts`), the app shows an amber "Workbook comparison"
-badge on it, and its CSV exports start with a `# runoff_model=legacy; …`
-comment line. GR4J is the model of record.
-One row runs per day, and each row reads the previous row. Parameters come from `[Flow Calibration Cfg]`. The
-defaults from the blank workbook are shown.
+**Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff
+model is GR4J (§2.4a); this section keeps a short record of the workbook's
+routine and says what outlived it.
 
-| Parameter | Blank default | Meaning |
-| --- | --- | --- |
-| `RainThreshold` | 2 mm | Rain at or below this produces no flow and does not offset demand |
-| `a`, `b` | 0.09, 1.2 | Peak flow = `a · rain^b` |
-| `RainToM3` | total farm area km² × 1000 | Converts mm over the catchment to m³ |
-| `SummerMths` | 1,2,3,4,5,11,12 (blank; the engine default is the same) | Calendar months that are always "summer" |
-| `FactorSummer` / `FactorWinter` | 0.1 / 1 | Seasonal response factor |
-| `WinterTodayThresh` / `WinterNextDayThresh` | 35 mm / 9 mm | Rain that flips a non-summer month into winter response |
-| `MinFlowRatioToResetBase` | 1.5 | Rain pulse / base flow ratio above which base flow resets |
-| `ShiftPeakIndexLo` / `Hi` | 0.9 / 3.5 | Range of the recession index given to a new rain pulse |
-| `Amplitude` | derived | Rain→flow amplitude used to scale the pulse index |
-| `DaysMax` | rows in the curve − 1 (79) | Upper bound of the recession index |
-| `RecessionCurve` / `RecessionFactors` | 80-row table | Flow (m³/day, descending) → daily recession factor |
-| `BaseFlowInitial` | 300 m³/day | Base flow on the first day |
+**What it was.** b023 turns rain into natural flow with a calibrated
+recession routine, one row per day reading the previous row. A day's rain
+above a threshold (2 mm by default) adds a peak of `a · rain^b` (0.09, 1.2)
+times the catchment area and a summer or winter factor (0.1 / 1; a big enough
+rain opens the winter response outside the fixed summer months). The flow then
+recedes day by day along an 80-row recession table (flow → daily factor), and
+a storm peak above 1.5 × the receded base flow resets the base flow to the
+peak. The parameters sit in `[Flow Calibration Cfg]`. The engine ported it as
+the `legacy` runoff model (`flow.ts`), without the workbook's rounding (audit
+E1, E2, R1).
 
-Per day *t*, with the workbook column letters:
+**Why it went** ([audit H1](./engine-audit.md)). The base-flow reset makes a
+storm's peak recede along the *slow* part of the curve, so the routine does
+not conserve water at the event scale: a single 10 mm winter storm on a dry
+catchment returns several times its own rain over the next year, and small
+storms return relatively more than large ones. Calibrated annual totals can
+still look plausible only because the parameters compensate. GR4J became
+the default in engine 0.11.0, legacy runs were labelled workbook comparison
+only (`LEGACY_NOT_EVIDENCE`, 2026-09-24), GR4J was decided as the model on
+record on 2026-09-25, and engine 1.0.0 removed the legacy model. Before it
+went, the client catchment regression suite compared its natural flow with
+the workbook's end to end; the last run, on engine 0.45.0 (2026-09-26),
+passed within E1/R1 (B1 years aside), and `packages/engine/src/run.test.ts`
+keeps that record.
 
-| Col | Quantity | Formula |
-| --- | --- | --- |
-| R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold. From engine 0.7.0, CHIRPS used here is **bias-corrected** per calendar month first (§2.4b, audit B1); the workbook used it raw |
-| N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
-| V | **Rain-added flow** | `a · R^b · RainToM3 · seasonFactor` if R > 0, else 0 (workbook: `INT(…)`) |
-| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB` (the engine resets on any `V > 0` when `FB` is 0, where the workbook divides by 0; engine review F6). (Workbook: rounded to 0 dp.) |
-| T | **Base recession index** | Where S sits on the recession curve, interpolated linearly and clamped to `[1, DaysMax]` (workbook: 4 dp) |
-| U | **Response flow (start)** | Yesterday's resultant response receded by yesterday's resultant index |
-| W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1. Capped at `DaysMax` (workbook: 4 dp). The workbook used the base index when yesterday's was blank, which only happens on day 1, so a first-day storm lost its pulse index; the engine seeds the day before the run (E1). |
-| X | **Response + added** | If V > 0: `U + V`. Else if yesterday's X = 0: `U`. Else yesterday's X receded by yesterday's W. |
-| Y / Z | **Resultant response / index** | `max(X, S)` and the index of whichever one won |
-| AB | **Natural flow (m³/day)** | `Y` if > 0, else 0. The workbook fell back to its Pitman column when `Y` was 0 (quirk Q7); from engine 0.10.0 the engine doesn't ([audit P1](./engine-audit.md)) |
+**What outlived it:**
 
-`recede(flow, index) = flow × lerp(factor[floor(index)], factor[floor(index)+1], frac(index))` (workbook: `ROUND(…, 0)`)
-
-The interpolated factor is clamped at 0, so an index below 1 (a pulse starting at
-`ShiftPeakIndexLo` < 1) can shrink a flow to nothing but never make it negative
-([audit E2](./engine-audit.md)).
+- **Rain used** (column R): the first non-blank of catchment rain, CHIRPS
+  (bias-corrected per calendar month since engine 0.7.0, §2.4b, audit B1;
+  the workbook used it raw) or forecast rain. GR4J reads it without a
+  threshold (§2.4a). Irrigation demand reads it thresholded: rain at or
+  below `settings.calibration.rainThresholdMm` counts as 0 (§2.3).
+- **`settings.calibration`** keeps only `rainThresholdMm` and
+  `catchmentAreaKm2` (the area rain falls on, null = the sum of the farm
+  areas). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
+  season factors, summer months and winter thresholds, the initial base flow,
+  the reset ratio, the shift-peak indices, the amplitude, `DaysMax` and the
+  recession tables) are dropped when settings are read, and migration 063
+  removed them from stored projects. The importers read only the threshold
+  and the area from `[Flow Calibration Cfg]`.
+- **`settings.runoffModel`** is the run's record of its model, not a choice:
+  `'gr4j'` is the only value the API accepts. A project still stored as
+  `'legacy'` runs GR4J with a `LEGACY_UPGRADED: …` warning.
+- **Stored legacy runs** (settings that name no runoff model, or `'legacy'`)
+  stay readable and are never re-run. They keep the amber "Workbook
+  comparison" badge, their CSV exports start with a `# runoff_model=legacy;
+  …` comment line, and they still can't be nominated as evidence, signed off
+  or published. `LEGACY_RUNOFF_COLUMNS` (§2.7) still explains their daily
+  columns.
 
 **Checks on every run** (warnings, engine ≥ 0.4.0; [audit W1–W5](./engine-audit.md)):
 
 - **Runoff coefficient** = natural-flow volume / rain volume on the catchment
-  over the run (`summary.catchment.runoffCoefficient`). Above 1 the catchment
-  gives back more water than fell on it, which is impossible over a whole
-  record, so the run warns. The structure makes this easy to reach: a storm
-  resets the base flow to the storm's peak, which then recedes along the slow
-  part of the curve (audit H1 — decided provisionally, pending the hydrologist).
+  over the run (`summary.catchment.runoffCoefficient`). GR4J conserves water,
+  so above 1 only its stores draining (or imported groundwater) can do it,
+  and the warning says which. Natural flow a caller supplies
+  (`runModelWith`) gets the plain "more runoff than rainfall" warning.
 - **Days with no rainfall value** from any source are counted: the model treats
   them as dry (0 mm), for runoff and for demand.
-- **Recession table**: a factor outside 0–1, a curve that rises, or tables of
-  different length.
-- **Not evidence**: every legacy run carries `LEGACY_NOT_EVIDENCE: …`
-  (audit H1) — the model doesn't conserve water at the event scale, so its
-  results are a workbook comparison only. GR4J never carries it.
+- The recession-table check (W4) went with the model.
 
 The same sheet also:
 
@@ -442,26 +440,19 @@ The same sheet also:
 - Reports mean annual runoff and mean daily runoff (all days and summer only)
   for observed and simulated flow.
 
-> The engine's `CalibrationParams` (`settings.calibration`) holds every
-> parameter above: `a`, `b`, the threshold, the seasonal factors, summer
-> months, the initial base flow, the reset ratio, the winter thresholds, the
-> shift-peak indices, the amplitude, `DaysMax`, the recession curve and
-> factors, and an optional catchment-area override (`catchmentAreaKm2`, null =
-> the sum of the farm areas). The importer reads them from the workbook's
-> named ranges (`rCalibration_*`).
-
 ### 2.4a Rain to flow: GR4J (engine ≥ 0.5.0, issue #4)
 
-`settings.runoffModel = 'gr4j'` replaces the legacy recession model (§2.4)
-with **GR4J** (Perrin, Michel & Andréassian 2003, *J. Hydrol.* 279), a
+The engine's runoff model is **GR4J** (Perrin, Michel & Andréassian 2003, *J. Hydrol.* 279), a
 published daily rainfall–runoff model with four parameters. It is written from
 the paper's equations in `packages/engine/src/runoff/gr4j.ts`. The reference
 implementation, the R package airGR, is GPL-2, and no code is taken from it.
-Everything downstream (flow shares, farms, dams, transfers, EWR) is unchanged,
-so the two models compare run against run. GR4J is the default since engine
-0.11.0 (the calibration research's CR-17): a project that never picked a model
-runs GR4J. Legacy stays selectable, and a stored run without a runoff model
-predates the setting, so run comparison reads it as legacy.
+Everything downstream (flow shares, farms, dams, transfers, EWR) is the same
+as under the legacy recession model (§2.4) it replaced, so a stored legacy run
+and a GR4J run compare day by day. GR4J was selectable from engine
+0.5.0, the default from 0.11.0 (the calibration research's CR-17), and the
+only runoff model from 1.0.0 (issue #16). `settings.runoffModel` records it
+(`'gr4j'`); a stored run whose settings name no runoff model predates the
+setting, so run comparison reads it as legacy.
 
 **Parameters** (`settings.gr4j`). The typical range is Perrin's 80 % range over
 429 catchments; the bounds are enforced by the API and searched by calibration.
@@ -477,8 +468,8 @@ predates the setting, so run comparison reads it as legacy.
 **Forcing** (`runoff/simulate.ts`, `runoffForcing`):
 
 - **Rain P**: catchment rain, else CHIRPS (bias-corrected, §2.4b), else
-  forecast, as for legacy, but with **no rain threshold** (that was part of
-  the legacy model). A day with no
+  forecast (rain used, §2.4), with **no rain threshold** (the threshold was
+  part of the legacy model; it still applies to demand's effective rain). A day with no
   value is dry, and the run counts those days (W2). Negative values count as 0.
 - **Potential evaporation E** (engine ≥ 0.31.0, issue #39) is the month's PE
   from `settings.pe` (`gr4jPeMonthlyMm`), spread evenly over the days of that
@@ -714,7 +705,7 @@ predates the setting, so run comparison reads it as legacy.
    - R ← R − Qr.
 8. **Direct flow:** Qd = max(0, Q1 + F).
 9. **Flow:** Q = Qr + Qd, in mm over the catchment. Natural flow (m³/day) =
-   Q × area (km²) × 1000, over the same catchment area as legacy
+   Q × area (km²) × 1000, over the catchment area
    (`calibration.catchmentAreaKm2`, else the sum of the farm areas).
 
 **Fluxes recorded:**
@@ -764,8 +755,9 @@ At the scale of a small mountain catchment it can read a fraction of the
 catchment's own gauges, and by different amounts in different seasons:
 frontal and orographic rain on the ridges is what a satellite estimate
 misses most. Used raw, a year whose
-catchment rain is missing runs far too dry. The legacy model hides some of
-this, because its base-flow reset makes flow out of little rain (H1). GR4J
+catchment rain is missing runs far too dry. The legacy model (§2.4, removed
+in engine 1.0.0) hid some of this, because its base-flow reset made flow out
+of little rain (H1). GR4J
 conserves water, so in those years it makes almost no flow. In the
 hydrologist's review of issue #4 phase 6 on the client catchment, those
 fallback years made up most of the EWR-failure difference between the two
@@ -935,10 +927,10 @@ Catchment rain is never changed. A day where the catchment reads 0 keeps its
 it aside as missing first: then it is a blank day like any other. **Forecast rain is
 not corrected**: there is no overlap to fit a forecast factor from, and a
 forecast product's bias is not CHIRPS's. The corrected rain then goes
-through everything that reads rain used: the legacy model (before its rain
-threshold), GR4J, the effective-rain offset on irrigation demand, automatic
-calibration, and the runoff coefficient (W1). So both runoff models change,
-and so does demand.
+through everything that reads rain used: GR4J, the effective-rain offset on
+irrigation demand, automatic calibration, and the runoff coefficient (W1). So
+the runoff model changes, and so does demand. (Before engine 1.0.0 it also
+fed the legacy model, before its rain threshold.)
 
 **Output.** `summary.chirpsCorrection` holds each month's shared days, sums,
 own and applied factor, its source (`month`, `pooled` or none) and whether it
@@ -960,7 +952,7 @@ and the series explorer:
 
 | Key | What | Missing days |
 | --- | --- | --- |
-| `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so the legacy `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
+| `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so a stored legacy run's `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. With listed fit ranges (engine ≥ 0.29.0), the day's own range's factor. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
@@ -1134,9 +1126,9 @@ Viney & Bates (2004, "It never rains on Sunday", *Int. J. Climatol.* 24)
 found these *untagged* accumulations throughout the Australian high-quality
 daily record; they are the classic fault of manually read stations. The
 total is right and the days are wrong: the model sees a dry spell and then
-one storm several times bigger than any day really was. Both runoff models
-respond to daily rain non-linearly (the legacy model's a·Rain^b peak,
-GR4J's production store), so one 150 mm day makes far more quick flow, and
+one storm several times bigger than any day really was. The runoff model
+responds to daily rain non-linearly (GR4J's production store; the removed
+legacy model's a·Rain^b peak too), so one 150 mm day makes far more quick flow, and
 carries far less soil moisture forward, than 150 mm over three weeks.
 Worse, when the unread days form a flagged zero run (§2.4c), engine
 0.15–0.19 filled them from CHIRPS and kept the reading too, counting that
@@ -1890,7 +1882,7 @@ Runs saved before 0.12.0 don't have them.
 
 The runoff side has its own catalogue in the same file: `GR4J_COLUMNS` (P, E,
 AET, S, UH, F, R, Q, with the GR4J step's equations) and
-`LEGACY_RUNOFF_COLUMNS` (the [Flow data] columns R, N, V, S, X, Y, AB). The
+`LEGACY_RUNOFF_COLUMNS` (the [Flow data] columns R, N, V, S, X, Y, AB, for a stored legacy run from before engine 1.0.0). The
 results' day trace reads them to show the catchment's day, and for GR4J it
 closes the day's store balance: stores the day before + P + F − AET − Q =
 stores at the end of the day, in mm over the catchment. Only the stores'
@@ -2161,8 +2153,9 @@ node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
 - *The GR4J routing store* is catchment-wide and belongs to the natural-flow
   model: drawing on it would put a human impact inside the runoff model's
   balance (§2.4a) and could not say which reach loses the water. The legacy
-  model has no store to draw on at all. Taking the depletion from the river at
-  the node works identically for both runoff models, keeps natural flow
+  model (removed in engine 1.0.0) had no store to draw on at all. Taking the
+  depletion from the river at the node worked identically for both runoff
+  models, keeps natural flow
   natural, and puts the loss where the EWR is checked.
 - *Volume is conserved.* Over the run d × Σ GW = Σ Dep + Σ unmet + Sd at the
   end: depletion keeps going for a while after pumping stops, and the store's
@@ -2934,19 +2927,15 @@ project's observed record. It is pure and deterministic for a seed, so the
 browser runs it in a Web Worker and a test can pin it. It doesn't change
 `runModel`.
 
-- **What is fitted.**
-  - GR4J: X1, X3 and X4 by default; X2 only when asked (`free`).
-  - Legacy: a, b and the two season factors by default; the base-flow reset
-    ratio when asked. The rain threshold is left out, because it also decides
-    which rain days reduce demand. The recession tables stay as imported.
-
-  Legacy can be fitted too so that the two models are compared calibrated
-  against calibrated (issue #4 phase 6).
+- **What is fitted.** GR4J's X1, X3 and X4 by default; X2 only when asked
+  (`free`). The rain threshold is never fitted, because it decides which rain
+  days reduce demand. (Until engine 1.0.0 the legacy model could be fitted
+  too, so that the two models were compared calibrated against calibrated,
+  issue #4 phase 6.)
 - **Bounds** (`CalibrateOptions.bounds`, `CalibrationReport.bounds`; issue #4
   phase 6 §"make the logger fit identifiable"): the box the search may
   explore, per parameter.
-  - `'wide'` (default): each `ParamSpec`'s min/max (§2.4a for GR4J,
-    `runoff/params.ts` `LEGACY_PARAMS` for legacy).
+  - `'wide'` (default): each `ParamSpec`'s min/max (§2.4a).
   - `'typical'`: Perrin et al.'s (2003) 80 % confidence range (`ParamSpec.typical`)
     over 429 catchments — for GR4J, X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9
     days. A short, drought-dominated record often can't pin down X1 and X3, so
@@ -2963,7 +2952,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   runoff model → natural flow → network → simulated outflow, which is what a
   gauge or logger record measures. So the fitted parameters
   describe the natural catchment, and the network adds the impacts. A test
-  checks this, day for day, on random networks for both models.
+  checks this, day for day, on random networks.
   `prepareCalibration` builds everything but natural flow once
   (`prepareRun` + `buildNetworkPlan`, shared with `runModel`). Each candidate
   swaps in its natural flow and simulates only up to the last scored day,
@@ -3074,7 +3063,11 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   (`resolveFitRecord`), so a hand edit marks the record ("parameters edited
   since fit") rather than silently keeping it valid, and a client can't clear
   the mark. Each run snapshots the record in effect in `model_run.inputs`.
-  `fitRecordStatus` also says when the runoff model, window, exclusions or
+  `fitRecordStatus` also says when the record is of another runoff model (a
+  fit of the legacy model in a run snapshot from before engine 1.0.0:
+  "The fit is of the legacy runoff model, removed in engine 1.0.0, …";
+  `resolveFitRecord` and migration 063 drop one from a project's settings, so
+  the project reads as not fitted), and when the window, exclusions or
   flow record have changed since the fit — and, from `forcing`, when the pan
   coefficient, A-pan evaporation, PE input or CHIRPS bias correction has
   (`forcingChanged`): the pan coefficient is fixed, never calibrated (§2.4a),
@@ -3116,8 +3109,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   and `forcingChanged`, with the caveat "The daily A-pan evaporation series
   has been added, replaced or removed since the fit …". It counts only for a
   GR4J fit made under `pe.kind: 'pan'` with the settings still on `'pan'`:
-  under a monthly PE the series doesn't reach GR4J, and a legacy fit never
-  reads evaporation. A record made before 0.38.0, or a caller that doesn't
+  under a monthly PE the series doesn't reach GR4J. A record made before 0.38.0, or a caller that doesn't
   know the series (a run stored before `valuesSha256`), compares nothing.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) take on the order of a minute in Node on
@@ -3444,7 +3436,7 @@ catchment's own flow rather than fixed. The flow is the first record whose
 every calendar month has **28 or more** valid days: the calibration record,
 then the other observed record, then the run's simulated natural flow.
 Observed flow comes first because it doesn't depend on the runoff model, so
-runs of different models get the same months and their curves can be
+runs of different models (a GR4J run and a stored legacy run) get the same months and their curves can be
 overlaid. A tie keeps the window starting earliest in the water year.
 
 **1. Natural flow ≥ observed flow + net abstraction, per water year**
@@ -3572,14 +3564,13 @@ it never changes a run's results.
   parameters' bounds, **never the optimiser's search path** (a DDS trajectory
   crowds where one fit happened to look). Each point falls in a different
   one of `members` equal strata of every dimension.
-  - Parameters: the model's free parameters (GR4J X1, X3, X4; legacy a, b and
-    the season factors) inside the **typical** bounds (Perrin et al. 2003's
+  - Parameters: GR4J's free parameters (X1, X3, X4) inside the **typical** bounds (Perrin et al. 2003's
     80 % range) by default, or the fit record's bounds when the project's
     parameters come from a fit of this model (§2.10b), or `wide`. A range
     spanning a factor of ten or more is sampled **log-uniformly** (X1, X3,
     and X4 in the wide bounds): a uniform draw would put nearly every member
     in its top decade. Parameters not free keep the project's values.
-  - **Pan coefficient** (GR4J only; the legacy model uses no PET): an
+  - **Pan coefficient**: an
     additive shift of the whole monthly row, uniform in ±`panOffset`
     (default ±0.1, at most 0.3). A shifted month stays inside the FAO-56
     Class A range 0.35–0.85 (or at the project's own value when that is
@@ -3636,8 +3627,9 @@ it never changes a run's results.
   - the monthly Reserve compliance rate per site with a rule table (§2.9c);
   - monthly **flow-duration curves** of simulated outflow at 5 … 99 %
     exceedance, each read against the month's mean outlet EWR.
-- **One runoff model per ensemble.** Bands of GR4J and legacy are never
-  pooled: each ensemble has one `model`, and paired bands refuse two.
+- **One runoff model per ensemble.** Each ensemble records its `model`, and
+  paired bands refuse two different ones, so a band stored from a legacy run
+  (engine < 1.0.0) is never paired with a GR4J one.
 - **The decision rule** (`ensembleDecisionRule`) states the thresholds, the
   split date, the percentiles, the 30-member gate, the coverage test and the
   sample (members, seed, bounds) in one paragraph, printed next to every band.
@@ -3677,6 +3669,8 @@ it never changes a run's results.
 (`packages/engine/src/liability/validation.ts`) says how far one saved run
 can be trusted, from its stored summary alone (no re-run, so any run has
 one). It changes no run output; 0.31.2 only adds it to the engine's surface.
+`legacy` marks a stored run of the legacy runoff model (engine < 1.0.0,
+§2.4): a workbook comparison only, never evidence.
 
 - **Calibration statistics with ratings.** NSE and PBIAS carry the Moriasi
   et al. (2007) streamflow ratings (NSE > 0.75 very good, > 0.65 good,
@@ -4309,7 +4303,7 @@ from the workbook.
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** a rule is capped at the destination's room, cap − storage[t−1] + its demand that day (§2.6; from 0.19.0 the storage after that day's rain on the dam, evaporation and seepage); transfers stay settled before irrigation, so the source doesn't irrigate first. | Confirm both rules. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. Attribution is Q17 (decided, engine 0.17.0). | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
-| Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). |
+| Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). Since engine 1.0.0 only the offset reads the threshold: GR4J has none (§2.4a). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and the client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
@@ -4436,6 +4430,9 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 3. **Stage by stage:** natural flow (§2.4) → demand (§2.3) → fragmentation
    (§2.5) → farm balance and transfers (§2.6–2.7) → EWR and outputs (§2.8).
    Each stage is compared with the workbook's column for every day of the record.
+   The natural-flow stage was retired with the legacy model in engine 1.0.0
+   (its last run passed; §2.4); the other stages are fed the workbook's own
+   natural flow, so they are still compared.
    Where the workbook's rounding or a corrected algorithm makes the engine
    differ, the difference is listed and explained
    ([engine-audit.md § Regression suite](./engine-audit.md)); elsewhere the
@@ -4515,10 +4512,11 @@ PET in, mm out), in `testing/runoff.ts`. Every model offered must pass them
 | `checkSteadyState` | Constant P > E converges to Q = P − AET, from empty and from full stores. With P ≤ E the stores empty only algebraically (power-law outflows), so that case has no fixed horizon. |
 | UH ordinates (`gr4j.test.ts`) | Non-negative, summing to 1, of length ⌈X4⌉ and ⌈2·X4⌉ for any X4 in bounds. |
 
-`EVENT_SCALE_EXEMPT` names the legacy model, with the reason. The test
-asserts that an exempt model still *fails* the check, so the exemption can't
-outlive the problem. From a June start, 20 mm returns 1.05× its rain and
-200 mm returns 16.6×.
+`runoff/event-scale.test.ts` runs `checkEventScale` on every model in
+`RUNOFF_MODELS`, with no exemption. Until engine 1.0.0 `EVENT_SCALE_EXEMPT`
+named the legacy model, the one model that failed it (from a June start,
+20 mm returned 1.05× its rain and 200 mm 16.6×); it went with the model
+(issue #16).
 
 **Every saved run checks itself (engine ≥ 0.12.0).** The backend saves runs
 through `runModelChecked` = `runModel` + `withVerification`, which calls
@@ -4561,20 +4559,22 @@ and the summary CSV has them as blocks.
 
 They run on:
 
-- **Random networks** (`run.invariants.test.ts`, generator in `testing/fuzz.ts`):
-  400 seeded cases per `pnpm test` — chains, fans, binary trees, gauges in the
+- **Random networks** (`fuzz/gr4j.1–4.test.ts` through `fuzz/shard.ts`,
+  generator in `testing/fuzz.ts`; pinned regression seeds in
+  `run.invariants.test.ts`): 400 seeded cases per `pnpm test`, with GR4J
+  runoff (the only model since engine 1.0.0) — chains, fans, binary trees, gauges in the
   middle, empty and huge dams, zero areas, share sums ≠ 1, several transfers
   per dam, transfers to upstream farms, missing days, leap days, runs that
   start mid water-year, calibration exclusions in and around the run. A failure prints the seed, the broken property and a
   **shrunk** reproduction (greedily dropping transfers, crops, nodes and days
   while the same property still fails).
-- **The same generator with GR4J runoff** (`randomInput(seed, { runoffModel: 'gr4j' })`):
-  the same networks and series, with GR4J parameters drawn from a second
-  generator (sometimes at the bounds, X2 ≠ 0 a quarter of the time). A second
-  400-case loop runs every check above plus `checkRunoffBalance`. The model-only
-  checks run on 400 random parameter sets and forcings (`runoff/gr4j.test.ts`).
+  GR4J's parameters come from a second generator (sometimes at the bounds,
+  X2 ≠ 0 a quarter of the time), so a seed's network and series don't depend
+  on them; every case also runs `checkRunoffBalance`. (Until engine 1.0.0 the
+  same seeds ran a second time on the legacy model.) The model-only checks run
+  on 400 random parameter sets and forcings (`runoff/gr4j.test.ts`).
 - **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
-  15 years each, through the full rain model, with legacy and with GR4J. A GR4J
+  15 years each, through the full rain model (GR4J). A GR4J
   run of one example must take under 50 ms (median of 7,
   `backend/src/model/examples.perf.test.ts`, its own `pnpm test:backend:perf`
   target — not part of `pnpm test`, since a loaded machine trips a hard
@@ -4594,15 +4594,19 @@ that doesn't add up) and expects an objection.
 roughly 12 minutes):
 
 ```bash
-FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
-FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
-FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/runoff/gr4j.test.ts src/run.invariants.test.ts -t GR4J   # GR4J only
-FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts -t "random cases"   # diagnostic: list every failing seed
+FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz
+FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz   # the next range
+FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/runoff/gr4j.test.ts   # the GR4J model-only checks
+FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz   # diagnostic: list every failing seed
 ```
 
-Each random-cases test stops after `FUZZ_MAX_FAILURES` failing seeds
+Each shard stops after `FUZZ_MAX_FAILURES` failing seeds
 (default 3, since each failure is shrunk, which is slow); a diagnostic soak
-raises it so one run lists every failing seed.
+raises it so one run lists every failing seed. The engine 1.0.0 soak
+(2026-09-26, issue #16) ran 20 000 cases with `FUZZ_MAX_FAILURES=100` clean,
+after seed 2909 showed the doubled-crop-area law must be checked with annual
+borehole caps off (more demand uses a cap up earlier and moves the lagged
+stream depletion in time).
 
 Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
 Write a new property as a physical statement ("storage never exceeds
@@ -4658,7 +4662,7 @@ step when a definition changes.
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
 | **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with 0 or blank on the unread days and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d). |
 | **Water year** | Oct–Sep in South African hydrology. The workbook orders monthly tables this way. |
-| **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
+| **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor; the engine's port of it was removed in 1.0.0 (§2.4). |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
 | **Condensed cover** | The area of a patch of trees as if its canopy were closed: area × canopy cover. Land-cover reductions scale with it (engine ≥ 0.24.0, §2.5a). |
