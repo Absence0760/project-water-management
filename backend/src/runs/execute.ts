@@ -16,7 +16,7 @@ import { mergeSettings } from '../projects/settings.js';
 /**
  * SHA-256 hex of a series' values (engine `seriesDigest`: the values as JSON,
  * null = missing day), stored in the run's input snapshot as `valuesSha256`
- * and the key of the values' `series_blob` (020_series_blob.sql).
+ * and the key of the values' `series_blob` (021_series_blob.sql).
  */
 export const seriesHash = (values: readonly (number | null)[]): string => createHash('sha256').update(seriesDigest(values)).digest('hex');
 
@@ -71,13 +71,13 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * True for a run the storage cap never trims and the DELETE route refuses, as
  * a SQL expression over `model_run r`: one an editor pinned (015_run_pinned),
  * one the evidence history names, now or before (010_run_nomination), or one
- * something **cites** (`model_run_cited`, 020_series_blob.sql). The single
+ * something **cites** (`model_run_cited`, 021_series_blob.sql). The single
  * exemption path for all three, so they can't drift apart.
  *
  * A new kind of citation (a scenario's base run, WP-3.2; an evidence pack or
  * assessment, WP-3.13/3.14) is not added here: its migration adds one EXISTS
  * clause to `model_run_cited` (CREATE OR REPLACE; the pattern is in
- * 020_series_blob.sql), and this expression, trimRuns and the DELETE route
+ * 021_series_blob.sql), and this expression, trimRuns and the DELETE route
  * pick it up unchanged.
  */
 export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
@@ -137,7 +137,7 @@ interface SnapshotSeries {
 /**
  * Run the engine and persist outputs. Returns the new run id.
  *
- * The run's input series are stored too (020_series_blob.sql): each kind's
+ * The run's input series are stored too (021_series_blob.sql): each kind's
  * values go to `series_blob` under their SHA-256 (only if the project doesn't
  * hold those exact values already) and `run_input_series` records which blob
  * and start date the run used, so loadRunInput can rebuild the exact input
@@ -229,7 +229,7 @@ async function storeRunInputs(
 export type RunInputProblem =
 	/** No such run, or not one the user can see. */
 	| 'not_found'
-	/** Saved before runs stored their input series (020_series_blob.sql): only hashes were kept. */
+	/** Saved before runs stored their input series (021_series_blob.sql): only hashes were kept. */
 	| 'not_reproducible'
 	/** The stored input disagrees with the run's own snapshot (a missing kind, a start, length or hash mismatch). */
 	| 'inconsistent';
@@ -255,7 +255,7 @@ export class RunInputError extends Error {
  * Runs under the caller's RLS: a run the user can't see is `not_found`, and
  * its blobs are unreadable. Throws RunInputError:
  * - `not_found`: no such run visible to the user;
- * - `not_reproducible`: a run saved before stored inputs (migration 020), which
+ * - `not_reproducible`: a run saved before stored inputs (migration 021), which
  *   kept only hashes of its series;
  * - `inconsistent`: a stored series doesn't match the snapshot's start date,
  *   length or SHA-256 (each blob is re-hashed on the way out), or a kind is

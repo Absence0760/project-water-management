@@ -209,8 +209,8 @@ In short:
   when), and `water_app` has no `UPDATE` or `DELETE` on it. Viewers read it.
   See [§ Import reports](#import-reports).
 - **Stored run inputs are readable only through a run you can see, and are
-  never shared across projects** (020_series_blob, roadmap WP-3.1,
-  [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-020_series_blobsql)).
+  never shared across projects** (021_series_blob, roadmap WP-3.1,
+  [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   A run's input series are kept content-addressed (`series_blob`, keyed by
   the SHA-256 of the values) so the run can be recomputed years later:
   - **Dedup is per project, by design.** The key is `(project_id, sha256)`,

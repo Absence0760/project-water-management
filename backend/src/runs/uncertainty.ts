@@ -43,7 +43,7 @@ import { loadModelInput, loadRunInput, RunInputError, seriesHash } from './execu
 export const CHECKED_MEMBERS = 3;
 
 /**
- * The exact input a run used. A run saved since 020_series_blob stored its
+ * The exact input a run used. A run saved since 021_series_blob stored its
  * input series, so it is rebuilt from them (loadRunInput) whatever has
  * happened to the project's data since. An older run kept only hashes: its
  * settings and model snapshot are used with the project's series, which must

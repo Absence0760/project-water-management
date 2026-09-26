@@ -1045,8 +1045,8 @@ role and not before it.
 ## Features left half-way
 
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
-  scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-020_series_blobsql)).
-  Built: engine `canonicalJson` / `seriesDigest`, `020_series_blob.sql`
+  scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
+  Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
   (`series_blob`, `run_input_series`, the GC trigger, `model_run_cited`),
   `executeRun` storing inputs, `loadRunInput` (byte-identical round trip on
   the three examples), the run-input route for uncertainty bands using it.

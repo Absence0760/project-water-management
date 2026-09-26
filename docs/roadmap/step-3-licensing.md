@@ -214,8 +214,8 @@ must build WP-2.15 Phase B.
 
 ### WP-3.1 Reproducible inputs and cited runs
 
-- **Status:** backend and engine core built (`020_series_blob.sql`,
-  [data-model.md § Stored run inputs](../data-model.md#stored-run-inputs-020_series_blobsql)),
+- **Status:** backend and engine core built (`021_series_blob.sql`,
+  [data-model.md § Stored run inputs](../data-model.md#stored-run-inputs-021_series_blobsql)),
   differently from the plan below in places:
   - engine `manifest.ts`: `canonicalJson` (RFC 8785, the Appendix B number
     vectors and §3.2 examples as tests) and `seriesDigest`, equal to the old

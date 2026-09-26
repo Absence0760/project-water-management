@@ -1,4 +1,4 @@
--- 020_series_blob — reproducible runs: every run keeps the exact input series
+-- 021_series_blob — reproducible runs: every run keeps the exact input series
 -- it used, and the hook that keeps "cited" runs (roadmap WP-3.1;
 -- docs/data-model.md § Stored run inputs, docs/security.md § Stored run inputs).
 --
@@ -57,9 +57,9 @@ CREATE TABLE run_input_series (
 CREATE INDEX run_input_series_blob_idx ON run_input_series (project_id, sha256);
 
 COMMENT ON TABLE series_blob IS
-	'Input series values kept for reproducible runs (020_series_blob), one row per distinct content per project. Readable only through a run_input_series row the user can see. water_app may only SELECT and INSERT; unreferenced rows are removed by series_blob_gc.';
+	'Input series values kept for reproducible runs (021_series_blob), one row per distinct content per project. Readable only through a run_input_series row the user can see. water_app may only SELECT and INSERT; unreferenced rows are removed by series_blob_gc.';
 COMMENT ON TABLE run_input_series IS
-	'Which series_blob each input series kind of a run used, and its start date (020_series_blob). Written with the run, gone with it. water_app may only SELECT and INSERT.';
+	'Which series_blob each input series kind of a run used, and its start date (021_series_blob). Written with the run, gone with it. water_app may only SELECT and INSERT.';
 
 -- Garbage collection: when references go (a trimmed or deleted run cascades
 -- here), remove the blobs no run references any more. Statement-level, with
@@ -138,4 +138,4 @@ CREATE FUNCTION model_run_cited(p_run uuid) RETURNS boolean
 	AS $$ SELECT false $$;
 
 COMMENT ON FUNCTION model_run_cited(uuid) IS
-	'True for a run a scenario, evidence pack or assessment cites (020_series_blob; one EXISTS clause per citing table, added by that table''s migration). Part of RUN_KEPT_SQL in backend/src/runs/execute.ts.';
+	'True for a run a scenario, evidence pack or assessment cites (021_series_blob; one EXISTS clause per citing table, added by that table''s migration). Part of RUN_KEPT_SQL in backend/src/runs/execute.ts.';

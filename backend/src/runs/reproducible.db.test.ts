@@ -1,4 +1,4 @@
-// Reproducible runs (roadmap WP-3.1, 020_series_blob.sql): executeRun stores
+// Reproducible runs (roadmap WP-3.1, 021_series_blob.sql): executeRun stores
 // each input series once per project (series_blob, by SHA-256) and the run's
 // references to them (run_input_series); loadRunInput rebuilds the run's exact
 // ModelInput. Checked here: the round trip is byte-identical on the example
@@ -185,7 +185,7 @@ describe('stored run inputs', () => {
 	});
 
 	it('says a run from before stored inputs is not reproducible, and why', async () => {
-		// A run saved the way executeRun did before 020: snapshot hashes, no references.
+		// A run saved the way executeRun did before 021: snapshot hashes, no references.
 		const legacy = await withUser(owner.id, async (db) => {
 			const { rows } = await db.query<{ id: string }>(
 				`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)

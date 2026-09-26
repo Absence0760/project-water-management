@@ -132,7 +132,7 @@ ORDINALITY` (fine for occasional reports).
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
 MB to a few tens of MB. The engine is deterministic, so a run saved since
-migration 020 can be recomputed from its `inputs` snapshot plus its stored
+migration 021 can be recomputed from its `inputs` snapshot plus its stored
 input series (`loadRunInput`, see **Stored run inputs** below) on the same
 `engine_version`.
 
@@ -316,7 +316,7 @@ parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
 they add no policy. They are small: a fit record is a few KB.
 
-### Stored run inputs (020_series_blob.sql)
+### Stored run inputs (021_series_blob.sql)
 
 Roadmap WP-3.1: a run can be recomputed exactly years later, whatever
 happens to the live project. `executeRun` writes each input series' values
@@ -352,7 +352,7 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   (viewer). `loadRunInput` re-hashes each blob and checks it against the
   snapshot's hash, start date and length.
 - **`loadRunInput` errors** (`RunInputError.problem`): `not_found` (no such
-  run visible to the user); `not_reproducible` (saved before 020, so it has
+  run visible to the user); `not_reproducible` (saved before 021, so it has
   snapshot hashes but no stored series: "this run is not reproducible from
   stored inputs: it was made on YYYY-MM-DD, before runs stored their input
   series"); `inconsistent` (a stored series is missing, or disagrees with the
@@ -384,7 +384,7 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   lock is held from the input writes to commit, where the trim already held
   it).
 
-**Cited runs (020_series_blob.sql).** A run a scenario is based on (WP-3.2),
+**Cited runs (021_series_blob.sql).** A run a scenario is based on (WP-3.2),
 or that an evidence pack or assessment cites (WP-3.13, WP-3.14), must never be
 trimmed or deleted, and no editor action may lift that (unlike a pin).
 "Cited" is derived, not stored: `model_run_cited(p_run uuid)` (SQL, `STABLE

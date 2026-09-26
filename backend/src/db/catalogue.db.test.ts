@@ -24,7 +24,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * report is the record of what the importer flagged (017_project_import.sql).
  * A run's stored inputs are immutable: a reference goes only with its run
  * (cascade) and a blob only when no run references it, through the
- * series_blob_gc trigger (020_series_blob.sql).
+ * series_blob_gc trigger (021_series_blob.sql).
  */
 const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series']);
 /**

@@ -246,7 +246,7 @@ describe('storing the result', () => {
 });
 
 describe('a run whose data changed', () => {
-	it('still gets its own input: a run stores its input series (020_series_blob)', async () => {
+	it('still gets its own input: a run stores its input series (021_series_blob)', async () => {
 		const run = await newRun(owner, 'Stored inputs, then the data changed');
 		const input = await inputOf(owner, run);
 		const rain = (input.series.rain_catchment_mm!.values as number[]).map((v) => v * 1.1);

@@ -240,7 +240,7 @@ export const runRoutes = new Hono<AuthEnv>()
 			// new run of this project is taking a reference to them (lockProjectRuns).
 			await lockProjectRuns(db, id);
 			// A kept run (RUN_KEPT_SQL) isn't deleted: one something cites
-			// (model_run_cited, 020_series_blob) or the evidence history names is
+			// (model_run_cited, 021_series_blob) or the evidence history names is
 			// kept for good (their foreign keys refuse it too); a pinned one until
 			// it is unpinned.
 			const { rows: kept } = await db.query<{ pinned: boolean; cited: boolean; kept: boolean }>(
