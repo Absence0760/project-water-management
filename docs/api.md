@@ -511,7 +511,8 @@ tell there is new data since the last run.
 sent are merged into the existing series by date. Incoming values win on
 overlapping days, the series extends in either direction, and any gap days
 between the old and new ranges become `null`. `413` if the merged series would
-exceed 60 000 days.
+exceed 60 000 days. A merge that changes nothing (a re-sent batch) leaves the
+row alone, so `updatedAt` doesn't move.
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`

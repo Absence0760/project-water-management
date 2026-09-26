@@ -333,7 +333,10 @@ merges into:
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health
-  commit in the job's transaction, as the job's acting user.
+  commit in the job's transaction, as the job's acting user. Re-reading an
+  unchanged window (CHIRPS does, every day) leaves the series row alone, so
+  its `updatedAt` ("new data since the last run") moves only when a value
+  does.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who
