@@ -4,8 +4,9 @@
 import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser } from '../db/tx.js';
+import { runTick } from '../jobs/runner.js';
 import { BAD_KEY } from './auth.js';
 import { INGEST_RATE } from './keys.js';
 
@@ -469,5 +470,82 @@ describe('automatic re-runs from an ingest (042_auto_rerun.sql, WP-2.11)', () =>
 		// The days are there: the ingest committed.
 		const [row] = await asOwner(`SELECT "values" FROM time_series WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [pid]);
 		expect(row.values).toEqual([4, 5]);
+	});
+});
+
+
+// WP-2.16 abuse case "a leaked or mis-configured gateway key poisons a
+// series" (series/hold.ts): a key's push whose days the data-quality rules
+// flag commits, records series.held, queues no automatic re-run, and holds
+// every automatic re-run until a person runs the model. Positive controls: a
+// clean push queues a re-run that runs once a person has run the model, and a
+// person's own merge is never held.
+describe('a key pushing days that look wrong holds the automatic re-run (WP-2.16)', () => {
+	let pid: string;
+	let keyId: string;
+	let secret: string;
+	const runs = async () => (await asOwner('SELECT trigger FROM model_run WHERE project_id = $1 ORDER BY created_at', [pid])).map((r) => r.trigger as string);
+	const pendingReruns = async () => (await asOwner(`SELECT 1 FROM job WHERE project_id = $1 AND kind = 'rerun' AND status = 'queued'`, [pid])).length;
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Held ingest' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id);
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+		// 600 days: enough rain days (120) for the outlier rule (OUTLIER_MIN_POSITIVE).
+		const values = Array.from({ length: 600 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true, debounceMinutes: 0 } } })).status).toBe(200);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+		const res = await createKey(pid);
+		expect(res.status).toBe(201);
+		({ secret } = res.body);
+		keyId = res.body.key.id;
+	});
+
+	it('merges a negative day, records series.held as the key, and queues nothing', async () => {
+		const res = await merge(secret, { ...rain('2021-02-04', [-3]), source: 'gw-7' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body).toMatchObject({ daysChanged: 1, rerunQueuedFor: null, rerunHeld: { negative: 1, outlier: 0, examples: [{ date: '2021-02-04', value: -3 }] } });
+		expect(await pendingReruns()).toBe(0);
+		const [event] = await asOwner(`SELECT actor_api_key_id, actor_user_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'series.held'`, [pid]);
+		expect(event).toMatchObject({ actor_api_key_id: keyId, actor_user_id: null, subject: { kind: 'rain_catchment_mm', negative: 1, source: 'gw-7' } });
+		// The data isn’t lost: the day is in the series (2021-02-04 is day 400 from 2020-01-01; arrays are 1-based).
+		const [row] = await asOwner(`SELECT "values"[401] AS v FROM time_series WHERE project_id = $1 AND kind = 'rain_catchment_mm'`, [pid]);
+		expect(row.v).toBe(-3);
+	});
+
+	it('flags a day far above the series’ own range too', async () => {
+		const res = await merge(secret, rain('2021-02-05', [5000]));
+		expect(res.body).toMatchObject({ rerunQueuedFor: null, rerunHeld: { negative: 0, outlier: 1, examples: [{ date: '2021-02-05', value: 5000 }] } });
+		expect(await pendingReruns()).toBe(0);
+	});
+
+	it('lets a later clean push queue a re-run, which does nothing while the hold stands', async () => {
+		const res = await merge(secret, rain('2021-02-06', [2]));
+		expect(res.body).toMatchObject({ rerunHeld: null, rerunQueuedFor: expect.any(String) });
+		expect(await pendingReruns()).toBe(1);
+		await runTick();
+		expect(await pendingReruns()).toBe(0);
+		expect(await runs()).toEqual([]);
+	});
+
+	it('ends the hold once a person runs the model: the next clean push makes an automatic run', async () => {
+		expect((await owner.call('POST', `/projects/${pid}/runs`, { label: 'reviewed' })).status).toBe(201);
+		const res = await merge(secret, rain('2021-02-07', [1]));
+		expect(res.body.rerunQueuedFor).toEqual(expect.any(String));
+		await runTick();
+		expect(await runs()).toEqual(['manual', 'auto']);
+	});
+
+	it('never holds a person’s own merge (it queues the re-run as usual)', async () => {
+		const res = await owner.call('POST', `/projects/${pid}/series/merge`, rain('2021-02-08', [-1]));
+		expect(res.status).toBe(200);
+		expect(res.body.rerunQueuedFor).toEqual(expect.any(String));
+		expect(await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND kind = 'series.held'`, [pid])).toEqual([{ n: 2 }]);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
 	});
 });

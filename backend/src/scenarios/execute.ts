@@ -9,6 +9,7 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
 import { loadPublishedRunInput, loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
+import type { OpName } from './names.js';
 import type { ScenarioOutcome, ScenarioStatus } from './schema.js';
 
 /** A scenario row as the API returns it. */
@@ -22,6 +23,8 @@ export interface ScenarioRow {
 	ops: ScenarioOp[];
 	opsSha256: string;
 	ownedNodeIds: string[];
+	/** Names of the nodes and crops the ops name, kept from the base run's snapshot when the ops were written (047_scenario_op_names). */
+	opNames: OpName[];
 	ownerUserId: string;
 	owner: string | null;
 	status: ScenarioStatus;
@@ -54,7 +57,7 @@ export const APPLICATION_RUNS_KEPT = 5;
 // not even their own application's (its inputs hold every farm).
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
-	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.owner_user_id AS "ownerUserId",
+	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
 	u.display_name AS owner, s.status, s.origin, s.submitted_at AS "submittedAt", s.decided_at AS "decidedAt",
 	du.display_name AS "decidedBy", s.outcome, s.decision_note AS "decisionNote",
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)

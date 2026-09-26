@@ -66,7 +66,14 @@ export default defineConfig({
 				ALLOWED_ORIGINS: WEB_URL,
 				SITE_URL: WEB_URL,
 				// Print emails to the server log; e2e doesn't need Mailpit running.
-				MAIL_TRANSPORT: 'log'
+				MAIL_TRANSPORT: 'log',
+				// bcrypt at its minimum cost, as under vitest (backend/src/auth/password.ts).
+				// Every test registers a user, and a cost-12 hash holds this one shared
+				// server's event loop for ~250 ms: at 12, hashing took over a third of the
+				// server's time in a parallel run, and model saves and page loads queued
+				// past their waits behind it (issue #41). e2e tests sign-up and login, not
+				// the work factor; Lambda refuses the override.
+				PASSWORD_HASH_COST: '4'
 			}
 		},
 		DEV_SERVER

@@ -255,6 +255,11 @@ describe('an application', () => {
 		const res = await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000), damRaise(kliphuis.id, 10)] });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.check.classified).toEqual(['proposal', 'baseline']);
+		// The names kept with the ops (047): only their own farm's, in the answer and in the row itself
+		// (positive control: a team scenario keeps every name its ops need, scenarios.db.test.ts).
+		expect(res.body.scenario.opNames).toEqual([{ id: rooikloof.id, name: 'Rooikloof' }]);
+		const [row] = await asOwner('SELECT op_names FROM scenario WHERE id = $1', [sid]);
+		expect(row.op_names).toEqual([{ id: rooikloof.id, name: 'Rooikloof' }]);
 		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000)] })).status).toBe(200);
 		const text = JSON.stringify(seen);
 		for (const name of OTHER_FARMS) expect(text, name).not.toContain(name);

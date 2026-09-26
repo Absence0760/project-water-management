@@ -249,6 +249,8 @@ export const noteRoutes = new Hono<AuthEnv>()
 				settingKey: note.setting_key,
 				visibility: note.visibility,
 				author: note.author_name,
+				// So deleting the author's account can pseudonymise this event (048_account_deletion.sql).
+				authorId: note.author_id,
 				own
 			});
 			return c.body(null, 204);

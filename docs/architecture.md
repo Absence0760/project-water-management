@@ -246,7 +246,15 @@ sliding back into the page chunk.
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
 5. zod validates the input. The model document is saved in one transaction
    (rows missing from a `PUT` are deleted). Tree validation runs before the
-   write.
+   write. `saveModel` (`model/store.ts`) is set-based: one statement clears the
+   way (deletes and temporary names), then one upsert per table takes the
+   whole row list as a jsonb parameter (`jsonb_populate_recordset` against the
+   table's row type), so a save is at most nine statements whatever the
+   model's size. `loadModel` builds the document in one statement
+   (`json_agg` per table), and the history snapshots load settings and model
+   together. A whole `PUT` is ~18 round trips, down from ~42 for a 3-node model
+   and growing with it, because each round trip waits its turn when the API
+   is busy (issue #41); `model/store.db.test.ts` pins the fixed statement count.
 6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
    and anything unexpected to a generic 500; raw database error text never
    reaches the client ([api.md § Errors](./api.md#errors)).
@@ -319,7 +327,9 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   `app_finish_job` **in the same transaction**, so the work and its "done"
   commit together. There is no principal that bypasses RLS: only claim,
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
-  functions that never return a payload.
+  functions that never return a payload. Each tick also purges finished jobs
+  after 30 days, report rows after 8, and invites 90 days past their expiry
+  (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),
@@ -406,6 +416,24 @@ Settings → Automatic runs.
   `model_run.trigger = 'auto'`, then `trimRuns`, which caps each trigger
   apart: the newest unkept auto run replaces the older one, and never pushes
   a person's run out ([data-model.md](./data-model.md), **Run output volume**).
+- **Scheduled forecast runs** (WP-2.12, `series/newData.ts`
+  `queueForecastFor` → `runs/autoRun.ts` `enqueueForecastRun`): a forecast
+  feed's (CHIRPS-GEFS) merge that changes days in the forecast series also
+  queues a `rerun` job with `trigger: 'forecast'`, due after the same
+  debounce, under dedupe key `forecast` (one pending per project, apart from
+  the re-run's; a second issue before it runs joins it, and it reads the
+  newest issue when it runs). **Only when automatic runs are on**
+  (`settings.autoRun.enabled`): a scheduled forecast run is an automatic run,
+  so it takes the same opt-in, and a project that turned them off since gets
+  nothing when the job runs. It runs `executeRun(db, id, forecastRunLabel,
+  'forecast')` (`Forecast · from <first forecast day>`), then `trimRuns`,
+  which keeps the newest unkept forecast run, so daily issues never pile up.
+  An issue the observed rain has overtaken (no forecast day after the last
+  observed one) leaves nothing to run: the job ends done, with no run. Never
+  auto-published, whatever `autoRun.publish` says: a forecast is guidance,
+  and publishing one stays a person's act. Only a feed's forecast queues
+  one: a person who uploads a forecast runs it from the Runs tab (Run
+  forecast), and an API key's ingest carries observed data.
 - **Publication stays a person's act** (roadmap D5): the Overview offers
   the editor "New auto run: publish?". A project may opt in to
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run

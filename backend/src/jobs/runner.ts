@@ -1,4 +1,4 @@
-// One tick of the queue: purge old jobs and reports, queue the data feeds
+// One tick of the queue: purge old jobs, reports and lapsed invites, queue the data feeds
 // (feeds/schedule.ts) and report schedules (reports/schedule.ts) that are
 // due, then claim and run due jobs one at a
 // time until none are due or the time budget is spent. Every transport ends
@@ -7,6 +7,7 @@
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
+import { purgeInvites } from '../invites/invites.js';
 import { requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JobError, LeaseLostError } from './errors.js';
@@ -93,6 +94,8 @@ export interface TickOptions {
 
 export interface TickResult {
 	purged: number;
+	/** Lapsed invites deleted (invites/invites.ts purgeInvites). */
+	invitesPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -117,8 +120,9 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const maxJobs = o.maxJobs ?? envInt(process.env.JOB_MAX_PER_TICK, 25);
 	const leaseSeconds = o.leaseSeconds ?? envInt(process.env.JOB_LEASE_SECONDS, DEFAULT_LEASE_SECONDS);
 	const budgetMs = o.budgetMs ?? 4 * 60_000;
-	const result: TickResult = { purged: 0, claimed: 0, done: 0, failed: 0, dead: 0, lost: 0, stats: { due: 0, running: 0, oldestDueSeconds: 0 } };
+	const result: TickResult = { purged: 0, invitesPurged: 0, claimed: 0, done: 0, failed: 0, dead: 0, lost: 0, stats: { due: 0, running: 0, oldestDueSeconds: 0 } };
 	result.purged = await withoutUser((db) => purgeJobs(db));
+	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
 	// One at a time, so a job's lease starts when it does, not when a batch was claimed.

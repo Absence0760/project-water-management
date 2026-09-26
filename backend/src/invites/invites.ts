@@ -24,6 +24,20 @@ import { requireTeamRole } from '../teams/access.js';
 
 export type InviteKind = 'project' | 'team';
 
+/**
+ * An invite that lapsed unaccepted is kept this long past its expiry (owners
+ * see it as expired and can send it again), then the job tick deletes it with
+ * its farms (048_account_deletion.sql app_purge_invites): it holds the address
+ * of someone who never signed up (docs/security.md § Personal information).
+ */
+export const INVITE_RETENTION_DAYS = 90;
+
+/** Delete invites expired more than `days` ago (the job tick, as no user). Returns how many went. */
+export async function purgeInvites(db: Db, days = INVITE_RETENTION_DAYS): Promise<number> {
+	const { rows } = await db.query<{ n: number }>('SELECT app_purge_invites(make_interval(days => $1)) AS n', [days]);
+	return rows[0]?.n ?? 0;
+}
+
 // Column names per kind — fixed strings, never user input.
 const COLS = {
 	project: { target: 'project_id', role: 'project_role', nameSql: 'SELECT name FROM project WHERE id = $1' },

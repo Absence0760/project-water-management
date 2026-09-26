@@ -341,9 +341,13 @@ must build WP-2.15 Phase B.
   foreign key to the live `node` table. The Scenarios tab, its override
   editor, the scenario-vs-base comparison, the compare page's Scenario
   overrides section, e2e and axe are built too
-  ([ui.md § Scenarios](../ui.md#scenarios-tabscenarios)); the editor is one
-  form over every op rather than an "override mode" of the Network, Crops
-  and Transfers editors (tracked in [followups.md](../followups.md)).
+  ([ui.md § Scenarios](../ui.md#scenarios-tabscenarios)). The editor has
+  both the one-change form over every op and, since 2026-09-26, the
+  plan's **override mode**: the Network, Crops and Transfers tables on the
+  scenario's model, their edits recorded as ops
+  (`scenarios/OverrideEditor.svelte`, `overrideDiff.ts`). A scenario also
+  keeps the display names its ops need (`047_scenario_op_names`), so a node
+  a rebase dropped still reads by name.
 - **Goal.** A scenario is a named, ordered list of **overrides on a base
   run**. It is run and compared without copying the project.
 - **How it relates to today:**
