@@ -3,6 +3,8 @@
 // ApiError carrying the HTTP status and the server's message.
 import type {
 	DailySeries,
+	FarmIndex,
+	FarmView,
 	MemberResult,
 	ModelInput,
 	PairedMember,
@@ -227,6 +229,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ farmer: Farmer }>('POST', `${p(id)}/farmers`, { email, nodeIds }).then((r) => r.farmer),
 			setFarms: (id: string, userId: string, nodeIds: string[]) =>
 				request<{ farmer: Farmer }>('PUT', `${p(id)}/farmers/${enc(userId)}`, { nodeIds }).then((r) => r.farmer)
+		},
+		/**
+		 * The phone-first farmer view (WP-2.6, docs/design/farmer-view.md): a
+		 * farmer's own farms from the current publication. A farmer gets these
+		 * and nothing else under /projects/:id (403); viewer+ may call them to
+		 * preview a farm as its farmer sees it.
+		 */
+		farm: {
+			/** The farms the caller may open in a project, and whether anything is published (publication null = not yet). */
+			index: (id: string) => request<FarmIndex>('GET', `${p(id)}/farm`),
+			/** Everything one farm's page renders, in one response. */
+			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
+			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
+			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`
 		},
 		teams: {
 			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),
