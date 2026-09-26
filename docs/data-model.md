@@ -886,7 +886,7 @@ Read-only links to the current publication for people outside the project
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
 
-### Notes (035_notes.sql)
+### Notes (036_notes.sql)
 
 Plain-text notes and comments kept against what they are about (WP-2.7;
 [api.md § Notes](./api.md#notes), [ui.md § Notes](./ui.md#notes)).

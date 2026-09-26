@@ -14,7 +14,7 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
-	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (035_notes.sql).
+	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (036_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
@@ -69,7 +69,7 @@ const APPEND_ONLY = new Set([
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
  * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (035_notes.sql).
+ * editors (036_notes.sql).
  */
 const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note']);
 /**

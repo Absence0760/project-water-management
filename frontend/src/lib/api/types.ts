@@ -761,7 +761,7 @@ export interface ShareSeries {
 	recent: { startDate: string; values: (number | null)[] };
 }
 
-/** Longest note, in characters (backend NOTE_MAX, 035_notes.sql). */
+/** Longest note, in characters (backend NOTE_MAX, 036_notes.sql). */
 export const NOTE_MAX = 4000;
 
 /** Who may read a note: the team (viewers and above), or also the farmers of its farm. */

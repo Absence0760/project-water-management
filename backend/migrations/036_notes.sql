@@ -1,4 +1,4 @@
--- 035_notes — notes and comments kept against a farm, a run, a setting or
+-- 036_notes — notes and comments kept against a farm, a run, a setting or
 -- the project (roadmap WP-2.7; docs/data-model.md § Notes, docs/api.md
 -- § Notes).
 --
@@ -51,7 +51,7 @@ CREATE TABLE note (
 	CONSTRAINT note_farm_on_node CHECK (visibility = 'team' OR node_id IS NOT NULL)
 );
 COMMENT ON TABLE note IS
-	'Plain-text notes on a node, run, setting or the project, visible to the team or also to the linked farmers (035, WP-2.7). Soft-deleted, never removed by the app.';
+	'Plain-text notes on a node, run, setting or the project, visible to the team or also to the linked farmers (036, WP-2.7). Soft-deleted, never removed by the app.';
 
 CREATE INDEX note_project_idx ON note (project_id, created_at DESC);
 CREATE INDEX note_author_idx ON note (author_id);

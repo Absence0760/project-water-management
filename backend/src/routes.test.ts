@@ -157,7 +157,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Notes and comments (WP-2.7, 035_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
+	// Notes and comments (WP-2.7, 036_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
 	it('inventories the note routes as auth-gated', () => {
 		const notes = [
 			'GET /projects/:id/notes',

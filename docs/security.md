@@ -307,7 +307,7 @@ In short:
   notice change `updated_by` / `updated_at`; the full audit log is WP-2.4.
   Share links (a public, token-bearing catchment page) are not built yet
   (WP-2.3 phase 2).
-- **Notes (WP-2.7, 035).** The note routes admit the farmer role and leave
+- **Notes (WP-2.7, 036).** The note routes admit the farmer role and leave
   the scoping to RLS: a farmer reads and writes only `farm`-visible notes on
   their linked farms (`note_select_farmer`, `note_insert`), never a `team`
   note or a run, settings, project or other farm's note. Only the author

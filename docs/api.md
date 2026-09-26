@@ -1085,7 +1085,7 @@ never a farm's row, name or id.
 ## Notes
 
 Plain-text notes and comments on a node, a run, a settings group or the
-project (WP-2.7; [data-model.md § Notes](./data-model.md#notes-035_notessql)).
+project (WP-2.7; [data-model.md § Notes](./data-model.md#notes-036_notessql)).
 The min role is **farmer** on every route, and RLS does the scoping: a farmer
 reads and writes only `farm` notes on their linked farms, and never sees a
 `team` note.
