@@ -64,8 +64,13 @@ section lists joins *Build the model*). It is layout only: the URLs stay
   below that, its name and remove columns kept in view (`model.spec.ts`).
 - **900–1099 px:** one strip across the top, sections side by side with a
   divider and a small label over each.
-- **Below 900 px (phones):** the same strip scrolling sideways; the section labels are read
-  out (each section is a named group) but not shown.
+- **Below 900 px (phones):** a full-width **Sections** button naming the open
+  tab (its accessible name is "Project sections: *Tab*", with the problems dot
+  when a model tab has one) opens the same grouped list in the page, the
+  section labels shown and the open tab marked, with a viewer's **Show model
+  inputs** at the end. Choosing a tab or pressing Escape closes it (Escape puts
+  focus back on the button). It replaced a 12-tab strip that scrolled
+  sideways, where a phone showed about three tabs and none of the grouping.
 
 The arrow keys move through the tabs in the order shown, across sections,
 wrapping at the ends (Right/Down next, Left/Up previous).

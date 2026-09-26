@@ -40,7 +40,8 @@
 
 <section class="panel" aria-labelledby="applications-h">
 	<div class="panel-head">
-		<h2 id="applications-h">Applications</h2>
+		<!-- Not "Applications": the tab body is already the region of that name (landmarks need unique names). -->
+		<h2 id="applications-h">Submitted applications</h2>
 		{#if items?.length}
 			<div class="field sort">
 				<label for="applications-sort">Sort by</label>
