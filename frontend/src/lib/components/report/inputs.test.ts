@@ -64,6 +64,17 @@ describe('settingsRows', () => {
 			'2005-10-01 to 2010-09-30: alternative catchment gauge, fitted against reanalysis 1995/96–2004/05 (automatic station)'
 		);
 	});
+
+	it('says where GR4J’s potential evaporation came from (engine ≥ 0.31.0), pan × A-pan for a snapshot without it', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run))['GR4J potential evaporation']).toBe('pan coefficient × A-pan');
+		const pe = { kind: 'monthly' as const, mm: new Array(12).fill(100) as never, source: 'station ET₀' };
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', pe }), run))['GR4J potential evaporation']).toBe(
+			'monthly, entered directly: 1,200 mm a year (station ET₀)'
+		);
+		// Legacy runs have no GR4J PE.
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'legacy', pe }), run))['GR4J potential evaporation']).toBeUndefined();
+	});
 });
 
 describe('monthlyRows', () => {
@@ -73,6 +84,15 @@ describe('monthlyRows', () => {
 		expect(rows.map((r) => r.label)).toEqual(['A-pan evaporation (mm)', 'Pan coefficient', 'Pragmatic EWR (m³/day)']);
 		expect(rows[0]!.values[0]).toBe('1');
 		expect(rows[0]!.values).toHaveLength(12);
+	});
+
+	it('shows GR4J’s monthly PE row instead of the unused pan coefficient under a monthly PE', () => {
+		const pe = { kind: 'monthly' as const, mm: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120] as never, source: 'station' };
+		const rows = monthlyRows(effectiveSettings({ runoffModel: 'gr4j', pe }));
+		expect(rows.map((r) => r.label)).toEqual(['A-pan evaporation (mm)', 'GR4J monthly PE (mm)', 'Pragmatic EWR (m³/day)']);
+		expect(rows[1]!.values[0]).toBe('10');
+		// Legacy ignores the PE input, so the report keeps the pan coefficient row as before.
+		expect(monthlyRows(effectiveSettings({ runoffModel: 'legacy', pe })).map((r) => r.label)).toContain('Pan coefficient');
 	});
 });
 
