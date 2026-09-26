@@ -268,13 +268,13 @@
 	}
 
 	const METHODS: { value: FlowShareMethod; label: string; help: string }[] = [
-		{ value: 'area', label: 'By catchment area', help: "Each farm's share = its area ÷ the total farm area." },
+		{ value: 'area', label: 'By catchment area', help: "Each unit's share = its area ÷ the total unit area." },
 		{
 			value: 'hiLo',
 			label: 'High/low MAP split',
 			help: 'High-MAP areas share the high part of the split and low-MAP areas the low part (WR90/WR2012 practice).'
 		},
-		{ value: 'manual', label: 'Manual share per farm', help: 'Shares typed per farm on the Network tab ("Manual flow share").' }
+		{ value: 'manual', label: 'Manual share per unit', help: 'Shares typed per unit on the Network tab ("Manual flow share").' }
 	];
 	const method = $derived(METHODS.find((m) => m.value === s.flowShareMethod));
 	const runoffOption = $derived(RUNOFF_MODEL_OPTIONS.find((o) => o.value === s.runoffModel));
@@ -330,7 +330,7 @@
 
 	<p class="muted small lead">
 		Grouped by what each setting drives: irrigation <strong>demand</strong>, natural <strong>flow generation</strong> from rainfall, how
-		flow is <strong>shared</strong> between farms, and the <strong>EWR</strong> at the outflow gauge. Monthly values run through the water
+		flow is <strong>shared</strong> between units, and the <strong>EWR</strong> at the outflow gauge. Monthly values run through the water
 		year, October → September.
 	</p>
 
@@ -404,7 +404,7 @@
 			<div class="field">
 				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
-				<span class="hint" id="st-lef-h">Open-water evaporation from the farm dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
+				<span class="hint" id="st-lef-h">Open-water evaporation from the units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
 				<label class="check">
 					<input
 						type="checkbox"
@@ -444,13 +444,13 @@
 					id="cal-catchmentAreaKm2"
 					min={0}
 					nullable
-					placeholder="{fmtNum(farmAreaKm2, 2)} (sum of farms)"
+					placeholder="{fmtNum(farmAreaKm2, 2)} (sum of units)"
 					disabled={readonly}
 					bind:value={s.calibration.catchmentAreaKm2}
 					aria-describedby="cal-area-h"
 				/>
 				<span class="hint" id="cal-area-h">
-					Area the rain falls on. Leave blank to use the sum of the farm areas —
+					Area the rain falls on. Leave blank to use the sum of the unit areas —
 					<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
 						Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
 				</span>
@@ -833,8 +833,8 @@
 	<!-- Flow share ----------------------------------------------------------------->
 	<section class="panel" id="set-share" aria-labelledby="share-h">
 		<div class="panel-head">
-			<h2 id="share-h">Flow share between farms</h2>
-			<span class="muted small">Splits catchment natural flow and the EWR into per-farm parts</span>
+			<h2 id="share-h">Flow share between units</h2>
+			<span class="muted small">Splits catchment natural flow and the EWR into per-unit parts</span>
 			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
 		</div>
 		<div class="fields">
@@ -843,7 +843,7 @@
 				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
-				<span class="hint" id="st-method-h">{method?.help} The resulting share per farm is shown on the Network tab.</span>
+				<span class="hint" id="st-method-h">{method?.help} The resulting share per unit is shown on the Network tab.</span>
 			</div>
 			<fieldset class="plain hilo">
 				<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
@@ -878,7 +878,7 @@
 		<p class="hint muted">
 			The flow that must stay in the river for the ecosystem (the Ecological Reserve). b023's <em>pragmatic</em> EWR is one fixed
 			flow per month, so farmers can plan for it; the model checks it at the EWR sites (the outlet and every gauge) and charges
-			each shortfall to the farms upstream by their net impact that day.
+			each shortfall to the units upstream by their net impact that day.
 		</p>
 		<div class="ewr">
 			<div class="table-wrap">
@@ -938,7 +938,7 @@
 					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
 					aria-describedby="st-aat-h"
 				/>
-				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a farm's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
 			</div>
 		</fieldset>
 	</section>

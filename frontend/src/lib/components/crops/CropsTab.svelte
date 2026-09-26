@@ -87,7 +87,7 @@
 
 	function remove(id: string, name: string) {
 		const used = editor.model.cropAreas.some((a) => a.cropId === id);
-		if (used && !confirm(`Remove crop "${name}" and its planted areas on every farm?`)) return;
+		if (used && !confirm(`Remove crop "${name}" and its planted areas on every unit?`)) return;
 		editor.removeCrop(id);
 	}
 
@@ -116,7 +116,7 @@
 		const f = farms[from];
 		if (!f || to < 0 || to >= farms.length) return;
 		editor.model.nodes = reorderSubset(editor.model.nodes, farms.map((x) => x.id), from, to);
-		announce = `${f.name || 'Farm'} moved to row ${to + 1} of ${farms.length} (network order).`;
+		announce = `${f.name || 'Unit'} moved to row ${to + 1} of ${farms.length} (network order).`;
 		if (focus) void refocusMover('mvf', f.id, focus);
 	}
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
@@ -214,18 +214,18 @@
 <section class="panel" aria-labelledby="areas-h">
 	<div class="panel-head">
 		<h2 id="areas-h">Planted areas</h2>
-		<span class="muted small">Irrigated area per farm and crop, hectares · rows follow the network order</span>
+		<span class="muted small">Irrigated area per unit and crop, hectares · rows follow the network order</span>
 	</div>
 	{#if farms.length === 0 || crops.length === 0}
 		<p class="muted">
-			Add at least one farm (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
+			Add at least one unit (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
 		</p>
 	{:else}
 		<div class="table-wrap">
 			<table class="data compact areas">
 				<thead>
 					<tr>
-						<th scope="col" class="sticky">Farm</th>
+						<th scope="col" class="sticky">Unit</th>
 						{#each crops as c (c.id)}<th scope="col" class="num">{c.name || '(unnamed)'}<br /><span class="u">ha</span></th>{/each}
 						<th scope="col" class="num">Total<br /><span class="u">ha</span></th>
 					</tr>
@@ -237,7 +237,7 @@
 							<th scope="row" class="sticky">
 								<span class="namecell">
 									{#if !readonly}
-										<MoveControls id={f.id} label={f.name || 'farm'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
+										<MoveControls id={f.id} label={f.name || 'unit'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
 									{/if}
 									<span>{f.name || '(unnamed)'}</span>
 								</span>
@@ -246,7 +246,7 @@
 								<td>
 									<span class="cell-label" aria-hidden="true">{c.name || '(unnamed)'} <span class="u">ha</span></span>
 									<NumberInput
-										label="{c.name || 'crop'} on {f.name || 'farm'}, ha"
+										label="{c.name || 'crop'} on {f.name || 'unit'}, ha"
 										min={0}
 										step={0.1}
 										scale={1 / 10_000}
@@ -286,7 +286,7 @@
 		Gross demand = Σ area × A-pan × crop factor, spread over the days in each month (February {fmtNum(settings.februaryDays, 2)}
 		days). On each simulated day the model then subtracts effective rainfall ({fmtPct(settings.effectiveRainFraction, 0)} of rain on the
 		cropped area{#if settings.effectiveRainStoreMm > 0}, with what the crop can't use that day carried over in a
-			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the farm abstracts that ÷ its irrigation efficiency. Uses saved A-pan values and the crops and areas above,
+			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the unit abstracts that ÷ its irrigation efficiency. Uses saved A-pan values and the crops and areas above,
 		including unsaved edits.
 	</p>
 	{#if !apanSet}
@@ -296,7 +296,7 @@
 		</div>
 	{/if}
 	{#if farms.length === 0}
-		<p class="muted">No farms yet.</p>
+		<p class="muted">No units yet.</p>
 	{:else}
 		{#if stacks.length && demandTotal.annual > 0}
 			<figure class="demand-chart">
@@ -307,7 +307,7 @@
 			<table class="data compact demand">
 				<thead>
 					<tr>
-						<th scope="col" class="sticky">Farm</th>
+						<th scope="col" class="sticky">Unit</th>
 						<th scope="col" class="num">Area<br /><span class="u">ha</span></th>
 						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">m³/day</span></th>{/each}
 						<th scope="col" class="num">Mean<br /><span class="u">m³/day</span></th>

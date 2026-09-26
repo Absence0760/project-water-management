@@ -79,14 +79,14 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(ageText(row({ figuresUntil: null, figuresAgeDays: null }))).toBeNull();
 	});
 	it('farms, dams, restriction, feeds', () => {
-		expect(farmsShortText(row())).toBe('2 of 12 farms short this week');
-		expect(farmsShortText(row({ farmCount: 1, farmsShort7: 0 }))).toBe('0 of 1 farm short this week');
-		expect(farmsShortText(row({ farmCount: 0, farmsShort7: 0 }))).toBe('No farms');
+		expect(farmsShortText(row())).toBe('2 of 12 units short this week');
+		expect(farmsShortText(row({ farmCount: 1, farmsShort7: 0 }))).toBe('0 of 1 unit short this week');
+		expect(farmsShortText(row({ farmCount: 0, farmsShort7: 0 }))).toBe('No units');
 		expect(farmsShortText(row({ farmsShort7: null }))).toBeNull();
 		expect(farmsUnknownText(row({ source: 'run' }))).toBe('Unknown until a run is published');
 		expect(farmsUnknownText(row())).toBe('Unknown: publish again to count them');
 		expect(damText(row())).toBe('Kareebos 18 %');
-		expect(damText(row({ lowestDamPct: null }))).toBe('No farm dams');
+		expect(damText(row({ lowestDamPct: null }))).toBe('No dams');
 		expect(damText(row({ damsKnown: false, lowestDamPct: null }))).toBe('Unknown until a run is published');
 		expect(restrictionText(row())).toBe('Advisory · 12.5 %');
 		expect(restrictionText(row({ restriction: { level: 'restricted', pct: null } }))).toBe('Restricted');

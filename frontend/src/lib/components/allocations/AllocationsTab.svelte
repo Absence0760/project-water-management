@@ -199,7 +199,7 @@
 						<h3 id="alloc-form-h">{editingId ? 'Change the registered volume' : 'Add a registered volume'}</h3>
 						<div class="form-row">
 							<div class="field">
-								<label for="af-node">Farm or water user</label>
+								<label for="af-node">Unit or water user</label>
 								<select id="af-node" bind:value={draft.nodeId}>
 									<option value="">Not matched yet</option>
 									{#each data.nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
@@ -276,7 +276,7 @@
 							<caption class="visually-hidden">Registered and licensed volumes</caption>
 							<thead>
 								<tr>
-									<th scope="col">Farm or user</th>
+									<th scope="col">Unit or user</th>
 									<th scope="col">Registration</th>
 									{#if data.canSeeHolders}<th scope="col">Registered user</th>{/if}
 									<th scope="col">Authorisation</th>

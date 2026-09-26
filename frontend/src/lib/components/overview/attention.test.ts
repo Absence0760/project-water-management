@@ -69,12 +69,12 @@ describe('attention', () => {
 			{
 				id: 'short-farms',
 				text: `Lower got 60% of its demand in the latest run, below the ${target} target.`,
-				action: 'See the farm results',
+				action: 'See the unit results',
 				href: '?tab=runs&run=r%2F1'
 			}
 		]);
 		const two = attention(base({ summary: summary([farm('Upper', 0.9), farm('Lower', 0.5), farm('Mid', 1)]) }));
-		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 farms below ${target} (of 3).`);
+		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 units below ${target} (of 3).`);
 	});
 
 	it("adds the short farm's planted areas when it is still a farm in the model", () => {

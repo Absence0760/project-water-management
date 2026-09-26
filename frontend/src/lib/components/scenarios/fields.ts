@@ -186,7 +186,7 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	'calibration.summerFactor': { label: 'Calibration summer factor', spec: num('') },
 	'calibration.winterFactor': { label: 'Calibration winter factor', spec: num('') },
 	'calibration.baseFlowInitial': { label: 'Calibration initial base flow', spec: num('m³/day') },
-	'calibration.catchmentAreaKm2': { label: 'Calibration catchment area', spec: num('km²', { nullable: true, nullLabel: 'sum of farm areas' }) },
+	'calibration.catchmentAreaKm2': { label: 'Calibration catchment area', spec: num('km²', { nullable: true, nullLabel: 'sum of unit areas' }) },
 	'calibration.summerMonths': { label: 'Calibration summer months', spec: { t: 'months' } },
 	simulationStart: { label: 'Simulation start', spec: { t: 'date', nullLabel: 'first day with rain' } },
 	simulationEnd: { label: 'Simulation end', spec: { t: 'date', nullLabel: 'last day with rain' } },

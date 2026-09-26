@@ -87,7 +87,7 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 
 	await page.getByRole('button', { name: 'Run scenario' }).click();
 	const compare = page.getByRole('region', { name: 'Scenario against its base' });
-	const table = compare.getByRole('region', { name: 'Farms' }).getByRole('table', { name: 'Change per farm, run B minus run A' });
+	const table = compare.getByRole('region', { name: 'Units' }).getByRole('table', { name: 'Change per unit, run B minus run A' });
 	await expect(table).toBeVisible();
 
 	// The stored runs: the scenario's daily demand is the base's × 0.5 in Dec and Jan, the base's on every other day.

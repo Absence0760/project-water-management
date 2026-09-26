@@ -114,7 +114,7 @@
 		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}
 		<p class="muted small">
-			Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
+			Start storage + unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
 			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
 		</p>
 		<div class="table-wrap">
@@ -149,12 +149,12 @@
 <section aria-labelledby="{uid}-tr">
 	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
-		Every column of one farm's day, with the formula the model used, so the day can be checked by hand. The farm's daily CSV has the same
+		Every column of one unit's day, with the formula the model used, so the day can be checked by hand. The unit's daily CSV has the same
 		columns for every day. Pick the catchment to see how the runoff model turned the day's rain into natural flow.
 	</p>
 	<form class="trace-form" onsubmit={trace}>
 		<label>
-			<span>Farm, gauge or catchment</span>
+			<span>Unit, gauge or catchment</span>
 			<select bind:value={nodeId}>
 				<option value={CATCHMENT}>Catchment (rain to natural flow)</option>
 				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : n.kind === 'user' ? ' (other user)' : ''}</option>{/each}

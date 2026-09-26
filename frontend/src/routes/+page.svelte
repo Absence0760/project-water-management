@@ -217,7 +217,7 @@
 	<div class="page-head">
 		<div>
 			<h1>Projects</h1>
-			<p class="muted sub">Each project models one catchment: its river network, farms, dams and data.</p>
+			<p class="muted sub">Each project models one catchment: its river network, units, dams and data.</p>
 		</div>
 		<div class="head-actions">
 			<button

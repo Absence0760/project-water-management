@@ -258,7 +258,7 @@
 
 	<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	{#if isOwner && farms.length === 0}
-		<p class="muted small add-hint">Add a farm on the Network tab before inviting a farmer to it.</p>
+		<p class="muted small add-hint">Add a unit on the Network tab before inviting a farmer to it.</p>
 	{/if}
 </section>
 

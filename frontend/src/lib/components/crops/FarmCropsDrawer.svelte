@@ -46,9 +46,9 @@
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);
 </script>
 
-<Dialog bind:open title={node ? `${name}: planted areas` : 'Farm not found'} side>
+<Dialog bind:open title={node ? `${name}: planted areas` : 'Unit not found'} side>
 	{#if !node}
-		<p>This farm isn't in the model any more. It may have been removed or renamed on the Network tab.</p>
+		<p>This unit isn't in the model any more. It may have been removed or renamed on the Network tab.</p>
 	{:else if planting.rows.length === 0}
 		<p>No crops are defined yet. Add crops and their monthly crop factors on <a href="?tab=crops">Crops &amp; demand</a> first.</p>
 	{:else}
@@ -80,18 +80,18 @@
 		</table>
 		<!-- After the table, so opening the sheet focuses the first area, not this link. -->
 		<p class="muted small">
-			Irrigated area of each crop on this farm, in hectares. The same values as this farm's row on
+			Irrigated area of each crop on this unit, in hectares. The same values as this unit's row on
 			<a href="?tab=crops">Crops &amp; demand</a>, where the crop factors are set.
 		</p>
 		{#if !apanSet}
-			<p class="muted small">A-pan evaporation isn't set yet, so this farm's demand is zero (<a href="?tab=settings">Settings &amp; calibration</a>).</p>
+			<p class="muted small">A-pan evaporation isn't set yet, so this unit's demand is zero (<a href="?tab=settings">Settings &amp; calibration</a>).</p>
 		{:else if demand && planting.totalM2 > 0}
 			<p class="small" data-testid="farm-demand">
 				Gross irrigation demand: <strong>{fmtNum(demand.meanM3Day)} m³/day</strong> on average,
 				{fmtNum(demand.annualMm3, 3)} million m³ a year, highest in {WATER_YEAR_MONTHS[peak]} ({fmtNum(demand.monthlyM3Day[peak])} m³/day).
 			</p>
 		{:else}
-			<p class="muted small">Nothing planted, so this farm draws no irrigation water.</p>
+			<p class="muted small">Nothing planted, so this unit draws no irrigation water.</p>
 		{/if}
 	{/if}
 

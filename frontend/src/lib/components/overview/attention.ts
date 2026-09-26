@@ -56,7 +56,7 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (short.length) {
 			const worst = short.reduce((a, f) => (f.fractionSupplied < a.fractionSupplied ? f : a));
 			const target = fmtPct(SUPPLY_TARGET, 0);
-			const worstText = `${worst.name || 'An unnamed farm'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
+			const worstText = `${worst.name || 'An unnamed unit'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
 			// Its planted areas, when it is still a farm in the model (the run may be older than an edit).
 			const inModel = model.nodes.some((n) => n.id === worst.nodeId && n.kind === 'farm');
 			out.push({
@@ -64,8 +64,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 				text:
 					short.length === 1
 						? `${worstText}, below the ${target} target.`
-						: `${worstText}, the least of the ${fmtNum(short.length)} farms below ${target} (of ${fmtNum(farms.length)}).`,
-				action: 'See the farm results',
+						: `${worstText}, the least of the ${fmtNum(short.length)} units below ${target} (of ${fmtNum(farms.length)}).`,
+				action: 'See the unit results',
 				href: runHref(latest.id),
 				...(inModel ? { also: { action: 'Its planted areas', href: farmDrawerHref(null, worst.nodeId) } } : {})
 			});
@@ -111,7 +111,7 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (bare.length)
 			out.push({
 				id: 'unplanted',
-				text: `${nameList(bare.map((n) => n.name || 'Unnamed farm'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
+				text: `${nameList(bare.map((n) => n.name || 'Unnamed unit'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
 				action: bare.length === 1 ? 'Set its planted areas' : 'Set crop areas',
 				href: bare.length === 1 ? farmDrawerHref(null, bare[0]!.id) : '?tab=crops'
 			});

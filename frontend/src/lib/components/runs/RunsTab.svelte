@@ -781,7 +781,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		{:else}
 			<div class="panel placeholder muted">
 				Results appear here after a run: flows at the outflow gauge, calibration against observed flow, EWR compliance and each
-				farm's supply and dam storage.
+				unit's supply and dam storage.
 			</div>
 		{/if}
 	</div>

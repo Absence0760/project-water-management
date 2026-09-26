@@ -55,7 +55,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await expect(page).not.toHaveURL(new RegExp(idA));
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
 	await expect(stat('Outflow gauge')).toHaveText('Outflow gauge');
-	await expect(stat('Farms')).toHaveText(/^2\s*\+ 1 gauge$/);
+	await expect(stat('Units')).toHaveText(/^2\s*\+ 1 gauge$/);
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).

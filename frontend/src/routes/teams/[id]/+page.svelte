@@ -242,7 +242,7 @@
 				{team.projectCount} project{team.projectCount === 1 ? '' : 's'} · {team.memberCount} member{team.memberCount === 1 ? '' : 's'} ·
 				created {fmtDate(team.createdAt)}
 			</p>
-			<p class="portfolio-link"><a href="{base}/teams/{team.id}/portfolio">Portfolio: every catchment's EWR status, farms and dams</a></p>
+			<p class="portfolio-link"><a href="{base}/teams/{team.id}/portfolio">Portfolio: every catchment's EWR status, units and dams</a></p>
 
 			{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 

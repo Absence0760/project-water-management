@@ -26,7 +26,7 @@
 			<p>No transfer rules.</p>
 			<p class="small">
 				A transfer moves water from one node's dam to another in the months you pick, such as a pipeline pumping from a
-				river dam to a farm dam in summer. Most catchments have none.
+				river dam to a unit’s dam in summer. Most catchments have none.
 			</p>
 			{#if !readonly}<button type="button" class="btn btn-primary" onclick={() => editor.addTransfer()}>Add transfer</button>{/if}
 		</div>

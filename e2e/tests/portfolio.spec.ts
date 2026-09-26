@@ -63,7 +63,7 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(pr).toContainText(/Figures to \d+ \w{3} 20\d\d, [\d,]+ days ago/);
 	await expect(pr).toContainText('Stale: over 7 days old');
 	await expect(pr).toContainText('Advisory · 15 %');
-	await expect(pr).toContainText(/\d+ of \d+ farms? short this week/);
+	await expect(pr).toContainText(/\d+ of \d+ units? short this week/);
 
 	// Run only: the EWR from the run, farms and dams honestly unknown.
 	const rr = tableRow(page, 'Pf run only A');
@@ -148,7 +148,7 @@ test('“farms short this week” opens the Runs tab at the curtailment table, o
 	};
 
 	await page.goto(`/teams/${team.id}/portfolio`);
-	await tableRow(page, 'Pf short D').getByRole('link', { name: /farms? short this week$/ }).click();
+	await tableRow(page, 'Pf short D').getByRole('link', { name: /units? short this week$/ }).click();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=runs&run=${runId}&window=last7#res-curtailment$`));
 	await landed();
 

@@ -150,10 +150,10 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		unit: 'of demand',
 		sub: [
 			!farms.length
-				? 'no farms in the run'
+				? 'no units in the run'
 				: short
-					? `${fmtNum(short)} of ${fmtNum(farms.length)} farms below ${target}`
-					: `all farms ≥ ${target}`
+					? `${fmtNum(short)} of ${fmtNum(farms.length)} units below ${target}`
+					: `all units ≥ ${target}`
 		],
 		flagged: short > 0,
 		delta: previous ? change(supplyFraction(previous), supplied) : null,

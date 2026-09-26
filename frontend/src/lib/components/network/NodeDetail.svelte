@@ -86,7 +86,7 @@
 		<div class="field">
 			<span class="lbl"><label for={id('kind')}>Kind</label><HelpTip key="node.kind" /></span>
 			<select id={id('kind')} disabled={readonly} bind:value={node.kind}>
-				<option value={'farm' satisfies NodeKind}>Farm (or stand-alone dam)</option>
+				<option value={'farm' satisfies NodeKind}>Unit (farm, sub-catchment or stand-alone dam)</option>
 				<option value={'gauge' satisfies NodeKind}>Gauge</option>
 				<option value={'user' satisfies NodeKind}>Other water user (town, industry, unlisted)</option>
 			</select>
@@ -113,7 +113,7 @@
 	</div>
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
-	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this farm’s page as its farmer sees it, from the current publication.</p>{/if}
+	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this unit’s farm page as its farmer sees it, from the current publication.</p>{/if}
 	{#if node.kind === 'gauge'}
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
