@@ -4,20 +4,27 @@
 //
 // A key's ingest is a machine writing without a person looking. When the days
 // it pushed hold a value the engine's data-quality rules call impossible or
-// far out (engine seriesRowFlags: a negative rain or flow, or a value above
-// the outlier limit of the series it lands in), the merge still commits (no
+// far out (a negative rain or flow, or a value above the engine's outlier
+// limit, OUTLIER_FACTOR × the 99th percentile of the series' non-zero days,
+// once it has OUTLIER_MIN_POSITIVE of them), the merge still commits (no
 // data is lost, and the History names the key), but:
 //   - it queues no automatic re-run, and records `series.held` with the
 //     counts and a few examples (mergeInto, series/merge.ts);
 //   - an automatic re-run already queued, or queued later by a clean push,
 //     does nothing while a `series.held` event is newer than the project's
 //     latest run (heldSinceLastRun, jobs/handlers/rerun.ts).
+// The limit is taken from the series as it was *without* this push (its days
+// before the merge, less the days the push overwrites), so a push can't
+// raise the bar it is judged by: a batch of huge values would otherwise lift
+// the 99th percentile over itself. Days an earlier push of the same key
+// wrote still count (a series keeps no per-day author); followups.md tracks
+// excluding them.
 // The hold ends when a person runs the model (the Run button or a queued
 // manual re-run; not a scenario run): they have looked at the data, fixed it
 // or accepted it.
 // A person's own merge from the UI is never held, and a data feed's values
 // are checked by its parser instead (feeds/ingest.ts).
-import { seriesRowFlags, type SeriesKind } from '@water-management/engine';
+import { OUTLIER_FACTOR, OUTLIER_MIN_POSITIVE, type SeriesKind } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 
@@ -27,33 +34,50 @@ export const HELD_EXAMPLES = 5;
 export interface HeldDays {
 	/** Pushed days below zero. */
 	negative: number;
-	/** Pushed days above the series' outlier limit. */
+	/** Pushed days above the outlier limit of the series without them. */
 	outlier: number;
 	/** The first few flagged days, in date order. */
 	examples: { date: string; value: number }[];
 }
 
+type Daily = { startDate: string; values: (number | null)[] };
+
 /**
- * The pushed days (`pushed`, as sent) that the engine's rules flag in the
- * merged series (`merged`), or null when none is. Only days that carry a
- * value in the push count: the rest of the series is what it was.
+ * The engine's outlier limit (quality.ts seriesRowFlags: OUTLIER_FACTOR × the
+ * linear-interpolated 99th percentile of the positive values) for the values
+ * of `before` outside the pushed days, or null below OUTLIER_MIN_POSITIVE.
  */
-export function anomalousPushedDays(
-	kind: SeriesKind,
-	merged: { startDate: string; values: (number | null)[] },
-	pushed: { startDate: string; values: (number | null)[] }
-): HeldDays | null {
-	const flags = seriesRowFlags(kind, merged);
-	const offset = toEpochDay(pushed.startDate) - toEpochDay(merged.startDate);
+export function limitWithout(kind: SeriesKind, before: Daily | null, pushed: Daily): number | null {
+	if (!before) return null;
+	const from = toEpochDay(pushed.startDate) - toEpochDay(before.startDate);
+	const to = from + pushed.values.length;
+	const positive = Float64Array.from(
+		before.values.filter((v, i): v is number => (i < from || i >= to) && v !== null && Number.isFinite(v) && v > 0)
+	).sort();
+	if (positive.length < OUTLIER_MIN_POSITIVE) return null;
+	const pos = (positive.length - 1) * 0.99;
+	const lo = Math.floor(pos);
+	const hi = Math.ceil(pos);
+	const p99 = positive[lo]! + (positive[hi]! - positive[lo]!) * (pos - lo);
+	return (kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow) * p99;
+}
+
+/**
+ * The pushed days (`pushed`, as sent) that are negative, or above the outlier
+ * limit of the series before the push without those days (`before`, null for
+ * a new series), or null when none is.
+ */
+export function anomalousPushedDays(kind: SeriesKind, before: Daily | null, pushed: Daily): HeldDays | null {
+	const limit = limitWithout(kind, before, pushed);
+	const d0 = toEpochDay(pushed.startDate);
 	const held: HeldDays = { negative: 0, outlier: 0, examples: [] };
 	pushed.values.forEach((v, i) => {
-		const k = offset + i;
-		if (v === null || k < 0 || k >= merged.values.length) return;
-		const negative = flags.negative[k] === true;
-		const outlier = flags.outlier[k] === true;
+		if (v === null || !Number.isFinite(v)) return;
+		const negative = v < 0;
+		const outlier = limit !== null && v > limit;
 		if (negative) held.negative++;
 		if (outlier) held.outlier++;
-		if ((negative || outlier) && held.examples.length < HELD_EXAMPLES) held.examples.push({ date: fromEpochDay(toEpochDay(merged.startDate) + k), value: v });
+		if ((negative || outlier) && held.examples.length < HELD_EXAMPLES) held.examples.push({ date: fromEpochDay(d0 + i), value: v });
 	});
 	return held.negative || held.outlier ? held : null;
 }

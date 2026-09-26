@@ -452,7 +452,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 		await recordAudit(db, projectId, 'series.merged', revisionId ? { ...subject, revisionId } : subject);
 	}
 	// A key's push whose days look wrong holds the automatic re-run for a person to review (series/hold.ts).
-	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.after, body) : null;
+	const flagged = opts.via === 'api_key' && daysChanged > 0 ? anomalousPushedDays(body.kind, r.before, body) : null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
 	const rerun = flagged ? null : await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
