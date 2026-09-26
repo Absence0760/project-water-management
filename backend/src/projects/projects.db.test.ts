@@ -385,7 +385,7 @@ describe('display order', () => {
 
 // Issue #43: a project that has nominated an evidence run keeps it, and its
 // nomination history, for good. Refused by the route (409 naming the run) and
-// by the project_evidence_guard trigger (040), whoever deletes.
+// by the project_evidence_guard trigger (035), whoever deletes.
 describe('a project with a nominated evidence run', () => {
 	type User = Awaited<ReturnType<typeof signUp>>;
 

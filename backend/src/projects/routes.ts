@@ -93,7 +93,7 @@ const ImportQuery = z.object({
 });
 const IMPORT_MB = (IMPORT_MAX_BYTES / 1024 / 1024).toFixed(0);
 
-/** restrict_violation: the project_evidence_guard trigger (040) refusing a DELETE. */
+/** restrict_violation: the project_evidence_guard trigger (035) refusing a DELETE. */
 const PG_RESTRICT = '23001';
 
 /**
@@ -242,7 +242,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'owner');
 			// A project that has nominated an evidence run keeps it and its
 			// nomination history for good (issue #43); the project_evidence_guard
-			// trigger (040) refuses the DELETE too, whoever runs it.
+			// trigger (035) refuses the DELETE too, whoever runs it.
 			const { rows: evidence } = await db.query<{ runId: string; runLabel: string; nominations: number }>(
 				`SELECT n.run_id AS "runId", r.label AS "runLabel", count(*) OVER ()::int AS nominations
 				 FROM run_nomination n JOIN model_run r ON r.id = n.run_id
