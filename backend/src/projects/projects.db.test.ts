@@ -356,6 +356,9 @@ describe('series append', () => {
 		expect(Date.parse(first.body.updatedAt)).toBeGreaterThanOrEqual(Date.parse(next.body.updatedAt));
 		const list = await u.call('GET', `/projects/${projectId}/series`);
 		expect(list.body.series[0].updatedAt).toBe(first.body.updatedAt);
+		// A re-sent batch changes nothing, so it doesn't move updatedAt either.
+		const resent = await merge('2025-01-03', [30, 4]);
+		expect(resent.body).toMatchObject({ id: next.body.id, startDate: '2025-01-01', length: 5, updatedAt: first.body.updatedAt });
 	});
 });
 

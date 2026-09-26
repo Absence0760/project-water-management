@@ -471,7 +471,8 @@ In short:
   - In production the fetch happens in the **fetcher Lambda, outside the VPC
     and with no database access**: its role may only receive fetch requests and
     send results. The worker validates each result again (`FetchResult`: size,
-    dates, values, a flat `meta`), checks it answers a real `feed_fetch` job of
+    dates, values, a flat `meta` within `last_meta`'s byte budget, no U+0000,
+    so nothing it accepts can fail the database after the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
     as the feed's acting user. A compromised fetcher could at worst send wrong
     numbers for feeds that asked it, into the series those feeds already

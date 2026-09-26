@@ -7,6 +7,37 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Blocking releases (operator)
 
+- [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
+      backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
+      refuses every `backend@` release until these repository variables
+      exist: `WORKER_FUNCTION_NAME` (job queue, #10 part 1),
+      `FETCHER_FUNCTION_NAME` (data feeds, #10 part 2),
+      `RENDERER_FUNCTION_NAME` and `RENDERER_ECR_REPOSITORY` (server-side
+      PDFs, #26). They are Terraform outputs (`infra/outputs.tf`), so after
+      the AWS bootstrap below, re-run
+      `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
+      appear under the repo's Settings → Variables.
+- [ ] **Renderer Lambda needs a two-step first deploy (#26).** Lambda can't be
+      created before its image is in ECR: apply without it, cut the first
+      `backend@X.Y.Z` release (which builds and pushes
+      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to that
+      version and apply again. The image has never been built or run on
+      Lambda; smoke-test one render in production and check its alarms
+      (details under § Server-side reports).
+- [ ] **SES production access.** Report links (#26), invites and password
+      resets reach only verified addresses while SES is in the sandbox.
+      Request production access in the chosen region before any client uses
+      email.
+- [ ] **AWS budget default is now $60** (`infra/variables.tf`
+      `budget_monthly_usd`; was $50). The job queue's SQS interface endpoint
+      adds ~$7.30/month per AZ; feeds and the renderer add ~$2/month idle.
+      Keep it, or set your own in tfvars (about 80 for af-south-1, below).
+- [ ] **Data-feed terms** (operator, roadmap D7): DWS's terms for automated
+      fetching and whether the fetcher's region can reach the site (it
+      answered our network with HTTP 403, so the DWS parser is untested
+      against the live page); CHIRPS-GEFS's licence before client use
+      (details under § Features left half-way).
+
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and
       logger volumes (commit 4f931bb onward). The tree no longer has them,
@@ -1160,14 +1191,16 @@ role and not before it.
   the jobs, the routes, Settings → Data feeds, the fetcher Lambda and its
   queues (plan only). Left open:
   - [ ] **DWS is unverified against the live site.** It answers HTTP 403 to
-        our (non-South-African) network, so the parser follows the format two
-        open-source clients parse (RivRetrieve-Python, aquascope), not a
-        recorded page. Trigger: the first deploy. From the fetcher's region,
-        attach a DWS feed to a throwaway project and check it goes OK; if the
+        our (non-South-African) network, so the parser follows the request two
+        open-source clients make (RivRetrieve-Python, aquascope) and the
+        layout of an archived daily page (web.archive.org, 2024: the header
+        is `D AVG F/R`, not the clients' `D_AVG_FR`). Trigger: the first
+        deploy. From the fetcher's region, attach a DWS feed to a throwaway project and check it goes OK; if the
         page differs, the feed fails loudly (nothing is written) and
-        `sources/dws.ts` plus its fixture change together. The quality codes
-        are counted, not interpreted: agree with the hydrologist which ones
-        should become gaps.
+        `sources/dws.ts` plus its fixture change together. Codes that say
+        the data is missing (151, 165, 170, 172, 246, 247, 255) become gaps;
+        the rest are counted: agree with the hydrologist whether flagged flows
+        (60 above rating, 150 extrapolated, 173 unreliable…) should be kept.
   - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
         automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
         public domain). Decide before a DWS or GEFS feed is used for a client.

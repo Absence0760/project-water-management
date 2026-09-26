@@ -39,6 +39,13 @@ export const SOURCES: Record<FeedSource, SourceSpec> = {
 const Lat = z.number().finite().min(-60).max(60);
 const Lon = z.number().finite().min(-180).max(180);
 
+/**
+ * CHIRPS begins on this day; every earlier day is a 404. A start date before
+ * it would make the first window all empty, and with no newest day to move
+ * on from, every later fetch would read that same empty window again.
+ */
+export const CHIRPS_FIRST_DAY = '1981-01-01';
+
 /** CHIRPS / CHIRPS-GEFS: the rainfall is the weighted mean of these 0.05° cells. */
 export const GridConfig = z
 	.object({
@@ -46,8 +53,8 @@ export const GridConfig = z
 			.array(z.object({ lat: Lat, lon: Lon, weight: z.number().finite().positive().max(1000).default(1) }).strict())
 			.min(1)
 			.max(25),
-		/** First day to fetch when the feed has no data yet (default: 60 days back). */
-		startDate: SeriesStartDate.optional(),
+		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
+		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional()
 	})
 	.strict();
@@ -61,7 +68,7 @@ export const DwsConfig = z
 			.trim()
 			.transform((s) => s.toUpperCase())
 			.pipe(z.string().regex(DWS_STATION, 'a DWS station code looks like A2H012')),
-		/** First day to fetch when the feed has no data yet (default: 10 years back). */
+		/** First day to fetch when the feed has no data yet (default: 10 years back), and never fetched before. */
 		startDate: SeriesStartDate.optional(),
 		staleAfterDays: z.number().int().min(1).max(3650).optional()
 	})

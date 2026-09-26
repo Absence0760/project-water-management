@@ -518,7 +518,8 @@ tell there is new data since the last run.
 sent are merged into the existing series by date. Incoming values win on
 overlapping days, the series extends in either direction, and any gap days
 between the old and new ranges become `null`. `413` if the merged series would
-exceed 60 000 days.
+exceed 60 000 days. A merge that changes nothing (a re-sent batch) leaves the
+row alone, so `updatedAt` doesn't move.
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
@@ -971,8 +972,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
     1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
     `{ station }`, a code like `A2H012` (letter, digit, letter, three digits;
-    upper-cased). Both take optional `startDate` (the first fetch's first day)
-    and `staleAfterDays` (overrides the source's staleness threshold);
+    upper-cased). Both take optional `startDate` (the first fetch's first day,
+    and a floor no later fetch reads before; for `chirps`, not before
+    `1981-01-01`, where CHIRPS begins) and `staleAfterDays` (overrides the source's staleness threshold);
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
