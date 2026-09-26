@@ -4023,7 +4023,8 @@ engine bug (fix the engine).
 ## 7. Glossary
 
 The app's `/help` page carries a fuller, searchable version of this glossary
-plus per-field help (`frontend/src/lib/help/content.ts`). Keep the two in
+plus per-field help (`frontend/src/lib/help/`: `tips.ts` for the short
+text and field keys, `articles.ts` for the fuller text). Keep the two in
 step when a definition changes.
 
 | Term | Meaning |

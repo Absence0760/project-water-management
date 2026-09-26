@@ -1,6 +1,6 @@
 <script lang="ts">
 	// "What do these words mean?" for farmers (docs/design/farmer-view.md §5.1):
-	// the glossary's farmer entries ($lib/help/content, category 'farmer') in the
+	// the glossary's farmer entries ($lib/help/farmer, category 'farmer') in the
 	// farm pages' frame, each with an anchor the pages link to. The same entries
 	// appear in the workspace's /help glossary. In Afrikaans an entry shows its
 	// reviewed translation ($lib/help/content.af) when it has one, else the
@@ -10,12 +10,12 @@
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
-	import { HELP } from '$lib/help/content';
+	import { FARMER_HELP } from '$lib/help/farmer';
 	import { HELP_AF } from '$lib/help/content.af';
 	import { i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	const entries = $derived(
-		HELP.filter((e) => e.category === 'farmer').map((e) => {
+		FARMER_HELP.map((e) => {
 			const af = i18n.locale === 'af' ? HELP_AF[e.id] : undefined;
 			return af ? { id: e.id, term: af.term, short: af.short, long: af.long, lang: 'af' } : { id: e.id, term: e.term, short: e.short, long: e.long, lang: 'en' };
 		})

@@ -604,6 +604,23 @@
 //             chunk is at its 43 KB ceiling. Headroom ~6 KB.
 // 2026-09-26  total 941 → 925 KB (measured 919). #9's engine split (−20)
 //             merged with WP-2.5's i18n foundation (+12). Headroom ~6 KB.
+// 2026-09-26  largest chunk 43 → 42 KB (down); total 925 → 937 KB (up).
+//             main @ 3ada6d9 already measured 928 KB (927.0), over 925: the
+//             alert emails (WP-2.13) landed without a ceiling change. The
+//             help text split (issue #9's last item, docs/followups.md):
+//             lib/help/content.ts, one 42.2 KB chunk and the largest page
+//             chunk, is now tips.ts (term, short, units, field keys; 10.4 KB,
+//             all a HelpTip fetches), articles.ts (the long text, joined by
+//             content.ts for the /help pages; 32.3 KB with it) and farmer.ts
+//             (2.2 KB, all /farm/words loads). A tooltip fetches 10 KB
+//             instead of 42, a farmer's words page 2 instead of 42. The
+//             split costs +3.1 KB of total (927.0 → 930.1): smaller chunks
+//             compress worse, and this guard counts every chunk. Measured
+//             and rejected: one module per category behind an id → category
+//             index, +9 KB of total for about the same tip download. The
+//             largest page chunk is now the Settings tab's, 41.4 KB. No new
+//             dependency. Headroom ~6 KB on the total. The ways down are
+//             unchanged: English-as-key i18n (~5–7 KB, docs/followups.md).
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -614,8 +631,8 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 925,
-	largestChunkKb: 43,
+	totalCodeKb: 937,
+	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
