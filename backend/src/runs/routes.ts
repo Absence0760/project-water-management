@@ -219,8 +219,8 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			const { rows: found } = await db.query<{ pinned: boolean; cited: boolean }>(
-				'SELECT pinned, model_run_cited(id) AS cited FROM model_run WHERE project_id = $1 AND id = $2',
+			const { rows: found } = await db.query<{ pinned: boolean; cited: boolean; notes: string }>(
+				'SELECT pinned, notes, model_run_cited(id) AS cited FROM model_run WHERE project_id = $1 AND id = $2',
 				[id, runId]
 			);
 			if (!found[0]) throw new ApiError(404, 'not found');
@@ -237,8 +237,13 @@ export const runRoutes = new Hono<AuthEnv>()
 			}
 			// Only the columns sent: a pin leaves the note (and its stamp) alone, and the other way round.
 			const set = Object.entries({ notes: body.notes, pinned: body.pinned }).filter(([, v]) => v !== undefined);
-			// The note's text stays on the run (notes_updated_by/at stamp it); the log says what changed.
-			await recordAudit(db, id, 'run.changed', { runId, fields: set.map(([k]) => k), ...(body.pinned !== undefined ? { pinned: body.pinned } : {}) });
+			// The note's text stays on the run (notes_updated_by/at stamp it); the log says what changed,
+			// and nothing when a PATCH re-sends what the run already has.
+			const changed = set.filter(([k, v]) => (k === 'notes' ? v !== found[0]!.notes : v !== found[0]!.pinned)).map(([k]) => k);
+			if (changed.length) {
+				const pinChanged = changed.includes('pinned');
+				await recordAudit(db, id, 'run.changed', { runId, fields: changed, ...(pinChanged ? { pinned: body.pinned } : {}) });
+			}
 			await db
 				.query(`UPDATE model_run SET ${set.map(([k], i) => `${k} = $${i + 3}`).join(', ')} WHERE project_id = $1 AND id = $2`, [
 					id,

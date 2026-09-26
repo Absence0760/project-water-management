@@ -89,6 +89,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 				enabled: patch.enabled ?? cur.enabled
 			});
 			if (!(await updateFeed(db, id, fid, input).catch(conflict))) throw new ApiError(404, 'not found');
+			// Logged even when the settings come back unchanged: every save makes the saver the
+			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
 			await recordAudit(db, id, 'feed.configured', feedSubject(fid, 'changed', input));
 			return getFeed(db, id, fid, utcToday());
 		});

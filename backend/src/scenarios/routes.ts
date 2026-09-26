@@ -99,12 +99,29 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					...set.map(([, v]) => v)
 				])
 				.catch(duplicateName);
-			await recordAudit(db, id, 'scenario.changed', {
-				scenarioId: sid,
-				name: body.name ?? s.name,
-				fields: set.map(([k]) => k).filter((k) => k !== 'ops_sha256'),
-				...(body.status !== undefined && body.status !== s.status ? { from: s.status, to: body.status } : {})
-			});
+			// Only the fields whose value moved: a PATCH that re-sends the scenario as it is logs nothing.
+			const was: Record<string, unknown> = {
+				name: s.name,
+				description: s.description,
+				ops: s.opsSha256,
+				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
+				status: s.status
+			};
+			const now: Record<string, unknown> = {
+				name: body.name,
+				description: body.description,
+				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
+				owned_node_ids: body.ownedNodeIds !== undefined ? [...body.ownedNodeIds].sort().join(',') : undefined,
+				status: body.status
+			};
+			const fields = Object.keys(now).filter((k) => now[k] !== undefined && now[k] !== was[k]);
+			if (fields.length)
+				await recordAudit(db, id, 'scenario.changed', {
+					scenarioId: sid,
+					name: body.name ?? s.name,
+					fields,
+					...(body.status !== undefined && body.status !== s.status ? { from: s.status, to: body.status } : {})
+				});
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid)));
 		});
 	})

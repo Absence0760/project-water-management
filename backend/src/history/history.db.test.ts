@@ -311,3 +311,56 @@ describe('series revisions', () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/series/${first.body.id}/revisions`)).body.revisions).toHaveLength(SERIES_REVISIONS_KEPT);
 	});
 });
+
+describe('what the log leaves out, and what a restore refuses', () => {
+	it('records a run edit only when something changed, not a PATCH that re-sends what the run has', async () => {
+		const [run] = await asOwner('SELECT id FROM model_run WHERE project_id = $1 ORDER BY created_at LIMIT 1', [projectId]);
+		expect(run, 'a run from the restore-inputs test above').toBeTruthy();
+		const patch = (body: Record<string, unknown>) => editor.call('PATCH', `/projects/${projectId}/runs/${run.id}`, body);
+		const count = async () => (await events(projectId, 'run.changed')).length;
+		const n0 = await count();
+		expect((await patch({ notes: 'Checked against the gauge' })).status).toBe(200);
+		expect((await patch({ pinned: true })).status).toBe(200);
+		// Positive control: both real changes are logged.
+		expect(await count()).toBe(n0 + 2);
+		expect((await patch({ notes: 'Checked against the gauge' })).status).toBe(200);
+		expect((await patch({ pinned: true, notes: 'Checked against the gauge' })).status).toBe(200);
+		expect(await count()).toBe(n0 + 2);
+		// A mixed PATCH logs only the field that moved.
+		expect((await patch({ pinned: false, notes: 'Checked against the gauge' })).status).toBe(200);
+		expect((await events(projectId, 'run.changed')).at(-1)!.subject).toMatchObject({ fields: ['pinned'], pinned: false });
+	});
+
+	it('records a scenario edit only when a field changed', async () => {
+		const [run] = await asOwner('SELECT id FROM model_run WHERE project_id = $1 ORDER BY created_at LIMIT 1', [projectId]);
+		const made = await editor.call('POST', `/projects/${projectId}/scenarios`, {
+			name: 'Bigger dam',
+			baseRunId: run.id,
+			ops: [{ op: 'node.set', nodeId: farm.id, field: 'damCapacityM3', value: 150_000 }]
+		});
+		expect(made.status).toBe(201);
+		const sid = made.body.scenario.id as string;
+		const count = async () => (await events(projectId, 'scenario.changed')).length;
+		const n0 = await count();
+		expect((await editor.call('PATCH', `/projects/${projectId}/scenarios/${sid}`, { description: 'Raise the wall 2 m' })).status).toBe(200);
+		expect(await count()).toBe(n0 + 1);
+		expect((await editor.call('PATCH', `/projects/${projectId}/scenarios/${sid}`, { description: 'Raise the wall 2 m', name: 'Bigger dam' })).status).toBe(200);
+		expect(await count()).toBe(n0 + 1);
+	});
+
+	it("refuses to restore a version whose model doesn't pass today's checks, and changes nothing", async () => {
+		const before = (await editor.call('GET', `/projects/${projectId}/model`)).body;
+		const revs = await revisions();
+		const target = revs.find((r) => r.source === 'model_put')!;
+		// A stored snapshot that today's validation rejects: a farm draining into a node that doesn't exist.
+		await asOwner(
+			`UPDATE model_revision SET snapshot = jsonb_set(snapshot, '{model,nodes,1,downstreamNodeId}', to_jsonb($2::text)) WHERE id = $1`,
+			[target.id, crypto.randomUUID()]
+		);
+		const res = await editor.call('POST', `/projects/${projectId}/history/revisions/${target.id}/restore`, {});
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/can't be restored/);
+		expect((await revisions()).length).toBe(revs.length);
+		expect((await editor.call('GET', `/projects/${projectId}/model`)).body).toEqual(before);
+	});
+});
