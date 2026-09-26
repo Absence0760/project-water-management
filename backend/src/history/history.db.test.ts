@@ -1,4 +1,4 @@
-// The change history (WP-2.4, 027_history.sql): revisions of the project's
+// The change history (WP-2.4, 030_history.sql): revisions of the project's
 // inputs, series revisions, audit events, restore, and who may read them.
 // Every "cannot see" has its positive control. Synthetic data only.
 import { beforeAll, describe, expect, it } from 'vitest';

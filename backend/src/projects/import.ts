@@ -93,7 +93,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 			[id, s.kind, s.name, s.unit, s.startDate, s.values]
 		);
 	}
-	// The project's history starts with the imported state (027_history.sql).
+	// The project's history starts with the imported state (030_history.sql).
 	await recordModelRevision(db, id, { source: 'import', before: null });
 	return id;
 }

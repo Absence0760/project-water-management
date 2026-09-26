@@ -324,7 +324,7 @@ parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
 they add no policy. They are small: a fit record is a few KB.
 
-### Change history and audit log (027_history.sql)
+### Change history and audit log (030_history.sql)
 
 Roadmap WP-2.4, issue #28: "who changed which parameter, when, and why did
 the result change?", and put back any earlier version.

@@ -1,4 +1,4 @@
-// The change history (roadmap WP-2.4, 027_history.sql, docs/api.md §
+// The change history (roadmap WP-2.4, 030_history.sql, docs/api.md §
 // History): the project's timeline of revisions and audit events, a
 // revision's snapshot with what restoring it would change, restoring a
 // revision or a run's inputs, and a series' kept values and restoring them.

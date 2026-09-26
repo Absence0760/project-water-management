@@ -1,4 +1,4 @@
-// Pure helpers for the change history (027_history.sql): which nodes a model
+// Pure helpers for the change history (030_history.sql): which nodes a model
 // change touched, and what a series change did day by day. No I/O.
 import { fromEpochDay, toEpochDay, type ProjectModel } from '@water-management/engine';
 

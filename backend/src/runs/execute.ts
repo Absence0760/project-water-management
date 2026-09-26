@@ -169,7 +169,7 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 		) RETURNING id`,
 		[projectId, keep]
 	);
-	// The storage cap's removals are in the project's history too (027_history.sql).
+	// The storage cap's removals are in the project's history too (030_history.sql).
 	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'trimmed' });
 	return rows.map((r) => r.id);
 }

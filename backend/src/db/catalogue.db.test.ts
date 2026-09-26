@@ -46,7 +46,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * then consumed or purged only through app_consume_render_token
  * (023_reports.sql). The change history is the record of who changed what: a
  * model revision and an audit event go only with their project, a series
- * revision also through its retention trim (027_history.sql).
+ * revision also through its retention trim (030_history.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',

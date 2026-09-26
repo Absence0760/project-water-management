@@ -157,7 +157,7 @@ function inviteRoutes(kind: InviteKind, authorize: (db: Db, id: string) => Promi
 					[inviteId, id]
 				);
 				if (!rows[0]) throw new ApiError(404, 'not found');
-				// A project's history (027_history.sql); teams have none.
+				// A project's history (030_history.sql); teams have none.
 				if (kind === 'project') await recordAudit(db, id, 'invite.revoked', { inviteId, email: maskEmail(rows[0].email), role: rows[0].role });
 				return c.body(null, 204);
 			})
