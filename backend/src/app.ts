@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
+import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
@@ -105,6 +106,7 @@ export function createApp() {
 	projects.route('/', publicationRoutes);
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
+	projects.route('/', allocationRoutes);
 	app.route('/projects', projects);
 
 	// Read-only share links (WP-2.3 phase 2): no session, the token is the credential.

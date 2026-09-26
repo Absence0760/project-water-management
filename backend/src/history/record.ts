@@ -194,6 +194,11 @@ export type AuditKind =
 	| 'scenario.created'
 	| 'scenario.changed'
 	| 'scenario.deleted'
+	| 'allocation.created'
+	| 'allocation.changed'
+	| 'allocation.deleted'
+	| 'allocation.imported'
+	| 'allocation.import_deleted'
 	| 'restore';
 
 /**
