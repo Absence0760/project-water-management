@@ -317,6 +317,12 @@ sequenceDiagram
   A-->>B: { startDate, values }  (one series per chart)
 ```
 
+On the Runs tab the catchment flows the first charts draw (natural,
+simulated, observed, EWR) are requested the moment the run's detail
+arrives (`prefetchSeries`, `runs/cache.ts`), not when the charts mount:
+rendering the results page takes half a second or more on a loaded machine,
+and the panels further down would otherwise ask first.
+
 ### A model run
 
 A request that runs the engine holds **no database connection while it
