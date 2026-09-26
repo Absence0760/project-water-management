@@ -844,7 +844,7 @@ heavy dependency, and help text that can't silently drift out of date.
 | --- | --- |
 | Farmer view (all) | `routes/farm/**`, `lib/components/farm/**` (WP-2.6) |
 | Sign-in pages | `routes/{login,register,forgot-password,reset-password,verify-email}`, `layout/AuthCard.svelte`, `auth-extras/*` |
-| App chrome a farmer sees | `layout/AppHeader.svelte` (account menu, language switch), `common/LoadState.svelte`, `common/Dialog.svelte` |
+| App chrome a farmer sees | `layout/AccountMenu.svelte` (the account menu; the farm pages have their own `farm/FarmShell.svelte` with the language switch), `common/LoadState.svelte`, `common/Dialog.svelte` |
 | Share page | `routes/share/**` |
 | Emails | `backend/src/mail/templates.ts`: verify, reset, invite, alert, digest (a backend `mail/i18n/{en,af}.ts` with the same typed-key pattern) |
 | Help entries marked `audience: 'farmer'` | ~15–20 of the 76 entries in `lib/help/content.ts` (dam level, supplied, deficit, restriction, EWR in plain words, forecast) |

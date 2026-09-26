@@ -2164,7 +2164,7 @@ from the WP:
       map in `notes/counts.svelte.ts` kept one entry per project opened in a
       session, and a project visited again showed its first visit's counts.
       Now only the open project's counts are kept (another project replaces
-      them) and sign-out clears them (`clearNoteCounts`, AppHeader and
+      them) and sign-out clears them (`clearNoteCounts`, AccountMenu and
       FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)

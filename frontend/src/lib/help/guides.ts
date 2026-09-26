@@ -147,7 +147,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'On a wide screen the sections are a list down the left. On a narrower one they sit in a row across the top, and on a phone behind a **Sections** button that names the tab you are on. The arrow keys move from one tab to the next.'
+						text: 'On a wide screen the sections are in the sidebar down the left, under the catchment’s name; **Projects**, **Teams** and **Help** are at the top of it, and your account at the foot. On a phone, the **Menu** button in the bar at the top opens Projects, Teams and Help, and the project’s sections sit behind a **Sections** button that names the tab you are on. The arrow keys move from one tab to the next.'
 					},
 					{
 						type: 'note',
@@ -184,7 +184,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'Open **Projects** in the header and press **New project**.',
+							'Open **Projects** in the sidebar (on a phone, under **Menu**) and press **New project**.',
 							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create**.',
 							'The project opens on its **Summary** tab. Work through the setup checklist from the top.'
 						]
