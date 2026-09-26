@@ -201,8 +201,9 @@ const periodList = (noun: string) =>
 export const CalibrationExclusion = datedPeriod('calibration exclusion');
 
 /**
- * settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): 'all', 'segments',
- * or water-year ranges, each with a reason, none overlapping. The engine
+ * settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): 'all', or water-year
+ * ranges, each with a reason, none overlapping. The double-mass breaks only
+ * propose ranges (the Settings form); there is no automatic mode. The engine
  * resolves the same rules (rain.ts resolveChirpsFitPeriod), so a stored value
  * never runs differently from what was validated.
  */
@@ -322,7 +323,11 @@ export const FitRecord = z
 				// Engine ≥ 0.29.0 (issue #40): the CHIRPS fit period, and the factors per fit segment. Optional, as above.
 				chirpsFitPeriod: ChirpsFitPeriod.optional(),
 				chirpsFactors: z
-					.array(z.object({ label: z.string().max(600), factors: z.array(z.number().finite().nullable()).length(12) }).strict())
+					.array(
+						z
+							.object({ label: z.string().max(600), fittedOn: z.string().max(100).optional(), factors: z.array(z.number().finite().nullable()).length(12) })
+							.strict()
+					)
 					.max(EXCLUSIONS_MAX + 3)
 					.nullable()
 					.optional(),

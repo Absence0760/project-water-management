@@ -78,15 +78,15 @@ describe('SettingsPatch.chirpsFitPeriod (engine ≥ 0.29.0)', () => {
 	const ok = (chirpsFitPeriod: unknown) => SettingsPatch.safeParse({ chirpsFitPeriod }).success;
 	const r = (fromWaterYear: number, toWaterYear: number, reason = 'new network') => ({ fromWaterYear, toWaterYear, reason });
 
-	it('accepts the modes and non-overlapping water-year ranges, each with a reason', () => {
+	it('accepts the whole record and non-overlapping water-year ranges, each with a reason', () => {
 		expect(ok('all')).toBe(true);
-		expect(ok('segments')).toBe(true);
 		expect(ok([r(1990, 2004), r(2005, 2019)])).toBe(true);
 		expect(ok([r(2005, 2005)])).toBe(true);
 	});
 
 	it('refuses anything the engine would drop', () => {
-		for (const bad of ['latest', '', null, 1, [], [r(2005, 2004)], [r(1990, 2004, ' ')], [r(1990, 2004), r(2004, 2010)], [r(1799, 1800)], [{ ...r(1990, 1999), extra: 1 }], [r(1990.5, 1999)]]) {
+		// 'segments' is not a mode: the double-mass breaks only propose ranges.
+		for (const bad of ['segments', 'latest', '', null, 1, [], [r(2005, 2004)], [r(1990, 2004, ' ')], [r(1990, 2004), r(2004, 2010)], [r(1799, 1800)], [{ ...r(1990, 1999), extra: 1 }], [r(1990.5, 1999)]]) {
 			expect(ok(bad), JSON.stringify(bad)).toBe(false);
 		}
 	});
@@ -451,10 +451,11 @@ describe('SettingsPatch.fitRecord', () => {
 
 	it('accepts an optional CHIRPS fit period and factor sets inside forcing (engine ≥ 0.29.0)', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
-		const sets = [{ label: 'double-mass segment 1990/91–1999/00, filling up to 1999/00', factors: [...new Array(11).fill(1.5), null] }];
-		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'segments', chirpsFactors: sets } })).toBe(true);
+		const sets = [{ label: 'range 1990/91–1999/00 (old network), filling up to 1999/00', fittedOn: '1990/91–1999/00', factors: [...new Array(11).fill(1.5), null] }];
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'all', chirpsFactors: sets } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFactors: [{ label: 'whole record', factors: new Array(12).fill(1) }] } })).toBe(true); // fittedOn optional
 		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: [{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'x' }], chirpsFactors: null } })).toBe(true);
-		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'latest' } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsFitPeriod: 'segments' } })).toBe(false);
 		expect(ok({ ...record, forcing: { ...forcing, chirpsFactors: [{ label: 'x', factors: [1, 2] }] } })).toBe(false); // 12 months
 	});
 
