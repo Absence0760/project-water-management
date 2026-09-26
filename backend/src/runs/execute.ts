@@ -113,6 +113,10 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * clause to `model_run_cited` (CREATE OR REPLACE; the pattern is in
  * 021_series_blob.sql), as 024_scenarios.sql did for a scenario's base run,
  * and this expression, trimRuns and the DELETE route pick it up unchanged.
+ * `app_run_kept` (045_contributor_scope.sql) is the same rule as a SECURITY
+ * DEFINER function, for the contributor's delete policy on their own
+ * application runs (a contributor can't read run_nomination): change both
+ * together.
  */
 export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR model_run_cited(r.id))`;
 
@@ -278,7 +282,8 @@ export async function runAndStore(
 	label: string,
 	input: ModelInput,
 	scenario?: RunScenarioSnapshot,
-	trigger: RunTrigger = 'manual'
+	trigger: RunTrigger = 'manual',
+	opts: { privateLabel?: boolean } = {}
 ): Promise<{ id: string; output: ModelOutput }> {
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
 	// A forecast run is reproduced by runForecastChecked(loadRunInput(run)), an ordinary one by runModelChecked.
@@ -328,7 +333,10 @@ export async function runAndStore(
 	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {
 		runId,
-		label,
+		// A draft application's run (045_contributor_scope): its label, the
+		// application's name by default, stays out of the project's log, which
+		// every viewer reads.
+		...(opts.privateLabel ? { application: true } : { label }),
 		engineVersion: output.engineVersion,
 		startDate: output.startDate,
 		endDate: output.endDate,
@@ -416,19 +424,48 @@ export class RunInputError extends Error {
  *   be presented as reproduced.
  */
 export async function loadRunInput(db: Db, runId: string): Promise<ModelInput> {
-	const { rows: run } = await db.query<{ created_at: Date; inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries> } }>(
-		'SELECT created_at, inputs FROM model_run WHERE id = $1',
-		[runId]
-	);
-	const r = run[0];
-	if (!r) throw new RunInputError('not_found', 'run not found');
-	const snap = r.inputs.series ?? {};
-	const { rows: refs } = await db.query<{ kind: string; start_date: string; sha256: string; values: (number | null)[] | null }>(
+	const { rows: run } = await db.query<StoredRun>('SELECT created_at, inputs FROM model_run WHERE id = $1', [runId]);
+	if (!run[0]) throw new RunInputError('not_found', 'run not found');
+	const { rows: refs } = await db.query<StoredRef>(
 		`SELECT i.kind, i.start_date, i.sha256, b."values"
 		 FROM run_input_series i LEFT JOIN series_blob b ON b.project_id = i.project_id AND b.sha256 = i.sha256
 		 WHERE i.run_id = $1`,
 		[runId]
 	);
+	return rebuildRunInput(run[0], refs);
+}
+
+/**
+ * loadRunInput for a **published** run of the project, read past RLS through
+ * app_published_run_input / app_published_run_series (045_contributor_scope):
+ * how the server rebuilds the baseline an application applies to, though a
+ * contributor can't read the run's row. Answers a contributor or above; a run
+ * no publication of the project names (current or in the history) is
+ * `not_found`. The same checks as loadRunInput. The input is for the server
+ * only: never return it to a contributor (scenarios/applicant.ts projects
+ * what they may see of it).
+ */
+export async function loadPublishedRunInput(db: Db, projectId: string, runId: string): Promise<{ input: ModelInput; trigger: RunTrigger }> {
+	const { rows: run } = await db.query<StoredRun & { trigger: RunTrigger }>('SELECT created_at, inputs, "trigger" FROM app_published_run_input($1, $2)', [projectId, runId]);
+	if (!run[0]) throw new RunInputError('not_found', 'run not found');
+	const { rows: refs } = await db.query<StoredRef>('SELECT kind, start_date, sha256, "values" FROM app_published_run_series($1, $2)', [projectId, runId]);
+	return { input: rebuildRunInput(run[0], refs), trigger: run[0].trigger };
+}
+
+interface StoredRun {
+	created_at: Date;
+	inputs: { settings: ModelInput['settings']; model: ModelInput['model']; series?: Record<string, SnapshotSeries> };
+}
+interface StoredRef {
+	kind: string;
+	start_date: string;
+	sha256: string;
+	values: (number | null)[] | null;
+}
+
+/** A run's input from its snapshot and its stored series, checked against each other (loadRunInput's rules). */
+function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
+	const snap = r.inputs.series ?? {};
 	const kinds = Object.keys(snap);
 	if (refs.length === 0 && kinds.length > 0) {
 		throw new RunInputError(

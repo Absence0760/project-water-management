@@ -538,6 +538,13 @@
 //             network/boreholes.ts supply order and annual use (in every run,
 //             so in the calibration worker too). No new dependency. #9's
 //             engine split is the way back for the total and the worker.
+// 2026-09-26  total 909 → 921 KB (measured 914; 919 merged with main's
+//             WP-2.12 forecast mode, which raised no ceiling); other ceilings unchanged
+//             (largest chunk still the help content at 43, worker 62 of 64).
+//             WP-3.3's applicants: the Applicant view, the Application panel
+//             and the assessors' Applications tab, each a lazy chunk, and the
+//             applicant mode of the Scenarios tab. No new dependency. #9's
+//             engine split is the way back for the total.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -548,7 +555,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 909,
+	totalCodeKb: 921,
 	largestChunkKb: 43,
 	largestWorkerKb: 64,
 	largestSpreadsheetWorkerKb: 95,

@@ -27,13 +27,17 @@ import type {
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
 /**
- * Project roles, lowest first. `farmer` (WP-2.1) sits below viewer: a farmer
- * reads only the farms linked to them, and every workspace control that asks
- * for viewer or above hides itself (hasRole).
+ * Project roles, lowest first. `farmer` (WP-2.1) and `contributor` (WP-3.3, a
+ * licence applicant) sit below viewer: a farmer reads only the farms linked
+ * to them, an applicant their own applications on the published baseline,
+ * and every workspace control that asks for viewer or above hides itself
+ * (hasRole).
  */
-export type Role = 'farmer' | 'viewer' | 'editor' | 'owner';
+export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 /** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
-export const ROLES: readonly Role[] = ['viewer', 'editor', 'owner'];
+export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
+/** A role as people read it: a `contributor` is an applicant. */
+export const ROLE_LABEL: Record<Role, string> = { farmer: 'farmer', contributor: 'applicant', viewer: 'viewer', editor: 'editor', owner: 'owner' };
 
 export interface User {
 	id: string;
@@ -172,6 +176,8 @@ export interface Farmer {
 	userId: string;
 	email: string;
 	displayName: string;
+	/** An applicant (contributor, WP-3.3) keeps farm links too; absent from servers before it. */
+	role?: 'farmer' | 'contributor';
 	nodeIds: string[];
 }
 
@@ -609,8 +615,8 @@ export interface Scenario {
 	name: string;
 	description: string;
 	baseRunId: string;
-	/** The base run, for the "Based on run X" banner. */
-	baseRun: { id: string; label: string; createdAt: string };
+	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
+	baseRun: { id: string; label: string; createdAt: string | null };
 	ops: ScenarioOp[];
 	/** SHA-256 of the ops as canonical JSON; a run of the scenario records the same hash. */
 	opsSha256: string;
@@ -620,11 +626,45 @@ export interface Scenario {
 	/** The owner's display name. */
 	owner: string | null;
 	status: ScenarioStatus;
+	/** 'team': a modelling scenario. 'applicant': an application by a contributor (WP-3.3), on the published baseline. */
+	origin: ScenarioOrigin;
+	/** When it was submitted (null while a draft). */
+	submittedAt: string | null;
+	/** The assessor's decision, once decided. */
+	decidedAt: string | null;
+	decidedBy: string | null;
+	outcome: ScenarioOutcome | null;
+	decisionNote: string;
+	/** Who else reads an application: the applicant's consultant or client. */
+	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
 	/** Runs of this scenario still stored, and the newest. */
 	runCount: number;
 	lastRun: { id: string; label: string; createdAt: string } | null;
+}
+
+export type ScenarioOrigin = 'team' | 'applicant';
+/** An assessor's decision on an application (backend scenarios/schema.ts SCENARIO_OUTCOMES; the words pending the licensing authority). */
+export type ScenarioOutcome = 'approved' | 'approved_with_conditions' | 'refused';
+export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['approved', 'approved_with_conditions', 'refused'];
+export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
+	approved: 'Approved',
+	approved_with_conditions: 'Approved with conditions',
+	refused: 'Refused'
+};
+
+/**
+ * GET …/scenarios/:sid/base: the base run's model and settings as you may see
+ * them. For an applicant every node but their own farms and the gauges is
+ * anonymised (`anonymisedNodeIds`: its name is "Farm 3" and its values are
+ * blank, not the base's).
+ */
+export interface ScenarioBase {
+	baseRunId: string;
+	settings: unknown;
+	model: unknown;
+	anonymisedNodeIds: string[];
 }
 
 /**
@@ -649,7 +689,7 @@ export interface ScenarioWithCheck {
 	checkError: string | null;
 }
 
-const RANK: Record<Role, number> = { farmer: -1, viewer: 0, editor: 1, owner: 2 };
+const RANK: Record<Role, number> = { farmer: -2, contributor: -1, viewer: 0, editor: 1, owner: 2 };
 
 /** True when `role` is at least `min`. */
 export function hasRole(role: Role | undefined | null, min: Role): boolean {

@@ -107,6 +107,15 @@ describe('GET /teams/:id/portfolio', () => {
 		expect(asAdmin.body.current.catchmentView.recent).toMatchObject({ to: '2023-12-29', from7: '2023-12-23', from30: '2023-11-30' });
 	});
 
+	it('an applicant (contributor, WP-3.3) on a team project never gets the roll-up', async () => {
+		const [applicant] = (await Promise.all(['PfApplicant'].map((n) => signUp(n)))) as [User];
+		expect((await admin.call('POST', `/projects/${published}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await portfolio(applicant)).status).toBe(404);
+		expect(await withUser(applicant.id, (db) => loadPortfolio(db, teamId, utcToday()))).toEqual([]);
+		// Positive control: the same project reaches a team viewer.
+		expect((await withUser(teamViewer.id, (db) => loadPortfolio(db, teamId, utcToday()))).map((p) => p.id)).toContain(published);
+	});
+
 	it('reads every project in one query, however many there are', async () => {
 		let queries = 0;
 		const rows = await withUser(admin.id, (db) => {
