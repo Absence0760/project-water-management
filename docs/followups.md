@@ -1169,6 +1169,8 @@ yet; each lands with the work package named.
 
 ## Afrikaans (WP-2.5)
 
+The items waiting on the translator are tracked in [issue #49](https://github.com/Absence0760/project-water-management/issues/49).
+
 The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
 No Afrikaans wording ships yet: none is reviewed.
@@ -1999,7 +2001,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
+- [ ] **D1, D2, D3 are open decisions** ([issue #50](https://github.com/Absence0760/project-water-management/issues/50); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
@@ -2169,6 +2171,8 @@ Left, each with its trigger:
       locally. Trigger: farmers ask for it after a season of email.
 ## POPIA and the Step 2 release (WP-2.16)
 
+The decisions for the client's information officer are tracked in [issue #48](https://github.com/Absence0760/project-water-management/issues/48).
+
 The Step 2 release-hardening pass (2026-09-26,
 [step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
 documented what is true today in
@@ -2263,7 +2267,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       produces. While the account exists, clearing or changing
       `decided_by` is still refused. `auth/account-deletion.db.test.ts`
       covers both.
-- [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
+- [ ] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51); WP-2.16 items not run in this
       pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
       with the verdicts recorded in step-2 §9, and the 60-farm load
       timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
