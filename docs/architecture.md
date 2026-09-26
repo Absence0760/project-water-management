@@ -279,7 +279,7 @@ auto re-runs and alerts plug in as further kinds.
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.
 - **Each job runs as its acting user**, the member who queued it (an editor,
-  or for `report_render` any viewer: `022_reports.sql` widens the job insert
+  or for `report_render` any viewer: `023_reports.sql` widens the job insert
   policy for that one kind): the worker
   opens `withUser(acting_user_id)`, checks the user still holds the handler's
   role (and fails the job closed, dead with no retry, if not), reads and
@@ -388,7 +388,7 @@ and a bounding-box config for CHIRPS (cells only).
 The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on
 the server, so it can be emailed or sent on a schedule without anyone opening
 a browser (roadmap WP-2.15 Phase B, issue #26; `backend/src/reports/`,
-`022_reports.sql`, the `report_render` job). There is **one implementation of
+`023_reports.sql`, the `report_render` job). There is **one implementation of
 the report**: the job opens the same SvelteKit route a person prints from, in
 headless Chromium (playwright-core), and never re-draws a chart.
 

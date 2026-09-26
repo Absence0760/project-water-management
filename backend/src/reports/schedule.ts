@@ -1,6 +1,6 @@
 // The report side of the job queue's tick (jobs/runner.ts), with no user
 // context, crossing projects only through SECURITY DEFINER functions
-// (022_reports.sql):
+// (023_reports.sql):
 //
 //   scheduleDueReports   every tick: for each report schedule whose time has
 //                        come (reports/due.ts), claim that time and queue a

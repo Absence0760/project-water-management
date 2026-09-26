@@ -50,10 +50,13 @@
 	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
 	// even when a signed-in user opens a reset or confirmation link.
 	const authScreen = $derived(isPublicPath(page.url.pathname, base));
+	// The farmer view (/farm/…) has its own header and Menu (FarmShell): a farmer
+	// has no projects, teams or workspace to navigate to.
+	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
 </script>
 
 {#if !authScreen}
-	<AppHeader />
+	{#if !farmScreen}<AppHeader />{/if}
 	<VerifyEmailBanner />
 {/if}
 

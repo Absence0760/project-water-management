@@ -1,4 +1,4 @@
-// Server-side PDF reports end to end against Postgres (022_reports.sql,
+// Server-side PDF reports end to end against Postgres (023_reports.sql,
 // reports/*): the render token (single use, 5 minutes, one project and one
 // run, as the requester), the session it buys (refused everywhere else), the
 // report API and its RLS, and report schedules (RLS, recipients, the tick).

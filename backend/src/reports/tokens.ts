@@ -1,4 +1,4 @@
-// Render tokens (022_reports.sql, docs/security.md § Render tokens): the
+// Render tokens (023_reports.sql, docs/security.md § Render tokens): the
 // headless report renderer's way in. 32 random bytes, handed to the renderer
 // (in process, or on the render-requests queue in production), stored only as
 // their SHA-256; single use, 5 minutes, for one project and one run, issued by

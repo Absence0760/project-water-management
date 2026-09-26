@@ -108,7 +108,7 @@ Lambda, must read a project as the member who asked for its report, without
 that member's password or session. It gets a **render token**, and the token
 buys a **render session** that can read one report and nothing else.
 
-- **The token** (`render_token`, `022_reports.sql`) is the `email_token`
+- **The token** (`render_token`, `023_reports.sql`) is the `email_token`
   pattern with purpose `report`: 32 random bytes, stored **only as their
   SHA-256**, **single use** (consuming deletes the row), **5 minutes** (the
   insert trigger sets the expiry whatever the caller sent), and tied to one
@@ -200,6 +200,26 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
+- **Publications and the farm view (WP-2.3, WP-2.6 API, 022).** A farmer reads
+  run results only through the project's current publication: its counts-only
+  `catchment_view`, their own farms' stored projections (`publication_farm`)
+  and their own farms' farm-allowlist series of the published run
+  (`run_series_select_farmer`: `demand`, `supplied`, `deficit`,
+  `dam_storage`, `spill`, `transfer`; no flow series, no catchment series,
+  nothing of an earlier publication). The farm routes
+  (`/projects/:id/farm…`) admit the farmer role, answer `404` alike for a
+  node the farmer isn't linked to, a gauge or a node that doesn't exist, and
+  null the even share below `k − 1` other holders per viewer. Tests:
+  `publish/publication.db.test.ts` scans a farmer's farm view and
+  publication list for every other farm's id and name, with positive
+  controls; `farms.db.test.ts` keeps every other `/projects/:id` route
+  refusing a farmer. The modeller's publication `note` is withheld from
+  farmers by the API but not by RLS (a column can't be hidden from one role
+  there): the publish dialog tells the modeller farmers don't see it, and it
+  must not be relied on as a secret. Publishing records `published_by`, and a
+  notice change `updated_by` / `updated_at`; the full audit log is WP-2.4.
+  Share links (a public, token-bearing catchment page) are not built yet
+  (WP-2.3 phase 2).
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its

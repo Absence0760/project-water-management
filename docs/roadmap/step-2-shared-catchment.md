@@ -1743,7 +1743,7 @@ for alert counts.
 > published-card entry point waits for WP-2.3. The farmer access test (a
 > farmer gets 403) waits for WP-2.1's farmer role; today a non-member gets the
 > workspace's not-found message. **Phase B built** (issue #26;
-> `backend/src/reports/`, `022_reports.sql`, `infra/reports.tf`;
+> `backend/src/reports/`, `023_reports.sql`, `infra/reports.tf`;
 > [architecture.md § Server-side reports](../architecture.md#server-side-reports)):
 > on-demand PDFs ("Generate PDF" / "Email me the PDF"), emailed links and
 > weekly or monthly schedules, rendered from the same route in headless

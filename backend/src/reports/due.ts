@@ -1,4 +1,4 @@
-// When a report schedule fires (report_schedule, 022_reports.sql). Pure: no
+// When a report schedule fires (report_schedule, 023_reports.sql). Pure: no
 // database, no clock but the `now` passed in, and no dependence on the
 // process's time zone. A schedule's hour is in its OWN zone (the IANA name
 // on the row), so "Monday 07:00 Africa/Johannesburg" is the same instant on a

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { base } from '$app/paths';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { detailCache } from '$lib/components/runs/cache';
@@ -447,6 +448,7 @@
 				{readonly}
 				onremove={() => remove(selected.id, selected.name || 'unnamed node')}
 				farmersNote={selected.kind === 'farm' ? linkedNote(farmerCount?.[selected.id] ?? 0) : null}
+				previewHref={selected.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(selected.id)}` : null}
 				onmove={(d) => moveBy(selected.id, d)}
 				canMoveUp={selectedIndex > 0}
 				canMoveDown={selectedIndex < nodes.length - 1}

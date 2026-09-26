@@ -8,19 +8,21 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
+import { executeRun, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 // `evidence` is the run's place in the evidence history (010_run_nomination);
-// `pinned` keeps it past the storage cap (015_run_pinned).
+// `pinned` keeps it past the storage cap (015_run_pinned); `published` says
+// the project's current publication holds it (022_publication).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
-	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned`;
+	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned,
+	EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id AND p.superseded_at IS NULL) AS published`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
 
 /** Longest run note, in characters (007_run_notes.sql CHECK). */
@@ -239,19 +241,21 @@ export const runRoutes = new Hono<AuthEnv>()
 			// The run's stored inputs may be garbage-collected with it: not while a
 			// new run of this project is taking a reference to them (lockProjectRuns).
 			await lockProjectRuns(db, id);
-			// A kept run (RUN_KEPT_SQL) isn't deleted: one something cites
-			// (model_run_cited, 021_series_blob) or the evidence history names is
-			// kept for good (their foreign keys refuse it too); a pinned one until
-			// it is unpinned.
-			const { rows: kept } = await db.query<{ pinned: boolean; cited: boolean; kept: boolean }>(
-				`SELECT r.pinned, model_run_cited(r.id) AS cited, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+			// A kept run (RUN_KEPT_SQL) isn't deleted: one a publication holds, or
+			// something else cites (model_run_cited, 021_series_blob and
+			// 022_publication), or the evidence history names is kept (their foreign
+			// keys refuse it too); a pinned one until it is unpinned.
+			const { rows: kept } = await db.query<{ pinned: boolean; published: boolean; cited: boolean; kept: boolean }>(
+				`SELECT r.pinned, ${RUN_PUBLISHED_SQL} AS published, model_run_cited(r.id) AS cited, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId]
 			);
 			if (kept[0]?.kept)
 				throw new ApiError(
 					409,
-					kept[0].cited
-						? 'this run is cited, so it is kept'
+					kept[0].published
+						? 'run is published: it is, or was, the published baseline, so it is kept'
+						: kept[0].cited
+							? 'this run is cited, so it is kept'
 						: kept[0].pinned
 							? 'this run is pinned; unpin it before deleting it'
 							: 'this run is or was nominated as evidence, so it is kept'

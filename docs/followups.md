@@ -973,6 +973,33 @@ the suggested order (the IDs carry the detail):
       without a run, raw values plus quality flags only. Waiting on the
       operator to confirm this is what they want (2026-09-24).
 
+## Farmer view (WP-2.6, #25)
+
+Left out of the first build because the contract or an API doesn't carry it
+yet; each lands with the work package named.
+
+- [ ] **"Next 14 days"** (ForecastCard) on the main and dam pages: needs
+      `forecast` in `FarmView` (WP-2.12, design E2).
+- [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
+      before the named translator reviews it, and `FarmView` carries one
+      `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
+      translator is named.
+- [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
+      says the WUA can name them; needs an endpoint listing the people with
+      access to a farm.
+- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
+      `FarmIndex`; the pages say "your WUA".
+- [ ] **"Email me when …"** links (the notice / low-dam alert and "Email me
+      when it's ready"): WP-2.13.
+- [ ] **"Not available: the model's data starts on …"** needs the run's
+      first date; `lastSeason` is null without it, so the page says the data
+      doesn't reach back.
+- [ ] **Account volume unit**: the ML/m³ switch is kept in `localStorage`
+      until `app_user.volume_unit` (WP-2.5).
+- [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
+      farm API and the seeded publication (the backend half of #25); run it
+      once both are merged.
+
 ## UI
 
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
@@ -1282,6 +1309,36 @@ role and not before it.
         ~125 MB peak growth the import should fit comfortably, but the first
         client import from a phone, or any report of a failing import, is
         the trigger to confirm on a device (the harness notes in issue #23).
+
+- **Publication** (roadmap WP-2.3 phase 1, 2026-09-25; [data-model.md §
+  Publications](./data-model.md#publications-022_publicationsql),
+  [api.md § Publication](./api.md#publication)). Built: `022_publication`,
+  `farmProjection` / `catchmentView` in the engine, the publication routes,
+  the farm-view API routes of WP-2.6 (index, view, CSV), publishing from the
+  Runs tab, the seeded publications. Left open:
+  - [ ] **Share links** (WP-2.3 phase 2): `share_link`, `app_share_view` /
+        `app_share_series`, `POST /share/view` and `/share/series`, the
+        `/share` page and the owner's Share links panel, with their tests
+        (revoked or expired tokens answer nothing, farm keys refused).
+        Trigger: the WUA asks to send the catchment result to someone outside
+        the project, and before the Step 2 release (WP-2.16) at the latest.
+  - [ ] **Audit events** for publishing and for notice changes: today only
+        `published_by` and `updated_at` / `updated_by` record them. Needs
+        WP-2.4's `audit_event`; add the writes in the same change.
+  - [ ] **Roadmap UI still to build around it:** the Overview's "Published
+        baseline" card, opening viewers on the published run by default, and
+        run-comparison's "compare with published". Trigger: the WP-2.6 farm
+        page lands (its preview button needs the same card).
+  - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
+        store which site bound a farm's charge each day, so the projection
+        re-runs the engine's attribution on the stored flows. Exact, except
+        when the transfer rules form a loop (per-rule volumes can't be solved
+        from the farms' net transfer series; the loop is cut and
+        `bindingApproximate` says so). Durable fix: store the per-rule
+        transfer volumes (or the per-day binding site) as run series. Trigger:
+        the next change that bumps `ENGINE_VERSION`.
+  - [ ] **The chart series and per-farm history routes** of WP-2.6
+        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
 
 ## Pipelines
 

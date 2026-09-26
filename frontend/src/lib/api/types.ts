@@ -1,5 +1,6 @@
 // Wire shapes from docs/api.md that aren't in @water-management/engine.
 import type {
+	CatchmentView,
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
@@ -11,6 +12,7 @@ import type {
 	ProjectSettings,
 	RecordCoverage,
 	ResolvedEnsembleOptions,
+	RestrictionLevel,
 	RunComparison,
 	RunInputsSnapshot,
 	RunSummary
@@ -126,6 +128,14 @@ export interface Member {
 	role: Role;
 }
 
+/** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
+export interface FarmAccessPerson {
+	displayName: string;
+	role: Role;
+	/** The caller. */
+	you: boolean;
+}
+
 /** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
 export interface Farmer {
 	userId: string;
@@ -215,6 +225,8 @@ export interface RunMeta {
 	 * it can't be deleted until unpinned. Absent from an older API.
 	 */
 	pinned?: boolean;
+	/** The project's current publication holds this run (022_publication, WP-2.3). Absent from an older API. */
+	published?: boolean;
 }
 
 /** Most pinned runs per project (backend PINNED_RUNS_PER_PROJECT_MAX, 015_run_pinned.sql). */
@@ -392,4 +404,51 @@ const TEAM_RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2 };
  */
 export function hasTeamRole(role: TeamRole | string | undefined | null, min: TeamRole): boolean {
 	return role != null && Object.hasOwn(TEAM_RANK, role) && TEAM_RANK[role as TeamRole] >= TEAM_RANK[min];
+}
+
+/** Longest publication note or notice, in characters (backend PUBLICATION_TEXT_MAX, 022_publication.sql). */
+export const PUBLICATION_TEXT_MAX = 2000;
+
+/** The WUA's restriction notice on a publication (docs/api.md § Publication). The WUA writes the words; the app never does. */
+export interface PublicationRestriction {
+	level: RestrictionLevel;
+	/** 0–100 with two decimals; null for 'none' or when the notice gives none. */
+	pct: number | null;
+	noticeEn: string | null;
+	noticeAf: string | null;
+}
+
+/** A publication's line in the history (GET …/publication). */
+export interface PublicationMeta {
+	id: string;
+	runId: string;
+	publishedAt: string;
+	publishedBy: string | null;
+	restriction: { level: RestrictionLevel };
+	supersededAt: string | null;
+}
+
+/** The current publication (GET …/publication, POST, PATCH). */
+export interface Publication extends Omit<PublicationMeta, 'restriction'> {
+	/** The modeller's note to the project's staff; absent for a farmer. */
+	note?: string;
+	restriction: PublicationRestriction;
+	nextExpectedOn: string | null;
+	/** What every member, farmers included, reads about the catchment: counts and dates, no volumes. */
+	catchmentView: CatchmentView & { engineVersion: string; runoffModel: string; calibration: { nse: number | null; pbias: number | null; kge: number | null } | null };
+	updatedAt: string | null;
+	updatedBy: string | null;
+}
+
+export interface PublishRequest {
+	runId: string;
+	note?: string;
+	restriction?: PublicationRestriction;
+	nextExpectedOn?: string | null;
+}
+
+export interface PublicationPatch {
+	note?: string;
+	restriction?: PublicationRestriction;
+	nextExpectedOn?: string | null;
 }

@@ -185,10 +185,23 @@
 			series = sl;
 			runs = rl;
 		} catch (e) {
+			// A farmer gets 403 from the workspace's routes: their view of this
+			// project is the farm page (WP-2.6).
+			if (e instanceof ApiError && e.status === 403 && (await isFarmerHere())) {
+				await goto(`${base}/farm/${encodeURIComponent(projectId)}`, { replaceState: true });
+				return;
+			}
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
+		}
+	}
+	async function isFarmerHere(): Promise<boolean> {
+		try {
+			return (await api.projects.list()).some((p) => p.id === projectId && p.role === 'farmer');
+		} catch {
+			return false;
 		}
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */

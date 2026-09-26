@@ -1,4 +1,4 @@
--- 022_reports — server-side PDF reports: on demand, emailed, and on a
+-- 023_reports — server-side PDF reports: on demand, emailed, and on a
 -- schedule (roadmap WP-2.15 Phase B, issue #26; docs/architecture.md §
 -- Server-side reports, docs/data-model.md § Reports, docs/security.md §
 -- Render tokens).

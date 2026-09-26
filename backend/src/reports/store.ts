@@ -1,4 +1,4 @@
-// The report table (022_reports.sql): queue a PDF, read its status, and
+// The report table (023_reports.sql): queue a PDF, read its status, and
 // record a finished render, each as the transaction's user under RLS.
 import { randomUUID } from 'node:crypto';
 import type { Db } from '../db/tx.js';

@@ -15,8 +15,20 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
-	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (022_reports.sql).
-	report: ['bytes', 'error', 'finished_at', 'pages', 'status']
+	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
+	report: ['bytes', 'error', 'finished_at', 'pages', 'status'],
+	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql).
+	run_publication: [
+		'next_expected_on',
+		'note',
+		'notice_af',
+		'notice_en',
+		'restriction_level',
+		'restriction_pct',
+		'superseded_at',
+		'updated_at',
+		'updated_by'
+	]
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -26,11 +38,12 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * report is the record of what the importer flagged (017_project_import.sql).
  * A run's stored inputs are immutable: a reference goes only with its run
  * (cascade) and a blob only when no run references it, through the
- * series_blob_gc trigger (021_series_blob.sql). A render token is issued,
+ * series_blob_gc trigger (021_series_blob.sql). A farm's projection is what
+ * its farmers were shown (022_publication.sql). A render token is issued,
  * then consumed or purged only through app_consume_render_token
- * (022_reports.sql).
+ * (023_reports.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series', 'render_token']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series', 'publication_farm', 'render_token']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
@@ -38,14 +51,13 @@ const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_
  */
 const NO_DELETE = new Set(['run_uncertainty']);
 /**
- * Tables with a node column that farmers never read (020_farm_scope.sql). A
- * farmer reads run results only through a publication (WP-2.3), so run_series
- * stays closed to them until that adds its own policy. Every other table with
- * a node column needs a farmer-aware SELECT policy (one that calls
- * app_farm_nodes), so a new per-farm table can't ship without a decision about
- * farmers.
+ * Tables with a node column that farmers never read (020_farm_scope.sql).
+ * Empty since run_series gained its publication-scoped farmer policy
+ * (022_publication.sql). Every table with a node column needs a farmer-aware
+ * SELECT policy (one that calls app_farm_nodes) or a place here, so a new
+ * per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set(['run_series']);
+const FARMERS_NEVER_READ = new Set<string>();
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 

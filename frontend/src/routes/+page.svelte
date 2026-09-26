@@ -72,6 +72,12 @@
 		try {
 			const [p, t] = await Promise.allSettled([api.projects.list(), api.teams.list()]);
 			if (p.status === 'rejected') throw p.reason;
+			// A user who is only ever a farmer has no workspace: their farms are
+			// the farmer view (WP-2.6, docs/design/farmer-view.md).
+			if (p.value.length && p.value.every((x) => x.role === 'farmer')) {
+				await goto(`${base}/farm`, { replaceState: true });
+				return;
+			}
 			projects = p.value;
 			// The list still works without teams (filters just show fewer choices).
 			teams = t.status === 'fulfilled' ? t.value : [];

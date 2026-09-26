@@ -22,7 +22,8 @@
 		landCover = [],
 		onaddcover,
 		onremovecover,
-		farmersNote = null
+		farmersNote = null,
+		previewHref = null
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -40,6 +41,8 @@
 		onremovecover?: (id: string) => void;
 		/** "N farmers are linked…" for a farm with linked farmers (WP-2.1); null otherwise. */
 		farmersNote?: string | null;
+		/** A farm's page as its farmer sees it (WP-2.6); null for other nodes. */
+		previewHref?: string | null;
 	} = $props();
 
 	const groups = $derived.by(() => {
@@ -99,6 +102,7 @@
 	</div>
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
+	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this farm’s page as its farmer sees it, from the current publication.</p>{/if}
 	{#if node.kind === 'gauge'}
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
