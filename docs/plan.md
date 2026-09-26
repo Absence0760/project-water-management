@@ -518,6 +518,33 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 > The yes to 1 closed #1. Questions 2–4 are still open and don't reopen it;
 > each is its own follow-up.
 
+> **Rain forcing ([#12](https://github.com/Absence0760/project-water-management/issues/12), closed).**
+>
+> **Decided 2026-09-26: force the model with the #12 era treatment.** The
+> operator accepted the research's recommendation on the hydrologist's
+> behalf (their agreement assumed, not yet written down by them); if the
+> hydrologist later disagrees, reopen #12. The central configuration:
+> the station series as recorded in the older and calibration eras (older
+> eras carry an upward-skewed uncertainty band); gaps filled from ERA5 ×
+> reference-era monthly factors (the per-range fit period, #40); the
+> collapsed recent era replaced by the in-catchment automatic station,
+> aggregated 08:00–08:00 and scaled by season (the per-period rain source,
+> #40), its gaps filled from ERA5 and never CHIRPS v3; the absolute level at
+> the lowest rain level of the joint rain × PE grid, the one Budyko supports
+> at every PE; `kgeNp` for EWR and low-flow statistics, with a KGE′ fit kept
+> for peak-flow and event questions. EWR is reported as a range, separately
+> for the calibration and replaced eras; recent-year EWR figures from the
+> untreated record are withdrawn. The method is in
+> [calibration-research.md § Rain forcing](./calibration-research.md#rain-forcing-which-record-and-how-to-homogenise-it-issue-12);
+> client figures in the private repo's `Research/rainfall-forcing.md`.
+>
+> 5. **Rain gauges:** which gauges are behind the catchment rain series? With
+>    a fixed station set the recent era could be rebuilt rather than
+>    replaced, and the point-to-area factor and the mid-record step pinned
+>    down. Still open; it doesn't reopen #12. (High-flow gaugings at the
+>    logger are question 2; the A-pan row and a station ET₀ record stay with
+>    [#13](https://github.com/Absence0760/project-water-management/issues/13).)
+
 
 1. **Which model should the app be built on?** b023 is complete and in use. The
    node-based v004 and the runoff module are unfinished experiments. Is the plan
