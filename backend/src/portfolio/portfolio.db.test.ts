@@ -128,6 +128,7 @@ describe('the figures, and where they come from', () => {
 			lastRunAt: null,
 			publishedAt: null,
 			source: null,
+			sourceRunId: null,
 			figuresUntil: null,
 			figuresAgeDays: null,
 			stale: false,
@@ -160,6 +161,7 @@ describe('the figures, and where they come from', () => {
 		const runId = await run(admin, pid);
 		const before = byId((await portfolio(admin)).body.projects, pid)!;
 		expect(before.source).toBe('run');
+		expect(before.sourceRunId).toBe(runId);
 		expect(before.ewr.status).not.toBe('unknown');
 		expect(before.ewr.days30).toBe(30);
 
@@ -187,7 +189,7 @@ describe('the figures, and where they come from', () => {
 		// A newer run leaves the published figures in place, and says there's a newer one.
 		await run(admin, pid);
 		const later = byId((await portfolio(admin)).body.projects, pid)!;
-		expect(later).toMatchObject({ source: 'published', newerRun: true, ewr: before.ewr });
+		expect(later).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: true, ewr: before.ewr });
 		expect(Date.parse(later.lastRunAt!)).toBeGreaterThan(Date.parse(later.publishedAt!));
 	});
 

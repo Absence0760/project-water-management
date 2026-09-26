@@ -32,8 +32,9 @@ export interface PortfolioProject {
 	lastRunAt: string | null;
 	/** The current publication, or null ("Not published"). */
 	publishedAt: string | null;
-	/** Where the figures below come from. */
+	/** Where the figures below come from, and the run they were read from (null with no source). */
 	source: 'published' | 'run' | null;
+	sourceRunId: string | null;
 	/** The last day the figures cover (the source run's dataUntil), and its age in days; null without a source. */
 	figuresUntil: string | null;
 	figuresAgeDays: number | null;
@@ -70,6 +71,8 @@ export interface PortfolioRow {
 	role: PortfolioProject['role'];
 	data_until: string | null;
 	last_run_at: Date | null;
+	last_run_id: string | null;
+	pub_run_id: string | null;
 	newer_run: boolean;
 	published_at: Date | null;
 	restriction_level: RestrictionLevel | null;
@@ -110,7 +113,7 @@ const PORTFOLIO_SQL = `
 	SELECT pr.id, pr.name, pr.role,
 		to_char((SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
 			WHERE ts.project_id = pr.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0), 'YYYY-MM-DD') AS data_until,
-		lr.created_at AS last_run_at,
+		lr.created_at AS last_run_at, lr.id AS last_run_id, pub.run_id AS pub_run_id,
 		COALESCE(lr.created_at > pubrun.created_at, false) AS newer_run,
 		pub.published_at, pub.restriction_level, pub.restriction_pct,
 		pub.catchment_view->>'dataUntil' AS pub_until,
@@ -192,6 +195,7 @@ export function toPortfolioProject(r: PortfolioRow, today: string): PortfolioPro
 		lastRunAt: iso(r.last_run_at),
 		publishedAt: iso(r.published_at),
 		source,
+		sourceRunId: source === 'published' ? r.pub_run_id : source === 'run' ? r.last_run_id : null,
 		figuresUntil,
 		figuresAgeDays: figuresUntil ? ageDays(figuresUntil, today) : null,
 		stale: isStale(figuresUntil, today),

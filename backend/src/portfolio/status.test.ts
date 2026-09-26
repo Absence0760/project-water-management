@@ -63,6 +63,8 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	role: 'viewer',
 	data_until: '2026-09-24',
 	last_run_at: new Date('2026-09-25T06:00:00Z'),
+	last_run_id: 'run-latest',
+	pub_run_id: 'run-published',
 	newer_run: false,
 	published_at: new Date('2026-09-25T07:00:00Z'),
 	restriction_level: 'advisory',
@@ -96,6 +98,7 @@ describe('toPortfolioProject', () => {
 			lastRunAt: '2026-09-25T06:00:00.000Z',
 			publishedAt: '2026-09-25T07:00:00.000Z',
 			source: 'published',
+			sourceRunId: 'run-published',
 			figuresUntil: '2026-09-24',
 			figuresAgeDays: 2,
 			stale: false,
@@ -131,6 +134,7 @@ describe('toPortfolioProject', () => {
 		);
 		expect(p).toMatchObject({
 			source: 'run',
+			sourceRunId: 'run-latest',
 			figuresUntil: '2026-09-10',
 			figuresAgeDays: 16,
 			stale: true,
