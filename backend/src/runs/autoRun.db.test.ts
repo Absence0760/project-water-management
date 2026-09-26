@@ -104,6 +104,12 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		const before = (await u.call('GET', `/projects/${pid}`)).body.project.updatedAt;
 		await u.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true } } });
 		expect((await u.call('GET', `/projects/${pid}`)).body.project.updatedAt).toBe(before);
+		// The Settings form sends every setting: the same holds when only autoRun differs.
+		const { settings } = (await u.call('GET', `/projects/${pid}`)).body.project;
+		expect((await u.call('PATCH', `/projects/${pid}`, { settings: { ...settings, autoRun: { ...settings.autoRun, debounceMinutes: 5 } } })).status).toBe(200);
+		const after = (await u.call('GET', `/projects/${pid}`)).body.project;
+		expect(after.settings.autoRun).toEqual({ enabled: true, debounceMinutes: 5, publish: 'never' });
+		expect(after.updatedAt).toBe(before);
 		// Positive control: a model setting does move it.
 		await u.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(151) } });
 		expect((await u.call('GET', `/projects/${pid}`)).body.project.updatedAt > before).toBe(true);

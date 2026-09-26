@@ -112,14 +112,29 @@ async function getProject(db: import('../db/tx.js').Db, id: string) {
 	return rows[0];
 }
 
+/** JSON with object keys sorted, so two equal settings objects compare equal whatever order their keys were written in. */
+const stableJson = (v: unknown): string =>
+	JSON.stringify(v, (_k, x: unknown) =>
+		x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x
+	);
+const withoutAutoRun = (settings: unknown) => {
+	const { autoRun: _autoRun, ...rest } = settings as Record<string, unknown>;
+	return rest;
+};
+
 /**
  * A patch that changes nothing but settings.autoRun (when the project re-runs
  * itself, not how) leaves updated_at alone: updated_at is "the inputs changed
  * since the latest run" to the Runs tab, and turning automatic runs on
- * changes no input.
+ * changes no input. The Settings form sends every setting, so this compares
+ * the settings as they'd be saved, not the keys sent.
  */
-const onlyAutoRun = (body: z.infer<typeof PatchBody>) =>
-	body.name === undefined && body.description === undefined && body.teamId === undefined && !!body.settings && Object.keys(body.settings).every((k) => k === 'autoRun');
+const onlyAutoRun = (body: z.infer<typeof PatchBody>, stored: unknown, next: unknown) =>
+	body.name === undefined &&
+	body.description === undefined &&
+	body.teamId === undefined &&
+	next !== undefined &&
+	stableJson(withoutAutoRun(next)) === stableJson(withoutAutoRun(mergeSettings(stored)));
 
 export const projectRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
@@ -221,7 +236,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END
 				 WHERE id = $1`,
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
-					body.teamId !== undefined, body.teamId ?? null, onlyAutoRun(body)]
+					body.teamId !== undefined, body.teamId ?? null, onlyAutoRun(body, current.settings, settings)]
 			);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
 			const fields = [
