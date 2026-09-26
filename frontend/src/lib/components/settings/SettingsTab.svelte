@@ -47,6 +47,7 @@
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
+	import { proposeFitRanges } from './proposeFitRanges';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
@@ -592,7 +593,12 @@
 			</div>
 		</div>
 		{#if s.chirpsBiasCorrection === 'monthly'}
-			<ChirpsFitPeriodSection bind:value={s.chirpsFitPeriod} bind:error={fitPeriodError} {readonly} />
+			<ChirpsFitPeriodSection
+				bind:value={s.chirpsFitPeriod}
+				bind:error={fitPeriodError}
+				{readonly}
+				propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
+			/>
 		{/if}
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 	</section>

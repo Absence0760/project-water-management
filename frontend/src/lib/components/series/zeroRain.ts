@@ -31,8 +31,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /**
  * `chirps` is the CHIRPS series a run reads (null without one: no
  * accumulation can be detected then), `chirpsMode` the CHIRPS bias setting,
- * `fit` the CHIRPS fit period and the double-mass result it splits on
- * (engine ≥ 0.29.0), as a run judges accumulations with them.
+ * `fit` the CHIRPS fit period
+ * (engine ≥ 0.29.0), as a run judges accumulations with it.
  */
 export function zeroRainShading(
 	series: DailySeries,

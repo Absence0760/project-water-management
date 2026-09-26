@@ -1,26 +1,51 @@
 <!--
 	settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40, docs/model.md §2.4b):
 	which part of the record the CHIRPS factors are fitted on. The whole
-	record, one set per double-mass segment, or water-year ranges the
-	hydrologist lists, each with a reason. `error` is set while the list is
-	invalid, so the parent form can block saving. Switching away from the
-	list and back keeps it for the session.
+	record, or water-year ranges the hydrologist lists, each with a reason.
+	`propose` (optional) fills the list from the double-mass breaks for the
+	hydrologist to check; nothing is saved until Save. `error` is set while the
+	list is invalid, so the parent form can block saving. Switching away from
+	the list and back keeps it for the session.
 -->
 <script lang="ts">
 	import { waterYearLabel, type ChirpsFitPeriod, type ChirpsFitRange } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, type ChirpsFitChoice } from './rain';
+	import type { FitRangeProposal } from './fitRangeProposal';
 
 	let {
 		value = $bindable(),
 		error = $bindable(null),
-		readonly = false
+		readonly = false,
+		propose
 	}: {
 		value: ChirpsFitPeriod;
 		error?: string | null;
 		readonly?: boolean;
+		/** Ranges proposed from the double-mass breaks, or why there are none. */
+		propose?: () => Promise<FitRangeProposal>;
 	} = $props();
+
+	let proposing = $state(false);
+	let proposeNote = $state<string | null>(null);
+	async function runProposal() {
+		if (!propose) return;
+		proposing = true;
+		proposeNote = null;
+		try {
+			const r = await propose();
+			if ('ranges' in r) {
+				if (Array.isArray(value)) kept = value;
+				value = r.ranges;
+				proposeNote = `Proposed ${r.ranges.length} ranges from the double-mass breaks. Check each against the station history and the CHIRPS version, and rewrite its reason, before saving.`;
+			} else proposeNote = r.reason;
+		} catch {
+			proposeNote = 'Could not load the rain series to propose ranges. Try again.';
+		} finally {
+			proposing = false;
+		}
+	}
 
 	const uid = $props.id();
 	const choice = $derived(chirpsFitChoice(value));
@@ -73,6 +98,14 @@
 		</select>
 		<span class="hint" id="{uid}-h">{option?.help}</span>
 	</div>
+	{#if propose && !readonly}
+		<div class="propose">
+			<button type="button" class="btn btn-sm" disabled={proposing} onclick={runProposal}>
+				{proposing ? 'Proposing…' : 'Propose from the double-mass breaks'}
+			</button>
+			{#if proposeNote}<p class="hint" role="status">{proposeNote}</p>{/if}
+		</div>
+	{/if}
 	{#if choice === 'ranges'}
 		<fieldset class="plain">
 			<legend>Fit ranges</legend>
@@ -186,6 +219,12 @@
 	}
 	.add {
 		margin-top: 0.5rem;
+	}
+	.propose {
+		display: grid;
+		gap: 0.25rem;
+		justify-items: start;
+		max-width: 75ch;
 	}
 	.err {
 		color: var(--danger);

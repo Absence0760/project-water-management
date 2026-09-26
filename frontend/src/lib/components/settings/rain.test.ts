@@ -11,12 +11,12 @@ describe('CHIRPS_BIAS_OPTIONS', () => {
 });
 
 describe('CHIRPS_FIT_OPTIONS', () => {
-	it('offers the whole record (the default) first, then segments and listed ranges; the segments help steers to ranges when CHIRPS is suspect', () => {
-		expect(CHIRPS_FIT_OPTIONS.map((o) => o.value)).toEqual(['all', 'segments', 'ranges']);
+	it('offers the whole record (the default) and listed ranges, no automatic mode; the ranges help says a proposal needs checking', () => {
+		expect(CHIRPS_FIT_OPTIONS.map((o) => o.value)).toEqual(['all', 'ranges']);
 		expect(chirpsFitChoice(defaultProjectSettings().chirpsFitPeriod)).toBe('all');
-		expect(chirpsFitChoice('segments')).toBe('segments');
+		expect(chirpsFitChoice('segments')).toBe('all');
 		expect(chirpsFitChoice([{ fromWaterYear: 1990, toWaterYear: 1999, reason: 'a' }])).toBe('ranges');
-		expect(CHIRPS_FIT_OPTIONS[1]!.help).toMatch(/suspect CHIRPS, list the water years instead/);
+		expect(CHIRPS_FIT_OPTIONS[1]!.help).toMatch(/can be a year or two off, and a CHIRPS change moves them too: check each range/);
 	});
 });
 

@@ -20,21 +20,19 @@ describe('chirpsFitNote', () => {
 		);
 	});
 
-	it('names a change of fit period, or of the segments under the same period (engine ≥ 0.29.0)', () => {
+	it('names a change of fit period, of the ranges under the same period, or of a reference window (engine ≥ 0.29.0)', () => {
 		const base = { pooledFactor: { a: 2, b: 2, delta: 0 }, excludedWaterYearsA: [], excludedWaterYearsB: [], changed: true };
-		expect(chirpsFitNote({ ...base, fitPeriodA: 'whole record', fitPeriodB: 'double-mass segments', segmentsA: [], segmentsB: ['double-mass segment 1990/91–1999/00'] })).toMatch(
-			/\(pooled factor 2\.00 → 2\.00; fit period: whole record → double-mass segments\)/
+		const listed = 'listed water years: 1990/91–1999/00 (old network)';
+		expect(chirpsFitNote({ ...base, fitPeriodA: 'whole record', fitPeriodB: listed, segmentsA: [], segmentsB: ['range 1990/91–1999/00 (old network)'] })).toMatch(
+			/\(pooled factor 2\.00 → 2\.00; fit period: whole record → listed water years: 1990\/91–1999\/00 \(old network\)\)/
 		);
 		expect(
-			chirpsFitNote({
-				...base,
-				fitPeriodA: 'double-mass segments',
-				fitPeriodB: 'double-mass segments',
-				segmentsA: ['double-mass segment 1990/91–2009/10'],
-				segmentsB: ['double-mass segment 1990/91–1999/00', 'double-mass segment 2000/01–2009/10']
-			})
-		).toMatch(/fit segments: double-mass segment 1990\/91–2009\/10 → double-mass segment 1990\/91–1999\/00; double-mass segment 2000\/01–2009\/10\)/);
-		// Runs from before 0.29.0 carry neither: nothing added.
+			chirpsFitNote({ ...base, fitPeriodA: listed, fitPeriodB: listed, segmentsA: ['range 1990/91–1999/00 (a)'], segmentsB: ['range 1990/91–1999/00 (old network)'] })
+		).toMatch(/fit ranges: range 1990\/91–1999\/00 \(a\) → range 1990\/91–1999\/00 \(old network\)\)/);
+		expect(
+			chirpsFitNote({ ...base, fitPeriodA: 'whole record', fitPeriodB: 'whole record', fitWindowsA: ['whole record: 1990/91–2009/10'], fitWindowsB: ['whole record: 1990/91–2011/12'] })
+		).toMatch(/fitted on: whole record: 1990\/91–2009\/10 → whole record: 1990\/91–2011\/12\)/);
+		// Runs from before 0.29.0 carry none of these: nothing added.
 		expect(chirpsFitNote(base)).toMatch(/^The CHIRPS bias factors differ between the runs \(pooled factor 2\.00 → 2\.00\), so/);
 	});
 });

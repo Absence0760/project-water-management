@@ -79,7 +79,7 @@
 					<div>
 						<dt>CHIRPS factors</dt>
 						<dd>
-							{#each record.forcing.chirpsFactors as f (f.label)}<span class="factor-set">{f.label}: {chirpsFactorsText(f.factors)}</span>{/each}
+							{#each record.forcing.chirpsFactors as f (f.label)}<span class="factor-set">{f.label}{f.fittedOn ? ` (fitted on ${f.fittedOn})` : ''}: {chirpsFactorsText(f.factors)}</span>{/each}
 						</dd>
 					</div>
 				{/if}

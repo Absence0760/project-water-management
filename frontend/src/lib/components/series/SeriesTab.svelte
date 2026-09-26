@@ -186,8 +186,8 @@
 		if (!viewing || viewing.kind !== 'rain_catchment_mm' || viewing.id !== first('rain_catchment_mm')?.id) return null;
 		const v = values[viewing.id];
 		const h = first('rain_chirps_mm');
-		// The fit period too (engine ≥ 0.29.0): 'segments' splits the factors on the double-mass result below.
-		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []), doubleMass: dm?.result ?? null };
+		// The CHIRPS fit period too (engine ≥ 0.29.0): accumulations are judged with each range's factors, as a run judges them.
+		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []) };
 		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly', fit) : null;
 	});
 
