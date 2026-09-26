@@ -2,7 +2,7 @@
 // the Network, Crops and Transfers editors edit a copy of the scenario's model
 // (its base run's snapshot with the scenario's ops applied), and this turns
 // the edited copy back into ScenarioOps: node fields → node.set, a crop area →
-// cropArea.set, a new node → node.add, and so on. Each op is checked with the
+// cropArea.set, a new node → node.add, a borehole → borehole.add, and so on. Each op is checked with the
 // "Add a change" form's own check (ops.ts checkOp: the engine's
 // validateScenarioOps), and the whole list is then applied to the model it
 // was diffed from (the engine's applyScenario): it must apply cleanly and give
@@ -164,6 +164,13 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	for (const id of bCover.keys()) if (!aCover.has(id) || changedCover.some((p) => p.id === id)) ops.push({ op: 'landCover.remove', patchId: id });
 	for (const p of aCover.values()) if (!bCover.has(p.id) || changedCover.includes(p)) ops.push({ op: 'landCover.add', patch: (plain(p)) });
 
+	// --- individual boreholes (WP-3.9): as land cover, a borehole edited in place is removed and added again
+	const bBores = new Map((b.boreholes ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => [x.id, x]));
+	const aBores = new Map((after.boreholes ?? []).map((x) => [x.id, x]));
+	const changedBores = [...aBores.values()].filter((x) => bBores.has(x.id) && !same(bBores.get(x.id), x));
+	for (const id of bBores.keys()) if (!aBores.has(id) || changedBores.some((x) => x.id === id)) ops.push({ op: 'borehole.remove', boreholeId: id });
+	for (const x of aBores.values()) if (!bBores.has(x.id) || changedBores.includes(x)) ops.push({ op: 'borehole.add', borehole: plain(x) });
+
 	// --- each op through the form's check, then the whole list against the model it came from
 	const problems: string[] = [];
 	// The name before the edit wins (an edit may be the name being cleared).
@@ -203,6 +210,8 @@ function whereOf(op: ScenarioOp, names: ReadonlyMap<string, string>): string {
 			return `A transfer${op.op === 'transfer.set' ? `, ${TRANSFER_FIELD_SPECS[op.field as TransferSetField]?.label ?? op.field}` : ''}`;
 		case 'landCover.add':
 			return `Land cover on ${nm(op.patch.nodeId)}`;
+		case 'borehole.add':
+			return `The borehole “${op.borehole.name || 'unnamed'}” on ${nm(op.borehole.nodeId)}`;
 		default:
 			return 'A change';
 	}
@@ -228,7 +237,8 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
 			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority]),
-			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors])
+			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
+			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1)))
 		});
 	};
 	return norm(x) === norm(y);

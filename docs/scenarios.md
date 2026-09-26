@@ -331,18 +331,45 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
   headline, farm and daily-overlay components (issue #8); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
-- **Where the build differs from the roadmap**: the roadmap's "override mode"
-  of the Network, Crops and Transfers editors (recording their edits as ops)
-  is not built; the op form covers every op instead, one change at a time.
-  Tracked in [followups.md § Scenarios](./followups.md).
+- **Override mode** (`OverrideEditor.svelte`, `overrideDiff.ts`, its own
+  chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
+  their own `ModelEditor` loaded with the scenario's model (the base run's
+  snapshot with the listed ops applied, `stepInputs(...).after`). The live
+  model is never loaded or saved there. **Record** diffs the edited model
+  against the one it was loaded with (`diffModel`) into ops, in an order
+  that applies: `crop.add`, `node.remove` (re-linking as the editor does),
+  `node.set` per changed field the engine lets a scenario set, `node.add`
+  (each after the node it drains into), `cropArea.set` with the farm's new
+  total of a crop, `transfer.remove` / `.add` / `.set` per field,
+  `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
+  borehole edited in place is removed and added again). Each op goes
+  through the form's own check (`ops.ts` `checkOp`, which `buildOp` also
+  ends with: the engine's `validateScenarioOps`, worded in the form's
+  units), and the whole list is applied to the loaded model
+  (`applyScenario`): it must apply cleanly and give back the edited model
+  (ignoring display order), or nothing is recorded. The ops are appended
+  with one `PATCH`, so one **Undo** takes them all back.
+- **What override mode can't record**, named in its record panel and
+  holding the rest back until undone (the engine has no op for them yet;
+  [§ Not yet supported](#not-yet-supported)): editing or removing an
+  existing crop, changing a node's kind, moving a node (what it drains
+  into), a new node that drains nowhere, a dam survey curve, and a field the
+  engine doesn't let a scenario set on that kind of node (a gauge's area).
+  Row order is display only and isn't recorded.
 
 Tests: `scenarios/fields.test.ts` (every node field, transfer field and
 settings path the engine allows has a spec; values round-trip through the
 form's text and still pass the engine's checks), `scenarios/ops.test.ts`
 (`stepInputs`, `describeOp`, problems lined up with their ops, `buildOp` for
-every op kind, each built op applying to a base), and
+every op kind, each built op applying to a base), `scenarios/overrideDiff.test.ts`
+(edits made with the model editor's own methods come back as ops that
+apply and give back the edited model, per table; every edit no op can
+express is named; the engine's refusals in the form's words; a fuzz over
+the engine's own random ops, `randomOps`, round-trips), and
 `e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
-read only; submit, withdraw, delete releasing the base; axe in light, dark
-and on a phone).
+read only; override mode recording one edit in each table as changes,
+refusing a kind change, leaving the live model untouched, undone as one
+edit, with axe; submit, withdraw, delete releasing the base; axe in light,
+dark and on a phone).

@@ -183,6 +183,61 @@ test('a rebase onto a run without the farm reports the change that no longer app
 	await expect(changes(page)).toHaveCount(0);
 });
 
+test('override mode records edits in the Network, Crops and Transfers tables as changes, never touching the catchment', async ({ page, owner }) => {
+	void owner;
+	const { project, scenarioId } = await seedScenario(page, 'Scenario override mode');
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+
+	// It says plainly that this is the scenario, not the catchment, and starts from the scenario's model (the raise applied).
+	const mode = page.getByTestId('override-mode');
+	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
+	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
+	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
+	const record = page.getByTestId('override-record');
+	await expect(record).toContainText('No edits yet.');
+
+	// One edit in each table.
+	await page.getByLabel('Dam capacity of Lower farm, m³').fill('100000');
+	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
+	await page.getByLabel('Orchard on Lower farm, ha').fill('15');
+	await mode.getByRole('button', { name: 'Transfers', exact: true }).click();
+	await page.getByLabel('transfer 1 enabled').uncheck();
+	const pending = record.getByRole('list', { name: `Edits to record in ${NAME}` }).getByRole('listitem');
+	await expect(pending).toHaveCount(3);
+	await expect(pending.nth(0)).toContainText('Lower farm: Dam capacity 90,000 m³ → 100,000 m³');
+	await expect(pending.nth(1)).toContainText('Lower farm: Orchard 12 ha → 15 ha');
+	await expect(pending.nth(2)).toContainText('The transfer Upper farm → Lower farm:');
+
+	// An edit no change can express is named, and holds the rest back until it is undone.
+	await mode.getByRole('button', { name: 'Network', exact: true }).click();
+	await page.getByLabel('Kind of Lower farm').selectOption('user');
+	await expect(record.getByRole('status').first()).toContainText("Changing “Lower farm” from a farm to a user: a scenario can't change a node's kind.");
+	await expect(record.getByRole('button', { name: /^Record/ })).toBeDisabled();
+	await page.getByLabel('Kind of Lower farm').selectOption('farm');
+
+	await record.getByRole('button', { name: 'Record 3 changes' }).click();
+	await expect(changes(page).getByRole('listitem')).toHaveCount(4);
+	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Lower farm: Dam capacity 90,000 m³ → 100,000 m³');
+	// The tables reload from the scenario as it now is: nothing left to record.
+	await expect(record).toContainText('No edits yet.');
+	await expect(page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('100000');
+
+	// The catchment's own model is untouched.
+	const live = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { name: string; damCapacityM3: number }[] };
+	expect(live.nodes.find((n) => n.name === 'Lower farm')!.damCapacityM3).toBe(90_000);
+	expect(live.nodes.find((n) => n.name === 'Upper farm')!.damCapacityM3).toBe(150_000);
+
+	// Undo takes the three back as one edit; closing brings the form back.
+	await page.getByRole('button', { name: 'Undo', exact: true }).click();
+	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await expectNoViolations(page);
+	await mode.getByRole('button', { name: 'Close override mode' }).click();
+	await expect(page.getByTestId('override-mode')).toHaveCount(0);
+	await expect(page.getByRole('form', { name: 'Add a change' })).toBeVisible();
+});
+
 test('a viewer reads a scenario and its comparison but changes nothing', async ({ page, owner, signIn }) => {
 	void owner;
 	const { project, scenarioId } = await seedScenario(page, 'Scenario viewer');
@@ -196,7 +251,7 @@ test('a viewer reads a scenario and its comparison but changes nothing', async (
 	await expect(changes(viewer.page).getByRole('listitem')).toContainText(RAISE);
 	await expect(changes(viewer.page).getByRole('listitem')).toContainText('Proposal');
 	await expect(viewer.page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Headline results' })).toBeVisible();
-	for (const name of ['Create scenario', 'Run scenario', 'Undo', 'Submit', 'Delete scenario', 'Rename', 'Add change']) {
+	for (const name of ['Create scenario', 'Run scenario', 'Undo', 'Submit', 'Delete scenario', 'Rename', 'Add change', 'Edit in the model tables']) {
 		await expect(viewer.page.getByRole('button', { name, exact: true })).toHaveCount(0);
 	}
 	await expect(changes(viewer.page).getByRole('button', { name: /^Remove change/ })).toHaveCount(0);

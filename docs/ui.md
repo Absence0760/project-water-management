@@ -1848,6 +1848,23 @@ them scenarios).
   it applies to the base is the server's check, shown once it is saved.
   Every edit is a `PATCH` of the whole op list, answered with the check.
   **Undo** steps back through this visit's edits; each op also has a ✕.
+- **Edit in the model tables** (override mode, editors, drafts only;
+  `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
+  Transfers tables, switched with a **Network / Crops / Transfers** control,
+  on the scenario's model (its base run with its changes applied), under a
+  banner in the warning colour: "Editing the scenario *X*, not the
+  catchment", saying the catchment's own model isn't touched, with **Close
+  override mode**. Notes, farmer links, the yield panel and "Colour farms
+  by" are left out (they belong to the live model). **Edits to record**
+  (sticky at the foot on wide screens) lists each edit as the change it will
+  be, in the same words as the Changes list; **Record N changes** appends
+  them (one Undo takes them back), **Discard edits** reverts. An edit no
+  change can express (a crop's factors, a node's kind or what it drains
+  into…) is listed there and disables Record until it is undone; the
+  tables' own problems ("Fix before saving") block it too. While there are
+  unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
+  Delete wait, and leaving the page asks first. The "Add a change" form and rebase are hidden while
+  override mode is open.
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).

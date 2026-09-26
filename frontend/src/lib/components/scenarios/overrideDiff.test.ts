@@ -148,6 +148,23 @@ describe('diffModel', () => {
 		expect(roundTrips(b, e.snapshot()).map((o) => o.op)).toEqual(['landCover.remove', 'landCover.add', 'landCover.add']);
 	});
 
+	it('turns individual boreholes into borehole.add and .remove; one edited in place is removed and added again', () => {
+		const b = base();
+		const e = editing(b);
+		const bore = e.addBorehole(UP);
+		bore.capacityM3Day = 300;
+		let ops = roundTrips(b, e.snapshot());
+		expect(ops).toEqual([{ op: 'borehole.add', borehole: expect.objectContaining({ id: bore.id, nodeId: UP, capacityM3Day: 300 }) }]);
+		// Recorded, then edited: the next diff (from the model with it) removes and re-adds it.
+		const withBore = applyScenario(b, ops).input;
+		const e2 = editing(withBore);
+		e2.model.boreholes![0]!.capacityM3Day = 500;
+		ops = roundTrips(withBore, e2.snapshot());
+		expect(ops.map((o) => o.op)).toEqual(['borehole.remove', 'borehole.add']);
+		e2.removeBorehole(bore.id);
+		expect(roundTrips(withBore, e2.snapshot())).toEqual([{ op: 'borehole.remove', boreholeId: bore.id }]);
+	});
+
 	it('names every edit no op can express, and records none of them', () => {
 		const b = base();
 		const e = editing(b);

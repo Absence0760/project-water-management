@@ -1403,16 +1403,22 @@ role and not before it.
         **Scenario base** tags (no ✕ on a cited base), e2e
         (`e2e/tests/scenarios.spec.ts`: a 20 % dam raise run and compared)
         and axe in light, dark and on a phone.
-  - [ ] **Override mode for the Network, Crops and Transfers editors**
-        (roadmap WP-3.2 *Frontend*): editing the base run's model in the
-        familiar tables and recording each edit as an op, instead of the
-        one-change-at-a-time "Add a change" form. The form already builds
-        every op the engine has (`scenarios/ops.ts` `buildOp`), so the
-        durable fix is a `ModelEditor` variant loaded from the base run's
-        snapshot whose edits diff into ops (node fields → `node.set`, rows
-        → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
-        hydrologist building scenarios of more than a handful of changes,
-        or WP-3.3's applicant flow.
+  - [x] **Override mode for the Network, Crops and Transfers editors**
+        (roadmap WP-3.2 *Frontend*, 2026-09-26; [scenarios.md § UI](./scenarios.md#ui),
+        [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)). **Edit in the
+        model tables** opens the three tabs, unchanged, on their own
+        `ModelEditor` loaded with the scenario's model
+        (`scenarios/OverrideEditor.svelte`, its own chunk), under a banner
+        saying it is the scenario, not the catchment. **Record** diffs the
+        edits into ops (`scenarios/overrideDiff.ts` `diffModel`): node fields
+        → `node.set`, crop areas → `cropArea.set`, new and removed nodes,
+        crops, transfers, land cover and boreholes → their ops, each through
+        the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
+        list re-applied to prove it gives back the edited model. Edits no op
+        can express are named and block recording: they wait on the later
+        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        The shared editors weren't changed, so no pinning e2e was needed;
+        e2e covers override mode in `scenarios.spec.ts`.
   - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
         `044_scenario_op_names`, `backend/src/scenarios/names.ts`): the
         server keeps `op_names`, `{ id, name }` for every node and crop the
