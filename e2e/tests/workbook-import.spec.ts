@@ -8,13 +8,12 @@
 // ranges it lacks; a farm name that looks like HTML shows as text; and the
 // review and the import record pass axe in both themes and on a phone.
 import { readFileSync } from 'node:fs';
-import { AxeBuilder } from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import * as XLSX from 'xlsx';
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
 const FIXTURE = new URL('../../scripts/wbt-import/fixtures/synthetic_b023.xlsx', import.meta.url);
 const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
 
@@ -101,11 +100,6 @@ async function importAndOpen(page: Page) {
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'synthetic_b023' })).toBeVisible();
-}
-
-async function expectNoViolations(page: Page) {
-	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
 test('imports the synthetic workbook with a first run, and the project opens with results', async ({ page, owner }) => {

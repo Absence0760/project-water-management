@@ -2,19 +2,10 @@
 // docs/run-comparison.md § Daily series): pick a node matched across the two
 // runs and one of its series, chart A against B with B − A underneath, and
 // explain a node only one run has. Axe-scanned in both themes.
-import { AxeBuilder } from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { copyProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
-
-/** Same scan as a11y.spec.ts: from the top, so the sticky header hides nothing. */
-async function expectNoViolations(page: Page) {
-	await page.evaluate(() => window.scrollTo(0, 0));
-	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-	expect(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }))).toEqual([]);
-}
 
 const overlay = (page: Page) => page.getByRole('region', { name: 'Daily series' });
 

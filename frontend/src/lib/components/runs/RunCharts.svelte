@@ -234,7 +234,7 @@
 				<table class="data compact q">
 					<thead>
 						<tr>
-							<th scope="col"></th>
+							<th scope="col"><span class="visually-hidden">Flow record</span></th>
 							<th scope="col" class="num">Q10</th>
 							<th scope="col" class="num">Q50</th>
 							<th scope="col" class="num">Q90</th>

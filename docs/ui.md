@@ -1661,7 +1661,15 @@ or Run button.
   save bar, the one-node form, the view-only workspace, run comparison, teams,
   help, the dead-link states of the emailed-link pages and an invitation
   opened while signed in, in light and dark, and every tab again at phone
-  width. No rule is disabled: a violation is fixed in the app.
+  width. No rule is disabled: a violation is fixed in the app. Each test
+  scans one page state, through the shared `e2e/support/a11y.ts` scan (see
+  e2e/README.md for why it runs axe in legacy mode).
+- Every workspace tab (desktop and phone) and a GR4J run are also held to two
+  of axe's best-practice rules the WCAG tags leave out: `empty-table-header`
+  (a corner header above a column of row headers carries a visually hidden
+  name, such as "Curve" or "Flow record"; `lib/a11y/tableHeaders.test.ts`
+  refuses an empty `<th>` in any component) and `landmark-unique` (a tab's
+  top panel is not a second region with the tab's own name).
 - **Sideways-scrolling boxes** (every `.table-wrap`, and anything marked
   `data-scroll-region`, such as the schematic) become a focusable, named
   group while their content overflows, so Tab reaches them and the arrow keys

@@ -121,7 +121,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="{uid}-h">
+<!-- A plain panel, not a second region: the tab body is already the region
+     named "History" (a same-named landmark inside it is axe landmark-unique). -->
+<div class="panel">
 	<div class="head">
 		<h2 id="{uid}-h">History</h2>
 		<p class="muted small">
@@ -222,7 +224,7 @@
 	{#if canEdit && editor.dirty}
 		<p class="muted small" role="note">You have unsaved model changes: save or discard them before restoring a version.</p>
 	{/if}
-</section>
+</div>
 
 <Dialog bind:open={confirmOpen} title="Restore this version?" wide>
 	{#if target}

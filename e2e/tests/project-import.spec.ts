@@ -5,13 +5,12 @@
 // file creates nothing; and the dialog passes axe at each step, in both themes.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { AxeBuilder } from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
 
 interface ExampleDoc {
 	name: string;
@@ -43,11 +42,6 @@ async function openImport(page: Page) {
 	const dialog = page.getByRole('dialog', { name: 'Import project file' });
 	await expect(dialog.getByLabel('Project file (.json)')).toBeVisible();
 	return dialog;
-}
-
-async function expectNoViolations(page: Page) {
-	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
 test('imports an example catchment into a team and runs it', async ({ page, owner }) => {
