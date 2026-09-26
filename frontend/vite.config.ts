@@ -60,6 +60,21 @@ function autocalWorkerChunk(): Plugin {
  */
 const engineIsPure = (id: string) => !id.includes('/packages/engine/src/');
 
+/**
+ * Svelte's runtime in one chunk of its own (issue #9). Left to Rollup, the
+ * runtime was cut into ~15 chunks by which pages use which piece (snippets,
+ * `bind:this`, `<svelte:head>`, stores…), several under 0.5 KB gzip, with the
+ * largest part merged into an app chunk; every component chunk then imported
+ * a long list of runtime names from several files. One chunk: total −12 KB
+ * and every page's first load 3–6 KB lighter, although a page now also gets
+ * the few runtime pieces it doesn't use. The chunk imports nothing, so it
+ * can't join an import cycle. src/lib/svelteRuntimeChunk.test.ts checks this
+ * rule stays in place.
+ */
+export function svelteRuntimeChunk(id: string): string | undefined {
+	return /\/node_modules\/svelte\/src\//.test(id) && !id.includes('/svelte/src/compiler/') ? 'svelte' : undefined;
+}
+
 export default defineConfig({
 	plugins: [autocalWorkerChunk(), sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
@@ -80,6 +95,7 @@ export default defineConfig({
 		// the page build.
 		target: 'es2022',
 		rollupOptions: {
+			output: { manualChunks: svelteRuntimeChunk },
 			treeshake: {
 				// See engineIsPure. Rollup otherwise groups engine code by phantom
 				// edges: the farm and share pages loaded ~13 KB of engine code they

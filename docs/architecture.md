@@ -149,6 +149,16 @@ down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 K
 across the bundle). The app already needs newer browsers than ES2022 does
 (HelpTip's popover needs Chrome 114, Safari 17, Firefox 125).
 
+Svelte's runtime is one chunk of its own (`svelteRuntimeChunk`, the page
+build's `manualChunks` in `frontend/vite.config.ts`). Left to Rollup, the
+runtime was cut into ~15 chunks by which pages use which piece (snippets,
+`bind:this`, `<svelte:head>`, stores), several under 0.5 KB gzip, with its
+largest part merged into an app chunk, and every component chunk imported
+runtime names from several of them. As one chunk (21.5 KB gzip, importing
+nothing) the total dropped 12 KB and every page's first load 3–6 KB, although
+a page now also loads the few runtime pieces it doesn't use.
+`src/lib/svelteRuntimeChunk.test.ts` keeps the rule in place.
+
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
