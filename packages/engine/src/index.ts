@@ -5,6 +5,7 @@ export * from './compare';
 export * from './demand';
 export * from './flow';
 export * from './project';
+export * from './manifest';
 export * from './run';
 export * from './runoff';
 export * from './calibrate/calibrate';

@@ -246,8 +246,31 @@ describe('storing the result', () => {
 });
 
 describe('a run whose data changed', () => {
-	it('gets no ensemble: its input can no longer be rebuilt (409)', async () => {
-		const run = await newRun(owner, 'Before the data changed');
+	it('still gets its own input: a run stores its input series (020_series_blob)', async () => {
+		const run = await newRun(owner, 'Stored inputs, then the data changed');
+		const input = await inputOf(owner, run);
+		const rain = (input.series.rain_catchment_mm!.values as number[]).map((v) => v * 1.1);
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2018-10-01', values: rain })).status).toBe(200);
+		const res = await owner.call('GET', `${base(run)}/model-input`);
+		expect(res.status).toBe(200);
+		expect(res.body.input).toEqual(input);
+		expect((await start(owner, run)).status).toBe(201);
+		// Put the data back for the tests below.
+		expect((await owner.call('PUT', `/projects/${projectId}/series`, { ...input.series.rain_catchment_mm, kind: 'rain_catchment_mm', unit: 'mm' })).status).toBe(200);
+	});
+
+	it('gets no ensemble when it is from before stored inputs: its input can no longer be rebuilt (409)', async () => {
+		const stored = await newRun(owner, 'Before the data changed');
+		// A run saved as executeRun did before 020: the same snapshot, no stored series.
+		const run = await withUser(owner.id, async (db) => {
+			const { rows } = await db.query<{ id: string }>(
+				`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)
+				 SELECT project_id, created_by, 'legacy', engine_version, start_date, end_date, inputs, summary FROM model_run WHERE id = $1 RETURNING id`,
+				[stored]
+			);
+			return rows[0]!.id;
+		});
+		// Positive control: while the data still hashes to the snapshot, the legacy run gets its input.
 		const input = await inputOf(owner, run);
 		const rain = (input.series.rain_catchment_mm!.values as number[]).map((v) => v * 1.1);
 		expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2018-10-01', values: rain })).status).toBe(200);

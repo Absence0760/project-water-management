@@ -79,7 +79,15 @@ The same `runModel` runs:
   the result (`POST …/uncertainty/:uid/result`).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
-  summary and output series. Stored runs are what users share and compare.
+  summary and output series, and the input series themselves, once per
+  distinct content per project (`series_blob`, 020). Stored runs are what
+  users share and compare. `loadRunInput(db, runId)`
+  (`backend/src/runs/execute.ts`) rebuilds a stored run's exact input, so a
+  run can be recomputed later whatever happened to the live project since:
+  the base a scenario applies its overrides to (roadmap WP-3.2), and the
+  input the uncertainty ensemble runs on. Runs saved before 020 kept only
+  hashes of their series and can't be rebuilt that way
+  ([data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-020_series_blobsql)).
 
 Because the engine is pure and deterministic, there is only one implementation
 to test (invariant tests, plus the client catchment regression suite with its
@@ -227,7 +235,8 @@ sequenceDiagram
   A->>A: runModelChecked(input)
   A->>P: INSERT model_run (inputs snapshot, summary)
   A->>P: INSERT run_series × N (double precision[])
-  A->>P: DELETE runs beyond the newest 20 (nominated evidence runs exempt)
+  A->>P: lock the project's runs; INSERT series_blob (new values only), run_input_series
+  A->>P: DELETE runs beyond the newest 20 (pinned, nominated and cited runs exempt; unused blobs collected)
   A->>P: COMMIT
   A-->>B: 201 { run, removedRunIds }
   B->>A: GET /runs/:runId/series?key=…&nodeId=…
