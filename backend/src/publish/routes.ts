@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
@@ -22,7 +23,15 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			return c.json(await publishRun(db, id, body), 201);
+			const published = await publishRun(db, id, body);
+			const p = published.publication;
+			await recordAudit(db, id, 'publication.published', {
+				publicationId: p.id,
+				runId: p.runId,
+				restriction: { level: p.restriction.level, pct: p.restriction.pct },
+				farms: published.farms
+			});
+			return c.json(published, 201);
 		});
 	})
 	.patch('/:id/publication/:pubId', async (c) => {
@@ -31,6 +40,15 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(pubId)) throw new ApiError(404, 'not found');
-			return c.json({ publication: await patchPublication(db, id, pubId, body) });
+			const publication = await patchPublication(db, id, pubId, body);
+			// Which parts were sent, not their text: the notice is on the publication itself.
+			const fields = (['note', 'restriction', 'nextExpectedOn'] as const).filter((k) => body[k] !== undefined);
+			await recordAudit(db, id, 'publication.notice_changed', {
+				publicationId: publication.id,
+				runId: publication.runId,
+				fields,
+				restriction: { level: publication.restriction.level, pct: publication.restriction.pct }
+			});
+			return c.json({ publication });
 		});
 	});

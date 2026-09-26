@@ -12,6 +12,7 @@ import {
 	type SeriesKind
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
 
@@ -168,6 +169,8 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 		) RETURNING id`,
 		[projectId, keep]
 	);
+	// The storage cap's removals are in the project's history too (030_history.sql).
+	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'trimmed' });
 	return rows.map((r) => r.id);
 }
 
@@ -262,6 +265,15 @@ export async function runAndStore(
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
 	await storeRunInputs(db, projectId, runId, input.series, hashes);
+	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
+	await recordAudit(db, projectId, 'run.created', {
+		runId,
+		label,
+		engineVersion: output.engineVersion,
+		startDate: output.startDate,
+		endDate: output.endDate,
+		...(scenario ? { scenarioId: scenario.id } : {})
+	});
 	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };
 }

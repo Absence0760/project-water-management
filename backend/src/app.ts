@@ -10,6 +10,7 @@ import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
 import { farmViewRoutes } from './farms/view.js';
+import { historyRoutes } from './history/routes.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
@@ -102,6 +103,7 @@ export function createApp() {
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);
 	projects.route('/', publicationRoutes);
+	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
 	app.route('/projects', projects);
 

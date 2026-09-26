@@ -173,7 +173,11 @@
 		x2Open = s.gr4j.x2 !== 0;
 		resetListText();
 		error = null;
+		reason = '';
 	}
+
+	/** The optional "why" of the save, kept with the change in the History tab. */
+	let reason = $state('');
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
@@ -182,7 +186,9 @@
 		error = null;
 		justSaved = false;
 		try {
-			const p = await api.projects.update(project.id, { settings: $state.snapshot(s) as unknown as ProjectSettings });
+			const why = reason.trim();
+			const p = await api.projects.update(project.id, { settings: $state.snapshot(s) as unknown as ProjectSettings, ...(why ? { reason: why } : {}) });
+			reason = '';
 			onProjectChange(p);
 			s = clone(p.settings);
 			saved = JSON.stringify(p.settings);
@@ -811,6 +817,12 @@
 			</div>
 			{#if justSaved && !dirty}<span class="muted" role="status">Settings saved.</span>{/if}
 			{#if dirty}<span class="unsaved">Unsaved settings</span>{/if}
+			{#if dirty}
+				<label class="reason">
+					<span class="visually-hidden">Reason for this change (optional)</span>
+					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
+				</label>
+			{/if}
 			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
 				{saving ? 'Saving…' : 'Save settings'}
@@ -1010,6 +1022,13 @@
 		padding: 0.75rem 0;
 		background: var(--bg);
 		border-top: 1px solid var(--border);
+	}
+	.actions .reason {
+		flex: 0 1 22rem;
+		min-width: 12rem;
+	}
+	.actions .reason input {
+		width: 100%;
 	}
 	/* In-page menu (as on Runs & results, but a bar: the monthly input rows need the full width). */
 	.sections {

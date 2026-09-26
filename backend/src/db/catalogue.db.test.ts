@@ -44,9 +44,22 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * series_blob_gc trigger (021_series_blob.sql). A farm's projection is what
  * its farmers were shown (022_publication.sql). A render token is issued,
  * then consumed or purged only through app_consume_render_token
- * (023_reports.sql).
+ * (023_reports.sql). The change history is the record of who changed what: a
+ * model revision and an audit event go only with their project, a series
+ * revision also through its retention trim (030_history.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_blob', 'run_input_series', 'publication_farm', 'render_token']);
+const APPEND_ONLY = new Set([
+	'run_nomination',
+	'job',
+	'project_import',
+	'series_blob',
+	'run_input_series',
+	'publication_farm',
+	'render_token',
+	'model_revision',
+	'series_revision',
+	'audit_event'
+]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band

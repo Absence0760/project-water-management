@@ -1,9 +1,13 @@
 // Apply a fetch's result to its feed, inside the job's transaction as the
 // feed's acting user: merge the days into the target series through the same
-// path as POST /projects/:id/series/merge (series/merge.ts mergeInto), then
+// path as POST /projects/:id/series/merge (series/merge.ts mergeSeries), then
 // record the feed's health. The merge replaces only days this feed wrote
 // itself, and fills empty ones: an uploaded or imported value is kept, and
-// counted in last_meta.kept (030_feed_days, #30). A failed fetch records the failure and writes no
+// counted in last_meta.kept (031_feed_days, #30). The change history
+// (030_history.sql) gets a series.merged event for days that changed (no
+// series revision: a feed's merges are append-mostly and would push a
+// person's restore points out) and a feed.failed event when a working feed
+// starts failing, not on every failed attempt after that. A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
 // queue from the fetcher Lambda, so it is untrusted input. An answer holding a
 // day after the newest the source can have (latestDay), or a day outside the
@@ -23,7 +27,8 @@
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { mergeInto, SeriesBody } from '../series/merge.js';
+import { recordAudit, seriesSubject } from '../history/record.js';
+import { mergeSeries, SeriesBody } from '../series/merge.js';
 import { type FeedSource, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
@@ -45,6 +50,16 @@ const INVALID = 'the fetcher’s answer was not valid, so nothing was written';
 const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Record<string, string | number> }) =>
 	r.startDate === null || (r.meta.issued === r.startDate && r.values.length <= GEFS_DAYS);
 
+/** Record a failed fetch; the first failure after a success (or ever) goes in the project's history too. */
+async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutcome> {
+	const { rows } = await db.query<{ n: number }>('SELECT consecutive_failures AS n FROM data_feed WHERE id = $1', [feed.id]);
+	await recordFeedResult(db, feed.id, { ok: false, error });
+	if ((rows[0]?.n ?? 0) === 0) {
+		await recordAudit(db, feed.projectId, 'feed.failed', { feedId: feed.id, source: feed.source, targetKind: feed.targetKind, targetName: feed.targetName, error });
+	}
+	return { merged: 0, lastDate: null };
+}
+
 /**
  * `window` is what the fetch asked for. A forecast is checked by its issue
  * instead (it reads the newest issue, whatever the window), and records no
@@ -53,22 +68,17 @@ const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Re
 export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow): Promise<IngestOutcome> {
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
-		await recordFeedResult(db, feed.id, { ok: false, error: INVALID });
-		return { merged: 0, lastDate: null };
+		return failed(db, feed, INVALID);
 	}
 	const result = parsed.data;
-	if (!result.ok) {
-		await recordFeedResult(db, feed.id, { ok: false, error: result.error });
-		return { merged: 0, lastDate: null };
-	}
+	if (!result.ok) return failed(db, feed, result.error);
 	// A day the source can't have published yet (a wrong clock or a bad
 	// message) would become the feed's newest date, which only moves forward:
 	// every later window would start after it and the feed would never read
 	// real days again. Refuse the whole answer.
 	const latest = latestDay(feed.source, utcToday());
 	if (result.startDate !== null && toEpochDay(result.startDate) + result.values.length - 1 > toEpochDay(latest)) {
-		await recordFeedResult(db, feed.id, { ok: false, error: `the fetcher’s answer had days after ${latest}, so nothing was written` });
-		return { merged: 0, lastDate: null };
+		return failed(db, feed, `the fetcher’s answer had days after ${latest}, so nothing was written`);
 	}
 	// A day the fetch didn't ask for: a bug, or an answer for another request.
 	// Merging it could overwrite days the feed doesn't own (before startDate).
@@ -77,11 +87,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 		result.startDate !== null &&
 		(result.startDate < window.start || fromEpochDay(toEpochDay(result.startDate) + result.values.length - 1) > window.end)
 	) {
-		await recordFeedResult(db, feed.id, {
-			ok: false,
-			error: `the fetcher’s answer had days outside ${window.start} to ${window.end}, the days it was asked for, so nothing was written`
-		});
-		return { merged: 0, lastDate: null };
+		return failed(db, feed, `the fetcher’s answer had days outside ${window.start} to ${window.end}, the days it was asked for, so nothing was written`);
 	}
 	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
 		// ISO calendar dates compare as strings (startDate is checked; meta.issued equals it).
@@ -110,13 +116,15 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
 				// feedId: only this feed's own days (and empty ones) are replaced; any
-				// other value, an upload or an import, is kept (030_feed_days, #30).
-				({ written: merged, kept } = await mergeInto(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id }));
+				// other value, an upload or an import, is kept (031_feed_days, #30).
+				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id });
+				({ written: merged, kept } = r);
+				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
+				if (subject.daysChanged) await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
 			} catch (err) {
 				// The merge refuses before writing (e.g. the series would pass 60 000 days).
 				if (!(err instanceof ApiError)) throw err;
-				await recordFeedResult(db, feed.id, { ok: false, error: `the series could not take the new days: ${err.message}` });
-				return { merged: 0, lastDate: null };
+				return failed(db, feed, `the series could not take the new days: ${err.message}`);
 			}
 			lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
 			lastValue = result.values[lastIdx]!;

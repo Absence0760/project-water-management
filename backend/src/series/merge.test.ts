@@ -39,7 +39,7 @@ describe('mergeDaily', () => {
 	});
 });
 
-describe('sameDaily (mergeInto skips a merge that changes nothing)', () => {
+describe('sameDaily (mergeSeries skips a merge that changes nothing)', () => {
 	const e = { startDate: '2025-01-01', values: [1, null, 3] };
 	it('is true for a re-sent batch and for gaps that keep what is there', () => {
 		expect(sameDaily(e, mergeDaily(e, { startDate: '2025-01-02', values: [null, 3] }))).toBe(true);

@@ -10,7 +10,8 @@
 		transfers: () => import('$lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
-		runs: () => import('$lib/components/runs/RunsTab.svelte')
+		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
 </script>
@@ -44,7 +45,8 @@
 		{ id: 'transfers', label: 'Transfers' },
 		{ id: 'series', label: 'Data' },
 		{ id: 'settings', label: 'Settings & calibration' },
-		{ id: 'runs', label: 'Runs & results' }
+		{ id: 'runs', label: 'Runs & results' },
+		{ id: 'history', label: 'History' }
 	] as const;
 	type TabId = (typeof TABS)[number]['id'];
 	const MODEL_TABS: TabId[] = ['network', 'crops', 'transfers'];
@@ -54,7 +56,8 @@
 		timeseries: 'series',
 		demand: 'crops',
 		calibration: 'settings',
-		results: 'runs'
+		results: 'runs',
+		changes: 'history'
 	};
 
 	const projectId = $derived(page.params.id ?? '');
@@ -73,6 +76,8 @@
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);
 	let saveBarHeight = $state(0);
+	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
+	let saveReason = $state('');
 
 	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
 	// The viewer's calendar date, as on the project list (projects/freshness.ts).
@@ -222,7 +227,8 @@
 		editor.saving = true;
 		editor.saveError = null;
 		try {
-			editor.load(await api.model.save(projectId, editor.snapshot()));
+			editor.load(await api.model.save(projectId, editor.snapshot(), saveReason.trim() || undefined));
+			saveReason = '';
 		} catch (e) {
 			editor.saveError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -247,6 +253,13 @@
 
 	function onProjectChange(p: Project) {
 		project = p;
+	}
+
+	/** A restore (History tab, or a run's "Restore these inputs") changed the saved settings and model. */
+	async function reloadInputs() {
+		const [p, m] = await Promise.all([api.projects.get(projectId), api.model.get(projectId)]);
+		project = p;
+		editor.load(m);
 	}
 
 	async function onLeftProject() {
@@ -443,13 +456,18 @@
 								canRun={canEdit}
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
+								onInputsRestored={reloadInputs}
 							/>
 						{/snippet}
+					</Lazy>
+				{:else if tab === 'history'}
+					<Lazy load={LOAD.history}>
+						{#snippet children(HistoryTab)}<HistoryTab {projectId} {editor} {canEdit} onRestored={reloadInputs} />{/snippet}
 					</Lazy>
 				{/if}
 			</section>
 
-			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} />
+			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
 			{#if canEdit}
 				{#if addMounted}
 					<Lazy load={loadAddData}>

@@ -556,6 +556,84 @@ export interface PublicationPatch {
 	nextExpectedOn?: string | null;
 }
 
+// --- Change history (WP-2.4, docs/api.md § History) ------------------------
+
+/** What wrote a revision of the project's inputs. `baseline`: the state before the first recorded change. */
+export type RevisionSource = 'baseline' | 'model_put' | 'settings_patch' | 'restore' | 'import' | 'copy';
+
+/** One revision of { settings, model }, with the lines that describe it (not its snapshot). */
+export interface HistoryRevision {
+	type: 'revision';
+	id: string;
+	createdAt: string;
+	/** Items one request wrote share it. */
+	changeSet: string | null;
+	/** Who made it; null when that account is gone. */
+	actor: string | null;
+	source: RevisionSource;
+	reason: string | null;
+	changes: InputChange[];
+	restoredFrom: string | null;
+	restoredFromRun: string | null;
+}
+
+/** One audit event: `kind` is '<noun>.<verb>' or 'restore'; `subject` its own shape (ids, names, counts, dates). */
+export interface HistoryEvent {
+	type: 'event';
+	id: string;
+	createdAt: string;
+	changeSet: string | null;
+	/** The actor's display name when it happened. */
+	actor: string;
+	kind: string;
+	subject: Record<string, unknown>;
+}
+
+export type HistoryItem = HistoryRevision | HistoryEvent;
+
+export interface HistoryPage {
+	items: HistoryItem[];
+	/** Pass as `before` for the next (older) page; null at the end. */
+	next: string | null;
+	/** When recording started for this project (its creation, or when history was switched on). */
+	historySince: string;
+}
+
+export interface HistoryQuery {
+	before?: string;
+	limit?: number;
+	nodeId?: string;
+	/** 'revision', an event kind ('series.replaced') or its noun ('series'). */
+	kind?: string;
+}
+
+/** A farmer to link again: a restore brings a farm back without its links. */
+export interface Relink {
+	userId: string;
+	displayName: string;
+	nodeId: string;
+	nodeName: string;
+}
+
+export interface RestoreResult {
+	revision: { id: string; createdAt: string; source: RevisionSource; reason: string | null; changes: InputChange[] };
+	relink: Relink[];
+}
+
+/** A series' kept values (newest 5, at most 180 days old). */
+export interface SeriesRevisionMeta {
+	id: string;
+	createdAt: string;
+	createdBy: string | null;
+	reason: 'replace' | 'delete' | 'manual_merge';
+	startDate: string;
+	length: number;
+	valuesSha256: string;
+	kind: string;
+	name: string;
+	unit: string;
+}
+
 /** Longest share-link label and lifetime (backend share/links.ts, 025_share_links.sql). */
 export const SHARE_LABEL_MAX = 100;
 export const SHARE_DAYS_MAX = 365;

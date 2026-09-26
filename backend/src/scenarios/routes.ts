@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { lockProjectRuns, trimRuns } from '../runs/execute.js';
@@ -65,6 +66,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), body.ownedNodeIds]
 				)
 				.catch(duplicateName);
+			await recordAudit(db, id, 'scenario.created', { scenarioId: rows[0]!.id, name: body.name, baseRunId: body.baseRunId, ops: body.ops.length });
 			return c.json(await withCheck(db, id, await loadScenario(db, id, rows[0]!.id)), 201);
 		});
 	})
@@ -97,6 +99,29 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					...set.map(([, v]) => v)
 				])
 				.catch(duplicateName);
+			// Only the fields whose value moved: a PATCH that re-sends the scenario as it is logs nothing.
+			const was: Record<string, unknown> = {
+				name: s.name,
+				description: s.description,
+				ops: s.opsSha256,
+				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
+				status: s.status
+			};
+			const now: Record<string, unknown> = {
+				name: body.name,
+				description: body.description,
+				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
+				owned_node_ids: body.ownedNodeIds !== undefined ? [...body.ownedNodeIds].sort().join(',') : undefined,
+				status: body.status
+			};
+			const fields = Object.keys(now).filter((k) => now[k] !== undefined && now[k] !== was[k]);
+			if (fields.length)
+				await recordAudit(db, id, 'scenario.changed', {
+					scenarioId: sid,
+					name: body.name ?? s.name,
+					fields,
+					...(body.status !== undefined && body.status !== s.status ? { from: s.status, to: body.status } : {})
+				});
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid)));
 		});
 	})
@@ -109,6 +134,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// Its base run stops being cited and may be trimmed: under the project's run lock, as a trim is.
 			await lockProjectRuns(db, id);
 			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]);
+			await recordAudit(db, id, 'scenario.deleted', { scenarioId: sid, name: s.name });
 			return c.body(null, 204);
 		});
 	})
@@ -144,6 +170,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (!rowCount) throw frozen(await loadScenario(db, id, sid));
 			}
 			const s = await loadScenario(db, id, sid);
+			if (!body.dryRun) await recordAudit(db, id, 'scenario.changed', { scenarioId: sid, name: s.name, fields: ['base_run_id'], baseRunId: body.baseRunId });
 			return c.json({ scenario: s, ...checkView(checkScenario(base, s.ops, s.ownedNodeIds)) });
 		});
 	});

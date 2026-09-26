@@ -116,6 +116,23 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The change history (WP-2.4): auth-gated like every project route.
+	it('inventories the history routes as auth-gated', () => {
+		const history = [
+			'GET /projects/:id/history',
+			'GET /projects/:id/history/revisions/:revId',
+			'POST /projects/:id/history/revisions/:revId/restore',
+			'GET /projects/:id/runs/:runId/changes-since',
+			'POST /projects/:id/runs/:runId/restore-inputs',
+			'GET /projects/:id/series/:seriesId/revisions',
+			'POST /projects/:id/series/:seriesId/revisions/:revId/restore'
+		];
+		for (const r of history) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
 		for (const r of ['GET /projects/:id/share-links', 'POST /projects/:id/share-links', 'DELETE /projects/:id/share-links/:linkId']) {

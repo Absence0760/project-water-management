@@ -530,7 +530,7 @@ between the old and new ranges become `null`. `413` if the merged series would
 exceed 60 000 days. A merge that changes nothing (a re-sent batch) leaves the
 row alone, so `updatedAt` doesn't move. A merge or `PUT` by a user also takes the days it writes back from the
 series' data feed, which then keeps them rather than replacing them
-([data-model.md § Feed days](./data-model.md#feed-days-030_feed_dayssql)).
+([data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)).
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
@@ -1124,6 +1124,24 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   `/projects/:id/runs/:runId[/…]` of the one project and run; everything else
   answers `403 this session can only read one report`
   ([security.md § Render tokens](./security.md#render-tokens)).
+
+## History
+
+Change history and the audit log (WP-2.4, [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql)).
+Farmers get `403`.
+
+| Method | Path | Body / query | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `next` is an opaque cursor (`<ts>\|<type>\|<id>`) | viewer |
+| GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
+| POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
+| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
+| POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
+| GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length }[] }` (kept: the newest 5, ≤ 180 days) | viewer |
+| POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id) | editor |
+
+`PUT /projects/:id/model` and `PATCH /projects/:id` (with `settings`) take an
+optional `reason` (≤ 500 characters), kept with the revision.
 
 ## Compare runs
 

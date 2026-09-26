@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { newToken, parseToken } from '../auth/tokens.js';
 import { withoutUser, withUser } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
@@ -51,6 +52,8 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 				[id, body.label, hash, body.expiresInDays]
 			);
 			const { rows: link } = await db.query<ShareLinkRow>(`${SELECT_LINKS} WHERE s.id = $1`, [rows[0]!.id]);
+			// Never the token: the log says which link and for how long.
+			await recordAudit(db, id, 'share_link.created', { linkId: rows[0]!.id, label: body.label, expiresInDays: body.expiresInDays });
 			// The only time the token leaves the server: it isn't stored, so it can't be shown again.
 			return c.json({ link: { ...toLink(link[0]!), url: shareUrl(token) } }, 201);
 		});
@@ -60,11 +63,12 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 			const { id, linkId } = c.req.param();
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(linkId)) throw new ApiError(404, 'not found');
-			const { rowCount } = await db.query(
-				'UPDATE share_link SET revoked_at = now(), revoked_by = app_current_user_id() WHERE id = $1 AND project_id = $2 AND revoked_at IS NULL',
+			const { rows: revoked } = await db.query<{ label: string }>(
+				'UPDATE share_link SET revoked_at = now(), revoked_by = app_current_user_id() WHERE id = $1 AND project_id = $2 AND revoked_at IS NULL RETURNING label',
 				[linkId, id]
 			);
-			if (!rowCount) {
+			if (revoked[0]) await recordAudit(db, id, 'share_link.revoked', { linkId, label: revoked[0].label });
+			else {
 				// Already revoked is done; not this project's link is not found.
 				const { rows } = await db.query('SELECT 1 FROM share_link WHERE id = $1 AND project_id = $2', [linkId, id]);
 				if (!rows[0]) throw new ApiError(404, 'not found');

@@ -251,6 +251,13 @@ In short:
   project_id = …` therefore returns nothing rather than someone else's data.
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
+- **Change history and audit log (WP-2.4, 030).** `model_revision`,
+  `series_revision` and `audit_event` are append-only for `water_app`
+  (`SELECT` and `INSERT` grants, no `UPDATE` or `DELETE` policy); only the
+  `series_revision` retention trigger deletes, and only that series' old
+  rows. An audit row must name the caller as its actor. Viewers and above
+  read history; farmers and strangers see nothing. Invite emails in events
+  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
 - **`SECURITY DEFINER` functions are executable by `water_app` only**
   (028_definer_grants, issue #37). They run as the owner, so Postgres's default
   `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
@@ -744,7 +751,6 @@ readable by anyone. The rules:
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- No audit log of model changes yet. (Phase 3)
 - POPIA: privacy notice, data export and account deletion. (Phase 7)
 
 ## Incident playbook

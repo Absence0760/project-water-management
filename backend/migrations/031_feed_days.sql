@@ -1,4 +1,4 @@
--- 030_feed_days — a data feed replaces only the days it wrote itself (issue #30;
+-- 031_feed_days — a data feed replaces only the days it wrote itself (issue #30;
 -- docs/architecture.md § Data feeds, docs/data-model.md § Data feeds).
 --
 -- Until now a feed owned every day it fetched in its target series: on a day
@@ -38,8 +38,8 @@ ALTER TABLE time_series
 -- Covers the foreign key (catalogue.db.test.ts).
 CREATE INDEX time_series_feed_idx ON time_series (project_id, feed_id);
 
-COMMENT ON COLUMN time_series.feed_id IS 'The data feed that wrote feed_days (030_feed_days); NULL: no day is a feed''s.';
-COMMENT ON COLUMN time_series.feed_days IS 'The days feed_id wrote and may replace (030_feed_days). A user''s write releases the days it covers; removing or re-targeting the feed releases all.';
+COMMENT ON COLUMN time_series.feed_id IS 'The data feed that wrote feed_days (031_feed_days); NULL: no day is a feed''s.';
+COMMENT ON COLUMN time_series.feed_days IS 'The days feed_id wrote and may replace (031_feed_days). A user''s write releases the days it covers; removing or re-targeting the feed releases all.';
 
 -- No feed, no feed days: also clears them when the foreign key's SET NULL fires.
 CREATE FUNCTION time_series_feed_days() RETURNS trigger

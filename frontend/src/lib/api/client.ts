@@ -3,6 +3,7 @@
 // ApiError carrying the HTTP status and the server's message.
 import type {
 	DailySeries,
+	InputChange,
 	FarmIndex,
 	FarmView,
 	MemberResult,
@@ -23,6 +24,11 @@ import type {
 	EnsembleStart,
 	FarmAccessPerson,
 	Farmer,
+	HistoryPage,
+	HistoryQuery,
+	HistoryRevision,
+	RestoreResult,
+	SeriesRevisionMeta,
 	Member,
 	Nomination,
 	Project,
@@ -183,6 +189,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;
+					/** Why the settings changed, kept in the history (only with `settings`). */
+					reason?: string;
 				}
 			) => request<{ project: Project }>('PATCH', p(id), patch).then((r) => r.project),
 			remove: (id: string) => request<void>('DELETE', p(id)),
@@ -281,7 +289,39 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		model: {
 			get: (id: string) => request<ProjectModel>('GET', `${p(id)}/model`),
-			save: (id: string, model: ProjectModel) => request<ProjectModel>('PUT', `${p(id)}/model`, model)
+			/** `reason`: the optional "why", kept with the change in the project's history. */
+			save: (id: string, model: ProjectModel, reason?: string) =>
+				request<ProjectModel>('PUT', `${p(id)}/model`, reason ? { ...model, reason } : model)
+		},
+		/** The change history (WP-2.4): viewers read, editors restore. */
+		history: {
+			/** One page of the timeline, newest first. */
+			list: (id: string, q: HistoryQuery = {}) => {
+				const params = new URLSearchParams();
+				for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
+				return request<HistoryPage>('GET', `${p(id)}/history${params.size ? `?${params}` : ''}`);
+			},
+			/** A revision with its snapshot, and what restoring it would change now (`preview`). */
+			revision: (id: string, revId: string) =>
+				request<{ revision: HistoryRevision & { snapshot: { settings: ProjectSettings; model: ProjectModel } }; preview: InputChange[] }>(
+					'GET',
+					`${p(id)}/history/revisions/${enc(revId)}`
+				),
+			/** Put a revision back, as a new revision (409 when the inputs already match it). */
+			restore: (id: string, revId: string, reason?: string) =>
+				request<RestoreResult>('POST', `${p(id)}/history/revisions/${enc(revId)}/restore`, reason ? { reason } : {}),
+			/** The input lines between a run's snapshot and now, and the revisions made since it ran. */
+			changesSince: (id: string, runId: string) =>
+				request<{ changes: InputChange[]; revisions: HistoryRevision[] }>('GET', `${p(id)}/runs/${enc(runId)}/changes-since`),
+			/** Put back the settings and model a run used, as a new revision. */
+			restoreRunInputs: (id: string, runId: string, reason?: string) =>
+				request<RestoreResult>('POST', `${p(id)}/runs/${enc(runId)}/restore-inputs`, reason ? { reason } : {}),
+			/** A series' kept values, newest first. */
+			seriesRevisions: (id: string, seriesId: string) =>
+				request<{ revisions: SeriesRevisionMeta[] }>('GET', `${p(id)}/series/${enc(seriesId)}/revisions`).then((r) => r.revisions),
+			/** Put a series' kept values back (the values it replaces are kept in turn). */
+			restoreSeries: (id: string, seriesId: string, revId: string) =>
+				request<SeriesMeta>('POST', `${p(id)}/series/${enc(seriesId)}/revisions/${enc(revId)}/restore`, {})
 		},
 		series: {
 			list: (id: string) =>

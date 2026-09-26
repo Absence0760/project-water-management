@@ -283,7 +283,10 @@ describe('publications keep their runs', () => {
 		// A project with publications still deletes whole.
 		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
 		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [p])).toEqual([]);
-	});
+		// Thirteen model runs and publications are real work: ~2 s on an idle machine,
+		// past vitest's 5 s default when other checkouts load the machine. Sized to
+		// the work, not to a race: nothing in it waits on a signal.
+	}, 20_000);
 });
 
 describe('what a farmer reads', () => {

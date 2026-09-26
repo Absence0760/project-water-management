@@ -756,7 +756,7 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 	});
 });
 
-describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → series/merge.ts mergeInto)', () => {
+describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → series/merge.ts mergeSeries)', () => {
 	const WIDE = { start: '1850-01-01', end: utcToday() };
 	/** A feed of a fresh project; `ingest` applies a result as the job does, as its acting user. */
 	async function setup(name: string, over: Record<string, unknown> = {}) {
@@ -837,7 +837,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1]);
 	});
 
-	/** The feed-days columns (030_feed_days) of a project's default-named series of `kind`. */
+	/** The feed-days columns (031_feed_days) of a project's default-named series of `kind`. */
 	const feedDaysOf = async (pid: string, kind: string) =>
 		(await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND kind = $2 AND name = ''`, [pid, kind]))[0] as {
 			feed_id: string | null;
@@ -857,7 +857,7 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 	}
 
 	it('user-entered days: the feed keeps the user’s values and fills only empty days (#30), a gap never erases one, another series is untouched', async () => {
-		// Until 030_feed_days a feed replaced the user's value on every day it fetched.
+		// Until 031_feed_days a feed replaced the user's value on every day it fetched.
 		const { owner, pid, id, ingest } = await setup('UserData');
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, null, 30, 40] });
 		// The user's own record under another name: a feed writes only the series it targets.

@@ -3,6 +3,15 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import {
+	beginSettingsChange,
+	farmLinks,
+	maskEmail,
+	Reason,
+	recordAudit,
+	recordLinkChanges,
+	recordModelRevision
+} from '../history/record.js';
 import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
@@ -72,7 +81,9 @@ const PatchBody = z.object({
 	/** Move the project into a team you belong to (null = personal). Owner only. */
 	teamId: z.string().uuid().nullable().optional(),
 	description: z.string().max(5000).optional(),
-	settings: SettingsPatch.optional()
+	settings: SettingsPatch.optional(),
+	/** Why the settings changed, kept with the revision (ignored without settings). */
+	reason: Reason
 });
 const RoleEnum = z.enum(['viewer', 'editor', 'owner']);
 const ImportQuery = z.object({
@@ -175,6 +186,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 					[id]
 				);
 			}
+			// A settings change is a revision of the project's inputs (history/record.ts).
+			const before = body.settings ? await beginSettingsChange(db, id) : null;
 			const current = await getProject(db, id);
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			await db.query(
@@ -188,7 +201,21 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
 					body.teamId !== undefined, body.teamId ?? null]
 			);
-			return c.json({ project: full(await getProject(db, id)) });
+			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
+			const fields = [
+				body.name !== undefined && body.name !== current.name && 'name',
+				body.description !== undefined && body.description !== current.description && 'description',
+				body.teamId !== undefined && body.teamId !== current.team_id && 'team'
+			].filter((f): f is string => !!f);
+			const updated = await getProject(db, id);
+			if (fields.length) {
+				await recordAudit(db, id, 'project.changed', {
+					fields,
+					...(fields.includes('name') ? { from: current.name, to: updated.name } : {}),
+					...(fields.includes('team') ? { team: updated.team_name } : {})
+				});
+			}
+			return c.json({ project: full(updated) });
 		});
 	})
 	.delete('/:id', async (c) =>
@@ -225,6 +252,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 				 SELECT $2, kind, name, unit, start_date, "values" FROM time_series WHERE project_id = $1`,
 				[srcId, newId]
 			);
+			// The copy's history starts with its first state; the original's stays with the original.
+			await recordModelRevision(db, newId, { source: 'copy', before: null, reason: `Copied from "${src.name}"`.slice(0, 500) });
 			return c.json({ project: full(await getProject(db, newId)) }, 201);
 		});
 	})
@@ -255,7 +284,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// by email (they join once the address is verified), so pre-registering
 			// a colleague's address can't get you added in their place.
 			if (!user?.verified) {
-				return { invited: await inviteByEmail(db, 'project', id, body.email, body.role, user?.id) };
+				const invited = await inviteByEmail(db, 'project', id, body.email, body.role, user?.id);
+				await recordAudit(db, id, 'invite.sent', { inviteId: invited.invite.id, email: maskEmail(body.email), role: body.role, mailed: !!invited.mail });
+				return { invited };
 			}
 			const { rowCount } = await db.query(
 				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
@@ -263,6 +294,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			);
 			if (!rowCount) throw new ApiError(409, 'already a member');
 			await dropInvite(db, 'project', id, user.email);
+			await recordAudit(db, id, 'member.added', { userId: user.id, displayName: user.display_name, role: body.role });
 			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } };
 		});
 		// Mail goes out after the transaction commits, and never fails the request.
@@ -279,6 +311,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			if (body.role !== 'owner') await assertNotLastOwner(db, id, userId);
+			const { rows: was } = await db.query<{ role: string }>('SELECT role FROM project_member WHERE project_id = $1 AND user_id = $2', [id, userId]);
 			const { rows } = await db.query(
 				`UPDATE project_member m SET role = $3 FROM app_user u
 				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
@@ -286,6 +319,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[id, userId, body.role]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			if (was[0]?.role !== body.role) {
+				await recordAudit(db, id, 'member.role', { userId, displayName: rows[0].displayName, from: was[0]?.role ?? null, to: body.role });
+			}
 			return c.json({ member: rows[0] });
 		});
 	})
@@ -298,6 +334,19 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (!self && role !== 'owner') throw new ApiError(403, 'requires owner role');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastOwner(db, id, userId);
+			// Recorded before the delete: afterwards someone who left can no
+			// longer write to the project's log (audit_event_insert needs a member).
+			const { rows: gone } = await db.query<{ role: string; display_name: string }>(
+				`SELECT m.role, u.display_name FROM project_member m JOIN app_user u ON u.id = m.user_id WHERE m.project_id = $1 AND m.user_id = $2`,
+				[id, userId]
+			);
+			if (!gone[0]) throw new ApiError(404, 'not found');
+			// A farmer's links go with the membership (farm_link cascades): say whom
+			// to re-link if they come back. Only viewers and above read every link;
+			// a farmer leaving reads their own, which are the ones that go.
+			const links = (await farmLinks(db, id)).filter((l) => l.userId === userId);
+			await recordLinkChanges(db, id, links, [], 'member_removed');
+			await recordAudit(db, id, 'member.removed', { userId, displayName: gone[0].display_name, role: gone[0].role, self });
 			const { rowCount } = await db.query('DELETE FROM project_member WHERE project_id = $1 AND user_id = $2', [
 				id,
 				userId

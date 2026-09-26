@@ -178,7 +178,8 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   and would be a second implementation to keep in step with the engine.
 
 **Run input snapshots.** `model_run.inputs` holds the settings and model data
-the run used. Input *series* values are not copied into it (they are large):
+the run used (a checkpoint; the continuous record between runs is
+`model_revision`, § Change history and audit log). Input *series* values are not copied into it (they are large):
 for each series kind the snapshot keeps `{ startDate, length, valuesSha256 }`,
 where `valuesSha256` is the SHA-256 hex of `JSON.stringify(values)` (engine
 `seriesDigest`, hashed by `backend/src/runs/execute.ts` `seriesHash`; it lives
@@ -322,6 +323,77 @@ again when a run snapshots the settings (`executeRun`), so each
 parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
 they add no policy. They are small: a fit record is a few KB.
+
+### Change history and audit log (030_history.sql)
+
+Roadmap WP-2.4, issue #28: "who changed which parameter, when, and why did
+the result change?", and put back any earlier version.
+
+- **`model_revision`**: one row per save of the model or the settings, at
+  the **document** level, written in the same transaction by the route that
+  saves (not by row triggers: `saveModel` rewrites every node and crop area,
+  so a trigger would log hundreds of meaningless changes per save). It holds
+  `source` (`model_put`, `settings_patch`, `restore`, `import`, `copy`,
+  `baseline`), the optional `reason` (≤ 500, from the save bar), `snapshot`
+  `{ settings, model }` (the shape of `model_run.inputs` without series),
+  `changes` (the engine's `diffInputs` lines against the previous revision),
+  `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`.
+  A save whose snapshot is unchanged writes nothing; a reorder is recorded,
+  with a line saying it only changed the order. A **`baseline`** row stores
+  the state before the first change to a project that predates history, so
+  that state can be restored too.
+- **`series_revision`**: a series' previous values, written *before* a
+  replace, a delete or a merge from the UI (not for feed or key merges,
+  which are append-mostly: they get an audit event only). `series_id` is a
+  plain uuid, not a foreign key, so a deleted series can still be restored by
+  its old id; `unit` is kept with it. **Retention**: the newest 5 per
+  (project, kind, name) and nothing older than 180 days, trimmed by a
+  `SECURITY DEFINER` trigger on insert.
+- **`audit_event`**: append-only access, data and publication events, with
+  `actor_user_id` (must be the caller), `actor_label` (the display name then),
+  `kind`, `subject jsonb`, `change_set`, and `actor_api_key_id` (reserved,
+  unused until API keys exist). Kinds recorded: `member.added/removed/role`
+  (an accepted invite logs `member.added` in `app_accept_invites`),
+  `farmer.linked/unlinked` (including unlinks a model save, a member leaving
+  or a restore causes), `invite.sent/revoked` (email masked `j•••@domain`),
+  `publication.published/notice_changed`, `share_link.created/revoked`,
+  `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
+  changed), `run.created/changed/deleted/trimmed`, `feed.configured`,
+  `feed.failed` (only the first failure after a success), `project.changed`,
+  `report_schedule.configured`, `scenario.created/changed/deleted`, and
+  restores. `api_key.*` is reserved.
+- **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
+  request (transaction-local), read by `app_change_set_id()`, so a save and
+  the farmer unlinks it caused show as one entry.
+- **`project.history_since`**: when recording started for the project (its
+  creation, or the migration's time for an older project). The History tab's
+  empty state says "History starts from {date}".
+- **Access.** Viewers and above read all three tables; farmers see nothing
+  (D4), and strangers nothing. `water_app` has `SELECT` and `INSERT` only,
+  and there is no `UPDATE` or `DELETE` policy for anyone (append-only; the
+  catalogue test lists them in `APPEND_ONLY`). Only the retention trigger
+  deletes, and only old `series_revision` rows of the series being written.
+- **Restore** always writes a *new* revision pointing at what it restored
+  (history is never rewritten). It answers `409` when the inputs already
+  match, and when the old model fails today's validation. A restored farm
+  node comes back with its old id but **without its farmer links** (they were
+  cascaded away); the response and the UI list whom to re-link, from the
+  `farmer.unlinked` events. Series values aren't part of a model version:
+  they come back only through `series_revision`, within its retention. A
+  scenario run's inputs can't be restored into the project (`409`): they are
+  the scenario applied to its base run (WP-3.2).
+- **Relation to run snapshots.** A run's `inputs` is an occasional full
+  checkpoint; `model_revision` is the continuous record between checkpoints,
+  in the same shape. "Why did the result change between run A and run B?" is
+  the revisions between their dates; "restore the inputs this run used"
+  writes `A.inputs.{settings, model}` as a new revision.
+- **The guard.** `backend/src/history/write-routes.db.test.ts` is a table of
+  every non-GET route under `/projects/:id`: each either `records` (with a
+  `call` that proves the revision or event is written) or is `exempt` with a
+  reason. A new write route fails the inventory until it's listed. Exempt
+  today, with reasons in the table: project delete, `POST /jobs`, feed
+  run-now, evidence nomination (its own append-only history), uncertainty
+  ensembles, `POST /reports`.
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -895,7 +967,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays` |
-| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-030_feed_dayssql)) |
+| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)) |
 | `enabled`, `schedule` | `daily` or `hourly` |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
@@ -957,7 +1029,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   ingest hand-off (the window check, late and redelivered answers, the fetch
   columns' guards).
 
-### Feed days (030_feed_days.sql)
+### Feed days (031_feed_days.sql)
 
 Which days of a series its feed wrote, so a feed replaces only those and
 never an uploaded or imported value (#30, [architecture.md § Data
@@ -982,7 +1054,7 @@ feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
   target_name`, as the saving owner under RLS) releases the feed's days in
   its old series when it is re-targeted. A project copy or import writes new
   rows without them.
-- **No backfill**: days written before `030` are nobody's, so feeds keep them.
+- **No backfill**: days written before `031` are nobody's, so feeds keep them.
 - Tests: `series/merge.test.ts` (the day-run arithmetic and `feedDays`),
   `feeds/feeds.db.test.ts` (user values kept; final replaces preliminary and
   a re-fetch revises; a user's merge or PUT wins afterwards, under skewed

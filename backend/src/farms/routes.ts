@@ -11,6 +11,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
+import { farmLinks, recordAudit, recordLinkChanges } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
@@ -93,6 +94,8 @@ export const farmerRoutes = new Hono<AuthEnv>()
 			if (!rowCount) throw new ApiError(409, 'already a member');
 			await setLinks(db, id, user.id, nodeIds, c.get('userId'));
 			const farmer = (await listFarmers(db, id)).find((f) => f.userId === user.id)!;
+			await recordAudit(db, id, 'member.added', { userId: user.id, displayName: farmer.displayName, role: 'farmer' });
+			await recordLinkChanges(db, id, [], (await farmLinks(db, id)).filter((l) => l.userId === user.id), 'farmers_set');
 			return c.json({ farmer }, 201);
 		});
 	})
@@ -106,7 +109,9 @@ export const farmerRoutes = new Hono<AuthEnv>()
 			const nodeIds = await assertFarms(db, id, body.nodeIds);
 			const { rows } = await db.query(`SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2 AND role = 'farmer'`, [id, userId]);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			const before = (await farmLinks(db, id)).filter((l) => l.userId === userId);
 			await setLinks(db, id, userId, nodeIds, c.get('userId'));
+			await recordLinkChanges(db, id, before, (await farmLinks(db, id)).filter((l) => l.userId === userId), 'farmers_set');
 			const farmer = (await listFarmers(db, id)).find((f) => f.userId === userId)!;
 			return c.json({ farmer });
 		});

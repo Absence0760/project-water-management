@@ -1465,6 +1465,18 @@ role and not before it.
       together (the Chromium build is tied to the version); Dependabot bumps
       them separately.
 
+## Change history (WP-2.4, issue #28)
+
+- [ ] **Field-level history affordance.** A small "changed 3× · last by Ann,
+      12 Aug: 40 % → 60 %" on individual inputs (roadmap WP-2.4 UI). Not
+      built: the History tab's farm and parameter filters answer the same
+      question in two clicks. Trigger: a hydrologist or WUA user asks for it
+      on the field itself, or the History tab's parameter filter is the
+      most-used one.
+- [ ] **`api_key.*` audit kinds are reserved** until per-project API keys
+      exist (WP-2.9); `audit_event.actor_api_key_id` is there, unused.
+      Trigger: WP-2.9.
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue

@@ -1304,6 +1304,24 @@ run's report to chosen members every week or month.
 - **Report**, beside the Download menu in the run header, opens the shown
   run's printable report (§ Report below).
 
+## History (`?tab=history`)
+
+WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
+settings revisions and audit events, grouped by the viewer's day, with a
+request's change set folded into one entry; filters by farm, event kind and
+parameter. Each revision shows its change lines, and for editors a
+**Restore this version** button behind a confirm that previews the diff;
+restore buttons are disabled while there are unsaved model edits, and a
+restored farm lists the farmers to re-link. Viewers read it; farmers never
+see the tab. Empty: "No changes recorded yet. History starts from {date}."
+
+- The **save bar** and the Settings save row have an optional "Reason for
+  this change", kept with the revision.
+- **Runs**: a collapsible "Changes since this run" and **Restore these
+  inputs** (not for a scenario run).
+- A small "history" affordance on individual fields is not built
+  (followups.md).
+
 ## Report
 
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,

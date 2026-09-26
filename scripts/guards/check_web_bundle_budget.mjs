@@ -351,6 +351,15 @@
 //             workspace page chunk and the API client ~0.3 KB. Inline SVG, no
 //             new dependency; the largest chunk is unchanged (37 KB).
 //             Headroom ~6 KB.
+// 2026-09-26  total 726 → 740 KB; other ceilings unchanged. Change history
+//             and audit log (WP-2.4, issue #28): the History tab
+//             (lib/components/history/, its own lazy chunk, loaded only on
+//             ?tab=history), the Runs tab's "Changes since this run" /
+//             "Restore these inputs" panel, the save bar's reason field and
+//             the history API client. Measured over main 6b3bf18: 722 → 734
+//             KB (+12). No page's first load grows; the largest chunk is
+//             still 37 KB. No new dependency. Headroom ~6 KB. Issue #9 still
+//             stands.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -361,7 +370,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 726,
+	totalCodeKb: 740,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

@@ -10,6 +10,7 @@
 import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
+import { recordModelRevision } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { saveModel } from '../model/store.js';
 import { modelProblems } from '../model/validate.js';
@@ -92,6 +93,8 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 			[id, s.kind, s.name, s.unit, s.startDate, s.values]
 		);
 	}
+	// The project's history starts with the imported state (030_history.sql).
+	await recordModelRevision(db, id, { source: 'import', before: null });
 	return id;
 }
 

@@ -75,7 +75,7 @@ export function mergeDaily(existing: Daily | null, incoming: Daily, { keepOnNull
 /**
  * Days as sorted, disjoint, non-adjacent half-open [start, end) epoch-day
  * runs: the days of a series its data feed wrote (time_series.feed_days,
- * 030_feed_days).
+ * 031_feed_days).
  */
 export type DayRuns = [number, number][];
 
@@ -187,26 +187,47 @@ export interface SeriesMetaRow {
 }
 
 /**
+ * What a merge did: the series' meta after it, and its values before (null
+ * when the merge created it) and after; for a feed's merge, the days it wrote
+ * and the days it kept because their value wasn't its own.
+ */
+export interface MergeResult {
+	meta: SeriesMetaRow;
+	before: { id: string; unit: string; startDate: string; values: (number | null)[] } | null;
+	after: Daily;
+	written: number;
+	kept: number;
+}
+
+/**
  * Merge days into a project's series (creating it if needed), as the
  * transaction's user under RLS. POST /projects/:id/series/merge and the data
  * feeds' ingest (feeds/ingest.ts) both go through here, so the lock and merge
- * sequence stay one. The caller checks the role.
+ * sequence stay one. The caller checks the role, and records the change in
+ * the history (it knows whether a series revision is wanted: not for a feed).
  *
  * Which days a data feed wrote travels with the row (time_series.feed_id /
- * feed_days, 030_feed_days). With `feedId` (the ingest), the merge writes
+ * feed_days, 031_feed_days). With `feedId` (the ingest), the merge writes
  * only the days that feed may replace (feedDays) and records them as its own;
  * without (a user), it releases the feed's claim on every day it overwrites.
  * `kept` counts the days a feed left alone because their value wasn't its own.
  */
-export async function mergeInto(
+export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
 	{ keepOnNull = false, feedId }: MergeOptions & { feedId?: string } = {}
-): Promise<{ series: SeriesMetaRow; kept: number; written: number }> {
+): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
-	const { rows: cur } = await db.query<{ start_date: string; unit: string; values: (number | null)[]; feed_id: string | null; feed_days: DayRuns }>(
-		`SELECT start_date, unit, "values", feed_id,
+	const { rows: cur } = await db.query<{
+		id: string;
+		start_date: string;
+		unit: string;
+		values: (number | null)[];
+		feed_id: string | null;
+		feed_days: DayRuns;
+	}>(
+		`SELECT id, start_date, unit, "values", feed_id,
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
 			 FROM unnest(feed_days) r) AS feed_days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
@@ -231,6 +252,7 @@ export async function mergeInto(
 	if (owned.length === 0) owner = null;
 	const merged = mergeDaily(existing, incoming, { keepOnNull });
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
+	const before = row ? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values } : null;
 	const sameOwner = !!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
 	// leave the values, so updated_at still says when the values last changed.
@@ -246,7 +268,7 @@ export async function mergeInto(
 					 WHERE project_id = $1 AND kind = $2 AND name = $3 RETURNING ${SERIES_META}`,
 					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
 				);
-		return { series: rows[0]!, kept, written };
+		return { meta: rows[0]!, before, after: merged, kept, written };
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days)
@@ -257,7 +279,7 @@ export async function mergeInto(
 		 RETURNING ${SERIES_META}`,
 		[projectId, body.kind, body.name, body.unit, merged.startDate, merged.values, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
 	);
-	return { series: rows[0]!, kept, written };
+	return { meta: rows[0]!, before, after: merged, kept, written };
 }
 
 /** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
