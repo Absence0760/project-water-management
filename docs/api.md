@@ -146,6 +146,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   0–2 bound is validation only; the engine separately warns (and Settings
   hints, with a preset picker: `PAN_COEFFICIENT_PRESETS`) when a month sits
   outside FAO-56's usual 0.6–0.85 range for a Class A pan (model.md §2.4a).
+  `pe` (engine ≥ 0.31.0, issue #39) is where GR4J's potential evaporation
+  comes from: `{ kind: 'pan' }` (the default, pan coefficient × A-pan), or
+  `{ kind: 'monthly', mm, source }` with `mm` 12 finite numbers, each
+  0–10 000 mm, in water-year order, and `source` trimmed, 1–600 characters.
+  Both shapes are strict: any other key is a `400`. `pe` is replaced whole by
+  a `PATCH`, so `{ kind: 'pan' }` over a stored monthly row drops its `mm`
+  and `source`. An invalid `pe` is a `400` with no database text. A monthly
+  row of zeros saves, but a GR4J run on it is refused (`400`, "GR4J needs
+  potential evaporation…", the engine's `GR4J_NO_PET`, below), as an A-pan
+  row of zeros is. Settings stored before it
+  read back as `{ kind: 'pan' }`
+  ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
   `wr2012` (engine ≥ 0.6.0; model.md §2.10c) is the optional WR2012 check:
   `reference` (`null`, the default, or the whole object `{ quaternary` 1–16
   chars, `areaKm2` > 0, `marMm3` ≥ 0 (Mm³ a year), `monthlyMm3` 12 values ≥ 0
@@ -174,7 +186,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
-  values, each `wr2012` group and `fitRecord` are replaced whole. Unknown
+  values, each `wr2012` group, `fitRecord` and `pe` are replaced whole. Unknown
   keys pass through, and the settings patch is capped at 64 000 characters
   of JSON.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
@@ -256,8 +268,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   factors }` with 12 factors each, Jan … Dec, `null` for a month without one,
   and `fittedOn` the reference window in words: the factors per fit range the
   fit's rain used; from engine 0.30.0 optional `rainSource`, validated like
-  the setting, absent = none) is the
-  pan coefficient, A-pan evaporation, CHIRPS bias correction mode and
+  the setting, absent = none; from engine 0.31.0 optional `pe`, validated like
+  the setting, absent = `{ kind: 'pan' }`) is the
+  pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
   settings change the rain fed to the model on the days CHIRPS fills a gap.
@@ -627,7 +640,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
   with the engine's reason, and nothing is stored: no rainfall series, a
   simulation end before its start, (engine ≥ 0.11.1) a GR4J run with no
-  potential evaporation (A-pan × pan coefficient 0 in every month), or
+  potential evaporation (A-pan × pan coefficient, or from engine 0.31.0 the
+  monthly PE row of `settings.pe`, 0 in every month), or
   (engine ≥ 0.27.1) farm flow shares that add up to more than 100 %.
 - A project keeps its newest **20** runs (env `RUNS_KEPT_PER_PROJECT`,
   default 20); each new run deletes the oldest beyond that, with their
@@ -875,7 +889,7 @@ the result is stored only after the server has checked it.
 | GET | `/projects/:id/runs/:runId/model-input` | – | `{ input: ModelInput }`: the run's own input. A run saved since migration 021 stored its input series, so this is exactly what it ran on whatever the project's data is now (`loadRunInput`). An older run kept only hashes of them: its settings and model snapshot with the project's series, and `409` when a series changed since the run, with the kinds | viewer |
 | GET | `/projects/:id/runs/:runId/uncertainty` | – | `{ ensembles: Ensemble[] }`, newest first, **every** ensemble started for the run (abandoned starts included), without `result` | viewer |
 | GET | `/projects/:id/runs/:runId/uncertainty/:uid` | – | `{ ensemble: Ensemble & { result } }`: `result` = `{ engineVersion, header, members, coverage }` (an ensemble) or `{ engineVersion, header, members: { index, metrics }[] }` (paired) | viewer |
-| POST | `/projects/:id/runs/:runId/uncertainty` | `{ request: { members?, bounds?, free?, panOffset?, rainSources?, records?, thresholds?: { objective?, minSkill?, wr2012MaxLevel?, maxLowFlowBiasPct? } } }` or `{ baselineId }` | `201 { ensemble, notes }`, status `started`: the resolved options (`ResolvedEnsembleOptions`, the model is the run's own) with the seed the database drew. `baselineId` (a complete ensemble of **another** run of this project, same runoff model and period) starts a paired band: its options and seed are the baseline's. `400` with the engine's reason for options the run can't use (fewer than 30 members, a rain source it lacks, no observed record, two models, two periods); `409` from `model-input`, or at 50 ensembles for the run | editor |
+| POST | `/projects/:id/runs/:runId/uncertainty` | `{ request: { members?, bounds?, free?, panOffset?, rainSources?, records?, thresholds?: { objective?, minSkill?, wr2012MaxLevel?, maxLowFlowBiasPct? } } }` or `{ baselineId }` | `201 { ensemble, notes }`, status `started`: the resolved options (`ResolvedEnsembleOptions`, the model is the run's own) with the seed the database drew. `baselineId` (a complete ensemble of **another** run of this project, same runoff model and period) starts a paired band: its options and seed are the baseline's. `400` with the engine's reason for options the run can't use (fewer than 30 members, a rain source it lacks, no observed record, two models, two periods, or from engine 0.31.0 a baseline that varied the pan coefficient paired with a GR4J run on a monthly PE row, which doesn't use it). On a GR4J run with a monthly PE row the pan coefficient isn't varied (`panOffset` 0) and `notes` says so; `409` from `model-input`, or at 50 ensembles for the run | editor |
 | POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }` | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
 
 - `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
