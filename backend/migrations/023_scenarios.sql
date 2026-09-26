@@ -53,7 +53,7 @@ CREATE TABLE scenario (
 	-- farms). An op on one is a proposal; anything else a baseline assumption
 	-- (engine classifyOp). WP-3.3 derives it for applicants from their links.
 	owned_node_ids uuid[] NOT NULL DEFAULT '{}' CHECK (cardinality(owned_node_ids) <= 500),
-	-- Set from the session by scenario_stamp; never changes.
+	-- Set from the session by scenario_guard; never changes.
 	owner_user_id  uuid NOT NULL REFERENCES app_user(id),
 	status         text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'submitted', 'withdrawn', 'decided')),
 	created_at     timestamptz NOT NULL DEFAULT now(),

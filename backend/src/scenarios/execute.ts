@@ -7,7 +7,7 @@
 import { applyScenario, classifyScenario, type AppliedOp, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { loadRunInput, RunInputError, runAndStore } from '../runs/execute.js';
+import { loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
 import type { ScenarioStatus } from './schema.js';
 
 /** A scenario row as the API returns it. */
@@ -96,6 +96,10 @@ export async function executeScenarioRun(
 	scenarioId: string,
 	label: string | undefined
 ): Promise<{ id: string; output: ModelOutput; check: ScenarioCheck; scenario: ScenarioRow }> {
+	// The project's run lock first, then the scenario row: the order the delete
+	// and rebase routes take them in, so a run racing a delete waits instead of
+	// deadlocking. (runAndStore and trimRuns take the same lock again later.)
+	await lockProjectRuns(db, projectId);
 	const scenario = await loadScenario(db, projectId, scenarioId, true);
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId);
 	const check = checkScenario(base, scenario.ops, scenario.ownedNodeIds);
