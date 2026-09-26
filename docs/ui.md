@@ -309,8 +309,10 @@ put the results first. Top to bottom:
   can't be confused. A context line gives the label, the run period
   (`fmtDay`, e.g. "1 Oct 2021 – 28 Jan 2022"), the engine version and "ran …
   ago" (`describeAge`, by the viewer's calendar), with badges for a legacy run
-  (*Workbook comparison*, plus a note that its figures are for workbook
-  comparison only, not evidence) and the evidence run. **Open in Runs** links
+  (a stored run from before engine 1.0.0: *Workbook comparison*, plus a note
+  that its figures are for workbook comparison only, not evidence, and that
+  engine 1.0.0 removed the model, so it can't be re-run and a new run uses
+  GR4J) and the evidence run. **Open in Runs** links
   to `?tab=runs&run=<id>`. Four cards, the same figures and labels as the Runs
   tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
   site from `headlineSite`) or, without a rule table, *EWR not met* (days below
@@ -1295,20 +1297,16 @@ which checks every catchment tab).
   long one: Flow calibration, Rain gaps and CHIRPS, Calibration record and
   Fit automatically, in that order.
 - **Flow calibration (rain → natural flow)** (`#set-flow`): the **runoff
-  model** picker ("GR4J (Perrin et al. 2003)", the default, or "Legacy (b023
-  workbook, comparison only)", `settings.runoffModel`). Legacy doesn't
-  conserve water at the event scale (audit H1), so it's kept for workbook
-  comparison only, never evidence: a legacy run carries an amber "Workbook
-  comparison" badge on the Runs list and the run header, a matching label on
-  its CSV exports and on legacy fit records in FitProvenance, and run
-  comparison notes it when either side is legacy. Then the catchment area
-  (blank = the sum of the farm areas, which is shown). The rest depends on
-  the model:
-  - **Legacy**: a, b, rain threshold, summer and winter factors, initial base
-    flow, and summer months as toggles. **Advanced** ("Advanced: winter
-    switch, recession and base flow", collapsed) holds the base-flow reset
-    ratio, the winter switch, the recession parameters, the 80-value
-    recession tables and any other stored calibration keys.
+  model**, shown read-only as "GR4J (Perrin et al. 2003)" (`RUNOFF_MODEL_LABEL`;
+  there is no picker since engine 1.0.0, issue #16). Its hint says the legacy
+  b023 workbook model was removed in engine 1.0.0 and that runs made with it
+  still open, labelled, but can't be re-run. A stored legacy run keeps its
+  amber "Workbook comparison" badge on the Runs list and the run header, a
+  matching label on its CSV exports, and run comparison notes it when either
+  side is legacy. Then the catchment area (blank = the sum of the farm areas,
+  which is shown), then GR4J's parameters. (Until engine 1.0.0 a Legacy
+  choice showed a, b, the season factors, summer months and, under
+  Advanced, the recession tables; they are gone with the model.)
   - **GR4J**: X1, X3 and X4, each with its typical and allowed range
     (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
     input refuses values outside those bounds. The GR4J view also has the
@@ -1481,8 +1479,10 @@ which checks every catchment tab).
     (in-sample)") next to each validation score, plus the notes. Editing a
     fitted parameter by hand shows a **Parameters edited since fit** badge and
     names the parameters at once; the server records the same on save. A
-    change of runoff model, window, exclusions or flow series since the fit
-    is called out too, and a change to the pan coefficient, A-pan, PE input, CHIRPS
+    fit of the legacy runoff model (only in a run snapshot from before engine
+    1.0.0: the heading says "Legacy (removed in engine 1.0.0)"; a project's
+    own settings no longer hold one, migration 063) and a change of window,
+    exclusions or flow series since the fit are called out too, and a change to the pan coefficient, A-pan, PE input, CHIRPS
     bias correction or zero-rain runs since the fit shows a **Forcing changed since fit** badge
     and a caveat explaining why (evaporation trades off against X1/X3, and
     CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
@@ -1874,8 +1874,9 @@ run's report to chosen members every week or month.
   notice in English and Afrikaans) and an optional note for the staff
   ("farmers don't see it"). **Publish** answers "Published. N farm views
   updated." **Edit notice** changes the current notice in place (`PATCH`,
-  no re-publishing): "Notice saved." A legacy-model run says why it can't be
-  published. In the runs list the current published run carries a
+  no re-publishing): "Notice saved." A legacy-model run (a stored run from
+  before engine 1.0.0) says why it can't be published: that model was
+  removed and the run is a workbook comparison only. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
   the section. Viewers see the status and the notice, no actions. The farm
@@ -2190,7 +2191,8 @@ run's report to chosen members every week or month.
   which. Editors get a required **Why this run is the evidence** textarea (2 000
   characters at most) and **Nominate as evidence** (or **Nominate this run
   instead** when another run is current; `POST …/evidence`). A legacy-model
-  run and the current evidence run say why they can't be nominated instead.
+  run (a stored run from before engine 1.0.0, which removed the model) and
+  the current evidence run say why they can't be nominated instead.
   Under it the **Nomination history**, newest first: "Nominated “A” on … by
   …", then each "Replaced by “B” on … by …", each with the run's runoff model
   and engine version and the reason, the current one badged. Nothing in the
@@ -2202,7 +2204,8 @@ run's report to chosen members every week or month.
   **different runoff model** ("1 run made after the nominated evidence run “A”
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
-  miss a later model switch.
+  miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
+  only a stored legacy run made after the nomination can raise it.
   Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
   chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
   inputs, **Check reproduction** (viewers too) re-runs it on the server from
@@ -2272,9 +2275,10 @@ run's report to chosen members every week or month.
   and a row per break with the observed and simulated ratios, the change
   beyond the model overall and by season, and what it points to; (4) the
   **dry-season low-flow duration curves** (log axis by default): gauge and
-  logger dashed, simulated outflow and natural flow, and the latest run of each
-  other runoff model's simulated outflow (fetched on demand, left out with a
-  note when it used another dry season); *Simulated outflow over* switches this
+  logger dashed, simulated outflow and natural flow, and the simulated outflow
+  of the latest run of another runoff model (since engine 1.0.0 only a stored
+  legacy run can be one; fetched on demand, left out with a note when it used
+  another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
   Q70 / Q90 / Q95 table. Farm detail (dam
   storage as % of the capacity the run had, from its model snapshot, not
@@ -2669,11 +2673,15 @@ exists, says so with a link to Runs & results.
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
-  legacy-model warning, the run's summary sentence, contents), then numbered
+  legacy-model warning for a stored run from before engine 1.0.0, the run's
+  summary sentence, contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
+  The **Runoff model** row reads "GR4J", or for a run whose settings don't
+  name GR4J (a stored run from before engine 1.0.0) "Legacy (b023 workbook,
+  removed in engine 1.0.0): workbook comparison only", never today's default.
   A GR4J run adds a **GR4J potential evaporation** row, "pan coefficient ×
   A-pan" or the monthly total and source, engine ≥ 0.31.0; under a monthly
   PE the monthly table shows **GR4J monthly PE (mm)** in place of the pan
@@ -2694,7 +2702,8 @@ exists, says so with a link to Runs & results.
     `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
     engine version, the build's invariant and soak results (*Not recorded
     for this build* until CI injects them), the run's self-checks, the
-    runoff coefficient (flagged above 1, audit W1), a legacy-model warning,
+    runoff coefficient (flagged above 1, audit W1), a legacy-model warning
+    ("Legacy runoff model (b023 workbook, removed in engine 1.0.0): …"),
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
     caveat, the flagged data-quality years and checks, and the **known
     limitations** table (ID, limitation, where it stands) generated from
@@ -2704,7 +2713,8 @@ exists, says so with a link to Runs & results.
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the five
     statements a signer confirms. An editor or owner gets **Sign off this
-    run…** (screen only); a legacy run says why it can't be signed; a viewer
+    run…** (screen only); a legacy run (from before engine 1.0.0) says why it
+    can't be signed; a viewer
     sees neither. Loaded with the report (`GET …/signoffs`), so
     `data-report-ready` waits for it and the server-side PDF prints it.
   - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): the draft
@@ -2853,7 +2863,11 @@ under the search box, and close again when you pick a page.
   `tips.ts`, `articles.ts` and `farmer.ts`), grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
   the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the
   contents which topic and term are on screen; the contents list the current
-  topic's terms and keep the current one in view inside their column.
+  topic's terms and keep the current one in view inside their column. The
+  legacy runoff model's six terms (peak coefficient, season factors, summer
+  months, winter thresholds, recession curve, pulse index) became one
+  **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
+  removed the model; it still explains a stored legacy run's daily columns.
 - **Search** (`/help/search?q=`): results update as you type in the box at
   the head of the page, which keeps focus; guides first, then glossary terms.
 
