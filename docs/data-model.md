@@ -429,8 +429,9 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
-  `report_schedule.configured`, `scenario.created/changed/deleted`, and
-  restores. `api_key.*` is reserved.
+  `report_schedule.configured`, `scenario.created/changed/deleted`,
+  `signoff.created` (035: the sign-off's id, run, signer's typed name and
+  registration, statement version and hash), and restores. `api_key.*` is reserved.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -547,8 +548,8 @@ clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest body
 (024's) plus `OR EXISTS (SELECT 1 FROM <table> WHERE <run column> = p_run)`,
 same signature, `SECURITY DEFINER` and `search_path`, alongside a `NO ACTION`
 foreign key to `model_run`, and adds its kind to `CITED_BY_SQL`
-(`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication` and
-`scenario` today). `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
+(`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication`,
+`scenario` and `signoff` (035) today). The latest body is 035_signoff's. `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
 `SECURITY DEFINER` so a citation the caller can't see still keeps the run. A
 cited run's pin doesn't count against the 10-pin ceiling, and unpinning one
 is `409`. **The publication-history cap (keep the newest 12) skips a
@@ -618,6 +619,44 @@ run's stored input (above), never the live model.
 - Guards: `backend/src/scenarios/scenarios.db.test.ts` (with positive
   controls), the catalogue tests (RLS, grants, covering indexes,
   `search_path`) and the route inventories (auth and farmer `403`).
+
+### Sign-offs (035_signoff.sql)
+
+Roadmap WP-3.13. A registered professional's signature on one run: that its
+calibration, EWR tables, network (or scenario) and assurance levels are
+appropriate, and that they read its known limitations
+([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
+
+- **`signoff`**: `id`, `project_id` (→ `project`, cascade), `run_id` (→
+  `model_run`, `NO ACTION`: a project delete still cascades, any other delete
+  of a signed run fails), `user_id` (→ `app_user`, `SET NULL` so an account
+  deletion keeps the professional record), `full_name` (1–200),
+  `registration_body` (1–100, e.g. SACNASP), `registration_no` (1–50,
+  self-declared, never checked against the register), `scope` (1–1 000: what
+  the signature covers, in the signer's words), `statement_version`
+  (`signoff-1`), `statement_sha256` (hex: the SHA-256 of the engine
+  statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
+  `signed_at`. Indexes cover the project, the run and the user.
+  `signoff_same_project` (`assert_same_project('run_id')`): the run is one of
+  the project's.
+- **Immutable.** `water_app` has `SELECT, INSERT` only and no policy allows
+  `UPDATE` or `DELETE` (catalogue `APPEND_ONLY`). A correction is a second
+  sign-off.
+- **Bound to the words shown.** The route rebuilds the statement for the run
+  (engine version, scenario or not, the generated limitations, the
+  disclaimer version) and refuses a hash that isn't that statement's, so a
+  signature can't be carried over to wording the signer never saw.
+- **Cites its run**: `model_run_cited` (latest body here) is true for a
+  signed run, so `trimRuns` and the run `DELETE` route keep it, and
+  `citedBy` lists `{ kind: 'signoff', name: <signer> }`.
+- **RLS**: `SELECT` viewer; `INSERT` editor, with `user_id =
+  app_current_user_id()` (no one signs as someone else). Farmers read
+  nothing. Each sign-off writes `audit_event` `signoff.created` in the same
+  transaction.
+- **Not yet**: the WP's `target = 'pack'` (WP-3.14 adds it with packs), MFA
+  on signing (Step 4), sign-off in the data export (the POPIA export,
+  WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
+  controls), the catalogue tests and the route inventory.
 
 ### Import reports (017_project_import.sql)
 

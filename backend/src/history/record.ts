@@ -194,6 +194,7 @@ export type AuditKind =
 	| 'scenario.created'
 	| 'scenario.changed'
 	| 'scenario.deleted'
+	| 'signoff.created'
 	| 'restore';
 
 /**

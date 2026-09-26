@@ -73,6 +73,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Sign-offs (WP-3.13, 035_signoff): auth-gated like every project route.
+	it('inventories the sign-off routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
 	it('inventories the scenario routes as auth-gated', () => {
 		const scenarios = [
