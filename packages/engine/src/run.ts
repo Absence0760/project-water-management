@@ -60,7 +60,7 @@ import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf } from './network/boreholes';
-import { damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
+import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -902,6 +902,12 @@ export function buildNetworkPlan(
 		if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) continue;
 		const bad = damCurveProblem(n.damCurve);
 		if (bad) warnings.push(`farm "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
+		const top = resolveDamCurve(n)?.volume.at(-1);
+		if (top !== undefined && Math.abs(top - n.damCapacityM3) > DAM_CURVE_CAPACITY_TOLERANCE * n.damCapacityM3)
+			warnings.push(
+				`farm "${n.name}": the dam survey curve tops out at ${Math.round(top)} m³ but the capacity is ${Math.round(n.damCapacityM3)} m³ (more than 1 % apart); ` +
+					`above the top row the area stays at its last value. Check the capacity against the survey`
+			);
 	}
 	const estimated = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0 && (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined) && !resolveDamCurve(n));
 	if (estimated.length) {

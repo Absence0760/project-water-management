@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { DamCurvePoint, ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { checkInvariants } from '../verify/checks';
+import { modelRuleProblems } from '../modelRules';
 import { sameOutput } from '../testing/invariants';
 import { curveAreaAt, damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
 
@@ -173,6 +174,23 @@ describe('dam storage (WP-3.5)', () => {
 		passed(bad);
 		expect(bad.summary.warnings.join('\n')).toMatch(/survey curve not used \(a survey curve needs at least two rows\)/);
 		expect(col(bad, 'A', 'dam_area')).toEqual(col(none, 'A', 'dam_area'));
+	});
+
+	it('warns when the survey tops out more than 1 % away from the capacity', () => {
+		const within = run(input({ damCurve: SURVEY, damCapacityM3: 100_900 }), natural);
+		const off = run(input({ damCurve: SURVEY, damCapacityM3: 105_000 }), natural);
+		passed(off);
+		expect(within.summary.warnings.join('\n')).not.toMatch(/tops out/);
+		expect(off.summary.warnings.join('\n')).toMatch(/farm "A": the dam survey curve tops out at 100000 m³ but the capacity is 105000 m³/);
+	});
+
+	it('the model rules refuse a curve the run could not use, or one on a node without a dam', () => {
+		const m = input({ damCurve: [SURVEY[1]!, { ...SURVEY[2]!, areaM2: 1 }] }).model;
+		expect(modelRuleProblems(m)).toEqual(['"A": dam survey curve: the survey area falls from 8000 to 1 m² as the volume rises']);
+		const g = input({}).model;
+		g.nodes[0]!.damCurve = SURVEY;
+		expect(modelRuleProblems(g)).toEqual(['"G": dam survey curve: only a farm has a dam']);
+		expect(modelRuleProblems(input({ damCurve: SURVEY }).model)).toEqual([]);
 	});
 
 	it('monthly lake factors move evaporation month by month', () => {

@@ -6,6 +6,9 @@
 import { waterYearIndex } from '../calendar';
 import { DAM_CURVE_MAX_ROWS, type DamCurvePoint, type NetworkNode } from '../project';
 
+/** How far a survey curve's top volume may sit from the dam's capacity before a run warns (±1 %, WP-3.5). */
+export const DAM_CURVE_CAPACITY_TOLERANCE = 0.01;
+
 /** A survey curve ready to interpolate: volumes strictly increasing from 0, areas non-decreasing, both ≥ 0. */
 export interface DamCurve {
 	volume: Float64Array;
