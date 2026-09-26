@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and farms with nothing planted, each a link to where it is fixed); and **Supply by farm**, where a farm’s name opens its planted areas. The checklist, dam levels and the project’s details follow below them.'
 					}
 				]
 			},
@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or use the link beside a farm in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
+						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or pick the farm’s name in the Summary’s **Supply by farm** (or the link on a farm in its **Needs attention**). It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
