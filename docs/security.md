@@ -479,7 +479,7 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   to an address on its suppression list; the app learns of it through the
   configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
   `ses-events` → SQS `mail-events` → the worker (`mail/suppression.ts`,
-  056). The person's `app_user.mail_suppressed_at` is set, they drop out of
+  057). The person's `app_user.mail_suppressed_at` is set, they drop out of
   `app_alert_recipients`, the deliveries waiting for them are skipped, and a
   delivery already made is skipped when it's built (the worker checks the
   flag as the recipient). Their choices are kept, so turning mail back on
@@ -499,7 +499,8 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     own flag and takes their address off SES's account-level suppression
     list (`ses:DeleteSuppressedDestination`, the API role only; `*` is the
     only resource IAM allows for it). At most once a day per person (`429`
-    otherwise), so an address that keeps bouncing costs the account one
+    otherwise; checked and stamped in one conditional `UPDATE`, so two calls
+    at once can't both pass), so an address that keeps bouncing costs the account one
     bounce a day, not a loop.
 
 ## Authorization: per-project roles enforced by Postgres RLS
@@ -1101,7 +1102,7 @@ file), so a new column can't ship without a decision.
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (056) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |

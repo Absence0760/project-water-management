@@ -1,16 +1,25 @@
-// SES mail suppression (056_alert_followups.sql, mail/suppression.ts): a
+// SES mail suppression (057_alert_followups.sql, mail/suppression.ts): a
 // permanent bounce or a complaint flags the address, its alert emails pause
 // (no deliveries made, waiting ones skipped, one already claimed skipped at
 // send time), /auth/me says so for the banner, and the person turns mail back
 // on (POST /me/alerts/resume) with their choices as they were. Every "gets
 // nothing" check has a positive control.
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { outbox } from '../mail/transport.js';
 import { acceptMailEvent } from '../mail/suppression.js';
 import { simulatedSesEvent } from '../../scripts/mail-bounce.js';
 import { sendAlerts, SUPPRESSED } from './send.js';
+
+// releaseAddress is a no-op without SES; counted here, so a test can see how many resumes reached it.
+const released = vi.hoisted(() => ({ n: 0 }));
+vi.mock('../mail/suppression.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../mail/suppression.js')>()),
+	releaseAddress: async () => {
+		released.n++;
+	}
+}));
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -129,5 +138,23 @@ describe('turning mail back on (POST /me/alerts/resume)', () => {
 		expect((await owner.call('POST', '/me/alerts/resume')).status).toBe(200);
 		await clear(owner);
 		await clear(other);
+	});
+
+	it('lets only one of two resumes at once through the day’s limit (checked and stamped in one UPDATE)', async () => {
+		await clear(owner);
+		// Resumed more than a day ago, then bounced again: one resume is due.
+		await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now() - interval '25 hours' WHERE id = $1`, [owner.id]);
+		released.n = 0;
+		const statuses = (await Promise.all([owner.call('POST', '/me/alerts/resume'), owner.call('POST', '/me/alerts/resume')])).map((r) => r.status).sort();
+		// The second either waited and saw it done (200, nothing to resume) or lost the day's slot (429); never two resumes.
+		expect(statuses[0]).toBe(200);
+		const [{ n }] = await asOwner(`SELECT count(*)::int AS n FROM app_user WHERE id = $1 AND mail_suppressed_at IS NULL AND mail_resumed_at > now() - interval '1 minute'`, [owner.id]);
+		expect(n).toBe(1);
+		// Only one of them took the address off SES's list.
+		expect(released.n).toBe(1);
+		// Bounced again: the day's resume is spent.
+		await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce' WHERE id = $1`, [owner.id]);
+		expect((await owner.call('POST', '/me/alerts/resume')).status).toBe(429);
+		await clear(owner);
 	});
 });

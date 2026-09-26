@@ -131,32 +131,40 @@ export const RESUME_GAP_HOURS = 24;
  * complaint, mail/suppression.ts), and they have fixed it. Takes the address
  * off SES's suppression list (MAIL_TRANSPORT=ses; nothing locally), then
  * clears the flag, so their alert choices apply again as they were. Only the
- * caller's own flag. 429 within RESUME_GAP_HOURS of the last resume.
+ * caller's own flag. 429 within RESUME_GAP_HOURS of the last resume (checked
+ * and stamped in one UPDATE, so parallel calls can't both pass).
  */
 async function resumeMail(userId: string): Promise<void> {
-	const me = await withUser(userId, async (db) => {
-		const { rows } = await db.query<{ email: string; suppressed: boolean; recent: boolean }>(
-			`SELECT email::text, mail_suppressed_at IS NOT NULL AS suppressed,
-				coalesce(mail_resumed_at > now() - make_interval(hours => $1), false) AS recent
-			 FROM app_user WHERE id = app_current_user_id()`,
+	// Claim the day's resume in one conditional UPDATE, so two calls at once
+	// can't both pass the check: only one stamps mail_resumed_at.
+	const claim = await withUser(userId, async (db) => {
+		const { rows } = await db.query<{ email: string; previous: Date | null; claimed: Date }>(
+			`WITH old AS (SELECT id, mail_resumed_at FROM app_user WHERE id = app_current_user_id() FOR UPDATE)
+			 UPDATE app_user u SET mail_resumed_at = clock_timestamp()
+			 FROM old
+			 WHERE u.id = old.id AND u.mail_suppressed_at IS NOT NULL
+			   AND (old.mail_resumed_at IS NULL OR old.mail_resumed_at <= now() - make_interval(hours => $1))
+			 RETURNING u.email::text AS email, old.mail_resumed_at AS previous, u.mail_resumed_at AS claimed`,
 			[RESUME_GAP_HOURS]
 		);
-		return rows[0];
+		if (rows[0]) return rows[0];
+		const { rows: me } = await db.query<{ suppressed: boolean }>('SELECT mail_suppressed_at IS NOT NULL AS suppressed FROM app_user WHERE id = app_current_user_id()');
+		return me[0]?.suppressed ? ('too soon' as const) : null;
 	});
-	if (!me?.suppressed) return;
-	if (me.recent) throw new ApiError(429, 'you turned alert emails back on less than a day ago and the address was refused again: check it, then try again tomorrow');
+	if (claim === null) return;
+	if (claim === 'too soon') throw new ApiError(429, 'you turned alert emails back on less than a day ago and the address was refused again: check it, then try again tomorrow');
 	try {
-		await releaseAddress(me.email);
+		await releaseAddress(claim.email);
 	} catch (err) {
-		// The flag stays (mail would be dropped and bounce again): a 500, without the SDK's text.
+		// The flag stays (mail would be dropped and bounce again), and the day's resume is given back: a 500, without the SDK's text.
+		await withUser(userId, (db) =>
+			db.query('UPDATE app_user SET mail_resumed_at = $1 WHERE id = app_current_user_id() AND mail_resumed_at = $2', [claim.previous, claim.claimed])
+		);
 		console.error(JSON.stringify({ event: 'mail_release_failed', userId, error: (err as { name?: string }).name ?? 'Error' }));
 		throw new Error('releasing the address from the SES suppression list failed');
 	}
 	await withUser(userId, (db) =>
-		db.query(
-			`UPDATE app_user SET mail_suppressed_at = NULL, mail_suppressed_reason = NULL, mail_resumed_at = now()
-			 WHERE id = app_current_user_id() AND mail_suppressed_at IS NOT NULL`
-		)
+		db.query(`UPDATE app_user SET mail_suppressed_at = NULL, mail_suppressed_reason = NULL WHERE id = app_current_user_id() AND mail_suppressed_at IS NOT NULL`)
 	);
 }
 
@@ -215,7 +223,7 @@ export interface AlertRuleView {
 	kind: AlertKind;
 	nodeId: string | null;
 	nodeName: string | null;
-	/** The data feed a data_stale rule watches (one rule per feed, 056); null for every other kind. */
+	/** The data feed a data_stale rule watches (one rule per feed, 057); null for every other kind. */
 	feedId: string | null;
 	/** That feed as the feeds page names it ("CHIRPS daily rainfall (Upper)"), and whether it is enabled. */
 	feedName: string | null;
