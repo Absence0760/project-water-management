@@ -152,7 +152,7 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
-		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all', rainSource: [] });
+		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' } });
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -210,7 +210,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
@@ -298,6 +298,48 @@ describe('fit record', () => {
 		const { rainSource: _r, ...pre030 } = rec.forcing!;
 		expect(fitRecordStatus({ ...base, rainSource: [period] }, { ...rec, forcing: pre030 }).forcingChanged).toBe(true);
 		expect(fitRecordStatus(base, { ...rec, forcing: pre030 }).forcingChanged).toBe(false);
+	});
+
+	it('records the PE input and flags a change of its kind or row, not of its source note or of A-pan alone under a monthly PE (engine ≥ 0.31.0)', () => {
+		const mm: Monthly = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];
+		const monthlyPe = { kind: 'monthly' as const, mm, source: 'station FAO-56 ET₀ × 1.0' };
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const, rainSource: [] };
+		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, pe: monthlyPe } });
+		expect(rec.forcing!.pe).toEqual(monthlyPe);
+		// A copy, not the settings' own row.
+		expect(rec.forcing!.pe).not.toBe(monthlyPe);
+		const mono = (arr: number[]): Monthly => arr as unknown as Monthly;
+		const status = (s: Partial<ProjectSettings>) => fitRecordStatus(s, rec).forcingChanged;
+		// Positive control: the same PE is no change, nor is float noise.
+		expect(status({ ...base, pe: { ...monthlyPe, mm: mono([...mm]) } })).toBe(false);
+		expect(status({ ...base, pe: { ...monthlyPe, mm: mono(mm.map((v) => v + 1e-12)) } })).toBe(false);
+		// Another row, or back to pan × A-pan, is a change.
+		expect(status({ ...base, pe: { ...monthlyPe, mm: mono(mm.map((v, i) => (i === 2 ? v + 5 : v))) } })).toBe(true);
+		expect(status({ ...base, pe: { kind: 'pan' } })).toBe(true);
+		// Settings without pe (a run before 0.31.0) ran pan × A-pan: a change from this monthly fit.
+		expect(status(base)).toBe(true);
+		// Rewording the source note doesn't change what GR4J ran on.
+		expect(status({ ...base, pe: { ...monthlyPe, source: 'ET₀ from the farm AWS, 2001–2020' } })).toBe(false);
+		// Under a monthly PE, GR4J never reads A-pan or the pan coefficient: changing them alone is no GR4J forcing change.
+		const apan2 = mono(apanMm.map((v) => v * 1.2));
+		const k2 = mono(panCoefficient.map(() => 0.8));
+		expect(status({ ...base, apanMm: apan2, panCoefficient: k2, pe: monthlyPe })).toBe(false);
+		// … but under pan × A-pan they are (positive control).
+		const panRec = fitRecordFromReport(report(), ctx);
+		expect(panRec.forcing!.pe).toEqual({ kind: 'pan' });
+		expect(fitRecordStatus({ ...base, pe: { kind: 'pan' } }, panRec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, apanMm: apan2, pe: { kind: 'pan' } }, panRec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, panCoefficient: k2 }, panRec).forcingChanged).toBe(true);
+		// A pan fit, then switching to a monthly PE, is a change even when A-pan is untouched.
+		expect(fitRecordStatus({ ...base, pe: monthlyPe }, panRec).forcingChanged).toBe(true);
+		// A forcing recorded before 0.31.0 (no pe) ran pan × A-pan: current pan settings match it, monthly ones don't.
+		const { pe: _pe, ...pre031 } = panRec.forcing!;
+		const old = { ...panRec, forcing: pre031 };
+		expect(fitRecordStatus({ ...base, pe: { kind: 'pan' } }, old).forcingChanged).toBe(false);
+		expect(fitRecordStatus(base, old).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, pe: monthlyPe }, old).forcingChanged).toBe(true);
+		// The caveat names the PE input.
+		expect(fitRecordCaveats(fitRecordStatus({ ...base, pe: monthlyPe }, old)).at(-1)).toMatch(/^The potential evaporation GR4J runs on \(the PE input/);
 	});
 
 	it('flags a fit made on another CHIRPS version (issue #40 part c), only when both sides know the version', () => {
