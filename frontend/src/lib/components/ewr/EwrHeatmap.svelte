@@ -6,6 +6,7 @@
 	Input: RunSummary.ewrCompliance (engine 0.3.0+).
 -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { EwrCompliance } from '@water-management/engine';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
@@ -25,10 +26,20 @@
 		type HeatMetric
 	} from './heatmap';
 
-	let { compliance }: { compliance: EwrCompliance | undefined | null } = $props();
+	let {
+		compliance,
+		site: initialSite = 'outlet',
+		print = false
+	}: {
+		compliance: EwrCompliance | undefined | null;
+		/** The site shown first: 'outlet' or a farm's node id. */
+		site?: string;
+		/** The printable report's static view: one site, named in the heading, no pickers or keyboard read-out. */
+		print?: boolean;
+	} = $props();
 
 	const uid = $props.id();
-	let site = $state('outlet');
+	let site = $state(untrack(() => initialSite));
 	let metric = $state<HeatMetric>('pct');
 	let focus = $state<{ r: number; m: number }>({ r: 0, m: 0 });
 	let hover = $state<{ r: number; m: number } | null>(null);
@@ -106,8 +117,8 @@
 
 <section class="ewr-heatmap" aria-labelledby="{uid}-h">
 	<div class="head">
-		<h3 id="{uid}-h">EWR compliance by month</h3>
-		{#if compliance && grids.length}
+		<h3 id="{uid}-h">EWR compliance by month{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''}</h3>
+		{#if compliance && grids.length && !print}
 			<div class="controls">
 				<div class="field inline">
 					<label for="{uid}-site">Site</label>
@@ -154,7 +165,7 @@
 			<li><span class="swatch none" aria-hidden="true"></span>Not simulated</li>
 		</ul>
 
-		<p class="readout" aria-hidden="true">{describe(active.r, active.m)}</p>
+		{#if !print}<p class="readout" aria-hidden="true">{describe(active.r, active.m)}</p>{/if}
 
 		<div class="table-wrap scroll">
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -211,7 +222,7 @@
 				A day counts when this farm is charged part of the shortfall at an EWR site below it (runs before engine 0.17.0: when its reach shortfall was below zero).
 			{/if}
 			Cells show {metric === 'pct' ? '% of the month’s days' : 'shortfall volume (k = thousand m³, M = million m³)'}; blank = met every
-			day. The "All years" row is the share of days not met in that month across all years. Use the arrow keys to move between months.
+			day. The "All years" row is the share of days not met in that month across all years.{print ? '' : ' Use the arrow keys to move between months.'}
 		</p>
 	{/if}
 </section>

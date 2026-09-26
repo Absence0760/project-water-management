@@ -1,3 +1,9 @@
+<script module lang="ts">
+	// Land cover, groundwater and other users' tables: a separate chunk (HumanImpactTables.svelte).
+	// Exported so the printable report can load it before it says it is ready.
+	export const loadHumanImpacts = () => import('./HumanImpactTables.svelte');
+</script>
+
 <script lang="ts">
 	// Headline numbers, calibration fit and the per-farm table of one run.
 	import type { RunSummary } from '@water-management/engine';
@@ -22,8 +28,6 @@
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
-	// Land cover, groundwater and other users' tables: a separate chunk (HumanImpactTables.svelte).
-	const loadHumanImpacts = () => import('./HumanImpactTables.svelte');
 	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
 	const pumping = $derived([...farms, ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);

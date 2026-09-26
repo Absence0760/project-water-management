@@ -13,6 +13,7 @@
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { cachedSeries } from './cache';
+	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from './flowSeries';
 	import RunChart from './RunChart.svelte';
 	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
 
@@ -61,10 +62,9 @@
 	let ewrLog = $state(true);
 
 	// --- catchment series -----------------------------------------------------
-	type Loaded = { natural?: DailySeries; simulated?: DailySeries; observed?: DailySeries; ewr?: DailySeries };
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
 	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
-	let catchment = $state.raw<Loaded>({});
+	let catchment = $state.raw<CatchmentFlows>({});
 	let catchError = $state<string | null>(null);
 	let catchLoading = $state(true);
 
@@ -72,16 +72,10 @@
 		const id = runId;
 		catchLoading = true;
 		catchError = null;
-		const want: [keyof Loaded, string][] = [
-			['natural', 'natural_flow'],
-			['simulated', 'simulated_outflow'],
-			['observed', 'observed_flow'],
-			['ewr', 'ewr']
-		];
-		Promise.all(want.filter(([, k]) => has(k)).map(async ([slot, k]) => [slot, await get(k)] as const))
+		Promise.all(CATCHMENT_FLOW_KEYS.filter(([, k]) => has(k)).map(async ([slot, k]) => [slot, await get(k)] as const))
 			.then((pairs) => {
 				if (id !== runId) return;
-				catchment = Object.fromEntries(pairs) as Loaded;
+				catchment = Object.fromEntries(pairs) as CatchmentFlows;
 			})
 			.catch((e) => {
 				if (id === runId) catchError = e instanceof Error ? e.message : String(e);
@@ -92,14 +86,7 @@
 	});
 
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
-	const hydroSeries = $derived.by<ChartSeries[]>(() => {
-		const out: ChartSeries[] = [];
-		const c = catchment;
-		if (c.observed) out.push({ label: 'Observed', startDate: c.observed.startDate, values: conv(c.observed), color: '--chart-obs', width: 1.5 });
-		if (c.natural) out.push({ label: 'Natural', startDate: c.natural.startDate, values: conv(c.natural), color: '--series-1', width: 2.25, hidden: true });
-		if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
-		return out;
-	});
+	const hydroSeries = $derived(hydrographSeries(catchment, conv));
 	const fdc = $derived.by(() => {
 		const list = [catchment.natural, catchment.simulated, catchment.observed];
 		const labels = ['Natural', 'Simulated outflow', 'Observed'];
@@ -112,13 +99,7 @@
 			q: present.map(({ d, i }) => ({ label: labels[i]!, ...percentileFlows(conv(d)) }))
 		};
 	});
-	const ewrSeries = $derived.by<ChartSeries[]>(() => {
-		const c = catchment;
-		const out: ChartSeries[] = [];
-		if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
-		if (c.ewr) out.push({ label: 'Pragmatic EWR', startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
-		return out;
-	});
+	const ewrSeries = $derived(ewrChartSeries(catchment, conv));
 
 	// --- one farm ------------------------------------------------------------------
 	const farmOptions = $derived(
