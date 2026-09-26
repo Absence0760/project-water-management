@@ -123,6 +123,21 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.
 Settings has its own save button, which sits above that bar.
 
+**A part that fails to download.** Every tab but Overview, the Add data
+dialog and several panels download on first use. If one can't (a network
+blip, or a new release that removed the old file), it says "This part of the
+page could not be loaded. Check your connection, then reload the page." with
+**Reload page**, in place of the part. There is no "Try again": the browser
+won't fetch a failed file again until the page reloads. With unsaved model
+edits (or a scenario's unrecorded overrides) it adds "You have unsaved
+changes: save them first, or the browser will ask before the reload discards
+them."; the save bar is still there, and **Reload page** meets the same
+"leave site?" prompt as closing the tab. Nothing reloads by itself. The
+project list's import dialog and its workbook reader, Overview's alert email
+settings, the printable report and the language of the translated pages say
+the same, naming what failed
+([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+
 **Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
 account menu, the "Rain up to" dropdown, the download menu and the dialogs.
 Help tips, the account menu and the "Rain up to" dropdown also close on a
@@ -393,7 +408,7 @@ Two buttons rather than one "Import…": the client looks for a named workbook
 import, and the two sources explain themselves differently (a workbook's
 review has options and reports a `.json` file doesn't). The dialog downloads
 on demand (hovering or focusing a button starts it); if that download fails,
-the list says so and offers **Reload**
+the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
 **A click anywhere on a project's row opens it.** The name link stretches

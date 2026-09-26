@@ -111,8 +111,8 @@ reads (not a `model_run`, so sweeps never count against the run cap), or
 its problems when its ops don't apply to the base run; one
 member never fails the sweep. At most 12 members, 2 pending sweeps per user,
 the newest 20 kept per project ([scenarios.md § Sweeps](../scenarios.md#sweeps)
-has the rules). **(judgement)** No UI yet: R4's matrix view is the first
-screen that reads a sweep, and a results table now would be replaced by it.
+has the rules). Sweeps have no screen of their own: R4's outcome matrix (Runs tab → River
+& Reserve, [ui.md](../ui.md)) is the first that starts and reads one.
 
 ### 3.3 R3: the share-the-pain board (**S**, presentation only)
 
