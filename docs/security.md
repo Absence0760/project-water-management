@@ -399,7 +399,11 @@ In short:
   note or a run, settings, project or other farm's note. Only the author
   edits a body (`note_guard`); a delete is soft, the body kept for editors'
   audit trail and hidden from everyone else. Bodies are plain text, rendered
-  with Svelte's escaping (no `{@html}`, no markdown). Tests:
+  with Svelte's escaping (no `{@html}`, no markdown). The project export
+  (`export.json`, viewers and above) carries the undeleted notes the
+  exporter can read and never a deleted body, even to an editor; the import
+  ignores them and a copy takes none, so a note is never re-authored under
+  someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
   `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
   the note routes among the farmer-allowed ones.
 - **Same-project triggers** reject references to another project's nodes or

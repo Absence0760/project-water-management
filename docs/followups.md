@@ -1768,6 +1768,14 @@ from the WP:
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
+## Notes (WP-2.7)
+
+- [x] **Notes in the project export and copy** (2026-09-26). The export
+      (`export.json`) carries the undeleted notes the exporter can read, as
+      a record the importer ignores; a copy takes none. Why, per path:
+      [data-model.md § Notes](./data-model.md#notes-037_notessql). Tests in
+      `notes/notes.db.test.ts`.
+
 ## Portfolio dashboard (WP-2.14)
 
 - [ ] **Traffic-light thresholds per team (D11).** Green < 5 %, amber < 20 %

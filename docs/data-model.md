@@ -1042,6 +1042,30 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
 - The API lists no deleted note to anyone. Deleting records `note.deleted`
   in the audit log; adding and editing don't (the row carries its author,
   `created_at` and `edited_at`).
+- **In the project export** (`GET /projects/:id/export.json`,
+  `loadDocumentNotes` in `projects/document.ts`): yes. What the team wrote
+  down is the project's data as much as its series, so the document carries
+  a `notes` array (body, author's display name, times, target with the
+  node's id and name or the run's id and label, `visibility`). It reads
+  through RLS as the exporter, who is a viewer or above (a farmer can't
+  export, so a `team` note never leaves through a farmer), and never
+  includes a deleted note, even for the editors and authors RLS shows the
+  body to: the export matches what the app lists. **The importer ignores
+  them** (`ProjectFile` has no `notes`; the import dialog says so and
+  doesn't send them): a note is its author's words, the insert policy only
+  lets you write as yourself, and re-authoring them as the importer would
+  misattribute them. The export isn't a POPIA data-subject export (that is
+  still open, security.md § Known gaps); when it lands, a user's own notes
+  (as author) belong in it.
+- **In a copy** (`POST /projects/:id/copy`): no. A copy is a fork that
+  diverges, and the notes are about the original's farms, runs and
+  settings, which the copy's fresh ids and absent runs no longer are.
+  Keeping each note's author would mean inserting as someone else, which
+  RLS forbids (`note_insert`) and rule 1 won't bypass; copying them under
+  the copier's name would misattribute them; and a personal copy of a team
+  project would carry the team's discussion out of the team. The original
+  keeps its notes. Tested in `notes/notes.db.test.ts` (export, import,
+  copy).
 
 ### API keys (039_api_keys.sql)
 

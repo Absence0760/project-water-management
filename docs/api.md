@@ -125,7 +125,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says a nomination can be replaced but not withdrawn; `evidenceRun` is `null` only when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
-| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
+| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
 - `dataUntil` — the last day of the project's **recorded rain**
@@ -1809,9 +1809,15 @@ round-trips export → import:
   "name": "…", "description": "…",
   "settings": { /* stored settings merged over the defaults */ },
   "model": { "nodes": [], "crops": [], "cropAreas": [], "transfers": [] },
-  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "2001-10-01", "values": [0.4, null] }]
+  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "2001-10-01", "values": [0.4, null] }],
+  "notes": [{ "body": "…", "author": "…", "createdAt": "…", "editedAt": null, "target": "node", "nodeId": "…", "nodeName": "…",
+              "runId": null, "runLabel": null, "settingKey": null, "visibility": "farm" }]   // informational; ignored on import
 }
 ```
+
+`notes` are the project's notes the exporter can read, oldest first, never a
+deleted one ([data-model.md § Notes](./data-model.md#notes-037_notessql)):
+a record, not imported, since a note can only be written as its author.
 
 Runs are not included (re-run after importing, or pass `run=1` / `--run`),
 nor is the import report ([why](#import-report)). The importer gives every row

@@ -307,7 +307,8 @@ turns a project document into a new project through `POST /projects/import`:
    (`import/projectFile.ts`); a file that isn't JSON, isn't a project document
    or is over the 5 MB cap is refused here, before anything is sent.
 2. **Preview** (`ImportPreview.svelte`): the importer's notes first (for
-   example, a file with no time series), then the name (editable, prefilled
+   example, a file with no time series, or an export's notes, which aren't
+   imported and aren't sent), then the name (editable, prefilled
    from the file), *Belongs to* (only when you're a member or admin of a team;
    preselected when the list is filtered to one), what's in the file
    (farms, gauges and other water users, crops and planted areas, transfers,
