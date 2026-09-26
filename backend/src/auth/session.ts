@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { jwtVerify, SignJWT } from 'jose';
-import { withoutUser } from '../db/tx.js';
+import { queryWithoutUser } from '../db/tx.js';
 import type { RenderScope } from '../reports/scope.js';
 
 export const SESSION_COOKIE = 'wm_session';
@@ -86,13 +86,8 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 	} catch {
 		return null;
 	}
-	const row = await withoutUser(async (db) => {
-		const { rows } = await db.query<{ sessions_revoked_at: Date | null }>(
-			'SELECT sessions_revoked_at FROM app_user WHERE id = $1',
-			[userId]
-		);
-		return rows[0];
-	});
+	// Every authenticated request reads this: one statement, no transaction round trips.
+	const [row] = await queryWithoutUser<{ sessions_revoked_at: Date | null }>('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [userId]);
 	if (!row) return null;
 	if (row.sessions_revoked_at && issuedMs < row.sessions_revoked_at.getTime()) return null;
 	return { userId, scope };

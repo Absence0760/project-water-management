@@ -18,7 +18,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
-	import { detailCache, forgetRun } from './cache';
+	import { detailCache, forgetRun, prefetchSeries } from './cache';
+	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
 	import { runDamCapacity } from './results';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
@@ -185,6 +186,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		detailError = null;
 		try {
 			const d = await api.runs.get(projectId, id);
+			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
+			prefetchSeries(id, d.series, CATCHMENT_FLOW_KEYS.map(([, key]) => ({ key, nodeId: null })), (key, nodeId) => api.runs.series(projectId, id, key, nodeId));
 			detailCache.set(id, d);
 			if (detailFor === id) detail = d;
 		} catch (e) {

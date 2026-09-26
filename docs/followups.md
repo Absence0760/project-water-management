@@ -1838,6 +1838,41 @@ role and not before it.
       concurrent requests per process (it doesn't on Lambda).
       [architecture.md § A model run](./architecture.md#a-model-run),
       `runs/connection.db.test.ts`.
+- [x] **Four e2e failures in a full local run on cb652174** (#41's class,
+      2026-09-26):
+      - `examples.spec.ts:70` ("Farmers (3)") was shared state, not load:
+        `language.spec.ts` linked a new farmer to the seeded Sandspruit, so
+        when it ran first the list read "Farmers (4)" (fails every time
+        with one worker and that file order). It now uses a catchment of
+        its own. #41's Members-table cases are a different thing: that
+        table already waits on its loaded rows.
+      - `published-baseline.spec.ts` ran twelve page loads in one 30 s
+        budget; no step waited over 3 s, the budget ran out wherever it
+        was. Split into three tests (24/24 at 16 workers, where the single
+        test failed 4–6 of 8).
+      - `runs.spec.ts:110`, `:169` (the hydrograph and EWR canvases): no
+        race, the canvas appears once the flows load. But the flows were
+        requested only when the charts mounted, after the browser had
+        rendered the whole results page (0.4–1.1 s under load), and after
+        the Runoff panel's stores and the notes count further down, so on
+        HTTP/1.1 (6 connections a host) the EWR series could queue. The
+        Runs tab now requests them as the run's detail arrives
+        (`prefetchSeries`, `runs/cache.ts`). Chart failures at 16 workers
+        went from 11 to 2 in 176 tests, at the same load.
+      - Every authenticated request read the session watermark in its own
+        transaction (3 round trips); now one statement
+        (`queryWithoutUser`, `auth/session.db.test.ts`).
+- [ ] **The Runs tab's first chart still misses a 5 s wait on an
+      oversubscribed machine** (2 of 96 `runs.spec.ts` tests at 16 workers,
+      load average ~37 on 16 cores; none at the configured 6 workers,
+      120/120 in a 10× repeat). What is left: `/auth/me` gates the page's
+      own requests (one hop on every page load), and the browser spends
+      about a second rendering the whole results page before any chart
+      draws. The API thread was 29 % idle in a profile of such a run; each
+      round trip and render just stretched. Durable fix, if it recurs:
+      render the results page's lower groups after the first paint, and
+      start the project's requests alongside `/auth/me`. Trigger: a chart
+      wait failing at 6 workers, locally or in CI.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
