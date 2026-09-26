@@ -134,13 +134,28 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PUT', `${at(c)}/farmers/${c.farmer.id}`, { nodeIds: [c.otherFarmId] })
 	},
 	{
+		route: `POST ${P}/farmers/bulk`,
+		records: ['member.added', 'farmer.linked', 'invite.sent'],
+		call: async (c) => {
+			// One verified account (added and linked) and one address with none (invited).
+			const added = await signUp('Guardbulk');
+			const rows = [
+				{ email: added.email, farm: 'Farm A' },
+				{ email: `guard-bulk-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }
+			];
+			const res = await c.owner.call('POST', `${at(c)}/farmers/bulk`, { rows });
+			expect(res.body.results.map((r: { status: string }) => r.status)).toEqual(['added', 'invited']);
+			return res;
+		}
+	},
+	{
 		route: `DELETE ${P}/invites/:inviteId`,
 		records: ['invite.revoked'],
 		call: async (c) => {
 			// The invite itself (POST /members for an address with no account) records invite.sent.
 			const sent = await c.owner.call('POST', `${at(c)}/members`, { email: `guard-${crypto.randomUUID()}@example.com`, role: 'viewer' });
 			expect(sent.body.invited).toBe(true);
-			expect((await asOwner(`SELECT 1 FROM audit_event WHERE project_id = $1 AND kind = 'invite.sent'`, [c.projectId])).length).toBe(1);
+			expect((await asOwner(`SELECT 1 FROM audit_event WHERE project_id = $1 AND kind = 'invite.sent' AND subject->>'inviteId' = $2`, [c.projectId, sent.body.invite.id])).length).toBe(1);
 			return c.owner.call('DELETE', `${at(c)}/invites/${sent.body.invite.id}`);
 		}
 	},
