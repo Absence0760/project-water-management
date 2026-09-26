@@ -385,6 +385,32 @@ describe('what a farmer reads', () => {
 		for (const f of farms.slice(1)) expect(res.text).not.toContain(f.name);
 		expect((await csv(farmer, `/projects/${projectId}/farm/${farms[0]!.id}/export.csv?from=2030-01-01`)).status).toBe(400);
 	});
+
+	// WP-2.16 abuse case "a farmer using a removed membership": access is
+	// re-checked on every request (RLS reads project_member each transaction),
+	// so a removed farmer's still-valid session reads nothing from the next
+	// request on. Positive control: the same session reads the farm just before.
+	it('ends a removed farmer’s access on their next request, with the same session', async () => {
+		const removed = await signUp('Premoved');
+		const farm = farms[3]!.id;
+		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: removed.email, nodeIds: [farm] })).status).toBe(201);
+		expect((await removed.call('GET', `/projects/${projectId}/farm/${farm}`)).status).toBe(200);
+		expect((await removed.call('POST', `/projects/${projectId}/notes`, { body: 'before', nodeId: farm, visibility: 'farm' })).status).toBe(201);
+
+		expect((await owner.call('DELETE', `/projects/${projectId}/members/${removed.id}`)).status).toBe(204);
+
+		expect((await removed.call('GET', `/projects/${projectId}/farm/${farm}`)).status).toBe(404);
+		expect((await csv(removed, `/projects/${projectId}/farm/${farm}/export.csv`)).status).toBe(404);
+		expect((await removed.call('GET', `/projects/${projectId}/farm`)).status).toBe(404);
+		expect((await removed.call('GET', `/projects/${projectId}/publication`)).status).toBe(404);
+		expect((await removed.call('GET', `/projects/${projectId}/notes`)).status).toBe(404);
+		expect((await removed.call('POST', `/projects/${projectId}/notes`, { body: 'after', nodeId: farm, visibility: 'farm' })).status).toBe(404);
+		expect((await removed.call('GET', '/projects')).body.projects).toEqual([]);
+		expect(await rowsAs(removed, 'SELECT 1 FROM publication_farm WHERE project_id = $1', [projectId])).toEqual([]);
+		expect(await rowsAs(removed, 'SELECT 1 FROM run_series WHERE project_id = $1', [projectId])).toEqual([]);
+		// Their links went with the membership (farm_link → project_member ON DELETE CASCADE).
+		expect(await asOwner('SELECT 1 FROM farm_link WHERE user_id = $1', [removed.id])).toEqual([]);
+	});
 });
 
 describe('the aggregate rule on the even share', () => {
