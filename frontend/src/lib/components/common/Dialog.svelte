@@ -39,9 +39,28 @@
 		if (open && !el.open) el.showModal();
 		else if (!open && el.open) el.close();
 	});
+
+	// Escape closes the dialog at once, but the browser fires `close` from a
+	// queued task, so `open` would stay true until it runs, and a trigger
+	// pressed in that gap (Escape, then Enter on the button that opened it)
+	// sets `open` to the true it already is: nothing reopens. `cancel` comes
+	// synchronously with the Escape, so follow it too. Only the dialog's own:
+	// a file input's `cancel` (its picker dismissed) bubbles up to here.
+	function oncancel(e: Event) {
+		if (e.target === el && !e.defaultPrevented) open = false;
+	}
 </script>
 
-<dialog bind:this={el} class:wide class:full class:side class:keep-inputs={keepInputs} aria-labelledby={titleId} onclose={() => (open = false)}>
+<dialog
+	bind:this={el}
+	class:wide
+	class:full
+	class:side
+	class:keep-inputs={keepInputs}
+	aria-labelledby={titleId}
+	{oncancel}
+	onclose={() => (open = false)}
+>
 	<h2 id={titleId}>{title}</h2>
 	{#if subhead}<div class="subhead">{@render subhead()}</div>{/if}
 	<div class="body">{@render children()}</div>

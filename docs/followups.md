@@ -1014,9 +1014,29 @@ the suggested order (the IDs carry the detail):
       Component CSS repeated across files (`.small`, `.u`, `.seg .btn`,
       `.stat dd.sub`: ~17 KB raw, an estimated 2–3 KB gzip) could move to
       the global stylesheet, but it changes cascade order in 26 components,
-      so it needs the e2e visual pins first. The home page loads the import
-      dialog (~7.5 KB gzip) on first paint; loading it on demand would cut
-      home's first load, not the total. Trigger: the next ceiling raise.
+      so it needs the e2e visual pins first. Trigger: the next ceiling raise.
+- [x] **The home page loads the import dialog on demand** (issue #9,
+      2026-09-26). It was estimated at ~7.5 KB; with the engine's series
+      provenance and kinds code only it used, home's first load fell 81.5 →
+      65.5 KB gzip. The total rose 889.4 → 891.5 KB (extra chunks; no
+      ceiling moved). Warmed on hover or focus of the import buttons;
+      `project-import.spec.ts` pins the keyboard path (Enter opens, focus
+      moves in, Escape closes and returns focus) and a failed download;
+      `components/import/homeSplit.test.ts` keeps the page off the import
+      code. Pinning the keyboard path found that `Dialog` couldn't be
+      reopened straight after Escape (its `close` event is queued, so the
+      bound `open` lagged); it now follows `cancel` too.
+- [ ] **A failed chunk download can't be retried without a reload.**
+      `common/lazy.ts` forgets a failed import and `Lazy.svelte` offers
+      "Try again", but browsers keep a module that failed to fetch in the
+      page's module map (HTML spec; checked in Chromium with the home
+      page's import dialog), so the same `import()` fails again at once and
+      "Try again" never recovers. The home import dialog offers a reload
+      instead. Durable fix for the workspace: have `Lazy.svelte`'s retry
+      reload the page when nothing is unsaved, or tell the user to save and
+      reload when something is (the save bar knows), and correct the
+      comment in `lazy.ts`. Trigger: the next change to `Lazy.svelte`, or
+      a report of a stuck "Try again".
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
