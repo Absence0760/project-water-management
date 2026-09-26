@@ -264,8 +264,10 @@ sliding back into the page chunk.
 3. On every route except the public ones (`/health`, and the sign-in and
    emailed-link `/auth/*` routes), `requireUser` verifies the `wm_session`
    JWT (HS256, jose), checks it was issued after the user's
-   `sessions_revoked_at` watermark (one `app_user` lookup by primary key), and
-   sets `userId`. Otherwise `401`. The ingest routes (`/ingest/v1/*`, WP-2.9)
+   `sessions_revoked_at` watermark (one `app_user` lookup by primary key, a
+   single autocommit statement, `queryWithoutUser` in `db/tx.ts`: wrapping it
+   in a transaction made it three round trips on every request), and sets
+   `userId`. Otherwise `401`. The ingest routes (`/ingest/v1/*`, WP-2.9)
    take a per-project API key instead (`requireApiKey`, `ingest/auth.ts`):
    the key is checked in constant time and rate-limited per key, and the work
    runs in `withApiKey`, which sets `app.current_api_key_id` and no user

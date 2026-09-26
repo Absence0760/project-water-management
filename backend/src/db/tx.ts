@@ -58,6 +58,17 @@ export async function withoutUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
 	return inTransaction(fn);
 }
 
+/**
+ * One statement with no user context, on its own (autocommit), for a
+ * single-row auth lookup that runs on every request (auth/session.ts). A
+ * lone statement is already atomic, so wrapping it in withoutUser only adds
+ * the BEGIN and COMMIT round trips: 3 trips instead of 1, on every
+ * authenticated request (issue #41). RLS sees no user, as in withoutUser.
+ */
+export async function queryWithoutUser<R extends pg.QueryResultRow>(text: string, values: unknown[]): Promise<R[]> {
+	return (await getPool().query<R>(text, values)).rows;
+}
+
 async function inTransaction<T>(fn: (db: Db) => Promise<T>, begin = 'BEGIN'): Promise<T> {
 	const client = await getPool().connect();
 	try {
