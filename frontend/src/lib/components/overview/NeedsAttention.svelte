@@ -16,7 +16,7 @@
 			{#each items as it (it.id)}
 				<li data-attention={it.id}>
 					<span class="mark" aria-hidden="true">!</span>
-					<span>{it.text} <a href={it.href}>{it.action}</a></span>
+					<span>{it.text} <a href={it.href}>{it.action}</a>{#if it.also}<span class="also"> · <a href={it.also.href}>{it.also.action}</a></span>{/if}</span>
 				</li>
 			{/each}
 		</ul>

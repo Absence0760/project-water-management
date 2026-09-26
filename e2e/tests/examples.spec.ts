@@ -60,7 +60,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await expect(page.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
 	await expect(page.getByRole('button', { name: '+ Add node' })).toHaveCount(0);
 
-	await page.getByRole('link', { name: 'Runs' }).click();
+	await page.getByRole('link', { name: 'Runs & results' }).click();
 	await expect(page.getByRole('button', { name: /^Initial run \(seed\)/ })).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Farms' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(0);

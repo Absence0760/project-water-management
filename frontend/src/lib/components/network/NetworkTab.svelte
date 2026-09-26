@@ -4,6 +4,7 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { detailCache } from '$lib/components/runs/cache';
+	import { farmDrawerHref, farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode, type SchematicSupply } from './supplyColour';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -121,6 +122,9 @@
 	let selectedId = $state<string | null>(null);
 	const selected = $derived(nodes.find((n) => n.id === selectedId) ?? nodes[0] ?? null);
 	const selectedIndex = $derived(selected ? nodes.indexOf(selected) : -1);
+	// A farm picked on the schematic or in the table: its planted areas are a click away (the farm drawer, issue #17).
+	const pickedFarm = $derived(nodes.find((n) => n.id === selectedId && n.kind === 'farm') ?? null);
+	const pickedPlanting = $derived(pickedFarm ? farmPlanting(editor.model, pickedFarm.id) : null);
 
 	let pickerEl: HTMLDivElement | undefined = $state();
 
@@ -258,6 +262,17 @@
 		onreparent={reparent}
 		{supply}
 	/>
+	{#if pickedFarm && pickedPlanting}
+		<p class="picked small" data-testid="picked-farm">
+			<strong>{pickedFarm.name || '(unnamed)'}</strong>:
+			{#if pickedPlanting.planted}
+				{fmtNum(pickedPlanting.totalM2 / 10_000, 2)} ha planted, {pickedPlanting.planted} crop{pickedPlanting.planted === 1 ? '' : 's'}.
+			{:else}
+				nothing planted.
+			{/if}
+			<a href={farmDrawerHref('network', pickedFarm.id)}>Planted areas</a>
+		</p>
+	{/if}
 </section>
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
@@ -790,5 +805,9 @@
 		color: var(--text-muted);
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
+	}
+	.picked {
+		margin: 0.5rem 0 0;
+		color: var(--text-2);
 	}
 </style>
