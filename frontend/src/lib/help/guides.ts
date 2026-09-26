@@ -761,7 +761,7 @@ export const GUIDES: Guide[] = [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
 							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no farms.',
 							'**Shares.** Natural flow and the EWR are split between the farms by fixed [[flow-share|flow shares]].',
-							'**Demand.** Crops, A-pan and effective rain give each farm’s net irrigation demand.',
+							'**Demand.** Crops, A-pan and effective rain give each farm’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the farm takes from its dam and the river.',
 							'**Farm balance.** Upstream first, each farm fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one farm]].',
 							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the farms upstream of it ([[ewr-charge]]).'
 						]

@@ -537,7 +537,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 EWR shortfalls sheet'
 	},
 	'ewr-charge': {
-		long: 'The EWR is assessed at EWR sites: the outlet and every gauge. On a day a site is short by D, each farm upstream of it has a net impact e = inflow + runoff + transfers − outflow (its consumptive use, storage gain and exports; a transfer counts only when it leaves the site’s catchment). The farms are charged D in proportion to the positive impacts, but never more than the sum of those impacts: the rest is natural, because natural flow was already below the EWR. A farm that added water that day (a dam release, return flow) is neither charged nor credited. A farm above several sites carries the largest of its charges, not the sum, because a cut upstream raises the flow at every site below it; the site that sets it is its binding site.\n\nA farm short on its own reach is not charged while every EWR site is met. Add gauges at the Reserve determination’s EWR sites to protect upstream reaches. A cut can be taken up by a dam between two nested sites; only a re-run with the cuts applied shows that.\n\nThe curtailment report uses the charge (engine 0.17.0). Before, it used the reach shortfall, which could charge a farm more than it took or for low flow nobody caused. Decided on a simulated CMA-assessor recommendation (2026-09-24), pending the real assessor and hydrologist.',
+		long: 'The EWR is assessed at EWR sites: the outlet and every gauge. On a day a site is short by D, each farm upstream of it has a net impact e = inflow + runoff + transfers − outflow (its consumptive use, storage gain and exports; a transfer counts only when it leaves the site’s catchment). The farms are charged D in proportion to the positive impacts, but never more than the sum of those impacts: the rest is natural, because natural flow was already below the EWR. A farm that added water that day (a dam release, return flow) is neither charged nor credited. A farm above several sites carries the largest of its charges, not the sum, because a cut upstream raises the flow at every site below it; the site that sets it is its binding site.\n\nA farm short on its own reach is not charged while every EWR site is met. Add gauges at the Reserve determination’s EWR sites to protect upstream reaches. A cut can be taken up by a dam between two nested sites; only a re-run with the cuts applied shows that.\n\nThe curtailment report uses the charge (engine 0.17.0). Before, it used the reach shortfall, which could charge a farm more than it took or for low flow nobody caused. Decided on a simulated CMA-assessor recommendation (2026-09-24), pending the real assessor and hydrologist.\n\nEvery table and export shows the charge as a positive volume charged (m³/day), and its irrigate-less and store-less parts the same way; the changes it asks for (supply cut, total change) are negative, a reduction. Only the daily series (ewr_charge, ewr_charge_irrigation) keep the workbook’s sign, negative on a day with a charge.',
 		aliases: ['EWR attribution', 'charged to farms', 'natural shortfall', 'binding site', 'net impact'],
 		related: ['ewr-shortfall', 'ewr-charge-split', 'reach-shortfall'],
 		source: 'docs/model.md §2.7b; docs/engine-audit.md Q17'
@@ -723,7 +723,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Flow data'
 	},
 	'observed-flow': {
-		long: 'Converted to m³/day and compared with the simulated outflow on days both exist. The calibration record (Settings & calibration, “Compare with”) picks which one; left on the default, the gauge record is used, else the logger, and a run with both says so in its warnings.',
+		long: 'Converted to m³/day and compared with the simulated outflow on days both exist. The calibration record (Settings & calibration, “Compare with”) picks which one; left on the default, the gauge record is used, else the logger, and a run with both says so in its warnings.\n\nWith both records, the hydrograph shows both (engine 0.39.0): the calibration record as a solid line, labelled “calibration record”, and the other dashed. Only the calibration record is scored.',
 		aliases: ['gauge flow', 'logger flow', 'measured flow', 'DWS gauge'],
 		related: ['calibration', 'nse'],
 		source: 'b023 Flow data'
@@ -836,5 +836,11 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		aliases: ['volume bias', 'water balance error'],
 		related: ['pbias'],
 		source: 'docs/model.md §2.10'
+	},
+	'in-sample': {
+		long: 'Scores on the days a model was fitted on show how well it fits, not how well it predicts: judge fitted parameters by the fit’s validation scores. A run’s calibration scores are labelled in-sample only when its parameters came from Fit automatically for its runoff model, unchanged since, with the same calibration window, exclusions and flow record (engine 0.39.0).\n\nOtherwise the label says why not: “parameters not fitted” (set by hand, imported or left at their defaults), “parameters edited since the fit”, or “not the period fitted” (another window, other exclusions or the other record). Parameters tuned by hand against the record flatter the model as much as a fit does, so read hand-calibrated scores the same way. A run made before engine 0.39.0 says only “calibration period”.',
+		aliases: ['in sample', 'calibration period', 'parameters not fitted', 'out-of-sample'],
+		related: ['calibration', 'nse', 'pbias'],
+		source: 'docs/model.md §2.10; docs/calibration-research.md'
 	}
 };

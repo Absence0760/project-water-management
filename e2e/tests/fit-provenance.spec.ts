@@ -52,6 +52,10 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(scores.getByRole('columnheader', { name: /^Calibration period \(in-sample\)/ })).toBeVisible();
 	await expect(scores.getByRole('columnheader', { name: /^Split: other half/ })).toBeVisible();
 	await expect(prov.getByText('Parameters edited since fit')).toHaveCount(0);
+	// The run's own scores are in-sample: its parameters were fitted on these days (issue #45).
+	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
+	await expect(calibration.getByText('Calibration period (in-sample).', { exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Run summary' }).getByText('calibration period (in-sample)', { exact: true })).toHaveCount(2);
 });
 
 test('editing a fitted parameter by hand marks the fit record as edited: in the form, once saved, on the run and in run comparison', async ({ page, owner }) => {
@@ -85,8 +89,15 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(page.getByRole('heading', { level: 2, name: 'Hand-tuned' })).toBeVisible();
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
 	await expect(prov.getByText('Parameters edited since fit')).toBeVisible();
+	// Hand-edited parameters: the run's scores are no longer in-sample (issue #45).
+	await expect(
+		page.getByRole('region', { name: 'Calibration against observed flow' }).getByText('Calibration period (parameters edited since the fit).', { exact: true })
+	).toBeVisible();
 
 	await page.goto(`/compare?a=${project.id}:${fittedRun}&b=${project.id}:${tunedRun}`);
+	await expect(
+		page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (run A in-sample, run B parameters edited since the fit)' })
+	).toBeVisible();
 	await expect(page.getByText('Fit record: parameters edited since the fit (x1)')).toBeVisible();
 	const fits = page.getByRole('table', { name: 'Fit and validation for both runs' });
 	await expect(fits.getByRole('row', { name: /^Parameters edited since fit/ })).toHaveText(/no\s*yes \(x1\)$/);
