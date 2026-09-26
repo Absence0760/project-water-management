@@ -2201,26 +2201,33 @@ own. Loop in the CISO or security analyst before acting on any of them.
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data
       subject (s22), and in what time. Who: client. Trigger: before go-live.
-- [ ] **The ingest hold's outlier limit still counts a key's earlier
-      pushes.** Each push is judged against the series without its own days
-      (`series/hold.ts` `limitWithout`), but days the same key pushed before
-      count, so a key that poisons slowly can lift the 99th percentile it is
-      later judged by. Durable fix: record which days each key wrote
-      (a `key_days datemultirange` on `time_series`, like `feed_days` for
-      feeds, 031) and leave them out of the limit, or take the limit from
-      the published run's inputs. Trigger: the first production gateway
-      key, or a hold that should have fired and didn't.
-- [ ] **Deleting an assessor's account is refused (session B, WP-3.3).**
-      `scenario_guard` (045_contributor_scope.sql, the branch that raises
-      "a decision is recorded when the scenario is decided, and never
-      changes") also refuses the foreign key's `ON DELETE SET NULL` on
-      `scenario.decided_by`, so an account that decided an application can't
-      be deleted: the same bug 048 fixed in `note_guard`. Fix (session B's
-      to make, from 045's definition): let an update through untouched when
-      its only change is `decided_by` becoming NULL (water_app can't write
-      `decided_by` outside a decision, which the guard stamps), then add the
-      case to `auth/account-deletion.db.test.ts`. Trigger: before the first
-      application is decided on production.
+- [x] **The ingest hold's outlier limit still counts a key's earlier
+      pushes.** Fixed in 053_series_key_days.sql: `series_key_days` records,
+      per (series, key), the days a key changed that nobody has written
+      since (a person's or a feed's write releases them, a replace releases
+      all), and `series/hold.ts` `limitWithout` leaves them out. Tests:
+      `ingest/ingest.db.test.ts` (a key pushing in batches can't raise its
+      own limit; another key's and a person's days still count),
+      `series/hold.test.ts`.
+- [ ] **The ingest hold has no reference for a series one key fills.** When
+      the days left without the key's own are fewer than the outlier rule's
+      100 (a logger series nothing else writes), `limitWithout` falls back
+      to the series without the push only, which the key's earlier pushes
+      shape, so slow poisoning of such a series still lifts its limit
+      (053 closed it for series with other sources). Durable fix: take the
+      limit for those days from what a person last accepted, the inputs of
+      the project's latest manual run (`run_input_series`), which a key
+      can't write. Trigger: the first production gateway key that is the
+      only writer of its series, or a hold that should have fired and
+      didn't.
+- [x] **Deleting an assessor's account is refused (session B, WP-3.3).**
+      Fixed in 052_scenario_decider_deletion.sql: `scenario_guard` (from
+      045's definition) lets an update through untouched when its only
+      change is `decided_by` becoming NULL and the account it named no
+      longer exists, which only the foreign key's `ON DELETE SET NULL`
+      produces. While the account exists, clearing or changing
+      `decided_by` is still refused. `auth/account-deletion.db.test.ts`
+      covers both.
 - [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
       pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
       with the verdicts recorded in step-2 §9, and the 60-farm load

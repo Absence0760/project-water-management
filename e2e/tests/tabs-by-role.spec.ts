@@ -12,9 +12,10 @@ const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catc
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
-const EVERY_TAB = ['Overview', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations', 'Applications', 'History'];
+// In sidebar order: Outcomes, Build the model, Review (issue #17, lib/workspace/tabs.ts NAV_SECTIONS).
+const EVERY_TAB = ['Overview', 'Runs & results', 'Scenarios', 'Allocations', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Applications', 'History'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
-const SHORT = ['Overview', 'Data', 'Runs & results', 'Scenarios', 'Allocations'];
+const SHORT = ['Overview', 'Runs & results', 'Scenarios', 'Allocations', 'Data'];
 
 /** The strip's tab names, in order. */
 async function tabNames(page: Page) {
@@ -32,6 +33,10 @@ test('owners and editors see every tab, and no "Show model inputs"', async ({ pa
 		await p.goto(`/projects/${project.id}`);
 		await expect.poll(() => tabNames(p)).toEqual(EVERY_TAB);
 		await expect(toggle(p)).toHaveCount(0);
+		// Grouped into named sections.
+		await expect(strip(p).getByRole('group', { name: 'Outcomes' }).getByRole('link')).toHaveText(EVERY_TAB.slice(0, 4));
+		await expect(strip(p).getByRole('group', { name: 'Build the model' }).getByRole('link')).toHaveText(EVERY_TAB.slice(4, 9));
+		await expect(strip(p).getByRole('group', { name: 'Review' }).getByRole('link')).toHaveText(['Applications', 'History']);
 		// Every checklist step links to its tab.
 		await expect(setup(p).getByRole('link')).toHaveCount(5);
 	}
@@ -71,7 +76,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Network', 'Data', 'Runs & results', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Runs & results', 'Scenarios', 'Allocations', 'Network', 'Data']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Overview' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -88,7 +93,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body.
-	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Data', 'Settings & calibration', 'Runs & results', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Overview', 'Runs & results', 'Scenarios', 'Allocations', 'Data', 'Settings & calibration']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();
@@ -97,10 +102,16 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await v.goto(`/projects/${project.id}?tab=demand`);
 	await expect(strip(v).getByRole('link', { name: 'Crops & demand' })).toHaveAttribute('aria-current', 'page');
 
-	// Arrow keys move through the strip as shown.
+	// Arrow keys move through the tabs as shown, across sections, and wrap.
 	await v.goto(`/projects/${project.id}?tab=series`);
 	await strip(v).getByRole('link', { name: 'Data' }).focus();
+	await v.keyboard.press('ArrowLeft');
+	await expect(v).toHaveURL(/\?tab=allocations$/);
+	await expect(strip(v).getByRole('link', { name: 'Allocations' })).toBeFocused();
+	await v.keyboard.press('ArrowDown');
+	await expect(v).toHaveURL(/\?tab=series$/);
+	await expect(strip(v).getByRole('link', { name: 'Data' })).toBeFocused();
 	await v.keyboard.press('ArrowRight');
-	await expect(v).toHaveURL(/\?tab=runs$/);
-	await expect(strip(v).getByRole('link', { name: 'Runs & results' })).toBeFocused();
+	await expect(v).not.toHaveURL(/\?tab=/);
+	await expect(strip(v).getByRole('link', { name: 'Overview' })).toBeFocused();
 });

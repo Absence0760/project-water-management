@@ -43,9 +43,9 @@
 	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
-	import { hasModelInputsToggle, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
+	import { hasModelInputsToggle, navSections, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
 
-	// Workflow order: describe the catchment, feed it data, calibrate, run.
+	// The sidebar orders them by section (navSections), not by this list.
 	const TABS = [
 		{ id: 'overview', label: 'Overview' },
 		{ id: 'network', label: 'Network' },
@@ -87,7 +87,11 @@
 	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
 	const shownIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
-	const strip = $derived(TABS.filter((t) => stripIds.includes(t.id)));
+	const LABEL = Object.fromEntries(TABS.map((t) => [t.id, t.label])) as Record<TabId, string>;
+	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
+	// flattened in the order shown, for the arrow keys.
+	const sections = $derived(navSections(stripIds));
+	const strip = $derived(sections.flatMap((s) => s.tabs));
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
@@ -311,20 +315,21 @@
 	}
 	$effect(() => warmTab(tab));
 
-	// Keep the active tab in view in the scrolling strip (phones).
+	// Keep the active tab in view in the scrolling strip (narrow screens).
 	let tabStrip: HTMLElement | undefined = $state();
 	$effect(() => {
 		void tab;
 		tabStrip?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	});
 
-	function tabKeydown(e: KeyboardEvent, idx: number) {
-		if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+	// Arrows move through the tabs as shown: down/right to the next (across
+	// sections), up/left to the previous, wrapping at the ends.
+	function tabKeydown(e: KeyboardEvent, id: TabId) {
+		const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+		if (!step) return;
 		e.preventDefault();
-		const next = strip[(idx + (e.key === 'ArrowRight' ? 1 : strip.length - 1)) % strip.length]!;
-		goto(tabHref(next.id), { keepFocus: false, noScroll: true }).then(() =>
-			document.getElementById(`tab-${next.id}`)?.focus()
-		);
+		const next = strip[(strip.indexOf(id) + step + strip.length) % strip.length]!;
+		goto(tabHref(next), { keepFocus: false, noScroll: true }).then(() => document.getElementById(`tab-${next}`)?.focus());
 	}
 </script>
 
@@ -416,23 +421,29 @@
 				</div>
 			{/if}
 
+			<div class="workspace">
 			<div class="tab-row">
 				<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
-					{#each strip as t, i (t.id)}
-						<a
-							id="tab-{t.id}"
-							href={tabHref(t.id)}
-							data-sveltekit-noscroll
-							aria-current={tab === t.id ? 'page' : undefined}
-							onkeydown={(e) => tabKeydown(e, i)}
-							onpointerenter={() => warmTab(t.id)}
-							onfocus={() => warmTab(t.id)}
-						>
-							{t.label}
-							{#if MODEL_TABS.includes(t.id) && editor.issues.some((x) => x.area === t.id)}
-								<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
-							{/if}
-						</a>
+					{#each sections as sec (sec.id)}
+						<div class="section" role="group" aria-labelledby="nav-{sec.id}">
+							<span class="section-label" id="nav-{sec.id}">{sec.label}</span>
+							{#each sec.tabs as id (id)}
+								<a
+									id="tab-{id}"
+									href={tabHref(id)}
+									data-sveltekit-noscroll
+									aria-current={tab === id ? 'page' : undefined}
+									onkeydown={(e) => tabKeydown(e, id)}
+									onpointerenter={() => warmTab(id)}
+									onfocus={() => warmTab(id)}
+								>
+									{LABEL[id]}
+									{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
+										<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
+									{/if}
+								</a>
+							{/each}
+						</div>
 					{/each}
 				</nav>
 				{#if hasModelInputsToggle(project.role)}
@@ -443,6 +454,7 @@
 				{/if}
 			</div>
 
+			<div class="main-col">
 			{#if !canEdit && tab !== 'overview'}
 				<div class="readonly-note" role="note">
 					<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
@@ -538,6 +550,8 @@
 					</Lazy>
 				{/if}
 			</section>
+			</div>
+			</div>
 
 			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
 			{#if canEdit}
@@ -698,9 +712,12 @@
 	.crumbs {
 		color: var(--text-muted);
 	}
-	/* The strip scrolls sideways on phones. The underline is drawn inside each
-	   tab (inset shadow), so nothing overflows vertically and no stray vertical
-	   scrollbar appears with classic (always-visible) scrollbars. */
+	/* Below the sidebar width: one strip that scrolls sideways, sections side
+	   by side with a divider; on a phone their labels are read out but not
+	   shown. Each section is the labels' containing block, so a hidden label
+	   is clipped by the strip instead of widening the page. The underline is
+	   drawn inside each tab (inset shadow), so nothing overflows vertically and
+	   no stray vertical scrollbar appears with classic scrollbars. */
 	.tab-row {
 		display: flex;
 		align-items: center;
@@ -716,6 +733,25 @@
 		overflow: auto hidden;
 		scrollbar-width: thin;
 		overscroll-behavior-x: contain;
+	}
+	.section {
+		position: relative;
+		display: flex;
+		flex: none;
+		gap: 0.15rem;
+	}
+	.section + .section {
+		margin-left: 0.35rem;
+		padding-left: 0.35rem;
+		border-left: 1px solid var(--border);
+	}
+	.section-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
 	}
 	.tabs a {
 		display: inline-flex;
@@ -738,6 +774,94 @@
 	.tabs a[aria-current='page'] {
 		color: var(--accent);
 		box-shadow: inset 0 -2px 0 var(--accent);
+	}
+	@media (min-width: 900px) {
+		.section {
+			flex-wrap: wrap;
+			align-content: flex-start;
+		}
+		.section-label {
+			position: static;
+			flex-basis: 100%;
+			width: auto;
+			height: auto;
+			overflow: visible;
+			clip: auto;
+			padding: 0.25rem 0.85rem 0;
+			color: var(--text-muted);
+			font-size: 0.7rem;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+		.tabs a {
+			min-height: 38px;
+		}
+	}
+	/* Wide screens: a sidebar beside the section's content, in view while the
+	   page scrolls. Only from where the widest grid (the network's node table,
+	   model.spec.ts) still fits beside it, and the page grows by the sidebar's
+	   width so the content column keeps the usual maximum. */
+	@media (min-width: 1680px) {
+		.page {
+			max-width: calc(1480px + 14rem);
+		}
+		.workspace {
+			display: grid;
+			grid-template-columns: 12.5rem minmax(0, 1fr);
+			gap: 1.5rem;
+			align-items: start;
+		}
+		.tab-row {
+			position: sticky;
+			top: calc(var(--header-h) + 0.75rem);
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.75rem;
+			box-shadow: none;
+			margin: 0;
+		}
+		.tabs {
+			flex-direction: column;
+			gap: 1rem;
+			overflow: visible;
+		}
+		.section {
+			flex-direction: column;
+			flex-wrap: nowrap;
+		}
+		.section + .section {
+			margin-left: 0;
+			padding-left: 0;
+			border-left: 0;
+		}
+		.section-label {
+			position: static;
+			width: auto;
+			height: auto;
+			overflow: visible;
+			clip: auto;
+			padding: 0 0.75rem 0.25rem;
+			color: var(--text-muted);
+			font-size: 0.75rem;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+		.tabs a {
+			min-height: 38px;
+			padding: 0 0.75rem;
+			border-radius: var(--radius);
+			white-space: normal;
+		}
+		.tabs a[aria-current='page'] {
+			background: var(--accent-soft);
+			box-shadow: inset 3px 0 0 var(--accent);
+		}
+		.inputs-toggle {
+			padding: 0 0.75rem;
+			white-space: normal;
+		}
 	}
 	/* A viewer's "Show model inputs" (lib/workspace/tabs.ts), at the strip's end. */
 	.inputs-toggle {

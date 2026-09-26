@@ -604,16 +604,11 @@
 //             chunk is at its 43 KB ceiling. Headroom ~6 KB.
 // 2026-09-26  total 941 → 925 KB (measured 919). #9's engine split (−20)
 //             merged with WP-2.5's i18n foundation (+12). Headroom ~6 KB.
-// 2026-09-26  total 925 → 933 KB; other ceilings unchanged. The
-//             reporting window's recompute moved into the engine
-//             (curtailmentOverWindow, views/farmProjection.ts; #44's
-//             follow-up), which restores the EWR site setting each farm's
-//             charge for any window. The binding-site attribution was only in
-//             the calibration worker before; it now sits in a shared chunk the
-//             worker also imports (worker 33 → 27 KB), so the total grew by
-//             the new recompute, ~2 KB. The merge measured 927 KB. No new
-//             dependency. Headroom ~6 KB. Trims tracked in docs/followups.md:
-//             split the help content chunk; English-as-key for the catalogue.
+// 2026-09-26  total 925 → 935 KB. origin/main measured 928 (over its own
+//             ceiling) after the alert pages (WP-2.13) and the commits
+//             merged since the 925 entry; the grouped workspace navigation
+//             (issue #17, option A step 1: sections, sidebar CSS) adds ~1 KB
+//             to the page chunk, measuring 929. Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -624,7 +619,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 933,
+	totalCodeKb: 935,
 	largestChunkKb: 43,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
