@@ -286,6 +286,12 @@ describe('fitRecordFor', () => {
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});
 
+	it('records where the pan-coefficient row came from, when noted (engine ≥ 0.31.1)', () => {
+		const form = { ...defaultProjectSettings(), panCoefficientSource: 'FAO-56 Table 5, Case A' };
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing!.panCoefficientSource).toBe('FAO-56 Table 5, Case A');
+		expect(fitRecordFor(report(), defaultProjectSettings(), { validate: false, validationRecord: null }).forcing).not.toHaveProperty('panCoefficientSource');
+	});
+
 	it('records a monthly PE input the fit ran under, copied (issue #39)', () => {
 		const mm = new Array(12).fill(90) as unknown as ProjectSettings['apanMm'];
 		const form = { ...defaultProjectSettings(), pe: { kind: 'monthly' as const, mm, source: 'station ET₀' } };

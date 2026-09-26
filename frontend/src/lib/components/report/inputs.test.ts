@@ -72,6 +72,14 @@ describe('settingsRows', () => {
 		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', pe }), run))['GR4J potential evaporation']).toBe(
 			'monthly, entered directly: 1,200 mm a year (station ET₀)'
 		);
+		// Where the pan-coefficient row came from, when noted (engine ≥ 0.31.1); not under a monthly PE, which doesn't use it.
+		const panCoefficientSource = 'FAO-56 Table 5, Case A, 10 m green crop fetch';
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', panCoefficientSource }), run))['GR4J potential evaporation']).toBe(
+			'pan coefficient × A-pan (pan coefficient: FAO-56 Table 5, Case A, 10 m green crop fetch)'
+		);
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', pe, panCoefficientSource }), run))['GR4J potential evaporation']).toBe(
+			'monthly, entered directly: 1,200 mm a year (station ET₀)'
+		);
 		// Legacy runs have no GR4J PE.
 		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'legacy', pe }), run))['GR4J potential evaporation']).toBeUndefined();
 	});

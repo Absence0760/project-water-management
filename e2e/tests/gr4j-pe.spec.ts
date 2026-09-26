@@ -105,6 +105,18 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.7');
 	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');
 	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.75');
-	// It only fills the form: nothing is saved until Save.
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+	// The cells and the RH/wind note go into the row's source note (issue #39).
+	const source = page.getByLabel('Pan coefficient source');
+	await expect(source).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
+	// It only fills the form: nothing is saved until Save; then the note is kept.
+	const save = page.getByRole('button', { name: 'Save settings' });
+	await expect(save).toBeEnabled();
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await page.reload();
+	await expect(page.getByLabel('Pan coefficient source')).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
+	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');
+	// A preset replaces the row and names itself in the note.
+	await page.getByLabel('Pan-coefficient preset').selectOption({ label: 'Generic (flat 0.70)' });
+	await expect(page.getByLabel('Pan coefficient source')).toHaveValue(/^Generic \(flat 0\.70\) preset: indicative, from FAO-56 Table 5/);
 });
