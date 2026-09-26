@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
+	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
 
@@ -26,6 +27,10 @@
 	}
 
 	onMount(checkSession);
+	// A client navigation commits only once the new page's stylesheets have
+	// loaded; otherwise SvelteKit + Vite can render it unstyled for a moment
+	// and a scroll or measurement made then is wrong ($lib/nav/stylesheets).
+	onNavigate(() => stylesheetsReady());
 	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
 	onMount(() => watchScrollRegions(document.body));
 
