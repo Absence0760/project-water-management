@@ -1579,7 +1579,7 @@ in dev.
 
 > **Status: built** (`packages/engine/src/forecast.ts`, `model_run.trigger` from WP-2.11's `041_auto_rerun.sql`,
 > `POST /runs { forecast }`, `forecast/ForecastPanel.svelte`, the `LineChart`
-> band, `farm/ForecastCard.svelte`; [model.md §2.4f](../model.md#24f-forecast-mode-roadmap-wp-212)).
+> band, `farm/ForecastCard.svelte`; [model.md §2.4f](../model.md#24f-forecast-mode-engine--0350-roadmap-wp-212)).
 > Where the build departs from the plan below, and why:
 > - **The simulation is not causal**, so prefix stability can't rest on it
 >   (engine-audit.md K1: the land-cover Q75, EWR rule tables and GR4J's
@@ -1591,8 +1591,9 @@ in dev.
 > - **`runModel` is unchanged.** Forecast mode is a separate entry point
 >   (`runForecastChecked`), and an ordinary run's input is cut at the tail by
 >   the backend (`withoutForecastTail`), so no existing engine result moves
->   and the regression suite is untouched. Whether that is worth the planned
->   `ENGINE_VERSION` bump is settled with the parallel engine work at merge.
+>   and the regression suite is untouched. `ENGINE_VERSION` moved 0.34.0 →
+>   0.35.0 (not the plan's 0.5.0; the engine had moved on) for the new
+>   output fields.
 > - **`rain_source` keeps engine 0.30.0's codes** (0 catchment, 1 alternative
 >   gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank none), not the plan's
 >   0–3, and is stored only on forecast runs (and runs with rain-source

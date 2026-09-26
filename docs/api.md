@@ -773,7 +773,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`trigger: 'auto'`, WP-2.11, and `'forecast'`, WP-2.12) are capped apart,
   per trigger: only the newest unkept auto run and the newest unkept forecast
   run are kept, and neither counts against, or pushes out, the 20.
-- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-roadmap-wp-212)).
+- **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0350-roadmap-wp-212)).
   An ordinary run (`forecast` absent or `false`) leaves out any forecast rain
   after the last observed rain day: it ends the day before the forecast
   tail, and stores that input, so forecast rain never reaches its figures.

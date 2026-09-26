@@ -1167,7 +1167,7 @@ keeps the gauge's own wet-day distribution. A replacement from a gridded
 product alone (no gauge) is still a `missing` period (§2.4c) filled from
 CHIRPS.
 
-### 2.4f Forecast mode (roadmap WP-2.12)
+### 2.4f Forecast mode (engine ≥ 0.35.0, roadmap WP-2.12)
 
 The workbook marks the rows after the last observed rain "F": they run on
 forecast rain. Left to `runModel`, a forecast tail flows into every summary
@@ -1175,7 +1175,8 @@ forecast rain. Left to `runModel`, a forecast tail flows into every summary
 calibration, the compliance grid), so yesterday's forecast would change the
 figures farmers and regulators rely on. Forecast mode
 (`packages/engine/src/forecast.ts`) keeps the two apart. It adds no step to
-`runModel`, whose output is unchanged.
+`runModel`, whose output is unchanged: the version moved to 0.35.0 for the
+new output fields (`forecastFrom`, `summary.forecast`) forecast runs carry.
 
 **Where the forecast starts.** `forecastSplit` reads the rain exactly as the
 run does (`prepareRun`: zero runs set aside, accumulations spread, rain-source
