@@ -631,6 +631,16 @@
 //             CompareView, a chunk shared by the page and the workspace tab
 //             (split overhead), plus the tab's wiring and links. Measured
 //             937 → 940 over main @ d443df7. Headroom ~5 KB.
+// 2026-09-26  total 945 → 947 KB. Issue #45's labels: the observed series
+//             by record (gauge / logger, both on the hydrograph), the
+//             in-sample label only when the parameters were fitted
+//             (calibration/sample.ts and its notes, a new "In-sample" help
+//             entry, engine calibrationFitStatus), the EWR charge shown
+//             positive everywhere, abstraction-demand wording. Measured
+//             945 → 947 (966 445 → 968 637 B) over main @ 7f49dd48, which
+//             was at its ceiling; almost all of it is user-facing text. No
+//             new dependency; the largest page chunk stays 42 KB. Headroom
+//             ~0. The ways down are unchanged (English-as-key i18n).
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -641,7 +651,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 945,
+	totalCodeKb: 947,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
