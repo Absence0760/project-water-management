@@ -321,10 +321,26 @@ B on … because …". A run can be nominated again later (A, B, A).
   `NO ACTION`, so deleting the run fails (`DELETE …/runs/:runId` answers `409`
   first); `trimRuns` skips it, and it does not count against
   `RUNS_KEPT_PER_PROJECT` (the cap keeps the newest 20 runs that are neither
-  nominated nor pinned). `NO ACTION` rather than `RESTRICT` is checked at the end of the
-  statement, so deleting the whole project (owner only) still cascades to
-  both tables. The 50-nomination limit bounds how many runs can be kept this
-  way.
+  nominated nor pinned). The 50-nomination limit bounds how many runs can be
+  kept this way. (`NO ACTION` rather than `RESTRICT`, checked at the end of
+  the statement, is what would let a project delete cascade to both tables;
+  the guard below refuses that delete first.)
+- **A project with a nomination is kept for good** (issue #43,
+  040_project_evidence_guard.sql). The `project_evidence_guard` BEFORE DELETE
+  trigger on `project` (`SECURITY DEFINER`, `search_path` pinned) raises
+  `restrict_violation` when the project has **any** `run_nomination` row,
+  whoever deletes and however (the route, direct SQL as `water_app`, the
+  schema owner, a cascade). `DELETE /projects/:id` answers `409` first,
+  naming the current evidence run. **Current or past:** the conservative
+  reading, and the only one the data model allows: the history is
+  append-only, so a project that has nominated always has a current
+  nomination (its newest row), and "any row" also stays right if a
+  withdrawal is ever added, since a withdrawn nomination is still history.
+  There is no un-nominate; a nomination can only be replaced. Cascades into
+  `project`: none. `project.team_id` is `ON DELETE SET NULL` (deleting a team
+  keeps its projects) and `project.created_by` is `NO ACTION` (there is no
+  account deletion). The operator's out-of-band removal is in
+  [security.md](./security.md) § Authorization, "Tamper evidence".
 - No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
   is no account deletion yet. When there is, it must keep the history (for
   example a tombstone user), not cascade it away.

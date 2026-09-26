@@ -272,6 +272,17 @@ readers still meet one named link per row. The row's Team link, its Add data,
 Copy and Delete buttons, and the freshness and last-run badges (whose tooltips
 explain them) sit above the stretch and keep doing their own thing.
 
+**Delete** asks for confirmation, then deletes. A project that has nominated
+an evidence run is kept for good (issue #43, [data-model.md](./data-model.md)
+§ Evidence nomination), so the server answers `409`; instead of the raw error
+the page opens a **This project can't be deleted** dialog
+(`lib/components/projects/deleteRefusal.ts` reads the answer). It names the
+evidence run, says the nomination history is kept so the evidence can still
+be read and reproduced, and that a nomination can be replaced but not
+withdrawn; it links to the run (**Open the evidence run**, the Runs tab) and
+offers **Copy project**, which opens the copy dialog for a fresh start
+without the runs and their nominations.
+
 ### Import a project file
 
 The import dialog (`lib/components/import/ImportProjectDialog.svelte`, WP-1.8)

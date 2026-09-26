@@ -9,6 +9,7 @@
 	import ImportProjectDialog from '$lib/components/import/ImportProjectDialog.svelte';
 	import GetStarted from '$lib/components/projects/GetStarted.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
+	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
 	import {
 		filterProjects,
 		groupProjects,
@@ -44,6 +45,10 @@
 	let copySource = $state<ProjectSummary | null>(null);
 	let copyName = $state('');
 	let copying = $state(false);
+
+	// A delete the server refused because the project has nominated evidence (issue #43).
+	let keptOpen = $state(false);
+	let kept = $state<(EvidenceRefusal & { project: ProjectSummary }) | null>(null);
 
 	// Filter state lives in the URL so Back/Forward and shared links keep it.
 	const owner = $derived(parseOwner(page.url.searchParams.get('owner')));
@@ -160,7 +165,11 @@
 			await api.projects.remove(p.id);
 			projects = projects.filter((x) => x.id !== p.id);
 		} catch (err) {
-			actionError = msg(err);
+			const refusal = evidenceRefusal(err);
+			if (refusal) {
+				kept = { ...refusal, project: p };
+				keptOpen = true;
+			} else actionError = msg(err);
 		}
 	}
 
@@ -336,6 +345,38 @@
 	defaultTeamId={canAddTo(selectedTeam?.id) ? selectedTeam!.id : ''}
 	onimported={() => load()}
 />
+
+<Dialog bind:open={keptOpen} title="This project can't be deleted">
+	{#if kept}
+		<p data-testid="evidence-kept">
+			{#if kept.run}“{kept.run.label || 'Untitled run'}” is the nominated evidence run of “{kept.project.name}”.{:else}“{kept.project.name}”
+				has a nominated evidence run.{/if}
+			A project that has nominated evidence keeps it, with its nomination history{kept.nominations && kept.nominations > 1
+				? ` (${kept.nominations} nominations)`
+				: ''}, for good, so the evidence can still be read and reproduced.
+		</p>
+		<p class="muted">
+			A nomination can be replaced by another run but not withdrawn. To start again without it, copy the project: the model and time
+			series are copied, the runs and their nominations are not.
+		</p>
+		<p>
+			<a href="{base}/projects/{kept.project.id}?tab=runs{kept.run ? `&run=${kept.run.id}` : ''}"
+				>{kept.run ? 'Open the evidence run' : 'Open the project’s runs'}</a
+			>
+		</p>
+	{/if}
+	{#snippet actions()}
+		<button type="button" class="btn" onclick={() => (keptOpen = false)}>Close</button>
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => {
+				keptOpen = false;
+				if (kept) openCopy(kept.project);
+			}}>Copy project</button
+		>
+	{/snippet}
+</Dialog>
 
 <Dialog bind:open={copyOpen} title="Copy project">
 	<form id="copy-form" onsubmit={copy}>
