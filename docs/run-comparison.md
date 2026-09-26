@@ -93,6 +93,16 @@ The page has these sections, top to bottom:
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
    *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
    *"Fit record: parameters edited since the fit (x1)"*.
+   A change of GR4J's PE input (`settings.pe`, engine ≥ 0.31.0,
+   [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4))
+   is a settings line labelled **Potential evaporation (GR4J)**. Each side
+   reads "pan coefficient × A-pan" or "monthly PE, 1,105 mm/yr (source: …)",
+   and a change of kind is "A → B". Between two monthly rows the line names
+   the months that changed and the annual totals ("monthly PE Oct 110 →
+   120 mm (1,105 → 1,115 mm/yr)"), or "changed in N months" when more than
+   three did. A reworded source is listed too ("source "…" → "…""), since it
+   is part of the run's record. A run saved before 0.31.0 has no `pe` and
+   compares as pan coefficient × A-pan.
 3. **Headline results.** A **Water balance** table (total irrigation supplied
    and deficit, share of demand supplied, farms below 95 % supplied, EWR days
    not met and their share, mean outflow and natural flow, the runoff
@@ -106,8 +116,8 @@ The page has these sections, top to bottom:
    wet-year and independent-record scores ("not run" when that test wasn't),
    whether (and what) the WR2012 MAR penalty pulled towards, whether the
    parameters were edited since the fit, and whether that run's own forcing
-   (pan coefficient, A-pan evaporation, CHIRPS bias correction, zero-rain
-   runs and multi-day accumulations) has changed since its fit ("no" when the fit predates recorded
+   (pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction,
+   zero-rain runs and multi-day accumulations) has changed since its fit ("no" when the fit predates recorded
    forcing — nothing to compare). A run whose parameters
    didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
