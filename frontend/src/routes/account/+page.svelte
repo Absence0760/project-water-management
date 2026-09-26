@@ -175,6 +175,7 @@
 						autocomplete="new-password"
 						maxlength={200}
 						aria-invalid={passwordErrorField === 'next' ? 'true' : undefined}
+						aria-describedby={passwordErrorField === 'next' ? 'password-error' : undefined}
 						bind:value={repeat}
 					/>
 				</div>

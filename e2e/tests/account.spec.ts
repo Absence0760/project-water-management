@@ -107,6 +107,7 @@ test('a wrong current password and a too-short new password are shown as errors'
 	await page.getByRole('button', { name: 'Change password' }).click();
 	await expect(page.getByRole('alert')).toHaveText('Use at least 8 characters.');
 	await expect(page.getByLabel('New password', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+	await expect(page.getByLabel('Repeat new password')).toHaveAccessibleDescription('Use at least 8 characters.');
 	await expect(current).not.toHaveAttribute('aria-invalid');
 });
 
