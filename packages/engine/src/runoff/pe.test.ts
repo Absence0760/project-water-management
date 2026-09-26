@@ -174,6 +174,15 @@ describe('resolvePe', () => {
 		expect(resolve({ kind: 'monthly', mm: pe, source: 42 }).pe).toEqual(monthly(pe, ''));
 	});
 
+	it('panCoefficientSource is provenance only: the run is identical with or without it, and it is capped', () => {
+		const none = runModel(catchment());
+		const noted = runModel(catchment({ panCoefficientSource: 'FAO-56 Table 5, Case A' }));
+		expect(noted.series).toEqual(none.series);
+		expect(noted.summary).toEqual(none.summary);
+		const long = runModel(catchment({ panCoefficientSource: 'x'.repeat(PE_SOURCE_MAX + 50), pe: { kind: 'pan' } }));
+		expect(long.series).toEqual(none.series);
+	});
+
 	it('the run reports what it resolved', () => {
 		const out = runModel(catchment({ pe: { kind: 'penman' } as never }));
 		expect(out.summary.warnings).toContain('unknown potential-evaporation input {"kind":"penman"}; using pan coefficient × A-pan');

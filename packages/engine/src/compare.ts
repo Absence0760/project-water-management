@@ -571,6 +571,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
 	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
+	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
+	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
 		label: 'CHIRPS bias correction',
