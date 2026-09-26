@@ -31,7 +31,8 @@ const blockChunkWith = (marker: string) => async (route: Route) => {
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
-const historyHeading = (page: Page) => page.getByRole('heading', { name: 'History', level: 2 });
+// The History tab's own content (its heading is the page's section header, drawn before the chunk loads).
+const historyFilters = (page: Page) => page.getByRole('group', { name: 'Filter the history' });
 
 test('a tab that fails to download offers a reload, and the reload recovers', async ({ page, owner }) => {
 	void owner;
@@ -54,7 +55,7 @@ test('a tab that fails to download offers a reload, and the reload recovers', as
 		void d.dismiss();
 	});
 	await alert.getByRole('button', { name: 'Reload page' }).click();
-	await expect(historyHeading(page)).toBeVisible();
+	await expect(historyFilters(page)).toBeVisible();
 	await expect(page.getByRole('alert')).toHaveCount(0);
 	expect(prompted).toBe(false);
 });
@@ -94,7 +95,7 @@ test('with unsaved model edits the failure warns, and the reload asks before dis
 	});
 	await alert.getByRole('button', { name: 'Reload page' }).click();
 	expect(prompts).toEqual(['beforeunload', 'beforeunload']);
-	await expect(historyHeading(page)).toBeVisible();
+	await expect(historyFilters(page)).toBeVisible();
 	await expect(page.getByRole('alert')).toHaveCount(0);
 	await expect(saveBar(page)).toHaveCount(0);
 });
