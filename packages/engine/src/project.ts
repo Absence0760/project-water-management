@@ -1,6 +1,7 @@
 // Shape of a project's model configuration, shared by the backend (storage +
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
+import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
@@ -1443,6 +1444,12 @@ export interface RunSummary {
 	verification?: RunVerification;
 	/** Where the water went, per water year and over the run (engine ≥ 0.12.0). Absent on older runs. */
 	waterBalance?: WaterBalance;
+	/**
+	 * The forecast days of a forecast-mode run (WP-2.12, ./forecast.ts
+	 * runForecastChecked): every other figure in this summary covers the days
+	 * before `forecast.from` only. Absent on ordinary runs and older runs.
+	 */
+	forecast?: ForecastSummary;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }
@@ -1537,4 +1544,10 @@ export interface ModelOutput {
 	days: number;
 	series: RunSeries[];
 	summary: RunSummary;
+	/**
+	 * Forecast mode only (WP-2.12, ./forecast.ts): the first day whose rain
+	 * came from the forecast after the last observed rain day, null when the
+	 * run has no forecast tail. Absent on ordinary runs.
+	 */
+	forecastFrom?: string | null;
 }
