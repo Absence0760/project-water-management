@@ -940,8 +940,12 @@ series' data feed, which then keeps them rather than replacing them
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_catchment_alt_mm`, `rain_chirps_mm`, `rain_reanalysis_mm`,
-`rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
-and `flow_reference_m3s` (`flow_pitman_m3s` was removed in engine 0.10.0).
+`rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`,
+`flow_reference_m3s` and `evap_apan_mm` (`flow_pitman_m3s` was removed in engine 0.10.0).
+`evap_apan_mm` (engine ≥ 0.38.0) is a daily A-pan evaporation record in mm
+(given in mm, cm or in): on the days it has a value it replaces the monthly
+A-pan means, and a run reports the days that fell back to them in
+`summary.apanDaily` ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
 `rain_catchment_alt_mm` (an alternative catchment gauge) and
 `rain_reanalysis_mm` (a gauge-free reanalysis such as ERA5), engine ≥ 0.30.0,
 are read only by a `settings.rainSource` period

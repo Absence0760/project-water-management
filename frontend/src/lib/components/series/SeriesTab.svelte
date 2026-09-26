@@ -116,7 +116,8 @@
 	const endDate = (s: { startDate: string; length: number }) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1);
 	const inUse = $derived(seriesInUse(list, rainSourceKinds(settings?.rainSource)));
 	const latestRun = $derived(runs?.[0] ?? null);
-	const isRain = (k: string) => k.startsWith('rain_');
+	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
+	const isRain = (k: string) => k.endsWith('_mm');
 
 	async function load() {
 		if (!list.length) loading = true;

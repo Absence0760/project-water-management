@@ -301,6 +301,31 @@ test('an hourly file is added up into 08:00 days, or midnight days, and the seri
 	expect(s.values).toEqual([0, 16, 0]);
 });
 
+// Issue #45: a daily A-pan record is its own kind, guessed from the file name,
+// and Settings then says A-pan comes from it (the monthly means before it).
+test('a daily A-pan file uploads as its own kind, and Settings says evaporation now comes from it', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Daily A-pan');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const source = page.getByTestId('apan-source');
+	await expect(source).toHaveAttribute('data-daily', 'false');
+	await expect(source).toHaveText('A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.');
+
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('CSV file').setInputFiles(fixture('apan-daily.csv'));
+	await expect(form.getByLabel('Kind')).toHaveValue('evap_apan_mm');
+	await expect(form.getByLabel('Unit')).toHaveValue('mm');
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toHaveText('Uploaded 30 days to “Evaporation — A-pan, daily”.');
+	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Evaporation — A-pan, daily' });
+	await expect(row).toContainText('Daily evaporation');
+
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(source).toHaveAttribute('data-daily', 'true');
+	await expect(source).toContainText('A-pan comes from the daily A-pan series (Data tab) on the days it has a value');
+});
+
 // Issue #45: a DWS hydrology export loads as it is. The synthetic fixture is the
 // one the feed's and the import's unit tests read (packages/engine/fixtures).
 test('a DWS export loads with its missing-data codes and -999 as gaps, and the summary says why', async ({ page, owner }) => {

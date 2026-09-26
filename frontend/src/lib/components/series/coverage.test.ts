@@ -21,6 +21,10 @@ describe('coverageStats', () => {
 		expect(s.meanAnnualMm).toBeCloseTo(730.5, 6);
 	});
 
+	it('gives a daily A-pan series a mean annual total too (issue #45)', () => {
+		expect(coverageStats({ startDate: '2020-01-01', values: [4, 6] }, 'evap_apan_mm').meanAnnualMm).toBeCloseTo(1826.25, 6);
+	});
+
 	it('copes with an all-missing series', () => {
 		const s = coverageStats({ startDate: '2020-01-01', values: [null, null] }, 'rain_chirps_mm');
 		expect(s.present).toBe(0);

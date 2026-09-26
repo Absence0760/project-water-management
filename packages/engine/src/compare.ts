@@ -1206,7 +1206,8 @@ const SERIES_LABELS: Record<string, string> = {
 	rain_forecast_mm: 'Rainfall (forecast)',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
-	flow_reference_m3s: 'Reference gauge (other catchment)'
+	flow_reference_m3s: 'Reference gauge (other catchment)',
+	evap_apan_mm: 'A-pan evaporation (daily)'
 };
 
 /** A run's stored input values by series kind (backend: run_input_series + series_blob), when it has them. */

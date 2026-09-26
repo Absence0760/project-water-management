@@ -430,7 +430,7 @@
 	{:else if d.kind === 'series.scale'}
 		<div class="form-row">
 			<div class="field">
-				<label for="op-series">Rain series</label>
+				<label for="op-series">Series</label>
 				<select id="op-series" bind:value={d.seriesKind}>
 					{#each SCALABLE_SERIES_KINDS as k (k)}<option value={k}>{kindLabel(k)}</option>{/each}
 				</select>

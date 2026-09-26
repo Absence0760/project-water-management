@@ -17,13 +17,13 @@ export interface CoverageStats {
 	missingPct: number;
 	/** Mean of the days present (mm/day for rain, m³/s for flow). */
 	meanDaily: number | null;
-	/** Rain only: mean daily × 365.25, mm/a. */
+	/** Depth series only (rain, daily A-pan evaporation): mean daily × 365.25, mm/a. */
 	meanAnnualMm: number | null;
 	/** Last day that carries a value (null if none). */
 	lastValueDate: string | null;
 }
 
-const isRain = (kind: string) => kind.startsWith('rain_');
+const isRain = (kind: string) => kind.endsWith('_mm');
 
 export function coverageStats(s: Daily, kind: string): CoverageStats {
 	const n = s.values.length;

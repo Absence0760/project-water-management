@@ -42,6 +42,22 @@ export function grossFarmDemandM3PerDay(
 }
 
 /**
+ * Σ crop area (m²) × crop factor, per water-year month: a farm's gross
+ * demand on a day is this × the day's A-pan (mm) ÷ 1000 m³. Used on the days
+ * a daily A-pan series covers (engine ≥ 0.38.0, issue #45); the monthly path
+ * stays grossFarmDemandM3PerDay.
+ */
+export function cropFactorAreaM2(crops: readonly Crop[], areaM2ByCropId: ReadonlyMap<string, number>): number[] {
+	const out = new Array<number>(12).fill(0);
+	for (const crop of crops) {
+		const area = areaM2ByCropId.get(crop.id) ?? 0;
+		if (area === 0) continue;
+		for (let m = 0; m < 12; m++) out[m]! += area * (crop.cropFactor[m] ?? 0);
+	}
+	return out;
+}
+
+/**
  * Net daily demand after effective rainfall (b023 [Irrigation Demand]):
  * MAX(0, gross − cropped area × effectiveRainFraction / 1000 × rain mm).
  * The run uses farmDailyDemand, which carries rain over; this is its

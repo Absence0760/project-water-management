@@ -56,7 +56,7 @@
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
-	import { annualGr4jPeMm, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
+	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
@@ -267,7 +267,11 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	const isGr4j = $derived(s.runoffModel === 'gr4j');
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
-	const petMissing = $derived(!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }));
+	// A daily A-pan series (issue #45) is A-pan too, on the days it covers.
+	const apanSource = $derived(apanSourceNote(seriesKinds));
+	const petMissing = $derived(
+		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
+	);
 	const num = (k: string) => cal[k] as number;
 
 	// The in-page menu (SectionNav) and the save bar both stick, so in-page jumps
@@ -325,6 +329,7 @@
 		<p class="hint muted">
 			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment.
 		</p>
+		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text}</p>{/if}
 		{#if s.lakeEvapFactorMonthly}
 			<div class="table-wrap">
 				<table class="data compact monthly" data-testid="lake-factor-row">

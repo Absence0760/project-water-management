@@ -11,8 +11,8 @@ type Meta = SeriesMeta & { updatedAt?: string };
 export const seriesEnd = (s: Pick<SeriesMeta, 'startDate' | 'length'>) =>
 	fromEpochDay(toEpochDay(s.startDate) + Math.max(s.length, 1) - 1);
 
-/** Kinds that drive a run (rainfall); observed flow only scores it. */
-export const isDriver = (kind: string) => kind.startsWith('rain_');
+/** Kinds that drive a run (rainfall, daily A-pan evaporation); observed flow only scores it. */
+export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'evap_apan_mm';
 
 /**
  * Recorded rain: what a run is driven by, so what freshness measures. A
@@ -62,6 +62,8 @@ const KEYWORDS: [RegExp, string][] = [
 	[/forecast|gfs|ecmwf/, 'rain_forecast_mm'],
 	[/logger/, 'flow_logger_m3s'],
 	[/reference|regional|neighbou?r/, 'flow_reference_m3s'],
+	// Before rain: an evaporation file is in mm too.
+	[/evap|\ba-?pan\b/, 'evap_apan_mm'],
 	[/rain|precip|\bmm\b/, 'rain_catchment_mm'],
 	[/flow|gauge|weir|discharge|m3\/s|m³\/s|cumec/, 'flow_observed_m3s']
 ];

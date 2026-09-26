@@ -44,9 +44,10 @@ describe('newDataSinceRun', () => {
 			meta('same', 'rain_chirps_mm', '', '2025-01-01', 90),
 			meta('fixed', 'rain_forecast_mm', '', '2025-01-01', 90, '2025-04-02T08:00:00.000Z'),
 			meta('pitman', 'flow_pitman_m3s', '', '2025-01-01', 200), // engine ≤ 0.9.0 only: no longer drives a run
-			meta('obs', 'flow_observed_m3s', '', '2025-01-01', 200) // scores runs, doesn't drive them
+			meta('obs', 'flow_observed_m3s', '', '2025-01-01', 200), // scores runs, doesn't drive them
+			meta('pan', 'evap_apan_mm', '', '2025-01-01', 91) // daily A-pan drives demand, dams and GR4J (issue #45)
 		];
-		expect(newDataSinceRun(list, run).map((s) => s.id)).toEqual(['longer', 'fixed']);
+		expect(newDataSinceRun(list, run).map((s) => s.id)).toEqual(['longer', 'fixed', 'pan']);
 	});
 
 	it('is empty with no run', () => expect(newDataSinceRun([meta('x', 'rain_catchment_mm', '', '2025-01-01', 9)], null)).toEqual([]));
@@ -70,6 +71,10 @@ describe('guessSeries', () => {
 		expect(guessSeries('reference-gauge.csv', '', list)).toEqual({ kind: 'flow_reference_m3s', name: '' });
 		expect(guessSeries('gauge.csv', '', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow W7' });
 		expect(guessSeries('data.csv', 'date,value', list)).toBeNull();
+		// A pan record is in mm too: evaporation wins over the rain keyword.
+		expect(guessSeries('station-apan.csv', 'date,evaporation mm', list)).toEqual({ kind: 'evap_apan_mm', name: '' });
+		expect(guessSeries('pan_evap.csv', '', list)).toEqual({ kind: 'evap_apan_mm', name: '' });
+		expect(guessSeries('japan-rain.csv', '', list)).toEqual({ kind: 'rain_catchment_mm', name: 'Average Catchment Rainfall' });
 	});
 
 	it('reads the header line only when the first cell is not a date', () => {

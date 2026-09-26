@@ -22,7 +22,8 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, toEpochDay, waterYearIndex } from './calendar';
-import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
+import { cropFactorAreaM2, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
+import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
@@ -149,7 +150,7 @@ function runNetwork(
 	plausibility: typeof runPlausibility | null,
 	assuranceOf: typeof supplyAssurance | null
 ): ModelOutput {
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource } = prepareRun(input);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -631,6 +632,7 @@ function runNetwork(
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
+			...(apanDaily ? { apanDaily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
 			warnings
 		}
@@ -776,9 +778,12 @@ export function buildNetworkPlan(
 	const lakeEvapMmDay = new Float64Array(days);
 	// Monthly lake factors (WP-3.5), when set, replace the one factor month by month.
 	const lakeK = settings.lakeEvapFactorMonthly;
+	// A day the daily A-pan series covers (engine ≥ 0.38.0, issue #45) takes that day's A-pan instead of the month's mean.
+	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
 	for (let t = 0; t < days; t++) {
 		const m = waterYearIndex(month[t]!);
-		lakeEvapMmDay[t] = ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
+		const a = apanDay ? apanDay[t]! : NaN;
+		lakeEvapMmDay[t] = a === a ? (lakeK ? lakeK[m]! : settings.lakeEvapFactor) * a : ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
 	}
 	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -1410,6 +1415,9 @@ function buildDemand(
 	const wy = new Uint8Array(days);
 	for (let t = 0; t < days; t++) wy[t] = waterYearIndex(month[t]!);
 
+	// Daily A-pan (engine ≥ 0.38.0, issue #45): on the days it covers, gross demand is that day's A-pan × the crop factors.
+	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
+
 	let anyArea = false;
 	const out = nodes.map((node) => {
 		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days) };
@@ -1428,12 +1436,19 @@ function buildDemand(
 		if (cropped === 0) return d;
 		anyArea = true;
 		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
-		for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
+		if (apanDay) {
+			const k = cropFactorAreaM2(crops, areas);
+			for (let t = 0; t < days; t++) {
+				const a = apanDay[t]!;
+				d.gross[t] = a === a ? (k[wy[t]!]! * a) / 1000 : gross[wy[t]!]!;
+			}
+		} else for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
 		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
 		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
 		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});
-	if (anyArea && settings.apanMm.every((v) => v === 0)) {
+	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.
+	if (anyArea && !apanDay && settings.apanMm.every((v) => v === 0)) {
 		warnings.push('A-pan evaporation is 0 for every month, so irrigation demand is 0');
 	}
 	return out;
