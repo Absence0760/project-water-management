@@ -17,6 +17,7 @@ import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
 	resolvePe,
+	SUPPLY_RULE_LABEL,
 	upgradeLegacyModel,
 	type Borehole,
 	type CalibrationFitStatus,
@@ -626,6 +627,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'last day with rain') },
+	// Engine ≥ 0.44.0; set only by the seasonal outlook's members, never a project setting.
+	demandFactorFrom: { label: 'Demand factors apply from', fmt: (v) => (v ? String(v) : 'the run start') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },
@@ -1020,7 +1023,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damOutletCapacityM3Day', 'dam outlet capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['damSeepageReturnPct', 'share of dam seepage returning', pct],
 	// Supply rule and river pump (WP-3.8).
-	['supplyRule', 'supply rule', (v) => ({ damFirst: 'dam only', riverFirst: 'river first', trigger: 'dam, river when low', runOfRiver: 'run of river' })[String(v)] ?? String(v)],
+	['supplyRule', 'supply rule', (v) => (SUPPLY_RULE_LABEL as Record<string, string>)[String(v)] ?? String(v)],
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct]

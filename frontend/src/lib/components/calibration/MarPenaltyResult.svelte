@@ -70,7 +70,4 @@
 		font-weight: 500;
 		padding-bottom: 0.25rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 </style>

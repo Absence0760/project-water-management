@@ -394,6 +394,14 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 			s[key] = null;
 		}
 	}
+	// The seasonal outlook's demand-factor start (engine ≥ 0.44.0, issue #53 R5).
+	if (s.demandFactorFrom !== null && s.demandFactorFrom !== undefined) {
+		const v = s.demandFactorFrom;
+		if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+			warnings.push(`demandFactorFrom "${String(v)}" is not an ISO date (YYYY-MM-DD); demand factors apply on every day`);
+			s.demandFactorFrom = null;
+		}
+	}
 	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
 		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
 		s.calibrationStart = null;

@@ -190,9 +190,6 @@
 	h4 {
 		margin: 0 0 0.35rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.factor-set {
 		display: block;
 	}

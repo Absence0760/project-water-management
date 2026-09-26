@@ -513,6 +513,40 @@ table.data tr.flag {
 	flex: 1;
 }
 
+/* Shared utilities (issue #9). Each was a scoped copy in dozens of components;
+   they come after the rules above so they win ties with them (`.mono`,
+   `.btn-sm` and `.badge` set a size too), as the scoped copies did. A
+   component's own rule for the same class still wins (its selector carries
+   the component's hash class): a few keep `.small { font-size: 0.85rem }` or
+   a `.u` with a size of their own.
+   e2e/tests/shared-css.spec.ts pins the rendered result; docs/architecture.md
+   § Shared CSS says what belongs here. */
+
+/* Secondary text: hints, captions, notes. Usually with .muted. */
+.small {
+	font-size: 0.8rem;
+}
+/* A unit beside a label or in a table head: "Area <span class="u">ha</span>". */
+.u {
+	font-weight: 400;
+	color: var(--text-muted);
+}
+/* A segmented control: a row of .btn joined into one, e.g. m³/s | m³/day.
+   Give it role="group" and an aria-label; mark the chosen button aria-pressed. */
+.seg {
+	display: inline-flex;
+}
+.seg .btn:first-child {
+	border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.seg .btn:not(:first-child) {
+	margin-left: -1px;
+	border-radius: 0;
+}
+.seg .btn:last-child {
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 /* Skip-link target: focusable but no ring around the whole page. */
 #main:focus {
 	outline: none;

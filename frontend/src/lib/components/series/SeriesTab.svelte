@@ -513,13 +513,6 @@
 {/if}
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.series th[scope='row'] {
 		min-width: 190px;
 	}

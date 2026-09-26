@@ -9,7 +9,9 @@ describe('SETTINGS_SECTIONS', () => {
 		// Data feeds sits after the form: it saves on its own, never through the save bar.
 		expect(ids.at(-1)).toBe('set-feeds');
 		expect(ids.at(-2)).toBe('set-auto');
-		expect(ids.at(-3)).toBe('set-quality');
+		// The outcome matrix's reading of a sweep: after the model's inputs, like data quality it changes no result.
+		expect(ids.at(-3)).toBe('set-outcomes');
+		expect(ids.at(-4)).toBe('set-quality');
 	});
 });
 

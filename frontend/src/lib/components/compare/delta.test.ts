@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { metricDelta, type FarmDelta } from '@water-management/engine';
-import { fmtMetric, formatDelta, nextSort, sortFarms } from './delta';
+import { metricDelta, type FarmDelta, type FarmSummary } from '@water-management/engine';
+import { farmFeatureMetrics, fmtMetric, formatDelta, nextSort, sortFarms } from './delta';
 
 describe('formatDelta', () => {
 	it('signs and arrows volumes with a real minus sign and thousands separators', () => {
@@ -104,5 +104,58 @@ describe('farm table sorting', () => {
 		expect(nextSort({ key: 'name', dir: 'asc' }, 'name')).toEqual({ key: 'name', dir: 'desc' });
 		expect(nextSort({ key: 'name', dir: 'asc' }, 'deficitM3Day')).toEqual({ key: 'deficitM3Day', dir: 'desc' });
 		expect(nextSort({ key: 'deficitM3Day', dir: 'desc' }, 'name')).toEqual({ key: 'name', dir: 'asc' });
+	});
+});
+
+describe('farm feature metrics (issue #54)', () => {
+	const summary = (nodeId: string, extra: Partial<FarmSummary> = {}): FarmSummary => ({
+		nodeId,
+		name: nodeId,
+		avgDemandM3Day: 1000,
+		avgSuppliedM3Day: 800,
+		avgDeficitM3Day: 200,
+		fractionSupplied: 0.8,
+		avgEwrShortfallM3Day: 0,
+		daysEwrNotMet: 0,
+		...extra
+	});
+	const rows = [
+		{ nodeIdA: 'f1', nodeIdB: 'f1' },
+		{ nodeIdA: 'f2', nodeIdB: 'f2' }
+	];
+
+	it('shows river pumping the scenario added as 0 in the base, not hidden', () => {
+		const { columns, cells } = farmFeatureMetrics(rows, [summary('f1'), summary('f2')], [summary('f1', { avgRiverAbstractionM3Day: 450 }), summary('f2')]);
+		expect(columns.map((c) => c.key)).toEqual(['avgRiverAbstractionM3Day']);
+		expect(cells.get('f1')!.avgRiverAbstractionM3Day).toEqual({ m: { a: 0, b: 450, delta: 450 }, noneA: true, noneB: false });
+		// A farm with no pump in either run reads 0 against 0.
+		expect(cells.get('f2')!.avgRiverAbstractionM3Day).toEqual({ m: { a: 0, b: 0, delta: 0 }, noneA: true, noneB: true });
+	});
+
+	it('adds no column when no matched farm has the feature in either run', () => {
+		expect(farmFeatureMetrics(rows, [summary('f1'), summary('f2')], [summary('f1'), summary('f2')]).columns).toEqual([]);
+	});
+
+	it('ignores a farm only one run has, and leaves a farm with no summary unknown', () => {
+		// f9 has boreholes but is in B only: it is under "Only in run B", not a column.
+		const only = farmFeatureMetrics(rows, [summary('f1'), summary('f2')], [summary('f1'), summary('f2'), summary('f9', { avgGroundwaterM3Day: 10 })]);
+		expect(only.columns).toEqual([]);
+		// f2's summary is missing from A: no cells for it rather than a made-up 0.
+		const gap = farmFeatureMetrics(rows, [summary('f1')], [summary('f1', { avgGroundwaterM3Day: 30 }), summary('f2', { avgGroundwaterM3Day: 5 })]);
+		expect(gap.columns.map((c) => c.key)).toEqual(['avgGroundwaterM3Day']);
+		expect(gap.cells.get('f1')!.avgGroundwaterM3Day!.m).toEqual({ a: 0, b: 30, delta: 30 });
+		expect(gap.cells.get('f2')).toEqual({});
+	});
+
+	it('keeps both values when both runs have the feature', () => {
+		const { cells } = farmFeatureMetrics(
+			rows.slice(0, 1),
+			[summary('f1', { avgGroundwaterM3Day: 40, avgBaseflowDepletionM3Day: 12 })],
+			[summary('f1', { avgGroundwaterM3Day: 25, avgBaseflowDepletionM3Day: 9 })]
+		);
+		expect(cells.get('f1')).toEqual({
+			avgGroundwaterM3Day: { m: { a: 40, b: 25, delta: -15 }, noneA: false, noneB: false },
+			avgBaseflowDepletionM3Day: { m: { a: 12, b: 9, delta: -3 }, noneA: false, noneB: false }
+		});
 	});
 });

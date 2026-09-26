@@ -48,7 +48,8 @@
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import type { AutoRunSettings } from '$lib/api/types';
+	import type { AutoRunSettings, OutcomeSettings } from '$lib/api/types';
+	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -69,6 +70,8 @@
 	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 	// API keys for the ingest endpoint, owners only: likewise (docs/ui.md § API keys).
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
+	// The outcome matrix's settings (issue #53 R4): part of the form, but its own chunk (this one is at its ceiling).
+	const loadOutcomes = () => import('$lib/components/outcomes/OutcomeSettingsSection.svelte');
 
 	let {
 		project,
@@ -103,10 +106,13 @@
 		pe?: EditablePe;
 		/** When the project re-runs itself after new data (WP-2.11); defaults filled in for an older API. */
 		autoRun: AutoRunSettings;
+		/** How the outcome matrix reads a sweep (issue #53 R4); defaults filled in for an older API. */
+		outcomes: OutcomeSettings;
 	};
-	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings> }): Editable => {
+	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings }): Editable => {
 		const c = JSON.parse(JSON.stringify(v)) as Editable;
 		c.autoRun = resolveAutoRun(v);
+		c.outcomes = resolveOutcomes(v);
 		return c;
 	};
 
@@ -151,10 +157,11 @@
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	const autoError = $derived(autoRunError(s.autoRun));
+	const outError = $derived(outcomesError(s.outcomes));
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -171,6 +178,7 @@
 			{ id: 'set-reserve', message: reserveError },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
+			{ id: 'set-outcomes', message: outError },
 			{ id: 'set-auto', message: autoError }
 		])
 	);
@@ -1004,6 +1012,15 @@
 		{#if dqError}<p class="err" role="alert">{dqError}</p>{/if}
 	</section>
 
+	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
+	<div id="set-outcomes">
+		<Lazy load={loadOutcomes}>
+			{#snippet children(OutcomeSettingsSection)}
+				<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
+			{/snippet}
+		</Lazy>
+	</div>
+
 	<!-- Automatic runs (WP-2.11) ------------------------------------------------------------------>
 	<section class="panel" id="set-auto" aria-labelledby="auto-h">
 		<div class="panel-head">
@@ -1090,9 +1107,6 @@
 </Lazy>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.lead {
 		max-width: 80ch;
 		margin: -0.25rem 0 0.9rem;

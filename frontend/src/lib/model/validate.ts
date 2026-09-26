@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -9,6 +9,31 @@ export interface ModelIssue {
 }
 
 const inRange = (v: number, lo: number, hi: number) => !Number.isNaN(v) && v >= lo && v <= hi;
+
+/**
+ * A node's supply rule and river pump problems (WP-3.8), as the API refuses
+ * them (engine modelRules), in words for the node form, which shows them
+ * beside the fields; validateModel names the node in front.
+ */
+export function supplyIssues(
+	n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'supplyRule' | 'pumpCapacityM3Day' | 'supplyTriggerPct' | 'supplyStopPct'>
+): string[] {
+	const out: string[] = [];
+	const rule = n.supplyRule ?? SUPPLY_DEFAULTS.supplyRule;
+	const pump = n.pumpCapacityM3Day ?? null;
+	const trigger = n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct;
+	const stop = n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct;
+	if (n.kind !== 'farm') {
+		if (rule !== 'damFirst' || pump !== null) out.push('only a farm has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.');
+		return out;
+	}
+	if (rule === 'trigger' && !(n.damCapacityM3 > 0)) out.push('the “dam, river when low” supply rule needs a farm dam to switch on; enter a dam capacity or pick another supply rule.');
+	if (rule === 'runOfRiver' && n.damCapacityM3 > 0) out.push('run of river has no dam; set the dam capacity to 0 or pick another supply rule.');
+	if (pump !== null && !inRange(pump, 0, Infinity)) out.push("the river pump capacity can't be negative.");
+	if (!inRange(trigger, 0, 1) || !inRange(stop, 0, 1)) out.push('the supply switch levels must be between 0% and 100%.');
+	else if (rule === 'trigger' && stop < trigger) out.push('the switch-back level must be at least the switch-to-river level.');
+	return out;
+}
 
 export function validateModel(model: ProjectModel): ModelIssue[] {
 	const issues: ModelIssue[] = [];
@@ -75,6 +100,8 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a farm has a dam';
 			if (bad) issues.push({ area: 'network', message: `${label}: dam survey curve: ${bad}.` });
 		}
+		// Supply rule and river pump (WP-3.8), as the API checks them.
+		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });

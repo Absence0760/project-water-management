@@ -92,6 +92,8 @@ import type {
 	TeamRole,
 	User,
 	JobMeta,
+	Sweep,
+	SweepRequest,
 	YieldRequest,
 	YieldResult
 } from './types';
@@ -649,6 +651,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			},
 			/** Stop a yield job: a waiting one at once, a running one at its next progress report. */
 			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/yield/${enc(jobId)}/cancel`)
+		},
+		/**
+		 * Scenario sweeps (docs/api.md § Sweeps, issue #53 R2): a base run × named
+		 * op sets, run by one background job. Follow a pending one with get().
+		 */
+		sweeps: {
+			create: (id: string, body: SweepRequest) => request<{ sweep: Sweep; jobId: string; job: JobMeta }>('POST', `${p(id)}/sweeps`, body),
+			list: (id: string, q: { baseRunId?: string } = {}) =>
+				request<{ sweeps: Sweep[] }>('GET', `${p(id)}/sweeps${q.baseRunId ? `?${new URLSearchParams({ baseRunId: q.baseRunId })}` : ''}`).then((r) => r.sweeps),
+			/** One sweep, each member with its summary; `series: true` adds each done member's outcome series. */
+			get: (id: string, sweepId: string, q: { series?: boolean } = {}) =>
+				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

@@ -209,6 +209,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    return are untouched, so the meaning is "the farm takes 85 % of what it
    would" (deficit irrigation, or a restriction), not a smaller crop. The
    run's own check (`verify/checks.ts` `checkWorkings`) reads the factor.
+   `settings.demandFactorFrom` (engine ≥ 0.44.0, issue #53 R5), an ISO date,
+   starts the factors on that day: before it every factor is 1 (and a
+   user's too, §2.7c). Absent or null means every day, so no run before it
+   changes; a value that isn't a date is ignored with a warning. Only the
+   seasonal outlook sets it (§2.15), so a demand level changes the season
+   and not the history the season starts from. It is not a project setting.
 
 5. **Abstraction demand (engine ≥ 0.16.0, [audit N1](./engine-audit.md))**:
    the farm abstracts enough to cover its application losses,
@@ -4138,6 +4144,149 @@ metrics, the fallback and forced metric, the gauge site, the 3-year flag,
 every risk label at and beside its cut-offs, cut-off validation, the
 wording; and on random fuzz runs, every day below the EWR and every Reserve
 month of the classed years is counted exactly once.
+
+### 2.15 Seasonal outlook: an ESP ensemble from a decision date (issue #53 R5, engine core)
+
+"From the storage at the start of summer, how does the season go at 100,
+85 or 70 % of demand?" Answered as an **ensemble streamflow prediction**
+(ESP): the model's state on a decision date, then each historical year's
+weather, at each demand level
+([design/planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml),
+findings 3–6: its skill comes from the initial state, and one "expected"
+number is the wrong answer). Pure, in `packages/engine/src/outlook/`
+(`runSeasonalOutlook`, and its parts `outlookAnalogues`,
+`outlookMemberInput`, `outlookMember`, `summariseOutlook` for a job that
+runs the members one by one). A derived view: its only engine change is
+`settings.demandFactorFrom` (§2.3 step 4a), which moved the version to
+0.44.0. The backend job, the screen and the farmer view are not built yet
+(design §3.5).
+
+**The season.** A decision date (the season's first day; the state is the
+end of the day before) and a season end, inclusive, at most 366 days.
+`defaultOutlookSeason(asOf)` gives the next **1 October to 30 April** (the
+summer irrigation months of a winter-rainfall catchment; 1 October is the
+start of the water year, when the wet season's storage is known), a
+**judgement pending the client's O3** (`OUTLOOK_SEASON_PENDING_CLIENT`).
+
+**Analogue years and the day mapping** (`outlook/season.ts`). An analogue
+is a contiguous stretch of the record as long as the season. Analogue
+water year W starts on the decision date's month and day in W's calendar
+year (October–December in W, January–September in W + 1, so the stretch's
+first day is in water year W; 29 February becomes 28 February in a common
+year), and season day i takes the stretch's day i. So:
+- the weather keeps its own day-to-day order: no day is repeated or
+  dropped;
+- a season that crosses 1 October (say 1 September to 31 March) draws on
+  the end of one water year and the start of the next, in order, and is
+  labelled by the water year of its first day;
+- where only one of the season and the analogue spans a 29 February, the
+  analogue's calendar runs a day ahead or behind by the season's end (a
+  season to 31 March takes a leap analogue to 30 March). Monthly settings
+  (A-pan means, crop factors, the EWR) follow the season's own calendar.
+
+By default (`outlookAnalogues`) every water year whose stretch lies wholly
+inside the base run, with rain from some source on every day, is an
+analogue, except the season's own year (`theSeason`: in a hindcast it is
+the answer). One the record holds only in part is listed as
+`outsideRecord`, one with a rainless day as `missingRain`. A list of years
+can be given instead (the season's own allowed: that is how the test
+checks the method reproduces the base run).
+
+**A member** (`outlookMemberInput`): the base input with
+- every series cut at the decision date (catchment, CHIRPS, alternative,
+  reanalysis and forecast rain, A-pan, observed and reference flow: nothing
+  after the decision date is known);
+- the season's rain in `rain_forecast_mm`: the base run's `rain_final` on
+  the analogue's days, the rain the model used, already gap-filled and
+  bias-corrected (forecast rain is never corrected again, §2.4b);
+- the daily A-pan, when the project has one, the analogue's values on the
+  same days (a day without one takes the season month's mean, §2.3a);
+- the run window pinned to the base run's start and the season end,
+  rain-source periods clipped to the history (§2.4e), and
+  `demandFactorFrom` set to the decision date;
+- the level's ops applied. **Only `demand.scale` ops make a level**
+  (`outlookLevelProblems`): any other op would change the history, and so
+  the state the season starts from. A base that already carries a demand
+  factor (a scenario run) is refused.
+
+**State continuation.** The engine can't start a run from a saved state,
+so each member re-runs the history and then the season, as forecast mode
+does (§2.4f): the season is a forecast tail. Every level's history is
+therefore the same run, and the state on the decision date is the base
+run's (dam storage, soil-water stores, GR4J's stores, stream-depletion lag
+stores). As in forecast mode the few record-wide statistics are refitted on
+each member's record (the land-cover low-flow threshold §2.5a, the
+Reserve's natural duration curve §2.9c, CHIRPS factors fitted on the whole
+record §2.4b), so a member's history equals the base run's to float noise
+rather than to the bit, and a hindcast's history doesn't see the years
+after it. Cost: every member is a full run (`runModelWithoutChecks`), so an
+outlook is years × levels runs, linear in both: 12 years × 4 levels on the
+13-year test catchment take about 0.5 s (Node, warm; 2026-09-26). A run
+that could start from a stored state would take the history out of every
+member; it is an engine change of its own, not needed at this size.
+
+**Measured per member** (`outlookMember`, over the season's days):
+season-end storage (Σ farm dams, and per dam), the farms' demand and supply
+and supplied ÷ demand, the same for other water users, days the outlet's
+pragmatic EWR is not met, and with a Reserve rule table at the site
+(§2.9c, the outlet or a gauge) the months met. Reserve months are calendar
+months wholly inside the season: a month that starts before the decision
+date or ends after the season end isn't counted.
+
+**The metric** (`summariseOutlook`) is chosen as the outcome matrix's
+(§2.14): Reserve months met when every member has a rule table at the site
+and a whole month in the season, else the share of days below the
+pragmatic EWR, with a warning when only some members could use the table.
+A year **meets the requirement** when every Reserve month met, or no day
+fell below the EWR.
+
+**Per demand level**: season-end storage (total and per dam), the share of
+demand met (farms; other users separately) and the requirement's share
+(months met, or days below), each as the median and the 10th and 90th
+percentiles across the analogue years (linear, type 7, as §2.10e), with
+`nYears`, the years met in full, and every year's values. With fewer than
+`OUTLOOK_MIN_YEARS` = 10 analogue years (**judgement**, pending the
+hydrologist) the percentiles and the planning figure are null and a warning
+says so; the years are still returned.
+
+**The planning figure.** The levels are ranked by their mean season demand
+(farms + users, highest first, ties in the order given), not by their
+order, so a monthly plan ranks by the water it asks for. The planning
+figure is the first level whose requirement was met in at least
+`planningShare` of the analogue years (default `DEFAULT_PLANNING_SHARE` =
+0.8, **pending the client's O6**, `shareIsDefault` on the result; at the cut
+counts). It is data: `describePlanningFigure` counts years ("85 %: met the
+EWR on every day of the season in 17 of 21 analogue years, the highest
+demand level to do so in at least 80 % of them") and never says "likely"
+or "recommended"; the WUA decides and publishes the level (D10).
+
+**Invariants** (`outlook.invariants.test.ts`, random networks): every
+level's members share the history bit for bit; a lower level never asks
+for more water; and where demand only takes water out, a lower level never
+lowers season-end storage and never adds a day below the EWR, in any
+analogue year. The last holds **only** there, by design: irrigation losses
+that return to the river (β(1 − e)G, §2.3 step 5) are water taken from a
+dam reaching the river on dry days, so a lower demand can mean more days
+below the EWR (on the invented test catchment with β = 0.5 and a 1 500
+m³/day EWR, 105 days below at 100 % and 130 at 70 % in the 2000/01
+analogue; `outlook.test.ts` pins that it happens, and that it stops with
+β = 0); and an emergency or drought borehole
+that tops up a dam (§2.7d) or a supply rule's switch to the river pump
+(§2.7e) can leave a higher demand with the fuller dam. The planning figure
+takes the highest level that meets the share, so it doesn't assume the
+levels are monotone.
+
+**Tests** (`outlook/season.test.ts`, `outlook.test.ts`, synthetic): the
+default season, the day mapping over 29 February and across 1 October,
+a skewed `TZ`; factor 1 with the actual year as the analogue reproduces the
+base run's season (the default season, one across 1 October, one from
+29 February), levels share the history and scale demand only from the
+decision date, the members' rain, A-pan and window, rain-source periods
+clipped; analogue selection and exclusions; percentiles on known values;
+the planning share at, above and below the cut (and one whose product
+isn't whole in floating point), ranking by demand, the metric choice and
+fallback, too few years, levels that aren't demand.scale, a monthly plan,
+the wording; `run.demandFactorFrom.test.ts` for the engine setting.
 
 ---
 

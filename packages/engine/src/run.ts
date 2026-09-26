@@ -22,7 +22,7 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, toEpochDay, waterYearIndex } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -178,7 +178,7 @@ function runNetwork(
 	);
 
 	// --- network ----------------------------------------------------------------
-	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
+	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start);
 	const nodes = input.model.nodes;
 	const ewr = plan.ewr;
 	const sim = simulateNetwork(plan, { workings: true });
@@ -739,8 +739,13 @@ export function buildNetworkPlan(
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
 	natural: Float64Array,
-	warnings: string[]
+	warnings: string[],
+	/** The run's first epoch day; needed only when settings.demandFactorFrom is set. */
+	start?: number
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology> } {
+	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
+	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
+	const factorFrom = start === undefined ? 0 : demandFactorStart(settings.demandFactorFrom, start, days);
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
 	const model = upgradeLegacyModel(input.model);
 	const nodes = model.nodes;
@@ -755,7 +760,7 @@ export function buildNetworkPlan(
 	const ewr = new Float64Array(days);
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
-	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings);
+	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom);
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -825,7 +830,7 @@ export function buildNetworkPlan(
 		);
 	}
 
-	const users = otherUsers(nodes, topo, shares.share, days, month, warnings);
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 
@@ -1007,7 +1012,8 @@ function otherUsers(
 	share: Float64Array,
 	days: number,
 	month: Uint8Array,
-	warnings: string[]
+	warnings: string[],
+	factorFrom: number
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
@@ -1025,9 +1031,9 @@ function otherUsers(
 				demand[t] = Number.isFinite(v) && v > 0 ? v : 0;
 			}
 		}
-		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month.
+		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month, from settings.demandFactorFrom (0.44.0).
 		const factor = demandFactorOf(n, warnings);
-		if (factor) for (let t = 0; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
+		if (factor) for (let t = factorFrom; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -1404,7 +1410,8 @@ function buildDemand(
 	days: number,
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
-	warnings: string[]
+	warnings: string[],
+	factorFrom: number
 ): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
@@ -1481,9 +1488,10 @@ function buildDemand(
 		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
 		const f = farmDailyDemand(d.gross, cropped, rain, erFraction, settings.effectiveRainStoreMm);
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
-		// requirement F after the store, so the rain used, the store and the gross demand stay as they were.
+		// requirement F after the store, so the rain used, the store and the gross demand stay as they were;
+		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
 		const factor = demandFactorOf(node, warnings);
-		if (factor) for (let t = 0; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
+		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
 		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency };

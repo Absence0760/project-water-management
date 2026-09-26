@@ -83,11 +83,11 @@ const FAILURE_NOISE = 1e-9;
  */
 export function prepareYield(input: ModelInput, naturalFlow?: (ctx: RunContext) => NaturalFlowInput): YieldProblem {
 	const run = prepareRun(input);
-	const { settings, days, startDate, aligned, month, warnings } = run;
+	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	const nf = (naturalFlow ?? ((ctx: RunContext) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx)))({ settings, startDate, days, aligned });
 	if (nf.naturalFlowM3Day.length !== days) throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
-	const { plan } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
+	const { plan } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start);
 	const yearOfDay = new Int32Array(days);
 	const wyMonth = new Uint8Array(days);
 	const y0 = waterYearOf(run.start);

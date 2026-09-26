@@ -739,6 +739,29 @@
 //             Runs tab always renders it, so it stays eager. The Scale demand
 //             form is ~40 template lines in the already-lazy Scenarios chunk:
 //             not worth a chunk.
+// 2026-09-26  total stays 895 KB (measured 891). Issue #9: `.small` (53
+//             scoped copies), `.u` (22) and the `.seg` segmented control (5)
+//             live once in app.css (docs/architecture.md § Shared CSS).
+//             −1.0 KB total, not the 2–3 KB estimated: gzip had already
+//             folded the copies that shared a chunk. On main @ f784a24
+//             910 738 → 909 682 bytes; merged over origin/main @ 1a8d058
+//             (the home import dialog made lazy) 913 069 → 912 108. First
+//             loads: Runs and the report −0.2 KB, Network, Data and Settings
+//             −0.1; home, sign-in, /farm, /share and teams +0.06 (global CSS
+//             is on every page). Measured and not moved: the spinner (−0.3
+//             total, +0.1 on /farm, /share and sign-in) and `.stat dd.sub`
+//             (−0.07). Measurement + 5 would be 896, over the current
+//             ceiling, so it stays; headroom ~4 KB.
+// 2026-09-26  total 895 → 907 KB (measured 903, from 891 on main @
+//             db6f91a). Issue #53 R4's outcome matrix: the Runs tab's panel
+//             (outcomes/OutcomeMatrixPanel.svelte with its view model, 5.5
+//             KB), the engine's year classes and outcome matrix (0.9 + 2.0
+//             KB, first shipped now: nothing on the page side read them
+//             before), Settings → Outcome matrix (2.0 KB) and the sweeps API
+//             client. All three are lazy chunks: the panel loads when a run
+//             is shown, the section when Settings is; inline, the section
+//             took the Settings chunk over its 42 KB ceiling (it is 41.5 KB
+//             with the lazy hook). No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -749,7 +772,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 895,
+	totalCodeKb: 907,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
