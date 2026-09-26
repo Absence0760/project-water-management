@@ -65,4 +65,20 @@ describe('series day boundary', () => {
 		expect(imported.status).toBe(201);
 		expect(await boundary(u, imported.body.project.id)).toBe('08:00');
 	});
+
+	it('a revision keeps it, so a restore puts the boundary back with the values', async () => {
+		const u = await signUp('DayRestore');
+		const pid = await project(u, 'Days restore');
+		const first = (await put(u, pid, { dayBoundary: '08:00' })).body as { id: string };
+		// Replaced by daily values: the 08:00 series is kept as a revision.
+		expect((await put(u, pid, { values: [7, 8] })).body.dayBoundary).toBeNull();
+		const revs = (await u.call('GET', `/projects/${pid}/series/${first.id}/revisions`)).body.revisions as { id: string; dayBoundary: string | null }[];
+		expect(revs[0]!.dayBoundary).toBe('08:00');
+		const restored = await u.call('POST', `/projects/${pid}/series/${first.id}/revisions/${revs[0]!.id}/restore`, {});
+		expect(restored.status).toBe(200);
+		expect(restored.body).toMatchObject({ dayBoundary: '08:00' });
+		// And the daily values it replaced are a revision without one.
+		const after = (await u.call('GET', `/projects/${pid}/series/${first.id}/revisions`)).body.revisions as { dayBoundary: string | null }[];
+		expect(after[0]!.dayBoundary).toBeNull();
+	});
 });

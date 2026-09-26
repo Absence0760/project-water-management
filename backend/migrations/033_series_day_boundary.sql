@@ -16,12 +16,15 @@
 --    recorded). A replace (PUT) says what it holds, or clears it; a merge
 --    that says one into a series holding days of the other is refused (409),
 --    the same splice rule as 032's product/version guard. water_app's
---    existing table grants and RLS policies cover the new column. A series
---    revision doesn't keep it (a restore keeps the series' current label),
---    which the history docs say.
+--    existing table grants and RLS policies cover the new column.
+--  * series_revision.day_boundary: kept with the values, so a restore puts
+--    the boundary back with them (as 032 does for the product/version).
 
 ALTER TABLE time_series
 	ADD COLUMN day_boundary text CHECK (day_boundary IN ('00:00', '08:00'));
+
+ALTER TABLE series_revision
+	ADD COLUMN day_boundary text;
 
 COMMENT ON COLUMN time_series.day_boundary IS
 	'Sub-daily readings added up into days in this window, booked to the day it starts: 08:00 (manual-gauge day) or 00:00 (midnight). NULL = daily values as uploaded (033).';

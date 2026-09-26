@@ -16,7 +16,7 @@ import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
 import { rowProvenance } from '../series/merge.js';
-import { replaceSeries } from '../series/routes.js';
+import { replaceSeries, setDayBoundary } from '../series/routes.js';
 import {
 	beginModelChange,
 	describeChange,
@@ -330,7 +330,7 @@ export const historyRoutes = new Hono<AuthEnv>()
 			const { rows } = await db.query(
 				`SELECT r.id::text AS id, r.created_at AS "createdAt", u.display_name AS "createdBy", r.reason,
 					to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", cardinality(r."values") AS length, r.values_sha256 AS "valuesSha256",
-					r.kind, r.name, r.unit, r.product, r.product_version AS "productVersion"
+					r.kind, r.name, r.unit, r.product, r.product_version AS "productVersion", r.day_boundary AS "dayBoundary"
 				 FROM series_revision r LEFT JOIN app_user u ON u.id = r.created_by
 				 WHERE r.project_id = $1 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))
@@ -354,8 +354,10 @@ export const historyRoutes = new Hono<AuthEnv>()
 				values: (number | null)[];
 				product: string | null;
 				productVersion: string | null;
+				dayBoundary: string | null;
 			}>(
-				`SELECT r.kind, r.name, r.unit, to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", r."values", r.product, r.product_version AS "productVersion"
+				`SELECT r.kind, r.name, r.unit, to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", r."values", r.product, r.product_version AS "productVersion",
+					r.day_boundary AS "dayBoundary"
 				 FROM series_revision r
 				 WHERE r.project_id = $1 AND r.id = $3 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))`,
@@ -364,6 +366,8 @@ export const historyRoutes = new Hono<AuthEnv>()
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			// The values it replaces are kept as a revision in turn, so a restore can be undone.
 			// The label comes back with the values (032_series_provenance): they are what it describes.
-			return c.json(await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev }));
+			// So does the day boundary (033_series_day_boundary).
+			const meta = await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev });
+			return c.json(await setDayBoundary(db, id, meta, rows[0].dayBoundary));
 		});
 	});

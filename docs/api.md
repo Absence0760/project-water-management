@@ -568,8 +568,9 @@ does the adding up; the API stores the label. A PUT says it or clears it
 it labels a new or empty series, and is `409 { error: "the series holds
 08:00–08:00 days and these days are 00:00–00:00 days: merging them would put
 two day boundaries in one record. …" }` into a filled series holding the
-other (`null` counts as its own). Copies, the exported project document and
-imports keep it.
+other (`null` counts as its own). Copies, the exported project document,
+imports and series revisions keep it (a restore puts it back; the
+revisions list returns it as `dayBoundary`).
 
 **Units.** A series is stored in its kind's canonical unit, the one the model
 reads: m³/s for `flow_*`, mm for `rain_*`. `unit` on PUT, merge, the data

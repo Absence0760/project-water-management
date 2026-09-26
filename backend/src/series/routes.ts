@@ -87,7 +87,7 @@ export async function replaceSeries(
  * (033_series_day_boundary.sql): `boundary` null = daily values. Returns the
  * meta as it now stands.
  */
-async function setDayBoundary(db: Db, projectId: string, meta: SeriesMetaRow, boundary: string | null): Promise<SeriesMetaRow> {
+export async function setDayBoundary(db: Db, projectId: string, meta: SeriesMetaRow, boundary: string | null): Promise<SeriesMetaRow> {
 	if ((meta.dayBoundary ?? null) === boundary) return meta;
 	const { rows } = await db.query<SeriesMetaRow>(`UPDATE time_series SET day_boundary = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [
 		projectId,
@@ -196,7 +196,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			const subject = seriesSubject(r.meta, r.before, r.after);
 			if (!r.before) await recordAudit(db, id, 'series.created', subject);
 			else if (subject.daysChanged || r.before.unit !== r.meta.unit) {
-				const revisionId = await recordSeriesRevision(db, id, { ...r.before, kind: r.meta.kind, name: r.meta.name }, 'manual_merge');
+				const revisionId = await recordSeriesRevision(db, id, { ...r.before, kind: r.meta.kind, name: r.meta.name, dayBoundary: was?.dayBoundary ?? null }, 'manual_merge');
 				await recordAudit(db, id, 'series.merged', { ...subject, revisionId });
 			}
 			return c.json(r.meta);
@@ -208,7 +208,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<SeriesRow>(
-				`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion"
+				`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary"
 				 FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]
 			);

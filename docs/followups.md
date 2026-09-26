@@ -359,14 +359,7 @@ Tick items off (or move them into an issue) as they are done.
       hydrologist applies a rain-source period to the client record and the
       share of rain on heavy days (≥ 20 mm) in the period differs from the
       reference era by more than the calibration band allows.
-- [ ] **A series revision doesn't keep the day boundary** (033). A restore
-      puts the values back and leaves the series' current `day_boundary`,
-      so restoring daily values over an 08:00-aggregated series (or the
-      reverse) mislabels it until the next upload. Durable fix: a
-      `series_revision.day_boundary` column restored with the values, as 032
-      did for the product/version. Trigger: before the first production
-      deploy, or the first restore of an aggregated series, whichever
-      comes first.
+
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no

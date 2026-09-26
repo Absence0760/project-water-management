@@ -184,8 +184,9 @@ its interval) and sends the boundary with the values.
 - **Kept** by a merge. A merge that says the other boundary (`null`
   included) into a series holding values is refused (409), the same splice
   rule as the product/version guard above.
-- **Not kept by a series revision**: a restore puts the values back and
-  leaves the series' current boundary. The model never reads it.
+- **Kept by a series revision** (`series_revision.day_boundary`, 033), so a
+  restore puts the boundary back with the values, as it does the product
+  and version. The model never reads it.
 - water_app's existing `time_series` grants and RLS policies cover the
   column.
 - Checked by the same rules in the database (`CHECK`s) and the engine
