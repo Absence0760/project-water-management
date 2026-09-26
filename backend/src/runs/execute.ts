@@ -31,22 +31,38 @@ export const seriesHash = (values: readonly (number | null)[]): string => create
 
 /** Gather everything the engine needs for a project. */
 export async function loadModelInput(db: Db, projectId: string): Promise<ModelInput> {
+	return (await loadLiveInput(db, projectId)).input;
+}
+
+/** Which series each kind of a live input was read from (run_input_series.series_id, 055_accepted_series). */
+export type InputSeriesIds = Partial<Record<SeriesKind, string>>;
+
+/** loadModelInput, with the id of the series each kind came from. */
+async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelInput; seriesIds: InputSeriesIds }> {
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const model = await loadModel(db, projectId);
 	// First series of each kind (ordered by name) — the engine takes one per kind.
-	const { rows: s } = await db.query<{ kind: SeriesKind; start_date: string; values: (number | null)[]; product: string | null; product_version: string | null }>(
-		`SELECT DISTINCT ON (kind) kind, start_date, "values", product, product_version FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
-		[projectId]
-	);
+	const { rows: s } = await db.query<{
+		id: string;
+		kind: SeriesKind;
+		start_date: string;
+		values: (number | null)[];
+		product: string | null;
+		product_version: string | null;
+	}>(`SELECT DISTINCT ON (kind) id, kind, start_date, "values", product, product_version FROM time_series WHERE project_id = $1 ORDER BY kind, name`, [
+		projectId
+	]);
 	const series: Partial<Record<SeriesKind, DailySeries>> = {};
+	const seriesIds: InputSeriesIds = {};
 	for (const r of s) {
+		seriesIds[r.kind] = r.id;
 		// The product and version (032_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
 	}
 	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how: it's no model input, so runs don't record it.
 	const { autoRun: _autoRun, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
-	return { settings: settings as unknown as ModelInput['settings'], model, series };
+	return { input: { settings: settings as unknown as ModelInput['settings'], model, series }, seriesIds };
 }
 
 /**
@@ -265,6 +281,8 @@ export interface RunPlan {
 	scenario?: RunScenarioSnapshot;
 	/** A draft application's run: its label stays out of the project's log (storeRun's audit event). */
 	privateLabel?: boolean;
+	/** For a run of the live model: the series each input kind was read from (stored as run_input_series.series_id, 055). */
+	seriesIds?: InputSeriesIds;
 }
 
 /** The engine half of a run: no database. Injectable in tests (runOutsideTransaction). */
@@ -291,10 +309,10 @@ export async function prepareRun(
 	label: string | ((input: ModelInput) => string),
 	trigger: RunTrigger = 'manual'
 ): Promise<RunPlan> {
-	const live = await loadModelInput(db, projectId);
+	const { input: live, seriesIds } = await loadLiveInput(db, projectId);
 	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
-	return { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger };
+	return { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds };
 }
 
 /**
@@ -398,7 +416,10 @@ export function runFailure(err: Error): never {
  * values go to `series_blob` under their SHA-256 (only if the project doesn't
  * hold those exact values already) and `run_input_series` records which blob
  * and start date the run used, so loadRunInput can rebuild the exact input
- * later, whatever happens to the live series.
+ * later, whatever happens to the live series, and (for a run of the live
+ * model, `plan.seriesIds`) which series it was read from: a manual run's is
+ * what the ingest hold takes as a person's accepted values
+ * (055_accepted_series, series/hold.ts).
  */
 export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Promise<{ id: string; output: ModelOutput }> {
 	const { projectId, label, input, scenario, trigger } = plan;
@@ -447,7 +468,7 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		});
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
-	await storeRunInputs(db, projectId, runId, input.series, hashes);
+	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
 	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {
 		runId,
@@ -476,7 +497,8 @@ async function storeRunInputs(
 	projectId: string,
 	runId: string,
 	series: ModelInput['series'],
-	hashes: Record<string, string>
+	hashes: Record<string, string>,
+	seriesIds: InputSeriesIds
 ): Promise<void> {
 	const kinds = Object.keys(series) as SeriesKind[];
 	if (kinds.length === 0) return;
@@ -498,9 +520,9 @@ async function storeRunInputs(
 		]);
 	}
 	await db.query(
-		`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256)
-		 SELECT $1, $2, k, d, h FROM unnest($3::text[], $4::date[], $5::text[]) AS t(k, d, h)`,
-		[runId, projectId, kinds, kinds.map((k) => series[k]!.startDate), kinds.map((k) => hashes[k]!)]
+		`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256, series_id)
+		 SELECT $1, $2, k, d, h, s FROM unnest($3::text[], $4::date[], $5::text[], $6::uuid[]) AS t(k, d, h, s)`,
+		[runId, projectId, kinds, kinds.map((k) => series[k]!.startDate), kinds.map((k) => hashes[k]!), kinds.map((k) => seriesIds[k] ?? null)]
 	);
 }
 

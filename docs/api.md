@@ -1596,14 +1596,18 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
-- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom }`
   when days this push carried look wrong by the engine's data-quality rules
-  (a negative rain or flow; a value above the outlier limit of the series
-  it lands in, taken without this push's days and without the days this
-  key wrote before that nobody has written since, once that leaves 100 or
-  more non-zero days, else without this push's days alone; no outlier
-  limit while that is under 100), else
-  `null`. The days are merged all the same, `series.held` is recorded as
+  (a negative rain or flow, or a value above the outlier limit), else
+  `null`. The limit needs 100 non-zero days and comes from the first of
+  these that has them; `limitFrom` says which (`null`: none had, so only
+  negatives were checked): `others`, the series without this push's days
+  and without the days this key wrote before that nobody has written
+  since; `accepted`, for a series this key fills, the values the project's
+  latest run a person made read from it (beside the days `others` keeps);
+  `own`, while no such run has read enough of it, the series without this
+  push's days alone, which this key's earlier pushes shaped
+  ([security.md § API keys](./security.md#api-keys)). The days are merged all the same, `series.held` is recorded as
   the key (with the counts, up to 5 examples and the `source` label), no
   re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
   waits, doing nothing, until a person runs the model
