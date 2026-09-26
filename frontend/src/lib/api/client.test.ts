@@ -275,10 +275,20 @@ describe('teams client', () => {
 	});
 
 	it('farmers.* call the farmer routes and unwrap the farmer', async () => {
-		const farmer = { userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
+		const farmer = { status: 'active', userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
 		const add = mockFetch(201, { farmer });
-		expect(await createApi('', add).farmers.add('p', 'f@example.com', ['n1'])).toEqual(farmer);
-		expect(add).toHaveBeenCalledWith('/projects/p/farmers', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'f@example.com', nodeIds: ['n1'] }) }));
+		expect(await createApi('', add).farmers.add('p', 'f@example.com', ['n1'])).toEqual({ farmer });
+		expect(add).toHaveBeenCalledWith(
+			'/projects/p/farmers',
+			expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'f@example.com', nodeIds: ['n1'], locale: 'en' }) })
+		);
+		const results = [{ row: 0, email: 'f@example.com', farm: 'Hoek', status: 'invited' }];
+		const bulk = mockFetch(200, { results, dryRun: true });
+		expect(await createApi('', bulk).farmers.bulk('p', [{ email: 'f@example.com', farm: 'Hoek', locale: 'af' }], true)).toEqual(results);
+		expect(bulk).toHaveBeenCalledWith(
+			'/projects/p/farmers/bulk',
+			expect.objectContaining({ method: 'POST', body: JSON.stringify({ rows: [{ email: 'f@example.com', farm: 'Hoek', locale: 'af' }], dryRun: true }) })
+		);
 		const put = mockFetch(200, { farmer });
 		expect(await createApi('', put).farmers.setFarms('p', 'u', ['n1'])).toEqual(farmer);
 		expect(put).toHaveBeenCalledWith('/projects/p/farmers/u', expect.objectContaining({ method: 'PUT' }));

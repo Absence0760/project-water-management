@@ -2,12 +2,12 @@
 // farm, and the confirmation shown before deleting a node. Deleting a farm, or
 // changing it to a gauge or water user, unlinks its farmers when the model is
 // saved (020_farm_scope.sql), so the owner is told before it happens.
-import type { Farmer } from '$lib/api/types';
+import type { FarmerEntry } from '$lib/api/types';
 
-/** Linked farmers per node id. */
-export function countByNode(farmers: readonly Pick<Farmer, 'nodeIds'>[]): Record<string, number> {
+/** Linked farmers per node id. A pending invite (WP-2.2) links nobody yet, so it isn't counted. */
+export function countByNode(farmers: readonly Pick<FarmerEntry, 'nodeIds' | 'status'>[]): Record<string, number> {
 	const out: Record<string, number> = {};
-	for (const f of farmers) for (const id of f.nodeIds) out[id] = (out[id] ?? 0) + 1;
+	for (const f of farmers) if (f.status === 'active') for (const id of f.nodeIds) out[id] = (out[id] ?? 0) + 1;
 	return out;
 }
 

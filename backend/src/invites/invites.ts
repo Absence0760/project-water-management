@@ -17,7 +17,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { maskEmail, recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
-import { inviteMail, siteLink } from '../mail/templates.js';
+import { farmerInviteMail, inviteMail, siteLink, type Locale } from '../mail/templates.js';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { requireTeamRole } from '../teams/access.js';
@@ -68,6 +68,11 @@ export type PendingMail = Parameters<typeof trySendMail>[0] | null;
  * for that account instead of a sign-up link; verifying accepts the invite.
  * No email when a verification link went out within its own cooldown (the
  * link already in their inbox accepts the invite too).
+ *
+ * `farmer`: a farmer invite (WP-2.2, 034_farmer_invites). Its farms' names go
+ * into the farmer variant of the email, in `locale`; the caller writes the
+ * invite's invite_node rows. Any other role clears them, so an address
+ * re-invited as a viewer doesn't keep a farmer invite's farms.
  */
 export async function inviteByEmail(
 	db: Db,
@@ -75,9 +80,11 @@ export async function inviteByEmail(
 	targetId: string,
 	email: string,
 	role: string,
-	unverifiedUserId?: string
+	unverifiedUserId?: string,
+	farmer?: { farms: string[]; locale: Locale }
 ): Promise<{ invite: ReturnType<typeof toInvite>; mail: PendingMail }> {
 	const { target, role: roleCol } = COLS[kind];
+	const locale = farmer?.locale ?? 'en';
 	const { rows: existing } = await db.query<{ id: string; recent: boolean }>(
 		`SELECT id, last_sent_at > now() - $3::interval AS recent FROM invite
 		 WHERE ${target} = $1 AND email = $2 FOR UPDATE`,
@@ -90,25 +97,26 @@ export async function inviteByEmail(
 		// Mailed moments ago: keep the link that's in their inbox, just update the role.
 		id = existing[0].id;
 		send = false;
-		await db.query(`UPDATE invite SET ${roleCol} = $2, invited_by = app_current_user_id() WHERE id = $1`, [id, role]);
+		await db.query(`UPDATE invite SET ${roleCol} = $2, invited_by = app_current_user_id(), locale = $3 WHERE id = $1`, [id, role, locale]);
 	} else if (existing[0]) {
 		id = existing[0].id;
 		send = true;
 		await db.query(
 			`UPDATE invite SET ${roleCol} = $2, invited_by = app_current_user_id(), token_hash = $3,
-				expires_at = now() + $4::interval, last_sent_at = now()
+				expires_at = now() + $4::interval, last_sent_at = now(), locale = $5
 			 WHERE id = $1`,
-			[id, role, hash, TOKEN_TTL.invite]
+			[id, role, hash, TOKEN_TTL.invite, locale]
 		);
 	} else {
 		id = crypto.randomUUID();
 		send = true;
 		await db.query(
-			`INSERT INTO invite (id, email, ${target}, ${roleCol}, invited_by, token_hash, expires_at)
-			 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, now() + $6::interval)`,
-			[id, email, targetId, role, hash, TOKEN_TTL.invite]
+			`INSERT INTO invite (id, email, ${target}, ${roleCol}, invited_by, token_hash, expires_at, locale)
+			 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, now() + $6::interval, $7)`,
+			[id, email, targetId, role, hash, TOKEN_TTL.invite, locale]
 		);
 	}
+	if (kind === 'project' && role !== 'farmer') await db.query('DELETE FROM invite_node WHERE invite_id = $1', [id]);
 	const { rows } = await db.query<InviteRow>(`${selectInvites(kind)} WHERE i.id = $1`, [id]);
 	const row = rows[0]!;
 	if (!send) return { invite: toInvite(row), mail: null };
@@ -119,12 +127,17 @@ export async function inviteByEmail(
 		link = siteLink('/verify-email', verifyToken);
 	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
+	const mode = unverifiedUserId ? 'confirm' : 'sign-up';
+	if (farmer) {
+		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms }, mode, locale);
+		return { invite: toInvite(row), mail };
+	}
 	const mail = inviteMail(
 		email,
 		link,
 		row.invited_by_name,
 		{ kind, name: named[0]?.name ?? '', role },
-		unverifiedUserId ? 'confirm' : 'sign-up'
+		mode
 	);
 	return { invite: toInvite(row), mail };
 }

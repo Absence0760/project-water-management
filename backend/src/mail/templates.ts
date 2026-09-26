@@ -105,6 +105,68 @@ export function inviteMail(
 	});
 }
 
+/** Languages an invite email can be in (invite.locale, 034). */
+export const LOCALES = ['en', 'af'] as const;
+export type Locale = (typeof LOCALES)[number];
+
+/** "A", "A and B", "A, B and C". */
+export function listText(items: readonly string[], and = 'and'): string {
+	if (items.length <= 1) return items[0] ?? '';
+	return `${items.slice(0, -1).join(', ')} ${and} ${items.at(-1)}`;
+}
+
+export type FarmerInviteFacts = { catchment: string; farms: string[] };
+
+type FarmerText = (to: string, inviter: string, f: FarmerInviteFacts, confirm: boolean) => { subject: string; body: Omit<Body, 'action'> & { label: string } };
+
+/**
+ * The farmer invite's wording per language. Afrikaans follows WP-2.5; until
+ * it has a translation here an `af` invite is sent in English.
+ */
+const FARMER_TEXT: Partial<Record<Locale, FarmerText>> = {
+	en: (to, inviter, f, confirm) => {
+		const farms = f.farms.length ? listText(f.farms) : 'your farm';
+		return {
+			subject: `${inviter} has given you access to ${farms} in ${f.catchment}`,
+			body: {
+				heading: `Your farm on ${PRODUCT}`,
+				paragraphs: [
+					`${inviter} has given you access to ${farms} in ${f.catchment}.`,
+					"You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.",
+					confirm
+						? `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`
+						: `Create your ${PRODUCT} account with this email address (${to}) to accept.`
+				],
+				label: confirm ? 'Confirm email and accept' : 'Create account and accept',
+				footer: confirm
+					? [
+							'This link expires in 48 hours.',
+							`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
+						]
+					: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
+			}
+		};
+	}
+};
+
+/**
+ * A farmer invite (WP-2.2): "{inviter} has given you access to {farm} in
+ * {catchment}". Same two modes as `inviteMail`; `locale` picks the wording.
+ */
+export function farmerInviteMail(
+	to: string,
+	url: string,
+	inviterName: string,
+	facts: FarmerInviteFacts,
+	mode: 'sign-up' | 'confirm' = 'sign-up',
+	locale: Locale = 'en'
+): Mail {
+	const text = FARMER_TEXT[locale] ?? FARMER_TEXT.en!;
+	const { subject, body } = text(to, inviterName, facts, mode === 'confirm');
+	const { label, ...rest } = body;
+	return render(to, subject, { ...rest, action: { label, url } });
+}
+
 /** Absolute link to a page of the site (no token). */
 export function sitePage(path: string): string {
 	return `${(process.env.SITE_URL || 'http://localhost:7777').replace(/\/+$/, '')}${path}`;

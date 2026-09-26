@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, inviteMail, reportReadyMail, resetPasswordMail, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { escapeHtml, farmerInviteMail, inviteMail, listText, reportReadyMail, resetPasswordMail, siteLink, sitePage, verifyEmailMail } from './templates.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
 
@@ -106,5 +106,49 @@ describe('reportReadyMail', () => {
 		vi.stubEnv('SITE_URL', 'https://water.example.com/');
 		expect(sitePage('/projects/p/reports/j')).toBe(url);
 		vi.unstubAllEnvs();
+	});
+});
+
+describe('farmer invite email (WP-2.2)', () => {
+	const url = `http://localhost:7777/register?invite=${TOKEN}`;
+
+	it('lists farms in plain English', () => {
+		expect(listText([])).toBe('');
+		expect(listText(['Vaalbank'])).toBe('Vaalbank');
+		expect(listText(['A', 'B'])).toBe('A and B');
+		expect(listText(['A', 'B', 'C'])).toBe('A, B and C');
+	});
+
+	it('says who gave access to which farms in which catchment, with the sign-up link', () => {
+		const mail = farmerInviteMail('farmer@example.com', url, 'Wua Manager', { catchment: 'Sandspruit', farms: ['Vaalbank', 'Rietvlei'] });
+		expect(mail.subject).toBe('Wua Manager has given you access to Vaalbank and Rietvlei in Sandspruit');
+		expect(mail.text).toContain('Wua Manager has given you access to Vaalbank and Rietvlei in Sandspruit.');
+		expect(mail.text).toContain(`Create account and accept: ${url}`);
+		expect(mail.text).toMatch(/7 days/);
+		expect(mail.html).toContain(`href="${url}"`);
+		expect(mail.html).toMatch(/<html lang="en">/);
+		expect(mail.html.match(/<h1/g)).toHaveLength(1);
+	});
+
+	it('asks an existing unverified account to confirm instead', () => {
+		const mail = farmerInviteMail('farmer@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'] }, 'confirm');
+		expect(mail.text).toContain('Confirm email and accept');
+		expect(mail.text).toMatch(/48 hours/);
+		expect(mail.text).toContain('There is already a Water Management account for farmer@example.com');
+	});
+
+	it('defaults to English, and sends an Afrikaans invite in English until its translation lands (WP-2.5)', () => {
+		const facts = { catchment: 'Kloof', farms: ['Hoek'] };
+		const en = farmerInviteMail('f@example.com', url, 'Ann', facts);
+		expect(farmerInviteMail('f@example.com', url, 'Ann', facts, 'sign-up', 'en')).toEqual(en);
+		expect(farmerInviteMail('f@example.com', url, 'Ann', facts, 'sign-up', 'af')).toEqual(en);
+	});
+
+	it('escapes farm, catchment and inviter names in the HTML', () => {
+		const mail = farmerInviteMail('f@example.com', url, 'Eve <b>', { catchment: '"><img src=x>', farms: ['<script>x</script>'] });
+		expect(mail.html).not.toContain('<script>');
+		expect(mail.html).not.toContain('<img');
+		expect(mail.html).toContain('&lt;script&gt;');
+		expect(mail.text).toContain('<script>x</script>');
 	});
 });

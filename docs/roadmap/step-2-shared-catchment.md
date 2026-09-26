@@ -368,6 +368,29 @@ the aggregate rule), api.md.
 
 ### WP-2.2 Farmer invites (single and bulk)
 
+> **Status: built** (issue #27; `034_farmer_invites.sql`,
+> `backend/src/farms/routes.ts`, `overview/InviteFarmersDialog.svelte`;
+> [api.md § Farmers](../api.md#farmers)). Where the build departs from the
+> plan below, and why:
+> - **`PUT /farmers/:userId` stays** (the plan's `PATCH`), and there is no
+>   `DELETE /farmers/:userId`: a farmer is removed through
+>   `DELETE /members/:userId` and a pending invite revoked through
+>   `DELETE /invites/:inviteId`, as before. `GET /farmers` stays **viewer**;
+>   the pending invites in it are owners-only by RLS, so a viewer gets the
+>   farmers alone.
+> - **Bulk has a `dryRun`**, which is the dialog's preview: the same code
+>   path, rolled back to a savepoint, so the preview's added / invited /
+>   error can't drift from what "Send" does.
+> - **Bulk adds, never replaces**: a row adds its farm to an existing
+>   farmer's links or to a pending invite's farms. The single form replaces
+>   an invite's farms, as re-sending an invite replaces its role.
+> - **`invite.locale`** takes `en` or `af`; an `af` invite is sent in English
+>   until the Afrikaans wording lands (WP-2.5). A new account's
+>   `app_user.locale` isn't set from it yet: `app_user` has no `locale`
+>   column until WP-2.4/2.5 adds it.
+> - The e2e plants the invite token instead of reading Mailpit, like the
+>   other invite specs (e2e mails go to the server log).
+
 **Goal.** A WUA manager or owner invites 20–60 farmers, each linked to their
 farm(s), without typing each one twice. Invitations work whether or not the
 farmer already has an account.
