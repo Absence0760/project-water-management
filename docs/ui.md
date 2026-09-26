@@ -197,6 +197,13 @@ Two buttons rather than one "Import…": the client looks for a named workbook
 import, and the two sources explain themselves differently (a workbook's
 review has options and reports a `.json` file doesn't).
 
+**A click anywhere on a project's row opens it.** The name link stretches
+over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:
+Ctrl/Cmd-click or a middle click opens a new tab, and the keyboard and screen
+readers still meet one named link per row. The row's Team link, its Add data,
+Copy and Delete buttons, and the freshness and last-run badges (whose tooltips
+explain them) sit above the stretch and keep doing their own thing.
+
 ### Import a project file
 
 The import dialog (`lib/components/import/ImportProjectDialog.svelte`, WP-1.8)

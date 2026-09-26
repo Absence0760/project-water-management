@@ -5,6 +5,12 @@ import { expect, test } from '../support/fixtures.ts';
 const row = (page: Page, name: string) =>
 	page.getByRole('row').filter({ has: page.getByRole('rowheader', { name, exact: true }) });
 
+/** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
+async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
+	const box = (await target.boundingBox())!;
+	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
 async function createThroughDialog(page: Page, name: string, description = '') {
 	await page.getByRole('button', { name: 'New project' }).first().click();
 	const dialog = page.getByRole('dialog', { name: 'New project' });
@@ -61,6 +67,29 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await page.reload();
 	await expect(row(page, 'Example Valley — baseline')).toBeVisible();
 	await expect(row(page, 'Example Valley — drought')).toHaveCount(0);
+});
+
+// A click anywhere on a row opens the project; the row's own buttons still do their own thing.
+test('clicking anywhere on a project row opens it, and its buttons still work', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.context().request, 'Example Ridge');
+	await page.goto('/');
+	const r = row(page, 'Example Ridge');
+	await r.getByRole('button', { name: 'Copy Example Ridge' }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page).toHaveURL(/\/$/);
+	// Click where a user would, on the plain role cell away from the name: the
+	// stretched name link lies over it (Playwright's own click refuses a
+	// covered element, so click the screen point).
+	await clickAt(page, r.getByRole('cell', { name: 'owner', exact: true }));
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+	await expect(page.getByRole('heading', { level: 1, name: 'Example Ridge' })).toBeVisible();
+	// On a phone the row folds into the name cell; tapping its meta line opens it too.
+	await page.setViewportSize({ width: 390, height: 800 });
+	await page.goto('/');
+	await clickAt(page, row(page, 'Example Ridge').locator('.meta'));
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
 });
 
 test('cancelling the delete confirmation keeps the project', async ({ page, owner }) => {
