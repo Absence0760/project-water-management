@@ -192,7 +192,7 @@ describe('model store', () => {
 		expect(got.nodes.filter((n) => n.downstreamNodeId === bigModel.nodes[0]!.id)).toHaveLength(59);
 	});
 
-	it('refuses, as a whole, a save whose land-cover or transfer id is another project’s', async () => {
+	it('refuses, as a whole, a save whose land-cover, transfer or borehole id is another project’s', async () => {
 		const u = await signUp('Hijack');
 		const a = await newProject(u, 'A');
 		const b = await newProject(u, 'B');
@@ -201,7 +201,8 @@ describe('model store', () => {
 		const fresh = chain(2);
 		for (const stolen of [
 			{ ...fresh, landCover: [{ ...m.landCover![0]!, nodeId: fresh.nodes[1]!.id }] },
-			{ ...fresh, transfers: [{ ...m.transfers[0]!, fromNodeId: fresh.nodes[1]!.id, toNodeId: fresh.nodes[2]!.id }] }
+			{ ...fresh, transfers: [{ ...m.transfers[0]!, fromNodeId: fresh.nodes[1]!.id, toNodeId: fresh.nodes[2]!.id }] },
+			{ ...fresh, boreholes: [{ ...m.boreholes![0]!, nodeId: fresh.nodes[1]!.id }] }
 		]) {
 			const res = await u.call('PUT', `/projects/${b}/model`, stolen);
 			expect(res.status).toBe(409);
@@ -211,5 +212,6 @@ describe('model store', () => {
 		const got = (await u.call('GET', `/projects/${a}/model`)).body;
 		expect(got.landCover).toHaveLength(2);
 		expect(got.transfers).toHaveLength(1);
+		expect(got.boreholes).toHaveLength(m.boreholes!.length);
 	});
 });

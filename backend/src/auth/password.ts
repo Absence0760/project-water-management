@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 //
 // Under vitest the cost is bcrypt's minimum, 4: the db suite signs up and logs
 // in hundreds of times, and at cost 12 the lockout tests spent their whole
-// 5 s budget hashing (bcryptjs is ~300 ms a hash on a dev laptop). What they
+// 5 s budget hashing (bcryptjs is ~250 ms a hash on a dev laptop). What they
 // test is the counting and locking, not the work factor.
 //
 // The e2e API server lowers it the same way, with PASSWORD_HASH_COST=4
