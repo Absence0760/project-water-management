@@ -10,7 +10,7 @@
 // written under it, and tests are named by position, not by file name.
 //
 // PYTHON picks the interpreter (default: the checkout's .venv, else python3).
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -84,15 +84,25 @@ interface PythonRun {
 	warnings: string[];
 }
 
-function runPython(workbook: string, args: string[]): PythonRun {
+/**
+ * extract_project.py on one workbook, as a child process: it takes ~30 s on a
+ * client workbook, so the tests below start every run at once (it.concurrent)
+ * and they share the machine's cores instead of queueing behind each other.
+ */
+async function runPython(workbook: string, args: string[]): Promise<PythonRun> {
 	const out = mkdtempSync(join(tmpdir(), 'wbt-parity-'));
 	try {
-		const r = spawnSync(PY!, [SCRIPT, workbook, out, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-		if (r.status !== 0) throw new Error(`extract_project.py exited ${r.status}`);
+		const child = spawn(PY!, [SCRIPT, workbook, out, ...args]);
+		let stdout = '';
+		let stderr = '';
+		child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
+		child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
+		const status = await new Promise<number | null>((done, fail) => child.on('error', fail).on('close', done));
+		if (status !== 0) throw new Error(`extract_project.py exited ${status}`);
 		return {
 			project: JSON.parse(readFileSync(join(out, 'project.json'), 'utf8')),
-			notes: projectNotes(r.stdout.split('\n').filter((l) => l.startsWith('  note: ')).map((l) => l.slice('  note: '.length))),
-			warnings: r.stderr.split('\n').filter((l) => l.startsWith('  WARNING: ')).map((l) => l.slice(2))
+			notes: projectNotes(stdout.split('\n').filter((l) => l.startsWith('  note: ')).map((l) => l.slice('  note: '.length))),
+			warnings: stderr.split('\n').filter((l) => l.startsWith('  WARNING: ')).map((l) => l.slice(2))
 		};
 	} finally {
 		rmSync(out, { recursive: true, force: true });
@@ -114,15 +124,15 @@ describe.skipIf(!available)('parity with extract_project.py on the source workbo
 			const args = ['--gauge-as-reference', '--gauge-scaling-from', scaling.scalingFrom, '--gauge-scale-factor', String(scaling.scaleFactor)];
 			variants.push(["--gauge-as-reference with the seed's scaling", args, { gaugeAsReference: scaling }]);
 		}
-		it(`${label}: the streaming reader reads every cell as SheetJS did`, { timeout: 180_000 }, async () => {
+		it.concurrent(`${label}: the streaming reader reads every cell as SheetJS did`, { timeout: 180_000 }, async ({ expect }) => {
 			const bytes = new Uint8Array(readFileSync(path));
 			const reference = await readWorkbookWithSheetJS(bytes);
 			// The difference names a sheet and cell address only, never a value.
 			expect(readerDifference(reference.source, await readWorkbook(bytes))).toBeNull();
 		});
 		for (const [variant, args, opts] of variants) {
-			it(`${label}, ${variant}`, { timeout: 180_000 }, async () => {
-				const py = runPython(path, args);
+			it.concurrent(`${label}, ${variant}`, { timeout: 180_000 }, async ({ expect }) => {
+				const py = await runPython(path, args);
 				const t0 = performance.now();
 				const wb = await readWorkbook(readFileSync(path));
 				const t1 = performance.now();
