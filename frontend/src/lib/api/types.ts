@@ -58,6 +58,8 @@ export interface ProjectSummary {
 	dataUntil: string | null;
 	/** ISO timestamp of the newest run, or null. */
 	lastRunAt: string | null;
+	/** ISO timestamp of the current publication (022_publication), or null before any. Every member sees it, farmers included. */
+	publishedAt: string | null;
 }
 
 export interface Project extends ProjectSummary {

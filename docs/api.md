@@ -90,7 +90,8 @@ text never reaches the client.
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
 lists their projects with `role: "farmer"`, `dataUntil: null` and
-`lastRunAt: null`. Their own farm routes come with WP-2.6.
+`lastRunAt: null`, and the current publication's `publishedAt` (which every
+member reads). Their own farm routes come with WP-2.6.
 
 ## Projects
 
@@ -112,11 +113,14 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
-- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
 - `dataUntil` — the last day covered by any of the project's time series
   (`YYYY-MM-DD`: the latest `startDate + length − 1`), or `null` with no data.
-  `lastRunAt` — ISO timestamp of the newest run, or `null`. Both come from the
-  same query as the list (no per-project calls), for the list's freshness badge.
+  `lastRunAt` — ISO timestamp of the newest run, or `null`. `publishedAt` —
+  ISO timestamp of the current publication ([§ Publication](#publication)), or
+  `null` before any; every member sees it, farmers included. All three come
+  from the same query as the list (no per-project calls), for the list's
+  freshness badge and its "published" hint.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
