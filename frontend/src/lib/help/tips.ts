@@ -725,7 +725,7 @@ export const TIPS: HelpTipText[] = [
 		id: 'ewr-charge',
 		term: 'EWR charge',
 		short: 'A farm’s share of the EWR shortfall at the EWR sites below it, pro rata to its net impact that day.',
-		units: 'm³/day (negative in the daily series)',
+		units: 'm³/day, shown as a positive volume charged (negative in the daily series)',
 		category: 'ewr',
 		fields: ['run.ewr_charge', 'run.ewr_charged', 'run.ewr_natural', 'summary.avgEwrShortfallM3Day']
 	},
@@ -954,7 +954,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'Measured flow at the outlet (gauge record, or a logger), in m³/s. Scores the calibration and the EWR test; it never drives the model.',
 		units: 'm³/s',
 		category: 'data',
-		fields: ['series.flow_observed_m3s', 'series.flow_logger_m3s', 'run.observed_flow']
+		fields: ['series.flow_observed_m3s', 'series.flow_logger_m3s', 'run.observed_flow', 'run.observed_flow_other']
 	},
 	{
 		id: 'reference-gauge',
@@ -1098,6 +1098,14 @@ export const TIPS: HelpTipText[] = [
 		units: '%',
 		category: 'fit',
 		fields: ['stats.volumeErrorPct']
+	},
+	{
+		id: 'in-sample',
+		term: 'In-sample (calibration period)',
+		short: 'Scores on the same days the parameters were fitted on. Only then are they in-sample; otherwise the label says why not.',
+		units: 'label',
+		category: 'fit',
+		fields: ['stats.fitStatus']
 	}
 ];
 

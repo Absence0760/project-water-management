@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { CurtailmentFarm, CurtailmentSummary } from '@water-management/engine';
-import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtDemandLeft, fmtSigned, fmtVol } from './curtailment';
+import { runModel, type CurtailmentFarm, type CurtailmentSummary, type ModelOutput } from '@water-management/engine';
+import { randomInput } from '@water-management/engine/testing';
+import { fmtNum } from '$lib/format/number';
+import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtDemandLeft, fmtSigned, fmtVol } from './curtailment';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -105,7 +107,7 @@ describe('curtailmentRows', () => {
 			action: 'cut',
 			reduceGain: '-33.3',
 			reduceGainLs: '-0.3',
-			ewrShortfall: '-5',
+			ewrShortfall: '5',
 			totalChange: '-38.3',
 			totalChangeLs: '-0.4',
 			demandLeftPct: '62%',
@@ -165,7 +167,8 @@ describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
 
 	it('splits the charge into irrigate less and store less, with the supply cut and the binding site', () => {
 		const [a, b] = curtailmentRows(c, { g: 'Weir (renamed)' });
-		expect(a).toMatchObject({ ewrShortfall: '-30', ewrIrrigation: '-12', ewrStorage: '-18', supplyCut: '-16', supplyCutLs: '-0.2', bindingSite: 'Weir (renamed)' });
+		// The charge and its parts are volumes charged (positive, issue #45); the supply cut is a change (negative).
+		expect(a).toMatchObject({ ewrShortfall: '30', ewrIrrigation: '12', ewrStorage: '18', supplyCut: '-16', supplyCutLs: '-0.2', bindingSite: 'Weir (renamed)' });
 		expect(b).toMatchObject({ ewrIrrigation: '0', ewrStorage: '0', supplyCut: '0', bindingSite: '' });
 	});
 
@@ -182,9 +185,42 @@ describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
 
 	it('lists each EWR site with its days not met, shortfall, charged and natural parts', () => {
 		expect(ewrSiteRows(c)).toEqual([
-			{ nodeId: 'o', name: 'Outlet gauge (outlet)', farmCount: 2, daysNotMet: '40', shortfall: '-50', charged: '-30', natural: '-20' },
-			{ nodeId: 'g', name: 'Weir', farmCount: 1, daysNotMet: '3', shortfall: '-30', charged: '-30', natural: '0' }
+			{ nodeId: 'o', name: 'Outlet gauge (outlet)', farmCount: 2, daysNotMet: '40', shortfall: '50', charged: '30', natural: '20' },
+			{ nodeId: 'g', name: 'Weir', farmCount: 1, daysNotMet: '3', shortfall: '30', charged: '30', natural: '0' }
 		]);
 		expect(ewrSiteRows(summary([]))).toEqual([]);
+	});
+});
+
+describe('the EWR charge reads the same in the Farms table and the curtailment table (issue #45)', () => {
+	it('shows one farm the same positive volume in both, over the whole run', () => {
+		expect(fmtCharged(-30)).toBe('30');
+		expect(fmtCharged(0)).toBe('0');
+		expect(fmtCharged(null)).toBe('–');
+		let charged = 0;
+		for (let seed = 1; seed < 400 && charged < 5; seed++) {
+			const input = randomInput(seed, { maxDays: 400 });
+			let run: ModelOutput;
+			try {
+				run = runModel({ ...input, settings: { ...input.settings, reportStart: null, reportEnd: null } });
+			} catch {
+				continue;
+			}
+			const c = run.summary.curtailment;
+			if (!c?.farms.length) continue;
+			const rows = curtailmentRows(c);
+			for (const f of run.summary.farms) {
+				const i = c.farms.findIndex((x) => x.nodeId === f.nodeId);
+				if (!(f.avgEwrShortfallM3Day > 0.5)) continue;
+				charged++;
+				// The Farms table shows FarmSummary.avgEwrShortfallM3Day as it is; the curtailment table the same farm's R.
+				expect(f.avgEwrShortfallM3Day).toBeGreaterThan(0);
+				expect(0 - c.farms[i]!.ewrShortfallM3Day).toBeCloseTo(f.avgEwrShortfallM3Day, 6);
+				expect(rows[i]!.ewrShortfall).toBe(fmtNum(f.avgEwrShortfallM3Day, 0, true));
+				expect(rows[i]!.ewrShortfall.startsWith('-')).toBe(false);
+			}
+		}
+		// Positive control: some seeded farms were charged.
+		expect(charged).toBeGreaterThan(0);
 	});
 });

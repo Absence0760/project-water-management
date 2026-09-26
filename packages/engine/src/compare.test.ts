@@ -350,6 +350,10 @@ describe('compareRuns', () => {
 		expect(compareRuns(run(summary([], { calibration: empty })), run(summary([]))).calibration).toBeNull();
 		const one = compareRuns(run(summary([])), run(summary([], { calibration: { ...empty, days: 10, nse: 0.3 } })));
 		expect(one.calibration!.nse).toEqual({ a: null, b: 0.3, delta: null });
+		// Whether each side's scores are in-sample (issue #45); a run without it recorded is null.
+		expect(one.calibration!.fitStatus).toEqual({ a: null, b: null });
+		const fitted = compareRuns(run(summary([], { calibration: { ...empty, days: 10, nse: 0.5, fitStatus: 'fitted' } })), run(summary([], { calibration: { ...empty, days: 10, nse: 0.3, fitStatus: 'notFitted' } })));
+		expect(fitted.calibration!.fitStatus).toEqual({ a: 'fitted', b: 'notFitted' });
 		expect(one.samePeriod).toBe(true);
 	});
 });

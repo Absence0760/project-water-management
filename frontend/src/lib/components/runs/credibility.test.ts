@@ -37,7 +37,7 @@ describe('credibility', () => {
 				lowFlow: { comparison: { withinFactor: true } }
 			},
 			wr2012: { flag: { level: 'note' } },
-			calibration: { days: 400, nse: 0.712 }
+			calibration: { days: 400, nse: 0.712, fitStatus: 'fitted' }
 		} as unknown as Parameters<typeof credibility>[0]);
 		expect(items.map((i) => [i.label, i.text, i.tone, i.href])).toEqual([
 			['Self-checks', 'all 5 passed', 'ok', '#res-checks'],
@@ -45,6 +45,13 @@ describe('credibility', () => {
 			['WR2012', 'Note the difference', 'warn', '#res-wr2012'],
 			['Fit', 'NSE 0.71 over 400 observed days (in-sample)', 'none', '#res-calibration']
 		]);
+	});
+
+	it('calls the fit in-sample only when the parameters were fitted on those days (issue #45)', () => {
+		const fit = (fitStatus?: string) => credibility({ calibration: { days: 400, nse: 0.712, fitStatus } } as unknown as Parameters<typeof credibility>[0]).find((i) => i.label === 'Fit')!.text;
+		expect(fit('fitted')).toBe('NSE 0.71 over 400 observed days (in-sample)');
+		expect(fit('notFitted')).toBe('NSE 0.71 over 400 observed days (parameters not fitted)');
+		expect(fit(undefined)).toBe('NSE 0.71 over 400 observed days');
 	});
 
 	it('says a failed self-check in red, leaves out what the run has no panel for, and says when there is no fit', () => {

@@ -13,7 +13,7 @@
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from './flowSeries';
+	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
@@ -94,14 +94,16 @@
 	});
 
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
-	const hydroSeries = $derived(hydrographSeries(catchment, conv));
+	// Gauge or logger, and which one the run is scored against (issue #45).
+	const sources = $derived(observedSources(refs));
+	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
 	// Which days the flow-duration curves rank. With an observed record that
 	// covers only part of the run, the curves are compared on the days it read
 	// (like with like); the whole run is one click away.
 	let fdcDays = $state<'observed' | 'all'>('observed');
 	const fdc = $derived.by(() => {
 		const list = [catchment.natural, catchment.simulated, catchment.observed];
-		const labels = ['Natural', 'Simulated outflow', 'Observed'];
+		const labels = ['Natural', 'Simulated outflow', observedLabels(sources).observed];
 		const colors = ['--series-1', '--series-2', '--chart-obs'];
 		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
 		const obs = catchment.observed ? conv(catchment.observed) : null;
@@ -171,7 +173,7 @@
 	const supplySeries = $derived.by<ChartSeries[]>(() => {
 		const out: ChartSeries[] = [];
 		const { demand, supplied } = farmData;
-		if (demand) out.push({ label: 'Demand (net)', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
+		if (demand) out.push({ label: 'Abstraction demand', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
 		if (supplied) out.push({ label: 'Supplied', startDate: supplied.startDate, values: supplied.values, color: '--series-1', width: 1.25 });
 		return out;
 	});
@@ -232,7 +234,7 @@
 			</div>
 			{#if farm}
 				<p class="muted small">
-					Demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
+					Abstraction demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
 					({fmtPct(farm.fractionSupplied)}){capacity >= 1 ? ` · dam ${fmtNum(capacity)} m³` : ' · no dam'}.
 				</p>
 			{/if}
@@ -279,7 +281,7 @@
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
 				{band}
-				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
+				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
 	</section>

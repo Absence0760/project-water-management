@@ -2582,6 +2582,30 @@ calibration flow series (`pickObservedKind`, `DEFAULT_GAUGE_PICK_WARNING` in
 gets no such warning. The setting only picks which record the statistics are
 scored against; results change only when the parameters are re-tuned.
 
+**Both records in the run (engine ≥ 0.39.0, issue #45).** The run writes the
+calibration record as `observed_flow` and, when the project also has the other
+one, that record as `observed_flow_other` (m³/day, missing days NaN). Each is
+labelled by instrument (`OBSERVED_SERIES_LABEL` in `project.ts`: "Observed
+flow" is the gauge, "Observed flow (logger)" the logger), so the hydrograph
+can show both and say which one is scored. `observed_flow_other` is never
+scored, and adds nothing to the calibration statistics or the EWR agreement.
+
+**In-sample or not (engine ≥ 0.39.0, issue #45).** Scores on the days a
+model was fitted on show how well it fits, not how well it predicts, so the
+app calls them in-sample only when they are. `CalibrationStats.fitStatus`
+(`calibrationFitStatus` in `calibrate/provenance.ts`) records it: `fitted`
+when the run's settings hold a fit record for its runoff model, with no
+fitted parameter edited since, the same calibration window and exclusions,
+and the same flow record as the one scored; `notFitted` when there is no
+such record (parameters set by hand, imported or defaults); `edited` when a
+fitted parameter was changed by hand; `otherPeriod` when the fit used another
+window, other exclusions or the other record. A forcing change since the fit
+(PE, CHIRPS, rain-source settings) doesn't change it: the days are still the
+ones fitted, though the fit record flags the forcing. Hand-tuned parameters
+flatter the model as much as a fit does, which the `notFitted` note says. The
+field never changes a result; a run from before 0.39.0 has none, and the UI
+then says only "calibration period".
+
 **A workbook "gauge" column is not necessarily on the modelled river.** A b023
 workbook's gauge column can hold a neighbouring river's gauge, and it may be
 scaled by catchment area for part of the record and unscaled for the rest. Such
@@ -3506,6 +3530,18 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", U / H)` [sheet: `ROUND(…, 3)`] (see quirk Q12); in 0–1 from engine 0.17.0 |
 | – | `ewrCutBeyondShareM3Day` | – | `MAX(ΔG − M, 0)` (engine ≥ 0.17.0, Q13): how far the EWR supply cut exceeds the farm's equitable share; flagged "EWR cut exceeds this farm's equitable share" when > 0 |
 
+**Display sign of the EWR charge (issue #45).** R, R_irr, R_store, an
+other user's charge and uncurtailed charge, and each EWR site's shortfall,
+charged and natural parts stay ≤ 0 in the engine (the workbook's sign, so S =
+N + R and U = M + R hold for the workbook's formulas). `FarmSummary.
+avgEwrShortfallM3Day` and `UserSummary.avgEwrChargeM3Day` are the positive
+volume (`0 − mean`). Every table and export shows all of them as the positive
+volume charged (m³/day; the curtailment CSV's R header says "workbook R ×
+−1"), so one farm's charge reads the same in the Farms table and the
+curtailment table. The changes they ask for (N, O, the supply cut, S, T) keep
+− = reduce. Only the daily series `ewr_charge`, `ewr_charge_irrigation`,
+`ewr_charged`, `ewr_natural` and `ewr_shortfall` keep the negative sign.
+
 **Demand left % (engine ≥ 0.17.0, Q13).** The UI shows V as a whole
 percentage, never outside 0–100: "no demand" when H = 0; "—" with the
 tooltip *demand under 1 m³/day; % not meaningful* when 0 < H < 1 m³/day
@@ -4154,6 +4190,10 @@ step when a definition changes.
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |
 | **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.16.0). Abstraction demand = crop requirement ÷ efficiency. |
+| **Crop water requirement** | F: what the crops need from irrigation on a day, after effective rainfall (the workbook's net irrigation demand; run series `crop_requirement`). |
+| **Abstraction demand** | D = F ÷ irrigation efficiency: what the farm has to take to meet its crop water requirement (engine ≥ 0.16.0; run series `demand`, `FarmSummary.avgDemandM3Day`). The app's "Demand": supplied, deficit and % supplied are measured against it. Not "net of effective rainfall" alone, which is F. |
+| **EWR charge** | A farm's share of the EWR shortfall at the EWR sites below it (§2.7b). Shown everywhere as a positive volume charged, m³/day; the daily series are negative (§2.11). |
+| **In-sample** | Scores on the days the parameters were fitted on. A run's calibration scores are in-sample only when `fitStatus` is `fitted` (§2.10). |
 | **Return flow** | The part of the irrigation losses that runs back to the river the same day: loss return fraction × (1 − efficiency) × supplied. |
 | **Transfer** | Water moved from one farm's dam to another farm (pipeline or canal). |
 | **NSE** | Nash–Sutcliffe Efficiency = 1 − Σ(obs−sim)² / Σ(obs−mean obs)². 1 is perfect; ≤ 0 means no better than the mean. |
