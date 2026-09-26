@@ -13,13 +13,6 @@
 //      `call` makes one real request and returns its response. Keep what a
 //      later entry needs in `ctx`. Or, for a route that changes nothing the
 //      history covers, `exempt: '<why>'`.
-//
-// For example, share links (WP-2.3 phase 2), once merged:
-//   { route: 'POST /projects/:id/share-links', records: ['share_link.created'],
-//     call: async (c) => { const r = await c.owner.call('POST', `/projects/${c.projectId}/share-links`, { … });
-//                          c.shareLinkId = r.body.link.id; return r; } },
-//   { route: 'DELETE /projects/:id/share-links/:linkId', records: ['share_link.revoked'],
-//     call: (c) => c.owner.call('DELETE', `/projects/${c.projectId}/share-links/${c.shareLinkId}`) },
 import { beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 
@@ -183,6 +176,20 @@ const WRITE_ROUTES: Entry[] = [
 		route: `PATCH ${P}/publication/:pubId`,
 		records: ['publication.notice_changed'],
 		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', noticeEn: 'Use water sparingly' } })
+	},
+	{
+		route: `POST ${P}/share-links`,
+		records: ['share_link.created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/share-links`, { label: 'Guard link', expiresInDays: 7 });
+			c.shareLinkId = r.body.link?.id;
+			return r;
+		}
+	},
+	{
+		route: `DELETE ${P}/share-links/:linkId`,
+		records: ['share_link.revoked'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/share-links/${c.shareLinkId}`)
 	},
 	{
 		route: `DELETE ${P}/runs/:runId`,
