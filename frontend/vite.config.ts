@@ -52,6 +52,58 @@ function autocalWorkerChunk(): Plugin {
 }
 
 /**
+ * Preload lists without the chunks a page already has (issue #9).
+ *
+ * For every dynamic import Vite writes the whole static import tree of the
+ * chunk it loads into the importing chunk (`__vite__mapDeps`), so the browser
+ * can fetch it in parallel. Most of that tree (the Svelte runtime, the API
+ * client, the shared UI chunks) is already a static import of the importer
+ * itself, loaded before its code ran: preloading it again does nothing, but
+ * its file name still ships in every list. This drops those entries and keeps
+ * the rest (and every CSS file) as Vite wrote them. The chunk graph comes from
+ * the finished bundle: generateBundle runs `pre` here, before Vite's own
+ * import analysis asks resolveDependencies.
+ */
+export function preloadDedupe(): { plugin: Plugin; resolveDependencies: (file: string, deps: string[], ctx: { hostId: string; hostType: 'html' | 'js' }) => string[] } {
+	let imports = new Map<string, readonly string[]>();
+	const loaded = new Map<string, Set<string>>();
+	function staticTree(file: string): Set<string> {
+		let seen = loaded.get(file);
+		if (seen) return seen;
+		seen = new Set();
+		const stack = [...(imports.get(file) ?? [])];
+		while (stack.length) {
+			const f = stack.pop()!;
+			if (seen.has(f)) continue;
+			seen.add(f);
+			stack.push(...(imports.get(f) ?? []));
+		}
+		loaded.set(file, seen);
+		return seen;
+	}
+	return {
+		plugin: {
+			name: 'water:preload-dedupe',
+			generateBundle: {
+				order: 'pre',
+				handler(_options, bundle) {
+					imports = new Map();
+					loaded.clear();
+					for (const [file, out] of Object.entries(bundle)) if (out.type === 'chunk') imports.set(file, out.imports);
+				}
+			}
+		},
+		resolveDependencies(_file, deps, { hostId, hostType }) {
+			if (hostType !== 'js') return deps;
+			const has = staticTree(hostId);
+			return deps.filter((d) => !has.has(d));
+		}
+	};
+}
+
+const preload = preloadDedupe();
+
+/**
  * The engine is pure (no I/O, and no module does anything when it loads:
  * src/lib/engineSideEffects.test.ts guards that), so an engine module whose
  * exports a chunk doesn't use is no dependency of that chunk. Without this,
@@ -76,7 +128,7 @@ export function svelteRuntimeChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [autocalWorkerChunk(), sveltekit()],
+	plugins: [autocalWorkerChunk(), preload.plugin, sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
 	// builds that don't read build.rollupOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never
@@ -94,6 +146,7 @@ export default defineConfig({
 		// Firefox 125). Applies to the calibration worker too, which is part of
 		// the page build.
 		target: 'es2022',
+		modulePreload: { resolveDependencies: preload.resolveDependencies },
 		rollupOptions: {
 			output: { manualChunks: svelteRuntimeChunk },
 			treeshake: {

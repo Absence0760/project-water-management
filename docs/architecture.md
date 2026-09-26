@@ -219,6 +219,16 @@ nothing) the total dropped 12 KB and every page's first load 3–6 KB, although
 a page now also loads the few runtime pieces it doesn't use.
 `src/lib/svelteRuntimeChunk.test.ts` keeps the rule in place.
 
+Each dynamic import carries a preload list (Vite's `__vite__mapDeps`): the
+chunks and CSS the loaded chunk needs, fetched in parallel with it. Vite lists
+the loaded chunk's whole static import tree, most of which (the Svelte
+runtime, the API client, shared UI) the importing chunk already imports
+statically and so has loaded before its code runs. `preloadDedupe`
+(`build.modulePreload.resolveDependencies` in `frontend/vite.config.ts`)
+drops those entries; every CSS file and every chunk not yet loaded stays, so
+nothing loads later or in a different order. −2.3 KB gzip across the bundle;
+`src/lib/preloadDedupe.test.ts` pins the rule.
+
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
