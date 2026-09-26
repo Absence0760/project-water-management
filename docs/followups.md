@@ -1727,7 +1727,7 @@ role and not before it.
       keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
       and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
 - [x] **Auto re-run after an ingest or a feed merge** (WP-2.11,
-      `041_auto_rerun.sql`): `series/newData.ts` `onSeriesDaysChanged`
+      `042_auto_rerun.sql`): `series/newData.ts` `onSeriesDaysChanged`
       queues the debounced `rerun` from `mergeInto`, the PUT route and the
       data feeds' ingest. A key's re-run runs as the key's creator through
       `SECURITY DEFINER app_enqueue_rerun` (no job policy for keys); a key

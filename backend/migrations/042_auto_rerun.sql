@@ -1,4 +1,4 @@
--- 041_auto_rerun — automatic re-runs after new data (roadmap WP-2.11;
+-- 042_auto_rerun — automatic re-runs after new data (roadmap WP-2.11;
 -- docs/architecture.md § Background work, docs/data-model.md § Jobs and
 -- § Run storage cap).
 --

@@ -1456,7 +1456,7 @@ on.** WP-2.8, WP-2.9 (`mergeInto`), WP-2.4. D6, D7.
 
 ### WP-2.11 Auto re-run after new data
 
-> **Status: built** (`041_auto_rerun.sql`, `backend/src/series/newData.ts`,
+> **Status: built** (`042_auto_rerun.sql`, `backend/src/series/newData.ts`,
 > `backend/src/runs/autoRun.ts`, `backend/src/publish/autoPublish.ts`,
 > `jobs/handlers/rerun.ts`; [architecture.md § Automatic runs](../architecture.md#automatic-runs)).
 > Where the build departs from the design below, and why:

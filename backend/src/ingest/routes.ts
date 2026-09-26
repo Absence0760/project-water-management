@@ -111,7 +111,7 @@ export const ingestRoutes = new Hono<IngestEnv>()
 		const body = SeriesBody.parse(raw);
 		// Checked here for a clear 403; the time_series policies check it again (app_api_key_allows).
 		if (!keyAllows(key.allowedSeries, body.kind, body.name)) throw new ApiError(403, 'this key may not write that series');
-		// via 'api_key': the new-data hook queues the project's automatic re-run as the key's creator (041_auto_rerun.sql).
+		// via 'api_key': the new-data hook queues the project's automatic re-run as the key's creator (042_auto_rerun.sql).
 		const r = await withApiKey(key.id, (db) => mergeInto(db, key.projectId, body, { keepRevision: false, via: 'api_key', audit: source ? { source } : {} }));
 		await wakeForRerun(r.rerun);
 		c.header('Cache-Control', 'no-store');

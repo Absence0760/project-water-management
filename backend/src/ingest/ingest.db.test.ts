@@ -403,7 +403,7 @@ describe('the rate limit', () => {
 	});
 });
 
-describe('automatic re-runs from an ingest (041_auto_rerun.sql, WP-2.11)', () => {
+describe('automatic re-runs from an ingest (042_auto_rerun.sql, WP-2.11)', () => {
 	/** A fresh project owned by `u`, automatic runs as given, and a key `u` made for it. */
 	async function keyed(u: User, autoRun: Record<string, unknown> | null) {
 		const pid = (await u.call('POST', '/projects', { name: 'Auto-run ingest' })).body.project.id as string;

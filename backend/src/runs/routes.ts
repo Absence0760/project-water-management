@@ -22,7 +22,7 @@ import { CITED_BY_SQL, citedMessage, executeRun, loadModelInput, lockProjectRuns
 // `reproducible`: its input series are stored (021_series_blob), so
 // GET …/reproduce can re-run it. The same test loadRunInput makes: a run
 // with input series but no stored references is from before 021;
-// `trigger`: what made it, 'manual' or 'auto' (041_auto_rerun, WP-2.11).
+// `trigger`: what made it, 'manual' or 'auto' (042_auto_rerun, WP-2.11).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,

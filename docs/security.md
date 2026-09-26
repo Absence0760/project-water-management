@@ -278,7 +278,7 @@ and nothing else.
   key, history or feed (`ingest.db.test.ts` checks each, with its own series
   as the positive control). It can't write a series revision either, so a
   key's merge keeps none (like a data feed's).
-- **Automatic re-runs from a key** (041_auto_rerun). A key's ingest that
+- **Automatic re-runs from a key** (042_auto_rerun). A key's ingest that
   changes days queues the project's automatic re-run (when it has them on)
   as the key's **creator** (`api_key.created_by`), through `SECURITY DEFINER
   app_enqueue_rerun`; the key itself gets no job policy. The re-run runs as
@@ -489,7 +489,7 @@ In short:
   user and validates it as untrusted input. `water_app` has no `UPDATE` or
   `DELETE` on `job`. A job's stored error is written by the server, never
   database text, and wake messages carry a job id only.
-  **Automatic re-runs** (041_auto_rerun, [architecture.md § Automatic
+  **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
   `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's
   pending re-run, and only for someone `app_rerun_acting_user` answers for:
