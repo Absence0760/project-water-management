@@ -62,6 +62,8 @@
 	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
+	// API keys for the ingest endpoint, owners only: likewise (docs/ui.md § API keys).
+	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 
 	let {
 		project,
@@ -944,6 +946,14 @@
 		<DataFeedsPanel projectId={project.id} />
 	{/snippet}
 </Lazy>
+
+{#if project.role === 'owner'}
+	<Lazy load={loadApiKeys}>
+		{#snippet children(ApiKeysPanel)}
+			<ApiKeysPanel projectId={project.id} />
+		{/snippet}
+	</Lazy>
+{/if}
 
 <Lazy load={loadReportSchedules}>
 	{#snippet children(ReportSchedulesPanel)}

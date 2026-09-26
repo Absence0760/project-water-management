@@ -234,6 +234,80 @@ result without signing in, until it expires or its owner revokes it.
   and the k boundary at 4 and 5 holders) and `routes.test.ts` (the two reads
   on the public allowlist, answering `400` rather than `401`).
 
+## API keys
+
+Per-project keys for the ingest endpoint (WP-2.9; `038_api_keys.sql`,
+[api.md § Ingest](./api.md#ingest)). A new trust boundary: a request with no
+session, whose credential is a long-lived secret held by a machine (a
+logger gateway, a script). The key can merge days into one project's series
+and nothing else.
+
+- **The key.** `wm_<prefix>_<secret>`: `prefix` is the first 8 characters of
+  the row's id (a generated, `UNIQUE` column; it finds the row and tells keys
+  apart in lists), `secret` is 32 random bytes as base64url (43 characters).
+  `api_key.key_hash` holds **only the SHA-256 of the whole key** (`CHECK` 32
+  bytes, `UNIQUE`). With 256 bits of entropy a slow hash adds nothing (the
+  emailed tokens' reasoning). The raw key is in the `201` that creates it
+  (`Cache-Control: no-store`) and nowhere else: not in the list, the
+  database, the audit subject or a log. A lost key can't be shown again, only
+  replaced. The Settings panel's `curl` example uses a `$WM_INGEST_KEY`
+  placeholder, never the key.
+- **Checking a key** (`ingest/auth.ts`), on every request:
+  1. the `Authorization: Bearer …` value must match our exact format, or the
+     request is refused before any database work;
+  2. `app_api_key_lookup(prefix)` (`SECURITY DEFINER`: there is no user)
+     returns the row, and the presented key's SHA-256 is compared with the
+     stored one with **`crypto.timingSafeEqual`**. An unknown prefix is
+     compared against a dummy hash, so it costs the same;
+  3. a missing, malformed, unknown, wrong, revoked or expired key all get
+     the same `401 { error: "invalid or missing API key" }`;
+  4. `app_api_key_take` takes one request from the key's token bucket (60,
+     refilled at 60 a minute, under a row lock so concurrent requests count
+     one by one) in its own committed transaction: a failing request still
+     counts. An empty bucket is a `429` with `Retry-After`.
+- **Key context and RLS.** The work runs in `withApiKey` (`db/tx.ts`), which
+  sets `app.current_api_key_id` (transaction-local, like the user id) and
+  **no** user id. `app_api_key_project(scope)` re-checks the key on every
+  statement (exists, not revoked, not expired, holds the scope) and is NULL
+  when a user id is also set, so the two contexts never mix. Permissive
+  policies let the key SELECT, INSERT and UPDATE `time_series` of its project
+  (and only the series in its `allowed_series`, `app_api_key_allows`), and
+  INSERT `audit_event` rows with `actor_user_id` NULL and itself as
+  `actor_api_key_id`. No delete. Every other policy calls `app_has_role`,
+  which is false without a user: a key reads no model, run, member, project,
+  key, history or feed (`ingest.db.test.ts` checks each, with its own series
+  as the positive control). It can't write a series revision either, so a
+  key's merge keeps none (like a data feed's).
+- **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
+  checks it (`403`), and so does the database.
+- **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
+  for a clear `403`, and again by the policies, so a series outside the list
+  doesn't exist for the key.
+- **Owner-only management.** `api_key` RLS: SELECT, INSERT (as yourself) and
+  UPDATE for owners. `water_app` may update only `revoked_at` / `revoked_by`
+  and may not `DELETE` (the catalogue test pins both), so a key's hash,
+  scopes and series can't change after it is made. Revocation applies to
+  the next request. A key belongs to the project, not to the owner who made
+  it: it keeps working if that owner leaves, and any owner can revoke it
+  (the list says who made each one). Audit events `api_key.created` / `api_key.revoked`, and
+  every ingest merge is `series.created` / `series.merged` by `API key
+  “<name>”`, with the key's id on the row.
+- **Transport.** No cookie is read or set, so CSRF doesn't apply; the
+  existing `csrf()` middleware still refuses a cross-origin form post, and
+  the routes take JSON only. CORS isn't opened: gateways aren't browsers.
+  The general 4 MB body cap and the 60 000-day series cap apply. In
+  production the WAF's per-IP limit covers `/api/ingest/*` too, before the
+  per-key bucket.
+- **Tests:** `ingest/ingest.db.test.ts` (owner-only CRUD with a positive
+  control, only the hash stored, every bad key the same `401`, revoked and
+  expired keys, another project's key in the API and in SQL, allowed series,
+  scopes, what a key can't read, the audit actor, idempotency, `429` and the
+  bucket under 12 concurrent takes), `ingest/keys.test.ts` (format, parsing
+  before any database work, and the comparison going through
+  `timingSafeEqual` whichever byte differs), `routes.test.ts` (the ingest
+  routes key-gated, the owner routes session-gated) and
+  `e2e/tests/api-keys.spec.ts`.
+
 ## Authorization: per-project roles enforced by Postgres RLS
 
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
@@ -256,6 +330,9 @@ In short:
   sets `app.current_user_id` (transaction-local), and RLS policies on every
   project table check membership and role. A bug that forgets a `WHERE
   project_id = …` therefore returns nothing rather than someone else's data.
+  The one other request context is an ingest request's `withApiKey`
+  (`app.current_api_key_id` and no user), which the key policies limit to
+  its own project's series ([§ API keys](#api-keys)).
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
 - **Change history and audit log (WP-2.4, 030).** `model_revision`,

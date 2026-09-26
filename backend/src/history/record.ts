@@ -161,9 +161,7 @@ export async function recordModelRevision(db: Db, projectId: string, o: Revision
 }
 
 /**
- * Kinds of audit event (docs/data-model.md § Change history). `share_link.*`
- * and `api_key.*` are reserved for WP-2.3 phase 2 and the API keys; nothing
- * writes them yet.
+ * Kinds of audit event (docs/data-model.md § Change history).
  */
 export type AuditKind =
 	| 'project.changed'
@@ -199,14 +197,16 @@ export type AuditKind =
 	| 'restore';
 
 /**
- * Record one audit event as the signed-in user, with a snapshot of their
- * display name. `subject` holds ids, names, counts and dates, never a secret,
- * a token or series values.
+ * Record one audit event as the transaction's actor, with a snapshot of their
+ * name: the signed-in user (withUser) and their display name, or the API key
+ * (withApiKey, 038_api_keys.sql) and `API key “<name>”`. `subject` holds ids,
+ * names, counts and dates, never a secret, a token or series values.
  */
 export async function recordAudit(db: Db, projectId: string, kind: AuditKind, subject: Record<string, unknown> = {}): Promise<void> {
 	await db.query(
-		`INSERT INTO audit_event (project_id, actor_user_id, actor_label, kind, subject)
-		 VALUES ($1, app_current_user_id(), coalesce((SELECT left(display_name, 200) FROM app_user WHERE id = app_current_user_id()), ''), $2, $3)`,
+		`INSERT INTO audit_event (project_id, actor_user_id, actor_api_key_id, actor_label, kind, subject)
+		 VALUES ($1, app_current_user_id(), app_current_api_key_id(),
+			coalesce((SELECT left(display_name, 200) FROM app_user WHERE id = app_current_user_id()), app_api_key_label(), ''), $2, $3)`,
 		[projectId, kind, JSON.stringify(subject)]
 	);
 }

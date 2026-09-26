@@ -1126,9 +1126,34 @@ its own chunk loaded with the tab; WP-2.10,
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
 
+### API keys
+
+Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
+`lib/components/apiKeys/ApiKeysPanel.svelte`, its own chunk loaded with the
+tab; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
+or a script uses to push daily readings into the project's series.
+
+- **Make an API key**: a name, how long it works (until revoked, 90 days, 1
+  or 2 years) and what it may write: any series of the project, or only the
+  ticked ones (the project's current series).
+- **The new key** is shown once, in a highlighted box with **Copy** and the
+  warning that it won't be shown again, above a copyable `curl` example that
+  pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
+- **The list**: each key's name, its `wm_<prefix>_…` (never the secret), its
+  state (**Live**, **Expired**, **Revoked**), what it writes, who made it
+  and when, when it ends (or "Revoked … by …"), and when it was last used.
+  **Revoke** asks first; the key is refused from its next request, and the
+  row stays.
+- Editors and viewers don't see the panel (the API answers them `403`).
+  What a key writes shows in History by `API key “<name>”`.
+- Tested by `e2e/tests/api-keys.spec.ts` (make a key, push the fixture with
+  `scripts/ingest/push-fixture.mjs`, the series on the Data tab and the key
+  in History, a revoked key refused, axe on the panel, no panel for an
+  editor) and `apiKeys/apiKeys.test.ts`.
+
 ### Scheduled reports
 
-Below Data feeds, **Scheduled reports** (`#set-report-schedules`;
+Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
 `lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
 the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.

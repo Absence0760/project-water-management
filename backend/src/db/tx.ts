@@ -25,6 +25,26 @@ export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): P
 }
 
 /**
+ * Run `fn` in a transaction acting as the API key `keyId` (038_api_keys.sql,
+ * the ingest endpoint): sets `app.current_api_key_id`, transaction-local like
+ * withUser's setting, and **no** user id. The key's RLS policies then let it
+ * read and write its own project's (allowed) series and add audit events
+ * naming itself; every other policy needs a user, so the key sees nothing
+ * else. `app_api_key_project` re-checks the key (live, in scope) on every
+ * statement, so a revocation applies to the next request. Also sets a fresh
+ * `app.change_set_id`, as withUser does.
+ */
+export async function withApiKey<T>(keyId: string, fn: (db: Db) => Promise<T>): Promise<T> {
+	return inTransaction(async (db) => {
+		await db.query("SELECT set_config('app.current_api_key_id', $1, true), set_config('app.change_set_id', $2, true)", [
+			keyId,
+			crypto.randomUUID()
+		]);
+		return fn(db);
+	});
+}
+
+/**
  * Transaction with no user context: app_user lookups during auth, and the job
  * queue's cross-project SECURITY DEFINER calls (claim, failed finish, purge,
  * stats; jobs/runner.ts). Project data is never read here: RLS shows nothing.

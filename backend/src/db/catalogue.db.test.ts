@@ -33,7 +33,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'updated_by'
 	],
 	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
-	share_link: ['revoked_at', 'revoked_by']
+	share_link: ['revoked_at', 'revoked_by'],
+	// An API key likewise: never its hash, scopes or series, only its revocation (038_api_keys.sql).
+	api_key: ['revoked_at', 'revoked_by']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -71,9 +73,10 @@ const APPEND_ONLY = new Set([
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
  * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (037_notes.sql).
+ * editors (037_notes.sql). An API key too: audit events name it
+ * (audit_event.actor_api_key_id, 038_api_keys.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
