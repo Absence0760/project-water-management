@@ -4,11 +4,14 @@
 --
 -- A SECURITY DEFINER function runs with its owner's (`water`) rights, and
 -- Postgres grants EXECUTE on every new function to PUBLIC. 016, 018 and 023
--- revoked that for their functions; the ones below, from 001–024, kept it, so
+-- revoked that for their functions; the others, from 001–025, kept it, so
 -- any role that can connect could call them as the owner. This migration:
 --
---   1. revokes EXECUTE from PUBLIC on every SECURITY DEFINER function that
---      still had it (enumerated from pg_proc on a freshly migrated database);
+--   1. revokes EXECUTE from PUBLIC on every SECURITY DEFINER function in the
+--      schema. It walks pg_proc rather than naming them, so it also closes the
+--      ones from a migration numbered below 027 that ran first on a fresh
+--      database (025's app_share_view / app_share_series did: step 3's
+--      default privileges only cover functions created after it);
 --   2. grants EXECUTE to water_app on the non-trigger ones. water_app calls
 --      them from the routes and from RLS policy expressions, which run with
 --      the querying role's privileges. The owner keeps EXECUTE as owner.
@@ -25,58 +28,24 @@
 -- Non-SECURITY DEFINER functions keep their PUBLIC grant: they run with the
 -- caller's rights, so EXECUTE grants nothing new.
 
--- 1 + 2. Functions water_app calls.
-REVOKE ALL ON FUNCTION
-	app_project_role(uuid),
-	app_has_role(uuid, project_role),
-	app_team_role(uuid),
-	app_accept_invites(uuid),
-	app_invite_for_token(bytea),
-	app_issue_email_token(uuid, email_token_purpose, bytea, interval, interval),
-	app_consume_email_token(bytea, email_token_purpose),
-	app_login_attempt(citext, integer, interval, interval),
-	app_login_succeeded(citext),
-	app_farm_nodes(uuid),
-	app_farm_context(uuid, uuid),
-	app_farm_access(uuid, uuid),
-	app_other_farm_holders(uuid),
-	model_run_cited(uuid)
-FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION
-	app_project_role(uuid),
-	app_has_role(uuid, project_role),
-	app_team_role(uuid),
-	app_accept_invites(uuid),
-	app_invite_for_token(bytea),
-	app_issue_email_token(uuid, email_token_purpose, bytea, interval, interval),
-	app_consume_email_token(bytea, email_token_purpose),
-	app_login_attempt(citext, integer, interval, interval),
-	app_login_succeeded(citext),
-	app_farm_nodes(uuid),
-	app_farm_context(uuid, uuid),
-	app_farm_access(uuid, uuid),
-	app_other_farm_holders(uuid),
-	model_run_cited(uuid)
-TO water_app;
-
--- 1. Trigger functions: PUBLIC revoked, nothing granted.
-REVOKE ALL ON FUNCTION
-	project_add_creator_as_owner(),
-	project_member_keep_owner(),
-	team_add_creator_as_admin(),
-	team_member_keep_admin(),
-	run_nomination_stamp(),
-	run_uncertainty_start(),
-	farm_link_check(),
-	node_unlink_farmers(),
-	series_blob_gc(),
-	assert_same_project(),
-	run_publication_cap(),
-	scenario_guard(),
-	model_run_scenario_same_project(),
-	model_run_pin_limit(),
-	run_series_nodes_in_run()
-FROM PUBLIC;
+-- 1 + 2.
+DO $$
+DECLARE
+	f record;
+BEGIN
+	FOR f IN
+		SELECT p.oid::regprocedure AS sig, p.prorettype = 'trigger'::regtype AS is_trigger
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public' AND p.prosecdef
+	LOOP
+		EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f.sig);
+		IF NOT f.is_trigger THEN
+			EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO water_app', f.sig);
+		END IF;
+	END LOOP;
+END
+$$;
 
 -- 3. Future functions: owner + water_app, never PUBLIC. Applies to the role
 -- running the migrations (the schema owner, `water`), in this database.
