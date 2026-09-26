@@ -87,7 +87,9 @@ test('a help tip works from the keyboard alone and is announced to screen reader
 	await expect(tip).toHaveAttribute('aria-expanded', 'true');
 	await expect(tip).toHaveAttribute('aria-describedby', controls);
 	await expect(live.locator('.term')).toHaveText('Dam capacity');
-	await expect(live.locator('.short')).not.toBeEmpty();
+	await expect(live.locator('.short')).toHaveText(
+		'Combined full-supply volume of the farm’s dams, in m³. 0 means no storage: water not used the same day flows on.'
+	);
 	await expect(live.locator('.units')).toHaveText('Units: m³');
 
 	// Space toggles it shut and open again, focus staying on the button.
@@ -291,6 +293,48 @@ test('an old /help#term link goes on to the glossary entry', async ({ page, owne
 	await page.goto('/help#nse');
 	await expect(page).toHaveURL(/\/help\/glossary#nse$/);
 	await expect(page.getByRole('article', { name: /^NSE/ })).toBeInViewport();
+});
+
+test('the glossary shows every term in full, as many as the help page counts', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help');
+	const link = page.getByRole('main').getByRole('link', { name: /^Glossary, \d+ terms/ });
+	const count = Number((await link.textContent())!.match(/(\d+) terms/)![1]);
+	expect(count).toBeGreaterThan(100);
+	await link.click();
+	await expect(page).toHaveURL(/\/help\/glossary$/);
+	await expect(page.getByRole('main').getByRole('article')).toHaveCount(count);
+
+	// One entry, every part: the short text, the fuller text, units, other
+	// names, related terms (linked) and where the idea comes from.
+	const dam = page.getByRole('article', { name: 'Dam capacity' });
+	await expect(dam.locator('.short')).toHaveText(
+		'Combined full-supply volume of the farm’s dams, in m³. 0 means no storage: water not used the same day flows on.'
+	);
+	await expect(dam.locator('.long')).toHaveText([/^b023 treats a farm’s dams as one composite dam\./]);
+	await expect(dam.getByRole('definition')).toHaveText([
+		'm³',
+		'composite dam, storage capacity, full supply',
+		/Spill/,
+		'b023 Farm spec'
+	]);
+	await dam.getByRole('link', { name: 'Spill', exact: true }).click();
+	await expect(page).toHaveURL(/\/help\/glossary#spill$/);
+	await expect(page.getByRole('article', { name: 'Spill', exact: true })).toBeInViewport();
+});
+
+test('the farm glossary shows the glossary’s farmer words and jumps to the one linked', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/glossary');
+	const topic = page.getByRole('region', { name: 'Words on your farm page' });
+	await expect(topic.getByRole('article').first()).toBeVisible();
+	const terms = (await topic.getByRole('article').locator('h3 > span').allTextContents()).map((t) => t.trim());
+	expect(terms.length).toBeGreaterThan(0);
+
+	await page.goto('/farm/words#farm-reserve');
+	const cards = page.getByRole('main').getByRole('region');
+	await expect(cards.getByRole('heading', { level: 2 })).toHaveText(terms);
+	await expect(page.locator('section#farm-reserve')).toBeInViewport();
 });
 
 test('an unknown guide says so and links back to help', async ({ page, owner }) => {
