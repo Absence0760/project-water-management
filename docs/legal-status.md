@@ -38,7 +38,14 @@ client goes live. Not customer-facing.
   counsel for the Virginia terms.
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
-  instructions, with security measures. security.md lists it as *(confirm)*.
+  instructions, with security measures. **Template drafted** (2026-09-27):
+  [legal/operator-agreement.md](./legal/operator-agreement.md), for counsel
+  review; open until counsel has reviewed it and the first client has
+  signed. Its breach clause is backed by
+  [legal/incident-procedure.md](./legal/incident-procedure.md) (who decides,
+  timelines, the Regulator's eServices report, notices to data subjects).
+  Before the first signature, confirm the mailbox provider listed as a
+  sub-processor (clause 6.1).
 - [ ] **Register the information officer** with the Information Regulator
   (POPIA s55 / the Regulator's portal).
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed

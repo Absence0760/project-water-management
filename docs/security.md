@@ -1553,7 +1553,9 @@ CISO or security analyst before go-live.
 **Roles.** The client (the WUA, or the consultancy for a hydrologist-only
 project) is the **responsible party**: it decides whom to invite and why.
 The operator (whoever runs this deployment) is its **operator** under POPIA
-s20–21 and needs a written agreement with it *(confirm)*. Farmers are invited
+s20–21 and needs a written agreement with it: the template is
+[legal/operator-agreement.md](./legal/operator-agreement.md) (for counsel
+review), and a breach follows [legal/incident-procedure.md](./legal/incident-procedure.md). Farmers are invited
 by the WUA; nobody is added to a project without an owner acting.
 
 **Lawful basis and consent, today.**
@@ -1866,6 +1868,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook
+
+Where personal information may have been seen or taken, the technical steps
+below run alongside [legal/incident-procedure.md](./legal/incident-procedure.md)
+(who decides, the 48-hour notice to clients, the Regulator's report and the
+notice to data subjects).
 
 1. **Suspected secret leak:** rotate the secret at its source.
    `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored

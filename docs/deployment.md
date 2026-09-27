@@ -766,7 +766,9 @@ Every step is an ordinary app action by an owner unless it says "operator".
    `farmer.linked` events (who linked what, when, and whether from an
    invite). Tell the WUA, which as the responsible party decides whether to
    notify the Information Regulator and the farmer whose figures were seen
-   (POPIA s22). Record what was visible and for how long.
+   (POPIA s22). Record what was visible and for how long. Who decides,
+   the timelines and what to tell whom:
+   [legal/incident-procedure.md](./legal/incident-procedure.md).
 5. **A share link leaked.** Overview → Share links → Revoke: the next view
    answers 404. Make a new link for the people who should have it. A link
    shows catchment-level figures only, never a farm.
