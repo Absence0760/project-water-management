@@ -1,7 +1,7 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, renderOptionsFromEnv } from './render.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, renderOptionsFromEnv, reportQuery } from './render.js';
 import { reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
@@ -57,6 +57,17 @@ describe('reportState', () => {
 	it('waits for the renderer Lambda, but not for ever', () => {
 		expect(reportState('rendering', 'done', created, soon)).toBe('rendering');
 		expect(reportState('rendering', 'done', created, new Date(created.getTime() + RENDER_ANSWER_WITHIN_MS + 1))).toBe('failed');
+	});
+});
+
+describe('reportQuery', () => {
+	it('opens the run’s report, or its impact report against the baseline, as the report route reads them', () => {
+		expect(reportQuery({ runId: R })).toBe(`run=${R}`);
+		const q = new URLSearchParams(reportQuery({ runId: R, against: { projectId: P, runId: '33333333-3333-4333-8333-333333333333' } }));
+		expect([...q]).toEqual([
+			['run', R],
+			['against', `${P}:33333333-3333-4333-8333-333333333333`]
+		]);
 	});
 });
 

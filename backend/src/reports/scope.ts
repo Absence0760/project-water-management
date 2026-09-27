@@ -13,6 +13,14 @@
 //   GET /projects/<project>/runs/<run>/day     the self-checks' day trace
 //   GET /projects/<project>/runs/<run>/signoffs  the sign-off section
 //
+// An impact report's session (082: `?against=<baseline project>:<run>`) makes
+// one more read, and only with exactly this pair, baseline first:
+//
+//   GET /compare/runs?a=<baseline project>:<baseline run>&b=<project>:<run>
+//
+// It never reads the baseline's project or run directly: the comparison is
+// all the impact section shows (report/ImpactSection.svelte).
+//
 // Every other method, project, run or route answers 403: another project,
 // the run list, members, teams, compare, any write, and the run's other
 // reads the report doesn't make (its CSV exports, the workbook's bulk series,
@@ -25,6 +33,8 @@
 export interface RenderScope {
 	projectId: string;
 	runId: string;
+	/** An impact report's baseline (possibly another project's run); absent for the plain report. */
+	against?: { projectId: string; runId: string };
 }
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
@@ -32,10 +42,20 @@ const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
 const RUN_READS = ['series', 'day', 'signoffs'];
 const PROJECT_READ = new RegExp(`^/projects/(${UUID})(?:/series|/runs/(${UUID})(?:/(?:${RUN_READS.join('|')}))?)?/?$`);
 
-/** Whether a render session scoped to `scope` may make this request. */
-export function scopeAllows(scope: RenderScope, method: string, path: string): boolean {
+/** The impact section's one comparison: exactly `a` (the baseline) and `b` (the run), once each, nothing else. */
+function compareAllowed(scope: RenderScope, query: URLSearchParams): boolean {
+	if (!scope.against) return false;
+	const keys = [...query.keys()];
+	if (keys.length !== 2 || query.getAll('a').length !== 1 || query.getAll('b').length !== 1) return false;
+	const ref = (p: string, r: string) => `${p}:${r}`.toLowerCase();
+	return query.get('a')!.toLowerCase() === ref(scope.against.projectId, scope.against.runId) && query.get('b')!.toLowerCase() === ref(scope.projectId, scope.runId);
+}
+
+/** Whether a render session scoped to `scope` may make this request (`query`: its search parameters). */
+export function scopeAllows(scope: RenderScope, method: string, path: string, query: URLSearchParams = new URLSearchParams()): boolean {
 	if (method !== 'GET') return false;
 	if (path === '/auth/me') return true;
+	if (path === '/compare/runs') return compareAllowed(scope, query);
 	// Encoded characters or empty / dot segments are never in a path the report makes.
 	if (/%|\/\/|\/\.{1,2}(\/|$)/.test(path)) return false;
 	const m = PROJECT_READ.exec(path);

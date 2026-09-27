@@ -2193,21 +2193,25 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/reports` | `{ runId?, email? }` | `202 { jobId }`: a render of `runId` (the latest run without one) is queued. `email`: `true` emails the link to you; a list of user ids emails it to those members (editors and owners only; `403` for a viewer naming anyone else). `404` a `runId` not in the project; `409` the project has no runs; `429` over 10 on-demand PDFs an hour per user and project | viewer |
+| POST | `/projects/:id/reports` | `{ runId?, against?, email? }` | `202 { jobId }`: a render of `runId` (the latest run without one) is queued. `against` (`"<projectId>:<runId>"`, the report route's and Compare runs' ref; needs `runId`) makes it the **impact report** of `runId` against that baseline, which may be another project's run but must be one **you can read** (`404 no such baseline run, or its project isn't shared with you` otherwise, as Compare runs; `400` malformed, or the run itself). `email`: `true` emails the link to you; a list of user ids emails it to those members (editors and owners only; `403` for a viewer naming anyone else). `404` a `runId` not in the project; `409` the project has no runs; `429` over 10 on-demand PDFs an hour per user and project | viewer |
 | GET | `/projects/:id/reports/:jobId` | – | `{ report: ReportView, url? }`. `url` is a pre-signed download link (an hour) once `status` is `done`. `404` unknown job, or not a report's | viewer |
 | GET | `/projects/:id/report-schedules` | – | `{ schedules: ScheduleView[] }` | viewer |
 | POST | `/projects/:id/report-schedules` | `ScheduleInput` | `201 { schedule: ScheduleView }`. `409` past 10 schedules per project | editor |
 | PATCH | `/projects/:id/report-schedules/:scheduleId` | any of `ScheduleInput`'s fields | `200 { schedule }`. Saving makes you its acting user; changing its timing (or pausing / resuming it) starts it afresh from now | editor |
 | DELETE | `/projects/:id/report-schedules/:scheduleId` | – | `204`. PDFs already sent stay until they expire | editor |
 
-- `ReportView = { jobId, status, runId, scheduled, pages, createdAt, finishedAt, error, emailed }`.
+- `ReportView = { jobId, status, runId, impact, scheduled, pages, createdAt, finishedAt, error, emailed }`.
+  `impact` says it is an impact report; the baseline itself isn't shown (other
+  viewers of the project may not be able to see its project).
   `status` ∈ `queued` → `rendering` → `done`; `retrying` (the render failed
   and will be tried again; up to 3 attempts); `failed` (out of attempts, a
   failure no retry can fix, or, in production, no answer from the renderer
   within an hour). `error` is the server's own text, never raw database or
   browser output: e.g. `the render took longer than 90 s`, `the report page
   did not load: …` (the page's own message), `the run was deleted before its
-  report was made`, `the PDF could not be stored`; after a good render, `the
+  report was made`, `the baseline run was deleted, or its project isn't
+  shared with you any more, before the impact report was made`, `the PDF
+  could not be stored`; after a good render, `the
   email to 1 of 2 recipients could not be sent`. `emailed` is how many people
   it was sent to (asked for; each must still be a member when it's sent).
 - Recipients (on demand and scheduled) must be **direct members of the
@@ -2237,7 +2241,9 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   worker as the requester) for a 10-minute session that may only `GET`
   `/auth/me`, `/projects/:id`, `/projects/:id/series`,
   `/projects/:id/runs/:runId` and its `/series`, `/day` and `/signoffs` (the
-  report page's reads) of the one project and run; everything else, the
+  report page's reads) of the one project and run, and for an impact report
+  `GET /compare/runs?a=<baseline>&b=<project>:<run>` with exactly that pair
+  (never the baseline's own project or run); everything else, the
   run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
   ([security.md § Render tokens](./security.md#render-tokens)).

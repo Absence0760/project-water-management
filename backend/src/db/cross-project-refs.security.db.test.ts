@@ -207,11 +207,24 @@ const FK_SQL = `
  * Foreign keys onto a project-scoped table that need no same-project check,
  * with the reason. The inventory test checks each reason's premise.
  */
-const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' }> = {
+const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },
 	'report_schedule_recipient.schedule_id': {
 		reason: 'no project_id of its own: the row is its schedule’s (report_schedule_recipient_check holds the recipient to that project’s members)',
 		premise: 'no project_id'
+	},
+	// An impact report's baseline (082) may be another project's run, as in
+	// Compare runs: not a same-project reference but a read. The trigger
+	// checks the writer can READ it, under RLS, and the column is fixed at
+	// insert (no UPDATE), so that check is the only way in. Tested in
+	// reports/reports.db.test.ts "impact reports".
+	'report.against_run_id': {
+		reason: 'an impact report’s baseline, cross-project on purpose: report_enqueue requires the requester to read it (reports.db.test.ts)',
+		premise: 'cross-project by design'
+	},
+	'render_token.against_run_id': {
+		reason: 'the render session’s baseline, cross-project on purpose: render_token_issue requires the issuer to read it (reports.db.test.ts)',
+		premise: 'cross-project by design'
 	},
 	'alert_delivery.event_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_fan_out, SECURITY DEFINER, copies the project from the event',
@@ -513,7 +526,9 @@ describe('the inventory of references between project-scoped tables', () => {
 			const exempt = EXEMPT[key];
 			if (exempt) {
 				if (exempt.premise === 'no project_id') expect(fk.childHasProject, key).toBe(false);
-				else expect(fk.writable, key).toBe(false);
+				else if (exempt.premise === 'not writable') expect(fk.writable, key).toBe(false);
+				// Fixed at insert: the insert-time readability check can't be sidestepped by an UPDATE.
+				else expect(fk.updatable, key).toBe(false);
 				continue;
 			}
 			if (!CASES[key]) unclassified.push(key);
@@ -642,6 +657,7 @@ describe('through the routes, by an editor of both projects', () => {
 		const leaks: string[] = [];
 		for (const fk of inventory) {
 			if (!fk.childHasProject || fk.cols.includes('project_id')) continue;
+			if (EXEMPT[`${fk.child}.${fk.cols[0]}`]?.premise === 'cross-project by design') continue;
 			const [n] = await asOwner(
 				`SELECT count(*)::int AS n FROM ${fk.child} c JOIN ${fk.parent} p ON p.${fk.parentCols[0]} = c.${fk.cols[0]}
 				 WHERE c.project_id = ANY($1) AND p.project_id IS DISTINCT FROM c.project_id`,

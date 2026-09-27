@@ -1,12 +1,14 @@
 // Server-side PDF reports end to end against Postgres (023_reports.sql,
 // reports/*): the render token (single use, 5 minutes, one project and one
 // run, as the requester), the session it buys (refused everywhere else), the
-// report API and its RLS, and report schedules (RLS, recipients, the tick).
+// report API and its RLS, report schedules (RLS, recipients, the tick), and
+// impact reports (082): the baseline must be readable by the requester.
 // The render itself (Chromium + MinIO) is reports/render.db.test.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { newToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
+import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
 import { finishReport, loadReport, REPORTS_PER_HOUR } from './store.js';
 import { issueRenderToken } from './tokens.js';
@@ -261,6 +263,143 @@ describe('POST / GET /projects/:id/reports', () => {
 		expect(ok.body.url).toContain('X-Amz-Expires=3600');
 		expect(ok.body.url).toContain('response-content-disposition=attachment');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+});
+
+describe('impact reports (082): a run against a baseline the requester can read', () => {
+	/** Owner of A and B; `viewer` reads A only. A has a baseline and a what-if; B has a run. */
+	async function world(tag: string) {
+		const owner = await signUp(`Imp${tag}Owner`);
+		const viewer = await signUp(`Imp${tag}Viewer`);
+		const a = await withRun(owner, `Impact ${tag} A`);
+		const whatIf = (await owner.call('POST', `/projects/${a.projectId}/runs`, {})).body.run.id as string;
+		const b = await withRun(owner, `Impact ${tag} B`);
+		await member(owner, a.projectId, viewer, 'viewer');
+		return { owner, viewer, a: a.projectId, baseline: a.runId, whatIf, b: b.projectId, bRun: b.runId };
+	}
+	const cleanUp = (...projects: string[]) => asOwner('DELETE FROM job WHERE project_id = ANY($1)', [projects]);
+
+	it('queues one when the requester can read both runs (positive control), in this project or another; refuses a baseline they can’t read', async () => {
+		const w = await world('Api');
+		// Positive controls: the baseline in the same project, and in another project the owner reads.
+		const same = await w.owner.call('POST', `/projects/${w.a}/reports`, { runId: w.whatIf, against: `${w.a}:${w.baseline}`, email: true });
+		expect(same.status).toBe(202);
+		const cross = await w.owner.call('POST', `/projects/${w.a}/reports`, { runId: w.whatIf, against: `${w.b}:${w.bRun}` });
+		expect(cross.status).toBe(202);
+		const rows = await asOwner('SELECT job_id, impact, against_run_id FROM report WHERE job_id = ANY($1)', [[same.body.jobId, cross.body.jobId]]);
+		expect(new Set(rows.map((r) => `${r.job_id} ${r.impact} ${r.against_run_id}`))).toEqual(
+			new Set([`${same.body.jobId} true ${w.baseline}`, `${cross.body.jobId} true ${w.bRun}`])
+		);
+		// The status says it's an impact report; a plain one says it isn't. Neither names the baseline.
+		const status = await w.viewer.call('GET', `/projects/${w.a}/reports/${cross.body.jobId}`);
+		expect(status.body.report).toMatchObject({ impact: true, runId: w.whatIf });
+		expect(JSON.stringify(status.body)).not.toContain(w.bRun);
+		const plain = await w.viewer.call('POST', `/projects/${w.a}/reports`, {});
+		expect((await w.viewer.call('GET', `/projects/${w.a}/reports/${plain.body.jobId}`)).body.report).toMatchObject({ impact: false });
+
+		// The viewer reads A (positive control: A's own baseline is fine) but not B: B's run is refused, and nothing is queued.
+		expect((await w.viewer.call('POST', `/projects/${w.a}/reports`, { runId: w.whatIf, against: `${w.a}:${w.baseline}` })).status).toBe(202);
+		const before = await asOwner('SELECT count(*)::int AS n FROM report WHERE project_id = $1', [w.a]);
+		const refused = await w.viewer.call('POST', `/projects/${w.a}/reports`, { runId: w.whatIf, against: `${w.b}:${w.bRun}` });
+		expect(refused.status).toBe(404);
+		expect(refused.body.error).toBe("no such baseline run, or its project isn't shared with you");
+		expect(await asOwner('SELECT count(*)::int AS n FROM report WHERE project_id = $1', [w.a])).toEqual(before);
+
+		// Malformed or inconsistent requests.
+		const bad = async (body: object) => (await w.owner.call('POST', `/projects/${w.a}/reports`, body)).status;
+		expect(await bad({ against: `${w.a}:${w.baseline}` })).toBe(400); // no runId
+		expect(await bad({ runId: w.whatIf, against: `${w.a}:${w.whatIf}` })).toBe(400); // against itself
+		expect(await bad({ runId: w.whatIf, against: w.baseline })).toBe(400);
+		expect(await bad({ runId: w.whatIf, against: `${w.b}:${w.baseline}` })).toBe(404); // the run, under the wrong project
+		expect(await bad({ runId: w.whatIf, against: `${w.a}:${crypto.randomUUID()}` })).toBe(404);
+		await cleanUp(w.a, w.b);
+	});
+
+	it('the database refuses an unreadable, missing or self baseline, whatever the route does', async () => {
+		const w = await world('Db');
+		const insert = (u: User, against: string | null, impact = true) =>
+			withUser(u.id, (db) => db.query('INSERT INTO report (project_id, run_id, impact, against_run_id) VALUES ($1, $2, $3, $4) RETURNING against_run_id', [w.a, w.whatIf, impact, against]));
+		// Positive control: the viewer's readable baseline is stored.
+		expect((await insert(w.viewer, w.baseline)).rows).toEqual([{ against_run_id: w.baseline }]);
+		// B's run: the viewer can't read it, so it's refused (the owner, who can, may).
+		await expect(insert(w.viewer, w.bRun)).rejects.toMatchObject({ code: '42501' });
+		expect((await insert(w.owner, w.bRun)).rows).toEqual([{ against_run_id: w.bRun }]);
+		await expect(insert(w.owner, null)).rejects.toMatchObject({ code: '23514' });
+		await expect(insert(w.owner, w.whatIf)).rejects.toMatchObject({ code: '23514' });
+		// A plain report can't carry a baseline, and the baseline is fixed once queued.
+		await expect(insert(w.owner, w.baseline, false)).rejects.toMatchObject({ code: '23514' });
+		await expect(withUser(w.owner.id, (db) => db.query('UPDATE report SET against_run_id = $2 WHERE project_id = $1', [w.a, w.bRun]))).rejects.toMatchObject({ code: '42501' });
+		await asOwner('DELETE FROM report WHERE project_id = $1', [w.a]);
+	});
+
+	it('a render token for one reads the one comparison, and nothing of the baseline’s project; refused if the baseline becomes unreadable', async () => {
+		const w = await world('Tok');
+		// Positive control: the owner reads B, so its run can be the baseline.
+		const token = await withUser(w.owner.id, (db) => issueRenderToken(db, w.a, w.whatIf, w.bRun));
+		expect(await asOwner('SELECT against_run_id FROM render_token WHERE project_id = $1', [w.a])).toEqual([{ against_run_id: w.bRun }]);
+		const { status, cookie } = await exchange(token);
+		expect(status).toBe(200);
+		const compare = (a: string, b: string, extra = '') => `/compare/runs?${new URLSearchParams({ a, b })}${extra}`;
+		expect(await as(cookie!, 'GET', compare(`${w.b}:${w.bRun}`, `${w.a}:${w.whatIf}`))).toBe(200);
+		expect(await as(cookie!, 'GET', `/projects/${w.a}/runs/${w.whatIf}`)).toBe(200);
+		for (const path of [
+			compare(`${w.a}:${w.whatIf}`, `${w.b}:${w.bRun}`), // swapped
+			compare(`${w.a}:${w.baseline}`, `${w.a}:${w.whatIf}`), // another baseline the owner can read
+			compare(`${w.b}:${w.bRun}`, `${w.a}:${w.baseline}`), // another run
+			compare(`${w.b}:${w.bRun}`, `${w.a}:${w.whatIf}`, `&a=${w.a}:${w.baseline}`), // a second a
+			compare(`${w.b}:${w.bRun}`, `${w.a}:${w.whatIf}`, '&x=1'),
+			`/projects/${w.b}`,
+			`/projects/${w.b}/runs/${w.bRun}`,
+			`/projects/${w.b}/series`
+		]) {
+			expect(await as(cookie!, 'GET', path), path).toBe(403);
+		}
+		// A plain report's session never compares.
+		const plain = await exchange(await withUser(w.owner.id, (db) => issueRenderToken(db, w.a, w.whatIf)));
+		expect(await as(plain.cookie!, 'GET', compare(`${w.b}:${w.bRun}`, `${w.a}:${w.whatIf}`))).toBe(403);
+
+		// The viewer can't issue one against B's run; against A's own baseline they can (positive control).
+		await expect(withUser(w.viewer.id, (db) => issueRenderToken(db, w.a, w.whatIf, w.bRun))).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(w.viewer.id, (db) => issueRenderToken(db, w.a, w.whatIf, w.whatIf))).rejects.toMatchObject({ code: '23514' });
+		const own = await withUser(w.viewer.id, (db) => issueRenderToken(db, w.a, w.whatIf, w.baseline));
+		expect((await exchange(own)).status).toBe(200);
+
+		// Readable at issue, not at use: the viewer is given B, issues one, and loses B before the browser presents it.
+		await member(w.owner, w.b, w.viewer, 'viewer');
+		const late = await withUser(w.viewer.id, (db) => issueRenderToken(db, w.a, w.whatIf, w.bRun));
+		expect((await w.owner.call('DELETE', `/projects/${w.b}/members/${w.viewer.id}`)).status).toBe(204);
+		const lost = await exchange(late);
+		expect(lost.status).toBe(403);
+		expect(lost.cookie).toBeNull();
+	});
+
+	it('the render fails, without retrying, when the baseline was deleted or became unreadable after the request', async () => {
+		const w = await world('Job');
+		await member(w.owner, w.b, w.viewer, 'viewer');
+		const queue = async (u: User, against: string) => {
+			const res = await u.call('POST', `/projects/${w.a}/reports`, { runId: w.whatIf, against });
+			expect(res.status).toBe(202);
+			const [r] = await asOwner('SELECT id FROM report WHERE job_id = $1', [res.body.jobId]);
+			return { jobId: res.body.jobId as string, reportId: r.id as string };
+		};
+		const render = (u: User, q: { jobId: string; reportId: string }) => {
+			const job = { id: q.jobId, projectId: w.a, kind: 'report_render' as const, actingUserId: u.id, leaseToken: crypto.randomUUID(), attempts: 1, maxAttempts: 3 };
+			return withUser(u.id, (db) => reportRenderHandler.run({ db, job, payload: { reportId: q.reportId }, progress: async () => true }));
+		};
+		const why = "the baseline run was deleted, or its project isn't shared with you any more, before the impact report was made";
+
+		// Unreadable since: the viewer lost B.
+		const lostAccess = await queue(w.viewer, `${w.b}:${w.bRun}`);
+		expect((await w.owner.call('DELETE', `/projects/${w.b}/members/${w.viewer.id}`)).status).toBe(204);
+		await expect(render(w.viewer, lostAccess)).rejects.toMatchObject({ message: why, retry: false });
+
+		// Deleted since: the report stays an impact report, so it doesn't print the plain one.
+		const deleted = await queue(w.owner, `${w.a}:${w.baseline}`);
+		expect((await w.owner.call('DELETE', `/projects/${w.a}/runs/${w.baseline}`)).status).toBe(204);
+		expect(await asOwner('SELECT impact, against_run_id FROM report WHERE id = $1', [deleted.reportId])).toEqual([{ impact: true, against_run_id: null }]);
+		await expect(render(w.owner, deleted)).rejects.toMatchObject({ message: why, retry: false });
+		expect(await asOwner('SELECT id FROM render_token WHERE project_id = $1', [w.a])).toEqual([]);
+		await cleanUp(w.a, w.b);
 	});
 });
 

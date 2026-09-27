@@ -187,6 +187,8 @@ export type ReportMailFacts = {
 	/** Who asked, or who set up the schedule. */
 	requestedBy: string;
 	scheduled: boolean;
+	/** An impact report (the run against a baseline, 082); a schedule never makes one. */
+	impact?: boolean;
 };
 
 /**
@@ -202,7 +204,7 @@ export function reportReadyMail(to: string, url: string, f: ReportMailFacts): Ma
 		paragraphs: [
 			f.scheduled
 				? `This is the scheduled report of the latest run, ${f.runName} (${pages}), set up by ${f.requestedBy}.`
-				: `${f.requestedBy} made a PDF of the report for the run ${f.runName} (${pages}).`,
+				: `${f.requestedBy} made a PDF of the ${f.impact ? 'impact report' : 'report'} for the run ${f.runName} (${pages}).`,
 			'Sign in to download it. You need to be a member of the project.'
 		],
 		action: { label: 'Download the report', url },

@@ -2049,19 +2049,22 @@ refuses one.
 
 | Table | Holds |
 | --- | --- |
-| `render_token` | The headless renderer's way in: `purpose` (`report`), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
-| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
+| `render_token` | The headless renderer's way in: `purpose` (`report`), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project), `against_run_id` (082: an impact report's baseline, any run the issuer can read; `ON DELETE CASCADE`), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
+| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `impact` + `against_run_id` (082: an impact report of the run against a baseline, which may be another project's run the requester can read; `ON DELETE SET NULL` with `impact` kept, so a report whose baseline went fails rather than printing the plain report; fixed at insert), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
 | `report_schedule` | `frequency` (`weekly` with `weekday` 1–7, or `monthly` with `month_day` 1–28), `hour` 0–23 in `timezone` (IANA), `enabled`, `acting_user_id` (the editor who last saved it; `SET NULL` when that account goes, then skipped), `created_by`, `created_at`, `updated_at`, `anchor_at` (fires only for times after this; reset when the timing or `enabled` changes), `last_fired_for` (the scheduled time last queued), `last_error` (fixed text: why a due time queued nothing) |
 | `report_schedule_recipient` | `(schedule_id, user_id)`: who a schedule's PDF goes to |
 
 - **RLS**:
-  - `render_token`: INSERT as yourself for a project you can view; SELECT
-    your own. **Append-only** for `water_app` (the catalogue test lists it):
+  - `render_token`: INSERT as yourself for a project you can view (and a
+    baseline you can read: `render_token_issue`, latest definition 082);
+    SELECT your own. **Append-only** for `water_app` (the catalogue test lists it):
     consumed only by `app_consume_render_token`.
   - `report`: SELECT for viewers; INSERT for viewers as themselves (the
     `report_enqueue` trigger stamps the requester and a fresh `queued`
     state, and checks the run, job and schedule belong to the project, the
-    job being the requester's own `report_render`); UPDATE of the outcome
+    job being the requester's own `report_render`; and, latest definition
+    082, that an impact report's baseline is a run the requester can read,
+    under their RLS, and not the run itself); UPDATE of the outcome
     columns only (`status`, `pages`, `bytes`, `error`, `finished_at`, a
     column grant) and only by the requester, which is who the job runs as;
     DELETE by the requester.
@@ -2078,7 +2081,8 @@ refuses one.
     job of kind `report_render` only; every other kind still needs an editor.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
   - `app_consume_render_token(hash)`: deletes the token (single use) and
-    returns its user, project and run, or nothing when unknown, used or
+    returns its user, project and run (and, 082, the baseline run and its
+    project), or nothing when unknown, used or
     expired; drops tokens expired over a day ago. Pre-auth, like
     `app_consume_email_token`.
   - `app_report_schedules_to_check()`: the enabled schedules with an acting
@@ -2092,16 +2096,18 @@ refuses one.
     `render-results` messages.
   - `app_purge_reports(age)`: deletes reports older than `age` (≥ 1 day; the
     tick passes 8), returning their ids so a local run can delete the PDFs.
-- Indexes cover every foreign key (`render_token` user / project / run,
-  `report` project / run / schedule / requester, `job_id` by its unique
+- Indexes cover every foreign key (`render_token` user / project / run /
+  baseline, `report` project / run / baseline / schedule / requester, `job_id` by its unique
   constraint, `report_schedule` project / acting user / creator, the
   recipient's user), plus `render_token.expires_at` and `report.created_at`
   for the purges.
 - `reports/reports.db.test.ts` checks the token (single use, expiry, scope
   on other projects' and runs' routes, a requester who lost access), the
   report and schedule RLS with positive controls, farmers, the recipients
-  rule and the tick; `reports/render.db.test.ts` renders a real PDF into
-  MinIO.
+  rule and the tick, and impact reports' baselines (082: readable by the
+  requester, with positive and negative controls, and a deleted or unshared
+  baseline failing the render); `reports/render.db.test.ts` renders a real
+  PDF into MinIO, an impact report's included.
 
 ### Alerts (051_alerts.sql)
 

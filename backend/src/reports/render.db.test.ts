@@ -50,12 +50,20 @@ const stubPage = (apiBase: string) => `<!doctype html>
 (async () => {
 	const api = ${JSON.stringify(apiBase)};
 	const p = location.pathname.split('/')[2];
-	const r = new URLSearchParams(location.search).get('run');
+	const q = new URLSearchParams(location.search);
+	const r = q.get('run');
+	const against = q.get('against');
 	const get = (path) => fetch(api + path, { credentials: 'include' }).then((x) => x.status);
-	const [me, run, list] = await Promise.all([get('/auth/me'), get('/projects/' + p + '/runs/' + r), get('/projects')]);
+	const [me, run, list, cmp] = await Promise.all([
+		get('/auth/me'),
+		get('/projects/' + p + '/runs/' + r),
+		get('/projects'),
+		// An impact report's one extra read: the comparison with its baseline.
+		against ? get('/compare/runs?' + new URLSearchParams({ a: against, b: p + ':' + r })) : 200
+	]);
 	const main = document.querySelector('main');
-	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list;
-	if (me === 200 && run === 200 && list === 403) main.setAttribute('data-report-ready', 'true');
+	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list + ', compare ' + cmp;
+	if (me === 200 && run === 200 && list === 403 && cmp === 200) main.setAttribute('data-report-ready', 'true');
 	else { const a = document.createElement('div'); a.setAttribute('role', 'alert'); a.textContent = 'stub: ' + document.getElementById('s').textContent; main.prepend(a); }
 })();
 </script></body></html>`;
@@ -108,14 +116,14 @@ async function projectWithRun(name: string) {
  * report_render handler on it directly, as the worker does: inside the
  * acting user's transaction.
  */
-async function renderAs(u: { id: string }, projectId: string, email: boolean) {
+async function renderAs(u: { id: string }, projectId: string, email: boolean, againstRunId?: string) {
 	const reportId = crypto.randomUUID();
 	const jobId = await withUser(u.id, async (db) => {
 		const { job } = await enqueueJob(db, { projectId, kind: 'report_render', payload: { reportId }, delaySeconds: 3600, maxAttempts: 3 });
 		await db.query(
-			`INSERT INTO report (id, project_id, run_id, job_id, email_to)
-			 SELECT $1, $2, id, $3, $4::uuid[] FROM model_run WHERE project_id = $2 ORDER BY created_at DESC LIMIT 1`,
-			[reportId, projectId, job.id, email ? [u.id] : []]
+			`INSERT INTO report (id, project_id, run_id, job_id, email_to, impact, against_run_id)
+			 SELECT $1, $2, id, $3, $4::uuid[], $5::uuid IS NOT NULL, $5 FROM model_run WHERE project_id = $2 ORDER BY created_at DESC LIMIT 1`,
+			[reportId, projectId, job.id, email ? [u.id] : [], againstRunId ?? null]
 		);
 		return job.id;
 	});
@@ -160,6 +168,21 @@ describe.skipIf(!minioUp)('report_render with local Chromium and MinIO', () => {
 		const mail = lastMailTo(u.email);
 		expect(mail?.subject).toBe('Catchment report: Rendered catchment — Water Management');
 		expect(mail?.text).toContain(`/projects/${projectId}/reports/${jobId}`);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+		vi.unstubAllEnvs();
+	}, 90_000);
+
+	it('an impact report: the browser opens the report with its baseline and the session makes the one comparison (082)', async () => {
+		renderEnv();
+		const { u, projectId } = await projectWithRun('Impact catchment');
+		const [{ id: baseline }] = await asOwner('SELECT id FROM model_run WHERE project_id = $1', [projectId]);
+		expect((await u.call('POST', `/projects/${projectId}/runs`, {})).status).toBe(201);
+		const { jobId, outcome } = await renderAs(u, projectId, true, baseline);
+		// The stub sets data-report-ready only when GET /compare/runs (baseline, run) answered 200.
+		expect(outcome).toBeNull();
+		const status = await u.call('GET', `/projects/${projectId}/reports/${jobId}`);
+		expect(status.body.report).toMatchObject({ status: 'done', impact: true, error: null });
+		expect(lastMailTo(u.email)?.text).toContain('made a PDF of the impact report for the run');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 		vi.unstubAllEnvs();
 	}, 90_000);

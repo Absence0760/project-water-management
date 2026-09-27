@@ -73,6 +73,8 @@ export const RenderRequestMessage = z
 		reportId: Uuid,
 		projectId: Uuid,
 		runId: Uuid,
+		/** An impact report's baseline (082). The render session's scope, not this, decides what the page may read. */
+		against: z.object({ projectId: Uuid, runId: Uuid }).strict().optional(),
 		token: z.string().regex(/^[A-Za-z0-9_-]{43}$/)
 	})
 	.strict();

@@ -12,6 +12,8 @@ export interface ReportView {
 	jobId: string;
 	status: ReportState;
 	runId: string | null;
+	/** An impact report (the run against a baseline). */
+	impact: boolean;
 	scheduled: boolean;
 	pages: number | null;
 	createdAt: string;
@@ -62,8 +64,8 @@ export function reportsApi(api: Pick<Api, 'request'>, projectId: string) {
 	const p = `/projects/${encodeURIComponent(projectId)}`;
 	const sched = (id: string) => `${p}/report-schedules/${encodeURIComponent(id)}`;
 	return {
-		/** Queue a PDF: of `runId` (the latest without one), emailed to me (true) or to these members. */
-		create: (body: { runId?: string; email?: boolean | string[] }) => api.request<{ jobId: string }>('POST', `${p}/reports`, body).then((r) => r.jobId),
+		/** Queue a PDF: of `runId` (the latest without one), or its impact report `against` a baseline ("<projectId>:<runId>"), emailed to me (true) or to these members. */
+		create: (body: { runId?: string; against?: string; email?: boolean | string[] }) => api.request<{ jobId: string }>('POST', `${p}/reports`, body).then((r) => r.jobId),
 		get: (jobId: string) => api.request<ReportStatus>('GET', `${p}/reports/${encodeURIComponent(jobId)}`).then(downloadable),
 		schedules: () => api.request<{ schedules: ReportSchedule[] }>('GET', `${p}/report-schedules`).then((r) => r.schedules),
 		addSchedule: (body: ScheduleBody) => api.request<{ schedule: ReportSchedule }>('POST', `${p}/report-schedules`, body).then((r) => r.schedule),

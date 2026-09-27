@@ -10,8 +10,9 @@
 	// `&against=<projectId>:<runId>` (Compare runs' Export impact report, issue
 	// #17 A4) makes it an impact report: an "Impact against the baseline"
 	// section after the cover (report/ImpactSection.svelte, its own chunk),
-	// from GET /compare/runs. The server-side PDF prints the plain report, so
-	// the impact report offers the browser's PDF and links to the plain one.
+	// from GET /compare/runs. The server-side PDF prints it too: the report
+	// request carries the baseline (082), and the renderer opens this route
+	// with the same `against`.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -241,11 +242,9 @@
 				<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
 			{/if}
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
-			{#if run && againstParam}
-				<!-- The server renders the plain report (reports/render.ts), not this one: offer it by name rather than a PDF without the impact. -->
-				<a href="{base}/projects/{projectId}/report?run={run.id}">The run's report without the impact (server PDF)</a>
-			{:else if run}
-				<ServerPdf {projectId} runId={run!.id} />
+			<!-- An impact report whose baseline can't be read has no server PDF: the API would refuse it (the section says why). -->
+			{#if run && (!againstParam || impact)}
+				<ServerPdf {projectId} runId={run!.id} against={againstParam} />
 			{/if}
 			<p class="muted small" role="status">
 				{#if ready}

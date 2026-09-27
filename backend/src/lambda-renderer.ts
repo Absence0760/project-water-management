@@ -38,7 +38,7 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 		}
 		let result: RenderResult;
 		try {
-			const rendered = await renderReportPdf({ projectId: req.projectId, runId: req.runId, token: req.token }, renderOptionsFromEnv());
+			const rendered = await renderReportPdf({ projectId: req.projectId, runId: req.runId, against: req.against, token: req.token }, renderOptionsFromEnv());
 			await putPdf(reportKey(req.projectId, req.reportId), rendered.pdf);
 			result = { ok: true, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms };
 		} catch (err) {

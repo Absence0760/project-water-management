@@ -89,6 +89,32 @@ test('Email me the PDF: the worker renders the report, the page offers the downl
 	await expect(page.getByRole('link', { name: 'Download the PDF' })).toBeVisible();
 });
 
+test('an impact report’s server PDF prints the impact against its baseline, the same pages as the browser', async ({ page, owner }) => {
+	const { projectId, runId: baseline } = await seedRun(page, 'Server impact catchment');
+	const whatIf = await createRun(page.request, projectId, 'What-if');
+	await page.goto(`/projects/${projectId}/report?run=${whatIf}&against=${projectId}:${baseline}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByRole('region', { name: '1. Impact against the baseline' })).toBeVisible();
+
+	const control = page.locator('.server-pdf');
+	await page.getByRole('button', { name: 'Email me the PDF' }).click();
+	await expect(control).toHaveAttribute('data-state', 'queued');
+	await runJobsTick();
+	await expect(control).toHaveAttribute('data-state', 'done');
+
+	const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download the generated PDF' }).click()]);
+	const pdf = await readFile((await download.path())!);
+	expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+	const pages = pdf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length ?? 0;
+	// The cover, the impact section, then the report's own sections: the server printed this page, impact included.
+	expect(pages).toBeGreaterThanOrEqual(SECTIONS + 2);
+	const printed = await page.pdf({ format: 'A4', printBackground: true });
+	expect(printed.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length).toBe(pages);
+
+	const mail = await mailTo(owner.email);
+	expect(mail.text).toContain(`${owner.displayName} made a PDF of the impact report for the run What-if`);
+});
+
 test('the emailed link opens nothing for someone outside the project', async ({ page, owner, signIn }) => {
 	void owner;
 	const { projectId } = await seedRun(page, 'Server report access');

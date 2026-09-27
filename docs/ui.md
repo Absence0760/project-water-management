@@ -3995,10 +3995,11 @@ exists, says so with a link to Runs & results.
   (`ChangesList`). A baseline that can't be read (deleted, or its project
   not shared) leaves the report loading, with the reason in that section.
   The bar's back link reads **← Back to the comparison** (the Compare runs
-  tab on this pair). The server-side PDF renders the plain report
-  (`backend/src/reports/render.ts` takes a run only), so in its place the bar
-  links **The run's report without the impact (server PDF)**; **Download
-  PDF** (the browser's print) prints the impact report.
+  tab on this pair). **Generate PDF** / **Email me the PDF** make the
+  server-side PDF of the impact report itself: the request carries the
+  baseline (`against`, 082), and the renderer opens this route with it. A
+  baseline that can't be read has no server PDF (the API would refuse it);
+  **Download PDF** (the browser's print) stays.
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a

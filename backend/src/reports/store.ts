@@ -16,6 +16,8 @@ export const REPORTS_PER_HOUR = 10;
 export interface CreateReport {
 	projectId: string;
 	runId: string;
+	/** An impact report's baseline run (the caller checked the requester can read it; so does report_enqueue). */
+	againstRunId?: string;
 	/** User ids to email the link to (checked by the caller; filtered to members again at send time). */
 	emailTo: string[];
 	scheduleId?: string;
@@ -35,9 +37,9 @@ export async function createReport(db: Db, o: CreateReport): Promise<{ jobId: st
 	});
 	if (!created) return { jobId: job.id, created };
 	await db.query(
-		`INSERT INTO report (id, project_id, run_id, job_id, schedule_id, requested_by, email_to)
-		 VALUES ($1, $2, $3, $4, $5, app_current_user_id(), $6::uuid[])`,
-		[reportId, o.projectId, o.runId, job.id, o.scheduleId ?? null, [...new Set(o.emailTo)]]
+		`INSERT INTO report (id, project_id, run_id, job_id, schedule_id, requested_by, email_to, impact, against_run_id)
+		 VALUES ($1, $2, $3, $4, $5, app_current_user_id(), $6::uuid[], $7, $8)`,
+		[reportId, o.projectId, o.runId, job.id, o.scheduleId ?? null, [...new Set(o.emailTo)], o.againstRunId !== undefined, o.againstRunId ?? null]
 	);
 	return { jobId: job.id, created };
 }
@@ -49,6 +51,8 @@ export interface ReportView {
 	jobId: string;
 	status: ReportState;
 	runId: string | null;
+	/** An impact report (the run against a baseline). The baseline itself isn't shown: it may be a project other viewers can't see. */
+	impact: boolean;
 	scheduled: boolean;
 	pages: number | null;
 	createdAt: string;
@@ -63,6 +67,9 @@ export interface ReportRow {
 	id: string;
 	projectId: string;
 	runId: string | null;
+	/** An impact report; its baseline is againstRunId (null once deleted). */
+	impact: boolean;
+	againstRunId: string | null;
 	jobId: string | null;
 	scheduleId: string | null;
 	requestedBy: string;
@@ -75,7 +82,7 @@ export interface ReportRow {
 	finishedAt: string | null;
 }
 
-const REPORT_COLS = `r.id, r.project_id AS "projectId", r.run_id AS "runId", r.job_id AS "jobId", r.schedule_id AS "scheduleId",
+const REPORT_COLS = `r.id, r.project_id AS "projectId", r.run_id AS "runId", r.impact, r.against_run_id AS "againstRunId", r.job_id AS "jobId", r.schedule_id AS "scheduleId",
 	r.requested_by AS "requestedBy", r.email_to AS "emailTo", r.status, r.pages, r.bytes, r.error,
 	r.created_at AS "createdAt", r.finished_at AS "finishedAt"`;
 
@@ -116,6 +123,7 @@ export async function reportByJob(db: Db, projectId: string, jobId: string): Pro
 		jobId,
 		status,
 		runId: r.runId,
+		impact: r.impact,
 		scheduled: r.scheduleId !== null,
 		pages: r.pages,
 		createdAt: r.createdAt,
@@ -188,7 +196,7 @@ export async function finishReport(db: Db, report: ReportRow, r: { pages: number
 	let failed = 0;
 	for (const r2 of to) {
 		const ok = await trySendMail(
-			reportReadyMail(r2.email, link, { projectName: f.projectName, runName: f.runName ?? 'that was deleted', pages: r.pages, requestedBy: f.requestedBy, scheduled: report.scheduleId !== null })
+			reportReadyMail(r2.email, link, { projectName: f.projectName, runName: f.runName ?? 'that was deleted', pages: r.pages, requestedBy: f.requestedBy, scheduled: report.scheduleId !== null, impact: report.impact })
 		);
 		if (!ok) failed++;
 	}

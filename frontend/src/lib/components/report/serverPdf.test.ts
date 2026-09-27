@@ -10,6 +10,7 @@ const view = (over: Partial<ReportView> = {}): ReportView => ({
 	jobId: 'j',
 	status: 'queued',
 	runId: 'r',
+	impact: false,
 	scheduled: false,
 	pages: null,
 	createdAt: '2026-09-25T10:00:00Z',
@@ -38,6 +39,12 @@ describe('reportsApi', () => {
 			'DELETE /projects/p%2F1/report-schedules/s'
 		]);
 		expect(request.mock.calls[0]![2]).toEqual({ runId: 'r', email: true });
+	});
+
+	it('sends an impact report’s baseline as the report route’s `against`', async () => {
+		const request = vi.fn(async (..._a: unknown[]) => ({ jobId: 'j2' }) as never);
+		expect(await reportsApi({ request } as never, 'p').create({ runId: 'r', against: 'p0:r0' })).toBe('j2');
+		expect(request.mock.calls[0]![2]).toEqual({ runId: 'r', against: 'p0:r0' });
 	});
 
 	it('keeps the download link only when it is an http(s) URL: the page renders it as an href', async () => {
