@@ -238,6 +238,32 @@ collected as a checklist in issue #46; tick it there as they answer.
       only where no transfer crosses a site; the loop cut). About 1 % more
       series before compression on the examples with transfers
       ([model.md §2.7b](./model.md)).
+- [ ] **Issue #46 persona drafts: the safe changes, not built yet** (2026-09-27).
+      Two simulated reviewers (hydrologist, licence assessor) drafted "confirm or
+      change" answers to every #46 item (issue comment; full reasoning in the
+      gitignored `reviews/persona-*-issue46.md`). Three were defects and are
+      fixed: dam-target boreholes pump only on a day the dam is drawn for
+      demand (engine 1.7.0), a freshet is a flood hydrograph, not days held at
+      the peak (1.8.0), and groundwater pumped into a dam is netted out of
+      surface use in the allocation comparison (no engine bump). Still to
+      build, each adding an option or fixing a mechanism without changing a
+      default: GA volume per property (area × the quaternary's GN 538 rate,
+      capped at 40 000 m³/a, any 12 months); an enlarged dam resized along its
+      own area–volume curve; unmet borehole depletion carried over, not
+      dropped; a warning when the run's natural MAR is > ±15 % off the
+      gazetted one; assurance of supply over complete water years only; the
+      lowest review-trigger band starting from the lowest storage on record
+      for the date; a flow flat-line flagged only above Q30 (else 30 days).
+      Part-done work sits in stopped worktree branches
+      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion),
+      `worktree-agent-ac21d77185b90f6ec` (MAR warning, water years, bands) and
+      `worktree-agent-ac030f837ff7f9ec4` (GA, flat-line), uncommitted.
+      Waiting on the real hydrologist (they change defaults or rest on thin
+      evidence): `ewrChargeSource` → `ruleTable`, `lowFlowMeasure` →
+      `baseflow`, τ 0.2, outcome cut-offs 0.95 / 0.85, senior users exempt
+      only for basic human needs. The primary-source research on the
+      low-confidence answers was stopped before it wrote anything; rerun it
+      before relying on those answers.
 - [ ] **Client regression suite is thinner since N1.** Nearly every client
       farm has return flow, which the new efficiency model can't reproduce,
       so the replay skips those farms' balance columns and everything
