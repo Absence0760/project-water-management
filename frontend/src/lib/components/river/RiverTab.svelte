@@ -268,7 +268,7 @@
 				<div class="flow-cell" id="res-ewr">
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} fill={fit} />
+							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} fill={fit} units pannable />
 						{/snippet}
 					</Lazy>
 				</div>

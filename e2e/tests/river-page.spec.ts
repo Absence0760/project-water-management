@@ -88,6 +88,88 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	await expect(fig).toContainText(`Shaded: the ${Number(below).toLocaleString('en-US')} days the outflow was below the dashed EWR line (EWR not met).`);
 });
 
+test('the flow chart keeps the Runs tab’s controls: m³/s ↔ m³/day, and Earlier / Later by the window', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River chart controls');
+	await createRun(page.request, id, 'Baseline');
+	await openRiver(page, id);
+	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
+	const fig = flow.locator('figure.chart');
+	const units = flow.getByRole('group', { name: 'Flow units' });
+	const move = flow.getByRole('group', { name: 'Move through the record' });
+	const windows = flow.getByRole('group', { name: 'Time window' });
+	const simulated = fig.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: /^Simulated outflow/ }) });
+	const shaded = await fig.getAttribute('data-shaded');
+	const caption = /Shaded: the [\d,]+ days/.exec((await fig.textContent()) ?? '')![0];
+
+	// Units: the legend names the unit and a hovered day's value is 86 400 times larger in m³/day.
+	await expect(units.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(simulated.locator('.u-label')).toHaveText('Simulated outflow (m³/s)');
+	const plot = fig.locator('.u-over');
+	const box = (await plot.boundingBox())!;
+	const valueAt = async () => {
+		await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
+		await expect(simulated.locator('.u-value')).not.toHaveText('–');
+		return Number((await simulated.locator('.u-value').textContent())!.replace(/,/g, ''));
+	};
+	const perSecond = await valueAt();
+	await units.getByRole('button', { name: 'm³/day' }).click();
+	await expect(units.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(simulated.locator('.u-label')).toHaveText('Simulated outflow (m³/day)');
+	await expect(flow.getByRole('img', { name: /^EWR vs simulated outflow: line chart of Simulated outflow/ })).toBeVisible();
+	await expect(fig).toHaveAttribute('data-ready', 'true');
+	const perDay = await valueAt();
+	expect(perDay / perSecond).toBeGreaterThan(86_400 * 0.98);
+	expect(perDay / perSecond).toBeLessThan(86_400 * 1.02);
+	// The shading is days, not flows: the same in either unit.
+	await expect(fig).toHaveAttribute('data-shaded', shaded!);
+	await expect(fig).toContainText(caption);
+	await page.mouse.move(0, 0);
+
+	// Earlier / Later step by the window picked and stop at the ends. The chart opens on the last year.
+	const later = move.getByRole('button', { name: /Later/ });
+	const earlier = move.getByRole('button', { name: /Earlier/ });
+	await expect(fig).toHaveAttribute('data-view-end', '2022-09-30');
+	await expect(later).toBeDisabled();
+	await earlier.click();
+	await expect(fig).toHaveAttribute('data-view-start', '2020-09-30');
+	await expect(fig).toHaveAttribute('data-view-end', '2021-09-30');
+	await expect(windows.getByRole('button', { name: '1 year' })).toHaveAttribute('aria-pressed', 'true');
+	await earlier.click();
+	// Two years back reaches the first day: the window stops there.
+	await expect(fig).toHaveAttribute('data-view-start', '2019-10-01');
+	await expect(earlier).toBeDisabled();
+	await later.click();
+	await later.click();
+	await expect(fig).toHaveAttribute('data-view-end', '2022-09-30');
+	await expect(later).toBeDisabled();
+	// 30 days steps a month at a time.
+	await windows.getByRole('button', { name: '30 days' }).click();
+	await expect(fig).toHaveAttribute('data-view-start', '2022-08-31');
+	await earlier.click();
+	await expect(fig).toHaveAttribute('data-view-start', '2022-08-01');
+	await expect(fig).toHaveAttribute('data-view-end', '2022-08-31');
+	await expect(windows.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(later).toBeEnabled();
+	// All shows the whole record: nowhere to move, so Earlier / Later step aside (as on every chart).
+	await windows.getByRole('button', { name: 'All' }).click();
+	await expect(fig).toHaveAttribute('data-view-start', '2019-10-01');
+	await expect(move).toHaveCount(0);
+});
+
+test('the Summary’s flow chart stays as it was: no unit switch, no Earlier / Later', async ({ page, owner }) => {
+	void owner;
+	const id = await seedRiverProject(page.request, 'River summary chart');
+	await createRun(page.request, id, 'Baseline');
+	await page.goto(`/projects/${id}`);
+	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
+	await expect(flow.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	await expect(flow.getByRole('group', { name: 'Time window' })).toBeVisible();
+	await expect(flow.getByRole('group', { name: 'Flow units' })).toHaveCount(0);
+	await expect(flow.getByRole('group', { name: 'Move through the record' })).toHaveCount(0);
+});
+
 test('the run picker: another run is a URL, Back returns, a reload keeps it', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River picker');

@@ -2154,7 +2154,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **First screen.** The Summary's **Flow vs reserve** chart
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
-  shaded and counted in its caption, a forecast run's band) beside **Days
+  shaded and counted in its caption, a forecast run's band). It keeps the two
+  controls the Runs tab's EWR chart had, which the Summary's copy leaves off
+  (`FlowVsReserve` `units` and `pannable`): the **m³/s ↔ m³/day** switch
+  (the shading is days, so it is the same in both units) and **◀ Earlier /
+  Later ▶**, which step by the window picked (a year, or 30 days) with that
+  window's button still pressed, stop at either end of the run (disabled
+  there), and step aside under *All*; Shift+drag moves the view too. It sits beside **Days
   below the reserve, each water year** (`#res-reserve-years`, Compare runs'
   `ReserveYearsChart` with this one run: the engine's
   `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
