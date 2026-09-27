@@ -1795,6 +1795,22 @@ never re-run, and a scenario op is hashed (`ops_sha256`), so an op on a
 retired settings path stays stored and the engine refuses it with a reason
 ([scenarios.md](./scenarios.md)). No table, column, policy or grant changes.
 
+### Account deletion reaches every key (065_deletion-export_account_fk_clears.sql)
+
+Deleting an account ([security.md § Personal information](./security.md#personal-information-popia))
+does what `catalogue.db.test.ts` `APP_USER_ON_DELETE` says for every key
+(`auth/personal-data.security.db.test.ts` sweeps it). 065 redefines four
+functions and changes no table, policy or grant:
+
+- `scenario_sweep_complete` and `seasonal_outlook_complete` pass an update
+  that only clears `created_by` (the key's SET NULL; water_app has no UPDATE
+  on the column), so an account that asked for a sweep or an outlook can be
+  deleted;
+- `alert_rule_check` lets `created_by` go to NULL once that account no longer
+  exists, instead of putting the old creator back;
+- `app_user_pseudonymise` removes the person from `report.email_to` (a
+  `uuid[]` with no key) on reports someone else asked for.
+
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
