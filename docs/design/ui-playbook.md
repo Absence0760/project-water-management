@@ -179,8 +179,12 @@ Interaction details that bit:
 
 - Make each new view a lazy chunk. The guard
   (`scripts/guards/check_web_bundle_budget.mjs`) counts lazy chunks in the
-  total, so splitting code moves weight but also adds overhead; folding
-  always-rendered lazy panels back into their tab saves it.
+  total, so splitting code moves weight but also adds overhead.
+- Inside a tab, split only what some visits never render (a panel behind a
+  condition, a dialog, a chart shared with another tab). A panel the tab
+  always renders belongs in the tab's chunk: workspace tabs (the page's
+  `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
+  pages, routes and shared chunks.
 - Every ceiling change gets a dated change-log entry with the measured
-  numbers and what grew. Never raise the largest-chunk ceiling to fit a
-  page; move code out of the workspace page chunk instead.
+  numbers and what grew. Never raise the page ceiling to fit a page; move
+  code out of the workspace page chunk instead.
