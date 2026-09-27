@@ -1072,7 +1072,7 @@
 // 2026-09-27  total 1020 → 1024 KB (measured 1020 on main with both of the
 //             above: the landing page and the ewrRule.set op landed in
 //             parallel, each measured without the other). Headroom ~4 KB.
-// 2026-09-27  total 1024 → LEGAL_TOTAL KB (measured LEGAL_NOW). The legal pages
+// 2026-09-27  total 1024 → 1035 KB (measured 1032). The legal pages
 //             (/privacy, /terms, docs/legal-status.md): prerendered with
 //             csr = false, so a visitor downloads only their HTML and CSS and
 //             no script at all, but SvelteKit still emits their page nodes
@@ -1090,7 +1090,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1040,
+	totalCodeKb: 1035,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
