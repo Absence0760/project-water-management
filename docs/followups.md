@@ -204,6 +204,11 @@ collected as a checklist in issue #46; tick it there as they answer.
       of scaling the area with capacity; doubling a 3 m-deep 100 000 m³ dam
       gives 54 150 m², not 66 667. Confirm, and say whether the larger side
       should wait for a surveyed curve ("A resized dam's shape" under Yield).
+      Also for them: the default exponent is 0.7 (Liebe et al. 2005), while
+      WR2012 (TT 690/16 §2.2) gives 0.6 as the South African average, and an
+      unknown dam's area could follow A = 7.2 · C^0.77 m² (Sawunyama 2013)
+      instead of capacity ÷ 3 m. Both change every such dam's evaporation,
+      so both wait on the hydrologist (model.md §2.7a).
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),

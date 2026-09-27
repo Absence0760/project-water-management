@@ -1764,9 +1764,13 @@ binds, the transfer brings enough that neither MIN bites.
   (and their names) that used the estimate.
 - `b` is `node.damAreaExponent`, default **0.7** (`DAM_AREA_EXPONENT`, Liebe
   et al. 2005, small reservoirs; published small-reservoir fits give b ≈
-  0.65–0.85; calibration-research.md CR-32's "about 0.6" is the same
-  practice, the engine's default is 0.7); allowed 0 < b ≤ 3. The same b
-  resizes a dam along its own relation (§2.13, engine ≥ 1.10.0).
+  0.65–0.85); allowed 0 < b ≤ 3. WR2012's Pitman theory manual (WRC TT
+  690/16 §2.2) gives 0.6 as "the average for all reservoirs in South
+  Africa" (calibration-research.md CR-32). **Pending the hydrologist:**
+  switching the default to 0.6, and the unknown-area fallback from
+  capacity ÷ 3 m to A = 7.2 · C^0.77 m² (Sawunyama 2013); either shifts
+  every such dam's evaporation, so neither is made without them. The
+  dam's own b resizes it along its own relation (§2.13, engine ≥ 1.10.0).
 - **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
   start-of-day surface to the whole day. When the surface grows faster than
   the volume (b > 1) and a day's evaporation is more than 1/b of the dam
