@@ -181,7 +181,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * docs/model.md §2.7d), from the day's published columns: primary units to
  * the crop first, then the units that pump into the dam (primary fill it,
  * supplemental add what it lacks for the demand left, emergency fill it while
- * triggered; never above capacity), then the dam and river, then supplemental
+ * triggered; primary and emergency only on a day with demand left for the dam;
+ * never above capacity), then the dam and river, then supplemental
  * and triggered emergency units. Each unit pumps at most MIN(capacity, its
  * annual cap − what it pumped since 1 October). A farm's river pump (WP-3.8,
  * `river` what it may take today) is part of the surface: before the dam
@@ -211,7 +212,9 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
-			const want = u.mode === 1 ? room : u.mode === 2 ? (qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
+			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.7.0).
+			const drawn = left > D * 1e-12;
+			const want = u.mode === 1 ? (drawn ? room : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
 			dam += pump(k, Math.min(want, room));
 		}
 		const fromDam = Math.max(avail + dam - dead, 0);
