@@ -57,7 +57,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		scroll-margin-top: 72px;
 	}
 	.advisory {
 		background: var(--warning-soft);

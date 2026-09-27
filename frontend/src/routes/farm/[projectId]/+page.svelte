@@ -4,6 +4,7 @@
 	// one farm's page, from the current publication. ?node= picks the farm when
 	// the farmer has several here (a switcher lists them). Viewer+ opening it
 	// sees it as the farmer does, under a preview banner (FarmPage).
+	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
@@ -24,8 +25,10 @@
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
 	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
+	import { count, FARMS } from '$lib/components/farm/format';
 	import { farmHref } from '$lib/components/farm/load';
 	import { readUnit } from '$lib/components/farm/savedCopy';
+	import { holdAnchor } from '$lib/help/anchor';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	const projectId = $derived(page.params.projectId ?? '');
@@ -35,7 +38,30 @@
 	let unit = $state(session.user?.volumeUnit ?? readUnit());
 	const today = localIsoDate();
 
+	// Up to this many farms here, the switcher is a row of chips above the
+	// name; past it, they fold under "Your farms in this catchment (N farms)" (a WUA previewing sees
+	// every farm in the catchment, and 30 chips pushed the notice a screen down).
+	const SWITCH_CHIPS = 4;
 	const several = $derived((farm.index?.farms.length ?? 0) > 1);
+	// A link into the page ("Read the notice" on Why?, `#notice`) lands only
+	// once the farm has loaded: on a fresh load the browser's own jump runs
+	// before the cards exist. Held while the page settles
+	// (lib/help/anchor.ts), as the words page does.
+	const shown = $derived(farm.phase.kind === 'ready' && !!farm.view);
+	$effect(() => {
+		const id = decodeURIComponent(page.url.hash.slice(1));
+		if (!id || !shown) return;
+		let live = true;
+		let release: (() => void) | undefined;
+		tick().then(() => {
+			const el = live ? document.getElementById(id) : null;
+			if (el) release = holdAnchor(el);
+		});
+		return () => {
+			live = false;
+			release?.();
+		};
+	});
 	const href = (sub: string) => farmHref(base, projectId, farm.nodeId, several || !!asked, sub);
 </script>
 
@@ -46,11 +72,23 @@
 		{@const notice = noticeCard(view)}
 		{@const dam = damCard(view.farm, unit)}
 		{#if several && farm.index}
-			<nav class="switch" aria-label={t('Your farms in this catchment')}>
-				{#each farm.index.farms as f (f.nodeId)}
-					<a href={farmHref(base, projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
-				{/each}
-			</nav>
+			{#snippet switcher(farms: { nodeId: string; name: string }[])}
+				<nav class="switch" aria-label={t('Your farms in this catchment')}>
+					{#each farms as f (f.nodeId)}
+						<a href={farmHref(base, projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
+					{/each}
+				</nav>
+			{/snippet}
+			{#if farm.index.farms.length <= SWITCH_CHIPS}
+				{@render switcher(farm.index.farms)}
+			{:else}
+				<!-- Many farms: folded, so the farm's name and the WUA's notice stay on the first screen (ui.md § Farmer view). -->
+				<details class="switch-more">
+					<!-- The nav's own (translated) name, with the count beside it: no new words to translate. -->
+					<summary>{t('Your farms in this catchment')} ({count(FARMS, farm.index.farms.length)})</summary>
+					{@render switcher(farm.index.farms)}
+				</details>
+			{/if}
 		{/if}
 		<div>
 			<h1>{view.farm.name}</h1>
@@ -120,6 +158,9 @@
 		border-color: var(--accent);
 		color: var(--accent-contrast);
 		font-weight: 600;
+	}
+	.switch-more > .switch {
+		margin-top: 4px;
 	}
 	.glance {
 		display: flex;
