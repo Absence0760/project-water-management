@@ -37,8 +37,10 @@ const KEY_POLICIES = new Map<string, string>([
 	['series_key_days:UPDATE', 'and adds to them on a later push (053)']
 ]);
 
-// Tables a key of the project may see rows of, and which rows.
-const KEY_VISIBLE = new Set(['time_series', 'series_key_days']);
+// Tables a key of the project may see rows of, and which rows. `language`
+// (080) is reference data readable by every session, the same for everyone
+// and holding nothing of any project or person.
+const KEY_VISIBLE = new Set(['time_series', 'series_key_days', 'language']);
 
 const rain = (startDate: string, values: number[], name: string) => ({ kind: 'rain_catchment_mm', name, unit: 'mm', startDate, values });
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest();
