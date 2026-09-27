@@ -77,6 +77,66 @@ export function countPdfPages(pdf: Uint8Array): number {
 /** Chromium flags for AWS Lambda (no sandbox, one process, /dev/shm is tiny). */
 const LAMBDA_ARGS = ['--no-sandbox', '--no-zygote', '--single-process', '--disable-dev-shm-usage', '--disable-gpu'];
 
+const originOf = (url: string) => URL.parse(url)?.origin ?? 'null';
+
+/**
+ * The browser may talk to the configured site and API and nothing else
+ * (docs/security.md § Render tokens). The renderer Lambda has open egress
+ * and a live render session, so a subresource, a fetch, a script navigation
+ * or a redirect to another origin is aborted before it leaves, whatever the
+ * page asks for (the site's CSP is a second layer, in production only).
+ * Playwright doesn't route the redirect hops a browser follows itself, so a
+ * navigation's redirect chain is walked first, hop by hop without following
+ * any, and the navigation goes ahead only if every hop stays on the allowed
+ * origins. (It then continues in the browser rather than being fulfilled
+ * from that walk: a fulfilled document counts as "public" to Chromium's
+ * local network checks, which would refuse the local API.) Whatever still
+ * slips through, renderReportPdf prints only a page of the configured site.
+ * Inline data: and blob: resources never reach the network and aren't routed.
+ */
+const MAX_NAVIGATION_REDIRECTS = 5;
+
+/**
+ * Routes `context` through the origin check. Resolves once the route is in
+ * place, to a promise that rejects (a permanent RenderError) as soon as the
+ * page's own top-level navigation is refused, so a render that tried to
+ * leave fails at once instead of waiting out its timeout on an error page.
+ */
+async function confineToOrigins(context: import('playwright-core').BrowserContext, o: RenderOptions): Promise<{ left: Promise<never> }> {
+	const allowed = new Set([originOf(o.siteUrl), originOf(o.apiUrl)]);
+	let leave: (err: RenderError) => void = () => {};
+	const left = new Promise<never>((_, reject) => (leave = reject));
+	left.catch(() => {});
+	await context.route('**/*', async (route) => {
+		const request = route.request();
+		const refuse = () => {
+			let topLevel = false;
+			try {
+				topLevel = request.isNavigationRequest() && request.frame().parentFrame() === null;
+			} catch {
+				// A request with no frame (a service worker's): not the page's navigation.
+			}
+			if (topLevel) leave(new RenderError('the report page tried to leave the site', { retry: false }));
+			return route.abort('blockedbyclient');
+		};
+		if (!allowed.has(originOf(request.url()))) return refuse();
+		if (!request.isNavigationRequest()) return route.continue();
+		let url = request.url();
+		for (let hop = 0; ; hop++) {
+			const response = await route.fetch({ url, maxRedirects: 0 }).catch(() => null);
+			if (!response) return route.abort('failed');
+			const status = response.status();
+			const location = status >= 300 && status <= 399 ? response.headers()['location'] : undefined;
+			await response.dispose();
+			if (location === undefined) return route.continue();
+			const next = URL.parse(location, url)?.href;
+			if (!next || !allowed.has(originOf(next)) || hop === MAX_NAVIGATION_REDIRECTS) return refuse();
+			url = next;
+		}
+	});
+	return { left };
+}
+
 export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promise<RenderedPdf> {
 	const started = Date.now();
 	const { chromium } = await import('playwright-core');
@@ -93,6 +153,7 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 		if (closed) await browser.close();
 		// Light, like the print stylesheet forces; the UTC clock the tests pin too.
 		const context = await browser.newContext({ colorScheme: 'light', locale: 'en-ZA', timezoneId: 'UTC', viewport: { width: 1200, height: 1600 } });
+		const { left } = await confineToOrigins(context, o);
 		const res = await context.request.post(`${o.apiUrl}/auth/render-session`, {
 			data: { token: t.token },
 			headers: { origin: o.siteUrl },
@@ -107,16 +168,18 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 		}
 		const page = await context.newPage();
 		const url = `${o.siteUrl}/projects/${encodeURIComponent(t.projectId)}/report?run=${encodeURIComponent(t.runId)}`;
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: o.timeoutMs });
+		await Promise.race([page.goto(url, { waitUntil: 'domcontentloaded', timeout: o.timeoutMs }), left]);
 		// Ready, or one of the page's own "can't show this" messages.
 		const settled = page.locator('main[data-report-ready="true"], main > [role="alert"], main > .alert-info');
-		await settled.first().waitFor({ state: 'attached', timeout: Math.max(1_000, o.timeoutMs - (Date.now() - started)) });
+		await Promise.race([settled.first().waitFor({ state: 'attached', timeout: Math.max(1_000, o.timeoutMs - (Date.now() - started)) }), left]);
 		if ((await page.locator('main[data-report-ready="true"]').count()) === 0) {
 			const said = ((await settled.first().textContent()) ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
 			// No run, no project, no access: another attempt shows the same. Anything else (the API unreachable) may pass.
 			const permanent = (await page.locator('main > .alert-info').count()) > 0 || /don.t have access/.test(said);
 			throw new RenderError(`the report page did not load: ${said || 'no message'}`, { retry: !permanent });
 		}
+		// Whatever happened on the way, print only a page of the configured site.
+		if (originOf(page.url()) !== originOf(o.siteUrl)) throw new RenderError('the report page left the site', { retry: false });
 		const pdf = await page.pdf({ format: 'A4', printBackground: true });
 		return { pdf, pages: countPdfPages(pdf), ms: Date.now() - started };
 	};

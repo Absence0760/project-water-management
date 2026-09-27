@@ -115,12 +115,24 @@ async function createTransport(kind: string): Promise<Send> {
 	}
 }
 
+/**
+ * One bare address: no display name, list, group or line break. Making `to`
+ * one line is not enough: nodemailer reads "a@x.com Bcc: b@y.com" as a group
+ * addressed to b@y.com only, and "a@x.com, b@y.com" as two recipients. Every
+ * address the app mails was checked as an email where it came in (zod
+ * `.email()`); this is the transport's own check, so a path that forgets
+ * can't turn one mail into another recipient's.
+ */
+const SINGLE_ADDRESS = /^[^\s@,;:<>()[\]"\\]+@[^\s@,;:<>()[\]"\\]+$/;
+
 /** Send one email. Throws on transport failure — callers decide whether that matters. */
 export async function sendMail(mail: Mail): Promise<void> {
+	const to = mail.to.trim();
+	if (!SINGLE_ADDRESS.test(to)) throw new Error('refusing to send: the recipient is not a single email address');
 	const kind = process.env.MAIL_TRANSPORT || 'log';
 	if (cached?.key !== kind) cached = { key: kind, send: await createTransport(kind) };
 	const from = process.env.MAIL_FROM || 'Water Management <no-reply@localhost>';
-	await cached.send({ ...mail, to: oneLine(mail.to), headers: safeHeaders(mail.headers) }, from);
+	await cached.send({ ...mail, to, headers: safeHeaders(mail.headers) }, from);
 }
 
 /**
