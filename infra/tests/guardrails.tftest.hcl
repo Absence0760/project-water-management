@@ -493,8 +493,8 @@ run "production_guardrails" {
     error_message = "No distribution-wide custom error responses — they would rewrite API 403/404 JSON into index.html. The SPA fallback is the spa_rewrite function."
   }
   assert {
-    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = '/welcome.html'")
-    error_message = "The prerendered landing page (/welcome, issue #57) must be served from welcome.html, not the SPA fallback."
+    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "uri === '/welcome' || uri === '/privacy' || uri === '/terms'") && strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = uri + '.html'")
+    error_message = "The prerendered pages (/welcome, /privacy, /terms) must be served from their .html, not the SPA fallback."
   }
   assert {
     condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"

@@ -8,7 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
-	import { isLandingRoot, isPublicPath, LANDING_PATH, routeAccess, session } from '$lib/auth/session.svelte';
+	import { isLandingRoot, isPublicPath, routeAccess, session, STATIC_PATHS } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
@@ -27,7 +27,7 @@
 	const loadLanding = () => import('$lib/components/landing/Landing.svelte');
 	// By route, not by path: while prerendering, `base` is relative ('.'), so a
 	// path comparison would miss it and the page would prerender as "Loading…".
-	const landingPage = $derived(page.route.id === LANDING_PATH);
+	const staticPage = $derived(STATIC_PATHS.includes(page.route.id ?? ''));
 	const landingRoot = $derived(session.checked && isLandingRoot(page.url.pathname, base, !!session.user));
 
 	async function checkSession() {
@@ -159,10 +159,11 @@
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
-	// /welcome renders at once (and prerenders): English until the language's
-	// words arrive, the one page that may switch, so crawlers and a slow API
-	// still get the page (even with the API down: it needs none).
-	const shown = $derived(landingPage || ready);
+	// The static pages (/welcome, /privacy, /terms) render at once (and
+	// prerender), so crawlers and a slow API still get them (even with the API
+	// down: they need none). /welcome is English until the language's words
+	// arrive, the one page that may switch; the legal pages are English only.
+	const shown = $derived(staticPage || ready);
 </script>
 
 <!-- A signed-in person's pages sit in the app frame (a sidebar on wide screens,
@@ -177,14 +178,14 @@
 			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
 		{/await}
 	{/if}
-	{#if bootError && !landingPage}
+	{#if bootError && !staticPage}
 		<main class="page">
 			<div class="alert alert-error" role="alert">
 				Could not reach the API: {bootError}
 				<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
 			</div>
 		</main>
-	{:else if i18nFailed && translated && !landingPage}
+	{:else if i18nFailed && translated && !staticPage}
 		<main class="page">
 			<ChunkFailed what="This page" />
 		</main>

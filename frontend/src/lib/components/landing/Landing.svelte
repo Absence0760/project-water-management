@@ -93,6 +93,8 @@
 			<nav aria-label={t('Footer')}>
 				<a href="{base}/login">{t('Sign in')}</a>
 				<a href="{base}/register">{t('Create an account')}</a>
+				<a href="{base}/privacy">{t('Privacy notice')}</a>
+				<a href="{base}/terms">{t('Terms of use')}</a>
 			</nav>
 		</div>
 	</footer>
@@ -219,7 +221,8 @@
 	}
 	.foot nav {
 		display: flex;
-		gap: 1.25rem;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.25rem;
 	}
 	@media (prefers-color-scheme: dark) {
 		.closing {

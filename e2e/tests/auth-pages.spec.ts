@@ -32,7 +32,7 @@ const STATES: { name: string; path: string; settle: (page: Page) => Promise<void
 	{ name: 'sign in', path: '/login', settle: (p) => expect(p.getByLabel('Email')).toBeVisible() },
 	{ name: 'create an account', path: '/register', settle: (p) => expect(p.getByLabel('Display name')).toBeVisible() },
 	// The longest sign-up: the dead-invitation warning above the form.
-	{ name: 'a dead invitation', path: `/register?invite=${DEAD_TOKEN}`, settle: (p) => expect(p.getByRole('alert')).toHaveText(/This invitation link is invalid/) },
+	{ name: 'a dead invitation', path: `/register?invite=${DEAD_TOKEN}`, settle: (p) => expect(p.getByRole('alert')).toHaveText(/This invitation link has expired or was withdrawn/) },
 	{ name: 'forgot password', path: '/forgot-password', settle: (p) => expect(p.getByLabel('Email')).toBeVisible() },
 	{ name: 'choose a new password', path: `/reset-password?token=${DEAD_TOKEN}`, settle: (p) => expect(p.getByLabel('New password', { exact: true })).toBeVisible() },
 	{ name: 'a reset link without its token', path: '/reset-password', settle: (p) => expect(p.getByRole('alert')).toHaveText(/This reset link is invalid/) },

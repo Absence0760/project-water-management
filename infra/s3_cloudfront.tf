@@ -127,9 +127,10 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   object in S3. Any path whose last segment has no file extension is served
 #   /index.html with a 200, and the client router takes over. Done here rather
 #   than with a distribution-wide custom_error_response because those also
-#   rewrite the API's own 403/404 JSON responses into index.html. The one
-#   prerendered page, the landing page (issue #57), is served from its own
-#   HTML: /welcome → /welcome.html (static HTML for crawlers and link previews).
+#   rewrite the API's own 403/404 JSON responses into index.html. The
+#   prerendered pages, the landing page (issue #57) and the legal pages, are
+#   served from their own HTML: /welcome, /privacy, /terms → <path>.html
+#   (static HTML for crawlers and link previews).
 #
 # api_strip_prefix — /api/* behaviour. The browser calls same-origin
 #   /api/auth/login; the Hono app routes /auth/login (dev hits it directly on
@@ -152,8 +153,8 @@ resource "aws_cloudfront_function" "spa_rewrite" {
       var request = event.request;
       var uri = request.uri;
       var last = uri.substring(uri.lastIndexOf('/') + 1);
-      if (uri === '/welcome') {
-        request.uri = '/welcome.html';
+      if (uri === '/welcome' || uri === '/privacy' || uri === '/terms') {
+        request.uri = uri + '.html';
       } else if (last.indexOf('.') === -1) {
         request.uri = '/index.html';
       }

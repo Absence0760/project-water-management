@@ -663,6 +663,10 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Terms of use
+	'953dc886': 'Gebruiksvoorwaardes',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
@@ -797,6 +801,8 @@ export const af: Catalogue = {
 	'ec26a6ec': 'Hierdie plan',
 	// Change from today: supply {supply} points, river {days} days a year.
 	'a3a08f59': 'Verandering teenoor vandag: lewering {supply} punte, rivier {days} dae per jaar.',
+	// Legal
+	'de7530aa': 'Regsinligting',
 	// About Water Management
 	'a156f424': 'Oor Water Management',
 	// Catchment water balance, from rainfall to river.
@@ -1121,6 +1127,8 @@ export const af: Catalogue = {
 	'4b568eda': 'die projek {name}',
 	// the team {name}
 	'bbe4f51e': 'die span {name}',
+	// By signing up, you accept the {terms} and {privacy}.
+	'e463bcac': 'Deur te registreer, aanvaar jy die {terms} en die {privacy}.',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
 	// The two passwords don’t match. Type the same password in both.
@@ -1169,8 +1177,8 @@ export const af: Catalogue = {
 	'dae1dc58': '**{inviter}** het jou na **{target}** uitgenooi.',
 	// Create your account to join. You’ll have access straight away.
 	'4747998e': 'Skep jou rekening om aan te sluit. Jy kry dadelik toegang.',
-	// This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an account — then ask whoever invited you to add you again.
-	'd2b77b57': 'Hierdie uitnodigingskakel is ongeldig, is teruggetrek of het verval (hulle is 7 dae geldig). Jy kan steeds ’n rekening skep — vra dan die persoon wat jou uitgenooi het om jou weer by te voeg.',
+	// This invitation link has expired or was withdrawn. You can still create an account, then ask to be invited again.
+	'd52caaa3': 'Hierdie uitnodigingskakel het verval of is teruggetrek. Jy kan steeds ’n rekening skep en dan vra om weer uitgenooi te word.',
 	// We couldn’t check your invitation right now. You can still create an account; you’ll join once your email address is confirmed.
 	'bb9d18b6': 'Ons kon nie jou uitnodiging nou kontroleer nie. Jy kan steeds ’n rekening skep; jy sluit aan sodra jou e-posadres bevestig is.',
 	// The invitation was sent to this address. To use another, ask {inviter} to invite that one instead.

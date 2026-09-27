@@ -135,6 +135,21 @@ other signed-out route still goes to `/login?next=`.
   time, `data.generated.ts`), named as the example catchment's where shown. The art, the motion rules and the
   pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
 
+## Legal pages
+
+`/privacy` (the privacy notice) and `/terms` (terms of use),
+`routes/privacy`, `routes/terms`, framed by `lib/components/legal/LegalPage.svelte`:
+a slim header with the way home and **Sign in**, a contents list, a readable
+column, and footer links. Prerendered like `/welcome` (static HTML, open to
+anyone signed in or out, rendered before the session is known). English
+only: the English text binds; the link labels to them are translated. Linked
+from the landing footer, under every sign-in form (a **Legal** nav in
+`AuthCard`), and in the sign-up form's own sentence ("By signing up, you
+accept the Terms of use and Privacy notice", in its footer, where the
+**Legal** nav is left off). Drafts before counsel review: what they assume
+and what is open is in [legal-status.md](./legal-status.md).
+`e2e/tests/legal.spec.ts`.
+
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,

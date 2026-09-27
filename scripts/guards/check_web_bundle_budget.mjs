@@ -1072,6 +1072,14 @@
 // 2026-09-27  total 1020 → 1024 KB (measured 1020 on main with both of the
 //             above: the landing page and the ewrRule.set op landed in
 //             parallel, each measured without the other). Headroom ~4 KB.
+// 2026-09-27  total 1024 → LEGAL_TOTAL KB (measured LEGAL_NOW). The legal pages
+//             (/privacy, /terms, docs/legal-status.md): prerendered with
+//             csr = false, so a visitor downloads only their HTML and CSS and
+//             no script at all, but SvelteKit still emits their page nodes
+//             (4.4 + 4.9 KB, their text) and the frame (0.8 KB), which this
+//             guard counts like any file. The rest is the Legal nav under the
+//             sign-in forms, the sign-up form's acceptance sentence and their
+//             Afrikaans words (~2 KB). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1082,7 +1090,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1024,
+	totalCodeKb: 1040,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
