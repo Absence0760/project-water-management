@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateModel } from './validate';
 import { ModelEditor } from './editor.svelte';
 
 describe('ModelEditor', () => {
@@ -117,6 +118,26 @@ describe('ModelEditor', () => {
 		expect(ed.model.landCover).toHaveLength(1);
 		ed.removeNode(farm.id);
 		expect(ed.model.landCover).toEqual([]);
+	});
+
+	it('adds demand objects with their category’s defaults, and removing the unit removes them (engine 1.7.0)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.model.demandObjects).toBeUndefined();
+		ed.addNode();
+		const unit = ed.addNode();
+		const town = ed.addDemandObject(unit.id, 'municipal');
+		expect(ed.model.demandObjects).toHaveLength(1);
+		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true });
+		const homes = ed.addDemandObject(unit.id, 'domestic');
+		expect(homes).toMatchObject({ name: 'Demand 2', sizing: 'perUnit', count: 0, litresPerUnitDay: 230, monthlyM3Day: null });
+		expect(ed.addDemandObject(unit.id, 'external')).toMatchObject({ destination: 'external', returnPct: 0 });
+		// A new object's model is one the API accepts.
+		expect(validateModel(ed.snapshot()).filter((i) => /demand object/i.test(i.message))).toEqual([]);
+		ed.removeDemandObject(town.id);
+		expect(ed.model.demandObjects).toHaveLength(2);
+		ed.removeNode(unit.id);
+		expect(ed.model.demandObjects).toEqual([]);
 	});
 
 	it('adds and removes individual boreholes, the first one included, and removing the node removes them (WP-3.9)', () => {

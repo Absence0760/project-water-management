@@ -41,6 +41,7 @@ export { verifyRun } from './verify/verify';
 export { buildTopology, ewrSiteNodes, isEwrSite, type Topology } from './network/topology';
 export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
+export { DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppliedKey, parseDemandObjectKey } from './network/demandObjects';
 export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
 export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
