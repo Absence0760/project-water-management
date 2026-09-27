@@ -4246,10 +4246,41 @@ the days *D(y)* of *y* inside the run:
 
 - modelled use *M(n,s,y)* = Σ over *D(y)* of `groundwater_used` +
   `groundwater_to_dam` (WP-3.9: pumped into the farm dam, counted when
-  pumped) for *s* = groundwater, and of `supplied` − `groundwater_used` for
-  *s* = surface (both 0 for a node without boreholes, §2.7d). `supplied`
-  includes what the farm draws from its own dam, groundwater pumped into it
-  included (pending the hydrologist: whether to net that out of surface).
+  pumped) for *s* = groundwater (0 for a node without boreholes, §2.7d), and
+  for *s* = surface
+
+  ```
+  M(n,surface,y) = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw)
+  dam draw       = MAX(supplied − groundwater_used − river_abstraction, 0)   (per day)
+  ```
+
+  with every Σ over *D(y)*. `supplied` includes what the farm draws from its
+  own dam (§2.7d: G = Gs + GW + Gr, so the dam draw Gs is `supplied` less
+  groundwater to the crop and the river pump, `river_abstraction`, §2.7e, 0
+  without one). Groundwater pumped into the dam is already counted on the
+  groundwater side; drawing it back out is not a new surface take (in WARMS
+  the groundwater take and the storage are separate registered uses), so the
+  surface side nets it out: the year's dam draw is taken to be the pumped
+  water first, up to what was pumped into the dam that water year. Why this
+  rule (pending the hydrologist's confirmation):
+  - **Per water year, not per day.** Pumped water is stored and drawn later
+    (a primary dam-target borehole keeps the dam topped up between
+    irrigations), so a per-day MIN would miss most of it; the water year is
+    the registration period, so it's the natural pool. Water pumped before
+    1 October and drawn after it isn't netted: the surface side of the next
+    year can read high by at most what was pumped in late and carried over.
+  - **The pumped water first, not pro rata.** Stored water is mixed and the
+    model keeps no provenance, so no split is exact. Pumped-first is the
+    upper bound of the netting and the one that never counts a pumped m³ as
+    surface while the year drew at least that much from the dam; it
+    overstates the netting only by pumped water the dam lost to evaporation,
+    seepage or a release before it was drawn. Pro rata to the dam's inflows
+    would need the stored series of every inflow and still be an assumption.
+  - **Never below the river pump.** The netting is capped by the dam draw,
+    so the river pump's take always stays surface use.
+
+  Runs made before the river pump (no `river_abstraction` series) have no
+  river take, so the dam draw is `supplied` − `groundwater_used`.
 - registered volume *R(n,s,y)* = Σ over the node's allocations *a* of source
   *s*: *V(a)* × |*D(y)* ∩ [validFrom(a), validTo(a)]| ÷ *L(y)*, with *L(y)*
   = 365 or 366, the days of the whole water year. A whole year in force gives
@@ -4267,8 +4298,13 @@ the days *D(y)* of *y* inside the run:
   states one) beside the run's `damCapacityM3` for a farm.
 
 Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
-of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ `groundwater_to_dam`, and every run day falls
-in exactly one water year; the result is the same at UTC+14 and UTC−11.
+of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ
+`groundwater_to_dam` less Σ over *y* of MIN(Σ `groundwater_to_dam`, Σ dam
+draw), so a pumped m³ drawn from the dam in the year it was pumped counts
+once; the groundwater side alone equals Σ `groundwater_used` + Σ
+`groundwater_to_dam`; the surface side is never below the year's
+`river_abstraction`; every run day falls in exactly one water year; and the
+result is the same at UTC+14 and UTC−11.
 
 Not built yet: the engine settings `allocationMode` = `cap` (supply limited
 so cumulative supply within a water year ≤ the allocation) and
