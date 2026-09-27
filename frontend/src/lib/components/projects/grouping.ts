@@ -2,11 +2,23 @@
 // shared with you), text search, sorting and grouping. Pure functions so the
 // list page stays thin and this stays unit-tested.
 import type { ProjectSummary, Team } from '$lib/api/types';
+import { sortByOutcome, type OutcomeSortKey, type Outcomes } from './outcomes';
 
 /** `personal`, `shared`, or `team:<id>`. */
 export type OwnerKey = 'personal' | 'shared' | `team:${string}`;
 export type OwnerFilter = 'all' | OwnerKey;
-export type SortKey = 'updated' | 'name';
+export type SortKey = 'updated' | 'name' | OutcomeSortKey;
+
+/** The sort choices, in the order the Sort menu offers them. */
+export const SORT_LABELS: Record<SortKey, string> = {
+	updated: 'Recently updated',
+	attention: 'Needs attention first',
+	status: 'EWR status (worst first)',
+	farms: 'Units short (most first)',
+	dam: 'Lowest dam (lowest first)',
+	run: 'Last run (newest first)',
+	name: 'Name (A–Z)'
+};
 
 export interface ProjectGroup {
 	key: OwnerKey;
@@ -44,7 +56,9 @@ export function matchesQuery(p: ProjectSummary, query: string): boolean {
 
 const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 
-export function sortProjects(projects: ProjectSummary[], sort: SortKey): ProjectSummary[] {
+/** Sort the list; an outcome sort needs the outcomes (rows without them go last). */
+export function sortProjects(projects: ProjectSummary[], sort: SortKey, outcomes: Outcomes = new Map()): ProjectSummary[] {
+	if (sort !== 'updated' && sort !== 'name') return sortByOutcome(projects, sort, outcomes);
 	const out = [...projects];
 	if (sort === 'name') out.sort((a, b) => collator.compare(a.name, b.name));
 	else
@@ -121,5 +135,5 @@ export function parseOwner(v: string | null): OwnerFilter {
 	return 'all';
 }
 export function parseSort(v: string | null): SortKey {
-	return v === 'name' ? 'name' : 'updated';
+	return v && Object.hasOwn(SORT_LABELS, v) ? (v as SortKey) : 'updated';
 }

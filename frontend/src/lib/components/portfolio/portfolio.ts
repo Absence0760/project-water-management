@@ -157,9 +157,14 @@ function value(p: PortfolioProject, key: PortfolioSortKey): number | null {
 	}
 }
 
-export function sortPortfolio(rows: readonly PortfolioProject[], { key, dir }: PortfolioSort): PortfolioProject[] {
+export function sortPortfolio(rows: readonly PortfolioProject[], sort: PortfolioSort): PortfolioProject[] {
+	return [...rows].sort(comparePortfolio(sort));
+}
+
+/** The portfolio's order as a comparator (the project list sorts its rows by the same rule). */
+export function comparePortfolio({ key, dir }: PortfolioSort): (a: PortfolioProject, b: PortfolioProject) => number {
 	const sign = dir === 'asc' ? 1 : -1;
-	return [...rows].sort((a, b) => {
+	return (a, b) => {
 		if (key !== 'name') {
 			const va = value(a, key);
 			const vb = value(b, key);
@@ -169,7 +174,7 @@ export function sortPortfolio(rows: readonly PortfolioProject[], { key, dir }: P
 			return collator.compare(a.name, b.name);
 		}
 		return sign * collator.compare(a.name, b.name);
-	});
+	};
 }
 
 /** A click on a column heading: the same key flips direction, a new key starts ascending (worst first). */

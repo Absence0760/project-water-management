@@ -62,6 +62,7 @@ import type {
 	NoteCreate,
 	NotesQuery,
 	Portfolio,
+	PortfolioProject,
 	Project,
 	ProjectFile,
 	ProjectSummary,
@@ -239,6 +240,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
+			/** The portfolio's figures for every project you can see (the project list's outcome columns, issue #17). */
+			outcomes: () => request<{ projects: PortfolioProject[] }>('GET', '/projects/outcomes').then((r) => r.projects),
 			/** `teamId` null/omitted = a personal project. */
 			create: (name: string, description?: string, teamId?: string | null) =>
 				request<{ project: Project }>('POST', '/projects', {

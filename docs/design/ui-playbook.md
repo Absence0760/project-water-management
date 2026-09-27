@@ -84,6 +84,14 @@ section it belongs to, with the example that taught it.
   its 4rem bottom padding for a 1rem gutter: Applications fitted its card to
   the window yet the page still scrolled 42 px until it was listed there. Help, guides and account pages scroll normally
   with a readable text column (~75ch).
+- **Position the box that scrolls.** A list that scrolls inside its card
+  must be `position: relative` (or otherwise positioned) when anything
+  inside it is absolutely positioned. The Projects list fitted its card to
+  the window yet the page still scrolled 1,200 px with fifty projects: each
+  group's visually hidden `<caption>` (`position: absolute`) had no
+  positioned ancestor inside the scroller, so it sat at its static place far
+  down the list, outside the clip, and the measured "space below" fed the
+  overflow back into the fit. Test the fit with the big case, not the seed.
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once
@@ -250,7 +258,10 @@ picker in the header, moved panels, anchor redirects),
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
 window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
-cards in a narrow column).
+cards in a narrow column), `routes/+page.svelte` with
+`projects/ProjectTable.svelte` (the Projects list: a Needs attention strip,
+owner chips, outcome columns that fold under the name as the table narrows,
+a fixed-position ⋯ row menu that a scrolling list can't clip).
 
 Interaction details that bit:
 
