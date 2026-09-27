@@ -903,6 +903,14 @@
 //             (13.9 + 10.2), one per importer set, and the report chunk
 //             +0.4 for the unit table it now imports itself. No new
 //             dependency. Headroom ~4 KB.
+// 2026-09-26  total 978 → 991 KB (measured 987, +13 on main's 974); largest chunk unchanged.
+//             The Afrikaans (issue #49, WP-2.5): every farmer-facing string
+//             translated. The site catalogue (messages/af.ts) is a lazy
+//             chunk of 11.4 KB gzipped that only someone who picks
+//             Afrikaans downloads; the farmer glossary's Afrikaans
+//             (help/content.af.ts) adds ~3 KB to the /farm/words page. Words,
+//             not code: nothing to trim without dropping a translation.
+//             No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -913,7 +921,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 978,
+	totalCodeKb: 991,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

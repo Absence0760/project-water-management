@@ -45,14 +45,17 @@ describe('alertMail', () => {
 		expect(n.text).toContain('The WUA’s notice: “<img src=x onerror=alert(1)>”');
 	});
 
-	it('sends Afrikaans readers English words, marked lang="en", until reviewed Afrikaans exists (nothing invented)', () => {
+	it('sends Afrikaans readers Afrikaans, marked lang="af", with Afrikaans dates; English readers English', () => {
 		const af = alertMail({ ...farmer, locale: 'af' }, project, dam, unsub);
-		expect(af.html).toContain('<html lang="en">');
-		expect(af.subject).toBe('Dam low on Farm One — Rietvlei WUA');
+		expect(af.html).toContain('<html lang="af">');
+		expect(af.subject).toBe('Dam laag op Farm One — Rietvlei WUA');
 		// Dates follow the words' language.
-		expect(af.text).toContain('20 Sept 2026');
+		expect(af.text).toContain(dateText('2026-09-20', 'af'));
+		expect(af.text).not.toContain('20 Sept 2026');
+		expect(af.text).not.toContain('The model puts');
 		const en = alertMail({ ...farmer, locale: 'en' }, project, dam, unsub);
 		expect(en.html).toContain('<html lang="en">');
+		expect(en.subject).toBe('Dam low on Farm One — Rietvlei WUA');
 	});
 
 	it('names only the farm it was given: a farmer’s mail carries no other farm (the neighbour-name scan)', () => {

@@ -102,8 +102,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   was in). Without one, an account that accepts an invite takes the invite's
   `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
   The verification, reset and farmer-invite emails go out in the account's
-  (or the invite's) language, English where the Afrikaans isn't reviewed yet
-  ([ui.md § Language](./ui.md#language)).
+  (or the invite's) language, English for any key with no Afrikaans (none
+  today; [ui.md § Language](./ui.md#language)).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
