@@ -9,7 +9,10 @@ CloudFront at `/api`. All bodies are JSON, except the CSV exports. Shared TypeSc
 Session = an HS256 JWT in an **httpOnly cookie** `wm_session` (`SameSite=Lax`,
 `Secure` in prod, 7-day expiry). The browser sends it with `credentials: 'include'`;
 CORS allows the frontend origin with credentials. There is no token in JS-readable
-storage.
+storage. Register, login, reset-password and change-password also set a
+`wm_device` cookie (httpOnly, 180 days): with it, that browser's sign-in
+attempts count on their own lockout record, so someone else locking the
+address doesn't lock it out ([security.md § Authentication](./security.md#authentication)).
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |

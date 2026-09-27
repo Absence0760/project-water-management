@@ -10,6 +10,7 @@ import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { clearSession, issueSession } from './session.js';
+import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
 import { LOCALES } from '../mail/i18n/index.js';
@@ -49,13 +50,25 @@ const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200
  */
 export const LOGIN_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: '15 minutes' } as const;
 
-/** Counts one attempt against the address's lockout; the seconds left on a lock, or 0 to go ahead. */
-async function countAttempt(db: Db, address: string): Promise<number> {
+/**
+ * Counts one attempt against the lockout; the seconds left on a lock, or 0 to
+ * go ahead. On a trusted device (auth/device.ts) it is that device's own
+ * record for the address (076), otherwise the address's shared one (005).
+ */
+async function countAttempt(db: Db, address: string, device: string | null): Promise<number> {
 	const { rows } = await db.query<{ locked: number }>(
-		'SELECT app_login_attempt($1, $2, $3::interval, $4::interval) AS locked',
-		[address, LOGIN_THROTTLE.freeAttempts, LOGIN_THROTTLE.baseLock, LOGIN_THROTTLE.maxLock]
+		device
+			? 'SELECT app_login_device_attempt($1, $5, $2, $3::interval, $4::interval) AS locked'
+			: 'SELECT app_login_attempt($1, $2, $3::interval, $4::interval) AS locked',
+		[address, LOGIN_THROTTLE.freeAttempts, LOGIN_THROTTLE.baseLock, LOGIN_THROTTLE.maxLock, ...(device ? [device] : [])]
 	);
 	return rows[0]?.locked ?? 0;
+}
+
+/** A correct password clears the record it was counted on: the device's own, or the address's (and its devices'). */
+async function attemptSucceeded(db: Db, address: string, device: string | null): Promise<void> {
+	if (device) await db.query('SELECT app_login_device_succeeded($1, $2)', [address, device]);
+	else await db.query('SELECT app_login_succeeded($1)', [address]);
 }
 
 export function lockedMessage(seconds: number): string {
@@ -120,6 +133,8 @@ export const authRoutes = new Hono<AuthEnv>()
 		if (!result) throw ApiError.coded(409, 'account_exists', 'an account with that email already exists');
 		if (result.mail) await trySendMail(result.mail);
 		await issueSession(c, result.row.id);
+		// A new account has no watermark yet.
+		issueDevice(c, result.row.email, null);
 		return c.json({ user: toUser(result.row) }, 201);
 	})
 	.post('/login', async (c) => {
@@ -127,15 +142,23 @@ export const authRoutes = new Hono<AuthEnv>()
 		// Per-address lockout (005_login_throttle.sql). Counted in its own
 		// transaction before the password check, so parallel guesses queue on
 		// the row lock and can't all get past it. Keyed by the typed address,
-		// so an unknown address is locked exactly like a real one.
-		const { lockedSeconds, row } = await withoutUser(async (db) => {
-			const lockedSeconds = await countAttempt(db, body.email);
-			if (lockedSeconds > 0) return { lockedSeconds, row: undefined };
-			// app_user is under RLS (068) and nobody is signed in yet: the one-address lookup.
-			const { rows } = await db.query<{ id: string; password_hash: string }>('SELECT id, password_hash FROM app_auth_account($1)', [
-				body.email
-			]);
-			return { lockedSeconds, row: rows[0] };
+		// so an unknown address is locked exactly like a real one; a device
+		// that signed in to the address before counts on its own record
+		// (076, auth/device.ts), so a stranger's lock doesn't shut it out.
+		const { lockedSeconds, row, device } = await withoutUser(async (db) => {
+			// app_user is under RLS (068) and nobody is signed in yet: the one-address lookups.
+			const { rows } = await db.query<{ id: string; email: string; password_hash: string }>(
+				'SELECT id, email, password_hash FROM app_auth_account($1)',
+				[body.email]
+			);
+			const found = rows[0];
+			const watermark = found
+				? ((await db.query<{ sessions_revoked_at: Date | null }>('SELECT sessions_revoked_at FROM app_session_revoked_at($1)', [found.id]))
+						.rows[0]?.sessions_revoked_at ?? null)
+				: null;
+			const device = found ? trustedDevice(c, found.email, watermark) : null;
+			const lockedSeconds = await countAttempt(db, body.email, device);
+			return { lockedSeconds, row: lockedSeconds > 0 || !found ? undefined : { ...found, sessions_revoked_at: watermark }, device };
 		});
 		if (lockedSeconds > 0) {
 			c.header('Retry-After', String(lockedSeconds));
@@ -145,11 +168,12 @@ export const authRoutes = new Hono<AuthEnv>()
 		if (!row || !ok) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		// The password proved the account: read it as its owner.
 		const user = await withUser(row.id, async (db) => {
-			await db.query('SELECT app_login_succeeded($1)', [body.email]);
+			await attemptSucceeded(db, body.email, device);
 			return (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
 		});
 		if (!user) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		await issueSession(c, row.id);
+		issueDevice(c, row.email, row.sessions_revoked_at);
 		return c.json({ user: toUser(user) });
 	})
 	.post('/logout', (c) => {
@@ -164,6 +188,8 @@ export const authRoutes = new Hono<AuthEnv>()
 			db.query('UPDATE app_user SET sessions_revoked_at = $2 WHERE id = $1', [c.get('userId'), new Date()])
 		);
 		clearSession(c);
+		// The watermark moved, so every device cookie is void anyway (device.ts); drop this one too.
+		clearDevice(c);
 		return c.body(null, 204);
 	})
 	.get('/me', requireUser, async (c) => {
@@ -219,13 +245,13 @@ export const authRoutes = new Hono<AuthEnv>()
 		const userId = c.get('userId');
 		// Counted in its own transaction before the bcrypt check, as in login.
 		const { lockedSeconds, row } = await withUser(userId, async (db) => {
-			const { rows } = await db.query<{ email: string; password_hash: string }>(
-				'SELECT email, password_hash FROM app_user WHERE id = $1',
+			const { rows } = await db.query<{ email: string; password_hash: string; sessions_revoked_at: Date | null }>(
+				'SELECT email, password_hash, sessions_revoked_at FROM app_user WHERE id = $1',
 				[userId]
 			);
 			const row = rows[0];
 			if (!row) return { lockedSeconds: 0, row: undefined };
-			return { lockedSeconds: await countAttempt(db, row.email), row };
+			return { lockedSeconds: await countAttempt(db, row.email, trustedDevice(c, row.email, row.sessions_revoked_at)), row };
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		if (lockedSeconds > 0) {
@@ -236,6 +262,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
 		}
 		const newHash = await hashPassword(body.newPassword);
+		const watermark = new Date();
 		// As the user (withUser), so email_token's RLS lets the reset links be deleted.
 		const user = await withUser(userId, async (db) => {
 			// Only if the hash is still the one just checked: a concurrent change
@@ -244,7 +271,7 @@ export const authRoutes = new Hono<AuthEnv>()
 				`UPDATE app_user SET password_hash = $3, sessions_revoked_at = $4
 				 WHERE id = $1 AND password_hash = $2 RETURNING ${USER_COLS}`,
 				// Watermark from this server's clock, the one that stamps session iat_ms.
-				[userId, row.password_hash, newHash, new Date()]
+				[userId, row.password_hash, newHash, watermark]
 			);
 			const updated = rows[0];
 			if (!updated) return undefined;
@@ -254,7 +281,8 @@ export const authRoutes = new Hono<AuthEnv>()
 			return updated;
 		});
 		if (!user) throw ApiError.coded(409, 'password_changed_elsewhere', 'your password was changed somewhere else a moment ago — sign in again');
-		// Issued after the watermark, so this device stays signed in.
+		// Issued after the watermark, so this device stays signed in, and stays trusted.
 		await issueSession(c, userId);
+		issueDevice(c, user.email, watermark);
 		return c.json({ user: toUser(user) });
 	});
