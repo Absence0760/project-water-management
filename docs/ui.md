@@ -292,8 +292,25 @@ role, freshness, Add data) and each tab's own header:
   old banners is kept. The model save bar stays the dock at the bottom
   (Save changes, Discard, the reason), and the grid modal and sheets keep
   their own `ModelSaveRow`.
-- **Phones:** the same header after the Sections button; the actions wrap
-  under the title at full width, with 44 px targets.
+- **The groups:** `SectionHeader` takes the pill as `status`, the tab's
+  controls as `actions` and the page's pair (Add data, then Run model or the
+  tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  so all of it is one row beside the title (under it when it doesn't fit, as
+  on Allocations at 1440); the pair is one box, so a wrap never splits it.
+- **Phones (a header 640 px wide or less, a container query):** the same
+  header after the Sections button. The pill is a line of its own (its list
+  opens rightwards, on the screen); a picker (a run select) takes a full row;
+  the tab's buttons and the pair then fill full rows, every control growing to
+  fill its row, and Add data and Run model always end the header side by side
+  (Transfers fits all three on one row; Settings puts Fit the parameters on
+  one row and the pair on the next). Runs' run form is a row of its own under
+  Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  on every section with a big catchment, plus the overlays' phone scans (node
+  sheet, node table, Allocations' sheets, New scenario, Add data, the
+  Sections menu).
+- **Compare runs** draws no title of its own in the workspace: it gives the
+  header its context ("Baseline “…” against one what-if · …"); the
+  standalone `/compare` page keeps its own `h1`.
 
 ## Header: data freshness and "Add data"
 
@@ -3225,7 +3242,9 @@ gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
 - **Header:** *Compare runs* and a context line ("Baseline “…” against 2
-  what-ifs · same period, 2021–2024 · engine 0.45.0").
+  what-ifs · same period, 2021–2024 · engine 0.45.0"); in the workspace
+  that is the section header (`fillHeader({ context })`), with no second
+  title, and on `/compare` the view's own `h1`.
 - **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2

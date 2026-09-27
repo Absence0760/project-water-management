@@ -488,7 +488,7 @@
 	{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
 {/snippet}
 {#snippet pageContext()}{contextText}{/snippet}
-{#snippet headerActions()}
+{#snippet headerStatus()}
 	{#if fresh}
 		<!-- Escape closes it (freshKeydown), as the other disclosures. -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -519,7 +519,9 @@
 	{:else if series}
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
-	{@render headerSlot.actions?.()}
+{/snippet}
+<!-- Add data, then Run model or the tab's main action in its place: the pair every section ends on. -->
+{#snippet headerMain()}
 	{#if canEdit}
 		<button
 			type="button"
@@ -623,7 +625,9 @@
 				title={LABEL[tab]}
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
-				actions={headerActions}
+				status={fresh || series ? headerStatus : null}
+				actions={headerSlot.actions}
+				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
 			/>
 
@@ -861,6 +865,13 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
 		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	/* In a narrow header the pill starts its own row at the left (SectionHeader), so the list opens rightwards. */
+	@container section-header (max-width: 640px) {
+		.fresh-pop {
+			left: 0;
+			right: auto;
+		}
 	}
 	.fresh-pop p {
 		margin: 0.4rem 0 0;

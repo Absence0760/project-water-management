@@ -153,6 +153,17 @@ section it belongs to, with the example that taught it.
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
   entry re-runs that spec.
+- **Lay a row of actions out on purpose on a phone; don't let it wrap.**
+  One flat `flex-wrap` row of header controls left ragged rows and split
+  Add data from Run model (Settings put Run model alone on a third row;
+  Allocations, Add data). Group the controls (status, the section's own,
+  the page's pair), make the groups `display: contents` where they fit on
+  one row, and in a narrow container give the status its own line, pickers
+  a full row, every control `flex: 1 1 auto` so rows fill, and the pair one
+  box that never splits (`workspace/SectionHeader.svelte`,
+  `workspace-phone.spec.ts`). A popover anchored to the right edge (the
+  rain pill's list) must open from the left once its trigger starts the
+  row, or it runs off the screen.
 
 ## 3. Colour, wording, content
 

@@ -1,23 +1,40 @@
 <script lang="ts">
 	// One header per workspace section (issue #17, option A · the boards'
-	// header): the section's title, a one-line context under it, and the
-	// actions on the right (the page's rain-freshness pill, Add data and Run
-	// model around the tab's own, headerSlot.svelte.ts). Under them, one
-	// slim line of notices (view only, new data) instead of full-width banners.
+	// header): the section's title, a one-line context under it, and on the
+	// right, in this order, the page's rain-freshness pill (`status`), the
+	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's pair,
+	// Add data and Run model or the tab's main action in its place (`main`).
+	// Under them, one slim line of notices (view only, new data) instead of
+	// full-width banners.
+	//
+	// Wide, the three groups are one row of controls beside the title. In a
+	// narrow header (a phone), in the same order: the pill on a line of its
+	// own; the tab's pickers, each a full row; then its buttons and the page's
+	// pair in full rows, every control growing to fill its row. Add data and
+	// Run model are one box that never splits, so they always end the header
+	// side by side (a page action used to push them onto rows of their own,
+	// or split them over two).
 	import type { Snippet } from 'svelte';
 
 	let {
 		title,
 		badge,
 		context,
+		status,
 		actions,
+		main,
 		notices
 	}: {
 		title: string;
 		/** Beside the title (the "Unsaved changes" badge). */
 		badge?: Snippet;
 		context?: Snippet | null;
-		actions?: Snippet;
+		/** The page's status before the actions (the rain-freshness pill). */
+		status?: Snippet | null;
+		/** The section's own actions (pickers, links, its buttons). */
+		actions?: Snippet | null;
+		/** The page's pair, last: Add data and Run model, or the section's main action. */
+		main?: Snippet | null;
 		notices?: Snippet;
 	} = $props();
 </script>
@@ -31,13 +48,21 @@
 			</div>
 			{#if context}<div class="context muted" data-testid="section-context">{@render context()}</div>{/if}
 		</div>
-		{#if actions}<div class="actions">{@render actions()}</div>{/if}
+		{#if status || actions || main}
+			<div class="actions">
+				{#if status}<div class="group status" data-testid="header-status">{@render status()}</div>{/if}
+				{#if actions}<div class="group own" data-testid="header-own">{@render actions()}</div>{/if}
+				{#if main}<div class="group main" data-testid="header-main">{@render main()}</div>{/if}
+			</div>
+		{/if}
 	</div>
 	{@render notices?.()}
 </header>
 
 <style>
 	.section-header {
+		/* Its width decides the layout: the sidebar takes 240 px, so the viewport would lie. */
+		container: section-header / inline-size;
 		display: flex;
 		flex-direction: column;
 		gap: 0.6rem;
@@ -80,15 +105,71 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
+	/* Wide: the pill and the tab's controls add no boxes, so they are one row
+	   with the pair; the pair itself is one box, so a wrap never splits it. */
+	.group {
+		display: contents;
+	}
+	.main {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
 	.actions :global(.btn) {
 		min-height: 38px;
 	}
-	@media (max-width: 640px) {
+	/* Narrow (a phone, 640 px at most): the pill on a line of its own, then the controls in full rows. */
+	@container section-header (max-width: 640px) {
 		h1 {
 			font-size: 1.45rem;
 		}
 		.actions {
+			flex: 1 1 100%;
+		}
+		.status {
+			display: flex;
+			flex: 1 1 100%;
+		}
+		/* Every control grows to fill its row, so no row ends in a ragged gap. */
+		.own > :global(*) {
+			flex: 1 1 auto;
+		}
+		.own > :global(.btn) {
+			justify-content: center;
+		}
+		/* A menu's button (Grids ▾, Download ▾) fills its share like the rest. */
+		.own > :global(:is(details, div)) > :global(:is(summary, .btn):first-child) {
 			width: 100%;
+			justify-content: center;
+		}
+		/* A picker takes a row of its own, its select the full width (over the tab's desktop cap). */
+		.own > :global(label),
+		.own > :global(.field),
+		.own > :global(select) {
+			flex-basis: 100%;
+		}
+		.section-header .own :global(select) {
+			width: 100%;
+			max-width: none;
+		}
+		/* Add data and Run model never split: one box, last, sharing a row with the tab's
+		   buttons when they fit and taking the next row when they don't. */
+		.main {
+			display: flex;
+			flex: 1 1 auto;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+		.main > :global(*) {
+			flex: 1 1 0;
+			justify-content: center;
+		}
+		/* Runs' run form (label, name, Run model) takes a row of its own under Add data. */
+		.main:has(> :global(form)) {
+			flex-basis: 100%;
+		}
+		.main > :global(form) {
+			flex-basis: 100%;
 		}
 		.actions :global(.btn) {
 			min-height: 44px;
