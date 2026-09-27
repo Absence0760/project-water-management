@@ -60,7 +60,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	await expect(table.getByText('Say where the table comes from (Reserve determination, gazette notice, table).')).toBeVisible();
 	await expect(save).toBeDisabled();
 	await expect(page.getByRole('link', { name: 'Reserve rules: 1 rule table has a problem to fix.' })).toHaveAttribute('href', '#set-reserve');
-	await table.getByLabel('Source').fill('Synthetic determination, table 1');
+	await table.getByLabel('Source', { exact: true }).fill('Synthetic determination, table 1');
 
 	// Paste a tab-separated table: a heading row of % points and month names in calendar order.
 	const cal = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -92,7 +92,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	await save.click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 	await page.reload();
-	await expect(table.getByLabel('Source')).toHaveValue('Synthetic determination, table 1');
+	await expect(table.getByLabel('Source', { exact: true })).toHaveValue('Synthetic determination, table 1');
 	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('0.32');
 	await expect(table.getByLabel('% points')).toHaveValue('10, 20, 30, 40, 50, 60, 70, 80, 90, 99');
 	// Every EWR site now has a table (the sample network's only gauge is the outlet).
@@ -161,7 +161,7 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await high.getByRole('button', { name: 'Fill the high flows' }).click();
 	await expect(high.getByRole('status', { name: 'High-flow paste result' })).toHaveText('Filled 1 high-flow component.');
 	await expect(high.getByLabel('High flow 1 name')).toHaveValue('Synthetic freshet');
-	await expect(high.getByLabel('High flow 1 months it may start in')).toHaveValue('Nov–Jan');
+	await expect(high.getByLabel('High flow 1 months it may peak in')).toHaveValue('Nov–Jan');
 	await expect(save).toBeEnabled();
 	await expectNoViolations(page);
 
