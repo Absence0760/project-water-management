@@ -38,9 +38,12 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(a.getByRole('link', { name: 'Upper farm' })).toBeVisible();
 	await expect(a.getByTestId('scenarios-empty')).toContainText('No applications yet.');
 
-	// A new application starts on the published baseline.
-	await a.getByLabel('Name', { exact: true }).fill(NAME);
-	await a.getByRole('button', { name: 'Create application' }).click();
+	// A new application starts on the published baseline: New application, at the top of their list, opens the dialog.
+	await a.getByRole('region', { name: 'Your applications' }).getByRole('link', { name: 'New application', exact: true }).click();
+	const create = a.getByRole('dialog', { name: 'New application' });
+	await expect(create.getByLabel('Base run')).toHaveCount(0);
+	await create.getByLabel('Name', { exact: true }).fill(NAME);
+	await create.getByRole('button', { name: 'Create application' }).click();
 	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
 	await expect(a.getByTestId('scenario-base')).toContainText('Based on run Baseline');
 

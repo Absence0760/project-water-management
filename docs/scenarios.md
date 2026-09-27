@@ -577,7 +577,14 @@ recorded as one edit group whatever the save rules tie together; every edit
 no op can express is named; the engine's refusals in the form's words; a
 fuzz over the engine's own random ops, `randomOps`, round-trips, and one
 over any valid supply rule, pump, levels and dam from any valid start), and
-`e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
+`scenarios/summary.test.ts` (the header's counts), `e2e/tests/scenarios-page.spec.ts`
+(the layout, issue #17: the header's counts and + New scenario, the create
+dialog at `new=1` closed by Back and Esc, creating picking the new one, the
+newest opened in place; thirty scenarios at 1440 × 960 and 1280 × 800 with
+the rail reaching the window's bottom, scrolling inside and staying in view
+as the scenario scrolls, Run in the head row; a phone; override mode's
+banner clear of the record bar; a viewer; an applicant with thirty
+applications; axe), `e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
 read only; a `trigger` farm taken to run of river one change at a time

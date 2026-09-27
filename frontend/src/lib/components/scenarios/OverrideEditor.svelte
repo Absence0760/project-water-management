@@ -108,6 +108,14 @@
 	beforeNavigate((nav) => {
 		if (editor.dirty && leaves(nav.to?.url) && !confirm(LEAVE)) nav.cancel();
 	});
+
+	// Opened below the fold on a long scenario, the sticky "Edits to record" bar would cover this banner and its
+	// Close button (issue #17): bring the banner to the top once, when override mode opens.
+	let modeEl: HTMLElement | undefined = $state();
+	$effect(() => {
+		if (!modeEl) return;
+		untrack(() => modeEl?.scrollIntoView({ block: 'start' }));
+	});
 </script>
 
 <svelte:window
@@ -116,7 +124,7 @@
 	}}
 />
 
-<section class="panel override" aria-labelledby="override-h" data-testid="override-mode">
+<section class="panel override" bind:this={modeEl} aria-labelledby="override-h" data-testid="override-mode">
 	<div class="banner" role="note">
 		<h2 id="override-h">Editing the scenario “{scenarioName}”, not the catchment</h2>
 		<p>
