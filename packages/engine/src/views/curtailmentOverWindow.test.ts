@@ -9,6 +9,7 @@ import type { ReportWindow } from '../network/curtailment';
 import type { ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
+import { parseTransferRuleKey } from '../network/transferSeries';
 import { randomInput } from '../testing/fuzz';
 import { curtailmentOverWindow, curtailmentSeriesKeys, prepareCurtailment, ProjectionInputError, type CurtailmentRun } from './farmProjection';
 
@@ -31,8 +32,14 @@ function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): Curtail
 	};
 }
 
-/** The same run as one saved before engine 1.5.0, which stored no binding site: it is recomputed from the flows. */
+/** The same run as one saved before engine 1.5.0, which stored no binding site (nor, before 1.6.0, per-rule transfers): it is recomputed from the flows. */
 function asOldRun(input: ModelInput, out: ModelOutput, read?: Set<string>): CurtailmentRun {
+	const r = asRun(input, out, read);
+	return { ...r, series: (nodeId, key) => (key === EWR_BINDING_SERIES.key || parseTransferRuleKey(key) ? undefined : r.series(nodeId, key)) };
+}
+
+/** The same run with its binding sites hidden but its per-rule transfer volumes kept (engine ≥ 1.6.0): the recompute reads the rules. */
+function asRuleRun(input: ModelInput, out: ModelOutput, read?: Set<string>): CurtailmentRun {
 	const r = asRun(input, out, read);
 	return { ...r, series: (nodeId, key) => (key === EWR_BINDING_SERIES.key ? undefined : r.series(nodeId, key)) };
 }
@@ -147,7 +154,7 @@ describe('curtailmentOverWindow', () => {
 	it('reads exactly the series curtailmentSeriesKeys lists for a run saved before 1.5.0 (the recompute’s flows)', () => {
 		let recomputed = 0;
 		for (const { input, run } of runs) {
-			const stored = new Set(run.series.filter((s) => s.key !== EWR_BINDING_SERIES.key).map((s) => `${s.nodeId ?? ''}|${s.key}`));
+			const stored = new Set(run.series.filter((s) => s.key !== EWR_BINDING_SERIES.key && !parseTransferRuleKey(s.key)).map((s) => `${s.nodeId ?? ''}|${s.key}`));
 			const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
 			const read = new Set<string>();
 			curtailmentOverWindow(asOldRun(input, run, read), win(run, 0, run.days - 1));
@@ -190,6 +197,39 @@ describe('curtailmentOverWindow', () => {
 			}
 		}
 		expect(compared).toBeGreaterThan(100);
+		expect(loops).toBeGreaterThan(0);
+	});
+
+	it('recomputes exactly from the stored per-rule transfer volumes, a transfer loop included (engine ≥ 1.6.0)', () => {
+		let loops = 0;
+		let withRules = 0;
+		for (const { input, run } of cases(80, 600)) {
+			if (!run.series.some((s) => parseTransferRuleKey(s.key))) continue;
+			withRules++;
+			const rules = prepareCurtailment(asRuleRun(input, run));
+			const before = prepareCurtailment(asOldRun(input, run));
+			for (const w of windows(run)) {
+				const got = rules.over(w);
+				expect(got.bindingApproximate).toBe(false);
+				expect(got.curtailment).toEqual(prepareCurtailment(asRun(input, run)).over(w).curtailment);
+				if (before.over(w).bindingApproximate) {
+					loops++;
+					expect(got.curtailment.farms).toEqual(runModel(withWindow(input, w)).summary.curtailment!.farms);
+				}
+			}
+			// Given the stored series, the per-rule volumes are listed in place of the farms' net transfers.
+			const stored = new Set(run.series.filter((s) => s.key !== EWR_BINDING_SERIES.key).map((s) => `${s.nodeId ?? ''}|${s.key}`));
+			const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
+			const read = new Set<string>();
+			curtailmentOverWindow(asRuleRun(input, run, read), win(run, 0, run.days - 1));
+			const used = new Set([...read].filter((k) => stored.has(k)));
+			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, {}, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+			if (run.series.some((s) => s.key === EWR_BINDING_SERIES.key)) {
+				expect(new Set(keys)).toEqual(used);
+				expect(keys.some((k) => k.endsWith('|transfer'))).toBe(false);
+			}
+		}
+		expect(withRules).toBeGreaterThan(5);
 		expect(loops).toBeGreaterThan(0);
 	});
 

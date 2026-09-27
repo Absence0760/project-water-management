@@ -1262,7 +1262,8 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   of two or more EWR sites; other farms' follows from the charge). A run
   saved before 1.5.0 has none, and there it is recomputed with the engine's
   attribution on the run's stored flows (exact unless the transfer rules form
-  a loop; see the file header).
+  a loop in a run without the per-rule `transfer_rule@<rule id>` series,
+  i.e. one saved before engine 1.6.0; see the file header).
 - **Immutable but for the notice.** `water_app` has `UPDATE` on the notice
   columns (`restriction_level`, `restriction_pct`, `notice`),
   `note`, `next_expected_on`, `superseded_at`, `updated_at` and `updated_by`

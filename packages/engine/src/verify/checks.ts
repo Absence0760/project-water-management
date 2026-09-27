@@ -14,6 +14,7 @@ import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '.
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
+import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { cmpStr } from '../order';
 import { supplyOf, type PlanSupply } from '../network/supply';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
@@ -1113,12 +1114,19 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
  *   EWR is met has neither;
  * - per farm per day: charge ≤ irrigation part ≤ 0, and the irrigation part is
  *   at most the farm's consumptive irrigation G − T;
- * - per site per day, where no transfer rule crosses the site's catchment
- *   boundary (always at the outlet): with e = H + I + J − U for each farm
- *   upstream, the charged part is MIN(shortfall, Σ MAX(e, 0)), each farm's
- *   share is charged × MAX(e, 0) / Σ MAX(e, 0), and a farm's charge is at
- *   least that share (it carries the largest over its sites) and, when every
- *   site it is upstream of can be recomputed, exactly the largest;
+ * - the stored per-rule transfer volumes (engine ≥ 1.6.0,
+ *   network/transferSeries.ts): one for every rule that can move water or
+ *   none (an older run), each ≥ 0, and at every farm they add up to its net
+ *   transfer J;
+ * - per site per day, with e = H + I + J_int − U for each farm upstream
+ *   (J_int: only the rules with both ends upstream of the site), the charged
+ *   part is MIN(shortfall, Σ MAX(e, 0)), each farm's share is
+ *   charged × MAX(e, 0) / Σ MAX(e, 0), and a farm's charge is at least that
+ *   share (it carries the largest over its sites) and, when every site it is
+ *   upstream of can be recomputed, exactly the largest. With the per-rule
+ *   volumes every site can be; a run saved before 1.6.0 stores none, and
+ *   there a site is recomputed only where no rule crosses its catchment
+ *   boundary (always at the outlet), since J is then J_int;
  * - Σ farm charges upstream of a site ≥ the site's charged part;
  * - the stored binding site (engine ≥ 1.5.0, farms upstream of two or more
  *   sites): given exactly on the days the farm is charged, one of the sites
@@ -1152,18 +1160,30 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		}
 		return set;
 	};
-	const rules = input.model.transfers.filter((tr) => tr.enabled && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm');
+	const rules = farmRules(input.model.transfers, (id) => byId.get(id)?.kind);
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
+	// Each rule's daily volume (engine ≥ 1.6.0: a series for every rule that can move water; null for an older run, which stores none).
+	const movable = rules.filter(canMove);
+	const storedRules = movable.filter((r) => get.has(`${r.fromNodeId}|${transferRuleKey(r.id)}`)).length;
+	if (storedRules > 0 && storedRules < movable.length) return `transfer rules: ${storedRules} of the ${movable.length} that can move water have a stored volume`;
+	const ruleVol = readRuleVolumes(rules, out.days, (id, k) => get.get(`${id}|${k}`));
+	if (ruleVol) {
+		const err = checkRuleVolumes(rules, ruleVol, farms, get, out.days);
+		if (err) return err;
+	}
 	const byRule = input.settings.ewrChargeSource === 'ruleTable';
 	const siteInfo = sites.map((s, si) => {
 		const up = ancestors(s.id);
 		const key = si === 0 ? 'null' : s.id;
+		// A rule with one end inside counts at neither end here: without the per-rule volumes it can't be told apart from the farm's other transfers.
+		const crossed = rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId));
 		return {
 			name: s.id,
 			key,
 			farms: farms.filter((f) => up.has(f.id)),
-			// A rule with one end inside: its volume can't be told apart from the farm's other transfers.
-			exact: !rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)),
+			exact: !crossed || !!ruleVol,
+			// The rules with both ends upstream, when the per-rule volumes say what each moved (J_int); null = the farms' own J.
+			internal: crossed && ruleVol ? rules.flatMap((r, k) => (up.has(r.fromNodeId) && up.has(r.toNodeId) ? [{ from: r.fromNodeId, to: r.toNodeId, volume: ruleVol[k]! }] : [])) : null,
 			// The shortfall the charge follows (engine ≥ 1.3.0): the rule table's where it drives the charge.
 			D: get.get(`${key}|ewr_charge_shortfall`) ?? get.get(`${key}|ewr_shortfall`)!,
 			charged: get.get(`${key}|ewr_charged`),
@@ -1223,12 +1243,21 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			for (const f of s.farms) sumR -= F.get(f.id)!.R[t]!;
 			if (sumR < ch - tol(ch)) return `${where}: the farms upstream carry ${sumR} in all, less than the ${ch} charged`;
 			if (!s.exact || D === 0) continue;
+			let jInt: Map<string, number> | null = null;
+			if (s.internal) {
+				jInt = new Map();
+				for (const r of s.internal) {
+					jInt.set(r.to, (jInt.get(r.to) ?? 0) + r.volume[t]!);
+					jInt.set(r.from, (jInt.get(r.from) ?? 0) - r.volume[t]!);
+				}
+			}
 			let E = 0;
 			let scale = D;
 			const e = s.farms.map((f) => {
 				const x = F.get(f.id)!;
-				const v = x.H[t]! + x.I[t]! + x.J[t]! - x.U[t]!;
-				scale = Math.max(scale, Math.abs(x.H[t]!) + Math.abs(x.I[t]!) + Math.abs(x.J[t]!), Math.abs(x.U[t]!));
+				const J = jInt ? (jInt.get(f.id) ?? 0) : x.J[t]!;
+				const v = x.H[t]! + x.I[t]! + J - x.U[t]!;
+				scale = Math.max(scale, Math.abs(x.H[t]!) + Math.abs(x.I[t]!) + Math.abs(J), Math.abs(x.U[t]!));
 				E += Math.max(v, 0);
 				return Math.max(v, 0);
 			});
@@ -1262,6 +1291,45 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			if (!Number.isInteger(b) || !site || !site.farms.includes(f)) return `${where}: binding site ${b} is not an EWR site below it`;
 			const A = shareAt[b]!.get(f.id);
 			if (A !== undefined && Math.abs(R - A) > tol(Math.max(R, x.U[t]!, x.H[t]! + x.I[t]!))) return `${where}: EWR charge ${-R} ≠ its share ${A} at its binding site ${site.name}`;
+		}
+	}
+	return null;
+}
+
+/**
+ * The stored per-rule transfer volumes (engine ≥ 1.6.0): each ≥ 0 and the
+ * run's length, and at every farm Σ in − Σ out = its net transfer J.
+ */
+function checkRuleVolumes(
+	rules: readonly { id: string; fromNodeId: string; toNodeId: string }[],
+	vol: readonly Float64Array[],
+	farms: readonly NetworkNode[],
+	get: SeriesMap,
+	days: number
+): string | null {
+	for (const [k, r] of rules.entries()) {
+		const stored = get.get(`${r.fromNodeId}|${transferRuleKey(r.id)}`);
+		if (stored && stored.length !== days) return `transfer rule ${r.id}: ${stored.length} days stored, expected ${days}`;
+		for (let t = 0; t < days; t++) if (!(vol[k]![t]! >= 0)) return `transfer rule ${r.id} day ${t}: moved ${vol[k]![t]}, must be ≥ 0`;
+	}
+	for (const f of farms) {
+		if (f.kind !== 'farm') continue;
+		const J = get.get(`${f.id}|transfer`);
+		if (!J) continue;
+		const ins = rules.flatMap((r, k) => (r.toNodeId === f.id ? [vol[k]!] : []));
+		const outs = rules.flatMap((r, k) => (r.fromNodeId === f.id ? [vol[k]!] : []));
+		for (let t = 0; t < days; t++) {
+			let net = 0;
+			let scale = 0;
+			for (const v of ins) {
+				net += v[t]!;
+				scale += v[t]!;
+			}
+			for (const v of outs) {
+				net -= v[t]!;
+				scale += v[t]!;
+			}
+			if (Math.abs(net - J[t]!) > tol(scale)) return `${f.id} day ${t}: its transfer rules move ${net} net, but its transfer is ${J[t]}`;
 		}
 	}
 	return null;

@@ -3085,8 +3085,10 @@ read it before.
   of two or more sites), so the panel fetches that instead of the flows and
   the column is exact. For an older run the engine recomputes each day's
   binding site from the stored flows (the inflow, outflow, runoff, dam storage
-  and transfer series above, fetched only then); only when the transfer rules
-  form a loop is that column approximate, and the status line says so. Nothing is re-run and nothing is saved: the project
+  and transfer series above, fetched only then, or each rule's own
+  `transfer_rule@<rule id>` volume in place of the transfer series when the
+  run stores them, engine ≥ 1.6.0); only when the transfer rules form a loop
+  in a run without those is that column approximate, and the status line says so. Nothing is re-run and nothing is saved: the project
   setting, the stored run, the downloads and the printable report keep the
   project window, and the status line under the picker says so. A viewer can use
   it (it only reads the run). The choice is `?window=` in the URL (`last7`,

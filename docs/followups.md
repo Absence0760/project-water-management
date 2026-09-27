@@ -223,16 +223,17 @@ collected as a checklist in issue #46; tick it there as they answer.
       gauge's `node.set` field in a scenario (always a baseline
       assumption), and run comparison's *What changed* lists the EWR site
       list changing ([model.md §2.7b](./model.md), [run-comparison.md](./run-comparison.md)).
-- [ ] **The per-run attribution self-check is exact only where no transfer
-      crosses a site's catchment boundary** (Q17), because per-rule transfer
-      volumes aren't stored as run series (the full invariants run in
-      `network/attribution.test.ts` and the fuzz suite). Narrowed in engine
-      1.5.0: with the binding site stored, a farm's charge is checked exactly
-      against its share at its binding site whenever that site is exact, even
-      when another site above the farm is crossed. Durable fix: store the
-      per-rule transfer volumes as run series (they are small: one per
-      enabled rule). Trigger: a hydrologist or assessor asking for the
-      per-site recompute on a network with transfers across a gauge.
+- [x] **The per-run attribution self-check is exact at every site**
+      (Q17, engine ≥ 1.6.0). A run stores each transfer rule's daily volume
+      (`transfer_rule@<rule id>` on its source farm, for every rule that can
+      move water, `network/transferSeries.ts`), so the self-check recomputes
+      `J_int` and every site exactly, a site a transfer crosses included
+      (checked with a perturbed charge there, `transferSeries.test.ts`), and
+      the farm projection's recompute is exact on a transfer loop without
+      `bindingApproximate`. Runs from before 1.6.0 keep the fallback (exact
+      only where no transfer crosses a site; the loop cut). About 1 % more
+      series before compression on the examples with transfers
+      ([model.md §2.7b](./model.md)).
 - [ ] **Client regression suite is thinner since N1.** Nearly every client
       farm has return flow, which the new efficiency model can't reproduce,
       so the replay skips those farms' balance columns and everything
