@@ -9,7 +9,8 @@
 // pin the wording in the unit tests, lib/components/farm/*.test.ts).
 import type { BrowserContext, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { createProject, putModel, sampleModel } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
+import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -182,4 +183,107 @@ test('a farm whose catchment has nothing published says so', async ({ page, owne
 	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${project.id}`));
 	await expect(farmer.page.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();
 	await expectNoSidewaysScroll(farmer.page);
+});
+
+// The farm pages sit outside the app shell (FarmShell, ui.md § Farmer view).
+// Their header is sticky at every width, while the shell sets --header-h to 0
+// from 900 px: a link into a page must still land below the farm header.
+async function headerBottom(page: Page) {
+	return page.locator('.farm-header').evaluate((el) => el.getBoundingClientRect().bottom);
+}
+
+test('the farm pages pass an a11y scan on a phone and a desktop, in light and dark', async ({ page }) => {
+	test.setTimeout(90_000);
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		for (const size of [PHONE, DESKTOP]) {
+			await page.setViewportSize(size);
+			for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`, '/farm/words']) {
+				await page.goto(path);
+				await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+				await expect(page.locator('main[aria-busy]')).toHaveCount(0);
+				await expectNoViolations(page);
+			}
+		}
+	}
+});
+
+test('a link into a farm page lands below the sticky farm header on a phone and a desktop', async ({ page }) => {
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
+	for (const size of [PHONE, DESKTOP]) {
+		await page.setViewportSize(size);
+		// A glossary entry, loaded by its address (the dam page's "What is “modelled”?").
+		await page.goto('/farm/words#farm-modelled');
+		const entry = page.locator('#farm-modelled');
+		await expect(entry).toBeInViewport();
+		await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+		const bottom = await headerBottom(page);
+		await expect.poll(() => entry.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(bottom);
+
+		// "Read the notice" on Why? goes back to the farm page's notice, below the header and in view.
+		await page.goto(`/farm/${projectId}/why`);
+		await page.getByRole('link', { name: 'Read the notice' }).click();
+		await expect(page).toHaveURL(new RegExp(`/farm/${projectId}#notice$`));
+		const notice = page.locator('#notice');
+		await expect(notice).toBeInViewport();
+		await expect.poll(() => notice.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(await headerBottom(page));
+	}
+});
+
+test('a list of farms that fits the window doesn’t scroll', async ({ page }) => {
+	await signIn(page, FARMER2);
+	await expect(page).toHaveURL(/\/farm$/);
+	for (const size of [PHONE, DESKTOP, { width: 1440, height: 960 }]) {
+		await page.setViewportSize(size);
+		await expect(page.getByRole('link', { name: /Kareebos/ })).toContainText('% of water needed');
+		const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight]);
+		expect(scroll).toBeLessThanOrEqual(inner);
+	}
+});
+
+// Design for N (ui-playbook § 2): a farmer linked to many farms in one
+// catchment (or WUA staff previewing, who see them all) gets the switcher
+// folded, so the farm's name and the WUA's notice stay on the first screen.
+test('many farms in one catchment fold the switcher; the notice stays on the first screen', async ({ page, owner, signIn: signInAs }) => {
+	test.setTimeout(90_000);
+	void owner;
+	const req = page.context().request;
+	const project = await createProject(req, 'Many farms catchment');
+	const base = sampleModel();
+	const [gauge, template] = [base.nodes[0]!, base.nodes[1]!];
+	const farms = Array.from({ length: 12 }, (_, i) => ({ ...template, id: crypto.randomUUID(), name: `Farm ${i + 1} with a longer name`, sortOrder: i + 2 }));
+	const crop = base.crops[0]!;
+	await putModel(req, project.id, { nodes: [gauge, ...farms], crops: [crop], cropAreas: farms.map((f) => ({ nodeId: f.id, cropId: crop.id, areaM2: 100_000 })), transfers: [] });
+	await updateSettings(req, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: Array(12).fill(1000) });
+	await putSeries(req, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(120) });
+	await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
+	const runId = await createRun(req, project.id, 'Baseline');
+	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, {
+		data: { runId, restriction: { level: 'restricted', pct: 20, noticeEn: 'Pump at night only.', noticeAf: null } }
+	});
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmer = await signInAs('Many-farm farmer');
+	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: farms.map((f) => f.id) } });
+	expect(add.status(), await add.text()).toBe(201);
+
+	const fp = farmer.page;
+	await fp.setViewportSize(PHONE);
+	await fp.goto(`/farm/${project.id}?node=${farms[0]!.id}`);
+	await expect(fp.getByRole('heading', { level: 1, name: 'Farm 1 with a longer name' })).toBeInViewport();
+	await expect(fp.locator('#notice')).toBeInViewport();
+	const switcher = fp.getByRole('navigation', { name: 'Your farms in this catchment' });
+	await expect(switcher).toBeHidden();
+	await fp.getByText('Your farms in this catchment (12 farms)', { exact: true }).click();
+	await expect(switcher.getByRole('link')).toHaveCount(12);
+	await expect(switcher.getByRole('link', { name: 'Farm 1 with a longer name' })).toHaveAttribute('aria-current', 'page');
+	await switcher.getByRole('link', { name: 'Farm 12 with a longer name' }).click();
+	await expect(fp).toHaveURL(new RegExp(`node=${farms[11]!.id}`));
+	await expect(fp.getByRole('heading', { level: 1, name: 'Farm 12 with a longer name' })).toBeVisible();
+	await expectNoSidewaysScroll(fp);
+	await expectNoViolations(fp);
 });

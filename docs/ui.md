@@ -3870,7 +3870,10 @@ published.
 - **Routes.** `/farm` lists every farm linked to the user across projects
   (notice level, received %, dam %, or "Not published yet"), and goes
   straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
-  switcher when the farmer has several there), with `/why` ("Why about
+  switcher when the farmer has several there: a row of links above the name
+  for up to 4 farms; past that, folded under "Your farms in this catchment
+  (N farms)", so the name and the WUA's notice stay on the first screen,
+  which matters for WUA staff previewing, who see every farm), with `/why` ("Why about
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
   entries in the `farmer` category ("What do these words mean?"). The root
   page sends a user whose every membership is `farmer` to `/farm`; the
@@ -3879,7 +3882,13 @@ published.
 - **Frame.** The farm pages have their own header ("My farm", the EN | AF
   language switch, Menu: your farms, the words, "Don't keep a copy on this
   phone", sign out); the app shell isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
-  nothing under 13 px, existing tokens only, light and dark.
+  nothing under 13 px, existing tokens only, light and dark. The header is
+  sticky at every width, so while it's on the page it sets `--header-h` to
+  its 56 px (the app shell's 0 from 900 px would leave in-page links, such
+  as Why?'s "Read the notice" (`#notice`, landed once the farm has loaded)
+  and the words page's `#farm-…` entries, under it). The frame has no
+  minimum height, so a page that fits doesn't scroll (the confirm-your-email
+  banner sits above it).
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
