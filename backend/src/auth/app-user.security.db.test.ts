@@ -14,7 +14,9 @@
 //   5. a farmer (073) sees only the accounts their pages name: whoever
 //      published or last changed a publication, the author of a farm note on
 //      their farm, whoever linked them; never another farmer or a member who
-//      did none of those (a viewer still sees them all);
+//      did none of those (a viewer still sees them all); an applicant (076)
+//      likewise, plus the owner, the other members and the assessor of the
+//      applications they read; never another applicant;
 //   6. every inner join to app_user in the backend's SQL (JOIN … ON, an
 //      UPDATE's or a comma join's FROM app_user) is on a list, so a new one
 //      (which would drop rows whose maker RLS hides) needs a decision.
@@ -237,6 +239,114 @@ describe('a farmer', () => {
 			await asOwner(`UPDATE project_member SET role = 'farmer' WHERE project_id = $1 AND user_id = $2`, [projectId, farmer.id]);
 		}
 		expect((await withUser(farmer.id, visibleIds)).has(neighbour.id)).toBe(false);
+	});
+});
+
+describe('an applicant', () => {
+	let applicant: User; // a contributor linked to the farmer's farm; their application is decided
+	let consultant: User; // a contributor in the applicant's party, whose application is shared with them
+	let partner: User; // a contributor in that party, also on the consultant's application
+	let rival: User; // a contributor in another party, with an application of their own
+	let assessor: User; // the editor who decided the applicant's application
+	let own: string;
+	let shared: string;
+
+	const apply = async (u: User, name: string, baseRunId: string) => {
+		const res = await u.call('POST', `/projects/${projectId}/scenarios`, { name, baseRunId });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		return res.body.scenario.id as string;
+	};
+
+	beforeAll(async () => {
+		[applicant, consultant, partner, rival, assessor] = await Promise.all(['Rlsapplicant', 'Rlsconsultant', 'Rlspartner', 'Rlsrival', 'Rlsassessor'].map((n) => signUp(n))) as [User, User, User, User, User];
+		for (const [u, role] of [
+			[applicant, 'contributor'],
+			[consultant, 'contributor'],
+			[partner, 'contributor'],
+			[rival, 'contributor'],
+			[assessor, 'editor']
+		] as const) {
+			expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
+		}
+		for (const [u, party] of [
+			[applicant, 'Rls Trust'],
+			[consultant, 'Rls Trust'],
+			[partner, 'Rls Trust'],
+			[rival, 'Rival Estates']
+		] as const) {
+			expect((await owner.call('PATCH', `/projects/${projectId}/members/${u.id}`, { party })).status).toBe(200);
+		}
+		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${applicant.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		const [{ run_id: base }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		own = await apply(applicant, 'Raise the dam', base);
+		expect((await applicant.call('POST', `/projects/${projectId}/scenarios/${own}/submit`)).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${own}/decide`, { outcome: 'approved' })).status).toBe(200);
+		shared = await apply(consultant, 'Consultant draft', base);
+		for (const u of [applicant, partner]) {
+			expect((await consultant.call('POST', `/projects/${projectId}/scenarios/${shared}/members`, { userId: u.id })).status).toBe(201);
+		}
+		await apply(rival, 'Rival draft', base);
+	}, 60_000);
+
+	it('sees only themself and the people their pages name, never another applicant (positive control: a viewer sees every co-member)', async () => {
+		const seen = await withUser(applicant.id, visibleIds);
+		// Their farm page's (the owner linked them, the viewer's farm note, the
+		// publication's people); their applications' (the consultant who owns
+		// the one shared with them, the partner it is also shared with, the
+		// assessor who decided theirs).
+		expect([...seen].sort()).toEqual([applicant.id, owner.id, viewer.id, publisher.id, updater.id, consultant.id, partner.id, assessor.id].sort());
+		// Not the other applicant, not the farmers, not staff their pages don't name, not the removed member.
+		expect([rival.id, farmer.id, neighbour.id, quiet.id, leaver.id, mate.id, stranger.id].filter((id) => seen.has(id))).toEqual([]);
+		// The partner, with no farm link: the consultant's application's owner and its other member, and the publication's people.
+		expect([...(await withUser(partner.id, visibleIds))].sort()).toEqual([partner.id, consultant.id, applicant.id, publisher.id, updater.id].sort());
+		// The rival reads only their own application: nobody but the publication's people.
+		expect([...(await withUser(rival.id, visibleIds))].sort()).toEqual([rival.id, publisher.id, updater.id].sort());
+		const viewerSees = await withUser(viewer.id, visibleIds);
+		expect([applicant.id, consultant.id, partner.id, rival.id, assessor.id, farmer.id].filter((id) => !viewerSees.has(id))).toEqual([]);
+	});
+
+	it('still sees every name their application pages show', async () => {
+		const list = await applicant.call('GET', `/projects/${projectId}/scenarios`);
+		expect(list.status).toBe(200);
+		const rows = (list.body.scenarios as { id: string; owner: string; decidedBy: string | null; members: { displayName: string }[] }[]).map((s) => [
+			s.id,
+			s.owner,
+			s.decidedBy,
+			s.members.map((m) => m.displayName)
+		]);
+		// Both applications, the shared one kept by its owner's name (an inner join).
+		expect(rows.sort()).toEqual(
+			[
+				[own, 'Rlsapplicant', 'Rlsassessor', []],
+				[shared, 'Rlsconsultant', null, ['Rlsapplicant', 'Rlspartner']]
+			].sort()
+		);
+		const one = await partner.call('GET', `/projects/${projectId}/scenarios/${shared}`);
+		expect(one.status).toBe(200);
+		expect(one.body.scenario).toMatchObject({ owner: 'Rlsconsultant', members: [{ displayName: 'Rlsapplicant' }, { displayName: 'Rlspartner' }] });
+		// …and every name their farm page shows, as a farmer's.
+		const notes = await applicant.call('GET', `/projects/${projectId}/notes?nodeId=${farmId}`);
+		expect((notes.body.notes as { author: string }[]).map((n) => n.author)).toEqual(['Rlsviewer']);
+		expect((await applicant.call('GET', `/projects/${projectId}/publication`)).body.current).toMatchObject({ publishedBy: 'Rlspublisher', updatedBy: 'Rlsupdater' });
+	});
+
+	it('sees co-members as before once more than an applicant, and no application’s people once only a farmer', async () => {
+		await asOwner(`UPDATE project_member SET role = 'viewer' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+		try {
+			const seen = await withUser(applicant.id, visibleIds);
+			expect([rival.id, farmer.id, quiet.id, leaver.id].filter((id) => !seen.has(id))).toEqual([]);
+		} finally {
+			await asOwner(`UPDATE project_member SET role = 'contributor' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+		}
+		// A farmer now: their farm page's people only, though their application and its share are still stored.
+		await asOwner(`UPDATE project_member SET role = 'farmer' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+		try {
+			expect([...(await withUser(applicant.id, visibleIds))].sort()).toEqual([applicant.id, owner.id, viewer.id, publisher.id, updater.id].sort());
+		} finally {
+			await asOwner(`UPDATE project_member SET role = 'contributor' WHERE project_id = $1 AND user_id = $2`, [projectId, applicant.id]);
+		}
+		expect((await withUser(applicant.id, visibleIds)).has(rival.id)).toBe(false);
+		expect((await withUser(applicant.id, visibleIds)).has(assessor.id)).toBe(true);
 	});
 });
 
