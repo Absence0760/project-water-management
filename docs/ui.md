@@ -1694,8 +1694,8 @@ which checks every catchment tab).
       the row stays editable after, and the preset's name goes into the
       **Pan coefficient source** note below the row. Below it, a collapsed **Suggest from
       FAO-56 Table 5 (humidity, wind, siting)** helper
-      (`settings/PanCoefficientHelper.svelte`, loaded as its own chunk and
-      hidden on a read-only view): the pan siting (Case A, green crop, or
+      (`settings/PanCoefficientHelper.svelte`, part of the Settings tab's
+      chunk, hidden on a read-only view): the pan siting (Case A, green crop, or
       Case B, dry fallow) as radios, the windward fetch as a select (1, 10,
       100 or 1000 m), an optional reduction for bare surroundings (0–20 %),
       the mean RH (%) and wind at 2 m (m/s) for each of the 12 months, and a
@@ -1961,8 +1961,7 @@ which checks every catchment tab).
   whole minutes blocks Save. Saving only this group doesn't mark the runs as
   out of date (it changes no input).
 - **Outcome matrix** (`#set-outcomes`, issue #53 R4, `settings.outcomes`;
-  `outcomes/OutcomeSettingsSection.svelte`, a lazy chunk inside the form,
-  since the Settings chunk is at its bundle ceiling): how the Runs tab's
+  `outcomes/OutcomeSettingsSection.svelte`, part of the form): how the Runs tab's
   [outcome matrix](#outcome-matrix) reads a demand sweep. **Water-year
   classes**: *Automatic* (terciles, quintiles once the record has 25
   complete years; the default), *Terciles* or *Quintiles*. **Risk
@@ -1979,8 +1978,8 @@ which checks every catchment tab).
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
 - **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
-  `outlook/OutlookSettingsSection.svelte`, a lazy chunk inside the form,
-  like the outcome matrix's): how the Runs tab's
+  `outlook/OutlookSettingsSection.svelte`, part of the form, like the
+  outcome matrix's): how the Runs tab's
   [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
   the default season (1 Oct – 30 Apr)** ticked by default and a **Default
   pending the client** badge while it is (O3); unticked, the decision date
@@ -1995,7 +1994,7 @@ which checks every catchment tab).
 
 Below the settings form (it saves on its own, never through the save bar) is
 **Data feeds** (`#set-feeds`; `lib/components/feeds/DataFeedsPanel.svelte`,
-its own chunk loaded with the tab; WP-2.10,
+part of the Settings tab's chunk; WP-2.10,
 [architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
@@ -2079,8 +2078,8 @@ its own chunk loaded with the tab; WP-2.10,
 ### API keys
 
 Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
-`lib/components/apiKeys/ApiKeysPanel.svelte`, its own chunk loaded with the
-tab; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
+`lib/components/apiKeys/ApiKeysPanel.svelte`, part of the Settings tab's
+chunk; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
 or a script uses to push daily readings into the project's series.
 
 - **Make an API key**: a name, how long it works (until revoked, 90 days, 1
@@ -2104,8 +2103,8 @@ or a script uses to push daily readings into the project's series.
 ### Scheduled reports
 
 Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
-`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
-the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+`lib/components/report/ReportSchedulesPanel.svelte`, part of the Settings
+tab's chunk; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
 
 - **The list**, one card per schedule: "Every Monday at 07:00
@@ -2798,7 +2797,7 @@ read it before.
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
   there is no table. The **Plausibility checks** (`#res-plausibility`,
-  `runs/PlausibilityPanel.svelte`, its own chunk, helpers in
+  `runs/PlausibilityPanel.svelte`, part of the Runs tab's chunk, helpers in
   `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
   only on runs that have them): the dry season in one sentence, a line per
   check (*no finding*, *see below* or *not checked*, with a coloured edge and

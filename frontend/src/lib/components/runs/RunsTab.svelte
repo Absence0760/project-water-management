@@ -39,14 +39,16 @@
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
 	// with the other unit panels (issue #17).
+	// The plausibility checks (engine ≥ 0.25.0) render for every run that has them, which is every
+	// run since, so they are in this chunk too (tab chunks have their own ceiling,
+	// scripts/guards/check_web_bundle_budget.mjs).
+	import PlausibilityPanel from './PlausibilityPanel.svelte';
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
-	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
-	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to River & reserve (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -640,11 +642,7 @@
 					</div>
 					{#if summary.plausibility}
 						<div class="panel" id="res-plausibility">
-							<Lazy load={loadPlausibilityPanel}>
-								{#snippet children(PlausibilityPanel)}
-									<PlausibilityPanel checks={summary.plausibility!} {projectId} runId={shownRunId} runoffModel={shownRun.runoffModel} {runs} />
-								{/snippet}
-							</Lazy>
+							<PlausibilityPanel checks={summary.plausibility} {projectId} runId={shownRunId} runoffModel={shownRun.runoffModel} {runs} />
 						</div>
 					{/if}
 				{/snippet}
