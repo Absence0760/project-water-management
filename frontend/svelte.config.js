@@ -4,6 +4,13 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: [vitePreprocess()],
+	compilerOptions: {
+		// Component styles are scoped by a class on every element; Svelte's
+		// default is `svelte-<hash>`. `s<hash>` (same hash) is ~2.6 KB gzip
+		// lighter across the bundle (issue #9). src/lib/cssHash.test.ts checks
+		// no class the app writes itself can equal one.
+		cssHash: ({ css, filename, hash }) => `s${hash(filename === '(unknown)' ? css : (filename ?? css))}`,
+	},
 
 	kit: {
 		// SPA mode: routes like /projects/[id] can't be prerendered, so every

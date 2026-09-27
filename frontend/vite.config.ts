@@ -52,6 +52,84 @@ function autocalWorkerChunk(): Plugin {
 }
 
 /**
+ * Preload lists without the chunks a page already has (issue #9).
+ *
+ * For every dynamic import Vite writes the whole static import tree of the
+ * chunk it loads into the importing chunk (`__vite__mapDeps`), so the browser
+ * can fetch it in parallel. Most of that tree (the Svelte runtime, the API
+ * client, the shared UI chunks) is already a static import of the importer
+ * itself, loaded before its code ran: preloading it again does nothing, but
+ * its file name still ships in every list. This drops those entries and keeps
+ * the rest (and every CSS file) as Vite wrote them. The chunk graph comes from
+ * the finished bundle: generateBundle runs `pre` here, before Vite's own
+ * import analysis asks resolveDependencies.
+ */
+export function preloadDedupe(): { plugin: Plugin; resolveDependencies: (file: string, deps: string[], ctx: { hostId: string; hostType: 'html' | 'js' }) => string[] } {
+	let imports = new Map<string, readonly string[]>();
+	const loaded = new Map<string, Set<string>>();
+	function staticTree(file: string): Set<string> {
+		let seen = loaded.get(file);
+		if (seen) return seen;
+		seen = new Set();
+		const stack = [...(imports.get(file) ?? [])];
+		while (stack.length) {
+			const f = stack.pop()!;
+			if (seen.has(f)) continue;
+			seen.add(f);
+			stack.push(...(imports.get(f) ?? []));
+		}
+		loaded.set(file, seen);
+		return seen;
+	}
+	return {
+		plugin: {
+			name: 'water:preload-dedupe',
+			generateBundle: {
+				order: 'pre',
+				handler(_options, bundle) {
+					imports = new Map();
+					loaded.clear();
+					for (const [file, out] of Object.entries(bundle)) if (out.type === 'chunk') imports.set(file, out.imports);
+				}
+			}
+		},
+		resolveDependencies(_file, deps, { hostId, hostType }) {
+			if (hostType !== 'js') return deps;
+			const has = staticTree(hostId);
+			return deps.filter((d) => !has.has(d));
+		}
+	};
+}
+
+const preload = preloadDedupe();
+
+/**
+ * Shorter output file names (issue #9). Every chunk's name is in the import
+ * statements of the chunks that use it, and every CSS file's in the preload
+ * lists and SvelteKit's route manifest: random characters that compress
+ * badly. SvelteKit names chunks `[hash]` (Rollup's default, 8 characters);
+ * here 7, the least Rollup accepts below 4 096 chunks, and CSS files drop the
+ * component name (`LoadState.DaDhZLrP.css` → `DaDhZLr.css`), the way
+ * SvelteKit already names JS chunks. 42 bits of hash still change whenever
+ * the content does, so cache busting is unaffected. Output only: the SSR pass
+ * has no hashes, and the spreadsheet workers are builds of their own.
+ */
+export function shortFileNames(): Plugin {
+	const pattern = (n: unknown) => (typeof n === 'string' ? n.replace(/\[hash\]/g, '[hash:7]') : n);
+	return {
+		name: 'water:short-file-names',
+		outputOptions(output) {
+			return {
+				...output,
+				chunkFileNames: pattern(output.chunkFileNames) as typeof output.chunkFileNames,
+				entryFileNames: pattern(output.entryFileNames) as typeof output.entryFileNames,
+				assetFileNames: pattern(typeof output.assetFileNames === 'string' ? output.assetFileNames.replace('[name].', '') : output.assetFileNames) as typeof output.assetFileNames
+			};
+		}
+	};
+}
+
+/**
  * The engine is pure (no I/O, and no module does anything when it loads:
  * src/lib/engineSideEffects.test.ts guards that), so an engine module whose
  * exports a chunk doesn't use is no dependency of that chunk. Without this,
@@ -76,7 +154,7 @@ export function svelteRuntimeChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [autocalWorkerChunk(), sveltekit()],
+	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
 	// builds that don't read build.rollupOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never
@@ -94,6 +172,7 @@ export default defineConfig({
 		// Firefox 125). Applies to the calibration worker too, which is part of
 		// the page build.
 		target: 'es2022',
+		modulePreload: { resolveDependencies: preload.resolveDependencies },
 		rollupOptions: {
 			output: { manualChunks: svelteRuntimeChunk },
 			treeshake: {

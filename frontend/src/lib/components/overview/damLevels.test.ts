@@ -125,12 +125,26 @@ describe('damsInRun', () => {
 	];
 	it('keeps nodes with a capacity and a stored dam_storage series, from the run’s own model', () => {
 		const run = [
-			{ id: 'a', name: 'A', damCapacityM3: 500, damMinPct: 10 },
+			{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 500, damMinPct: 0.1 },
 			{ id: 'b', name: '', damCapacityM3: 0 },
 			{ id: 'c', name: 'C', damCapacityM3: 800 }
 		];
 		const live = [{ id: 'a', name: 'A', damCapacityM3: 9_999, damMinPct: 0 }];
 		expect(damsInRun(run, live, refs)).toEqual([{ nodeId: 'a', name: 'A', capacityM3: 500, minPct: 10 }]);
+	});
+
+	it('turns the model’s minimum level (a fraction) into the % damLevel compares with, on farms only', () => {
+		const run = [
+			{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 1000, damMinPct: 0.25 },
+			{ id: 'b', name: 'B', kind: 'gauge', damCapacityM3: 1000, damMinPct: 0.25 }
+		];
+		const dams = damsInRun(run, [], refs);
+		expect(dams.map((d) => d.minPct)).toEqual([25, 0]);
+		// A dam held at 25 % of its capacity is at its minimum level; the gauge's has none.
+		const held = { startDate: '2025-06-01', values: [250, 250] };
+		expect(damLevel(dams[0]!, held)).toMatchObject({ minPct: 25, daysAtMin: 2 });
+		expect(levelBand(damLevel(dams[0]!, held)!)).toBe('at-min');
+		expect(damLevel(dams[1]!, held)).toMatchObject({ minPct: 0, daysAtMin: 0 });
 	});
 
 	it('falls back to the live model for a run saved without one', () => {

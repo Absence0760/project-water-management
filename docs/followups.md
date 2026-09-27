@@ -1034,6 +1034,37 @@ the suggested order (the IDs carry the detail):
       (−0.3 KB total, +0.1 KB on /farm, /share and sign-in), `.stat dd.sub`
       (−0.07 KB; would leak into three components that style it their own
       way), the Settings sections' repeats (one lazy chunk already).
+- [x] **Cut weight for issue #17's pages** (issue #9, 2026-09-26): total
+      966 722 → 953 006 bytes gzip (945 → 931 KB by the guard's rounding;
+      ceiling 949 → 935), from a per-chunk and per-module attribution of a
+      sourcemapped build. The weight left is mostly content (help text
+      62 KB, uPlot 22, Svelte's runtime 21, SvelteKit's client 11) and
+      split overhead (~63 KB in the JS, ~30 KB in 109 CSS files), not dead
+      code: tree-shaking already drops unused exports and components, no
+      module ships twice outside the two spreadsheet workers (~1 KB), and
+      no global CSS class is unused. Removed: preload lists without chunks
+      the importer already has (−2.3), the Runs tab's six always-rendered
+      panels back in its chunk (−6.8), the report's server-PDF controls in
+      its chunk (−0.4), Svelte's scoping class `s<hash>` (−2.6), 7-character
+      file hashes and CSS files by hash alone (−2.7) (architecture.md §
+      Code splitting). Moved: the Invite farmers dialog is its own chunk
+      (+1.2 total), taking the workspace page chunk 40.7 → 38.5 KB. Numbers
+      per step in the bundle guard's change log.
+- [ ] **Per-chunk ceiling vs always-rendered lazy panels.** Some lazy
+      chunks load on every visit of their tab, so they only add split
+      overhead; they were split to keep the tab under the 42 KB per-chunk
+      ceiling. Inline, the Settings tab's data feeds, scheduled reports, API
+      keys, outcome settings and pan-coefficient helper save 6.0 KB of total
+      (a 59 KB Settings chunk), and the Runs tab's uncertainty and outcome
+      panels 2.8 KB (a 48 KB Runs chunk). One file is also the lighter,
+      single-request load for that tab. Durable fix: the guard's
+      `largestChunkKb` measures page and route chunks (the first load)
+      separately from tab chunks, with a tab ceiling near 60 KB, then these
+      fold back in. Also on the workspace page (left alone while #17's
+      section header and Compare runs work is in flight): the Overview's
+      always-rendered lazy panels (Flow vs reserve, Supply by farm, Dam
+      levels) and CompareView's. Trigger: the operator's call on the
+      ceiling, or the next Settings/Runs feature that needs room.
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →
@@ -1395,16 +1426,18 @@ No Afrikaans wording ships yet: none is reviewed.
       #5): the menu's *Account* link opens `/account` (display name, email
       and confirmation status, change password); `PATCH /auth/me` and
       `POST /auth/change-password` (docs/api.md § Auth).
-- [ ] **Dam figures in the run summary** (issue #55; from #17, Summary → Dam levels,
-      [ui.md § Summary](./ui.md#summary)). The Summary's Dam levels panel
-      and its Dams today card fetch each dam's daily `dam_storage` series (one request per dam,
+- [ ] **Dam figures in the run summary** (issue #55; from #17, the Dams page,
+      [ui.md § Dams](./ui.md#dams)). The Dams page (its cards and Dam levels
+      table), the Summary's Dams today card and the Network's colour by dam
+      level fetch each dam's daily `dam_storage` series (one request per dam,
       ~16 000 values each, four at a time) and reduces them in the browser
       (`overview/damLevels.ts`), because `RunSummary.farms` has no storage
       figures. Durable fix: the engine adds per-farm end-of-run storage, the
       storage 30 days before the end, the lowest in the last year (value and
       day) and days at the minimum level to
       `FarmSummary` (an `ENGINE_VERSION` bump), and the panel reads those,
-      keeping the series path only for runs saved before it. Trigger: a
+      keeping the series path only for runs saved before it (the Dams page's
+      sparklines and storage chart still need the picked dam's series). Trigger: a
       catchment with enough dams (tens) that the Summary's fetches are slow,
       or the next engine release that touches `FarmSummary`.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
@@ -2249,7 +2282,10 @@ from the WP:
       so while a team uses them. Durable fix: the hydrologist confirms or
       replaces them; change `EWR_THRESHOLDS`, the 055 header, and the docs
       that quote them. Trigger: the hydrologist's answer.
-- [ ] **Bundle ceiling after the team thresholds.** The team page's
+- [x] **Bundle ceiling after the team thresholds.** Superseded: the ceiling
+      has been re-measured and moved since (the guard's change log), and the
+      2026-09-26 weight cut took the total to 931 KB under a 935 ceiling.
+      The team page's
       thresholds panel, the portfolio's thresholds sentence and the History
       line add ~1.4 KB gzip: 925.5 KB against the 925 KB ceiling (main
       measured 924.1 KB before them), so `pnpm check:bundle` reports 926.

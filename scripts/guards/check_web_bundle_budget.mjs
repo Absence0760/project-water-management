@@ -839,6 +839,56 @@
 //             entry above and #17's 949 → 959 Compare runs entry were each
 //             measured without the other's growth; together they measure 963.
 //             Headroom ~4 KB; the bundle-weight trim under way is due.
+// 2026-09-26  total 959 → 968 KB (measured 964, with main's pulled work (the legacy
+//             runoff model removal, #16) included; the branch measured 947.3
+//             from 944.2 on main @ da785083, +3). Issue #17 shell: one section header per
+//             workspace section (workspace/SectionHeader, the header slot
+//             tabs fill, context.ts), the notices as one slim line, the
+//             role badge in the sidebar and the Data "series behind" badge,
+//             and the help guide's new paragraph. The workspace chunk went
+//             41.6 → 41.2 KB: the Overview's Share links panel became its
+//             own lazy chunk (owners only, far below the first screen) to
+//             pay for the header; splitting the Farmers panel too added ~3 KB
+//             to the total and wasn't needed, so it stays in the page. Largest
+//             chunk is still 41.7 KB (unchanged). No new dependency.
+// 2026-09-26  total 968 → 955 KB (down; measured 951, from 964, after merging onto
+//             main with the section header; the branch alone measured 931
+//             against 945 on its base); other ceilings unchanged. Issue #9, a weight cut for #17's pages. From a
+//             per-chunk and per-module attribution of a sourcemapped build on
+//             main @ da78508: 966 722 bytes (945 KB by this guard's rounding)
+//             over 309 files, of which ~63 KB is split overhead in the JS
+//             (the chunks gzip to 812 KB concatenated, 876 apart) and ~30 KB
+//             in the CSS (109 files: 75 KB apart, 44 together). Removed, each
+//             measured alone in order (bytes gzip):
+//             - preload lists without chunks the importer already has
+//               (vite.config.ts preloadDedupe): 966 722 → 964 390 (−2.3)
+//             - the Runs tab's six always-rendered panels back in its chunk
+//               (supply assurance, water account, evidence, reproduce,
+//               changes since, publication): → 957 463 (−6.8, 13 files)
+//             - the report's server-PDF controls in its chunk: → 957 105 (−0.4)
+//             - Svelte's scoping class s<hash>, not svelte-<hash>
+//               (svelte.config.js cssHash): → 954 446 (−2.6)
+//             - 7-character file hashes, CSS named by hash alone
+//               (vite.config.ts shortFileNames): → 951 731 (−2.7)
+//             Moved, not removed: the Invite farmers dialog is its own chunk
+//             (→ 953 006, +1.2), taking the workspace page chunk 40.7 →
+//             38.5 KB for the redesign's section header. Net −13.7 KB. The
+//             largest chunk is the Settings tab's, 41.2 KB (the ceiling
+//             stays 42). Measured and not landed: the Settings tab's four
+//             always-rendered lazy panels inline (−6.0 total, but a 59 KB
+//             chunk), and the Runs tab's uncertainty and outcome panels
+//             inline (−2.8 total, a 48 KB chunk; the outcome panel alone
+//             −1.6 with Runs at 41.2): both wait on the per-chunk ceiling
+//             (docs/followups.md). Rollup generatedCode es2015: +0.05.
+//             Headroom ~4 KB.
+// 2026-09-26  total 955 → 962 KB (measured 958, +7); largest chunk unchanged.
+//             The Dams page (issue #17,
+//             option A · Outcomes): dam cards with sparklines, the picked
+//             dam's storage chart and the Dam levels table, moved from the
+//             Summary (dams/DamsTab, DamLevels, dams.ts). A lazy chunk of
+//             7.4 KB gzipped, including the table, which left the Summary's
+//             own lazy chunk; LineChart and uPlot are shared chunks already.
+//             No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -849,7 +899,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 967,
+	totalCodeKb: 962,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
