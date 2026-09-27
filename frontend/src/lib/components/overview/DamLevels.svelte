@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Summary → Dam levels: each dam's storage at the end of the latest run and
 	// at its lowest in the run's last year (damLevels.ts), emptiest first.
-	// OverviewTab fetches the levels (they feed its Dams today card too) and
+	// OverviewTab loads the levels (they feed its Dams today card too) and
 	// shows this table below the first screen; its own chunk. It stays here
 	// until the planned Dams page exists (issue #17).
 	import LoadState from '$lib/components/common/LoadState.svelte';

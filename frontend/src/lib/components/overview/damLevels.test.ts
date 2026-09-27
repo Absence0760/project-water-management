@@ -1,5 +1,6 @@
+import { damFigures, type FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { AGO_DAYS, damLevel, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
+import { AGO_DAYS, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
 const series = (startDate: string, values: (number | null)[]) => ({ startDate, values });
@@ -125,7 +126,8 @@ describe('damsInRun', () => {
 	];
 	it('keeps nodes with a capacity and a stored dam_storage series, from the run’s own model', () => {
 		const run = [
-			{ id: 'a', name: 'A', damCapacityM3: 500, damMinPct: 10 },
+			// damMinPct is a fraction of capacity in the model; minPct is a percentage.
+			{ id: 'a', name: 'A', damCapacityM3: 500, damMinPct: 0.1 },
 			{ id: 'b', name: '', damCapacityM3: 0 },
 			{ id: 'c', name: 'C', damCapacityM3: 800 }
 		];
@@ -137,5 +139,49 @@ describe('damsInRun', () => {
 		expect(damsInRun(undefined, [{ id: 'b', name: '', damCapacityM3: 50, damMinPct: 'x' }], refs)).toEqual([
 			{ nodeId: 'b', name: '(unnamed)', capacityM3: 50, minPct: 0 }
 		]);
+	});
+});
+
+describe('damLevelsFromSummary (engine ≥ 1.1.0, issue #55)', () => {
+	const farm = (nodeId: string, over: Partial<FarmSummary> = {}) => ({ nodeId, name: nodeId, ...over }) as FarmSummary;
+	const dams = [
+		{ nodeId: 'a', name: 'A', capacityM3: 1000, minPct: 10 },
+		{ nodeId: 'b', name: 'B', capacityM3: 500, minPct: 0 }
+	];
+
+	it('turns the summary figures into levels, emptiest first, ending on the run\'s last day', () => {
+		const farms = [
+			farm('a', { damEndM3: 600, damAgoM3: 700, damLowM3: 100, damLowDate: '2025-03-01', damDaysAtMin: 12 }),
+			farm('b', { damEndM3: 100, damAgoM3: null, damLowM3: 50, damLowDate: '2025-04-02', damDaysAtMin: 0 })
+		];
+		expect(damLevelsFromSummary(dams, farms, '2025-06-30')).toEqual([
+			{ nodeId: 'b', name: 'B', capacityM3: 500, minPct: 0, endPct: 20, endDate: '2025-06-30', lowPct: 10, lowDate: '2025-04-02', daysAtMin: 0, agoPct: null },
+			{ nodeId: 'a', name: 'A', capacityM3: 1000, minPct: 10, endPct: 60, endDate: '2025-06-30', lowPct: 10, lowDate: '2025-03-01', daysAtMin: 12, agoPct: 70 }
+		]);
+	});
+
+	it('is null when any dam lacks the figures (a run from before them), so the caller reads the series', () => {
+		expect(damLevelsFromSummary(dams, [farm('a', { damEndM3: 1, damLowM3: 1, damLowDate: '2025-01-01', damDaysAtMin: 0 }), farm('b')], '2025-01-01')).toBeNull();
+		expect(damLevelsFromSummary(dams, [], '2025-01-01')).toBeNull();
+		expect(damLevelsFromSummary([], [], '2025-01-01')).toEqual([]);
+	});
+
+	it('matches damLevel() on the same series: the engine\'s damFigures follows the same rules', () => {
+		// A deterministic pseudo-random walk over two years and a bit, with gaps and a stretch held at the minimum.
+		let seed = 7;
+		const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+		for (const [len, minPct] of [[800, 20], [40, 0], [10, 35], [366, 15]] as const) {
+			const cap = 5000;
+			let x = cap / 2;
+			const values: (number | null)[] = Array.from({ length: len }, (_, i) => {
+				x = Math.min(cap, Math.max((minPct / 100) * cap, x + (rnd() - 0.55) * 400));
+				return i % 97 === 5 ? null : x;
+			});
+			const d = { nodeId: 'n', name: 'N', capacityM3: cap, minPct };
+			const series = { startDate: '2023-02-10', values };
+			const fig = damFigures(values, cap, minPct / 100, series.startDate)!;
+			const fromSummary = damLevelsFromSummary([d], [farm('n', fig)], damLevel(d, series)!.endDate)![0];
+			expect(fromSummary).toEqual(damLevel(d, series));
+		}
 	});
 });

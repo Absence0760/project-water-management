@@ -6,7 +6,7 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { damLevel, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
+	import { damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
@@ -108,8 +108,9 @@
 		});
 	});
 
-	// Dam levels at the end of the latest run: every dam's storage series, fetched only while
-	// "Dam level" is picked (overview/damLevels.ts loadDamLevels, as the Summary's panel).
+	// Dam levels at the end of the latest run, only while "Dam level" is picked: from the run
+	// summary, or for a run older than engine 1.1.0 every dam's storage series
+	// (overview/damLevels.ts, as the Summary's panel).
 	let damLevels = $state.raw<{ runId: string; levels: DamLevel[] } | null>(null);
 	let damLoading = $state<{ done: number; of: number } | null>(null);
 	let damError = $state(false);
@@ -121,11 +122,14 @@
 			if (!run || damLevels?.runId === run) return;
 			const detail = detailCache.get(run);
 			const refs = detail?.series ?? [];
-			const snap = (detail?.run.model?.nodes as { id: string; name: string; damCapacityM3?: unknown; damMinPct?: unknown }[] | undefined) ?? [];
-			const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
-			const dams = (snap.length ? snap : nodes)
-				.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
-				.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
+			const dams = damsInRun(detail?.run.model?.nodes as { id: string }[] | undefined, nodes, refs);
+			// A run from engine ≥ 1.1.0 carries the figures in its summary (issue #55): no series to fetch.
+			const fromSummary = supplyRun && latestRun ? damLevelsFromSummary(dams, supplyRun.summary.farms, latestRun.endDate) : null;
+			if (fromSummary) {
+				damError = false;
+				damLevels = { runId: run, levels: fromSummary };
+				return;
+			}
 			damError = false;
 			damLoading = { done: 0, of: dams.length };
 			loadDamLevels(dams, (nodeId) => cachedSeries(run, 'dam_storage', nodeId, () => api.runs.series(projectId, run, 'dam_storage', nodeId)), 4, (n) => {
@@ -371,16 +375,21 @@
 	);
 
 	// The picked farm's dam at the end of the latest run (the Dam now tile):
-	// its dam_storage series through the Runs cache (overview/damLevels.ts).
+	// from the run summary, or its dam_storage series through the Runs cache (overview/damLevels.ts).
 	let damNow = $state<{ nodeId: string; pct: number } | null>(null);
 	$effect(() => {
 		const id = view === 'map' && picked?.kind === 'farm' && picked.damCapacityM3 >= 1 ? picked.id : null;
 		const run = latestRun?.id ?? null;
 		const cap = picked?.damCapacityM3 ?? 0;
 		const refs = run ? (detailCache.get(run)?.series ?? []) : [];
-		void supplyRun;
 		if (!id || !run || !refs.some((r) => r.key === 'dam_storage' && r.nodeId === id)) {
 			damNow = null;
+			return;
+		}
+		// From the run summary when it has the figure (engine ≥ 1.1.0, issue #55), else the series.
+		const end = supplyRun?.id === run ? supplyRun.summary.farms.find((f) => f.nodeId === id)?.damEndM3 : undefined;
+		if (end !== undefined) {
+			damNow = { nodeId: id, pct: (end / cap) * 100 };
 			return;
 		}
 		cachedSeries(run, 'dam_storage', id, () => api.runs.series(projectId, run, 'dam_storage', id))

@@ -1395,18 +1395,17 @@ No Afrikaans wording ships yet: none is reviewed.
       #5): the menu's *Account* link opens `/account` (display name, email
       and confirmation status, change password); `PATCH /auth/me` and
       `POST /auth/change-password` (docs/api.md § Auth).
-- [ ] **Dam figures in the run summary** (issue #55; from #17, Summary → Dam levels,
-      [ui.md § Summary](./ui.md#summary)). The Summary's Dam levels panel
-      and its Dams today card fetch each dam's daily `dam_storage` series (one request per dam,
-      ~16 000 values each, four at a time) and reduces them in the browser
-      (`overview/damLevels.ts`), because `RunSummary.farms` has no storage
-      figures. Durable fix: the engine adds per-farm end-of-run storage, the
-      storage 30 days before the end, the lowest in the last year (value and
-      day) and days at the minimum level to
-      `FarmSummary` (an `ENGINE_VERSION` bump), and the panel reads those,
-      keeping the series path only for runs saved before it. Trigger: a
-      catchment with enough dams (tens) that the Summary's fetches are slow,
-      or the next engine release that touches `FarmSummary`.
+- [x] **Dam figures in the run summary** (issue #55, done 2026-09-26; from
+      #17, Summary → Dam levels, [ui.md § Summary](./ui.md#summary)). Engine
+      1.1.0 puts each dam's end-of-run storage, the storage 30 days before,
+      the lowest in the last year (value and first day) and the days at the
+      minimum level in `FarmSummary` (`damEndM3`, `damAgoM3`, `damLowM3`,
+      `damLowDate`, `damDaysAtMin`). The Summary's Dam levels and Dams today
+      and the Network's colour by dam level read them, and fetch the daily
+      `dam_storage` series only for a run from before 1.1.0. The same change
+      fixed the panel reading the minimum level (`damMinPct`, a fraction) as a
+      percentage, which put its tick near 0 % and never counted a day at the
+      minimum.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
 - [x] **Small flows read 0.000; the FDC table was in no export; download

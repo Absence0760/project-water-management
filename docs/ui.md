@@ -356,13 +356,16 @@ put the results first; its first screen follows board A1 of the redesign
   the first day of that low, and the days in that year at or below the
   minimum. Capacity and minimum come from the run's own model
   (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them. The run summary has no dam figures, so `OverviewTab` fetches each
-  dam's daily series through the Runs tab's `cachedSeries`, four at a time
-  (`loadDamLevels`), for this table and the **Dams today** card, with
-  "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
-  **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
-  dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
-  and is open work ([followups.md](./followups.md)).
+  them (the model's `damMinPct` is a fraction; the table shows it as a %).
+  The figures come from the run summary (`FarmSummary.dam*`, engine ≥ 1.1.0,
+  issue #55, [model.md §2.8](./model.md#28-outputs); `damLevelsFromSummary`),
+  so a new run fetches no series for this table or the **Dams today** card.
+  For a run from before 1.1.0, `OverviewTab` fetches each dam's daily series
+  through the Runs tab's `cachedSeries`, four at a time (`loadDamLevels`,
+  reduced by `damLevel()`, the same rules as the engine), with "Loading dam
+  levels (N of M)…" meanwhile. The Network's colour by dam level and the map
+  card's *Dam now* read the summary the same way. The first 8 rows show, with
+  **Show all N dams**. Its own chunk.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -388,9 +391,9 @@ put the results first; its first screen follows board A1 of the redesign
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
-  days"; none when the run is shorter), flagged below 30 %; it reads the dam
-  series fetched for Dam levels, so it says "loading dam levels" until they
-  are in, and "no dams in the run" without any. *Mean simulated outflow*
+  days"; none when the run is shorter), flagged below 30 %; it reads the
+  same levels as Dam levels, so for an older run it says "loading dam levels"
+  until their series are in, and "no dams in the run" without any. *Mean simulated outflow*
   (m³/s, % of natural, its change) is the line under the cards, with the
   run the changes are against. Each
   card shows its change from the previous run (the one before it by

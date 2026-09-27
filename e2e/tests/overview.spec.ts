@@ -9,6 +9,8 @@ import { expect, test } from '../support/fixtures.ts';
 const stat = (page: Page, term: string) =>
 	page.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) }).getByRole('definition');
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
+/** A run's daily dam_storage series (the Dam levels' fallback for a run older than engine 1.1.0). */
+const DAM_SERIES = /\/runs\/[^/]+\/series\?key=dam_storage/;
 
 test('a fresh project: nothing loaded, every step to do', async ({ page, owner }) => {
 	void owner;
@@ -234,6 +236,11 @@ test('dam levels: every dam in the latest run, emptiest first, with its end-of-r
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary dams');
 	const run = await createRun(page.request, project.id, 'Baseline');
+	// The run summary carries each dam's figures (engine ≥ 1.1.0, issue #55): no daily series is fetched for them.
+	const damSeries: string[] = [];
+	page.on('request', (r) => {
+		if (DAM_SERIES.test(r.url())) damSeries.push(r.url());
+	});
 	await page.goto(`/projects/${project.id}`);
 
 	const dams = page.getByRole('region', { name: 'Dam levels' });
@@ -260,6 +267,31 @@ test('dam levels: every dam in the latest run, emptiest first, with its end-of-r
 	expect(await top('Dam levels')).toBeGreaterThan(await top('Flow vs reserve'));
 	expect(await top('Dam levels')).toBeLessThan(await top(/^Set(up| up this catchment)/));
 	await expectNoViolations(page);
+	expect(damSeries).toEqual([]);
+});
+
+test('dam levels: a run from before the summary kept dam figures still shows them, from the daily series', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary dams, older run');
+	await createRun(page.request, project.id, 'Baseline');
+	// Strip the dam figures from the run's summary, as a run saved before engine 1.1.0 has none.
+	await page.route(/\/runs\/[0-9a-f-]+$/, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		const res = await route.fetch();
+		const body = (await res.json()) as { run: { summary: { farms: Record<string, unknown>[] } } };
+		for (const f of body.run.summary.farms) for (const k of ['damEndM3', 'damAgoM3', 'damLowM3', 'damLowDate', 'damDaysAtMin']) delete f[k];
+		await route.fulfill({ response: res, json: body });
+	});
+	const damSeries: string[] = [];
+	page.on('request', (r) => {
+		if (DAM_SERIES.test(r.url())) damSeries.push(r.url());
+	});
+	await page.goto(`/projects/${project.id}`);
+	const rows = page.getByRole('region', { name: 'Dam levels' }).getByRole('row').filter({ has: page.getByRole('rowheader') });
+	await expect(rows).toHaveCount(2);
+	await expect(rows.first().locator('td').nth(1)).toContainText(/\d+% · \d{1,2} [A-Z][a-z]{2} \d{4}/);
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('2 dams on 28 Jan 2022');
+	expect(damSeries).toHaveLength(2);
 });
 
 test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {

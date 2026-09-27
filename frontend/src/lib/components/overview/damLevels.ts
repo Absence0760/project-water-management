@@ -1,9 +1,11 @@
 // Summary → Dam levels (issue #17, option A: the results first): each dam's
 // storage at the end of the latest run, 30 days before it and at its lowest
 // in the run's last year, from the run's daily dam_storage series, and all
-// dams together (the Summary's "Dams today" card). The run summary carries no
-// dam figures, so the series are fetched (runs/cache.ts) and reduced here.
-import { fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
+// dams together (the Summary's "Dams today" card). A run from engine ≥ 1.1.0
+// carries each dam's figures in its summary (FarmSummary.dam*, issue #55;
+// damLevelsFromSummary); an older run's series are fetched (runs/cache.ts) and
+// reduced here by damLevel(), the same rules as the engine's damFigures().
+import { fromEpochDay, toEpochDay, type DailySeries, type FarmSummary } from '@water-management/engine';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
@@ -115,7 +117,8 @@ type DamNode = { id: string; name?: string; damCapacityM3?: unknown; damMinPct?:
  * The dams a run stored storage for: nodes with a capacity and a dam_storage
  * series. Capacity and the minimum level come from the run's own model
  * (`runNodes`), so a later edit doesn't skew them; `liveNodes` stand in for a
- * run saved before it kept its model.
+ * run saved before it kept its model. The model's damMinPct is a fraction of
+ * capacity; minPct here is a percentage.
  */
 export function damsInRun(
 	runNodes: readonly DamNode[] | undefined,
@@ -125,8 +128,37 @@ export function damsInRun(
 	const nodes = runNodes?.length ? runNodes : liveNodes;
 	const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 	return nodes
-		.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
+		.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) * 100 }))
 		.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
+}
+
+/**
+ * Each dam's levels from the run summary (engine ≥ 1.1.0, issue #55), with no
+ * series to fetch; `endDate` is the run's last day (the engine's storage has a
+ * value every day). null when any dam lacks the figures (a run saved before
+ * them): the caller falls back to the series (loadDamLevels). Emptiest first.
+ */
+export function damLevelsFromSummary(
+	dams: readonly { nodeId: string; name: string; capacityM3: number; minPct: number }[],
+	farms: readonly FarmSummary[],
+	endDate: string
+): DamLevel[] | null {
+	const out: DamLevel[] = [];
+	for (const d of dams) {
+		const f = farms.find((x) => x.nodeId === d.nodeId);
+		if (f?.damEndM3 === undefined || f.damLowM3 === undefined || f.damLowDate === undefined || f.damDaysAtMin === undefined) return null;
+		const pct = (x: number) => (x / d.capacityM3) * 100;
+		out.push({
+			...d,
+			endPct: pct(f.damEndM3),
+			endDate,
+			lowPct: pct(f.damLowM3),
+			lowDate: f.damLowDate,
+			daysAtMin: f.damDaysAtMin,
+			agoPct: f.damAgoM3 == null ? null : pct(f.damAgoM3)
+		});
+	}
+	return sortDamLevels(out);
 }
 
 /** Emptiest first (end-of-run %), then by name. */
