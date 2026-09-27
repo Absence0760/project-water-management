@@ -436,6 +436,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Say which product and version a series holds (both null: not recorded); its values are untouched. */
 			label: (id: string, seriesId: string, product: string | null, productVersion: string | null) =>
 				request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { product, productVersion }),
+			/** Where a flow record was measured: a gauge node inside the network, or null for the outlet (084_gauge_records). */
+			site: (id: string, seriesId: string, siteNodeId: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { siteNodeId }),
 			remove: (id: string, seriesId: string) =>
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},

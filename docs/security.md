@@ -759,7 +759,11 @@ In short:
   found: `model_revision.restored_from` (sequential ids, so any editor could
   plant a "restore" of another project's revision and, the key being NO
   ACTION, block that project's deletion; `restored_from_run` is held the
-  same way) and `alert_event.run_id`.
+  same way) and `alert_event.run_id`. A reference that is deliberately not
+  a foreign key is held the same way on write: `time_series.site_node_id`
+  (084, a gauge record's site) by `time_series_site_same_project`, and the
+  PATCH route finds the node in the project first
+  (`series/site.db.test.ts`).
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of

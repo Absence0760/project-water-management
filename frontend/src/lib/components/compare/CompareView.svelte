@@ -32,6 +32,7 @@
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
+	import PlausibilityCompare from '$lib/components/compare/PlausibilityCompare.svelte';
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
 	import { fmtMetric } from '$lib/components/compare/delta';
 	import { rainSourceNote } from '$lib/components/compare/rainSource';
@@ -713,6 +714,13 @@
 					<div class="panel-head"><h2 id="ewr-agreement-h">EWR test against observed flow</h2></div>
 					<EwrAgreementCompare {data} />
 				</section>
+
+				{#if data.comparison.plausibility}
+					<section class="panel" aria-labelledby="plausibility-h">
+						<div class="panel-head"><h2 id="plausibility-h">Plausibility checks</h2></div>
+						<PlausibilityCompare comparison={data.comparison.plausibility} />
+					</section>
+				{/if}
 
 				<section class="panel" aria-labelledby="farms-h">
 					<div class="panel-head"><h2 id="farms-h">Units</h2></div>

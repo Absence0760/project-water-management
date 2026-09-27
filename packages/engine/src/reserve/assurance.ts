@@ -25,7 +25,8 @@
 // because the lookup interpolates T and N with the same weights; and R
 // depends only on natural flow, so more abstraction can only lose months.
 import { toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
-import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleSourceKind, EwrRuleTable, EwrRuleUnit } from './rules';
+import { lyneHollickBaseflow } from './baseflow';
+import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleSourceKind, EwrRuleTable, EwrRuleUnit, LowFlowMeasure } from './rules';
 
 const SEC_PER_DAY = 86_400;
 /** Years of a calendar month below which the run's natural-flow percentiles are coarse. */
@@ -63,6 +64,14 @@ export interface EwrAssuranceMonth {
 	requiredLowFlow?: number;
 	lowFlowMet?: boolean;
 	requiredHighFlow?: number;
+	/**
+	 * The month's base flow at the site (table unit), when low flows are
+	 * judged on base flow (settings.lowFlowMeasure 'baseflow', engine ≥ 1.3.0)
+	 * and the table has a low-flow requirement: then a `lowFlow` table's `met`
+	 * and a total table's `lowFlowMet` compare it, not `actual`, with the
+	 * requirement. Absent otherwise.
+	 */
+	baseflow?: number;
 }
 
 /** Months met against one requirement (the low flows of a total table). */
@@ -140,7 +149,7 @@ export interface EwrAssuranceSite {
 	name: string;
 	isOutlet: boolean;
 	source: string;
-	/** The table's source kind (engine ≥ 1.3.0); absent when the table doesn't state one. */
+	/** The table's source kind (engine ≥ 1.5.0); absent when the table doesn't state one. */
 	sourceKind?: EwrRuleSourceKind;
 	component: EwrRuleComponent;
 	unit: EwrRuleUnit;
@@ -168,6 +177,12 @@ export interface EwrAssuranceSite {
 	lowFlow?: EwrMonthsMet;
 	/** The freshet and flood components (engine ≥ 0.33.0); absent when the table has none. */
 	highFlows?: EwrHighFlowReport[];
+	/**
+	 * 'baseflow' when the low-flow requirement was judged on the month's base
+	 * flow (engine ≥ 1.3.0, settings.lowFlowMeasure); absent when it was the
+	 * month's total volume, or the table has no low-flow requirement.
+	 */
+	lowFlowMeasure?: 'baseflow';
 }
 
 /** A site to assess: its table, and its daily natural and simulated flow (m³/day). */
@@ -273,6 +288,8 @@ export interface MonthCarry {
 	days: number;
 	natural: number;
 	impacted: number;
+	/** The impacted flow's base flow over those days (engine ≥ 1.3.0), for low flows judged on base flow; absent = not captured. */
+	baseflow?: number;
 }
 
 /** The calendar month a run starts inside, `before` of its days before the run: a block with from = −before, or null when the run ends before the month does. */
@@ -293,19 +310,28 @@ function carriedMonth(d0: number, days: number, before: number): MonthBlock | nu
  * assessSite sums a month. null when `at` is a month's first day, or the
  * month began before the series (it isn't a complete month either way).
  */
-export function monthCarryAt(startDate: string, at: number, natural: ArrayLike<number>, impacted: ArrayLike<number>): MonthCarry | null {
+export function monthCarryAt(
+	startDate: string,
+	at: number,
+	natural: ArrayLike<number>,
+	impacted: ArrayLike<number>,
+	/** The impacted flow's daily base flow, when low flows are judged on it (engine ≥ 1.3.0). */
+	baseflow?: ArrayLike<number>
+): MonthCarry | null {
 	const date = new Date((toEpochDay(startDate) + at) * SEC_PER_DAY * 1000);
 	const before = date.getUTCDate() - 1;
 	if (before === 0 || at - before < 0) return null;
 	let nat = 0;
 	let imp = 0;
+	let base = 0;
 	for (let t = at - before; t < at; t++) {
 		const n = natural[t]!;
 		const a = impacted[t]!;
 		nat += Number.isFinite(n) ? n : 0;
 		imp += Number.isFinite(a) ? a : 0;
+		if (baseflow) base += baseflow[t]!;
 	}
-	return { days: before, natural: nat, impacted: imp };
+	return { days: before, natural: nat, impacted: imp, ...(baseflow ? { baseflow: base } : {}) };
 }
 
 /** m³ over a month of `days` days → the table's unit, and back. */
@@ -332,11 +358,20 @@ export function assessSite(
 	 * month's first `days` days before the run, as the natural and impacted
 	 * sums (m³) so far, so the month is still assessed whole.
 	 */
-	carried?: MonthCarry | null
-): { report: EwrAssuranceSite; requiredM3Day: Float64Array } {
+	carried?: MonthCarry | null,
+	/**
+	 * settings.lowFlowMeasure (engine ≥ 1.3.0): 'baseflow' judges a low-flow
+	 * requirement on the month's base flow (./baseflow.ts); 'total' or absent,
+	 * on its volume.
+	 */
+	lowFlowMeasure: LowFlowMeasure = 'total'
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array; baseflowM3Day?: Float64Array } {
 	const { table } = site;
 	const unit = table.unit;
 	const P = table.points;
+	// Base flow only matters where there is a low-flow requirement to judge.
+	const onBase = lowFlowMeasure === 'baseflow' && (table.component === 'lowFlow' || !!table.lowFlow);
+	const baseDaily = onBase ? lyneHollickBaseflow(Array.from({ length: days }, (_, t) => site.impacted[t]!)) : null;
 	const inRun = completeMonths(startDate, days);
 	const requiredM3Day = new Float64Array(days).fill(NaN);
 	const d0 = toEpochDay(startDate);
@@ -348,13 +383,22 @@ export function assessSite(
 	const rows = blocks.map((b) => {
 		let nat = b === head ? carried!.natural : 0;
 		let imp = b === head ? carried!.impacted : 0;
+		// A snapshot without the carried days' base flow: their volume stands in (a resumed run's head month only).
+		let base = b === head ? (carried!.baseflow ?? carried!.impacted) : 0;
 		for (let t = Math.max(b.from, 0); t < b.from + b.days; t++) {
 			const n = site.natural[t]!;
 			const a = site.impacted[t]!;
 			nat += Number.isFinite(n) ? n : 0;
 			imp += Number.isFinite(a) ? a : 0;
+			if (baseDaily) base += baseDaily[t]!;
 		}
-		return { ...b, w: waterYearIndex(b.month), natural: toUnit(nat, b.days, unit), actual: toUnit(imp, b.days, unit) };
+		return {
+			...b,
+			w: waterYearIndex(b.month),
+			natural: toUnit(nat, b.days, unit),
+			actual: toUnit(imp, b.days, unit),
+			...(baseDaily ? { baseflow: toUnit(base, b.days, unit) } : {})
+		};
 	});
 
 	const byW = Array.from({ length: 12 }, (_, w) => rows.filter((r) => r.w === w));
@@ -376,8 +420,11 @@ export function assessSite(
 	const months: EwrAssuranceMonth[] = rows.map((r) => {
 		const c = curves[r.w]!;
 		const look = lookupRequirement(r.natural, P, c.natural!, c.ewr);
-		const met = isMet(r.actual, look.required);
-		const deficitM3 = met ? 0 : toM3(look.required - r.actual, r.days, unit);
+		// The flow a low-flow requirement is judged on: the month's base flow, or its volume.
+		const lowActual = r.baseflow ?? r.actual;
+		const judged = table.component === 'lowFlow' ? lowActual : r.actual;
+		const met = isMet(judged, look.required);
+		const deficitM3 = met ? 0 : toM3(look.required - judged, r.days, unit);
 		const reqM3Day = toM3(look.required, r.days, unit) / r.days;
 		for (let t = Math.max(r.from, 0); t < r.from + r.days; t++) requiredM3Day[t] = reqM3Day;
 		const month: EwrAssuranceMonth = {
@@ -393,11 +440,12 @@ export function assessSite(
 			met,
 			deficitM3
 		};
+		if (r.baseflow !== undefined) month.baseflow = r.baseflow;
 		if (c.low) {
 			// The same natural curve, so the same point and interpolation weight as the total.
 			const low = lookupRequirement(r.natural, P, c.natural!, c.low).required;
 			month.requiredLowFlow = low;
-			month.lowFlowMet = isMet(r.actual, low);
+			month.lowFlowMet = isMet(lowActual, low);
 			month.requiredHighFlow = Math.max(look.required - low, 0);
 		}
 		return month;
@@ -431,6 +479,7 @@ export function assessSite(
 
 	const longest = longestRun(months.map((m) => m.met));
 	const short = months.filter((m) => !m.met && m.required > 0);
+	const judgedOf = (m: EwrAssuranceMonth) => (table.component === 'lowFlow' ? (m.baseflow ?? m.actual) : m.actual);
 	const met = months.filter((m) => m.met).length;
 	const cells = byMonth.flatMap((m) => m.fdc.filter((f) => f.met !== null));
 	const cellsMet = cells.filter((f) => f.met).length;
@@ -454,7 +503,7 @@ export function assessSite(
 			rate: months.length ? met / months.length : null,
 			deficitM3: months.reduce((s, m) => s + m.deficitM3, 0),
 			longestNotMetRun: longest,
-			meanShortfallPct: short.length ? (100 * short.reduce((s, m) => s + (m.required - m.actual) / m.required, 0)) / short.length : null
+			meanShortfallPct: short.length ? (100 * short.reduce((s, m) => s + (m.required - judgedOf(m)) / m.required, 0)) / short.length : null
 		},
 		fdc: { cells: cells.length, met: cellsMet, rate: cells.length ? cellsMet / cells.length : null },
 		minYears: Math.min(...byMonth.map((m) => m.years))
@@ -465,14 +514,15 @@ export function assessSite(
 			months: months.length,
 			met: lowMet,
 			rate: months.length ? lowMet / months.length : null,
-			deficitM3: months.reduce((s, m) => s + (m.lowFlowMet ? 0 : toM3(m.requiredLowFlow! - m.actual, m.days, unit)), 0),
+			deficitM3: months.reduce((s, m) => s + (m.lowFlowMet ? 0 : toM3(m.requiredLowFlow! - (m.baseflow ?? m.actual), m.days, unit)), 0),
 			longestNotMetRun: longestRun(months.map((m) => m.lowFlowMet!))
 		};
 	}
 	if (table.highFlows?.length) {
 		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
 	}
-	return { requiredM3Day, report };
+	if (onBase) report.lowFlowMeasure = 'baseflow';
+	return { requiredM3Day, report, ...(baseDaily ? { baseflowM3Day: baseDaily } : {}) };
 }
 
 const isMet = (actual: number, required: number) => actual >= required - MET_TOLERANCE * Math.max(Math.abs(required), Math.abs(actual));

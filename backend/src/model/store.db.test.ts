@@ -90,7 +90,7 @@ describe('model store', () => {
 			supplyTriggerPct: 0.35,
 			supplyStopPct: 0.65
 		});
-		// A gauge taken off the EWR sites (engine 1.3.0, 084_ewr_site).
+		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
 		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior' });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };

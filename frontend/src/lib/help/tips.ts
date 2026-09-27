@@ -774,6 +774,22 @@ export const TIPS: HelpTipText[] = [
 		category: 'ewr'
 	},
 	{
+		id: 'ewr-charge-source',
+		term: 'What the EWR charge follows',
+		short: 'The daily pragmatic EWR (the default), or at a site with a rule table the month’s requirement from the table. Pending the hydrologist.',
+		units: 'm³/day',
+		category: 'ewr',
+		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']
+	},
+	{
+		id: 'low-flow-measure',
+		term: 'Low flows judged on',
+		short: 'The month’s total flow (the default), or its base flow, so a flood can’t make up for low flows that were short. Pending the hydrologist.',
+		units: 'Mm³ per month or m³/s',
+		category: 'ewr',
+		fields: ['settings.lowFlowMeasure']
+	},
+	{
 		id: 'plausibility-checks',
 		term: 'Plausibility checks',
 		short: 'Four checks a reviewing hydrologist makes on a run: they only warn, and never change a result.',

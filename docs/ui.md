@@ -1326,9 +1326,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
   are in the one-node form and the field guide only, not the table
   (`detailOnly` in `fields.ts`), so the table still fits a 1440px screen.
-- **EWR site** (engine ≥ 1.3.0, [model.md §2.7b](./model.md)): the one-node
+- **EWR site** (engine ≥ 1.5.0, [model.md §2.7b](./model.md)): the one-node
   form of a gauge has an **EWR site** checkbox (ticked by default, and on
-  every gauge before 1.3.0) with a line saying what it means: ticked, a
+  every gauge before 1.5.0) with a line saying what it means: ticked, a
   shortfall there is charged to the units upstream; unticked, the gauge only
   measures flow and a Reserve rule table there is skipped. The outlet's is
   ticked and disabled (the outlet is always a site). It also shows on a unit
@@ -1873,7 +1873,17 @@ relabels it without touching its values (`PATCH …/series/:id`), viewers the
 words. The **Upload CSV** form asks the same for a CHIRPS file (*Not known*
 by default, or the existing series' own label when appending to it); a
 merge of another version into a filled series is refused by the server with
-its reason. The alternative catchment gauge and the reanalysis (engine ≥
+its reason. An observed or logger **flow** record also shows **where it was
+measured** when the model has a gauge above the outlet (issue #64, engine ≥
+1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)):
+editors get a select (*At the outlet*, or *At gauge &lt;name&gt;* for each such
+gauge, `PATCH …/series/:id { siteNodeId }`), viewers the words. A record at a
+gauge is badged *Gauge record (checks only)*: the run checks it against the
+simulated flow there (Runs & results → Plausibility checks), and it is never
+the outlet's record, whatever its name (calibration, the EWR test, the
+*What the model uses* badges, the setup checklist and the fit panel's
+records read only the outlet's). A record whose gauge has left the model says
+so, until it is moved. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -2396,7 +2406,7 @@ which checks every catchment tab).
   every site has one, with a hint to add a gauge on the Network tab. Each
   table (a group headed "Rule table at …") has the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
-  desktop estimate, other; engine ≥ 1.3.0, the Reserve panel's confidence
+  desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
   line), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
@@ -2431,6 +2441,16 @@ which checks every catchment tab).
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow
   paste result*.
+  From engine 1.3.0 (issue #64, [model.md §2.9c–§2.9d](./model.md)), once
+  there is a table, two choices sit under the tables, both pending the
+  hydrologist and both defaulting to what earlier runs did: **EWR charge
+  follows** (`settings.ewrChargeSource`: *The pragmatic EWR*, the default, or
+  *The rule tables*: at a site with a table the month's requirement sets the
+  EWR charge, curtailment and the water account's EWR required vs met) and
+  **Low flows judged on** (`settings.lowFlowMeasure`: *The month's total
+  flow*, the default, or *The month's base flow*, from the Lyne–Hollick
+  filter, so a flood month can't pass its low flows). Each has a help tip;
+  scenarios can change both with `settings.set`.
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
@@ -3010,7 +3030,7 @@ read it before.
   once per run the first time another window is picked, and the run is read
   once, so switching between windows is instant. Every column is recomputed,
   the **EWR site setting each farm's charge** included: a run from engine
-  1.3.0 stores each day's binding site (`ewr_binding_site`, per farm upstream
+  1.5.0 stores each day's binding site (`ewr_binding_site`, per farm upstream
   of two or more sites), so the panel fetches that instead of the flows and
   the column is exact. For an older run the engine recomputes each day's
   binding site from the stored flows (the inflow, outflow, runoff, dam storage
@@ -3310,7 +3330,7 @@ read it before.
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
   when there are several, the method in one sentence and the table's source,
-  led by its confidence when the table states its kind (engine ≥ 1.3.0:
+  led by its confidence when the table states its kind (engine ≥ 1.5.0:
   "Gazetted Reserve: …", "Desktop estimate, low confidence: …" set apart in
   the caution colour, "Other source, confidence not stated: …"; the printed
   report shows the same line, since it reuses the panel),
@@ -3367,7 +3387,13 @@ read it before.
   legacy run can be one; fetched on demand, left out with a note when it used
   another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
-  Q70 / Q90 / Q95 table. Unit detail (on Units & supply since issue #17; dam
+  Q70 / Q90 / Q95 table; then, when a gauge inside the network has its own
+  record (engine ≥ 1.4.0), **At gauges in the network**: a row per gauge with
+  its record, the share of the catchment's natural flow above it, check 1's
+  failing water years and check 4's Q90 ratio with *within* / *outside the
+  factor of 2* (a failing gauge's row shaded), and a fifth line in the check
+  list. The Compare page sets these checks side by side
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Unit detail (on Units & supply since issue #17; dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final

@@ -47,7 +47,9 @@ export const ProjectFile = z.object({
 				// What the values are (032_series_provenance.sql), e.g. CHIRPS 2.0; absent = not recorded.
 				...ProvenanceFields,
 				// How sub-daily readings were added up into days (033_series_day_boundary.sql); absent = daily values.
-				dayBoundary: z.enum(DAY_BOUNDARIES).optional()
+				dayBoundary: z.enum(DAY_BOUNDARIES).optional(),
+				// A flow record's gauge node in the document's model (084_gauge_records); absent = the outlet.
+				siteNodeId: z.string().uuid().optional()
 			})
 			.superRefine(checkProvenance)
 			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
@@ -72,7 +74,7 @@ export interface ProjectDocument {
 	settings: Record<string, unknown>;
 	model: ProjectModel;
 	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
-	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string; dayBoundary?: DayBoundary }[];
+	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string; dayBoundary?: DayBoundary; siteNodeId?: string }[];
 	/** The notes the exporter can see, oldest first; informational, the importer ignores them. */
 	notes: ProjectDocumentNote[];
 }
@@ -153,16 +155,25 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	if (!p) return null;
 	const model = await loadModel(db, projectId);
 	const { rows: stored } = await db.query<
-		Omit<ProjectDocument['series'][number], 'dayBoundary'> & { product: string | null; productVersion: string | null; dayBoundary: DayBoundary | null }
+		Omit<ProjectDocument['series'][number], 'dayBoundary' | 'siteNodeId'> & {
+			product: string | null;
+			productVersion: string | null;
+			dayBoundary: DayBoundary | null;
+			siteNodeId: string | null;
+		}
 	>(
-		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary"
+		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
+			site_node_id AS "siteNodeId"
 		 FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
-	const series = stored.map(({ product, productVersion, dayBoundary, ...s }) => ({
+	// A site whose node has left the model (084: the record keeps it, the run warns) has nothing to point at in the file.
+	const nodeIds = new Set(model.nodes.map((n) => n.id));
+	const series = stored.map(({ product, productVersion, dayBoundary, siteNodeId, ...s }) => ({
 		...s,
 		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
-		...(dayBoundary !== null ? { dayBoundary } : {})
+		...(dayBoundary !== null ? { dayBoundary } : {}),
+		...(siteNodeId !== null && nodeIds.has(siteNodeId) ? { siteNodeId } : {})
 	}));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,

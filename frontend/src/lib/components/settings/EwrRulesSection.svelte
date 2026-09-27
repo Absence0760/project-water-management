@@ -8,7 +8,7 @@
 	Helpers in ./ewrRules.ts.
 -->
 <script lang="ts">
-	import type { EwrRuleTable, NetworkNode } from '@water-management/engine';
+	import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { newTable, rulesError, siteOptions } from './ewrRules';
@@ -16,11 +16,17 @@
 	let {
 		value = $bindable(),
 		error = $bindable(null),
+		chargeSource = $bindable(),
+		lowFlowMeasure = $bindable(),
 		readonly = false,
 		nodes
 	}: {
 		value: EwrRuleTable[];
 		error?: string | null;
+		/** settings.ewrChargeSource (engine ≥ 1.3.0); undefined = 'pragmatic'. */
+		chargeSource?: EwrChargeSource;
+		/** settings.lowFlowMeasure (engine ≥ 1.3.0); undefined = 'total'. */
+		lowFlowMeasure?: LowFlowMeasure;
 		readonly?: boolean;
 		/** The network, for the site picker (outlet and gauges). */
 		nodes: readonly NetworkNode[];
@@ -50,7 +56,8 @@
 		A Reserve determination gives the EWR as a table: for each month, the flow required at each assurance level (“% point”, the share of
 		time it should be equalled or exceeded; 10 % is the wet-condition flow, 99 % the drought flow). Each month’s <strong>natural flow</strong>
 		picks the point it sits at, and the run checks whether the simulated flow at the site met the EWR at that point. The result is a
-		monthly compliance rate on Runs & results; the pragmatic EWR above still sets the daily charge and curtailment. A total-flow table can
+		monthly compliance rate on Runs & results; the pragmatic EWR above sets the daily charge and curtailment unless you choose the rule
+		tables below. A total-flow table can
 		also carry the Desktop Reserve Model’s low-flow table (maintenance and drought low flows), to show whether a month failed its low flows or
 		only its high flows, and any site can list freshets and floods to check each water year. Paste from a spreadsheet or load a CSV file.
 	</p>
@@ -63,6 +70,28 @@
 				<Editor bind:value {readonly} {options} />
 			{/snippet}
 		</Lazy>
+	{/if}
+
+	{#if value.length}
+		<!-- Method choices pending the hydrologist (engine ≥ 1.3.0, issue #64); the defaults are what every earlier run did. -->
+		<div class="methods">
+			<div class="field">
+				<span class="lbl"><label for="{uid}-charge">EWR charge follows</label><HelpTip key="settings.ewrChargeSource" /></span>
+				<select id="{uid}-charge" disabled={readonly} value={chargeSource ?? 'pragmatic'} onchange={(e) => (chargeSource = e.currentTarget.value as EwrChargeSource)} aria-describedby="{uid}-charge-h">
+					<option value="pragmatic">The pragmatic EWR</option>
+					<option value="ruleTable">The rule tables</option>
+				</select>
+				<span class="hint" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. Pending the hydrologist.</span>
+			</div>
+			<div class="field">
+				<span class="lbl"><label for="{uid}-low">Low flows judged on</label><HelpTip key="settings.lowFlowMeasure" /></span>
+				<select id="{uid}-low" disabled={readonly} value={lowFlowMeasure ?? 'total'} onchange={(e) => (lowFlowMeasure = e.currentTarget.value as LowFlowMeasure)} aria-describedby="{uid}-low-h">
+					<option value="total">The month’s total flow</option>
+					<option value="baseflow">The month’s base flow</option>
+				</select>
+				<span class="hint" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. Pending the hydrologist.</span>
+			</div>
+		</div>
 	{/if}
 
 	{#if !readonly}
@@ -81,5 +110,25 @@
 	}
 	h2 :global(.helptip) {
 		margin-left: 0.15rem;
+	}
+	/* As Settings' .fields: the two method choices side by side, stacked on a phone. */
+	.methods {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 0 1.25rem;
+		margin-top: 0.75rem;
+	}
+	.methods select {
+		width: 100%;
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.lbl label {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
 	}
 </style>

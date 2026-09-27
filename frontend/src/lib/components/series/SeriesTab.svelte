@@ -55,7 +55,7 @@
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
-	import { isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
+	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
 	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
@@ -69,6 +69,7 @@
 		initial = null,
 		runs = null,
 		settings = null,
+		gauges = [],
 		onSeriesChange
 	}: {
 		projectId: string;
@@ -78,6 +79,8 @@
 		runs?: RunMeta[] | null;
 		/** The project's settings, the same object the Settings tab gets; null only before the page's own load finishes. */
 		settings?: ProjectSettings | null;
+		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.4.0). */
+		gauges?: readonly { id: string; name: string }[];
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();
 
@@ -154,6 +157,8 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const endDate = (s: { startDate: string; length: number }) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1);
 	const inUse = $derived(seriesInUse(list, rainSourceKinds(settings?.rainSource)));
+	const gaugeInUse = $derived(gaugeRecordsInUse(list, gauges));
+	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a node no longer in the model';
 	const latestRun = $derived(runs?.[0] ?? null);
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
@@ -304,6 +309,18 @@
 		try {
 			const meta = await api.series.label(projectId, s.id, f.product, f.productVersion);
 			list = list.map((x) => (x.id === s.id ? { ...x, product: meta.product, productVersion: meta.productVersion } : x));
+			onSeriesChange?.(list);
+		} catch (e) {
+			actionError = msg(e);
+		}
+	}
+
+	/** Move a flow record to a gauge inside the network, or back to the outlet (''). */
+	async function moveSite(s: SeriesMeta, nodeId: string) {
+		actionError = null;
+		try {
+			const meta = await api.series.site(projectId, s.id, nodeId || null);
+			list = list.map((x) => (x.id === s.id ? { ...x, siteNodeId: meta.siteNodeId ?? null } : x));
 			onSeriesChange?.(list);
 		} catch (e) {
 			actionError = msg(e);
@@ -508,14 +525,39 @@
 								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
 									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
 								{/if}
+								{#if SITED_KINDS.has(s.kind) && (gauges.length || s.siteNodeId)}
+									{#if readonly}
+										<span class="prov" data-testid="series-site">{s.siteNodeId ? `At gauge ${siteName(s.siteNodeId)}` : 'At the outlet'}</span>
+									{:else}
+										<select
+											class="prov"
+											data-testid="series-site"
+											aria-label="Where {s.name || kindLabel(s.kind)} was measured"
+											value={s.siteNodeId ?? ''}
+											onchange={(e) => moveSite(s, e.currentTarget.value)}
+										>
+											<option value="">At the outlet</option>
+											{#each gauges as g (g.id)}<option value={g.id}>At gauge {g.name}</option>{/each}
+											{#if s.siteNodeId && !gauges.some((g) => g.id === s.siteNodeId)}
+												<option value={s.siteNodeId} disabled>At a node no longer in the model</option>
+											{/if}
+										</select>
+									{/if}
+								{/if}
 								{#if s.dayBoundary}
 									<span class="prov" data-testid="series-day-boundary" title="Added up from sub-daily readings in {s.dayBoundary}–{s.dayBoundary} windows"
 										>{s.dayBoundary} day</span
 									>
 								{/if}
 								{#if role}
-									<span class="role" class:unused={!inUse.has(s.id)} title={role.help}>
-										{inUse.has(s.id) || s.kind === 'flow_reference_m3s'
+									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration and the EWR test use the outlet’s records.' : role.help}>
+										{s.siteNodeId
+											? gaugeInUse.has(s.id)
+												? 'Gauge record (checks only)'
+												: gauges.some((g) => g.id === s.siteNodeId)
+													? 'Not used (another record of this kind is at this gauge)'
+													: 'Not used: its gauge is no longer in the model'
+											: inUse.has(s.id) || s.kind === 'flow_reference_m3s'
 											? role.role
 											: s.kind === 'flow_logger_m3s' && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
 												? 'Calibration if chosen in settings'

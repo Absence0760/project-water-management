@@ -11,10 +11,10 @@
 // any period, even last year (design §11 F2).
 //
 // Which EWR site bound a farm's charge each day (attribution.ts `binding`),
-// which the season's "binding site" needs, is a run series from engine 1.3.0
+// which the season's "binding site" needs, is a run series from engine 1.5.0
 // (network/bindingSeries.ts, `ewr_binding_site`) for every farm upstream of
 // two or more EWR sites; for any other farm it follows from the charge. A run
-// saved before 1.3.0 has no such series, and there it is recomputed with the
+// saved before 1.5.0 has no such series, and there it is recomputed with the
 // engine's own attributeEwrShortfall on the run's stored flows (reattribute
 // below): exact, except that a transfer network with a loop is cut to a tree
 // first (documented there). The charges themselves always come from the
@@ -64,8 +64,9 @@ const NOISE_M3 = 1e-6;
 export const PROJECTION_SERIES = {
 	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
-	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural'],
-	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural']
+	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
+	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
+	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall']
 } as const;
 
 /** A saved run, as the projection sees it. */
@@ -166,6 +167,8 @@ export interface SeasonSite {
 	shortfall: Float64Array;
 	charged: Float64Array;
 	natural: Float64Array;
+	/** 'ruleTable' when `shortfall` is the run's ewr_charge_shortfall (the charge followed the site's Reserve rule table, engine ≥ 1.3.0). */
+	ewrSource?: 'ruleTable';
 }
 
 /** A run cut to the season, with the season's curtailment table. Shared by every farm's projection. */
@@ -186,6 +189,16 @@ function need(run: ProjectionRun, nodeId: string | null, key: string, days: numb
 	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for node ${nodeId}` : ''}: run the model again to publish it`);
 	if (v.length !== days) throw new ProjectionInputError(`the run's ${key} series has ${v.length} days, expected ${days}`);
 	return Float64Array.from({ length: days }, (_, t) => val(v[t]));
+}
+
+/**
+ * The shortfall an EWR site's charge followed: `ewr_charge_shortfall` where
+ * the run charged on the site's Reserve rule table (engine ≥ 1.3.0,
+ * settings.ewrChargeSource), else the pragmatic `ewr_shortfall`.
+ */
+function chargeShortfall(run: ProjectionRun, nodeId: string | null, days: number): { values: Float64Array; ruleTable: boolean } {
+	const ruleTable = run.series(nodeId, 'ewr_charge_shortfall') !== undefined;
+	return { values: need(run, nodeId, ruleTable ? 'ewr_charge_shortfall' : 'ewr_shortfall', days), ruleTable };
 }
 
 /**
@@ -264,7 +277,7 @@ function transferVolumes(
 
 /**
  * The engine's attribution, recomputed on the run's stored flows, for what a
- * run saved before engine 1.3.0 doesn't store: which site bound each farm's
+ * run saved before engine 1.5.0 doesn't store: which site bound each farm's
  * charge each day. Inputs mirror runModel's (run.ts): the canonical node
  * order, each node's consumptive share k, the sites outlet first then gauges
  * by id.
@@ -280,7 +293,7 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 	const supplied = nodes.map((n) => (n.kind === 'gauge' ? zeros() : need(run, n.id, 'supplied', days)));
 	const storage = nodes.map((n) => (n.kind === 'farm' ? need(run, n.id, 'dam_storage', days) : zeros()));
 	const { rules, approximate } = transferVolumes(run, index, days);
-	// The run's EWR sites, as runModel picked them (engine ≥ 1.3.0 honours each gauge's ewrSite flag; absent = a site).
+	// The run's EWR sites, as runModel picked them (engine ≥ 1.5.0 honours each gauge's ewrSite flag; absent = a site).
 	const siteNodes = ewrSiteNodes(nodes, topo.outflow);
 	const order = canonicalOrder(nodes, topo);
 	const res = attributeEwrShortfall({
@@ -297,7 +310,7 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 		transfers: rules,
 		sites: siteNodes.map((node, si) => ({
 			node,
-			shortfall: si === 0 && topo.outflow >= 0 ? need(run, null, 'ewr_shortfall', days) : need(run, nodes[node]!.id, 'ewr_shortfall', days)
+			shortfall: chargeShortfall(run, si === 0 && topo.outflow >= 0 ? null : nodes[node]!.id, days).values
 		}))
 	});
 	const pos = new Int32Array(nodes.length);
@@ -379,6 +392,12 @@ export interface PreparedCurtailment {
 export interface CurtailmentOptions {
 	/** Include the other water users' rows (reads their demand, return_flow and ewr_charge). Default true. */
 	otherUsers?: boolean;
+	/**
+	 * For curtailmentSeriesKeys: the EWR sites whose charge followed their
+	 * Reserve rule table (the stored EwrSiteSummary with ewrSource
+	 * 'ruleTable'; the outlet as null), whose ewr_charge_shortfall is read in place of ewr_shortfall.
+	 */
+	ruleTableSites?: readonly (string | null)[];
 }
 
 /**
@@ -404,7 +423,7 @@ function siteCatchments(nodes: readonly NetworkNode[], topo: Topology): { siteNo
 	return { siteNodes, farms, order };
 }
 
-/** The farms (node indices) upstream of two or more EWR sites: the ones whose binding site a run stores (engine ≥ 1.3.0). */
+/** The farms (node indices) upstream of two or more EWR sites: the ones whose binding site a run stores (engine ≥ 1.5.0). */
 function ambiguousFarms(nodes: readonly NetworkNode[], farms: readonly Int32Array[]): number[] {
 	const count = new Int32Array(nodes.length);
 	for (const list of farms) for (const f of list) count[f]!++;
@@ -418,8 +437,8 @@ function ambiguousFarms(nodes: readonly NetworkNode[], farms: readonly Int32Arra
  *
  * `has` says which series the run stored. When it is given and the run
  * stores the binding site of every farm upstream of two or more EWR sites
- * (engine ≥ 1.3.0), those series are listed and the flows the binding-site
- * recompute needs are not. Without it, or for a run saved before 1.3.0, the
+ * (engine ≥ 1.5.0), those series are listed and the flows the binding-site
+ * recompute needs are not. Without it, or for a run saved before 1.5.0, the
  * flows are listed: the recompute is the fallback.
  */
 export function curtailmentSeriesKeys(
@@ -435,6 +454,9 @@ export function curtailmentSeriesKeys(
 	const ambiguous = ambiguousFarms(nodes, farms);
 	const stored = !!has && ambiguous.every((f) => has(nodes[f]!.id, EWR_BINDING_SERIES.key));
 	const byId = new Map(nodes.map((n) => [n.id, n]));
+	// A site whose charge followed its rule table is read by its own shortfall, instead of the pragmatic one.
+	// (Or, given `has`, where the run stored one: what chargeShortfall reads.)
+	const siteShortfallKey = (id: string | null) => (options.ruleTableSites?.includes(id) || has?.(id, 'ewr_charge_shortfall') ? 'ewr_charge_shortfall' : 'ewr_shortfall');
 	// The farms whose net transfer series transferVolumes reads.
 	const inRule = new Set<string>();
 	for (const tr of transfers) {
@@ -453,11 +475,11 @@ export function curtailmentSeriesKeys(
 			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
 		} else if (n.kind === 'gauge' && i !== topo.outflow && sites.has(i)) {
-			add(n.id, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+			add(n.id, siteShortfallKey(n.id), 'ewr_charged', 'ewr_natural');
 		}
 	});
 	if (stored) for (const f of ambiguous) add(nodes[f]!.id, EWR_BINDING_SERIES.key);
-	if (topo.outflow >= 0) add(null, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+	if (topo.outflow >= 0) add(null, siteShortfallKey(null), 'ewr_charged', 'ewr_natural');
 	return out;
 }
 
@@ -475,8 +497,8 @@ function storedBinding(v: StoredValues, days: number, sites: number): Int32Array
 /**
  * Reads a saved run once for curtailmentOverWindow: its farm, other-user and
  * EWR-site series, and each day's binding site: stored by the run (engine ≥
- * 1.3.0), told from the charge for a farm upstream of one site, or else, for
- * a run saved before 1.3.0, recomputed with the engine's attribution on the
+ * 1.5.0), told from the charge for a farm upstream of one site, or else, for
+ * a run saved before 1.5.0, recomputed with the engine's attribution on the
  * stored flows (reattribute). `over` is cheap, so a caller showing several
  * windows of one run prepares once.
  */
@@ -522,14 +544,16 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 	const sites: SeasonSite[] = siteNodes.map((node, si) => {
 		const isOutlet = si === 0 && nodes[node]!.downstreamNodeId === null;
 		const id = isOutlet ? null : nodes[node]!.id;
+		const short = chargeShortfall(run, id, days);
 		return {
 			nodeId: nodes[node]!.id,
 			name: nodes[node]!.name,
 			isOutlet,
 			upstream: new Set(Array.from(siteFarms[si]!, (f) => nodes[f]!.id)),
-			shortfall: need(run, id, 'ewr_shortfall', days),
+			shortfall: short.values,
 			charged: need(run, id, 'ewr_charged', days),
-			natural: need(run, id, 'ewr_natural', days)
+			natural: need(run, id, 'ewr_natural', days),
+			...(short.ruleTable ? { ewrSource: 'ruleTable' as const } : {})
 		};
 	});
 	const siteInputs: CurtailmentSiteInput[] = sites.map((s) => ({
@@ -539,12 +563,13 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 		farmCount: s.upstream.size,
 		shortfall: s.shortfall,
 		charged: s.charged,
-		natural: s.natural
+		natural: s.natural,
+		...(s.ewrSource ? { ewrSource: s.ewrSource } : {})
 	}));
 
 	// Each farm's binding site per day: told from the charge (upstream of one
-	// site), stored by the run (engine ≥ 1.3.0), or else, for a run saved
-	// before 1.3.0, the recompute's, which is approximate only after a
+	// site), stored by the run (engine ≥ 1.5.0), or else, for a run saved
+	// before 1.5.0, the recompute's, which is approximate only after a
 	// transfer loop.
 	const binding: Int32Array[] = nodes.map(() => new Int32Array(days).fill(-1));
 	const charge: Float64Array[] = nodes.map(() => new Float64Array(days));

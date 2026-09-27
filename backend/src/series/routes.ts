@@ -5,7 +5,7 @@ import { withUser } from '../db/tx.js';
 import { lockSeries, recordAudit, recordSeriesRevision, seriesSubject, valuesSha256, type SeriesRow } from '../history/record.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
 import { z } from 'zod';
 import {
 	assertRoomForSeries,
@@ -100,12 +100,66 @@ export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
 	if (queued?.created && Date.parse(queued.runAfter) <= Date.now()) await wakeWorker(queued.jobId);
 }
 
-/** PATCH …/series/:seriesId: say what an existing series holds, without touching its values. */
+/**
+ * PATCH …/series/:seriesId: say what an existing series holds, or where a flow
+ * record was measured (`siteNodeId`, 084_gauge_records: a gauge node inside
+ * the network, null = the outlet), without touching its values.
+ */
 const LabelBody = z
-	.object({ ...ProvenanceFields })
+	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional() })
 	.strict()
 	.superRefine(checkProvenance)
-	.refine((b) => b.product !== undefined, 'give product and productVersion (both null: not recorded)');
+	.refine((b) => b.product !== undefined || b.siteNodeId !== undefined, 'give product and productVersion (both null: not recorded), or siteNodeId');
+
+/**
+ * Move a flow record to a site: a gauge node of the project's model that is
+ * not the outlet, or null (the outlet). Only the plausibility checks read a
+ * gauge's record (engine ≥ 1.4.0), so the outlet's calibration, EWR test and
+ * the rest move with it only when it leaves or joins the outlet.
+ */
+async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: string | null): Promise<SeriesMetaRow> {
+	const { rows: cur } = await db.query<{ kind: string; name: string; siteNodeId: string | null }>(
+		`SELECT kind, name, site_node_id AS "siteNodeId" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+		[projectId, seriesId]
+	);
+	if (!cur[0]) throw new ApiError(404, 'not found');
+	if (siteNodeId !== null && !(CALIBRATION_FLOW_KINDS as readonly string[]).includes(cur[0].kind)) {
+		throw new ApiError(400, 'only an observed or logger flow record has a site: rain and evaporation are the catchment\'s');
+	}
+	if (siteNodeId !== null) {
+		const { rows: node } = await db.query<{ kind: string; downstream: string | null }>(
+			'SELECT kind, downstream_node_id AS downstream FROM node WHERE project_id = $1 AND id = $2',
+			[projectId, siteNodeId]
+		);
+		if (!node[0]) throw new ApiError(400, 'siteNodeId: no such node in this project (save the model first)');
+		if (node[0].kind !== 'gauge') throw new ApiError(400, 'siteNodeId: a record\'s site is a gauge node');
+		if (node[0].downstream === null) throw new ApiError(400, 'siteNodeId: that gauge is the outlet, whose records have no site (null)');
+	}
+	const { rows } = await db.query<SeriesMetaRow>(
+		`UPDATE time_series SET site_node_id = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`,
+		[projectId, seriesId, siteNodeId]
+	);
+	if (cur[0].siteNodeId !== siteNodeId) {
+		const names = await nodeNames(db, projectId, [cur[0].siteNodeId, siteNodeId]);
+		await recordAudit(db, projectId, 'series.site_changed', {
+			seriesId,
+			kind: cur[0].kind,
+			name: cur[0].name,
+			site: { from: names(cur[0].siteNodeId), to: names(siteNodeId) }
+		});
+	}
+	return rows[0]!;
+}
+
+/** A site as the audit line says it: the outlet, the gauge's name, or a node that has gone. */
+async function nodeNames(db: Db, projectId: string, ids: (string | null)[]): Promise<(id: string | null) => string> {
+	const wanted = ids.filter((x): x is string => x !== null);
+	const { rows } = wanted.length
+		? await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1 AND id = ANY($2::uuid[])', [projectId, wanted])
+		: { rows: [] };
+	const byId = new Map(rows.map((r) => [r.id, r.name]));
+	return (id) => (id === null ? 'the outlet' : (byId.get(id) ?? 'a removed node'));
+}
 
 export const seriesRoutes = new Hono<AuthEnv>()
 	.get('/:id/series', async (c) =>
@@ -156,6 +210,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
+			const sited = body.siteNodeId !== undefined ? await setSite(db, id, seriesId, body.siteNodeId) : null;
+			if (body.product === undefined) return c.json(sited!);
 			const { rows: cur } = await db.query<{ product: string | null; productVersion: string | null }>(
 				`SELECT product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]

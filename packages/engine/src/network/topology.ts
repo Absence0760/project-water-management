@@ -121,7 +121,7 @@ export function canonicalOrder(nodes: readonly NetworkNode[], topo: Pick<Topolog
 }
 
 /**
- * Is node `n` an EWR site (engine ≥ 1.3.0)? The outlet always; a gauge unless
+ * Is node `n` an EWR site (engine ≥ 1.5.0)? The outlet always; a gauge unless
  * its `ewrSite` flag is false; a farm or other user never.
  */
 export function isEwrSite(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 'ewrSite'>): boolean {

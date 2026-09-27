@@ -139,7 +139,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		ewr_shortfall_incremental: 0,
 		ewr_charge: 0,
 		ewr_charge_irrigation: 0,
-		// Present on a farm upstream of two or more EWR sites (engine 1.3.0); an index, 0 = the outlet.
+		// Present on a farm upstream of two or more EWR sites (engine 1.5.0); an index, 0 = the outlet.
 		ewr_binding_site: 0,
 		// Present in a run with senior other water users (WP-1.33), boreholes (WP-1.34, WP-3.9), a farm that pumps from the river (WP-3.8) or a storage reset (the review triggers' members, engine 0.46.0); none here.
 		senior_requirement: 0,

@@ -207,7 +207,7 @@ describe('validateModel', () => {
 		]);
 	});
 
-	it('refuses the EWR site flag off the outlet or a unit, exactly as the backend does (engine 1.3.0)', () => {
+	it('refuses the EWR site flag off the outlet or a unit, exactly as the backend does (engine 1.5.0)', () => {
 		const g = node('g', 'Gauge', null);
 		const weir = { ...node('w', 'Weir', 'g'), kind: 'gauge' as const };
 		const a = node('a', 'A', 'w');

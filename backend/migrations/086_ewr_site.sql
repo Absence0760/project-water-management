@@ -1,7 +1,7 @@
--- 084_ewr_site — whether a gauge is an EWR site (engine 1.3.0, audit Q17
+-- 086_ewr_site — whether a gauge is an EWR site (engine 1.5.0, audit Q17
 -- follow-on, roadmap WP-3.7, docs/model.md §2.7b).
 --
--- Until engine 1.3.0 every gauge was an EWR site: the EWR was assessed there
+-- Until engine 1.5.0 every gauge was an EWR site: the EWR was assessed there
 -- and its shortfall charged to the farms upstream. ewr_site = false makes a
 -- gauge a flow-record station only: it keeps its flow and EWR-shortfall
 -- series but charges nobody, and a Reserve rule table at it is skipped.
@@ -20,4 +20,4 @@ ALTER TABLE node
 	ADD CONSTRAINT node_ewr_site_gauge CHECK (ewr_site OR kind = 'gauge');
 
 COMMENT ON COLUMN node.ewr_site IS
-	'Gauges: whether the EWR is assessed here (its shortfall charged upstream, a Reserve rule table may sit here). Default true; false only on a gauge, never the outlet (model rule). Engine >= 1.3.0.';
+	'Gauges: whether the EWR is assessed here (its shortfall charged upstream, a Reserve rule table may sit here). Default true; false only on a gauge, never the outlet (model rule). Engine >= 1.5.0.';

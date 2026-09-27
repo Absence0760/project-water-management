@@ -79,7 +79,7 @@
 	const hints = $derived(damHints(node));
 	// History's unit filter takes units (farms); another node's link filters by its name alone.
 	const unit = $derived(node.kind === 'farm' ? node.id : null);
-	/** The EWR site flag (engine ≥ 1.3.0): shown on a gauge, and on any node that has it off so it can be put right. */
+	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
 	const showEwrSite = $derived(node.kind === 'gauge' || node.ewrSite === false);
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
 </script>

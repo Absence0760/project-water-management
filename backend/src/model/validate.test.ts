@@ -88,7 +88,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, set as never]))).toEqual([]);
 	});
 
-	it('EWR site flag (engine 1.3.0): true unless set; a gauge may be taken off, never the outlet or a farm', () => {
+	it('EWR site flag (engine 1.5.0): true unless set; a gauge may be taken off, never the outlet or a farm', () => {
 		const out = node('Gauge', null);
 		const weir = node('Weir', out.id, { kind: 'gauge', damCapacityM3: 0 });
 		const farm = node('A', weir.id);

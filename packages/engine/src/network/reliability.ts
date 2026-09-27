@@ -134,6 +134,8 @@ export interface WaterAccountEwr {
 	/** Σ MIN(flow, requirement): the part of the requirement that passed. */
 	metM3: number;
 	daysNotMet: number;
+	/** 'ruleTable' when the requirement is the site's Reserve rule table (engine ≥ 1.3.0, settings.ewrChargeSource); absent = the pragmatic EWR. */
+	ewrSource?: 'ruleTable';
 }
 
 /**
@@ -275,6 +277,8 @@ export interface AccountSiteInput {
 	required: ArrayLike<number>;
 	/** ≤ 0: the site's shortfall. */
 	shortfall: ArrayLike<number>;
+	/** 'ruleTable' when `required` follows the site's Reserve rule table (engine ≥ 1.3.0); absent = the pragmatic EWR. */
+	ewrSource?: 'ruleTable';
 }
 
 export interface SupplyAssuranceInput {
@@ -499,7 +503,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 				met += r + Math.min(sh, 0);
 				if (sh < 0) notMet++;
 			}
-			return { nodeId: site.nodeId, name: site.name, requiredM3: nz(req), metM3: nz(met), daysNotMet: notMet };
+			return { nodeId: site.nodeId, name: site.name, requiredM3: nz(req), metM3: nz(met), daysNotMet: notMet, ...(site.ewrSource ? { ewrSource: site.ewrSource } : {}) };
 		})
 	};
 }

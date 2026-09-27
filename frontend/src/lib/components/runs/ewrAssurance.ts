@@ -32,7 +32,7 @@ export function verdict(s: EwrAssuranceSite): string {
 }
 
 /**
- * The table's source with its confidence (engine ≥ 1.3.0, WP-3.7): "Gazetted
+ * The table's source with its confidence (engine ≥ 1.5.0, WP-3.7): "Gazetted
  * Reserve: GN 123 of 2010", "Desktop estimate, low confidence: DRM run …", or
  * the bare source when the table doesn't say what kind it is. `low` marks a
  * desktop estimate, which the panel sets apart.

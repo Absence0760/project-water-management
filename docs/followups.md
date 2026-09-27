@@ -201,7 +201,7 @@ collected as a checklist in issue #46; tick it there as they answer.
         "Demand left %" bounded, "—" under 1 m³/day; equitable share labelled
         a fairness benchmark, not an allocation.
 - [x] **Attribution follow-ons (Q17): the site flag and the site list**
-      (engine 1.3.0, migration 084, issue #64). A gauge has an "EWR site"
+      (engine 1.5.0, migration 086, issue #64). A gauge has an "EWR site"
       flag (`ewrSite`, default true, so every existing project runs as
       before): unticked, it charges nobody and a Reserve rule table there is
       skipped; the outlet is always a site and only a gauge can be unticked
@@ -213,7 +213,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       crosses a site's catchment boundary** (Q17), because per-rule transfer
       volumes aren't stored as run series (the full invariants run in
       `network/attribution.test.ts` and the fuzz suite). Narrowed in engine
-      1.3.0: with the binding site stored, a farm's charge is checked exactly
+      1.5.0: with the binding site stored, a farm's charge is checked exactly
       against its share at its binding site whenever that site is exact, even
       when another site above the farm is crossed. Durable fix: store the
       per-rule transfer volumes as run series (they are small: one per
@@ -716,13 +716,16 @@ the reports):
       flow selects, the FDC check, the headline card, the Reserve compliance
       panel, a summary CSV block and run comparison. The method choices are
       plan.md question 17 for the hydrologist.
-      - [ ] **Daily charge from the rule table.** The EWR charge and
-            curtailment still follow the daily pragmatic EWR. If the
-            hydrologist and the assessor want the rule table to drive them
-            (plan.md question 17), the durable fix is a daily EWR series per
-            site from the month's requirement (`ewr_rule`, already stored),
-            fed to attribution in place of the pragmatic EWR, with a new
-            engine version and a regression note. Trigger: their answer.
+      - [x] **Daily charge from the rule table.** Built as an opt-in
+            setting, engine 1.3.0 (issue #64,
+            [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)):
+            `settings.ewrChargeSource: 'ruleTable'` feeds each rule-table
+            site's `ewr_rule` requirement to attribution and curtailment in
+            place of the pragmatic EWR (the pragmatic EWR outside complete
+            months and at sites without a table), stored as
+            `ewr_charge_shortfall`; the default stays `'pragmatic'`. Left
+            for the hydrologist and the assessor: which is the default
+            (plan.md question 17).
       - [x] **Uncertainty on compliance.** Phase 9's bands include the
             monthly Reserve compliance rate per site beside days not met
             (engine 0.26.0).
@@ -731,16 +734,16 @@ the reports):
             components per site, entered by paste or CSV, with a heat map
             per site ([model.md §2.9d](./model.md)). Method choices pending
             the hydrologist (plan.md question 17).
-      - [ ] **Low flows on base flow.** Engine 0.33.0 judges the low-flow
-            requirement on the month's total volume, so a flood month can
-            pass its low flows while its base flow was short. The durable
-            fix is a base-flow measure of the month (a recursive baseflow
-            filter, or the mean of the month's lowest daily flows) compared
-            with the low-flow requirement, behind a new engine version.
-            Trigger: the hydrologist's answer on which measure a Reserve
-            monitoring report uses.
+      - [x] **Low flows on base flow.** Built as an opt-in setting, engine
+            1.3.0 (issue #64, [model.md §2.9d](./model.md)):
+            `settings.lowFlowMeasure: 'baseflow'` judges a low-flow
+            requirement on the month's base flow from a three-pass
+            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997); the
+            default stays the month's total volume. Left for the
+            hydrologist: which measure a Reserve monitoring report uses, and
+            the filter parameter (plan.md question 17).
       - [x] **Site source and confidence labels (WP-3.7 UI)** (engine
-            1.3.0, issue #64). An optional typed `sourceKind`
+            1.5.0, issue #64). An optional typed `sourceKind`
             (`gazetted` | `desktop` | `other`) on `EwrRuleTable`, checked
             by the engine, the settings API and the rule-table editor; the
             Reserve panel and the printed report put the confidence line
@@ -786,15 +789,26 @@ the reports):
       10-point warning, the seasonal hint's 10-point margin and the factor of
       2 on Q90 (every value and its reasoning is in model.md §2.10d).
       Still open, each with its trigger:
-      - [ ] **Checks on a gauge node inside the network.** The observed
-            records are the outlet's, so the checks run there only. The
-            durable fix is attaching an observed record to a gauge node
-            (a series per node) and running check 1 and 4 at each. Trigger:
-            a project with a second gauged site.
-      - [ ] **The checks in the run comparison.** Compare shows neither the
-            failing years nor the Q90 ratio side by side. Trigger: the
-            hydrologist asks to compare the checks between runs (for
-            example before and after a refit).
+      - [x] **Checks on a gauge node inside the network.** Done 2026-09-27
+            (issue #64), engine 1.4.0, migration 084 (may need renumbering
+            at merge): a flow record can be attached to a gauge above the
+            outlet (`time_series.site_node_id`, the Data page's site select),
+            and checks 1 and 4 run at each such gauge against the simulated
+            flow there, per site in `plausibility.gauges`, the Runs panel,
+            the summary CSV and the warnings
+            ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6),
+            [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)).
+            A series revision keeps the site too (2026-09-27, migration 085):
+            a deleted gauge record restored from its revision is back at its
+            gauge, and a restore whose gauge has left the model is refused
+            rather than put at the outlet
+            ([data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)).
+      - [x] **The checks in the run comparison.** Done 2026-09-27 (issue
+            #64): Compare's *Plausibility checks* panel gives, per site (the
+            outlet and each gauge), both runs' failing years with those newly
+            failing and now passing, and the Q90 ratio with pass or fail,
+            then the rain-source split and the double-mass breaks
+            ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 - [x] **Phase 10 of issue #4: remove legacy** (issue #16). Done 2026-09-26,
       engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
       hydrologist-review trigger ([plan.md](./plan.md) Decisions,
@@ -1207,6 +1221,13 @@ the suggested order (the IDs carry the detail):
       **Owed for engines 1.1.0 and 1.2.0** (2026-09-27): no 20 000-case soak
       is recorded since 1.0.0. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
+      **Engine 1.3.0 (issue #64, 2026-09-27): a 2 000-case soak** (the new
+      rule-table charge and base-flow modes drawn in) passed except **seed
+      1774**, which fails with or without them (it has no rule table):
+      doubling crop areas raised n14's supply fraction 0.9999999999964 →
+      0.9999999999984, a 2e-12 rise, so either a float-noise tolerance
+      missing from `checkDoubledCropAreas` or a real sub-ulp effect; not
+      diagnosed. The 20 000-case soak is still owed.
       **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
       cap (N4) ignored the receiving dam's own rain, evaporation and
       seepage, so a leaky dam was topped up short by a fixed volume and
@@ -1776,9 +1797,12 @@ role and not before it.
         column, `damReleaseM3`, since a release joins the river) once WP-3.5 lands: a release
         that leaves the network is an out term; one that stays is already in
         the outflow. Owner: WP-3.5.
-  - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
-        WP-3.7's Desktop tables: the account uses the pragmatic EWR at each
-        site today. Owner: WP-3.7.
+  - [x] **EWR required vs met from the Reserve rule tables** (§2.9c) and
+        WP-3.7's Desktop tables: done, engine 1.3.0 (issue #64). With
+        `settings.ewrChargeSource: 'ruleTable'` the account's requirement
+        at a site with a table is the table's (rows say `ewrSource:
+        'ruleTable'`), the same choice as the charge; the pragmatic EWR
+        stays the default, pending the hydrologist.
   - [ ] **Where else the metrics show**: the printable report
         (`report/`), the farm view (a farmer's own reliability and stress
         months) and the scenario compare view (Δ reliability per farm).
@@ -2150,12 +2174,12 @@ role and not before it.
         with published" (the compare page's default and offer, and the Runs
         header link), and `publishedAt` on `GET /projects` for every member
         ([ui.md § Summary](./ui.md#summary), [run-comparison.md](./run-comparison.md)).
-  - [x] **The binding EWR site is stored** (engine 1.3.0, issue #64). A
+  - [x] **The binding EWR site is stored** (engine 1.5.0, issue #64). A
         run stores `ewr_binding_site` per farm upstream of two or more EWR
         sites (the site's index, blank on a day without a charge; any other
         farm's follows from its charge), and the projection and the Runs
         tab's window picker read it, so the binding site is exact on a
-        transfer loop too; a run from before 1.3.0 falls back to the
+        transfer loop too; a run from before 1.5.0 falls back to the
         recompute ([model.md §2.7b](./model.md)). About 195 kB before
         compression (1.6 % of the run's series) on Sandspruit, nothing on
         the single-site examples.

@@ -623,7 +623,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    (engine 0.21.0, hydrologist Q6): a Reserve rule table (12 months × % points)
    can be entered per EWR site beside the pragmatic EWR, and every run then
    reports monthly compliance with it ([model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
-   The pragmatic EWR still sets the daily charge and curtailment.* See 17.
+   The pragmatic EWR sets the daily charge and curtailment unless the project
+   chooses the rule tables (engine 1.3.0).* See 17.
 9. **Reference results.** Is the client catchment's current working workbook the version to
    match? Are there other catchments (B, C…) with workbooks we can use as test
    cases?
@@ -676,7 +677,12 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     the flow (as built) or hold at the drought flow? Is monthly compliance the
     measure the CMA wants, or % of time from daily flows as well? And should
     the daily EWR charge and curtailment follow the rule table's requirement
-    instead of the pragmatic EWR?
+    instead of the pragmatic EWR? *Both ways are built (engine 1.3.0, issue
+    #64, `settings.ewrChargeSource`, the pragmatic EWR by default).* Should a
+    low-flow requirement be judged on the month's base flow rather than its
+    volume, and with which filter parameter? *Built as an option
+    (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, the volume by default;
+    model.md §2.9d).*
 18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
     criteria (engine 0.26.0, model.md §2.10e), defaults to confirm.* Is a
     parameter set behavioural at KGE′ ≥ 0.5 on the first half of the record,

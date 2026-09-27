@@ -20,13 +20,13 @@ import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { doubleMassCheck } from './doublemass';
-import { plausibilityChecks } from './plausibility';
+import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
-import { attributeEwrShortfall, bindingSite } from './network/attribution';
+import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
@@ -51,6 +51,7 @@ import {
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
+	parseGaugeSeriesKey,
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
@@ -352,7 +353,7 @@ function runNetwork(
 
 	// Who is charged for a shortfall (engine ≥ 0.17.0, audit Q17): the EWR is
 	// assessed at the outlet and every gauge that is an EWR site (engine ≥
-	// 1.3.0: a gauge whose ewrSite flag is false only measures), and each
+	// 1.5.0: a gauge whose ewrSite flag is false only measures), and each
 	// site's shortfall is charged to the farms upstream of it pro rata to their
 	// net impact (./network/attribution.ts). Sites: the outlet first, then
 	// gauges by node id (./network/topology.ts ewrSiteNodes).
@@ -361,6 +362,28 @@ function runNetwork(
 	// calculation order, which follows sortOrder: the attribution sums impacts
 	// in it, so the charges don't depend on the display order in their last bit.
 	const ranked = canonicalOrder(nodes, topo);
+	const kinds = plan.nodes.map((n) => n.kind);
+	// The Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6): monthly
+	// compliance at each EWR site with a rule table (./reserve/assurance.ts).
+	// Assessed before the attribution, which may follow it (settings.ewrChargeSource).
+	const ewrAssurance = assessEwrRules(
+		settings,
+		nodes,
+		topo.outflow,
+		siteNodes.map((node) => ({ node, farms: siteUnits(kinds, plan.upstream, ranked, node) })),
+		sim,
+		simOutflow,
+		startDate,
+		days,
+		warnings,
+		{
+			...(resume ? { pinned: resume.pinned.reserveNatural, ...(warm.continued ? { carried: resume.reserveMonths } : {}) } : {}),
+			...(capturing ? { captureAt: captureAt! } : {})
+		}
+	);
+	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR, or
+	// with settings.ewrChargeSource 'ruleTable' the site's rule-table requirement where it has one.
+	const chargeSites = ewrChargeSites(settings, siteNodes, topo.outflow, ewrAssurance, sim, simOutflow, ewr, ewrShort, days, nodes, warnings);
 	const attribution = attributeEwrShortfall({
 		days,
 		kind: plan.nodes.map((n) => n.kind),
@@ -374,7 +397,7 @@ function runNetwork(
 		consumptivePerSupplied: plan.nodes.map(consumptivePerSupplied),
 		...(resume && warm.continued ? { storageBefore: resume.nodes.map((r) => r.setFromM3 ?? r.storageM3) } : {}),
 		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
-		sites: siteNodes.map((node) => ({ node, shortfall: node === topo.outflow ? ewrShort : sim.nodes[node]!.ewrShortfall }))
+		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
 	});
 	const posInOrder = new Int32Array(nodes.length);
 	ranked.forEach((node, k) => (posInOrder[node] = k));
@@ -382,13 +405,8 @@ function runNetwork(
 		const id = si === 0 && topo.outflow >= 0 ? null : nodes[site.node]!.id;
 		push(id, 'ewr_charged', 'EWR shortfall charged to the farms upstream (negative)', 'm³/day', site.charged);
 		push(id, 'ewr_natural', 'EWR shortfall not caused by use: natural (negative)', 'm³/day', site.natural);
+		if (chargeSites[si]!.ruleTable) push(id, 'ewr_charge_shortfall', EWR_CHARGE_SHORTFALL_LABEL, 'm³/day', chargeSites[si]!.shortfall);
 	}
-	// The Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6): monthly
-	// compliance at each EWR site with a rule table (./reserve/assurance.ts).
-	const ewrAssurance = assessEwrRules(settings, nodes, topo.outflow, attribution.sites, sim, simOutflow, startDate, days, warnings, {
-		...(resume ? { pinned: resume.pinned.reserveNatural, ...(warm.continued ? { carried: resume.reserveMonths } : {}) } : {}),
-		...(capturing ? { captureAt: captureAt! } : {})
-	});
 	for (const a of ewrAssurance) push(a.report.nodeId, 'ewr_rule', 'EWR from the Reserve rule table (the month’s requirement, per day)', 'm³/day', a.requiredM3Day);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
 	// No value from any source = NaN.
@@ -474,7 +492,7 @@ function runNetwork(
 		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
 		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
 		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
-		// Which site set the charge each day (engine ≥ 1.3.0), so a stored run's
+		// Which site set the charge each day (engine ≥ 1.5.0), so a stored run's
 		// projection reads it instead of recomputing the attribution
 		// (views/farmProjection.ts). Only where it can't be told from the charge
 		// alone: a farm upstream of two or more sites (./network/bindingSeries.ts).
@@ -582,9 +600,10 @@ function runNetwork(
 			name: nodes[site.node]!.name,
 			isOutlet: si === 0 && topo.outflow >= 0,
 			farmCount: site.farms.length,
-			shortfall: si === 0 && topo.outflow >= 0 ? ewrShort : sim.nodes[site.node]!.ewrShortfall,
+			shortfall: chargeSites[si]!.shortfall,
 			charged: site.charged,
-			natural: site.natural
+			natural: site.natural,
+			...(chargeSites[si]!.ruleTable ? { ewrSource: 'ruleTable' as const } : {})
 		}))
 	);
 
@@ -685,7 +704,9 @@ function runNetwork(
 		sim,
 		coverTotal,
 		ewrShort,
-		reserve: ewrAssurance.map((a) => a.report)
+		reserve: ewrAssurance.map((a) => a.report),
+		outflow: topo.outflow,
+		upstream: topo.upstream
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -733,11 +754,13 @@ function runNetwork(
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		sites: attribution.sites.map((site, si) => {
 			const outlet = si === 0 && topo.outflow >= 0;
+			const c = chargeSites[si]!;
 			return {
 				nodeId: outlet ? null : nodes[site.node]!.id,
 				name: nodes[site.node]!.name,
-				required: outlet ? ewr : sim.nodes[site.node]!.ewrCumulative,
-				shortfall: outlet ? ewrShort : sim.nodes[site.node]!.ewrShortfall
+				required: c.required,
+				shortfall: c.shortfall,
+				...(c.ruleTable ? { ewrSource: 'ruleTable' as const } : {})
 			};
 		})
 	});
@@ -827,6 +850,10 @@ function runPlausibility(r: {
 	coverTotal: Float64Array;
 	ewrShort: Float64Array;
 	reserve: EwrAssuranceSite[];
+	/** The outlet node (topology), −1 without one. */
+	outflow: number;
+	/** The nodes draining directly into each node (topology). */
+	upstream: readonly ArrayLike<number>[];
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -838,20 +865,26 @@ function runPlausibility(r: {
 	}
 	const nodes = input.model.nodes;
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-	const dams = new Float64Array(days);
-	for (const i of byId) {
-		const w = sim.workings?.[i];
-		if (!w || plan.nodes[i]!.kind !== 'farm') continue;
-		const q = sim.nodes[i]!.storage;
-		const set = sim.nodes[i]!.storageSet;
-		let prev = plan.nodes[i]!.initialStorageM3;
-		for (let t = 0; t < days; t++) {
-			// The storage reset's step (engine ≥ 0.46.0) is no water the dams took from the river.
-			if (set) prev += set[t]!;
-			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
-			prev = q[t]!;
+	/** Σ over the farms in `among` (every node when null) of their dams' storage gain + evaporation − rain on them, per day. */
+	const damsOf = (among: Uint8Array | null) => {
+		const dams = new Float64Array(days);
+		for (const i of byId) {
+			const w = sim.workings?.[i];
+			if (!w || plan.nodes[i]!.kind !== 'farm' || (among && !among[i])) continue;
+			const q = sim.nodes[i]!.storage;
+			const set = sim.nodes[i]!.storageSet;
+			let prev = plan.nodes[i]!.initialStorageM3;
+			for (let t = 0; t < days; t++) {
+				// The storage reset's step (engine ≥ 0.46.0) is no water the dams took from the river.
+				if (set) prev += set[t]!;
+				dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
+				prev = q[t]!;
+			}
 		}
-	}
+		return dams;
+	};
+	const dams = damsOf(null);
+	const gauges = gaugeSites(r, byId, damsOf);
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -871,8 +904,76 @@ function runPlausibility(r: {
 		hasStation: !!series.rain_catchment_mm,
 		ewrShortfall: r.ewrShort,
 		reserve: r.reserve,
-		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input)
+		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
+		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
+		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
 	});
+}
+
+/**
+ * The gauge nodes inside the network with an observed record of their own
+ * (a GaugeSeriesKey series, engine ≥ 1.4.0), with the flows the checks need
+ * at each: natural flow (the catchment's × the flow shares of the gauge and
+ * every node above it), the simulated flow there (the gauge's outflow), and
+ * the dams and land cover above it. In node-id order. A record whose node is
+ * gone, isn't a gauge or is the outlet is left out with a warning.
+ */
+function gaugeSites(
+	r: Parameters<typeof runPlausibility>[0],
+	byId: readonly number[],
+	damsOf: (among: Uint8Array | null) => Float64Array
+): { sites: GaugePlausibilityInput[]; warnings: string[] } {
+	const { input, start, days, plan, sim } = r;
+	const nodes = input.model.nodes;
+	const series = input.series ?? {};
+	const records = new Map<string, Partial<Record<CalibrationFlowKind, DailySeries>>>();
+	for (const [key, s] of Object.entries(series)) {
+		const g = s ? parseGaugeSeriesKey(key) : null;
+		if (!g) continue;
+		(records.get(g.nodeId) ?? records.set(g.nodeId, {}).get(g.nodeId)!)[g.kind] = s!;
+	}
+	const warnings: string[] = [];
+	const indexOf = new Map(nodes.map((n, i) => [n.id, i]));
+	for (const [id, recs] of [...records].sort(([a], [b]) => cmpStr(a, b))) {
+		const i = indexOf.get(id);
+		const what = Object.keys(recs).map((k) => OBSERVED_SERIES_LABEL[k as CalibrationFlowKind].toLowerCase()).join(' and ');
+		if (i === undefined) warnings.push(`An ${what} record is attached to a node that is no longer in the model: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
+		else if (nodes[i]!.kind !== 'gauge') warnings.push(`An ${what} record is attached to "${nodes[i]!.name}", which is not a gauge: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
+		else if (i === r.outflow) warnings.push(`An ${what} record is attached to the outlet node "${nodes[i]!.name}": the plausibility checks leave it out. The outlet's records are the ones with no site; move it there on the Data page.`);
+	}
+	const sites: GaugePlausibilityInput[] = [];
+	const hasCover = r.coverTotal.length > 0;
+	for (const g of byId) {
+		const recs = records.get(nodes[g]!.id);
+		if (!recs || nodes[g]!.kind !== 'gauge' || g === r.outflow) continue;
+		// The gauge and every node above it.
+		const above = new Uint8Array(nodes.length);
+		const stack = [g];
+		while (stack.length) {
+			const j = stack.pop()!;
+			if (above[j]) continue;
+			above[j] = 1;
+			const ups = r.upstream[j]!;
+			for (let k = 0; k < ups.length; k++) stack.push(ups[k]!);
+		}
+		let naturalShare = 0;
+		for (const j of byId) if (above[j]) naturalShare += plan.nodes[j]!.share;
+		const cover = new Float64Array(hasCover ? days : 0);
+		if (hasCover) for (const j of byId) if (above[j]) for (let t = 0; t < days; t++) cover[t]! += sim.nodes[j]!.landCoverReduction[t]!;
+		const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
+		for (const kind of CALIBRATION_FLOW_KINDS) if (recs[kind]) observed[kind] = alignSeries(recs[kind], start, days);
+		sites.push({
+			nodeId: nodes[g]!.id,
+			name: nodes[g]!.name,
+			naturalShare,
+			observed,
+			naturalM3Day: Float64Array.from(r.natural, (v) => v * naturalShare),
+			simulatedM3Day: sim.nodes[g]!.outflow,
+			damsM3Day: damsOf(above),
+			landCoverM3Day: cover
+		});
+	}
+	return { sites, warnings };
 }
 
 /**
@@ -1401,8 +1502,8 @@ function assessEwrRules(
 	 * carried into a resumed run; or the day to report each site's carry at.
 	 */
 	warm: { pinned?: ModelState['pinned']['reserveNatural']; carried?: ModelState['reserveMonths']; captureAt?: number } = {}
-): { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; carry?: MonthCarry | null }[] {
-	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; carry?: MonthCarry | null }[] = [];
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null }[] {
+	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null }[] = [];
 	const siteOf = new Map(sites.map((s) => [s.node, s]));
 	const key = (id: string | null) => id ?? '';
 	const tables = [...settings.ewrRules].sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
@@ -1427,7 +1528,7 @@ function assessEwrRules(
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: an EWR site is the outlet or a gauge`);
 			continue;
 		}
-		// Engine ≥ 1.3.0: a gauge taken off the EWR sites only measures.
+		// Engine ≥ 1.5.0: a gauge taken off the EWR sites only measures.
 		if (!isOutlet && !siteOf.has(node)) {
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: the gauge is not marked as an EWR site`);
 			continue;
@@ -1451,13 +1552,81 @@ function assessEwrRules(
 			days,
 			{ table, nodeId: isOutlet ? null : nodes[node]!.id, name, isOutlet, natural, impacted },
 			warm.pinned?.find((p) => p.site === site)?.curves,
-			warm.carried?.find((p) => p.site === site)?.carry ?? null
+			warm.carried?.find((p) => p.site === site)?.carry ?? null,
+			settings.lowFlowMeasure ?? 'total'
 		);
 		warnings.push(...assuranceWarnings(a.report));
 		done.add(node);
-		out.push({ ...a, site, ...(warm.captureAt !== undefined ? { carry: monthCarryAt(startDate, warm.captureAt, natural, impacted) } : {}) });
+		out.push({
+			report: a.report,
+			requiredM3Day: a.requiredM3Day,
+			site,
+			node,
+			...(warm.captureAt !== undefined ? { carry: monthCarryAt(startDate, warm.captureAt, natural, impacted, a.baseflowM3Day) } : {})
+		});
 	}
 	return out;
+}
+
+/** The label of an EWR site's `ewr_charge_shortfall` series (engine ≥ 1.3.0, settings.ewrChargeSource 'ruleTable'). */
+export const EWR_CHARGE_SHORTFALL_LABEL = 'EWR shortfall the charge follows: the Reserve rule table’s requirement (negative)';
+
+/**
+ * What the EWR charge follows at each site (engine ≥ 1.3.0, issue #64,
+ * docs/model.md §2.9c): the required flow and the shortfall, ≤ 0, per day.
+ * With settings.ewrChargeSource 'ruleTable', a site with a rule-table
+ * assessment takes the month's requirement from the table (`ewr_rule`) on
+ * every day of a complete month, and MIN(flow − requirement, 0) as its
+ * shortfall; days outside a complete month (a part month at either end of
+ * the run), and sites without a table, keep the pragmatic EWR. Otherwise
+ * every site keeps the pragmatic EWR, the same arrays as before.
+ */
+function ewrChargeSites(
+	settings: ProjectSettings,
+	siteNodes: readonly number[],
+	outflow: number,
+	assessed: readonly { node: number; requiredM3Day: Float64Array }[],
+	sim: { nodes: readonly NodeResult[] },
+	simOutflow: Float64Array,
+	ewr: ArrayLike<number>,
+	ewrShort: Float64Array,
+	days: number,
+	nodes: readonly NetworkNode[],
+	warnings: string[]
+): { node: number; required: ArrayLike<number>; shortfall: ArrayLike<number>; ruleTable: boolean }[] {
+	const byRule = settings.ewrChargeSource === 'ruleTable';
+	const rules = new Map(byRule ? assessed.map((a) => [a.node, a.requiredM3Day]) : []);
+	if (byRule && rules.size === 0) warnings.push('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the pragmatic EWR');
+	return siteNodes.map((node) => {
+		const isOutlet = node === outflow;
+		const required = isOutlet ? ewr : sim.nodes[node]!.ewrCumulative;
+		const short = isOutlet ? ewrShort : sim.nodes[node]!.ewrShortfall;
+		const rule = rules.get(node);
+		if (!rule) return { node, required, shortfall: short, ruleTable: false };
+		const flow = isOutlet ? simOutflow : sim.nodes[node]!.outflow;
+		const req = new Float64Array(days);
+		const sh = new Float64Array(days);
+		let pragmaticDays = 0;
+		for (let t = 0; t < days; t++) {
+			const r = rule[t]!;
+			if (Number.isFinite(r)) {
+				req[t] = r;
+				const d = shortfall(flow[t]!, r, Math.max(flow[t]!, r));
+				sh[t] = d < 0 ? d : 0;
+			} else {
+				req[t] = required[t]!;
+				sh[t] = short[t]!;
+				pragmaticDays++;
+			}
+		}
+		if (pragmaticDays) {
+			const name = nodes[node]!.name;
+			warnings.push(
+				`EWR charge at ${isOutlet ? `the outlet (${name})` : name}: ${pragmaticDays} day${pragmaticDays === 1 ? '' : 's'} outside a complete calendar month follow${pragmaticDays === 1 ? 's' : ''} the pragmatic EWR, since the rule table's requirement is monthly`
+			);
+		}
+		return { node, required: req, shortfall: sh, ruleTable: true };
+	});
 }
 
 /**

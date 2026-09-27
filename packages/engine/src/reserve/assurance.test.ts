@@ -122,7 +122,7 @@ describe('assessSite: worked examples', () => {
 		expect(requiredM3Day[0]).toBeCloseTo(750_000 / 31, 6);
 		expect(report.overall).toMatchObject({ months: 1, met: 0, rate: 0, longestNotMetRun: 1 });
 		expect(report.overall.meanShortfallPct).toBeCloseTo((100 * 0.05) / 0.75, 9);
-		// No source kind on the table: none on the report, as before engine 1.3.0.
+		// No source kind on the table: none on the report, as before engine 1.5.0.
 		expect(report).not.toHaveProperty('sourceKind');
 		expect(assessSite(start, days, { table: table({ sourceKind: 'gazetted' }), nodeId: null, name: 'Outlet', isOutlet: true, natural, impacted }).report.sourceKind).toBe('gazetted');
 		const oct = report.byMonth[0]!;

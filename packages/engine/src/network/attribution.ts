@@ -97,6 +97,41 @@ const RESIDUE = 1e-14;
 /** Two charges within this relative difference are a tie (float noise from summing in another order). */
 const TIE = 1e-9;
 
+/** 1 for `node` and every node draining into it, 0 elsewhere. */
+function upstreamMask(upstream: readonly ArrayLike<number>[], node: number): Uint8Array {
+	const inF = new Uint8Array(upstream.length);
+	const stack = [node];
+	while (stack.length) {
+		const i = stack.pop()!;
+		if (inF[i]) continue;
+		inF[i] = 1;
+		const ups = upstream[i]!;
+		for (let u = 0; u < ups.length; u++) stack.push(ups[u]!);
+	}
+	return inF;
+}
+
+/**
+ * The units a site charges: the farms and other water users whose outflow
+ * reaches `node` (the node itself when it is one), in `order`, so Σ impacts
+ * runs in the caller's (canonical) order, not the node array's. The same set
+ * as the site's AttributionSiteResult.farms, without the attribution.
+ */
+export function siteUnits(
+	kind: readonly ('farm' | 'gauge' | 'user')[],
+	upstream: readonly ArrayLike<number>[],
+	order: ArrayLike<number>,
+	node: number,
+	mask: Uint8Array = upstreamMask(upstream, node)
+): Int32Array {
+	const farms: number[] = [];
+	for (let k = 0; k < order.length; k++) {
+		const i = order[k]!;
+		if (mask[i] && kind[i] !== 'gauge') farms.push(i);
+	}
+	return Int32Array.from(farms);
+}
+
 export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?: boolean } = {}): AttributionResult {
 	const { days, kind, upstream, order, inflow, runoff, outflow, supplied, consumptivePerSupplied, transfers } = input;
 	const n = kind.length;
@@ -105,23 +140,9 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 
 	// Upstream farm sets, and which transfers stay inside each.
 	const sites = input.sites.map((site) => {
-		const inF = new Uint8Array(n);
-		const stack = [site.node];
-		while (stack.length) {
-			const i = stack.pop()!;
-			if (inF[i]) continue;
-			inF[i] = 1;
-			const ups = upstream[i]!;
-			for (let u = 0; u < ups.length; u++) stack.push(ups[u]!);
-		}
-		const farms: number[] = [];
-		// In `order`, so Σ impacts runs in the caller's (canonical) order, not the node array's.
-		for (let k = 0; k < order.length; k++) {
-			const i = order[k]!;
-			if (inF[i] && kind[i] !== 'gauge') farms.push(i);
-		}
+		const inF = upstreamMask(upstream, site.node);
 		const internal = transfers.filter((tr) => inF[tr.from] && inF[tr.to]);
-		return { site, farms: Int32Array.from(farms), internal };
+		return { site, farms: siteUnits(kind, upstream, order, site.node, inF), internal };
 	});
 
 	const charge = kind.map(() => new Float64Array(days));

@@ -12,6 +12,8 @@ import {
 	CHIRPS_BIAS_MODES,
 	NODE_SET_FIELDS,
 	SETTINGS_PATHS,
+	EWR_CHARGE_SOURCES,
+	LOW_FLOW_MEASURES,
 	SUPPLY_RULES,
 	SUPPLY_RULE_LABEL,
 	TRANSFER_SET_FIELDS,
@@ -121,7 +123,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
 	supplyStopPct: { label: 'Supply switch-back level', spec: pct() },
-	// A gauge's EWR site flag (engine ≥ 1.3.0): a baseline assumption, never a proposal (docs/scenarios.md).
+	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };
 
@@ -192,7 +194,10 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	calibrationFlowKind: {
 		label: 'Calibration flow series',
 		spec: { t: 'enum', options: CALIBRATION_FLOW_KINDS.map((k) => ({ value: k, label: kindLabel(k) })), nullable: true, nullLabel: 'default (observed, else logger)' }
-	}
+	},
+	// Reserve method choices (engine ≥ 1.3.0, issue #64), pending the hydrologist.
+	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The pragmatic EWR', ruleTable: 'The rule tables' }) } },
+	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } }
 };
 
 export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));

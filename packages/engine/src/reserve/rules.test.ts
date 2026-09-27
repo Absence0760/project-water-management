@@ -186,7 +186,7 @@ describe('low flows and high-flow components (engine ≥ 0.33.0)', () => {
 	});
 });
 
-describe('source kind (engine ≥ 1.3.0, WP-3.7)', () => {
+describe('source kind (engine ≥ 1.5.0, WP-3.7)', () => {
 	it('accepts each kind, absent and null, and refuses anything else on its own field', () => {
 		for (const k of EWR_RULE_SOURCE_KINDS) expect(ewrRuleTableIssues(table({ sourceKind: k }))).toEqual([]);
 		expect(ewrRuleTableIssues(table({ sourceKind: null }))).toEqual([]);

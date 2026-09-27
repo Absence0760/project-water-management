@@ -36,7 +36,7 @@ export function supplyIssues(
 }
 
 /**
- * Why a node's EWR site flag (engine ≥ 1.3.0) can't be saved, as the API
+ * Why a node's EWR site flag (engine ≥ 1.5.0) can't be saved, as the API
  * refuses it (engine modelRules), or null: the outlet is always an EWR site,
  * and only a gauge can be taken off.
  */
@@ -114,7 +114,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		}
 		// Supply rule and river pump (WP-3.8), as the API checks them.
 		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
-		// EWR site flag (engine ≥ 1.3.0), as the API checks it.
+		// EWR site flag (engine ≥ 1.5.0), as the API checks it.
 		const ewrSite = ewrSiteIssue(n);
 		if (ewrSite) issues.push({ area: 'network', message: `${label}: ${ewrSite}` });
 		// Other water users (WP-1.33), as the API checks them.

@@ -1,4 +1,4 @@
-// The stored binding EWR site (engine ≥ 1.3.0, followups "The binding EWR
+// The stored binding EWR site (engine ≥ 1.5.0, followups "The binding EWR
 // site is recomputed, not stored"): which EWR site set a farm's charge each
 // day (./attribution.ts `binding`), kept as a run series so a saved run's
 // projection (views/farmProjection.ts) reads it instead of re-running the
@@ -12,7 +12,7 @@
 // database stores as NULL: one bit in the array's null bitmap, not eight
 // bytes, so a farm never charged costs about a bit a day. It is stored even
 // then, so a run that has the series for every such farm is known to be one
-// from engine 1.3.0 on, and one that lacks it is recomputed.
+// from engine 1.5.0 on, and one that lacks it is recomputed.
 import type { AttributionResult } from './attribution';
 
 export const EWR_BINDING_SERIES = {

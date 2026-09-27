@@ -1,4 +1,4 @@
-// A gauge taken off the EWR sites (engine ≥ 1.3.0, audit Q17 follow-on,
+// A gauge taken off the EWR sites (engine ≥ 1.5.0, audit Q17 follow-on,
 // WP-3.7, docs/model.md §2.7b): its shortfall charges nobody and it drops out
 // of the site list, the curtailment table and the Reserve rule tables, while
 // every other site is charged as before. Absent and true are the same run to
@@ -40,7 +40,7 @@ function gaugeCases(count: number): { input: ModelInput; out: ModelOutput; gauge
 	return found;
 }
 
-describe('the EWR site flag on a gauge (engine 1.3.0)', () => {
+describe('the EWR site flag on a gauge (engine 1.5.0)', () => {
 	const cases = gaugeCases(8);
 
 	it('has networks whose gauge charges a farm', () => {
@@ -98,6 +98,27 @@ describe('the EWR site flag on a gauge (engine 1.3.0)', () => {
 		const off = runModel(withTables(withFlag(input, gauge.id, false)));
 		expect(off.summary.ewrAssurance?.map((a) => a.nodeId)).toEqual([null]);
 		expect(off.summary.warnings.some((w) => w.includes(`EWR rule table for "${gauge.name}" skipped: the gauge is not marked as an EWR site`))).toBe(true);
+	});
+
+	it('false with the charge following the rule tables (ewrChargeSource ruleTable): the gauge’s table charges nobody', () => {
+		const { input, gauge } = cases[0]!;
+		// A demanding table, so a site that follows it is short on most days.
+		const table = { ...blankEwrRuleTable(gauge.id), source: 'Invented test table', ewr: Array.from({ length: 12 }, () => [50, 40, 30, 30, 20, 20, 10, 10, 5, 1]) };
+		const byRule = (i: ModelInput): ModelInput => ({ ...i, settings: { ...i.settings, ewrRules: [table], ewrChargeSource: 'ruleTable' } });
+		// Positive control: ticked, the gauge's charge follows its table.
+		const on = runModel(byRule(input));
+		expect(series(on, gauge.id, 'ewr_charge_shortfall')).toBeDefined();
+		expect(on.summary.curtailment!.ewrSites!.find((s) => s.nodeId === gauge.id)?.ewrSource).toBe('ruleTable');
+		// Unticked: no site, no charge series, and the farms are charged as with the gauge off and no table at all.
+		const off = runModel(byRule(withFlag(input, gauge.id, false)));
+		expect(series(off, gauge.id, 'ewr_charge_shortfall')).toBeUndefined();
+		expect(series(off, gauge.id, 'ewr_charged')).toBeUndefined();
+		expect(off.summary.curtailment!.ewrSites!.map((s) => s.nodeId)).not.toContain(gauge.id);
+		const plain = runModel(withFlag(input, gauge.id, false));
+		for (const n of input.model.nodes.filter((x) => x.kind === 'farm')) {
+			expect(series(off, n.id, 'ewr_charge')!.values).toEqual(series(plain, n.id, 'ewr_charge')!.values);
+		}
+		expect(checkAll(byRule(withFlag(input, gauge.id, false)), 1)).toBeNull();
 	});
 
 	it('the outlet always is an EWR site, and only a gauge can be taken off (model rules)', () => {

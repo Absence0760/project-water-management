@@ -118,7 +118,7 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'settings.set', path: 'hiLoSplit.hi', value: 0.95 }, hiLo).problems[0]).toMatch(/sum to 114\.00%/);
 	});
 
-	it('node.set takes a gauge off the EWR sites (engine ≥ 1.3.0), never the outlet, always a baseline assumption', () => {
+	it('node.set takes a gauge off the EWR sites (engine ≥ 1.5.0), never the outlet, always a baseline assumption', () => {
 		const b = base();
 		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }));
 		nodeOf(b, 'B')!.downstreamNodeId = 'W';

@@ -1969,8 +1969,8 @@ unit / EWR site), not per property. Sites are listed outlet first, then
 gauges by node id (`network/topology.ts` `ewrSiteNodes`, one function for the
 run, the stored-run recompute and the checks).
 
-**The EWR site flag (engine ≥ 1.3.0, Q17 follow-on, WP-3.7).** A gauge has
-`ewrSite` (default true, every gauge before 1.3.0). Untick it for a gauge that
+**The EWR site flag (engine ≥ 1.5.0, Q17 follow-on, WP-3.7).** A gauge has
+`ewrSite` (default true, every gauge before 1.5.0). Untick it for a gauge that
 only records flow, a weir that is no Reserve site: it keeps its `outflow` and
 `ewr_shortfall` series, but its shortfall charges nobody (no `ewr_charged` /
 `ewr_natural` series, no row in the EWR sites table), and a Reserve rule
@@ -2017,13 +2017,13 @@ R_f     = MAX over the sites f is upstream of of A_f,s   (series ewr_charge = �
   below it, so summing counts the same water twice. The site that sets it is
   the **binding site** (on a tie within 1e-9, the most downstream one); the
   curtailment table names the site that set most of the charged volume over
-  the reporting window. From engine 1.3.0 the run stores it per day as the
+  the reporting window. From engine 1.5.0 the run stores it per day as the
   series `ewr_binding_site` (`network/bindingSeries.ts`): the site's index in
   the run's site list (0 = the outlet, then gauges by id), blank on a day
   without a charge, and only for a farm upstream of two or more sites (for any
   other farm it follows from the charge). A saved run's curtailment over
   another window and the farmer projection read it (`views/farmProjection.ts`);
-  a run from before 1.3.0 has none, so there the attribution is recomputed on
+  a run from before 1.5.0 has none, so there the attribution is recomputed on
   the stored flows, exact except after a transfer loop (`bindingApproximate`).
   On the example catchments the series adds nothing to the two single-site
   examples and 6 series, about 195 kB before compression (1.6 % of the run's
@@ -2070,7 +2070,7 @@ not upstream of the site or with `e ≤ 0`; `D = 0 ⇒` every `A = 0`;
 `E = 0 ⇒ N = D`; `R = MAX_s A`; `R ≥ A_irr ≥ 0` and `A_irr ≤ c`; and order
 invariance. The per-run check recomputes a site exactly where no transfer
 crosses its catchment boundary (always the outlet), because per-rule transfer
-volumes are not run series. From engine 1.3.0 it also checks the stored
+volumes are not run series. From engine 1.5.0 it also checks the stored
 binding site: given exactly on the days the farm is charged, a site below
 the farm, and, where that site can be recomputed, the charge equals the
 farm's share there, so a charge set at an exact site is checked even when
@@ -2628,7 +2628,7 @@ the outlet, `siteNodeId: null`, or a gauge), at most 20
 in (0, 100], default the ten DRM points), a 12 × points EWR grid (water-year
 rows Oct … Sep), the unit (`mcm` Mm³ per month or `m3s` the month's mean
 flow), what it covers (`total` or `lowFlow`, a label only), a required
-`source`, an optional `sourceKind` (engine ≥ 1.3.0, WP-3.7: `gazetted`,
+`source`, an optional `sourceKind` (engine ≥ 1.5.0, WP-3.7: `gazetted`,
 `desktop` or `other`, a label only, which the Reserve panel and the printed
 report turn into a confidence line: "Gazetted Reserve", "Desktop estimate,
 low confidence", "Other source, confidence not stated"; absent = not stated,
@@ -2649,9 +2649,11 @@ natural percentile comes from (`naturalSource`):
   determination's own curve, so the requirement is the gazette's for a given
   natural flow, but a model biased against that curve shifts the conditions.
 
-No table: nothing changes. The pragmatic EWR stays the daily EWR everywhere
-(the shortfall charge, curtailment, days not met), with or without tables; the
-rule tables add a report, they don't replace the daily EWR.
+No table: nothing changes. By default the pragmatic EWR stays the daily EWR
+everywhere (the shortfall charge, curtailment, days not met), with or without
+tables; the rule tables add a report. From engine 1.3.0 the charge can follow
+the tables instead (`settings.ewrChargeSource`, below, § The charge from the
+rule table).
 
 **Per site, per complete calendar month** (a part month at either end of the
 run is not assessed; `packages/engine/src/reserve/assurance.ts`):
@@ -2739,7 +2741,15 @@ years of a calendar month.
 - **The summaries add up**: the months of the year sum to the whole, and
   rates are met ÷ months.
 - The fuzz generator gives rule tables to 30 % of its random projects, so the
-  order-invariance and finiteness checks cover them too.
+  order-invariance and finiteness checks cover them too; from engine 1.3.0 it
+  sets `ewrChargeSource: 'ruleTable'` and `lowFlowMeasure: 'baseflow'` on 40 %
+  of those each (their own random stream), and the per-run verification
+  checks a rule-table site's `ewr_charge_shortfall` against `ewr_rule` and the
+  flow, and the attribution against it (`verify/checks.ts`
+  `checkEwrAttribution`). Tested directly in `reserve/ewrMethods.test.ts`: a
+  default run is byte-identical with the setting left out, a farm is never
+  charged more than its net impact, a flood month with short base flow fails
+  under `'baseflow'` and passes under `'total'`.
 
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
@@ -2747,11 +2757,46 @@ secondary measure; the Reserve compliance panel has the per-month-of-year
 table and chart; the summary CSV has a block per site; run comparison compares
 each site's rates (docs/ui.md, docs/run-comparison.md).
 
+**The charge from the rule table** (engine ≥ 1.3.0, issue #64;
+`settings.ewrChargeSource`, `'pragmatic'` by default). With `'ruleTable'`,
+the daily requirement the EWR charge (§2.7b), curtailment (§2.11) and the
+water account's EWR required vs met (§2.11b) follow at a site with a rule
+table is `ewr_rule`: each complete month's R spread evenly over its days.
+The site's shortfall on those days is
+
+```
+D_rule = MIN(A_t − R_day, 0)      (A_t the site's simulated flow that day; float noise 1e-12 × MAX(A_t, R_day) is 0, as for the pragmatic EWR)
+```
+
+and it feeds §2.7b's attribution unchanged, so a farm is still never charged
+more than its net impact that day, and charged + natural still add up to the
+site's shortfall (the verification checks both on every run). Days outside a
+complete calendar month (a part month at either end of the run, which the
+monthly rule can't judge) and sites without a table keep the pragmatic EWR;
+the run warns how many days that was per site. The shortfall the charge
+followed is stored per site as `ewr_charge_shortfall` (m³/day, ≤ 0), and the
+curtailment table's EWR sites and the water account's EWR rows carry
+`ewrSource: 'ruleTable'`, so the farm view and the re-windowed curtailment
+recompute from it. What doesn't change: the `ewr` and `ewr_shortfall` series,
+`ewrDaysNotMet`, the EWR compliance grid's outlet row and the observed-record
+agreement (§2.9b) stay on the pragmatic EWR, and the monthly compliance
+report above is the same either way. No table at all: the run says so and
+charges on the pragmatic EWR.
+
+Spreading the month's volume evenly is the simplest daily form of a monthly
+requirement: a day's shortfall then says the river ran below the month's
+average requirement that day. A month met on volume can still charge days
+below that average, and a month failed on volume can have uncharged days; the
+monthly report and the daily charge answer different questions (is the
+Reserve met this month; who reduced the flow on the days it was short).
+Which the charge should follow is plan.md question 17.
+
 **Pending the hydrologist.** The method is from the literature above, not
 from the client's hydrologist: which table applies at which site (and
 whether total or low-flow), whether the percentile should come from the run
-or the gazette's natural curve, linear or log interpolation, and whether the
-requirement below the driest point should scale or hold.
+or the gazette's natural curve, linear or log interpolation, whether the
+requirement below the driest point should scale or hold, and whether the
+daily charge should follow the rule table (`ewrChargeSource`).
 
 **Sources.** Full references are in
 [calibration-research.md § References](./calibration-research.md#references).
@@ -2801,12 +2846,63 @@ Plausibility notes (run warnings, not blocking): a low-flow row that rises
 with the % point, and low flows above the total at a point (the high-flow
 part there counts as 0).
 
-Both requirements are judged on the month's **total** flow volume A, as
-§2.9c does. A flood month can therefore pass its low flows on volume while
-its base flow was short; separating base flow from the month's flow (e.g. a
-baseflow filter or the month's lowest daily flows) is the durable measure
-and is pending the hydrologist (docs/followups.md, "Low flows on base
-flow").
+By default both requirements are judged on the month's **total** flow
+volume A, as §2.9c does. A flood month can therefore pass its low flows on
+volume while its base flow was short.
+
+**Low flows on base flow** (engine ≥ 1.3.0, issue #64;
+`settings.lowFlowMeasure`, `'total'` by default). With `'baseflow'`, a
+low-flow requirement (the `lowFlow` grid of a total table, or a table whose
+component is `lowFlow`) is judged on the month's **base flow** B instead:
+
+```
+b_t    = base flow of the site's simulated daily flow (Lyne–Hollick, below)
+B      = Σ b_t over the month   (table unit)
+lowMet = B ≥ R_low               (a lowFlow table: met = B ≥ R, deficit = MAX(R − B, 0))
+```
+
+The total requirement is still judged on A, and the natural percentile still
+comes from the month's natural flow, so R, R_low and the percentile are the
+same under either measure; only the flow a low-flow requirement is compared
+with changes. The month carries `baseflow` and the site `lowFlowMeasure:
+'baseflow'` (both absent under `'total'`, and on a table without a low-flow
+requirement, which reports exactly as before).
+
+*The filter* (`packages/engine/src/reserve/baseflow.ts`). The one-parameter
+recursive digital filter of Lyne & Hollick (1979),
+
+```
+f_t = α f_t−1 + (1 + α)/2 · (Q_t − Q_t−1),   0 ≤ f_t ≤ Q_t,   b_t = Q_t − f_t
+```
+
+passed three times, forward, backward, forward, each pass filtering the last
+one's base flow (Nathan & McMahon 1990), over the series reflected by 30 days
+at each end so the ends don't carry the filter's start-up (Ladson et al.
+2013). **α = 0.995**: Smakhtin & Watkins (1997, WRC Report 494/1/97) found
+0.995–0.997 right for daily flows in most South African catchments, and
+Hughes, Hannart & Watkins (2003, *Water SA* 29(1):43) build their daily and
+monthly separation for the DRM on it; the international default of 0.925
+(Nathan & McMahon) calls more of the flow quick flow. A digital filter was
+chosen over the mean of the month's lowest daily flows because it is the
+separation South African Reserve work uses (the DRM's base-flow index comes
+from it), it needs no window length to pick, and a month's base flow then
+adds up across months. 0 ≤ b_t ≤ Q_t every day (tested), so B ≤ A: a month
+met on base flow is met on its volume, and base flow only ever fails more
+low-flow months than the total does.
+
+The backward pass makes a day's base flow depend on the days after it, so a
+run resumed from a model-state snapshot (§2.16) carries the part month's base
+flow in the snapshot but filters from its own first day: its later base flow
+is close to, not bit-identical with, the uninterrupted run's (the daily series
+are, since base flow isn't one).
+
+*Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
+Institution of Engineers Australia, 89–93 (the filter) · Nathan & McMahon
+1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
+494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
+Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
+and monthly flows for the DRM) · Ladson, Brown, Neal & Nathan 2013,
+*Australasian J. Water Resources* 17(1):25 (reflecting the ends).
 
 **High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
 component: a label, the calendar months an event may start in, a peak
@@ -2838,8 +2934,8 @@ and simulated flow, so a dam upstream of one gauge changes that gauge and
 every site below it (the outlet), but not a site on another branch (tested:
 two branches, a gauge on each, a dam on one, `lowHighFlows.test.ts`). Farm
 attribution is unchanged: the daily charge still follows the pragmatic EWR at
-each site (§2.7b); a charge driven by the rule tables is the open
-follow-up "Daily charge from the rule table".
+each site (§2.7b) unless `settings.ewrChargeSource` is `'ruleTable'`
+(engine ≥ 1.3.0, §2.9c § The charge from the rule table).
 
 **Invariants (tested, `reserve/lowHighFlows.test.ts`).**
 - A table with neither addition reports exactly as before (no new keys).
@@ -2864,7 +2960,8 @@ days, per year). The API (the settings schema, `backend/src/projects/settings.ts
 table is a validation error, never "0 required".
 
 **Pending the hydrologist.** Whether the low flows should be judged on base
-flow rather than the month's volume; whether a freshet's "per year" should be
+flow rather than the month's volume (`settings.lowFlowMeasure`, built, off by
+default) and, if so, with which filter parameter; whether a freshet's "per year" should be
 capped by natural events (as here) or required outright in maintenance years
 only; whether events should be counted per month rather than per water year;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
@@ -3648,10 +3745,38 @@ the run computes or stores, so `ENGINE_VERSION` stayed where it was (as for
 earlier wording fixes): a run saved before it keeps its old text.
 
 Checks 1, 3 and the Q90 comparison use the calibration record only, by
-design: the other record may be a different river (§2.10a). **Not yet**
-([followups.md](./followups.md)): the checks at a gauge node inside the
-network (the observed records are the outlet's), and the checks in the run
-comparison.
+design: the other record may be a different river (§2.10a).
+
+**At a gauge node inside the network** (engine ≥ 1.4.0, issue #64,
+`gaugeSites` in `run.ts`, `gaugeChecks` in `plausibility/index.ts`). An
+observed or logger record can be attached to a gauge node above the outlet
+(`time_series.site_node_id`, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql));
+the run then has it as `series['<kind>@<node id>']` (`GaugeSeriesKey`), and
+the outlet's records stay the series with no site. Checks **1 and 4** run
+again at each such gauge (node-id order) and are reported per site in
+`RunSummary.plausibility.gauges`: `{ nodeId, name, flowKind, naturalShare,
+naturalised, lowFlow }`. At the gauge:
+
+- **O** is the gauge's record: of the run's calibration kind when it has one,
+  else its other record (`flowKind`);
+- **S** is the simulated flow at the gauge, its outflow U;
+- **N** is the catchment's natural flow × `naturalShare`, the flow shares
+  (§2.5) of the gauge and every node above it, which is what the network
+  routes there before any use;
+- the **dams** and **land cover** terms sum only the nodes above the gauge;
+  A = N − S as at the outlet, so a transfer across the gauge falls in *use*;
+- check 4 uses the catchment's dry season (above), the run's calibration
+  exclusions and the same tolerances, factor and floors.
+
+Each finding warns as the outlet's does, prefixed `At gauge "<name>": …`. A
+record whose node is gone from the model, is not a gauge, or is the outlet is
+left out with a warning naming it. Checks 2 and 3 stay catchment-wide (the rain
+is the catchment's), and calibration, the EWR test against observed flow
+(§2.10a) and every other use of an observed record read the outlet's records
+only. A project without a gauge record runs exactly as before: no `gauges`
+key, no new warning (`gauges.test.ts` pins that the rest of the summary and
+every series are unchanged). The run comparison sets both runs' checks side
+by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
@@ -3936,12 +4061,12 @@ several windows) recomputes the whole table (farms, other water users, EWR
 sites) over any window of a saved run from its stored daily series, with no
 re-run: what `runModel` reports with that window as `reportStart … reportEnd`.
 The EWR site setting each farm's charge needs each day's binding site: a run
-from engine 1.3.0 stores it (`ewr_binding_site`, §2.7b), so it is read and
-exact. A run saved before 1.3.0 doesn't, so the attribution (§2.7b) is re-run
+from engine 1.5.0 stores it (`ewr_binding_site`, §2.7b), so it is read and
+exact. A run saved before 1.5.0 doesn't, so the attribution (§2.7b) is re-run
 on the stored flows; that is exact unless the transfer rules form a loop,
 when the loop's closing rule is carried round the rest of it
 (`bindingApproximate`). `curtailmentSeriesKeys` lists what it reads: given the
-run's stored series, the binding sites and no flows for a 1.3.0 run. The
+run's stored series, the binding sites and no flows for a 1.5.0 run. The
 farmer projection's season and the Runs tab's reporting-window picker both use
 it; `curtailmentOverWindow.test.ts` checks it against `runModel` on seeded
 networks. It is a view over a saved run, so it leaves `ENGINE_VERSION` alone.
@@ -4012,7 +4137,11 @@ the run, volumes in m³, summed over every node per day in node-id order.
   `damReleaseM3`: a release joins the river below the dam the same day, so it
   is already inside the outflow or taken again downstream).
 - **EWR required vs met** at each EWR site (outlet, then gauges by id):
-  Σ requirement, Σ MIN(flow, requirement), and the days short.
+  Σ requirement, Σ MIN(flow, requirement), and the days short. The
+  requirement is the pragmatic EWR, or from engine 1.3.0 with
+  `settings.ewrChargeSource: 'ruleTable'` the site's rule-table requirement
+  where it has one (the row then says `ewrSource: 'ruleTable'`; §2.9c § The
+  charge from the rule table), pending the hydrologist.
 
 Dam releases (WP-3.5, engine 0.35.0) move water within the network, so they
 are a memo; only the lost share of dam seepage is a new out term. Runs made
@@ -4768,7 +4897,7 @@ from the workbook.
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
-| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.3.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
+| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.5.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
 | Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. No dam in the client catchment feeds more than one transfer, so no result is affected. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
 
 ---

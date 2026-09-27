@@ -56,6 +56,14 @@ export function projectFileProblems(data: ProjectFile): string[] {
 		const key = `${s.kind}/${s.name}`;
 		if (seen.has(key)) problems.push(`duplicate series ${s.kind}${s.name ? ` "${s.name}"` : ''}`);
 		seen.add(key);
+		// A flow record's site (084_gauge_records): a gauge of the file's own model, not the outlet.
+		if (s.siteNodeId !== undefined) {
+			const site = data.model.nodes.find((n) => n.id === s.siteNodeId);
+			const what = `series ${s.kind}${s.name ? ` "${s.name}"` : ''}`;
+			if (s.kind !== 'flow_observed_m3s' && s.kind !== 'flow_logger_m3s') problems.push(`${what}: only a flow record has a site`);
+			else if (!site) problems.push(`${what}: its site is not a node of the model`);
+			else if (site.kind !== 'gauge' || site.downstreamNodeId === null) problems.push(`${what}: its site "${site.name}" is not a gauge above the outlet`);
+		}
 	}
 	return problems;
 }
@@ -89,8 +97,10 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await saveModel(db, id, model);
 	for (const s of data.series) {
 		await db.query(
-			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			[id, s.kind, s.name, s.unit, s.startDate, s.values, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null]
+			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
+			[id, s.kind, s.name, s.unit, s.startDate, s.values, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null, s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null]
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).

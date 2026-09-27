@@ -41,7 +41,7 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  */
 // ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
 // month at either end of the run is not assessed against the Reserve rules.
-// ewr_binding_site (engine ≥ 1.3.0) is NaN on a day the farm isn't charged: no site set a charge.
+// ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
@@ -1108,7 +1108,7 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 /**
  * EWR shortfall attribution (engine ≥ 0.17.0, audit Q17; docs/model.md
  * §2.7b), from the run's own series. Sites are the outlet (the catchment
- * series) and every other gauge that is an EWR site (engine ≥ 1.3.0).
+ * series) and every other gauge that is an EWR site (engine ≥ 1.5.0).
  * - per site per day: charged + natural = shortfall, both ≤ 0, and a day the
  *   EWR is met has neither;
  * - per farm per day: charge ≤ irrigation part ≤ 0, and the irrigation part is
@@ -1120,7 +1120,7 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
  *   least that share (it carries the largest over its sites) and, when every
  *   site it is upstream of can be recomputed, exactly the largest;
  * - Σ farm charges upstream of a site ≥ the site's charged part;
- * - the stored binding site (engine ≥ 1.3.0, farms upstream of two or more
+ * - the stored binding site (engine ≥ 1.5.0, farms upstream of two or more
  *   sites): given exactly on the days the farm is charged, one of the sites
  *   below it, and, where that site can be recomputed, the charge is exactly
  *   the farm's share there. That checks a charge set at an exact site even
@@ -1135,7 +1135,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 	if (farms.length && !get.has(`${farms[0]!.id}|ewr_charge`)) return null;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null);
 	if (!outlet) return null;
-	// The EWR sites (engine ≥ 1.3.0: a gauge whose ewrSite flag is false isn't one).
+	// The EWR sites (engine ≥ 1.5.0: a gauge whose ewrSite flag is false isn't one).
 	// In the engine's order (outlet, then gauges by id): the stored binding site is an index into it.
 	const sites = [outlet, ...nodes.filter((n) => n.kind === 'gauge' && n !== outlet && n.ewrSite !== false).sort((a, b) => cmpStr(a.id, b.id))];
 	const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -1154,20 +1154,40 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 	};
 	const rules = input.model.transfers.filter((tr) => tr.enabled && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm');
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
+	const byRule = input.settings.ewrChargeSource === 'ruleTable';
 	const siteInfo = sites.map((s, si) => {
 		const up = ancestors(s.id);
 		const key = si === 0 ? 'null' : s.id;
 		return {
 			name: s.id,
+			key,
 			farms: farms.filter((f) => up.has(f.id)),
 			// A rule with one end inside: its volume can't be told apart from the farm's other transfers.
 			exact: !rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)),
-			D: get.get(`${key}|ewr_shortfall`)!,
+			// The shortfall the charge follows (engine ≥ 1.3.0): the rule table's where it drives the charge.
+			D: get.get(`${key}|ewr_charge_shortfall`) ?? get.get(`${key}|ewr_shortfall`)!,
 			charged: get.get(`${key}|ewr_charged`),
 			natural: get.get(`${key}|ewr_natural`)
 		};
 	});
 	for (const s of siteInfo) if (!s.charged || !s.natural) return `EWR site ${s.name}: no ewr_charged / ewr_natural series`;
+	// settings.ewrChargeSource 'ruleTable' (engine ≥ 1.3.0): a site with a rule table (an ewr_rule series)
+	// charges MIN(flow − the month's requirement, 0) inside complete months and the pragmatic shortfall
+	// outside them; every other site, and every site under 'pragmatic', has no ewr_charge_shortfall.
+	for (const [si, s] of siteInfo.entries()) {
+		const own = get.get(`${s.key}|ewr_charge_shortfall`);
+		const rule = get.get(`${s.key}|ewr_rule`);
+		if (!!own !== (byRule && !!rule)) return `EWR site ${s.name}: ewr_charge_shortfall ${own ? 'present' : 'missing'} with the charge following the ${byRule ? 'rule table' : 'pragmatic EWR'}${rule ? '' : ' and no rule table'}`;
+		if (!own || !rule) continue;
+		const flow = si === 0 ? get.get('null|simulated_outflow')! : get.get(`${s.key}|outflow`)!;
+		const prag = get.get(`${s.key}|ewr_shortfall`)!;
+		for (let t = 0; t < out.days; t++) {
+			const r = rule[t]!;
+			// The engine's shortfall(): below the requirement by more than float noise (SHORTFALL_NOISE, 1e-12).
+			const d = Number.isFinite(r) ? (flow[t]! - r < -1e-12 * Math.max(flow[t]!, r) ? flow[t]! - r : 0) : prag[t]!;
+			if (!Object.is(own[t]! + 0, d + 0)) return `EWR site ${s.name} day ${t}: ewr_charge_shortfall ${own[t]} ≠ ${Number.isFinite(r) ? `MIN(flow − rule-table requirement, 0) = ${d}` : `the pragmatic shortfall ${d}`}`;
+		}
+	}
 	const zeros = new Array<number>(out.days).fill(0);
 	const F = new Map(
 		farms.map((f) => {
@@ -1179,7 +1199,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		})
 	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
-	// The stored binding site, for every farm upstream of two or more sites (engine ≥ 1.3.0; older runs have none).
+	// The stored binding site, for every farm upstream of two or more sites (engine ≥ 1.5.0; older runs have none).
 	const binding = new Map<string, ArrayLike<number>>();
 	for (const f of farms) {
 		const v = get.get(`${f.id}|${EWR_BINDING_SERIES.key}`);

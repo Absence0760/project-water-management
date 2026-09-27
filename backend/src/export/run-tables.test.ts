@@ -982,6 +982,20 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(2);
 	});
 
+	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
+		const without = [...plausibilityLines(checks)];
+		expect(without.some((l) => l.startsWith('At gauge'))).toBe(false);
+		const gauge = { nodeId: 'g1', name: 'Upper weir', flowKind: 'flow_logger_m3s' as const, naturalShare: 0.25, naturalised: checks.naturalised, lowFlow: null };
+		const lines = [...plausibilityLines({ ...checks, gauges: [gauge] })];
+		// The outlet's blocks are unchanged and come first.
+		expect(lines.slice(0, without.length)).toEqual(without);
+		const tail = lines.slice(without.length);
+		expect(tail[1]).toBe('At gauge Upper weir,Share of the catchment natural flow above it (%),25');
+		expect(tail).toContain('Natural flow vs observed flow + net abstraction');
+		expect(tail).toContain('Water years judged,2,failed,2');
+		expect(tail).toContain('Not computed: no dry season');
+	});
+
 	it('says what is missing, and is part of the summary sheet', () => {
 		expect([...plausibilityLines(undefined)]).toEqual(['Plausibility checks', 'Run made before engine 0.25.0: no plausibility checks']);
 		const none = [...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null })];

@@ -15,7 +15,7 @@ import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
 import type { Wr2012Report } from './reference/wr2012';
-import type { EwrRuleTable } from './reserve/rules';
+import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { SupplyAssurance } from './network/reliability';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
@@ -332,10 +332,26 @@ export interface ProjectSettings {
 	 * Q6; ./reserve/rules.ts): at most one table per site (the outlet, or a
 	 * gauge). Each run then judges monthly compliance against them
 	 * (summary.ewrAssurance, docs/model.md §2.9c). Empty (the default) = none;
-	 * the daily pragmatic EWR above still drives the shortfall charge and
-	 * curtailment either way.
+	 * the daily pragmatic EWR above drives the shortfall charge and
+	 * curtailment unless `ewrChargeSource` is 'ruleTable'.
 	 */
 	ewrRules: EwrRuleTable[];
+	/**
+	 * What the daily EWR charge, curtailment and the water account's EWR
+	 * required vs met follow at an EWR site (engine ≥ 1.3.0, issue #64,
+	 * ./reserve/rules.ts EWR_CHARGE_SOURCES): 'pragmatic' (the default) or
+	 * 'ruleTable' (the site's Reserve rule table, where it has one). Pending
+	 * the hydrologist. Optional so settings stored before it still type;
+	 * absent = 'pragmatic'.
+	 */
+	ewrChargeSource?: EwrChargeSource;
+	/**
+	 * What a month's flow is judged by against a low-flow requirement (engine
+	 * ≥ 1.3.0, issue #64, ./reserve/rules.ts LOW_FLOW_MEASURES): 'total' (the
+	 * default, the month's volume) or 'baseflow' (its base flow, from the
+	 * Lyne–Hollick filter). Pending the hydrologist. Absent = 'total'.
+	 */
+	lowFlowMeasure?: LowFlowMeasure;
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
@@ -420,6 +436,25 @@ export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] a
 export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
 /**
+ * The key of an observed record attached to a gauge node inside the network
+ * (engine ≥ 1.4.0, docs/model.md §2.10d): `<kind>@<node id>` in
+ * ModelInput.series, beside the outlet's records (plain kinds). The backend
+ * builds it from time_series.site_node_id (084_gauge_records.sql). Only the
+ * plausibility checks read it: calibration, the EWR agreement and every other
+ * check stay on the outlet's records.
+ */
+export type GaugeSeriesKey = `${CalibrationFlowKind}@${string}`;
+export const gaugeSeriesKey = (kind: CalibrationFlowKind, nodeId: string): GaugeSeriesKey => `${kind}@${nodeId}`;
+/** The kind and node of a gauge record's key; null for any other key. */
+export function parseGaugeSeriesKey(key: string): { kind: CalibrationFlowKind; nodeId: string } | null {
+	const at = key.indexOf('@');
+	if (at < 0) return null;
+	const kind = key.slice(0, at);
+	const nodeId = key.slice(at + 1);
+	return (CALIBRATION_FLOW_KINDS as readonly string[]).includes(kind) && nodeId ? { kind: kind as CalibrationFlowKind, nodeId } : null;
+}
+
+/**
  * The label of a run's observed-flow series by the record it holds: the
  * calibration record (`observed_flow`) and, when the project has both, the
  * other one (`observed_flow_other`, engine ≥ 0.39.0). A caller can tell the
@@ -457,6 +492,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
 		ewrPragmaticM3PerDay: zeros,
 		ewrRules: [],
+		ewrChargeSource: 'pragmatic',
+		lowFlowMeasure: 'total',
 		simulationStart: null,
 		simulationEnd: null,
 		reportStart: null,
@@ -757,13 +794,13 @@ export interface NetworkNode {
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
 	supplyStopPct?: number;
 	/**
-	 * Gauges only (engine ≥ 1.3.0, audit Q17 follow-on, WP-3.7, docs/model.md
+	 * Gauges only (engine ≥ 1.5.0, audit Q17 follow-on, WP-3.7, docs/model.md
 	 * §2.7b): whether the EWR is assessed at this gauge. An EWR site's
 	 * shortfall is charged to the farms and other users upstream of it, and a
 	 * Reserve rule table can sit there. false = the gauge only measures (a
 	 * flow-record station that is no Reserve site): it keeps its flow and
 	 * EWR-shortfall series but charges nobody. Absent / true = an EWR site,
-	 * every engine before 1.3.0. The outlet is always one, and only a gauge
+	 * every engine before 1.5.0. The outlet is always one, and only a gauge
 	 * can be taken off the list (model rules).
 	 */
 	ewrSite?: boolean;
@@ -933,7 +970,7 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
-				// EWR site flag (engine ≥ 1.3.0): every gauge was one.
+				// EWR site flag (engine ≥ 1.5.0): every gauge was one.
 				n.ewrSite ??= true;
 				return n;
 			})
@@ -1125,6 +1162,12 @@ export interface SeriesMeta {
 	productVersion?: string | null;
 	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
 	rebuilding?: boolean;
+	/**
+	 * A flow record's site (084_gauge_records, engine ≥ 1.4.0): the gauge node
+	 * it was measured at; null / absent = the outlet. Only the plausibility
+	 * checks read a gauge's record.
+	 */
+	siteNodeId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,8 +1178,11 @@ export interface ModelInput {
 	/** Raw project settings; the engine merges them over defaultProjectSettings(). */
 	settings: Partial<ProjectSettings> & Record<string, unknown>;
 	model: ProjectModel;
-	/** Keyed by SeriesKind; only the first series of each kind is used. */
-	series: Partial<Record<SeriesKind, DailySeries>>;
+	/**
+	 * Keyed by SeriesKind; only the first series of each kind is used. A gauge
+	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey.
+	 */
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */
@@ -1527,6 +1573,12 @@ export interface EwrSiteSummary {
 	chargedM3Day: number;
 	/** The natural part: natural flow was already below the EWR. */
 	naturalM3Day: number;
+	/**
+	 * 'ruleTable' when the site's shortfall, and so its charge, follows the
+	 * site's Reserve rule table (engine ≥ 1.3.0, settings.ewrChargeSource,
+	 * docs/model.md §2.9c); absent = the pragmatic EWR.
+	 */
+	ewrSource?: 'ruleTable';
 }
 
 /** b023 [Shortfalls] over a reporting window: per-farm targets and cuts, plus the totals row. */

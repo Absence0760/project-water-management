@@ -20,6 +20,8 @@ import {
 	RETIRED_CALIBRATION_KEYS,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
+	OBSERVED_SERIES_LABEL,
+	parseGaugeSeriesKey,
 	upgradeLegacyModel,
 	type Borehole,
 	type CalibrationFitStatus,
@@ -35,6 +37,7 @@ import {
 } from './project';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
+import { comparePlausibility, type PlausibilityComparison } from './plausibility/compare';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -188,6 +191,14 @@ export interface RunComparison {
 	 * neither run has one. Rates are 0–1, deltas in fraction points.
 	 */
 	ewrAssurance: EwrAssuranceDelta[] | null;
+	/**
+	 * The hydrologist plausibility checks side by side (./plausibility/compare.ts):
+	 * per site (the outlet, then each gauge with a record of its own) the failing
+	 * water years of check 1 and the Q90 ratio of check 4, with pass or fail,
+	 * and the catchment-wide checks 2 and 3. null when neither run has them
+	 * (both before engine 0.25.0).
+	 */
+	plausibility: PlausibilityComparison | null;
 	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
 	wr2012: {
 		marRatioOverlap: MetricDelta;
@@ -430,6 +441,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 				: null,
 		chirpsFit,
 		rainSource,
+		plausibility: comparePlausibility(a.summary.plausibility, b.summary.plausibility),
 		wr2012:
 			wa || wb
 				? {
@@ -616,6 +628,15 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Engine ≥ 0.32.0; absent = the default 0.9. Changes only the reported annual reliability.
 	assuranceAnnualThreshold: { label: 'Annual assurance threshold', fmt: pct },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
+	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
+	ewrChargeSource: {
+		label: 'EWR charge follows',
+		fmt: (v) => (v === 'ruleTable' ? 'the Reserve rule tables' : v === 'pragmatic' || v === undefined ? 'the pragmatic EWR' : String(v))
+	},
+	lowFlowMeasure: {
+		label: 'Low flows judged on',
+		fmt: (v) => (v === 'baseflow' ? 'base flow (Lyne–Hollick filter)' : v === 'total' || v === undefined ? 'the month’s total flow' : String(v))
+	},
 	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
@@ -903,7 +924,7 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 
 const RULE_FIELDS: Record<string, ScalarField> = {
 	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
-	// Engine ≥ 1.3.0: gazetted, desktop estimate or other; absent = not stated.
+	// Engine ≥ 1.5.0: gazetted, desktop estimate or other; absent = not stated.
 	sourceKind: { label: 'kind of source', fmt: (v) => ewrSourceConfidence(v as EwrRuleSourceKind | null | undefined) ?? 'not stated' },
 	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
@@ -1048,12 +1069,12 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
-	// EWR site flag (engine ≥ 1.3.0), gauges; the site list as a whole is diffed below.
+	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
 	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')]
 ];
 
 /**
- * The EWR site list (engine ≥ 1.3.0), when it differs: one line naming the
+ * The EWR site list (engine ≥ 1.5.0), when it differs: one line naming the
  * sites in each run, with what was added and removed and why. Nodes are
  * paired as the node diff pairs them (by id, then by name).
  */
@@ -1146,7 +1167,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const p of parts) out.push({ area: 'network', kind: 'changed', subject: y.name, text: `${y.name}: ${p}` });
 	}
 
-	// --- EWR sites (engine ≥ 1.3.0) ---
+	// --- EWR sites (engine ≥ 1.5.0) ---
 	// The outlet and every gauge not taken off the list: a gauge added, removed,
 	// turned into a farm or its flag changed moves where the EWR is assessed
 	// and who is charged for a shortfall.
@@ -1341,10 +1362,17 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${c.first} to ${c.last})${total}`;
 }
 
+/** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.4.0) named by its gauge. */
+function seriesLabel(key: string, nodeName: (id: string) => string): string {
+	const g = parseGaugeSeriesKey(key);
+	return g ? `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}` : (SERIES_LABELS[key] ?? key);
+}
+
 function diffSeries(
 	sa: RunInputsSnapshot['series'] | undefined,
 	sb: RunInputsSnapshot['series'] | undefined,
-	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {}
+	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {},
+	nodeName: (id: string) => string = (id) => id
 ): InputChange[] {
 	const a = sa ?? {};
 	const b = sb ?? {};
@@ -1355,7 +1383,7 @@ function diffSeries(
 	};
 	const kinds = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
 	for (const k of kinds) {
-		const label = SERIES_LABELS[k] ?? k;
+		const label = seriesLabel(k, nodeName);
 		const x = a[k];
 		const y = b[k];
 		if (x && !y) out.push({ area: 'series', kind: 'removed', subject: label, text: `${label} series removed` });
@@ -1437,7 +1465,7 @@ export function diffInputs(
 	return [
 		...diffModel(a?.model, b?.model),
 		...diffSettings(a?.settings, b?.settings, siteName),
-		...diffSeries(a?.series, b?.series, values)
+		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id)
 	];
 }
 

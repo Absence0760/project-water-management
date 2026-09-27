@@ -67,7 +67,7 @@ describe('verdict and method', () => {
 	});
 });
 
-describe('sourceLine (engine ≥ 1.3.0)', () => {
+describe('sourceLine (engine ≥ 1.5.0)', () => {
 	it('puts the confidence before the source, and marks a desktop estimate', () => {
 		expect(sourceLine(site(() => 1))).toEqual({ text: 'Source: Synthetic table', low: false });
 		expect(sourceLine({ source: 'GN 1 of 2000', sourceKind: 'gazetted' })).toEqual({ text: 'Gazetted Reserve: GN 1 of 2000', low: false });

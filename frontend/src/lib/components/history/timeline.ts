@@ -152,6 +152,12 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;
 		}
+		case 'series.site_changed': {
+			// A flow record attached to a gauge inside the network, or back to the outlet (084_gauge_records).
+			const p = (s.site ?? {}) as Record<string, unknown>;
+			const at = (v: unknown) => (str(v) === 'the outlet' ? 'the outlet' : `gauge ${str(v)}`);
+			return `Moved ${seriesName(s)} to ${at(p.to)} (was ${at(p.from)})`;
+		}
 		case 'restore':
 			return s.target === 'series' ? `Restored earlier values of ${seriesName(s)}${range(s)}` : 'Restored an earlier version';
 		case 'run.created':

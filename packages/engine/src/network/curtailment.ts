@@ -66,6 +66,8 @@ export interface CurtailmentSiteInput {
 	shortfall: ArrayLike<number>;
 	charged: ArrayLike<number>;
 	natural: ArrayLike<number>;
+	/** 'ruleTable' when the site's shortfall follows its Reserve rule table (engine ≥ 1.3.0, settings.ewrChargeSource); absent = the pragmatic EWR. */
+	ewrSource?: 'ruleTable';
 }
 
 export interface ReportWindow {
@@ -160,7 +162,8 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			daysNotMet: notMet,
 			shortfallM3Day: nz(windowMean(s.shortfall, from, to)),
 			chargedM3Day: nz(windowMean(s.charged, from, to)),
-			naturalM3Day: nz(windowMean(s.natural, from, to))
+			naturalM3Day: nz(windowMean(s.natural, from, to)),
+			...(s.ewrSource ? { ewrSource: s.ewrSource } : {})
 		};
 	});
 

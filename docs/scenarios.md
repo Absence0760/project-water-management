@@ -136,7 +136,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `riverFirst` and `pumpCapacityM3Day` → 1200.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
-- gauge: `name`, and `ewrSite` (engine ≥ 1.3.0, true or false): whether the
+- gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
   EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
   can't be taken off (a model rule), and the op is always a baseline
   assumption (§ Classification). A scenario can't change a Reserve rule table
@@ -153,7 +153,9 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
 `simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
-`calibrationFlowKind`, `pe`. Ranges follow `backend/src/projects/settings.ts`.
+`calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
+(`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`).
+Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
 `{ kind: 'monthly', mm, source }` with 12 finite values of 0–10 000 mm and

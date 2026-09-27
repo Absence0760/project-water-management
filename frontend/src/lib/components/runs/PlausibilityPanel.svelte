@@ -12,7 +12,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
 	import { detailCache } from './cache';
-	import { breakHint, curveLabel, findings, lowFlowChart, otherModelRuns, seasonText, signedPct, type OtherCurves } from './plausibility';
+	import { breakHint, curveLabel, findings, gaugeRow, lowFlowChart, otherModelRuns, seasonText, signedPct, type OtherCurves } from './plausibility';
 
 	let {
 		checks,
@@ -36,6 +36,7 @@
 	const dm = $derived(checks.flowDoubleMass);
 	const lf = $derived(checks.lowFlow);
 	const flags = $derived(findings(checks));
+	const gauges = $derived((checks.gauges ?? []).map(gaugeRow));
 	const wy = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
 	const mm3 = (v: number) => fmtNum(v, Math.abs(v) >= 10 ? 1 : 3);
 	const flow = (v: number) => fmtNum(v, v >= 1 ? 2 : v >= 0.01 ? 3 : 4);
@@ -316,6 +317,48 @@
 		</div>
 	{:else}
 		<p class="muted small">Not computed: no flow record covers every calendar month, so there is no dry season.</p>
+	{/if}
+
+	{#if gauges.length}
+		<h4 id="{uid}-gauges">At gauges in the network</h4>
+		<p class="small">
+			The first and last checks again at each gauge with its own observed record (attached on the Data page), against the simulated flow at that gauge and
+			the natural flow, dams and land cover above it, in the same dry season. The run's warnings name each finding.
+		</p>
+		<div class="table-wrap">
+			<table class="data compact" aria-labelledby="{uid}-gauges" data-testid="plausibility-gauges">
+				<thead>
+					<tr>
+						<th scope="col">Gauge</th>
+						<th scope="col">Record</th>
+						<th scope="col" class="num">Natural flow above <span class="u">% of catchment</span></th>
+						<th scope="col">Natural ≥ observed + abstraction</th>
+						<th scope="col" class="num">Q90 simulated ÷ observed</th>
+						<th scope="col">Low flows</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each gauges as g (g.nodeId)}
+						<tr class:short-row={g.ok.includes(false)}>
+							<th scope="row">{g.name}</th>
+							<td>{g.record}</td>
+							<td class="num">{fmtPct(g.naturalShare, 0)}</td>
+							<td>
+								{g.judgedYears === null
+									? 'not checked'
+									: !g.judgedYears
+										? 'no water year judged'
+										: g.failedYears.length
+											? `fails ${g.failedYears.map(wy).join(', ')} (${g.failedYears.length} of ${g.judgedYears})`
+											: `passes (${g.judgedYears} judged)`}
+							</td>
+							<td class="num">{g.q90Ratio === null ? '–' : `${fmtNum(g.q90Ratio, 2)}×`}</td>
+							<td>{g.withinFactor === null ? 'not checked' : g.withinFactor ? 'within the factor of 2' : 'outside the factor of 2'}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </section>
 

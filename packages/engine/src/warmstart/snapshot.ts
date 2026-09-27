@@ -72,9 +72,13 @@ export interface ModelState {
 	 * Per Reserve rule table (keyed as reserveNatural): the natural and
 	 * impacted flow of the calendar month the day falls in, from its first
 	 * day to the day before, so a resumed run still assesses that month
-	 * whole; null on a month's first day.
+	 * whole; null on a month's first day. `baseflow` (engine ≥ 1.3.0): the
+	 * impacted flow's base flow over those days, when low flows are judged on
+	 * base flow (settings.lowFlowMeasure); the resumed run's filter restarts
+	 * at its first day, so its base flow after that is close to, not
+	 * bit-identical with, the uninterrupted run's.
 	 */
-	reserveMonths: { site: string; carry: { days: number; natural: number; impacted: number } | null }[];
+	reserveMonths: { site: string; carry: { days: number; natural: number; impacted: number; baseflow?: number } | null }[];
 	/**
 	 * Columns the capture run carried because some of its days needed them
 	 * (a zero-run or accumulation mask, a storage reset's step, the senior

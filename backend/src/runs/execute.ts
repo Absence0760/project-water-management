@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
 	forecastSplit,
+	gaugeSeriesKey,
 	resolveFitRecord,
 	runForecastChecked,
 	runModelChecked,
 	seriesDigest,
+	type CalibrationFlowKind,
 	type DailySeries,
 	type ModelInput,
 	type ModelOutput,
@@ -36,8 +38,8 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	return (await loadLiveInput(db, projectId)).input;
 }
 
-/** Which series each kind of a live input was read from (run_input_series.series_id, 056_accepted_series). */
-export type InputSeriesIds = Partial<Record<SeriesKind, string>>;
+/** Which series each kind (or gauge record, `<kind>@<node id>`) of a live input was read from (run_input_series.series_id, 056_accepted_series). */
+export type InputSeriesIds = Partial<Record<keyof ModelInput['series'], string>>;
 
 /** loadModelInput, with the id of the series each kind came from. */
 async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelInput; seriesIds: InputSeriesIds }> {
@@ -51,16 +53,23 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		values: (number | null)[];
 		product: string | null;
 		product_version: string | null;
-	}>(`SELECT DISTINCT ON (kind) id, kind, start_date, "values", product, product_version FROM time_series WHERE project_id = $1 ORDER BY kind, name`, [
-		projectId
-	]);
-	const series: Partial<Record<SeriesKind, DailySeries>> = {};
+		site_node_id: string | null;
+	}>(
+		// The outlet's: the first of each kind among the series with no site. A gauge node's own
+		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
+		// (engine gaugeSeriesKey), which only the plausibility checks read.
+		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id
+		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name`,
+		[projectId]
+	);
+	const series: ModelInput['series'] = {};
 	const seriesIds: InputSeriesIds = {};
 	for (const r of s) {
-		seriesIds[r.kind] = r.id;
+		const key = r.site_node_id === null ? r.kind : gaugeSeriesKey(r.kind as CalibrationFlowKind, r.site_node_id);
+		seriesIds[key] = r.id;
 		// The product and version (032_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
-		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
+		series[key] = { startDate: r.start_date, values: r.values, provenance };
 	}
 	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how, settings.outcomes
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook

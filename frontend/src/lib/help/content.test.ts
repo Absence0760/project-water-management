@@ -60,10 +60,12 @@ const RUN_KEYS = [
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// EWR attribution (engine 0.17.0, audit Q17)
 	'ewr_charged', 'ewr_natural', 'ewr_charge', 'ewr_charge_irrigation',
-	// The EWR site that set a farm's charge each day (engine 1.3.0)
+	// The EWR site that set a farm's charge each day (engine 1.5.0)
 	'ewr_binding_site',
 	// The Reserve rule table's monthly requirement (engine 0.21.0)
 	'ewr_rule',
+	// The shortfall a rule-table site's charge follows (engine 1.3.0, settings.ewrChargeSource)
+	'ewr_charge_shortfall',
 	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)
 	'gross_demand', 'effective_rain', 'soil_water', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam',
 	'diverted_to_dam', 'interim_storage', 'below_dam_not_diverted', 'return_flow', 'balance_residual',

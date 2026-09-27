@@ -1,4 +1,4 @@
-// The stored binding EWR site (engine ≥ 1.3.0): which farms get the series,
+// The stored binding EWR site (engine ≥ 1.5.0): which farms get the series,
 // what it holds, and that the per-run self-check catches a wrong one.
 import { describe, expect, it } from 'vitest';
 import type { ModelInput, ModelOutput } from '../project';

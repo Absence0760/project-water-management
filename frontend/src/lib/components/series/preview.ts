@@ -139,11 +139,14 @@ export function buildPreviewColumns(list: readonly SeriesMeta[]): PreviewColumn[
 	return [...seriesCols, ...flowCols, ...derivedCols];
 }
 
-/** The first series of each kind by name — the same rule the model uses (SeriesTab's own `first`, model.md). */
+/**
+ * The first series of each kind by name — the same rule the model uses (SeriesTab's own `first`, model.md),
+ * among the outlet's: a flow record attached to a gauge node (084_gauge_records) is that gauge's, never the outlet's.
+ */
 function firstByKind(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>): Partial<Record<SeriesKind, DailySeries>> {
 	const out: Partial<Record<SeriesKind, DailySeries>> = {};
 	for (const k of SERIES_KINDS) {
-		const s = [...list].filter((x) => x.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
+		const s = [...list].filter((x) => x.kind === k && !x.siteNodeId).sort((a, b) => a.name.localeCompare(b.name))[0];
 		const d = s && valuesById[s.id];
 		if (d) out[k] = d;
 	}

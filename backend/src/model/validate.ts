@@ -65,7 +65,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
-				// Gauges: whether the EWR is assessed there (engine ≥ 1.3.0); the outlet always, a model rule.
+				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
 				ewrSite: z.boolean().default(true)
 			})
 		)

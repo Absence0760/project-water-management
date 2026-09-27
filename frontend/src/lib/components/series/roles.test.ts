@@ -1,6 +1,6 @@
 import { SERIES_KINDS, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
+import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
 
 const meta = (id: string, kind: string, name = ''): SeriesMeta => ({ id, kind, name, unit: '', startDate: '2020-01-01', length: 1 });
 
@@ -34,5 +34,29 @@ describe('seriesInUse', () => {
 		expect([...seriesInUse(list, kinds)].sort()).toEqual(['alt', 'c', 'era']);
 		expect([...seriesInUse(list, rainSourceKinds([{ series: 'rain_catchment_alt_mm' }]))].sort()).toEqual(['alt', 'c']);
 		expect(rainSourceKinds(null).size).toBe(0);
+	});
+});
+
+describe('gauge records (084_gauge_records, engine ≥ 1.4.0)', () => {
+	const at = (id: string, kind: string, name: string, siteNodeId: string): SeriesMeta => ({ ...meta(id, kind, name), siteNodeId });
+
+	it('a record at a gauge is never the outlet’s, even when it sorts first', () => {
+		const list = [at('g', 'flow_observed_m3s', 'A weir', 'n1'), meta('o', 'flow_observed_m3s', 'Outlet'), meta('l', 'flow_logger_m3s')];
+		expect([...seriesInUse(list)]).toEqual(['o']);
+		// With only a gauge's observed record, the outlet falls back to its logger, as the run does.
+		expect([...seriesInUse([at('g', 'flow_observed_m3s', '', 'n1'), meta('l', 'flow_logger_m3s')])]).toEqual(['l']);
+	});
+
+	it('reads the first record of each kind per gauge, and none on a node no longer a gauge', () => {
+		const list = [
+			at('g2', 'flow_observed_m3s', 'B', 'n1'),
+			at('g1', 'flow_observed_m3s', 'A', 'n1'),
+			at('gl', 'flow_logger_m3s', 'L', 'n1'),
+			at('k', 'flow_observed_m3s', 'K', 'n2'),
+			at('gone', 'flow_observed_m3s', 'Z', 'removed'),
+			meta('o', 'flow_observed_m3s')
+		];
+		expect([...gaugeRecordsInUse(list, [{ id: 'n1' }, { id: 'n2' }])].sort()).toEqual(['g1', 'gl', 'k']);
+		expect([...gaugeRecordsInUse(list, [])]).toEqual([]);
 	});
 });

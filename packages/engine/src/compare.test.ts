@@ -1201,7 +1201,7 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(changed!.highFlowRate).toEqual({ a: null, b: 1, delta: null });
 	});
 
-	it('lists a rule table’s kind of source changing (engine ≥ 1.3.0); absent and null are both not stated', () => {
+	it('lists a rule table’s kind of source changing (engine ≥ 1.5.0); absent and null are both not stated', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];
 		const b = structuredClone(a);
@@ -1215,7 +1215,7 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
-	it('lists the EWR site list changing: a gauge added, taken off the sites, turned into a farm (engine ≥ 1.3.0)', () => {
+	it('lists the EWR site list changing: a gauge added, taken off the sites, turned into a farm (engine ≥ 1.5.0)', () => {
 		const a = snapshot();
 		a.model.nodes.push(node('w', 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0 }));
 		// A run saved before the flag (absent) compares equal to one with it set true.
