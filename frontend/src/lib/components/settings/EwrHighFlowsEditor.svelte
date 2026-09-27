@@ -76,7 +76,9 @@
 	<legend>High flows: freshets and floods</legend>
 	<p class="hint">
 		Each component is a flood that reaches its peak in one of its months and lasts its duration from rise to recession (counted as at least half the duration at or above half the peak), required that many times each water year. A
-		year is asked for no more events than the site’s natural flow had, so a dry year that would have had no flood is not failed for it.
+		year is asked for no more events than the site’s natural flow had, so a dry year that would have had no flood is not failed for it. The peak is a
+		<strong>daily-mean</strong> flow: a gazetted Reserve gives an instantaneous peak, which daily flow rarely reaches, so enter the daily-mean peak the
+		hydrologist converts it to (the run warns when natural flow reaches a peak in no more than half the water years).
 	</p>
 	{#if value.length}
 		<div class="table-wrap">
@@ -86,7 +88,7 @@
 					<tr>
 						<th scope="col">Name</th>
 						<th scope="col">Peaks in</th>
-						<th scope="col" class="num">Peak <span class="u">m³/s</span></th>
+						<th scope="col" class="num">Daily-mean peak <span class="u">m³/s</span></th>
 						<th scope="col" class="num">Event days</th>
 						<th scope="col" class="num">Per year</th>
 						{#if !readonly}<th scope="col"><span class="sr-only">Remove</span></th>{/if}
@@ -106,7 +108,7 @@
 									placeholder="Nov-Jan"
 								/>
 							</td>
-							<td><NumberInput label="High flow {k + 1} peak, m³/s" min={0} nullable disabled={readonly} value={Number.isFinite(e.peakM3s) ? e.peakM3s : null} onchange={(v) => (e.peakM3s = v ?? NaN)} /></td>
+							<td><NumberInput label="High flow {k + 1} daily-mean peak, m³/s" min={0} nullable disabled={readonly} value={Number.isFinite(e.peakM3s) ? e.peakM3s : null} onchange={(v) => (e.peakM3s = v ?? NaN)} /></td>
 							<td><NumberInput label="High flow {k + 1} event duration, days" min={1} max={90} step={1} nullable disabled={readonly} value={e.durationDays} onchange={(v) => (e.durationDays = v ?? NaN)} /></td>
 							<td><NumberInput label="High flow {k + 1} events per water year" min={1} max={12} step={1} nullable disabled={readonly} value={e.perYear} onchange={(v) => (e.perYear = v ?? NaN)} /></td>
 							{#if !readonly}
@@ -131,7 +133,7 @@
 			<textarea
 				id="{uid}-paste"
 				rows="3"
-				placeholder={'One per row: name, months, peak (m³/s), event days, events per year. A heading row is skipped.'}
+				placeholder={'One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped.'}
 				bind:value={paste}
 				aria-describedby="{uid}-status"
 			></textarea>

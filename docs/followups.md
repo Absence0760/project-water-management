@@ -250,13 +250,13 @@ collected as a checklist in issue #46; tick it there as they answer.
       default: GA volume per property (area × the quaternary's GN 538 rate,
       capped at 40 000 m³/a, any 12 months); an enlarged dam resized along its
       own area–volume curve; unmet borehole depletion carried over, not
-      dropped; a warning when the run's natural MAR is > ±15 % off the
-      gazetted one; assurance of supply over complete water years only; the
-      lowest review-trigger band starting from the lowest storage on record
-      for the date; a flow flat-line flagged only above Q30 (else 30 days).
+      dropped; a flow flat-line flagged only above Q30 (else 30 days). Built
+      in engine 1.10.0 (below, § Hydrologist): the natural-MAR warning,
+      assurance over complete water years, the lowest trigger band from the
+      lowest storage on record, and the freshet peak labelled daily-mean with
+      a warning when natural flow rarely reaches it.
       Part-done work sits in stopped worktree branches
-      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion),
-      `worktree-agent-ac21d77185b90f6ec` (MAR warning, water years, bands) and
+      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion) and
       `worktree-agent-ac030f837ff7f9ec4` (GA, flat-line), uncommitted.
       Waiting on the real hydrologist (they change defaults or rest on thin
       evidence): `ewrChargeSource` → `ruleTable`, `lowFlowMeasure` →
@@ -510,7 +510,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
-- [x] **Issue #46 persona drafts, three changes built** (engine 1.10.0,
+- [x] **Issue #46 persona drafts, four changes built** (engine 1.10.0,
       2026-09-27; drafts from the licensing-authority and hydrologist
       personas, **pending the client's hydrologist**, who may reverse any
       of them on #46): (1) an optional `naturalMarMcm` on a Reserve rule
@@ -525,7 +525,13 @@ collected as a checklist in issue #46; tick it there as they answer.
       §2.15a. Still open for the hydrologist: whether `naturalSource`
       should default to `table` (or be a required choice) where the gazette
       publishes a natural curve, the 15 % itself, and the minimum vs a 5th
-      percentile (≥ 20 years) for the lowest band.
+      percentile (≥ 20 years) for the lowest band. (4) A high-flow
+      component's peak is labelled the **daily-mean** peak in the editor
+      (a gazette gives an instantaneous one, BBM manual WRC TT 354/08
+      §21.3), and the run warns when natural flow has no event in more
+      than half the water years (`EWR_HIGH_FLOW_NATURAL_MIN_SHARE`),
+      §2.9d. Open: whether the engine should take the gazette's
+      instantaneous peak and a per-site peak-to-daily ratio instead.
 
 ## Issue #4 Phase 6: simulated review findings (2026-09-24)
 

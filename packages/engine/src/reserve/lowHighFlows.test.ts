@@ -8,7 +8,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModelWith } from '../run';
-import { EWR_HIGH_FLOW_EVENT_LEVEL, assessSite, completeMonths, completeWaterYears, countHighFlowEvents, highFlowEventMinDays } from './assurance';
+import { EWR_HIGH_FLOW_EVENT_LEVEL, EWR_HIGH_FLOW_NATURAL_MIN_SHARE, assessSite, assuranceWarnings, completeMonths, completeWaterYears, countHighFlowEvents, highFlowEventMinDays } from './assurance';
 import { DEFAULT_ASSURANCE_POINTS, type EwrHighFlowEvent, type EwrRuleTable } from './rules';
 
 const rows = (row: number[]) => Array.from({ length: 12 }, () => [...row]);
@@ -262,6 +262,24 @@ describe('high-flow components at a site', () => {
 		expect(r.highFlows![0]!.years[0]).toEqual({ waterYear: 2000, natural: 3, actual: 3, required: 1, met: true });
 		const higher = site(table({ scale: 2, highFlows: [freshet({ peakM3s: 8 })] }), start, natural, natural);
 		expect(higher.highFlows![0]!.overall).toEqual({ years: 3, required: 0, met: 0, rate: null });
+	});
+
+	it('warns when natural flow reaches the peak in no more than half the water years (engine ≥ 1.10.0), and not otherwise', () => {
+		const blind = (r: ReturnType<typeof site>) => assuranceWarnings(r).filter((w) => w.includes('high flow "'));
+		// Positive control: natural floods in 2 of the 3 water years; one year without is not more than half.
+		const two = floods(['2000-11-05', '2001-11-20']);
+		expect(blind(site(table({ highFlows: [freshet()] }), start, two, two))).toEqual([]);
+		// One year with a flood, two without: more than half, so the requirement is waived in most years.
+		const one = floods(['2000-11-05']);
+		expect(blind(site(table({ highFlows: [freshet()] }), start, one, one))).toEqual([
+			'EWR rule table at the outlet (O): high flow "Freshet": the site\'s natural flow reached its 10 m³/s daily-mean peak for the duration in only 1 of 3 water years, so the requirement is waived in the rest and the check can hardly fail; a gazette\'s flood peak is instantaneous, so enter the daily-mean peak it corresponds to (BBM manual, WRC TT 354/08, §21.3)'
+		]);
+		// An instantaneous peak entered as it is (20 m³/s above the 15 m³/s daily floods): natural flow never reaches it.
+		const all = floods(['2000-11-05', '2001-11-20', '2002-12-01']);
+		expect(blind(site(table({ highFlows: [freshet({ peakM3s: 20 })] }), start, all, all))[0]).toMatch(/reached its 20 m³\/s daily-mean peak for the duration in only 0 of 3 water years/);
+		expect(blind(site(table({ highFlows: [freshet({ peakM3s: 10 })] }), start, all, all))).toEqual([]);
+		// The share is the named constant.
+		expect(EWR_HIGH_FLOW_NATURAL_MIN_SHARE).toBe(0.5);
 	});
 
 	it('on random series: natural flow meets its own high flows, and a flow with no event fails every year that required one', () => {

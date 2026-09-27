@@ -2536,7 +2536,10 @@ which checks every catchment tab).
   synthetic example layouts (a total-flow and a low-flow table, DRM style).
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
-  months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, event
+  months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", the
+  **daily-mean** peak m³/s (labelled so from engine 1.10.0: a gazette's peak
+  is instantaneous and the hydrologist converts it; the hint says so and that
+  the run warns when natural flow rarely reaches it), event
   days from rise to recession, events per year; engine ≥ 1.9.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow

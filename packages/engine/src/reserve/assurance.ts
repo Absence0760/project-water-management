@@ -621,6 +621,18 @@ export function completeWaterYears(startDate: string, blocks: readonly MonthBloc
  */
 export const EWR_HIGH_FLOW_EVENT_LEVEL = 0.5;
 
+/**
+ * A high-flow component whose peak the site's natural flow reaches in no
+ * more than this share of the complete water years draws a warning (engine
+ * ≥ 1.10.0, docs/model.md §2.9d): with required = MIN(perYear, natural
+ * events), such a requirement is waived in most years and the check can
+ * hardly fail. The usual cause is a gazetted peak entered as it is published,
+ * an instantaneous peak (BBM manual, King, Tharme & de Villiers 2008, WRC TT
+ * 354/08, §21.3), where the engine compares daily means. Half: a judgement,
+ * pending the hydrologist.
+ */
+export const EWR_HIGH_FLOW_NATURAL_MIN_SHARE = 0.5;
+
 /** Days a high-flow event must stay at or above `EWR_HIGH_FLOW_EVENT_LEVEL × peak`: ⌈duration × (1 − level)⌉, at least 1. */
 export function highFlowEventMinDays(durationDays: number): number {
 	return Math.max(1, Math.ceil(durationDays * (1 - EWR_HIGH_FLOW_EVENT_LEVEL) - 1e-9));
@@ -704,7 +716,7 @@ function assessHighFlow(
 	};
 }
 
-/** Warnings a site's assessment carries (no complete month, calendar months missing, short records). */
+/** Warnings a site's assessment carries (no complete month, calendar months missing, short records, a high flow natural flow rarely has, a natural MAR off the determination's). */
 export function assuranceWarnings(r: EwrAssuranceSite): string[] {
 	const where = `EWR rule table at ${r.isOutlet ? `the outlet (${r.name})` : r.name}`;
 	if (r.overall.months === 0) return [`${where}: the run has no complete calendar month, so Reserve compliance is not assessed`];
@@ -719,6 +731,15 @@ export function assuranceWarnings(r: EwrAssuranceSite): string[] {
 				? `${base}, so the natural-flow percentiles, and the flow duration check, rest on few years; enter the table's natural flows or run a longer record`
 				: `${base}, so the flow duration check rests on few years`
 		);
+	}
+	for (const h of r.highFlows ?? []) {
+		const n = h.years.length;
+		const withEvent = h.years.filter((y) => y.natural > 0).length;
+		if (n > 0 && n - withEvent > n * EWR_HIGH_FLOW_NATURAL_MIN_SHARE) {
+			out.push(
+				`${where}: high flow "${h.label}": the site's natural flow reached its ${sig(h.peakAppliedM3s)} m³/s daily-mean peak for the duration in only ${withEvent} of ${n} water years, so the requirement is waived in the rest and the check can hardly fail; a gazette's flood peak is instantaneous, so enter the daily-mean peak it corresponds to (BBM manual, WRC TT 354/08, §21.3)`
+			);
+		}
 	}
 	const mar = r.naturalMar;
 	if (r.naturalSource === 'run' && mar && naturalMarBeyondTolerance(mar.differencePct)) {

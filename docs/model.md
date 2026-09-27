@@ -3194,6 +3194,25 @@ flood much longer than a triangle at half its peak (a broad, flat event)
 counts for a longer duration than its base. Both are for the hydrologist to
 confirm (below).
 
+*Instantaneous vs daily-mean peak (engine ≥ 1.10.0).* A gazetted Reserve
+gives each flood's **instantaneous** peak (the BBM manual, King, Tharme & de
+Villiers 2008, WRC TT 354/08, §21.3), while the engine compares **daily
+means**; a daily mean is always below the instantaneous peak of the same
+flood, often far below on a small, flashy catchment. Entered as published,
+the peak is rarely reached by natural daily flow, `required = MIN(perYear,
+n_nat)` falls to 0 in most years, and the check goes blind, as it did before
+1.9.0 for another reason. So the editor labels the field the **daily-mean
+peak** (the hydrologist converts the gazette's peak, e.g. with the site's
+peak-to-daily-mean ratio from an observed record), and the run warns for a
+component whose natural flow has no event in **more than half** of the
+complete water years (`EWR_HIGH_FLOW_NATURAL_MIN_SHARE` = 0.5, a judgement
+pending the hydrologist): "high flow "Class II freshet": the site's natural
+flow reached its 10 m³/s daily-mean peak for the duration in only 1 of 3
+water years, so the requirement is waived in the rest …". Exactly half is
+not warned about; tested with a positive control in `lowHighFlows.test.ts`.
+The engine doesn't convert the peak itself: the ratio depends on the site's
+flood shape, which the hydrologist has and the model doesn't.
+
 A year is never asked for a flood its natural flow didn't have: a dry year is
 not failed for it, but a dam that holds back a flood the river would have had
 is. That is the same principle as the monthly rules (the requirement follows

@@ -169,7 +169,7 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 	await page.reload();
 	await expect(table.getByLabel('Low flows (maintenance to drought), Jan, 50 %, Mm³')).toHaveValue('0');
-	await expect(high.getByLabel('High flow 1 peak, m³/s')).toHaveValue('0.2');
+	await expect(high.getByLabel('High flow 1 daily-mean peak, m³/s')).toHaveValue('0.2');
 });
 
 test('two EWR sites each get a Reserve heat map, low flows and high flows (engine 0.33.0)', async ({ page, owner }) => {
