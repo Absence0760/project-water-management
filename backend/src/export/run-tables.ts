@@ -17,6 +17,9 @@ import {
 	LOW_FLOW_WARN_FACTOR,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
+	type CalibrationStats,
+	type EwrAgreement,
+	type EwrAgreementScores,
 	type FdcPercentileRow,
 	type FdcPercentileTable,
 	type RunSummary,
@@ -104,6 +107,10 @@ export interface SummaryMeta {
 	evidence?: RunEvidence | null;
 	/** The FDC chart's Q10–Q95 table over the run's catchment flows in m³/s (export/fdc.ts); absent = not loaded. */
 	flowDuration?: FdcPercentileTable | null;
+	/** The runoff model the run used (settings.runoffModel as the run stored it); absent = not written. */
+	runoffModel?: string;
+	/** Each farm's dam capacity as the run's model had it, m³ by node id, so storage can be checked against it; absent = no column. */
+	damCapacityM3?: Record<string, number>;
 }
 
 /**
@@ -132,12 +139,20 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 const OPTIONAL_FARM_LABELS: Record<string, string> = {
 	avgGroundwaterM3Day: 'Average groundwater pumped (m³/day)',
 	avgBaseflowDepletionM3Day: 'Average stream depletion (m³/day)',
-	avgGroundwaterToDamM3Day: 'Average groundwater pumped into the dam (m³/day)'
+	avgGroundwaterToDamM3Day: 'Average groundwater pumped into the dam (m³/day)',
+	avgRiverAbstractionM3Day: 'Average pumped from the river (m³/day)',
+	// Engine ≥ 1.2.0 (issue #55): the dam's storage figures.
+	damEndM3: 'Dam storage on the last day (m³)',
+	damAgoM3: 'Dam storage 30 days before the last day (m³)',
+	damLowM3: 'Lowest dam storage in the last 365 days (m³)',
+	damLowDate: 'Date of the lowest dam storage',
+	damDaysAtMin: 'Days at or below the minimum operating level in the last 365 days'
 };
 
 const CATCHMENT_ROWS: Record<string, string> = {
 	meanNaturalFlowM3Day: 'Mean natural flow (m³/day)',
 	meanSimulatedOutflowM3Day: 'Mean simulated outflow (m³/day)',
+	runoffCoefficient: 'Runoff coefficient (natural flow ÷ rain, as depths over the catchment)',
 	ewrDaysNotMet: 'Days EWR not met at the outflow gauge',
 	ewrFractionDaysNotMet: 'Days EWR not met at the outflow gauge (%)'
 };
@@ -150,7 +165,22 @@ const CALIBRATION_ROWS: Record<string, string> = {
 	meanObservedM3s: 'Mean observed flow (m³/s)',
 	meanSimulatedM3s: 'Mean simulated flow (m³/s)',
 	// Engine ≥ 0.39.0 (issue #45): only 'fitted' scores are in-sample; notFitted / edited / otherPeriod say why not.
-	fitStatus: 'Parameters fitted on these days (fitted = in-sample scores)'
+	fitStatus: 'Parameters fitted on these days (fitted = in-sample scores)',
+	windowStart: 'Calibration window start',
+	windowEnd: 'Calibration window end',
+	firstObservedDate: 'First observed day in the window',
+	lastObservedDate: 'Last observed day in the window',
+	excludedDays: 'Observed days left out by the calibration exclusions',
+	kge: 'KGE (Kling–Gupta efficiency)',
+	kgeR: 'KGE r (correlation)',
+	kgeAlpha: 'KGE α (σ simulated ÷ σ observed)',
+	kgeBeta: 'KGE β (mean simulated ÷ mean observed)',
+	r2: 'r²',
+	logNse: 'log-NSE (NSE on ln(Q + ε))',
+	logEpsilonM3s: 'log-NSE ε (m³/s)',
+	volumeErrorPct: 'Volume error (%, + = model too wet)',
+	flowKind: 'Observed record scored',
+	simulatedKey: 'Simulated series scored'
 };
 
 type Cell = string | number | null;
@@ -629,6 +659,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield csvRow(['Run', meta.runLabel]);
 	yield csvRow(['Run created', meta.createdAt]);
 	yield csvRow(['Engine version', meta.engineVersion]);
+	if (meta.runoffModel) yield csvRow(['Runoff model', meta.runoffModel]);
 	yield csvRow(['Period start', meta.startDate]);
 	yield csvRow(['Period end', meta.endDate]);
 	// Always written, so the row is there (empty) for a reader looking for it.
@@ -646,11 +677,14 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
 		(k) => !known.has(k) && farms.some((f) => scalar(f[k]) !== undefined)
 	);
-	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)]);
+	// The dam's capacity beside its storage figures, so "storage stays within the dam" can be checked from this sheet.
+	const capacity = meta.damCapacityM3;
+	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...(capacity ? ['Dam capacity (m³)'] : []), ...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)]);
 	for (const f of farms) {
 		yield csvRow([
 			String(f.name ?? ''),
 			...FARM_COLUMNS.map(([k]) => scalar(PERCENT_KEYS.has(k) ? pct(f[k]) : f[k]) ?? null),
+			...(capacity ? [capacity[String(f.nodeId)] ?? null] : []),
 			...extra.map((k) => scalar(f[k]) ?? null)
 		]);
 	}
@@ -658,6 +692,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield csvRow(['Catchment']);
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
+	if (summary.catchment.ewrAgreement) yield* ewrAgreementLines(summary.catchment.ewrAgreement);
 	yield '';
 
 	if (summary.forecast) {
@@ -715,6 +750,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		for (const row of labelledRows(summary.calibration as unknown as Record<string, unknown>, CALIBRATION_ROWS)) {
 			yield csvRow(row);
 		}
+		yield* calibrationDetailLines(summary.calibration);
 	} else {
 		yield csvRow(['No observed flow series — calibration not computed']);
 	}
@@ -929,6 +965,59 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 	}
 }
 
+const pctCell = (v: number | null | undefined): Cell => (v == null ? null : (pct(v) as number));
+const AGREEMENT_HEADER = [
+	'Days counted',
+	'Both below the EWR',
+	'Model below, river not (false alarm)',
+	'River below, model not (miss)',
+	'Both at or above',
+	'Hit rate (%)',
+	'False-alarm ratio (%)',
+	'Frequency bias (1 = unbiased)',
+	'Model days below (%)',
+	'Observed days below (%)'
+];
+const agreementCells = (a: EwrAgreementScores): Cell[] => [
+	a.days,
+	a.bothBelow,
+	a.falseAlarm,
+	a.miss,
+	a.bothAbove,
+	pctCell(a.hitRate),
+	pctCell(a.falseAlarmRatio),
+	a.frequencyBias,
+	pctCell(a.modelFractionBelow),
+	pctCell(a.observedFractionBelow)
+];
+
+/**
+ * The outlet EWR test on the observed record vs the simulated outflow
+ * (engine ≥ 0.5.3, issue #4): does the model fail the EWR on the days the
+ * river did? The whole record, then each water year.
+ */
+export function* ewrAgreementLines(a: EwrAgreement): Generator<string> {
+	yield csvRow(['Outlet EWR test: observed record vs simulated outflow, on the days with an observation']);
+	yield csvRow(['Observed days', a.firstObservedDate ?? '', a.lastObservedDate ?? '', `${a.excludedDays} left out by the calibration exclusions`]);
+	yield csvRow(['Water year', ...AGREEMENT_HEADER]);
+	yield csvRow(['Whole record', ...agreementCells(a.overall)]);
+	for (const y of a.byWaterYear) yield csvRow([waterYearText(y.waterYear), ...agreementCells(y)]);
+}
+
+/** The calibration's lists: the exclusions it applied and the annual volumes it compared (both skipped by the scalar rows). */
+export function* calibrationDetailLines(c: CalibrationStats): Generator<string> {
+	if (c.exclusions?.length) {
+		yield csvRow(['Calibration exclusions (days not scored)']);
+		yield csvRow(['From', 'To', 'Reason']);
+		for (const e of c.exclusions) yield csvRow([e.start, e.end, e.reason]);
+	}
+	if (c.annualVolumes?.length) {
+		yield csvRow(['Annual volumes on the observed days (water years, Oct–Sep)']);
+		yield csvRow(['Water year', 'Days observed', 'Days in the window', 'Observed (Mm³)', 'Simulated (Mm³)', 'Simulated − observed (%)']);
+		for (const y of c.annualVolumes) yield csvRow([waterYearText(y.waterYear), y.days, y.daysInWindow, y.observedMm3, y.simulatedMm3, y.diffPct]);
+	}
+}
+
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */
 export function* verificationLines(v: RunSummary['verification']): Generator<string> {
 	yield csvRow(['Self-checks']);
@@ -967,6 +1056,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
 	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
 	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],
+	['Storage set into (+) / out of (−) the dams by a storage reset (m³)', (r) => r.storageSetM3 ?? null, true],
 	['Runoff removed by land cover (m³)', (r) => r.landCoverReductionM3 ?? null, true],
 	['Dam seepage lost from the catchment (m³)', (r) => r.damSeepageLostM3 ?? null, true],
 	['Released below dams (part of outflow) (m³)', (r) => r.damReleaseM3 ?? null, true],
@@ -975,6 +1065,22 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
 	['Residual (m³)', (r) => r.residualM3]
 ];
+
+/** Optional balance terms: [field, gain (in) or loss (out), words]. Land cover and release are memo columns, already in runoff and outflow. */
+const OPTIONAL_TERMS: [keyof WaterBalanceRow, 'in' | 'out', string][] = [
+	['groundwaterM3', 'in', 'groundwater pumped'],
+	['storageSetM3', 'in', 'storage set'],
+	['otherUseM3', 'out', 'other users’ use'],
+	['streamDepletionM3', 'out', 'stream depletion'],
+	['damSeepageLostM3', 'out', 'seepage lost']
+];
+
+/** The equation the rows close, naming only the terms this run has, so every term in it is a column. */
+export function balanceEquation(rows: readonly WaterBalanceRow[]): string {
+	const has = (k: keyof WaterBalanceRow) => rows.some((r) => r[k] !== undefined && r[k] !== null);
+	const terms = (side: 'in' | 'out') => OPTIONAL_TERMS.filter(([k, s]) => s === side && has(k)).map(([, , w]) => ` + ${w}`).join('');
+	return `Start storage + farm runoff + transfers + rain on dams${terms('in')} = consumptive use + dam evaporation${terms('out')} + outflow + end storage + residual`;
+}
 
 /**
  * Where the water went, one row per water year and one for the run (engine ≥
@@ -988,8 +1094,8 @@ export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<st
 		yield csvRow(['Run made before engine 0.12.0: no water balance recorded. Run it again to see it.']);
 		return;
 	}
-	yield csvRow(['Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage + residual; the residual should be 0']);
 	const rows = [...wb.years, wb.total];
+	yield csvRow([`${balanceEquation(rows)}; the residual should be 0`]);
 	const cols = BALANCE_COLUMNS.filter(([, f, optional]) => !optional || rows.some((r) => f(r) !== null));
 	yield csvRow(['Water year', ...cols.map(([h]) => h)]);
 	for (const r of rows) {

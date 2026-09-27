@@ -208,6 +208,12 @@ describe('run summary export', () => {
 		expect(lower).toBeGreaterThan(0);
 		expect(upper).toBeGreaterThan(0);
 		expect(lower + upper).toBeCloseTo(100, 9);
+		// The runoff model the run used, and each dam's capacity from the run's own model (hydrologist review, #17).
+		expect(rows.some((r) => /^Runoff model,\w+$/.test(r))).toBe(true);
+		const cap = header!.split(',').indexOf('Dam capacity (m³)');
+		expect(cap).toBeGreaterThan(0);
+		expect(rows.find((r) => r.startsWith('Farm 2,'))!.split(',')[cap]).toBe('50000');
+		expect(rows.find((r) => r.startsWith('"Farm, ""upper""",'))!.split(',')[cap + 1]).toBe('200000'); // + 1: the name's comma
 		expect(rows).toContain('Catchment');
 		expect(rows.some((r) => r.startsWith('NSE,'))).toBe(true);
 		// The engine's self-checks and the water balance (engine 0.12.0).

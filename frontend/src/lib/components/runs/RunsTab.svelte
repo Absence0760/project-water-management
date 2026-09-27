@@ -733,6 +733,7 @@
 							runId={shownRunId}
 							startDate={shownRun.startDate}
 							endDate={shownRun.endDate}
+							engineVersion={shownRun.engineVersion}
 							nodes={traceNodes}
 						/>
 					</section>

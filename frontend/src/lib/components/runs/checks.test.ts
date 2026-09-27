@@ -1,7 +1,7 @@
 import { FARM_COLUMNS, type RunVerification, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunCatchmentDay, RunDay } from '$lib/api';
-import { BALANCE_COLUMNS, balanceTableRows, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+import { BALANCE_COLUMNS, balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed, detail: passed ? null : 'broken' });
 
@@ -61,6 +61,35 @@ describe('water balance table', () => {
 		expect(residualIsNoise(row({ residualM3: 1e-4 }))).toBe(true); // 1e-4 m³ against 2e6 m³
 		expect(residualIsNoise(row({ residualM3: 10 }))).toBe(false);
 		expect(residualIsNoise(row({ residualM3: -10 }))).toBe(false);
+	});
+
+	it('shows a network’s optional terms only when a row has them, so the columns add up to the residual', () => {
+		const plain = balanceColumns([row()]).map((c) => c.key);
+		expect(plain).toEqual(['rain', 'runoffCoef', 'opening', 'runoff', 'transfers', 'rainOnDams', 'consumptive', 'damEvaporation', 'outflow', 'closing', 'residual']);
+		expect(balanceEquation(balanceColumns([row()]))).toBe(
+			'Start storage + unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage'
+		);
+		// Every term the engine's residual counts (verify.ts): with all of them, each gain and loss is a column.
+		const full = row({ groundwaterM3: 3e4, storageSetM3: -1e4, otherUseM3: 5e4, streamDepletionM3: 2e4, damSeepageLostM3: 1e3 });
+		const cols = balanceColumns([row(), full]);
+		expect(cols.map((c) => c.key)).toEqual([
+			'rain', 'runoffCoef', 'opening', 'runoff', 'transfers', 'groundwater', 'storageSet', 'rainOnDams',
+			'consumptive', 'damEvaporation', 'otherUse', 'streamDepletion', 'seepageLost', 'outflow', 'closing', 'residual'
+		]);
+		expect(cols.find((c) => c.key === 'otherUse')!.value(full)).toBeCloseTo(0.05, 12);
+		expect(cols.find((c) => c.key === 'storageSet')!.value(full)).toBeCloseTo(-0.01, 12);
+		expect(balanceEquation(cols)).toBe(
+			'Start storage + unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + seepage lost + outflow + end storage'
+		);
+	});
+});
+
+describe('checkLabel', () => {
+	it('says unit where the engine says farm, keeping capitals and plurals', () => {
+		expect(checkLabel('Every farm balances every day')).toBe('Every unit balances every day');
+		expect(checkLabel('Each farm’s soil-water store')).toBe('Each unit’s soil-water store');
+		expect(checkLabel('Farms upstream and farm summaries')).toBe('Units upstream and unit summaries');
+		expect(checkLabel('Transfers stay within their months')).toBe('Transfers stay within their months');
 	});
 });
 

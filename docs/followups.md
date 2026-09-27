@@ -1305,10 +1305,67 @@ the suggested order (the IDs carry the detail):
       `executeRun` logs `{ event: "self_check_failed", projectId, runId,
       checks }` (check ids only), and `infra/alarms.tf` has a metric filter
       + alarm on the alerts SNS topic (plan-tested; not applied).
-- [ ] **Hydrologist persona review of the Self-checks panel and exports.**
-      Run `persona-hydrologist` on the panel, the farm daily CSV and the
-      summary CSV: do they answer what a hydrologist checks first? Log gaps
-      here. Cheap; decides whether the Excel audit workbook is worth a day.
+- [x] **Hydrologist persona review of the Self-checks panel and exports**
+      (2026-09-27, #17). A persona draft (the `persona-hydrologist` point of
+      view over the three seeded examples, run through the engine and the
+      export builders), not the real hydrologist's sign-off. What a
+      hydrologist checks first, and what it found:
+      - *Mass balance closure*: answered. Residuals are float noise (whole-run
+        ≤ 1e-10 m³, largest farm-day 2.3e-10 m³/day on Kleinberg), in the
+        panel, the summary CSV and column V of every farm day. **Defect,
+        fixed:** the panel's balance table and the CSV's equation row left
+        out terms the residual counts (groundwater, other users, stream
+        depletion, seepage lost, storage set; the CSV had no storage-set
+        column at all), so a row with them didn't add up by eye. Both now
+        show a column for each term the run has and name exactly those
+        terms in the equation.
+      - *Units*: every daily column carries its unit and FarmTemplate
+        letter. **Defect, fixed:** the summary CSV wrote a dozen computed
+        figures under raw engine keys with no unit (`kge`, `logEpsilonM3s`,
+        `volumeErrorPct`, `runoffCoefficient`, `damEndM3` …); all are
+        labelled now, with a test that no raw key is left in the
+        calibration block.
+      - *Storage bounds*: the self-check covers it, but a reader couldn't
+        check it from the files: **fixed**, the summary's farm table has
+        `Dam capacity (m³)` (from the run's own model) beside the dam's
+        storage figures.
+      - *EWR*: **gap, fixed:** the outlet EWR test on the observed record vs
+        the simulated outflow (issue #4) was computed but silently dropped
+        from the summary CSV (an object, skipped); it is now a block under
+        Catchment, whole record then each water year. So were the
+        calibration exclusions and the annual observed-vs-simulated volumes
+        (arrays): both are written now.
+      - *Gap-filling provenance*: answered (rain-source, rain treated as
+        missing, accumulation and CHIRPS-factor blocks; the catchment daily
+        CSV's rain-source and missing-day columns).
+      - *Which run and engine*: the summary CSV says (and now names the
+        runoff model); the panel now says which engine ran the checks. The
+        daily CSVs still don't (next item).
+      - *Wording*: the panel said "farm" where the workspace says "unit";
+        it reads "unit" now (`checkLabel`), the CSV keeps the API's "farm".
+      **Is the Excel audit workbook worth a day?** Yes, but not before the
+      real hydrologist reads this: the checks show the model agrees with
+      itself, and only a recompute in someone else's tool shows it agrees
+      with its formulas. Note it also needs each farm day's *inputs* (rain,
+      A-pan, crop areas and factors), which the farm daily CSV doesn't carry
+      (it starts at gross demand), so the file can't be recomputed alone
+      today. Trigger unchanged (above), plus the first run nominated as
+      licence evidence.
+- [ ] **Say which run and engine made a daily CSV, inside the file.** The
+      farm and catchment daily CSVs (`daily.csv`, `farms.csv`) carry the run
+      only in the file name, which is lost the moment the file is renamed or
+      pasted into a workbook; the summary CSV has the full provenance. The
+      durable fix: a leading `# run=<label>; engine=<version>;
+      runoff_model=<m>; created=<iso>; period=<start>..<end>` line (plus
+      `dam_capacity_m3=` for a farm), the same shape as the legacy-run line
+      (audit H1), with `lib/export/dailyTable.ts` taught to take more than
+      one `#` line and the DB tests and `e2e/tests/forecast.spec.ts` that
+      read row 1 as the header updated. Not done in the review because it
+      moves the header off row 1 for *every* file, which breaks a plain
+      `pandas.read_csv` without `comment='#'`: the operator's call.
+      Trigger: the operator (or the real hydrologist) confirms the `#` line
+      is acceptable on every file, or the first client hand-off of daily
+      CSVs.
 - [x] **See every input series and how the model used it** (2026-09-24):
       the Data tab's Preview dialog joins every input series by day with
       rain used and its source, CHIRPS factor and corrected value, flow in
