@@ -3,7 +3,21 @@
 </script>
 
 <script lang="ts">
+	// Data (issue #17, option A): the input series, freshness first. The
+	// section header carries the title, the count and "N behind" (the same
+	// count as the sidebar's badge), Preview all data and Add data. The table
+	// lists the series behind first (series/freshness.ts `freshnessOrder`,
+	// the badge's own rule), then those a run reads, then the rest; picking a
+	// row charts it (`series=<id>`, so Back returns to the one before). On a
+	// big enough window the table and the chart are exactly the height left
+	// (the Dams page's measure): the table scrolls inside its box and the
+	// chart fills the rest. The checks, the upload form and the reference
+	// follow below.
 	import { onMount, untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		agreementOptions,
 		checkSeries,
@@ -42,7 +56,7 @@
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
 	import { isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
-	import { isRecordedRain } from './freshness';
+	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 
@@ -81,7 +95,22 @@
 	// The viewer's calendar date, as on the project list (projects/freshness.ts).
 	const today = localIsoDate();
 
-	let selectedId = $state<string | null>(null);
+	// The page's list changed without us (the header's Add data dialog uploaded a file): show it.
+	// Our own changes come back through onSeriesChange as this same array, so they are skipped.
+	$effect(() => {
+		const i = initial;
+		untrack(() => {
+			if (!i || i === list) return;
+			list = i;
+			void loadValues();
+		});
+	});
+
+	// The charted series is in the URL (`series=<id>`); without one (or a stale one), the default.
+	const seriesParam = $derived(page.url.searchParams.get('series'));
+	const selectedId = $derived(
+		seriesParam && list.some((s) => s.id === seriesParam) ? seriesParam : list.length ? pickDefault(list) : null
+	);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
 
 	let previewOpen = $state(false);
@@ -108,7 +137,14 @@
 	// button stays the keyboard / screen-reader way to do the same.
 	function rowClick(e: MouseEvent, id: string) {
 		if ((e.target as Element).closest('button, a, input, select, summary, [role="menu"]')) return;
-		selectedId = id;
+		choose(id);
+	}
+	/** Chart a series: a URL change, so it can be shared and Back returns; stacked, the chart comes into view. */
+	function choose(id: string, replaceState = false) {
+		if (id === selectedId && seriesParam === id) return;
+		void goto(withParam(page.url, 'series', id), { noScroll: true, keepFocus: true, replaceState }).then(() => {
+			if (!fit && !replaceState) chartEl?.scrollIntoView({ block: 'nearest' });
+		});
 	}
 	let flowLog = $state(false);
 
@@ -153,7 +189,6 @@
 				}
 			})
 		);
-		if (!selectedId && list.length) selectedId = pickDefault(list);
 	}
 
 	// Default chart: observed flow if present, else the main rainfall.
@@ -252,7 +287,8 @@
 			await api.series.remove(projectId, s.id);
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
-			if (selectedId === s.id) selectedId = list[0]?.id ?? null;
+			// The deleted series was charted: back to the default, without a history entry for it.
+			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { noScroll: true, keepFocus: true, replaceState: true });
 		} catch (e) {
 			actionError = msg(e);
 		}
@@ -274,7 +310,7 @@
 	async function uploaded(r: UploadResult) {
 		values = Object.fromEntries(Object.entries(values).filter(([id]) => id !== r.meta.id));
 		await load();
-		selectedId = r.meta.id;
+		choose(r.meta.id, true);
 	}
 
 	const typical = (s: SeriesMeta) => {
@@ -283,28 +319,94 @@
 		if (isRain(s.kind)) return st.meanAnnualMm === null ? '–' : `${fmtNum(st.meanAnnualMm)} mm/a`;
 		return st.meanDaily === null ? '–' : `${fmtNum(st.meanDaily, st.meanDaily < 1 ? 3 : 2)} ${s.unit}`;
 	};
+
+	// --- freshness first: the badge's "behind" (freshness.ts), the rows in that order ---
+	const fresh = $derived(freshness(list, today));
+	const behindAge = $derived(new Map((fresh?.behind ?? []).map((b) => [b.id, b.age])));
+	const rows = $derived(freshnessOrder(list, fresh?.behind ?? [], inUse));
+	const behindText = $derived(
+		behindAge.size ? `${behindAge.size} behind (more than ${STALE_DAYS} days old)` : ''
+	);
+
+	// --- the table and the chart fit the window on a big enough page (the Dams page's measure) ---
+	let pageW = $state(0);
+	let innerH = $state(0);
+	// Below ~720 px high the table would get only a row or two; the page scrolls as before instead.
+	const fit = $derived(pageW >= 720 && innerH >= 720 && list.length > 0);
+	let chartEl: HTMLElement | undefined = $state();
+	let firstEl: HTMLDivElement | undefined = $state();
+	let firstTop = $state(0);
+	$effect(() => {
+		if (!firstEl) return;
+		const el = firstEl;
+		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
+	// Filling: the plot gets what the slot leaves after the chart's own head, legend and caption.
+	const FIXED_H = 320;
+	const MIN_H = 150;
+	let slot: HTMLDivElement | undefined = $state();
+	let fig: HTMLDivElement | undefined = $state();
+	let fillH = $state(FIXED_H);
+	$effect(() => {
+		if (!fit || !slot || !fig) return;
+		const s = slot;
+		const f = fig;
+		const measure = () => {
+			const wrap = f.querySelector<HTMLElement>('.u-wrap');
+			if (!wrap) return;
+			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
+			if (Math.abs(target - fillH) > 2) fillH = target;
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(s);
+		ro.observe(f);
+		return () => ro.disconnect();
+	});
+	const chartH = $derived(fit ? fillH : FIXED_H);
+
+	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
+	$effect(() => fillHeader({ actions: headerActions }));
 </script>
 
-{#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
+<svelte:window bind:innerHeight={innerH} />
 
-{#if newerThanRun.length && latestRun}
-	<div class="alert alert-info" role="status">
-		New data since the latest run: {newerThanRun.map((s) => s.name || kindLabel(s.kind)).join(', ')} now run{newerThanRun.length === 1 ? 's' : ''}
-		to {newerThanRun.reduce((m, s) => (endDate(s) > m ? endDate(s) : m), '')}, but “{latestRun.label || 'the latest run'}” ends {latestRun.endDate}.
-		<a href="?tab=runs">Re-run the model</a> to include it.
+{#snippet headerActions()}
+	{#if list.length}
+		<button type="button" class="btn" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
+	{/if}
+{/snippet}
+
+<!-- The notices: one slim line each under the section header, as the page's own. -->
+{#if actionError || (newerThanRun.length && latestRun) || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+	<div class="notes">
+		{#if actionError}<p class="note err" role="alert">{actionError}</p>{/if}
+		{#if newerThanRun.length && latestRun}
+			<p class="note note-info" role="status">
+				New data since the latest run: {newerThanRun.map((s) => s.name || kindLabel(s.kind)).join(', ')} now run{newerThanRun.length === 1 ? 's' : ''}
+				to {newerThanRun.reduce((m, s) => (endDate(s) > m ? endDate(s) : m), '')}, but “{latestRun.label || 'the latest run'}” ends {latestRun.endDate}.
+				<a href="?tab=runs">Re-run the model</a> to include it.
+			</p>
+		{/if}
+		{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+			<p class="note note-info" role="status" data-testid="rebuilding-note">{rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}</p>
+		{/if}
 	</div>
 {/if}
 
-{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
-	<p class="alert alert-info" role="status" data-testid="rebuilding-note">{rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}</p>
-{/if}
-
-<section class="panel" aria-labelledby="ser-h">
+<div class="data-page" bind:clientWidth={pageW}>
+<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+<section class="panel list-panel" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
-			<span class="muted small">Daily values · {list.length} series{rainUpTo ? ` · recorded rain up to ${rainUpTo} (${describeAge(daysBetween(rainUpTo, today))})` : ''}</span>
-			<button type="button" class="btn btn-sm" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
+			<span class="muted small" data-testid="series-summary"
+				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${rainUpTo} (${describeAge(daysBetween(rainUpTo, today))})` : ''}</span
+			>
 		{/if}
 	</div>
 	<LoadState
@@ -314,7 +416,7 @@
 		empty={list.length === 0}
 		emptyText={readonly
 			? 'No time series yet. An editor can upload daily rainfall and observed flow as CSV files.'
-			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with the Upload CSV form below.'}
+			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with Add data or the Upload CSV form below.'}
 	>
 		<!-- Below 640px each row is a card (CSS grid), so the row's numbers, coverage and
 		     buttons all fit a phone without scrolling the table sideways. The explicit
@@ -326,8 +428,8 @@
 				<thead role="rowgroup">
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
-						<th scope="col" role="columnheader">Period</th>
 						<th scope="col" role="columnheader">Data up to</th>
+						<th scope="col" role="columnheader">Period</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
 						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
@@ -335,14 +437,15 @@
 					</tr>
 				</thead>
 				<tbody role="rowgroup">
-					{#each list as s (s.id)}
+					{#each rows as s (s.id)}
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
 						{@const role = KIND_ROLES[s.kind]}
+						{@const behind = behindAge.get(s.id)}
 						<!-- Pointer shortcut only; the View button is the accessible control. -->
 						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-						<tr role="row" class="pick" class:selected={s.id === selectedId} onclick={(e) => rowClick(e, s.id)}>
+						<tr role="row" class="pick" class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
 							<th scope="row" role="rowheader">
 								<span class="kind">{kindLabel(s.kind)}</span>
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
@@ -384,11 +487,16 @@
 									</span>
 								{/if}
 							</th>
-							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
 							<td role="cell" class="upto" data-label="Data up to">
 								<span class="num">{st?.lastValueDate ?? end}</span>
-								<span class="age" class:stale={age > 31}>{describeAge(age)}</span>
+								<span class="age">{describeAge(age)}</span>
+								{#if behind !== undefined}
+									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
+										>Behind</span
+									>
+								{/if}
 							</td>
+							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -401,7 +509,7 @@
 							</td>
 							<td role="cell" class="act">
 								<div class="acts">
-								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => (selectedId = s.id)}>View</button>
+								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => choose(s.id)}>View</button>
 								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
 								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
 								{#if !readonly}
@@ -416,31 +524,38 @@
 		</div>
 		<p class="muted small key">
 			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
-			Rainfall "typical" = mean annual total; flow = mean daily flow.
+			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
 		</p>
 	</LoadState>
 </section>
 
 {#if viewing}
-	<section class="panel" aria-labelledby="chart-h">
+	<section class="panel chart-panel" aria-labelledby="chart-h" bind:this={chartEl}>
 		<h2 id="chart-h" class="visually-hidden">Series chart</h2>
 		{#if values[viewing.id]}
-			<LineChart
-				title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
-				unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
-				series={[{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values }]}
-				logToggle={!isRain(viewing.kind)}
-				bind:log={flowLog}
-				recentDays={3 * 365}
-				recentLabel="Last 3 years"
-				shade={shading?.ranges ?? []}
-				caption={shading?.caption ?? undefined}
-			/>
+			<div class="slot" bind:this={slot}>
+				<div bind:this={fig}>
+					<LineChart
+						title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
+						unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
+						height={chartH}
+						series={[{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values }]}
+						logToggle={!isRain(viewing.kind)}
+						bind:log={flowLog}
+						recentDays={3 * 365}
+						recentLabel="Last 3 years"
+						shade={shading?.ranges ?? []}
+						caption={shading?.caption ?? undefined}
+					/>
+				</div>
+			</div>
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
 		{/if}
 	</section>
 {/if}
+</div>
+</div>
 
 {#if agreement}
 	<section class="panel" aria-label="Gauge vs logger agreement">
@@ -569,9 +684,92 @@
 		font-size: 0.75rem;
 		color: var(--text-muted);
 	}
-	.age.stale {
+	/* "Behind": the Data badge's rule (freshness.ts), in words as well as colour. */
+	.behind {
+		display: inline-block;
+		margin-left: 0.3rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		background: var(--warning-soft);
+		color: var(--warning);
+	}
+	.key .behind {
+		margin-left: 0.4rem;
+	}
+	.behind-text {
 		color: var(--warning);
 		font-weight: 600;
+	}
+	@media (min-width: 641px) {
+		tr.is-behind > th[scope='row'] {
+			box-shadow: inset 3px 0 0 var(--warning);
+		}
+	}
+	.notes {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.4rem;
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+	}
+	.note {
+		margin: 0;
+		padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text-2);
+	}
+	.note-info {
+		background: var(--accent-soft);
+		color: var(--text);
+	}
+	.note.err {
+		border-left-color: var(--danger);
+		color: var(--danger);
+	}
+	.data-page {
+		container: data-page / inline-size;
+	}
+	.first {
+		display: flex;
+		flex-direction: column;
+	}
+	/* Big enough: the table and the chart are the height left in the window (less the save bar); the table's rows
+	   scroll inside its box, the chart takes the rest. */
+	.first.fit {
+		height: max(540px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+	.fit > .panel {
+		margin: 0;
+	}
+	.fit .list-panel {
+		flex: 0 1 auto;
+		min-height: 11rem;
+		max-height: 55%;
+		display: flex;
+		flex-direction: column;
+	}
+	.fit .list-panel :global(.table-wrap) {
+		flex: 1 1 auto;
+		min-height: 0;
+		max-height: none;
+	}
+	.fit .chart-panel {
+		flex: 1 1 0;
+		min-height: 16rem;
+		display: flex;
+		flex-direction: column;
+	}
+	.fit .slot {
+		flex: 1 1 0;
+		min-height: 0;
+		overflow: hidden;
 	}
 	.warn {
 		color: var(--warning);
@@ -698,6 +896,9 @@
 		}
 		.series tr.pick:last-child {
 			border-bottom: 0;
+		}
+		.series tr.pick.is-behind {
+			box-shadow: inset 3px 0 0 var(--warning);
 		}
 		.series tr.pick > th,
 		.series tr.pick > td {

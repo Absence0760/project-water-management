@@ -191,7 +191,8 @@ test('on a phone each series row is a card: every column and button fits without
 
 	// Still a table to assistive tech: header cells and data cells keep their roles.
 	await expect(table.getByRole('columnheader', { name: 'Coverage by year' })).toHaveCount(1);
-	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-01');
+	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-03'); // Data up to comes first (freshness first)
+	await expect(flowRow.getByRole('cell').nth(1)).toContainText('2021-10-01');
 
 	// Nothing is hidden behind a sideways scroll, in the table's box or the page.
 	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
@@ -205,7 +206,7 @@ test('on a phone each series row is a card: every column and button fits without
 	}
 	// Each card shows its column labels.
 	const label = await flowRow.getByRole('cell').first().evaluate((el) => getComputedStyle(el, '::before').content);
-	expect(label).toContain('Period');
+	expect(label).toContain('Data up to');
 });
 
 test('on a wide screen the upload form stays to the right of "What the model uses"', async ({ page, owner }) => {

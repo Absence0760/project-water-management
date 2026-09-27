@@ -58,6 +58,25 @@ export function freshness(list: readonly SeriesMeta[], today: string, staleDays 
 }
 
 /**
+ * The Data table's order, freshness first: the series behind (the badge's
+ * count, `Freshness.behind`) most days behind first, then the series a run
+ * reads, then the rest (another of the same kind is read, reference only);
+ * the list's own order within each group.
+ */
+export function freshnessOrder<T extends { id: string }>(
+	list: readonly T[],
+	behind: readonly { id: string; age: number }[],
+	inUse: ReadonlySet<string>
+): T[] {
+	const age = new Map(behind.map((b) => [b.id, b.age]));
+	const rank = (s: T) => (age.has(s.id) ? 0 : inUse.has(s.id) ? 1 : 2);
+	return list
+		.map((s, i) => ({ s, i }))
+		.sort((a, b) => rank(a.s) - rank(b.s) || (age.get(b.s.id) ?? 0) - (age.get(a.s.id) ?? 0) || a.i - b.i)
+		.map((x) => x.s);
+}
+
+/**
  * Driver series changed since `run`: updated after it was made (when the API
  * reports updatedAt) or reaching past its end date.
  */
