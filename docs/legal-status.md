@@ -47,7 +47,12 @@ client goes live. Not customer-facing.
   Before the first signature, confirm the mailbox provider listed as a
   sub-processor (clause 6.1).
 - [ ] **Register the information officer** with the Information Regulator
-  (POPIA s55 / the Regulator's portal).
+  (POPIA s55, the Regulator's eServices portal). The pack, with what to
+  enter, the sources, and whether a foreign sole proprietor has to register
+  at all (most likely yes, as responsible party for accounts stored in
+  `af-south-1`; the questions for counsel are listed):
+  [legal/information-officer.md](./legal/information-officer.md). The
+  operator files it himself; record the registration number here once done.
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed
   request (runbook item 7 in deployment.md), which is how it works today.
 - [ ] **Backups:** the notice says up to 35 days; keep
