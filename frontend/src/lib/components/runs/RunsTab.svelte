@@ -36,29 +36,28 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
+	// Panels every shown run renders (assurance of supply, the water account, evidence, "Check
+	// reproduction", "Changes since this run", publication) are in the Runs chunk: as chunks of their
+	// own they loaded on every visit anyway and cost ~7 KB gzip of split overhead (issue #9).
+	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
+	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
+	import EvidencePanel from './EvidencePanel.svelte';
+	import ReproducePanel from './ReproducePanel.svelte';
+	import PublicationPanel from './PublicationPanel.svelte';
+	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
-	// Assurance of supply and the water account (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
-	const loadSupplyAssurancePanel = () => import('$lib/components/reliability/AssurancePanel.svelte');
-	const loadWaterAccountPanel = () => import('$lib/components/reliability/WaterAccountPanel.svelte');
-	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
-	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
+	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
-	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
-	// "Check reproduction" (WP-3.1): its own chunk, like the evidence panel.
-	const loadReproducePanel = () => import('./ReproducePanel.svelte');
-	// Publishing a run and the WP-2.3 notice editor: their own chunk, like the evidence panel.
-	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
-	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
+	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9) and the outcome matrix (issue #53 R4) load
+	// with every shown run too, but stay chunks of their own (~8 and ~7 KB gzip): with them inline
+	// the Runs chunk is 48 KB, over the per-chunk ceiling.
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
-	// The outcome matrix (issue #53 R4): a demand sweep of this run by class of water year; its own chunk.
 	const loadOutcomePanel = () => import('$lib/components/outcomes/OutcomeMatrixPanel.svelte');
 	// The seasonal outlook (issue #53 R5): the season from this run's state at a few demand levels; its own chunk.
 	const loadOutlookPanel = () => import('$lib/components/outlook/OutlookPanel.svelte');
-	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
-	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
 	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
@@ -654,11 +653,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						</Lazy>
 					</div>
 					<div class="panel" id="res-water-account">
-						<Lazy load={loadWaterAccountPanel}>
-							{#snippet children(WaterAccountPanel)}
-								<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-							{/snippet}
-						</Lazy>
+						<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
 					</div>
 				{/snippet}
 				{#snippet farmsLead()}
@@ -667,11 +662,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} network={editor.model} {farmNames} />
 					</section>
 					<section class="panel" id="res-assurance">
-						<Lazy load={loadSupplyAssurancePanel}>
-							{#snippet children(AssurancePanel)}
-								<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-							{/snippet}
-						</Lazy>
+						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
 					</section>
 				{/snippet}
 				{#snippet modelTail()}
@@ -727,26 +718,14 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}
-								<Lazy load={loadEvidencePanel}>
-									{#snippet children(EvidencePanel)}
-										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-									{/snippet}
-								</Lazy>
+								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
 							{/key}
 							{#key shownRunId}
-								<Lazy load={loadReproducePanel}>
-									{#snippet children(ReproducePanel)}
-										<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
-									{/snippet}
-								</Lazy>
+								<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
 							{/key}
 						</div>
 						{#key shownRunId}
-							<Lazy load={loadRunInputsPanel}>
-								{#snippet children(RunInputsPanel)}
-									<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
-								{/snippet}
-							</Lazy>
+							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
 						{/key}
 					</section>
 					<section class="panel" id="res-publication">
@@ -757,11 +736,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							</div>
 						{:else if publication}
 							{#key shownRunId}
-								<Lazy load={loadPublicationPanel}>
-									{#snippet children(PublicationPanel)}
-										<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
-									{/snippet}
-								</Lazy>
+								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
 							{/key}
 						{:else}
 							<p class="muted" role="status">Loading the publication…</p>

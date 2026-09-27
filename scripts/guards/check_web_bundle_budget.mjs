@@ -851,6 +851,35 @@
 //             pay for the header; splitting the Farmers panel too added ~3 KB
 //             to the total and wasn't needed, so it stays in the page. Largest
 //             chunk is still 41.7 KB (unchanged). No new dependency.
+// 2026-09-26  total 968 → 955 KB (down; measured 951, from 964, after merging onto
+//             main with the section header; the branch alone measured 931
+//             against 945 on its base); other ceilings unchanged. Issue #9, a weight cut for #17's pages. From a
+//             per-chunk and per-module attribution of a sourcemapped build on
+//             main @ da78508: 966 722 bytes (945 KB by this guard's rounding)
+//             over 309 files, of which ~63 KB is split overhead in the JS
+//             (the chunks gzip to 812 KB concatenated, 876 apart) and ~30 KB
+//             in the CSS (109 files: 75 KB apart, 44 together). Removed, each
+//             measured alone in order (bytes gzip):
+//             - preload lists without chunks the importer already has
+//               (vite.config.ts preloadDedupe): 966 722 → 964 390 (−2.3)
+//             - the Runs tab's six always-rendered panels back in its chunk
+//               (supply assurance, water account, evidence, reproduce,
+//               changes since, publication): → 957 463 (−6.8, 13 files)
+//             - the report's server-PDF controls in its chunk: → 957 105 (−0.4)
+//             - Svelte's scoping class s<hash>, not svelte-<hash>
+//               (svelte.config.js cssHash): → 954 446 (−2.6)
+//             - 7-character file hashes, CSS named by hash alone
+//               (vite.config.ts shortFileNames): → 951 731 (−2.7)
+//             Moved, not removed: the Invite farmers dialog is its own chunk
+//             (→ 953 006, +1.2), taking the workspace page chunk 40.7 →
+//             38.5 KB for the redesign's section header. Net −13.7 KB. The
+//             largest chunk is the Settings tab's, 41.2 KB (the ceiling
+//             stays 42). Measured and not landed: the Settings tab's four
+//             always-rendered lazy panels inline (−6.0 total, but a 59 KB
+//             chunk), and the Runs tab's uncertainty and outcome panels
+//             inline (−2.8 total, a 48 KB chunk; the outcome panel alone
+//             −1.6 with Runs at 41.2): both wait on the per-chunk ceiling
+//             (docs/followups.md). Rollup generatedCode es2015: +0.05.
 //             Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -862,7 +891,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 968,
+	totalCodeKb: 955,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

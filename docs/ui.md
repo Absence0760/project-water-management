@@ -523,7 +523,7 @@ put the results first; its first screen follows board A1 of the redesign
   consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
-  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
+  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
   the email's language) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
@@ -2161,7 +2161,7 @@ run's report to chosen members every week or month.
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
   option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
-  its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
+  in the Runs chunk, helpers in `runs/publication.ts`; `#res-publication`,
   menu entry **Publication**). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
@@ -2508,8 +2508,8 @@ run's report to chosen members every week or month.
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
   only a stored legacy run made after the nomination can raise it.
-  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
-  chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
+  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, in the
+  Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
   inputs, **Check reproduction** (viewers too) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
@@ -2593,7 +2593,7 @@ run's report to chosen members every week or month.
   monthly factors.
 - **Assurance of supply** (`#res-assurance`, under *Units & users* after the
   curtailment table; `reliability/AssurancePanel.svelte`, helpers in
-  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  `reliability/reliability.ts`, in the Runs chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, water years met against the annual threshold (Settings), the
@@ -2613,7 +2613,7 @@ run's report to chosen members every week or month.
   state at a few demand levels over the record's past years, described in
   [§ Seasonal outlook](#seasonal-outlook) below.
 - **Water account** (`#res-water-account`, last under *River & Reserve*;
-  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  `reliability/WaterAccountPanel.svelte`, in the Runs chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
@@ -3192,7 +3192,7 @@ exists, says so with a link to Runs & results.
   the charts redraw synchronously, so the canvas is light before the page is
   laid out; `afterprint` puts the previous theme back.
 - **Generate PDF / Email me the PDF** (WP-2.15 Phase B, issue #26;
-  `lib/components/report/ServerPdf.svelte`, a lazy chunk loaded with the bar)
+  `lib/components/report/ServerPdf.svelte`, in the report's chunk)
   sit beside Download PDF for any viewer. They queue a server-side render of
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
