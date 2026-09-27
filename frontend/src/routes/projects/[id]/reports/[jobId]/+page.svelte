@@ -63,8 +63,8 @@
 	/** The state in one word, for the pill; the status line beside it says the rest. */
 	const STATE_WORD: Record<ReportState, string> = { queued: 'Queued', rendering: 'Making', retrying: 'Retrying', done: 'Ready', failed: 'Failed' };
 	const jobState = $derived(current?.report.status ?? null);
-	const runHref = $derived(`${base}/projects/${projectId}?tab=runs${current?.report.runId ? `&run=${current.report.runId}` : ''}`);
-	const reportHref = $derived(`${base}/projects/${projectId}/report${current?.report.runId ? `?run=${current.report.runId}` : ''}`);
+	const runHref = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=runs${current?.report.runId ? `&run=${encodeURIComponent(current.report.runId)}` : ''}`);
+	const reportHref = $derived(`${base}/projects/${encodeURIComponent(projectId)}/report${current?.report.runId ? `?run=${encodeURIComponent(current.report.runId)}` : ''}`);
 </script>
 
 <svelte:head><title>Report PDF{projectName ? ` · ${projectName}` : ''} · Water Management</title></svelte:head>
