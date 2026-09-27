@@ -14,9 +14,10 @@ import { draftFrom, emptyDraft, noticeTextFields, noticeLanguages, parseDraft } 
 /** The types know only the shipped languages; the stand-in exists at run time. */
 const loose = (o: Record<string, string>) => o as never;
 
-vi.mock('../../../../../packages/engine/src/languages', async (orig) =>
-	(await import('@water-management/engine/testing/language')).withTestLanguage(await orig())
-);
+vi.mock('@water-management/engine/languages', async (importOriginal) => {
+	const real = await importOriginal<typeof import('@water-management/engine/languages')>();
+	return { ...real, ...real.languageTable([...real.LANGUAGES, { code: 'xx', name: 'Xx-test', intl: 'en-US', decimalMark: ',' }]) };
+});
 
 describe('the notice with a stand-in language in the table', () => {
 	it('gets its own field in the publish form, after English and Afrikaans', () => {

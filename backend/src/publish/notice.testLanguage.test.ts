@@ -5,9 +5,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NoticeTextBody, RestrictionBody } from './publish.js';
 
-vi.mock('../../../packages/engine/src/languages', async (orig) =>
-	(await import('@water-management/engine/testing/language')).withTestLanguage(await orig())
-);
+vi.mock('@water-management/engine/languages', async (importOriginal) => {
+	const real = await importOriginal<typeof import('@water-management/engine/languages')>();
+	return { ...real, ...real.languageTable([...real.LANGUAGES, { code: 'xx', name: 'Xx-test', intl: 'en-US', decimalMark: ',' }]) };
+});
 
 describe('the notice with a stand-in language in the table', () => {
 	it('accepts the new code, trimmed, and keeps refusing unknown ones', () => {

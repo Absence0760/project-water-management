@@ -4,7 +4,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { pickNotice } from './notice';
 
-vi.mock('../languages', async (orig) => (await import('../testing/testLanguage')).withTestLanguage(await orig()));
+vi.mock('../languages', async (importOriginal) => {
+	const real = await importOriginal<typeof import('../languages')>();
+	return { ...real, ...real.languageTable([...real.LANGUAGES, { code: 'xx', name: 'Xx-test', intl: 'en-US', decimalMark: ',' }]) };
+});
 
 describe('pickNotice with a stand-in language in the table', () => {
 	it('reads the new language for its reader, and falls back to it after English', () => {

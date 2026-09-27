@@ -11,9 +11,7 @@
 		"./dws": "./src/dws.ts",
 		"./languages": "./src/languages.ts",
 		"./provenance": "./src/seriesProvenance.ts",
-		"./testing": "./src/testing/index.ts",
-		"./testing/language": "./src/testing/testLanguage.ts"
-	},
+		"./testing": "./src/testing/index.ts"	},
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --project unit",
