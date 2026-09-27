@@ -71,6 +71,10 @@ const base: ModelInput = {
 		boreholes: [
 			{ id: 'b1', nodeId: MINE, name: 'Own hole', capacityM3Day: 80, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 },
 			{ id: 'b2', nodeId: N1, name: 'Neighbour hole', capacityM3Day: 90, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
+		],
+		demandObjects: [
+			{ id: 'd1', nodeId: MINE, name: 'Own cottages', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 12, litresPerUnitDay: 230, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' },
+			{ id: 'd2', nodeId: N1, name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }
 		]
 	} as unknown as ModelInput['model'],
 	series: {}
@@ -109,6 +113,7 @@ describe('projectBaseForApplicant', () => {
 		expect(view.model.transfers.map((t) => t.id)).toEqual(['t1']);
 		expect((view.model.landCover ?? []).map((p) => p.id)).toEqual(['p1']);
 		expect(view.model.boreholes).toEqual([base.model.boreholes![0]]);
+		expect(view.model.demandObjects).toEqual([base.model.demandObjects![0]]);
 	});
 
 	it('names no other node anywhere in the view', () => {

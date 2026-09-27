@@ -202,3 +202,28 @@ describe('ModelBody (PUT /model, project documents)', () => {
 		expect(parsed.nodes[1]).not.toHaveProperty('returnFlowPct');
 	});
 });
+
+describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
+	const gauge = node('Gauge', null, { kind: 'gauge' });
+	const unit = node('Unit', gauge.id);
+	const body = (o: Record<string, unknown>) => ({ nodes: [gauge, unit], crops: [], cropAreas: [], transfers: [], demandObjects: [{ id: crypto.randomUUID(), nodeId: unit.id, name: 'Town', ...o }] });
+
+	it('fills the defaults: a monthly demand, shared priority, internal, on, no return', () => {
+		const parsed = ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(10) }));
+		expect(parsed.demandObjects![0]).toMatchObject({ category: 'other', sizing: 'monthly', count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'shared', destination: 'internal', enabled: true, note: '' });
+		expect(modelProblems(parsed)).toEqual([]);
+	});
+
+	it('refuses 11 months, losses of 100 %, an unknown class and a negative count', () => {
+		expect(ModelBody.safeParse(body({ monthlyM3Day: new Array(11).fill(1) })).success).toBe(false);
+		expect(ModelBody.safeParse(body({ sizing: 'perUnit', count: 10, litresPerUnitDay: 90, lossPct: 1 })).success).toBe(false);
+		expect(ModelBody.safeParse(body({ monthlyM3Day: new Array(12).fill(1), priority: 'senior' })).success).toBe(false);
+		expect(ModelBody.safeParse(body({ sizing: 'perUnit', count: -1, litresPerUnitDay: 90 })).success).toBe(false);
+	});
+
+	it('refuses an object with no size, one on a gauge, and a return from water piped out', () => {
+		expect(modelProblems(ModelBody.parse(body({ sizing: 'perUnit' }))).join()).toMatch(/needs a count and litres/);
+		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), nodeId: gauge.id }))).join()).toMatch(/only a unit has demand objects/);
+		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), destination: 'external', returnPct: 0.2 }))).join()).toMatch(/nothing returns/);
+	});
+});

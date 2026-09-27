@@ -43,12 +43,21 @@ const MODEL_JSON = `json_build_object(
 	'boreholes', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
 		SELECT id, node_id AS "nodeId", name, capacity_m3_day AS "capacityM3Day", annual_cap_m3 AS "annualCapM3", mode,
 			emergency_below_pct AS "emergencyBelowPct", target, depletion_factor AS "depletionFactor"
-		FROM borehole WHERE project_id = $1) r)
+		FROM borehole WHERE project_id = $1) r),
+	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
+		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
+			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
+			return_pct AS "returnPct", priority, destination, enabled, note
+		FROM demand_object WHERE project_id = $1) r)
 )`;
 
-/** Individual boreholes (WP-3.9) are in the document only when there are any, so older documents read back unchanged. */
+/**
+ * Individual boreholes (WP-3.9) and demand objects (engine 1.7.0) are in the
+ * document only when there are any, so older documents read back unchanged.
+ */
 function withoutEmptyBoreholes(model: ProjectModel): ProjectModel {
 	if (!model.boreholes) delete model.boreholes;
+	if (!model.demandObjects) delete model.demandObjects;
 	return model;
 }
 
@@ -72,8 +81,8 @@ export async function loadSettingsAndModel(db: Db, projectId: string): Promise<{
  * Upserts only touch rows of *this* project — an id that exists in another
  * project is a conflict, never a hijack.
  *
- * Set-based: at most nine statements whatever the model's size, not one per
- * node, crop, transfer, land-cover patch and borehole (a 3-node save was 25 round trips
+ * Set-based: at most ten statements whatever the model's size, not one per
+ * node, crop, transfer, land-cover patch, borehole and demand object (a 3-node save was 25 round trips
  * of its own, and every round trip waits its turn on a busy API; issue #41).
  * Each row list goes as one jsonb parameter, read back with
  * jsonb_populate_recordset against the table's own row type, so every column
@@ -96,6 +105,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		`WITH t AS (DELETE FROM transfer WHERE project_id = $1 AND NOT (id = ANY($4::uuid[]))),
 			lc AS (DELETE FROM land_cover WHERE project_id = $1),
 			bh AS (DELETE FROM borehole WHERE project_id = $1),
+			dob AS (DELETE FROM demand_object WHERE project_id = $1),
 			ca AS (DELETE FROM crop_area WHERE project_id = $1),
 			cd AS (DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($3::uuid[]))),
 			cr AS (UPDATE crop SET name = '~' || id::text WHERE project_id = $1 AND id = ANY($3::uuid[])),
@@ -277,6 +287,32 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			depletion_factor: b.depletionFactor
 		})),
 		'borehole'
+	);
+	await upsertAll(
+		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+			loss_pct, monthly_factor, return_pct, priority, destination, enabled, note)
+		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+			loss_pct, monthly_factor, return_pct, priority, destination, enabled, note
+		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
+		 ON CONFLICT (id) DO NOTHING`,
+		(m.demandObjects ?? []).map((o) => ({
+			id: o.id,
+			node_id: o.nodeId,
+			name: o.name,
+			category: o.category,
+			sizing: o.sizing,
+			monthly_m3_day: o.monthlyM3Day,
+			unit_count: o.count,
+			litres_per_unit_day: o.litresPerUnitDay,
+			loss_pct: o.lossPct,
+			monthly_factor: o.monthlyFactor,
+			return_pct: o.returnPct,
+			priority: o.priority,
+			destination: o.destination,
+			enabled: o.enabled,
+			note: o.note
+		})),
+		'demand object'
 	);
 	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);
 }
