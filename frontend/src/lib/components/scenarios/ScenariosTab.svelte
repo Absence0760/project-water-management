@@ -204,7 +204,7 @@
 	const newHref = $derived(withParam(page.url, 'new', '1'));
 	const newLabel = $derived(applicant ? 'New application' : 'New scenario');
 
-	// --- the section header (not in the Applicant view, which has none) ---
+	// --- the section header (the Applicant view draws its own, with New application) ---
 	const summary = $derived(scenarios ? scenariosSummary(scenarios) : null);
 	$effect(() => fillHeader({ context: summary ? headerContext : undefined, actions: headerActions }, !applicant));
 
@@ -235,7 +235,6 @@
 		<!-- Not "Scenarios": the tab body is already the region of that name (landmarks need unique names). -->
 		<div class="panel-head">
 			<h2 id="scenarios-h">{applicant ? 'Your applications' : 'All scenarios'}</h2>
-			{#if applicant && publishedRunId}<a class="btn btn-sm btn-primary" href={newHref}>{newLabel}</a>{/if}
 		</div>
 		{#if applicant && !publishedRunId}
 			<p class="muted small">Nothing is published yet: an application starts on the published baseline.</p>

@@ -599,6 +599,8 @@
 				{#snippet children(ApplicantView)}<ApplicantView project={applicantProject!} />{/snippet}
 			</Lazy>
 		{:else if notFound || !project}
+			<!-- The same frame as every section: one title, then what happened (issue #17). -->
+			<SectionHeader title="Project not found" />
 			<div class="alert alert-error" role="alert">
 				This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
 			</div>

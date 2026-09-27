@@ -304,9 +304,16 @@ Interaction details that bit:
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's
-  "new" action goes in the section header (or at the top of the list where
-  there is no header, as in the Applicant view), never under the list,
-  where thirty items pushed it 2,700 px down.
+  "new" action goes in the section header (the Applicant view's New
+  application too, once it got one), never under the list, where thirty
+  items pushed it 2,700 px down.
+- **A view shared by a page and a tab draws its title only on the page.**
+  Compare runs (`CompareView`) drew its own "Compare runs" heading and
+  context under the workspace's section header, so the tab had the title
+  twice, and its spec pinned the second one. Inside the workspace it now
+  puts its context in the header (`fillHeader`) and draws no heading; the
+  standalone `/compare` keeps its `h1`. Count *all* headings with the
+  title's name, not just `h1`s, when checking "one page title".
 - **A fragment into a lazy tab needs the tab to land it.** Workspace tabs
   are lazy chunks, so the browser's own jump to `#set-ewr` runs before the
   element exists and the page opens at the top. Settings' note links

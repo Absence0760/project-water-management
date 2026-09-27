@@ -7,8 +7,8 @@
 // status moves and Delete sit in the scenario's head row; override mode
 // brings its banner into view clear of the record bar. Thirty scenarios at
 // 1440 × 960, 1280 × 800 and on a phone; a viewer; axe in both themes and on
-// a phone. The Applicant view (no section header) with thirty applications:
-// New application tops the list, on the first screen. Synthetic data only.
+// a phone. The Applicant view with thirty applications: New application is
+// its section header's action, on the first screen. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -179,7 +179,7 @@ test('a viewer reads the list and a scenario, with no New scenario and no create
 	await expect(header(viewer.page).getByTestId('section-context')).toHaveText('3 scenarios · 3 drafts · none run yet');
 });
 
-test('an applicant with thirty applications: New application tops the list on the first screen, and the list scrolls inside its card', async ({ page, owner, signIn }) => {
+test('an applicant with thirty applications: New application in the header on the first screen, and the list scrolls inside its card', async ({ page, owner, signIn }) => {
 	void owner;
 	const applicant = await signIn('Scenarios page applicant');
 	const project = await seedRunnableProject(page.request, 'Scenarios page applications');
@@ -197,9 +197,10 @@ test('an applicant with thirty applications: New application tops the list on th
 		await a.goto(`/projects/${project.id}`);
 		await expect(a.getByTestId('applicant-view')).toBeVisible();
 		await expect(scenarioList(a).getByRole('button')).toHaveCount(30);
-		// The newest opens; New application is at the top of the list, on the first screen.
+		// The newest opens; New application is the section header's action, on the first screen.
 		await expect(a.getByRole('heading', { level: 2, name: /^Application 30:/ })).toBeVisible();
-		await expect(rail(a).getByRole('link', { name: 'New application', exact: true })).toBeInViewport();
+		await expect(a.getByTestId('section-header').getByRole('link', { name: 'New application', exact: true })).toBeInViewport();
+		await expect(rail(a).getByRole('link', { name: 'New application', exact: true })).toHaveCount(0);
 		const list = await scenarioList(a).evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight }));
 		expect(list.sh).toBeGreaterThan(list.ch);
 		if (width > 900) {
@@ -208,7 +209,7 @@ test('an applicant with thirty applications: New application tops the list on th
 		}
 		await expectNoSidewaysScroll(a);
 	}
-	await rail(a).getByRole('link', { name: 'New application', exact: true }).click();
+	await a.getByTestId('section-header').getByRole('link', { name: 'New application', exact: true }).click();
 	const dialog = newDialog(a, 'New application');
 	await dialog.getByLabel('Name', { exact: true }).fill('Application 31');
 	await dialog.getByRole('button', { name: 'Create application' }).click();
