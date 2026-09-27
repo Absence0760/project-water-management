@@ -261,7 +261,7 @@ role, freshness, Add data) and each tab's own header:
   on a Summary before the first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  Crops' **Grids** and **+ Add crop**, Data's **Preview all data**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
   same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
@@ -1427,11 +1427,58 @@ each card's field labels.
 
 ## Data
 
-Each series shows its role in the model, its period, its last date and age,
+`?tab=series` (`?tab=data` and `?tab=timeseries` also work;
+`series/SeriesTab.svelte`), under **Build the model** (issue #17, option A;
+no board of its own, so it follows the Dams page's list-and-chart layout
+with the table the data needs).
+
+- **Header**: the section header titled "Data", its context line counting
+  the series and those behind ("5 input series · 2 behind",
+  `workspace/context.ts`), then the Rain up to pill, **Preview all data**
+  (filled through `fillHeader`; absent with no series) and **Add data**, the
+  main (primary) action for editors. The tab's own notices (new data since
+  the latest run with its *Re-run the model* link, a feed rebuilding a
+  series, a failed delete or relabel) are slim lines under the header, like
+  the page's.
+- **Freshness first**: the table lists the series **behind** first, most
+  days behind first, then the series a run reads, then the rest (another
+  series of that kind is read, reference only), keeping the list's order
+  within each group (`series/freshness.ts` `freshnessOrder`). *Behind* is
+  exactly the sidebar badge's rule (`freshness().behind`): a series a run is
+  driven by (recorded rain, daily A-pan) ending more than 7 days
+  (`STALE_DAYS`) before the viewer's date; a forecast runs ahead and observed
+  flow only scores a run, so neither is. Each such row carries a **Behind**
+  pill beside its age and an amber edge, the key line says what it means,
+  and the panel head repeats "2 behind (more than 7 days old)", so the
+  table, the header and the badge always give the same count. **Data up
+  to** is the column straight after the series. (Until 2026-09-26 any row
+  older than 31 days, flow included, was amber, which disagreed with the
+  badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
+  (`describeAge`; those two days used to read "1 months" / "1 years").
+- **Picking a series**: clicking a row (or its **View** button) charts it
+  through the URL (`series=<id>`, `withParam`), so the link can be shared
+  and Back returns to the series before. Without `series=` (or with one that
+  no longer exists) the observed flow a run reads is charted, else the main
+  rainfall, else the first. Deleting the charted series drops the parameter
+  (`replaceState`); an upload through the form below charts the new series.
+  When the layout is stacked, the chart comes into view after a pick.
+- **Layout**: when the page is at least 720 px wide and the window at least
+  720 px tall, the table and the chart are the height left in the window
+  below their top (measured with a `ResizeObserver` on `body`, less the save
+  bar; at least 540 px): the table takes up to 55 % and its rows scroll
+  inside its box (the sticky column headers stay), the chart fills the rest
+  (the plot takes what the chart's head, legend and caption leave). Shorter
+  or narrower, the page scrolls as before, and below 640 px each row is a
+  card. The gauge-vs-logger table, the double mass panel, Data checks, the
+  Upload CSV form and *What the model uses* follow below.
+- **Add data from the header** refreshes the table at once: the tab takes
+  the page's new series list when it changes (before 2026-09-26 the table
+  kept its own copy until the page was reloaded).
+
+Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Editors can **Delete** a series (after a
+their kind by name) are marked. Editors can **Delete** a series (after a
 confirm; runs already stored are not affected). A CHIRPS series shows which
 product and version it holds (issue #40 part c): editors get a select
 (*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
@@ -1458,7 +1505,7 @@ timestamp closes its interval. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card
-(series and role on top, then labelled Period / Data up to / Missing (% of
+(series and role on top, then labelled Data up to / Period / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. For editors the
@@ -1534,7 +1581,7 @@ side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
 and the window's height, with the table filling what's left and only the rows
 in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
-The card header's **Preview all data** button opens it with every column shown; a
+The section header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
 un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its

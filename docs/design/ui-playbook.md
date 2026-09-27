@@ -75,7 +75,13 @@ section it belongs to, with the example that taught it.
   with a readable text column (~75ch).
 - **Cards or list on one side, the picked item's detail on the other.** Dams
   and Units & supply: a scrolling column of items (worst first), the picked
-  item's chart filling the rest, the pick in the URL so Back works.
+  item's chart filling the rest, the pick in the URL so Back works. When
+  the items are genuinely tabular (Data: last date, period, % missing,
+  coverage, per-row actions), keep the table and stack it over the chart
+  instead: the table capped at a share of the fitted height (55 %) with its
+  rows scrolling in `.table-wrap`, the chart filling the rest. Ten specs
+  leaned on the Data table's rows; cards would have lost the columns and
+  broken them for nothing.
 - **Design for N.** Assume 30 crops, 40 units, 10 dams, 20 runs and names
   three times longer than the seed's. A card per item works for a handful;
   past that use a compact row list that scrolls inside its column, so the
@@ -117,7 +123,11 @@ section it belongs to, with the example that taught it.
 - **Honest numbers:** a figure on an outcome page comes from the same helper
   as the same figure elsewhere (Units & supply's irrigation supplied comes
   from `overview/latestRun.ts`, the per-year reserve days from the engine's
-  `ewr_shortfall`), so two pages never disagree.
+  `ewr_shortfall`), so two pages never disagree. The same holds for a
+  status: Data's rows turned amber past 31 days on any series while the
+  sidebar badge counted driver series past 7, so "1 behind" sat beside five
+  amber rows. Now the rows, the panel head and the badge all read
+  `freshness().behind`.
 
 ## 4. Pieces to reuse
 
@@ -142,7 +152,8 @@ picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Grids menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
-with a sticky header).
+with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
+window fit, the pick in the URL).
 
 Interaction details that bit:
 
@@ -154,21 +165,32 @@ Interaction details that bit:
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
   closes the overlay rather than leaving the page.
+- **A tab that copies a list from the page must take the page's updates.**
+  Data kept its own copy of the series (`untrack(() => initial)`), so a file
+  added through the header's Add data didn't show until a reload. Sync from
+  the prop when it changes to an array that isn't the tab's own.
 
 ## 5. Testing
 
 - Every new page gets its own spec with a11y scans at desktop and phone
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
-  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`).
+  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card (see `network-map.spec.ts`,
-  `portfolio.spec.ts`, `dams-page.spec.ts`).
+  `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
   names across page and modal cause strict-mode errors.
 - **Find things by their exact name.** "Runs" also matched "Compare runs";
   a card repeating a change's text caused duplicate matches in Compare.
+  But a badge is part of a link's name: once Data's sidebar link read "Data
+  (1 series behind)", two specs waiting for `{ name: 'Data', exact: true }`
+  timed out. Match the badge (`/^Data \(\d+ series behind\)$/`) or use
+  `/^Data/`.
+- **A click on a row lands in its middle**, which may be a control that
+  rightly ignores row picking (the CHIRPS row header holds its version
+  select). Click the row's text instead.
 - **Run the neighbours**, not only the spec for the screen: `a11y`,
   `golden-path`, `section-header`, `tabs-by-role`, `overview` and whatever
   links into the screen. `--repeat-each 5 --retries 0` on every new
