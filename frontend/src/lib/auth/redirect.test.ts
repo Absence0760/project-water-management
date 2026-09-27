@@ -9,6 +9,14 @@ describe('safeNext', () => {
 		expect(safeNext('https://evil.example', '/')).toBe('/');
 		expect(safeNext(null, '/x')).toBe('/x');
 	});
+
+	it('refuses a path a browser reads as another host once it strips tabs and newlines, or as a script URL', () => {
+		for (const hostile of ['/\t/evil.example', '/\n/evil.example', '/\r\n/evil.example/x', '/\\evil.example', 'javascript:alert(1)', ' /x', '\t//evil.example']) {
+			expect(safeNext(hostile, '/home'), JSON.stringify(hostile)).toBe('/home');
+		}
+		// Positive control: an ordinary app path with a query and hash survives unchanged.
+		expect(safeNext('/farm/p1?node=n%2F1#notice', '/home')).toBe('/farm/p1?node=n%2F1#notice');
+	});
 });
 
 describe('isPublicPath', () => {

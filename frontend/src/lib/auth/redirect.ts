@@ -1,5 +1,18 @@
 // Only follow same-app relative `?next=` targets (no open redirects).
+//
+// The prefix checks catch `//host` and `/\host`; the URL parse catches what a
+// browser strips before it reads the URL (tabs and newlines, so `/\t/host` is
+// `//host` to it), since a path the parser resolves to another origin is not
+// an app path whatever it looks like.
+const PROBE = 'https://app.invalid';
+
 export function safeNext(next: string | null, fallback: string): string {
 	if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
-	return next;
+	let origin: string;
+	try {
+		origin = new URL(next, PROBE).origin;
+	} catch {
+		return fallback;
+	}
+	return origin === PROBE ? next : fallback;
 }
