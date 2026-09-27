@@ -8,7 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
-	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
+	import { isLandingRoot, isPublicPath, LANDING_PATH, routeAccess, session } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
@@ -19,8 +19,20 @@
 	let { children }: { children: Snippet } = $props();
 	let bootError = $state<string | null>(null);
 
+	// The landing page (issue #57): a signed-out visitor to `/` sees it in place
+	// of the projects list, loaded as its own chunk, fetched beside /auth/me so
+	// it is usually in by the time the answer is. /welcome is the same page
+	// prerendered (routes/welcome), shown at once, before the session is known,
+	// since nothing on it depends on who is looking.
+	const loadLanding = () => import('$lib/components/landing/Landing.svelte');
+	// By route, not by path: while prerendering, `base` is relative ('.'), so a
+	// path comparison would miss it and the page would prerender as "Loading…".
+	const landingPage = $derived(page.route.id === LANDING_PATH);
+	const landingRoot = $derived(session.checked && isLandingRoot(page.url.pathname, base, !!session.user));
+
 	async function checkSession() {
 		bootError = null;
+		if (isLandingRoot(page.url.pathname, base, false)) loadLanding().catch(() => {});
 		// The catchment page's own requests go out beside /auth/me, not after it
 		// (workspace/firstLoad.ts); the page still mounts only once it answers.
 		startProjectPage(page.url.pathname, base);
@@ -60,7 +72,7 @@
 
 	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
 	// even when a signed-in user opens a reset or confirmation link.
-	const authScreen = $derived(isPublicPath(page.url.pathname, base));
+	const authScreen = $derived(isPublicPath(page.url.pathname, base) || landingRoot);
 	// The farmer view (/farm/…) has its own header and Menu (FarmShell): a farmer
 	// has no projects, teams or workspace to navigate to.
 	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
@@ -96,14 +108,16 @@
 
 	// Language (WP-2.5, docs/ui.md § Language), on the translated surfaces
 	// only (sign-in pages, the farm view, the account and alert pages, the
-	// public /share page): the modeller workspace is English and never loads
+	// public /share page, the landing page): the modeller workspace is English and never loads
 	// the message catalogue.
 	// The i18n module is imported on the first translated route; the language
 	// is the account's when signed in and chosen, else this device's, else the
 	// browser's, re-resolved when the user signs in or out or changes it (the
 	// switch updates session.user). The route renders once that language is
 	// set (i18nReady), so it never shows one language and then another.
-	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share)(\/|$)/.test(page.url.pathname.slice(base.length)));
+	const translated = $derived(
+		landingRoot || /^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share|welcome)(\/|$)/.test(page.url.pathname.slice(base.length))
+	);
 	type I18n = typeof import('$lib/i18n/locale.svelte');
 	let i18nModule = $state.raw<I18n | null>(null);
 	let i18nReady = $state(false);
@@ -145,6 +159,10 @@
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
+	// /welcome renders at once (and prerenders): English until the language's
+	// words arrive, the one page that may switch, so crawlers and a slow API
+	// still get the page (even with the API down: it needs none).
+	const shown = $derived(landingPage || ready);
 </script>
 
 <!-- A signed-in person's pages sit in the app frame (a sidebar on wide screens,
@@ -159,18 +177,24 @@
 			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
 		{/await}
 	{/if}
-	{#if bootError}
+	{#if bootError && !landingPage}
 		<main class="page">
 			<div class="alert alert-error" role="alert">
 				Could not reach the API: {bootError}
 				<button type="button" class="btn btn-sm" onclick={checkSession}>Try again</button>
 			</div>
 		</main>
-	{:else if i18nFailed && translated}
+	{:else if i18nFailed && translated && !landingPage}
 		<main class="page">
 			<ChunkFailed what="This page" />
 		</main>
-	{:else if ready}
+	{:else if shown && landingRoot}
+		{#await loadLanding() then landing}
+			<div id="main" tabindex="-1"><landing.default /></div>
+		{:catch}
+			<main class="page"><ChunkFailed what="This page" /></main>
+		{/await}
+	{:else if shown}
 		<div id="main" tabindex="-1">{@render children()}</div>
 	{:else}
 		<main class="page"><p class="muted" role="status">Loading…</p></main>

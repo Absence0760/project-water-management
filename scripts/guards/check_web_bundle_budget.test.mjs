@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { BUDGET, WORKSPACE_PAGE, calibrationWorkerViolations, kb, measure, tabChunks, tabModules, violations } from './check_web_bundle_budget.mjs';
+import { BUDGET, WORKSPACE_PAGE, calibrationWorkerViolations, kb, landingChunks, measure, tabChunks, tabModules, violations } from './check_web_bundle_budget.mjs';
 
-const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3 };
+const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6 };
 
 test('kb rounds up once, not per file', () => {
 	assert.equal(kb(0), 0);
@@ -200,4 +200,32 @@ test('the committed budget is internally sane', () => {
 	assert.ok(BUDGET.largestWorkerKb < BUDGET.totalCodeKb);
 	assert.ok(BUDGET.largestSpreadsheetWorkerKb < BUDGET.totalCodeKb);
 	assert.ok(Object.isFrozen(BUDGET));
+});
+
+test('the landing page is found by its modules, summed with its CSS, and has its own ceiling (issue #57)', () => {
+	const chunks = {
+		'_app/immutable/chunks/L1.js': { modules: ['src/lib/components/landing/Landing.svelte', 'src/lib/components/landing/Hero.svelte'], css: ['_app/immutable/assets/L1.css'] },
+		'_app/immutable/chunks/L2.js': { modules: ['src/lib/components/landing/data.generated.ts'], css: [] },
+		'_app/immutable/nodes/0.js': { modules: ['src/routes/+layout.svelte'], css: [] },
+	};
+	const { files, errors } = landingChunks(chunks);
+	assert.deepEqual(errors, []);
+	assert.deepEqual([...files].sort(), ['_app/immutable/assets/L1.css', '_app/immutable/chunks/L1.js', '_app/immutable/chunks/L2.js']);
+	const m = measure(
+		[
+			{ path: '_app/immutable/chunks/L1.js', gzipBytes: 4 * 1024 },
+			{ path: '_app/immutable/assets/L1.css', gzipBytes: 1024 },
+			{ path: '_app/immutable/chunks/L2.js', gzipBytes: 2 * 1024 },
+			{ path: '_app/immutable/nodes/0.js', gzipBytes: 1024 },
+		],
+		new Set(),
+		files,
+	);
+	assert.equal(m.landingKb, 7);
+	assert.equal(m.totalCodeKb, 8, 'the landing still counts in the total');
+	assert.match(violations(m, budget).join('\n'), /landing page's code is 7 KB, over the 6 KB landing budget/);
+
+	assert.match(landingChunks({}).errors.join('\n'), /Found no chunk holding/);
+	const inLayout = landingChunks({ '_app/immutable/nodes/0.js': { modules: ['src/routes/+layout.svelte', 'src/lib/components/landing/Landing.svelte'], css: [] } });
+	assert.match(inLayout.errors.join('\n'), /in the chunk of src\/routes\/\+layout\.svelte/);
 });

@@ -24,6 +24,7 @@ const TYPES = {
 	'.png': 'image/png',
 	'.jpg': 'image/jpeg',
 	'.webp': 'image/webp',
+	'.avif': 'image/avif',
 	'.ico': 'image/x-icon',
 	'.woff2': 'font/woff2',
 	'.txt': 'text/plain; charset=utf-8',
@@ -46,11 +47,15 @@ async function fileAt(pathname) {
 	return null;
 }
 
+// The prerendered pages, served for their extension-less path, as CloudFront's
+// spa_rewrite function does (infra/s3_cloudfront.tf): the landing page (issue #57).
+const PRERENDERED = { '/welcome': '/welcome.html' };
+
 createServer(async (req, res) => {
 	const { pathname } = new URL(req.url ?? '/', 'http://localhost');
 	let path;
 	try {
-		path = (await fileAt(pathname)) ?? join(root, 'index.html');
+		path = (await fileAt(PRERENDERED[pathname] ?? pathname)) ?? join(root, 'index.html');
 	} catch {
 		res.writeHead(400).end();
 		return;
