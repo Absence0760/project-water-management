@@ -968,8 +968,10 @@
 //             row are a few hundred bytes. Trimming CSS moved nothing (hash
 //             and class-name noise is ±50 bytes). No new dependency.
 //             Headroom ~4 KB.
-// 2026-09-27  total 1008 → 1012 KB (History measured 1004 on its own; merged with
-//             Compare runs extras, see the line below); other ceilings
+// 2026-09-27  total 1008 → 1018 KB (measured 1015 on merged main: History 1004 on
+//             its own, plus Compare runs extras below, plus the sign-in,
+//             account alerts / share, help subpage and farmer-page passes
+//             landing the same day); other ceilings
 //             unchanged. Issue #17's History page, the last of the four:
 //             main @ 14117da1 measured 1000 KB by this guard, this change
 //             1004 KB (+3.4 KB of JS/CSS gzip bytes). The History tab chunk
@@ -990,7 +992,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1012,
+	totalCodeKb: 1018,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
