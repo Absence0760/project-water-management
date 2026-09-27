@@ -64,7 +64,11 @@ describe('describeAge', () => {
 		[0, 'today'],
 		[1, 'yesterday'],
 		[12, '12 days ago'],
+		[59, '59 days ago'],
+		[60, '2 months ago'],
 		[75, '2 months ago'],
+		[729, '23 months ago'],
+		[730, '2 years ago'],
 		[800, '2 years ago']
 	])('%s days → %s', (d, want) => expect(describeAge(d)).toBe(want));
 
