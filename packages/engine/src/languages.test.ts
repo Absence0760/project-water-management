@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOCALE, isLocale, language, LANGUAGES, LOCALES, matchLocale } from './languages';
+import { DEFAULT_LOCALE, isLocale, language, languageTable, LANGUAGES, LOCALES, matchLocale } from './languages';
 
 describe('the language table', () => {
 	it('lists English first, each code once, as a lower-case primary tag with a working Intl locale', () => {
@@ -28,5 +28,19 @@ describe('the language table', () => {
 		expect(matchLocale(['en-ZA', 'af'])).toBe('en');
 		expect(matchLocale(['de', 'fr'])).toBe('en');
 		expect(matchLocale([])).toBe('en');
+	});
+});
+
+describe('languageTable (what the stand-in-language tests build on)', () => {
+	const XX = { code: 'xx', name: 'Xx-test', intl: 'en-ZA', decimalMark: ',' } as const;
+	const t = languageTable([...LANGUAGES, XX]);
+
+	it('adds a language to every lookup', () => {
+		expect(t.LOCALES).toEqual([...LOCALES, 'xx']);
+		expect(t.isLocale('xx')).toBe(true);
+		expect(t.language('xx')).toBe(XX);
+		expect(t.matchLocale(['de', 'xx-ZA', 'af'])).toBe('xx');
+		expect(t.language('zz').code).toBe('en');
+		expect(t.matchLocale(['de'])).toBe('en');
 	});
 });
