@@ -30,7 +30,7 @@
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { countByNode, linkedNote, removeMessage } from './farmerLinks';
 	import Lazy from '$lib/components/common/Lazy.svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	// The Yield panel (WP-3.6) and its chart load only when a farm is focused.
 	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');

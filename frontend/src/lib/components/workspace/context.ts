@@ -1,5 +1,5 @@
 // The section header's one-line context for the tabs that don't give their
-// own (sectionHeader.svelte.ts): a count of what the section holds, so a
+// own (headerSlot.svelte.ts): a count of what the section holds, so a
 // section's header says something under its title. Network, Crops, Summary
 // and History fill their own.
 import type { TabId } from '$lib/workspace/tabs';

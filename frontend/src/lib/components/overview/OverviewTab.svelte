@@ -7,7 +7,7 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { downloads } from '$lib/export';
 	import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention, runHref } from './attention';

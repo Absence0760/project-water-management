@@ -11,7 +11,7 @@
 	// the uncertainty bands, the outcome matrix, the seasonal outlook and the
 	// water account.
 	import { onDestroy, tick, untrack } from 'svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';

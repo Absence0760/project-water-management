@@ -57,7 +57,7 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import { headerSlot } from '$lib/components/workspace/sectionHeader.svelte';
+	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {

@@ -23,7 +23,7 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	let {
 		editor,

@@ -250,7 +250,7 @@ role, freshness, Add data) and each tab's own header:
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
   **Unsaved changes** shows beside it while the model has edits (editors).
 - **A one-line context** under it. A tab gives its own through
-  `fillHeader({ context, actions })` (`workspace/sectionHeader.svelte.ts`,
+  `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
   run it shows (label, workbook-comparison and evidence badges, period,
   engine, "ran N days ago", **Open in Runs**); the Network its summary

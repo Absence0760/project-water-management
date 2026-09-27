@@ -13,7 +13,7 @@
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { filterEntries, groupByChangeSet, groupByDay, itemLines, KIND_FILTERS, localDay, localTime, revisionTitle, seriesRestore } from './timeline';
 
 	let {

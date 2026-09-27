@@ -62,7 +62,7 @@ section it belongs to, with the example that taught it.
   the `h1`, a one-line context, and on the right the rain pill, the
   section's own actions, **Add data** and **Run model**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
-  (`workspace/sectionHeader.svelte.ts`); it never draws its own title (Dams
+  (`workspace/headerSlot.svelte.ts`); it never draws its own title (Dams
   briefly had two). Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Summary,
