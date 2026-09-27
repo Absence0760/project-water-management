@@ -267,14 +267,25 @@ role, freshness, Add data) and each tab's own header:
   run it shows (label, workbook-comparison and evidence badges, period,
   engine, "ran N days ago", **Open in Runs**); the Network its summary
   ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
-  line ("3 crops · 675 ha irrigated on 8 farms · …"); History what it holds.
-  The others count what they hold (`workspace/context.ts`): "2 runs",
-  "4 input series · 1 behind", "3 transfer rules · 2 active", "No runs yet"
-  on a Summary before the first run.
+  line ("3 crops · 675 ha irrigated on 8 farms · …"); Settings & calibration
+  where the runoff parameters came from; Runs & results its run count and
+  when the newest ran; River & reserve the run it shows (label, badges,
+  period, engine, the EWR rule); Units & supply, Dams, Scenarios,
+  Allocations, Project and Applications a summary of what they hold; History
+  what it holds. The others count what they hold (`workspace/context.ts`):
+  "2 runs" on Compare runs, "4 input series · 1 behind",
+  "3 transfer rules · 2 active", "No runs yet" on a Summary before the
+  first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Grids** and **+ Add node**,
   Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
-  **+ Add transfer**, Data's **Preview all data**), **Add data** (editors), and **Run
+  **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
+  **Fit the parameters** (a viewer: **Fit record**, when there is one),
+  River & reserve's **Run** menu and **Open in Runs & results**, Units &
+  supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
+  **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
+  **+ Add volume**, Project's **Download** menu, Applications' **Decide the
+  longest waiting**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
   same `startRun` as the new-data line's Re-run model. On Runs & results the
@@ -3798,9 +3809,11 @@ under the search box, and close again when you pick a page.
   guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
   the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
   *The whole process* has a **Getting around a project** section (the three
-  sections, where they sit in the app sidebar under the catchment's name,
-  Projects / Teams / Help at its top, the phone bar's Menu and the phone
-  Sections button, and the farm drawer),
+  sections, the Project and Dams pages, where the sections sit in the app
+  sidebar under the catchment's name, Projects / Teams / Help at its top, the
+  Data badge, the phone bar's Menu and the phone Sections button, the section
+  header and each page's actions in it, the notice line, the Grids menu's grid
+  modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
