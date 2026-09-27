@@ -58,6 +58,7 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
+	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
@@ -110,7 +111,12 @@
 	// Which tabs each role is shown (presentation only; a hidden tab still
 	// opens from a deep link, and then shows in the strip while it's open).
 	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
-	const shownIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
+	// What the role sees, then less the sections the person hid themselves
+	// (SectionsMenu, their account's preferences).
+	const roleIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
+	const shownIds = $derived(
+		visibleTabs(project?.role, { showModelInputs, hidden: session.user?.preferences?.hiddenTabs }, TAB_IDS)
+	);
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
 	const LABEL = TAB_LABELS;
 	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
@@ -473,7 +479,7 @@
      catchment's name. Phones: behind a "Sections" button here. One copy only. -->
 {#snippet projectSidebar()}
 	<div class="project-side">
-		<span class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}</span>
+		<div class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}<SectionsMenu roleTabs={roleIds} /></div>
 		<a class="side-project" href={tabHref('overview')} title={project?.name} data-testid="project-name">{project?.name}</a>
 		{@render sectionsNav()}
 	</div>
@@ -618,7 +624,10 @@
 					<svg class="chev" class:up={navOpen} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
 				</button>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="nav-panel" class:open={navOpen} id="project-nav" onkeydown={navKeydown}>{@render sectionsNav()}</div>
+				<div class="nav-panel" class:open={navOpen} id="project-nav" onkeydown={navKeydown}>
+					{@render sectionsNav()}
+					<div class="phone-sections-menu"><SectionsMenu roleTabs={roleIds} showLabel /></div>
+				</div>
 			</div>
 			{/if}
 
@@ -635,7 +644,7 @@
 
 			<section class="tab-body" class:readonly={!canEdit} aria-labelledby="tab-{tab}">
 				{#if tab === 'overview'}
-					<OverviewTab {project} {editor} {series} {runs} {canEdit} visibleTabs={shownIds} />
+					<OverviewTab {project} {editor} {series} {runs} {canEdit} visibleTabs={roleIds} />
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
 					<Lazy load={LOAD.network}>
@@ -970,6 +979,7 @@
 	}
 	.side-head {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0 0.75rem;
@@ -989,7 +999,10 @@
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		overflow: hidden;
-		margin-bottom: 0.6rem;
+		/* 0.3rem: the head line above is 24 px tall with the "Choose sections"
+		   button (SectionsMenu), and the sidebar's rows are budgeted to fit
+		   1440×960 (app-sidebar.spec.ts). */
+		margin-bottom: 0.3rem;
 		padding: 0 0.75rem;
 		color: var(--text);
 		font-weight: 600;
@@ -1115,6 +1128,14 @@
 	}
 	.nav-panel .tabs a {
 		min-height: 44px;
+	}
+	/* Phones: "Choose sections" after the list, on its own row. */
+	.phone-sections-menu {
+		display: flex;
+		flex-wrap: wrap;
+		margin-top: 0.5rem;
+		padding: 0.5rem 0.75rem 0;
+		border-top: 1px solid var(--border);
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.chev {

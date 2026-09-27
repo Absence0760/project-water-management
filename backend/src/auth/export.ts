@@ -93,6 +93,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'signoff.user_id': { section: 'signoffs' },
 	'team.created_by': { excluded: 'the team itself; the membership is in teamMemberships' },
 	'team_member.user_id': { section: 'teamMemberships' },
+	// The person's own display preferences (082): the workspace sections they hid.
+	'user_preferences.user_id': { section: 'preferences' },
 	'yield_result.created_by': { excluded: 'the project’s yield result; its maker only' }
 };
 
@@ -211,6 +213,11 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			 WHERE d.user_id = $1 ORDER BY d.created_at DESC`,
 			[userId]
 		);
+		// Own row only under RLS (082): one row, or none when they never saved any.
+		const { rows: prefs } = await db.query(
+			`SELECT preferences, updated_at AS "updatedAt" FROM user_preferences WHERE user_id = $1`,
+			[userId]
+		);
 		const { rows: hidden } = await db.query<{ doc: DefinerSections | null }>('SELECT app_subject_export() AS doc');
 		const rest = hidden[0]?.doc;
 		if (!rest) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
@@ -227,6 +234,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			invites: rest.invites,
 			alertSubscriptions: rest.alertSubscriptions,
 			alertDeliveries,
+			preferences: prefs,
 			reportSubscriptions: rest.reportSubscriptions,
 			auditEvents: rest.auditEvents,
 			auditEventsTruncated: rest.auditEventsTruncated

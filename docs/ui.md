@@ -178,7 +178,9 @@ the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
-  a "Catchment" label with your role badge (owner, editor, viewer) beside it,
+  a "Catchment" label with your role badge (owner, editor, viewer) beside it
+  and, at the end of that line, the **Choose sections** button (reading
+  "Hidden (n)" once you hid some; see Tabs by role below),
   the project's name (a link to its Summary; a long name is clamped to two
   lines, the full name its tooltip and accessible name), the section labels
   shown, with a
@@ -252,10 +254,25 @@ open (`stripTabs`), so you can see where you are. The one exception is
 Applications, which the API refuses a viewer: a viewer's `?tab=applications`
 link opens the Summary instead of an error (`canOpenTab`). The Summary's checklist keeps a
 hidden tab's step and its status, but as plain text rather than a link; the
-Project page's headline facts still link to their tabs (a deep link, as above). The
-per-member "choose your own tabs" preference is not built yet
-([followups.md](./followups.md#roles-and-what-each-member-sees)); it will
-arrive through `prefs`.
+Project page's headline facts still link to their tabs (a deep link, as above).
+
+**Your own sections** (`workspace/SectionsMenu.svelte`,
+`e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
+hides the sections they don't use. The **Choose sections** button (icon only
+on the sidebar's "Catchment" line, in words at the foot of the phone's
+Sections menu; "Hidden (n)" once some are hidden) opens a checkbox per
+section the role shows here, grouped as the sidebar is, with **Reset to
+default**. Summary is always shown (its box is ticked and disabled). The
+choice is the account's (`user.preferences.hiddenTabs`, `PATCH /auth/me`,
+[api.md § Auth](./api.md)), so it applies in every catchment and on every
+device; each change saves at once, in order, with the boxes kept live (a
+failed save says so and holds until a reload). It goes through `prefs.hidden`:
+`visibleTabs` drops those tabs after the role's own filter, so hiding only
+takes away, and `hiddenTabs` counts only the hidden ones the role would show
+here (a viewer's hidden Transfers counts only while the model inputs are
+shown). A hidden section still opens from a link and then shows in its place
+while open (`stripTabs`), and the Summary's checklist still links to it (it
+gets the role's tabs, not yours).
 
 The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.

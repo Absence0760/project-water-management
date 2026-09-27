@@ -50,6 +50,14 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ locale: null, volumeUnit: 'ML' });
 	});
 
+	it('PATCHes /auth/me with the sections hidden from the sidebar', async () => {
+		const user = { id: '1', email: 'a@b.c', displayName: 'A', preferences: { hiddenTabs: ['crops'] } };
+		const f = mockFetch(200, { user });
+		await expect(createApi('http://x', f).auth.updateMe({ preferences: { hiddenTabs: ['crops'] } })).resolves.toEqual(user);
+		const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toEqual({ preferences: { hiddenTabs: ['crops'] } });
+	});
+
 	it('POSTs /me/alerts/resume to turn alert emails back on after a bounce', async () => {
 		const f = mockFetch(200, { mailSuppressed: null });
 		await expect(createApi('http://x', f).alerts.resume()).resolves.toEqual({ mailSuppressed: null });

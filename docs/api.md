@@ -22,7 +22,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
-| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, or nothing to change (signed in) |
+| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
@@ -67,7 +67,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -77,13 +77,18 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `{ reason: 'bounce' | 'complaint', at }` once SES reported a permanent
   bounce or a spam complaint for the address (057): alert emails are paused
   until the person turns them back on (`POST /me/alerts/resume`,
-  [§ Alerts](#alerts)).
+  [§ Alerts](#alerts)). `preferences` is the person's own display choices
+  (`user_preferences`, 082), today `{ hiddenTabs: string[] }`: the workspace
+  sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs by
+  role](./ui.md)), `[]` until they hide one. Only ever their own.
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries,
-  reportSubscriptions, auditEvents, auditEventsTruncated }`. `account` is
+  signoffs, invites, alertSubscriptions, alertDeliveries, preferences,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
+  is the person's saved display preferences, `[{ preferences, updatedAt }]`,
+  or `[]` if they never saved any. `account` is
   the `app_user` row without the password hash. `farms` is one entry per farm
   linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
   with the registered volumes matched to that farm (`allocations`, holder
@@ -102,8 +107,12 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
   1–100 characters), `locale` (a code in the language table, e.g. `'en'` or
   `'af'`, or `null` to go back to following the browser; any other value,
-  including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`). At least one
-  is required. The email address isn't editable; other keys are ignored.
+  including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`),
+  and `preferences`, whose keys sent replace the account's (the others stay):
+  `hiddenTabs`, at most 32 section ids (`^[a-z][a-z-]{0,31}$`, each kept
+  once; `[]` is "Reset to default"). Any other key inside `preferences`, or a
+  value of another shape, is a `400` (`backend/src/auth/preferences.ts`). At least one
+  field is required. The email address isn't editable; other top-level keys are ignored.
 - **`register`** takes an optional `locale` (the language the sign-up page
   was in). Without one, an account that accepts an invite takes the invite's
   `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
