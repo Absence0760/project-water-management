@@ -687,6 +687,8 @@ export const af: Catalogue = {
 	'9c2638b9': 'Jy het jou data ’n oomblik gelede afgelaai. Probeer weer oor {wait}.',
 	// You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.
 	'e5a8dee0': 'Jy het waarskuwings-e-posse minder as ’n dag gelede weer aangeskakel, en jou e-posadres is weer geweier. Kyk die adres na en probeer môre weer.',
+	// Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.
+	'f3414d07': 'Iets in wat jy gestuur het, kan nie gestoor word nie (’n verborge beheerkarakter, of ’n getal wat heeltemal te groot is). Kyk na wat jy ingevul het en probeer weer.',
 	// {n} minute / {n} minutes
 	'a60f17d2': { one: '{n} minuut', other: '{n} minute' },
 	// Couldn’t reach the server. Check your connection and try again.
