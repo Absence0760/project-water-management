@@ -32,8 +32,8 @@ function names(list: string[]): string {
 }
 
 /**
- * The line over the list: "2 saved changes between the runs, by Ann and
- * Bob", newest author first; "No saved model or settings changes between
+ * The line over the list: "2 saved changes to the model or settings between
+ * the runs, by Ann and Bob", newest author first; "No saved model or settings changes between
  * the runs" when there were none (so any line is a series change, or from
  * before history was recorded).
  */

@@ -31,6 +31,13 @@ describe('attributeChanges', () => {
 		expect(attributeChanges([diff], [{ id: '1', changes: [other] }])).toEqual([null]);
 	});
 
+	it('keeps the field when the subject has a digit in its name', () => {
+		const f = (text: string) => line(text, { subject: 'Farm 2' });
+		const diff = f('Farm 2: dam capacity 600,000 m³ → 720,000 m³');
+		expect(attributeChanges([diff], [{ id: '1', changes: [f('Farm 2: minimum level 500,000 m³ → 720,000 m³')] }])).toEqual([null]);
+		expect(attributeChanges([diff], [{ id: '2', changes: [f('Farm 2: dam capacity 650,000 m³ → 720,000 m³')] }])).toEqual(['2']);
+	});
+
 	it('credits a settings line changed twice', () => {
 		const s = (text: string) => line(text, { area: 'settings', subject: 'Calibration rain threshold' });
 		expect(attributeChanges([s('Calibration rain threshold: 2 mm → 4 mm')], [{ id: '9', changes: [s('Calibration rain threshold: 3 mm → 4 mm')] }])).toEqual(['9']);

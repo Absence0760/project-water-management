@@ -11,11 +11,16 @@ export interface Attributable {
 
 const ARROW = ' → ';
 
-/** The words before the first value of a "…: <field> <old> → <new>" line: "Rooikloof: dam capacity ". */
-function head(text: string): string {
+/**
+ * The words before the first value of a "…: <field> <old> → <new>" line:
+ * "Rooikloof: dam capacity ". The subject is skipped before looking for the
+ * value, so a digit in a name ("Farm 2") doesn't cut the field off.
+ */
+function head(text: string, subject: string): string {
 	const before = text.slice(0, text.indexOf(ARROW));
-	const at = before.search(/[\d"“]/);
-	return at < 0 ? before : before.slice(0, at);
+	const from = before.startsWith(subject) ? subject.length : 0;
+	const at = before.slice(from).search(/[\d"“]/);
+	return at < 0 ? before : before.slice(0, from + at);
 }
 
 /** The value a "changed" line ends on: what follows its last arrow. */
@@ -36,7 +41,7 @@ function sets(r: InputChange, l: InputChange): boolean {
 	if (r.text === l.text) return true;
 	if (r.area !== l.area || r.subject !== l.subject || r.kind !== 'changed' || l.kind !== 'changed') return false;
 	const t = tail(l.text);
-	return t !== null && t === tail(r.text) && head(l.text) === head(r.text);
+	return t !== null && t === tail(r.text) && head(l.text, l.subject) === head(r.text, r.subject);
 }
 
 /**

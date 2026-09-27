@@ -2248,9 +2248,9 @@ matched.
   on the same new value (A → B "600,000 → 720,000 m³" is set by the
   revision "650,000 → 720,000 m³"). Series lines are never credited: series
   changes are audit events, not model revisions. A line no revision's wording
-  matches stays `null` rather than credited to a guess. Revisions are read
-  under RLS, so a caller who can't read the history (a farmer, a contributor)
-  gets an empty `revisions`.
+  matches stays `null` rather than credited to a guess. The endpoint needs
+  viewer on both projects (a farmer or contributor gets 403 for the whole
+  request), the same floor as `GET /history`.
 
 - `RunInputsSnapshot`, `RunComparison` and `InputChange` are in
   `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run
