@@ -1162,13 +1162,30 @@ chose for the project's stakeholders, with the WUA's restriction notice.
 - `run_publication (id, project_id, run_id → model_run, published_by →
   app_user SET NULL, published_at, note ≤ 2000, restriction_level none |
   advisory | restricted, restriction_pct numeric(5,2) NULL (0–100, NULL with
-  none), notice_en / notice_af ≤ 2000, next_expected_on date NULL (E10),
+  none), notice jsonb (081; below), next_expected_on date NULL (E10),
   catchment_view jsonb, superseded_at, updated_at, updated_by → app_user SET
   NULL)`. A partial unique index on `(project_id) WHERE superseded_at IS
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
   `published_by`, `updated_by`.
+- **The notice, by language (081_notice_languages.sql, issue #58).**
+  `notice` is one jsonb object from a language code to the WUA's words in
+  that language, `{"en": "…", "af": "…"}`; `{}` is no notice (never NULL).
+  The `run_publication_notice_valid` CHECK (`app_notice_valid`) holds the
+  shape: an object whose keys look like language codes (`^[a-z]{2,3}$`) and
+  whose values are strings, non-blank and at most 2000 characters. Which
+  codes are languages the app supports is the API's check, against the one
+  language table (`packages/engine/src/languages.ts`): a CHECK can't read a
+  table, and a notice in a language later dropped from the list stays
+  readable history. A reader gets the notice in their language, else
+  English, else the first other language of the table that has one
+  (`pickNotice`, `packages/engine/src/views/notice.ts`). 081 replaced 022's
+  `notice_en` / `notice_af` columns in one expand/contract (the app wasn't
+  deployed): it added `notice`, copied the written ones into it (a blank one
+  is no notice in that language; `run_publication_final` is off for the
+  copy, since it touches superseded rows), re-created `app_share_view` and
+  dropped the two columns.
 - `publication_farm (publication_id → run_publication CASCADE, project_id,
   node_id → node CASCADE, view jsonb, PRIMARY KEY (publication_id, node_id))`,
   indexed on `node_id` and `project_id`: one farm's `FarmProjection`
@@ -1194,7 +1211,7 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   recomputed with the engine's attribution on the run's stored flows
   (exact unless the transfer rules form a loop; see the file header).
 - **Immutable but for the notice.** `water_app` has `UPDATE` on the notice
-  columns (`restriction_level`, `restriction_pct`, `notice_en`, `notice_af`),
+  columns (`restriction_level`, `restriction_pct`, `notice`),
   `note`, `next_expected_on`, `superseded_at`, `updated_at` and `updated_by`
   only; the run, the projection, the publisher and the date can't change
   (the catalogue test pins the list).
@@ -1248,8 +1265,9 @@ Read-only links to the current publication for people outside the project
 - `app_share_view(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live link
   of a project with a current publication, one row of `project_name,
   published_at, published_by (display name), catchment_view (allowlisted
-  keys, the outlet unnamed), restriction_level, restriction_pct, notice_en,
-  notice_af, next_expected_on`; no row otherwise. Sets `last_used_at` when
+  keys, the outlet unnamed), restriction_level, restriction_pct, notice
+  (jsonb, by language), next_expected_on`; no row otherwise (081 re-created
+  it for the `notice` column). Sets `last_used_at` when
   it answers and the last bump is over an hour old.
 - `app_share_series(p_hash, p_key)` (`SECURITY DEFINER`, `STABLE`): one row
   of `label, unit, monthly_start, monthly[] (monthly means, NaN as none),

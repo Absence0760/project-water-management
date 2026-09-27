@@ -485,7 +485,8 @@ put the results first; its first screen follows board A1 of the redesign
   `GET /projects/:id/publication` and names the published run (a link to it
   in Runs, with its period from the page's runs list), when and by whom it
   was published, the notice level with its percentage ("Advisory · 15 %"),
-  the English and Afrikaans notice, and the next expected update (a calendar
+  the notice in each language the WUA wrote it in (named in its own
+  language, the text marked with its `lang`), and the next expected update (a calendar
   day, `fmtDay`). It is read-only for everyone: editors get **Change the
   notice or publish another run**, a link to the Runs tab on the published
   run at its Publication panel (`?tab=runs&run=<id>#res-publication`), so
@@ -2619,15 +2620,18 @@ read it before.
   menu entry **Publication**). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
-  notice: the level with its percentage ("Advisory · 10 %"), the English and
-  Afrikaans text, the next update date and who last changed it. Editors get
+  notice: the level with its percentage ("Advisory · 10 %"), its text in
+  each language written (table order, `noticeLanguages`), the next update
+  date and who last changed it. Editors get
   **Publish this run** on any other run: a confirm dialog says what changes
   for stakeholders (each farmer sees this run's figures for their own farm
   from 1 October, and the notice; it replaces the current baseline, which
   stays in the history), warns when farm dams have no stop level ("N farm
   dams have no stop level (0 %)…", from the run's model snapshot, design
   §3 Q3), and holds the notice fields (level, cut %, next update date,
-  notice in English and Afrikaans) and an optional note for the staff
+  one "Notice in …" text field per language of the language table, English
+  first, each with its `lang` so the browser spell-checks it in that
+  language: `noticeTextFields`; issue #58) and an optional note for the staff
   ("farmers don't see it"). **Publish** answers "Published. N farm views
   updated." **Edit notice** changes the current notice in place (`PATCH`,
   no re-publishing): "Notice saved." A legacy-model run (a stored run from
@@ -3906,11 +3910,16 @@ published.
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA". The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
-  the page's words are still English, and carries `lang="af"`), or in the
-  one the WUA wrote, with "The WUA wrote this notice in English only" (or
-  "in Afrikaans only") under it (design §7). `FarmView` carries both
-  (`noticeEn`, `noticeAf`), so a switch needs no request and the saved copy
-  holds both (`farm/notice.ts` `pickNotice`, shared with `/share`); water received this season with the ML/m³
+  the page's words are still English, and carries `lang="af"`), else in
+  English, else in the first other language the WUA wrote, with "The WUA
+  wrote this notice in {language} only" under it (design §7). `{language}`
+  is the language's name in the page's words' language from the browser's
+  `Intl.DisplayNames` ("Engels" on an Afrikaans page), the table's own
+  name when the browser has none, so a new language needs no message of
+  its own. `FarmView` carries every language the WUA wrote (`notice`, by
+  code), so a switch needs no request and the saved copy holds them all
+  (the engine's `pickNotice`, through `farm/notice.ts`, shared with
+  `/share` and the alert emails); water received this season with the ML/m³
   switch (saved to the account, `app_user.volume_unit`, and kept on the
   phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level
@@ -4205,8 +4214,8 @@ signed in or out, for someone outside the project, on a phone first.
 - **Top to bottom:** the catchment's name; "Published by *name* on *date*.
   Data up to *date*." (and the next expected update); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language or the other with a
-  "not translated" line, as on the farm view (marked with its `lang` when
+  restriction from the WUA"), in the reader's language, else English, else
+  another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
   gauge, with a check or warning icon, the last 30 days and the season in
