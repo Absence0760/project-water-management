@@ -10,8 +10,13 @@
 // positive control is a render that succeeds with the site and API both
 // asked; every refusal must leave elsewhere untouched.
 //
-// Runs the real renderReportPdf with the Chromium from `pnpm test:e2e:install`,
-// and is skipped (with a warning) only where that browser isn't installed.
+// Runs the real renderReportPdf with the Chromium from `pnpm test:e2e:install`.
+// It needs no database, but lives in the db project (`.db.test.ts`) because
+// CI's db-test job is where the Playwright Chromium is installed (the one
+// vitest job that needs a browser anyway, for reports/render.db.test.ts); the
+// unit job has none. Locally it skips (with a warning) without that browser;
+// under CI a missing browser FAILS the file, so it can't pass by skipping
+// (docs/testing.md § Tests that need a service or a browser).
 import { existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -20,7 +25,10 @@ import { RenderError, renderReportPdf, type RenderOptions } from './render.js';
 
 const chromiumPath = await import('playwright-core').then(({ chromium }) => chromium.executablePath()).catch(() => '');
 const haveChromium = !!chromiumPath && existsSync(chromiumPath);
-if (!haveChromium) console.warn('render.origin.test.ts skipped: no Playwright Chromium (pnpm test:e2e:install)');
+if (!haveChromium && process.env.CI) {
+	throw new Error(`render.origin.db.test.ts: no Playwright Chromium at ${chromiumPath || '(none)'} under CI; the job must install it (.github/workflows/ci.yml db-test)`);
+}
+if (!haveChromium) console.warn('render.origin.db.test.ts skipped: no Playwright Chromium (pnpm test:e2e:install)');
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 const hits = { site: [] as string[], api: [] as string[], elsewhere: [] as string[] };

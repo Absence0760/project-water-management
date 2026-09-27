@@ -12,8 +12,10 @@
 // data-report-ready, so the token exchange, the session's scope, the ready
 // wait, page.pdf(), storage and mail are all real.
 //
-// Skipped ONLY when MinIO isn't running (`pnpm dev:s3:up`): it needs the
-// object store. Chromium comes from `pnpm test:e2e:install`.
+// Skipped ONLY when MinIO isn't running (`pnpm dev:s3:up`), and only
+// locally: under CI a missing MinIO FAILS the file (CI's db-test job starts
+// MinIO and installs Chromium), so it can't pass by skipping. Chromium comes
+// from `pnpm test:e2e:install`.
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
@@ -29,6 +31,9 @@ const S3 = process.env.S3_ENDPOINT || 'http://127.0.0.1:9002';
 const minioUp = await fetch(`${S3}/minio/health/live`, { signal: AbortSignal.timeout(1500) })
 	.then((r) => r.ok)
 	.catch(() => false);
+if (!minioUp && process.env.CI) {
+	throw new Error(`render.db.test.ts: MinIO is not reachable at ${S3} under CI; the job must start it (.github/workflows/ci.yml db-test)`);
+}
 if (!minioUp) console.warn(`render.db.test.ts skipped: MinIO is not running at ${S3} (pnpm dev:s3:up)`);
 
 let api: ReturnType<typeof serve>;

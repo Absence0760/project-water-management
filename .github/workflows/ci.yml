@@ -136,6 +136,37 @@ jobs:
           PGPASSWORD: water
         run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
 
+      # The vitest files that drive real Chromium run in this job, the one
+      # vitest job with a browser: reports/render.db.test.ts (Chromium +
+      # MinIO) and reports/render.origin.db.test.ts (Chromium only). Under CI
+      # they FAIL, never skip, when the browser or MinIO is missing
+      # (docs/testing.md § Tests that need a service or a browser). Same
+      # cached install as the e2e shards; backend's playwright-core pins the
+      # same version as e2e's @playwright/test, so this is its browser.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -C e2e exec playwright install-deps chromium
+          else
+            pnpm -C e2e exec playwright install --with-deps chromium
+          fi
+
+      # The report PDF store for render.db.test.ts, from docker-compose.yml
+      # on the local-dev port (:9002). Mail is in-memory under vitest.
+      - name: Start MinIO
+        run: docker compose up -d --wait minio
+
       - name: DB tests
         run: pnpm test:backend:db
 

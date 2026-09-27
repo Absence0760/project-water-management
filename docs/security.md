@@ -190,10 +190,11 @@ buys a **render session** that can read one report and nothing else.
   before it leaves, a navigation's redirect chain is walked hop by hop first
   and refused if any hop leaves, a render whose page tries to leave fails at
   once without retry, and only a page of the site is ever printed. The
-  site's CSP is a second layer in production only. `reports/render.origin.test.ts`
+  site's CSP is a second layer in production only. `reports/render.origin.db.test.ts`
   checks each case with real Chromium against a counting "elsewhere" server,
-  with a positive control (skipped only where Playwright's Chromium isn't
-  installed). Residual: a redirect of a *subresource* is followed by the
+  with a positive control (skipped locally where Playwright's Chromium isn't
+  installed; under CI a missing browser fails it, docs/testing.md § Tests
+  that need a service or a browser). Residual: a redirect of a *subresource* is followed by the
   browser unrouted (Playwright can't route those hops); in production the
   CSP checks them.
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
