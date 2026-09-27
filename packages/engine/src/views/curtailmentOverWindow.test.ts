@@ -119,15 +119,23 @@ describe('curtailmentOverWindow', () => {
 	});
 
 	it('reads exactly the series curtailmentSeriesKeys lists', () => {
+		let ruleRuns = 0;
 		for (const { input, run } of runs) {
+			// As the Runs tab passes them: the stored sites whose charge followed a rule table (engine ≥ 1.3.0).
+			const ruleTableSites = run.summary.curtailment!.ewrSites!.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
+			if (ruleTableSites.length) ruleRuns++;
+			const stored = new Set(run.series.map((s) => `${s.nodeId ?? ''}|${s.key}`));
 			for (const otherUsers of [true, false]) {
 				const read = new Set<string>();
 				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
-				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers }).map((k) => `${k.nodeId ?? ''}|${k.key}`);
-				expect(new Set(keys)).toEqual(read);
-				expect(keys).toHaveLength(read.size);
+				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
+				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites }).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				expect(new Set(keys)).toEqual(used);
+				expect(keys).toHaveLength(used.size);
 			}
 		}
+		expect(ruleRuns).toBeGreaterThan(0);
 	});
 
 	it('leaves the other water users out when asked, and only then', () => {

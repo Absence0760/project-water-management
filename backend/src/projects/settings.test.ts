@@ -778,6 +778,24 @@ describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
 	});
 });
 
+describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, issue #64)', () => {
+	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
+
+	it('accepts the engine’s choices', () => {
+		for (const v of ['pragmatic', 'ruleTable']) expect(ok({ ewrChargeSource: v }), v).toBe(true);
+		for (const v of ['total', 'baseflow']) expect(ok({ lowFlowMeasure: v }), v).toBe(true);
+	});
+
+	it('rejects anything else', () => {
+		for (const v of ['', 'rule', 'Pragmatic', null, 1]) expect(ok({ ewrChargeSource: v }), String(v)).toBe(false);
+		for (const v of ['', 'base', 'median', null, 0]) expect(ok({ lowFlowMeasure: v }), String(v)).toBe(false);
+	});
+
+	it('defaults to what every earlier run did for a project that never set them', () => {
+		expect(mergeSettings({})).toMatchObject({ ewrChargeSource: 'pragmatic', lowFlowMeasure: 'total' });
+	});
+});
+
 describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', () => {
 	const ok = (assuranceAnnualThreshold: unknown) => SettingsPatch.safeParse({ assuranceAnnualThreshold }).success;
 

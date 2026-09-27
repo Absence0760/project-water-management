@@ -615,6 +615,15 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	// Engine ≥ 0.32.0; absent = the default 0.9. Changes only the reported annual reliability.
 	assuranceAnnualThreshold: { label: 'Annual assurance threshold', fmt: pct },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
+	// Engine ≥ 1.3.0 (issue #64); a snapshot without them ran the defaults, which is what older runs did.
+	ewrChargeSource: {
+		label: 'EWR charge follows',
+		fmt: (v) => (v === 'ruleTable' ? 'the Reserve rule tables' : v === 'pragmatic' || v === undefined ? 'the pragmatic EWR' : String(v))
+	},
+	lowFlowMeasure: {
+		label: 'Low flows judged on',
+		fmt: (v) => (v === 'baseflow' ? 'base flow (Lyne–Hollick filter)' : v === 'total' || v === undefined ? 'the month’s total flow' : String(v))
+	},
 	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },

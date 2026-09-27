@@ -937,7 +937,9 @@ must build WP-2.15 Phase B.
   below: the tables stay in `settings.ewrRules` (one per EWR site: the
   outlet and every gauge, engine 0.21.0 / 0.17.0) rather than an `ewr_site`
   table, so there is no migration and no `ewrMethod` switch (a table adds a
-  report; the pragmatic EWR still drives the daily charge). Built: the
+  report; the pragmatic EWR drives the daily charge unless
+  `settings.ewrChargeSource` is `'ruleTable'`, engine 1.3.0, issue #64, which
+  also lets low flows be judged on base flow). Built: the
   DRM's **low-flow table** (maintenance to drought) beside a total-flow
   table, read at the same natural percentile, so each month is met / only the
   high flows short / the low flows short; **freshet and flood components**

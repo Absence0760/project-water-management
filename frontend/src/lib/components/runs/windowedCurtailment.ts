@@ -49,7 +49,9 @@ export interface RunNetwork {
  */
 export function curtailmentSeriesKeys(stored: CurtailmentSummary, network: RunNetwork): SeriesKey[] | null {
 	if (!stored.ewrAttribution || !stored.ewrSites) return null;
-	return engineSeriesKeys(network.nodes, network.transfers);
+	// Sites whose charge followed their Reserve rule table (engine ≥ 1.3.0) have their own shortfall series.
+	const ruleTableSites = stored.ewrSites.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
+	return engineSeriesKeys(network.nodes, network.transfers, ruleTableSites.length ? { ruleTableSites } : {});
 }
 
 /** The keys the run has no stored series for (a run saved before one of them existed). */

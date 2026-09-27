@@ -148,7 +148,9 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
 `simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
-`calibrationFlowKind`, `pe`. Ranges follow `backend/src/projects/settings.ts`.
+`calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
+(`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`).
+Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
 `{ kind: 'monthly', mm, source }` with 12 finite values of 0–10 000 mm and

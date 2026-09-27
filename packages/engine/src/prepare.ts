@@ -42,7 +42,7 @@ import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } fro
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
-import { resolveEwrRules } from './reserve/rules';
+import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
 import { RUNOFF_MODELS } from './runoff/types';
 import {
 	CALIBRATION_FLOW_KINDS,
@@ -485,6 +485,15 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (s.assuranceAnnualThreshold !== undefined && !(typeof s.assuranceAnnualThreshold === 'number' && s.assuranceAnnualThreshold > 0 && s.assuranceAnnualThreshold <= 1)) {
 		warnings.push(`annual assurance threshold "${String(s.assuranceAnnualThreshold)}" is not a fraction in (0, 1]; using ${DEFAULT_ANNUAL_THRESHOLD}`);
 		delete s.assuranceAnnualThreshold;
+	}
+	// Reserve method choices (engine ≥ 1.3.0, issue #64): an unknown value runs today's default.
+	if (!(EWR_CHARGE_SOURCES as readonly unknown[]).includes(s.ewrChargeSource)) {
+		if (s.ewrChargeSource !== undefined) warnings.push(`unknown EWR charge source "${String(s.ewrChargeSource)}"; using pragmatic`);
+		s.ewrChargeSource = 'pragmatic';
+	}
+	if (!(LOW_FLOW_MEASURES as readonly unknown[]).includes(s.lowFlowMeasure)) {
+		if (s.lowFlowMeasure !== undefined) warnings.push(`unknown low-flow measure "${String(s.lowFlowMeasure)}"; using total`);
+		s.lowFlowMeasure = 'total';
 	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);

@@ -12,6 +12,8 @@ import {
 	CHIRPS_BIAS_MODES,
 	NODE_SET_FIELDS,
 	SETTINGS_PATHS,
+	EWR_CHARGE_SOURCES,
+	LOW_FLOW_MEASURES,
 	SUPPLY_RULES,
 	SUPPLY_RULE_LABEL,
 	TRANSFER_SET_FIELDS,
@@ -190,7 +192,10 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	calibrationFlowKind: {
 		label: 'Calibration flow series',
 		spec: { t: 'enum', options: CALIBRATION_FLOW_KINDS.map((k) => ({ value: k, label: kindLabel(k) })), nullable: true, nullLabel: 'default (observed, else logger)' }
-	}
+	},
+	// Reserve method choices (engine ≥ 1.3.0, issue #64), pending the hydrologist.
+	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The pragmatic EWR', ruleTable: 'The rule tables' }) } },
+	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } }
 };
 
 export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));
