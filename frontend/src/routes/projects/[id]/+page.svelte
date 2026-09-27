@@ -1132,11 +1132,6 @@
 		line-height: 1.35;
 		text-align: center;
 	}
-/* Absolutely positioned bits inside wide tables (visually-hidden labels)
-	   must be clipped by their scroll container, not widen the page. */
-	.tab-body :global(.table-wrap) {
-		position: relative;
-	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
 	.readonly :global(input:not([type='checkbox']):read-only),
 	.readonly :global(select:disabled),

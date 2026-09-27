@@ -699,7 +699,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme. Viewers can open it too.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
 					}
 				]
 			},

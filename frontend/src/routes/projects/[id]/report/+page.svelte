@@ -451,11 +451,18 @@
 	.report :global(.chart) {
 		margin-top: 1rem;
 	}
+	/* On screen a table as wide as the curtailment one squeezed its unit column
+	   until each verdict wrapped a word to a line; give the names room and let
+	   the table scroll inside its box. Paper keeps its own fit (below). */
+	@media screen {
+		.report :global(table.data tbody th[scope='row']) {
+			min-width: 11rem;
+		}
+	}
 
 	@media print {
-		/* No app chrome, and white paper whatever the screen theme. */
-		:global(body:has(main.report) .app-header),
-		:global(body:has(main.report) .skip),
+		/* No app chrome (the frame hides its own sidebar and phone bar in print,
+		   AppShell), and white paper whatever the screen theme. */
 		:global(body:has(main.report) .verify-banner),
 		.no-print {
 			display: none !important;

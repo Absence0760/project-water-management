@@ -3251,7 +3251,11 @@ gives it an `h1` and **Back to runs**). The full reference is
   then every panel of the two-run comparison, unchanged.
 
 At 1440×960 the header, cards, table and chart fit above the fold; below
-1100 px the table and chart stack, below 900 px the cards.
+1100 px the table and chart stack, below 900 px the cards. The standalone
+`/compare` page sits in the app frame with **Projects** as its current
+section; on a phone neither it nor the tab scrolls sideways (the delta
+cells' screen-reader words are clipped by their table's box, app.css
+`.table-wrap`; `e2e/tests/report-pages.spec.ts`).
 
 ## Scenarios (`?tab=scenarios`)
 
@@ -3731,7 +3735,14 @@ exists, says so with a link to Runs & results.
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
-  flagged rows), and no app sidebar, phone bar, banner or on-screen bar.
+  flagged rows), and no app sidebar, phone bar, banner or on-screen bar
+  (the frame hides its own sidebar and phone bar in print,
+  `layout/AppShell.svelte`: A4 is narrower than 900 px, so the phone bar
+  used to print on the cover, and whichever frame was drawn when the print
+  began changed the whole PDF: with the phone bar the type printed at ~80 %
+  of its size, with the sidebar's grid column 22 pages became 37). On screen only (`@media screen`), row headers get 11rem, so the
+  curtailment table's unit names and verdicts aren't a word a line; paper
+  keeps the tightened print fit.
 - **Themes.** On screen the report follows the light or dark theme. A print
   is always light: on `beforeprint` the page and each print-mode chart set
   `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
@@ -3753,11 +3764,22 @@ exists, says so with a link to Runs & results.
   must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
 - **The emailed link** opens `/projects/:id/reports/:jobId`
   (`routes/projects/[id]/reports/[jobId]/+page.svelte`, its own lazy route):
-  signed out, the reader signs in first and comes back; a member sees the
-  status and, once ready, **Download the PDF** (a fresh one-hour link each
-  visit) and **Open the report in the app**. Anyone else, or a PDF past its 7
+  signed out, the reader signs in first and comes back. A member sees the
+  title, *Catchment report PDF*, with a context line naming the catchment and
+  the run ("Upper catchment · Run “Baseline”", read from the project and
+  its runs list, best effort), then one card: the state as a pill in words
+  (Queued, Making, Retrying, Ready, Failed) beside the status line, when it
+  was asked for (and "This page checks again every few seconds." while it's
+  pending, polling every 2 s), **Download the PDF** once ready (a fresh
+  one-hour link each visit), after a failure a line pointing back to the
+  report, and **Open the report in the app** and **Go to the run** (**Go to
+  Runs & results** for a scheduled PDF of the latest run). The card's
+  `data-state` is the report's state. Anyone else, or a PDF past its 7
   days, gets "This report doesn't exist any more, or you don't have access to
-  its project." Tested by `e2e/tests/server-report.spec.ts`.
+  its project." Tested by `e2e/tests/server-report.spec.ts` and
+  `e2e/tests/report-pages.spec.ts` (queued and failed states planted with
+  `support/db.ts` `holdReportJob` / `failReport`, a viewer, not found, axe in
+  both themes at desktop and phone).
 
 ## Help (`/help`)
 

@@ -22,7 +22,8 @@
 	// Section the current URL belongs to, for aria-current on the main sections.
 	const section = $derived.by(() => {
 		const p = page.url.pathname.slice(base.length) || '/';
-		if (p === '/' || p.startsWith('/projects')) return 'projects';
+		// /compare shows runs of your projects (the workspace's Compare runs, standalone).
+		if (p === '/' || p.startsWith('/projects') || p.startsWith('/compare')) return 'projects';
 		if (p.startsWith('/teams')) return 'teams';
 		if (p.startsWith('/help')) return 'help';
 		return null;
@@ -249,6 +250,19 @@
 	}
 	.app-menu .main-nav a {
 		min-height: var(--tap);
+	}
+	/* Paper gets the page, not the frame: printed at A4 the window is under
+	   900 px, so without this the phone bar (Menu, the mark, the account)
+	   printed at the top of the report and of its server-side PDF. */
+	@media print {
+		.skip,
+		.app-sidebar,
+		.phone-bar {
+			display: none !important;
+		}
+		.shell.wide {
+			display: block;
+		}
 	}
 	@media (prefers-color-scheme: dark) {
 		.brand {

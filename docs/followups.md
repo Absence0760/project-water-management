@@ -2164,6 +2164,21 @@ role and not before it.
       build (`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, github.com/pgsty/minio,
       ~800k pulls). Re-check it on each bump; the alternative is any other
       S3-compatible local server, since the app only uses the S3 API.
+- [ ] **The printed network schematic is unreadable past ~10 units
+      (2026-09-27).** The report prints `NetworkSchematic` scaled to the A4
+      width (`svg.schematic { max-width: 100% }`), and the tree lays every
+      unit that drains into one node side by side: a 30-unit catchment
+      becomes a 4,500 px strip printed at ~15 %, its names about 1.5 pt
+      (the on-screen report scrolls it inside its box, so only paper and the
+      server PDF suffer). The Inputs table still lists every node, so
+      nothing is lost, but the picture is useless. Durable fix: a print
+      layout for the schematic that wraps a wide row of siblings onto
+      several rows (or lays out to the A4 box, as `fill` does for the
+      Network's map) with a readable floor for the labels, and an e2e case
+      printing a 30-unit report that checks the label size in the PDF
+      (`pdftotext -bbox`). Trigger: before a client prints a report of a
+      real catchment (they have 10–40 units), with the next change to
+      `NetworkSchematic` or the report's print CSS.
 - [ ] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move
