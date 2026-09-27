@@ -1,6 +1,7 @@
 // [Crop demand] (crop factors, A-pan evaporation, effective rainfall) and
 // [Farm demand] (crop areas per farm, and the gross demand checked against
 // them): extract_project.py read_crops, read_crop_areas and gross_demand_note.
+import type { DemandObject } from '@water-management/engine';
 import { clean, isName, num, pyRepr } from './cells';
 import { InvalidWorkbookError } from './errors';
 import type { Report } from './report';
@@ -87,11 +88,75 @@ export function readFarmGross(wb: B023Workbook): { gross: Map<string, number[]>;
 const GROSS_DEMAND_TOLERANCE_M3_DAY = 1.0;
 const GROSS_DEMAND_TOLERANCE_REL = 0.01;
 
+/** crop_formula(): [Farm demand]'s crop formula per month, Σ area × factor × A-pan / 1000 / days (m³/day). */
+function cropFormula(perCrop: Map<string, number>, factors: Map<string, number[]>, apan: number[], days: number[]): number[] {
+	return Array.from({ length: 12 }, (_, m) => {
+		let sum = 0;
+		for (const [crop, a] of perCrop) {
+			const f = factors.get(crop);
+			if (f) sum += (a * f[m]! * apan[m]!) / 1000 / days[m]!;
+		}
+		return sum;
+	});
+}
+
+/** gross_demand_off(): the months whose gross demand differs from the crop formula by more than the sheet's rounding. */
+function grossDemandOff(gross: number[], formula: number[]): number[] {
+	const out: number[] = [];
+	for (let m = 0; m < 12; m++) {
+		if (Math.abs(gross[m]! - formula[m]!) > Math.max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * Math.max(Math.abs(gross[m]!), Math.abs(formula[m]!)))) out.push(m);
+	}
+	return out;
+}
+
+/**
+ * non_crop_demand(): what a farm's gross demand has above its crop formula,
+ * per month (m³/day), or null. Only the months off by more than the sheet's
+ * rounding count, and only where the workbook is higher: a town's potable
+ * demand typed over the formula (issue #54, 2b). Where the workbook is lower
+ * (a formula that skips a crop) the crop areas win, as before.
+ */
+export function nonCropDemand(perCrop: Map<string, number>, gross: number[], factors: Map<string, number[]>, apan: number[], days: number[]): number[] | null {
+	const formula = cropFormula(perCrop, factors, apan, days);
+	const off = new Set(grossDemandOff(gross, formula));
+	const surplus = Array.from({ length: 12 }, (_, m) => (off.has(m) && gross[m]! > formula[m]! ? gross[m]! - formula[m]! : 0));
+	return surplus.some((v) => v > 0) ? surplus : null;
+}
+
+export const NON_CROP_DEMAND_NAME = 'Non-crop demand';
+
+/**
+ * non_crop_demand_object(): the demand object for a farm's non-crop demand
+ * (engine 1.7.0, docs/model.md §2.7f), supplied with its crops and returning
+ * the farm's irrigation return flow %, so what it takes and gives back is the
+ * workbook's. A farm with no crops is a town or scheme (municipal).
+ */
+export function nonCropDemandObject(uid: (key: string) => string, farm: string, nodeId: string, monthly: number[], cropped: boolean, returnPct: number): DemandObject {
+	return {
+		id: uid(`demand-object:${farm}`),
+		nodeId,
+		name: NON_CROP_DEMAND_NAME,
+		category: cropped ? 'other' : 'municipal',
+		sizing: 'monthly',
+		monthlyM3Day: monthly,
+		count: null,
+		litresPerUnitDay: null,
+		lossPct: 0,
+		monthlyFactor: null,
+		returnPct: Math.min(Math.max(returnPct, 0), 1),
+		priority: 'shared',
+		destination: 'internal',
+		enabled: true,
+		note: 'b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)'
+	};
+}
+
 /**
  * gross_demand_note(): a WARNING when a farm's gross demand doesn't follow
  * from its crop areas: a town's potable demand typed over the formula, or a
  * formula whose crop index is blank so it skips that crop (both seen in a
- * client workbook, issue #54). The app computes demand from crop areas only.
+ * client workbook, issue #54), saying what the import did: the part above the
+ * crop areas becomes a demand object (nonCropDemand), the crop areas win below.
  */
 export function grossDemandNote(
 	farm: string,
@@ -101,23 +166,22 @@ export function grossDemandNote(
 	apan: number[],
 	days: number[]
 ): string | null {
-	const formula = Array.from({ length: 12 }, (_, m) => {
-		let sum = 0;
-		for (const [crop, a] of perCrop) {
-			const f = factors.get(crop);
-			if (f) sum += (a * f[m]! * apan[m]!) / 1000 / days[m]!;
-		}
-		return sum;
-	});
-	const off = formula.filter(
-		(f, m) => Math.abs(gross[m]! - f) > Math.max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * Math.max(Math.abs(gross[m]!), Math.abs(f)))
-	).length;
-	if (off === 0) return null;
+	const formula = cropFormula(perCrop, factors, apan, days);
+	const off = grossDemandOff(gross, formula);
+	if (off.length === 0) return null;
 	const mean = (xs: number[]) => Math.floor(xs.reduce((a, b) => a + b, 0) / 12 + 0.5);
-	return (
-		`WARNING: [Farm demand] ${farm}: the gross demand in ${off} of 12 months doesn't follow from its crop areas ` +
+	const surplus = nonCropDemand(perCrop, gross, factors, apan, days);
+	const below = off.filter((m) => gross[m]! < formula[m]!).length;
+	const head =
+		`WARNING: [Farm demand] ${farm}: the gross demand in ${off.length} of 12 months doesn't follow from its crop areas ` +
 		`(a value typed over the formula, or a formula that skips a crop): the workbook has ${mean(gross)} ` +
-		`m³/day on average, the crop areas give ${mean(formula)}. The app computes demand from crop areas ` +
-		"only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)"
-	);
+		`m³/day on average, the crop areas give ${mean(formula)}. `;
+	if (surplus === null) return head + 'The app computes demand from the crop areas, so it models the second figure (issue #54, 2b)';
+	let text =
+		head +
+		`The part above the crop areas, ${mean(surplus)} m³/day on average, is imported as the demand object ` +
+		`"${NON_CROP_DEMAND_NAME}" (supplied with the crops, returning the farm's return flow %), so the modelled demand ` +
+		"follows the workbook's; confirm its category, priority and return share (issue #54, 2b)";
+	if (below) text += `. In ${below} month(s) the crop areas give more than the workbook, and the app models the crop areas there`;
+	return text;
 }
