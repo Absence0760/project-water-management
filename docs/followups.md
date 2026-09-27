@@ -172,7 +172,11 @@ collected as a checklist in issue #46; tick it there as they answer.
         supplemental, then emergency), what a dam-target borehole does in each
         mode (primary keeps the dam topped up; supplemental adds today's
         shortfall and first lifts a dam below dead storage; emergency refills
-        a low dam), and that annual caps reset on 1 October. Should a project
+        a low dam; primary and emergency only on a day the dam is drawn for
+        demand, engine 1.7.0, since pumping into it with nothing to irrigate
+        took the room winter inflow needed and spilled; model.md §2.7d), and
+        whether a farm needs a fill-to level or pumping season per borehole
+        instead, and that annual caps reset on 1 October. Should a project
         carry each property's own GN 538 volume (area × the schedule's rate,
         by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
         the first licence application with boreholes. Also: one depletion lag

@@ -2335,9 +2335,11 @@ the release left, and the farm balance also subtracts the seepage lost:
 ```
 1. primary, direct:        GWp += MIN(room, D − GWp)                 (in unit order)
 2. target dam (before irrigation; room in the dam H = cap − (S0 + M + O + K + J) − pumped into it so far):
-     primary:              MIN(room, H)                               (keeps the dam topped up)
-     supplemental:         MIN(room, H, D − GWp − (S0 + M + O + K + J + GWd − dead storage))
-     emergency:            MIN(room, H) while Q[t−1] < level × cap    (refills a low dam)
+     primary:              MIN(room, H) on a day with Dr > 0            (keeps the dam topped up)
+     supplemental:         MIN(room, H, Dr − (S0 + M + O + K + J + GWd − dead storage))
+     emergency:            MIN(room, H) on a day with Dr > 0,
+                           while Q[t−1] < level × cap                 (refills a low dam)
+   Dr = D − GWp, less what a river-first pump takes (§2.7e): the demand the dam is drawn for today
 3. surface:                Gs = MIN(MAX(S0 + M + O + K + J + GWd − dead storage, 0), D − GWp)
 4. supplemental, direct:   MIN(room, D − Gs − GW)                     then emergency, direct, while Q[t−1] < level × cap
 ```
@@ -2346,7 +2348,25 @@ GW (`groundwater_used`) is what went straight to the crop (part of G); GWd
 (`groundwater_to_dam`) went into the dam, so P = S0 + M + O + K + J + GWd − Gs.
 Because GWd never exceeds the room in the dam, pumped water never makes the
 dam spill. A supplemental dam-target borehole lifts a dam below its dead
-storage up to it first, since the water can't be drawn otherwise. The farm
+storage up to it first, since the water can't be drawn otherwise.
+
+*Only on a day the dam is drawn for demand (engine ≥ 1.7.0).* A primary or
+emergency dam-target borehole pumps only while Dr > 0 (to within 10⁻¹² × D,
+the float noise of several primary units adding up to D). Before 1.7.0 they
+pumped whenever the dam had room, demand or not: in a winter-rainfall
+catchment a primary 200 m³/day borehole filled an empty dam from groundwater
+over a dry winter with nothing to irrigate, and the rain that came later
+spilled instead (a 30 000 m³ dam, 92 dry days then 50 000 m³ of inflow: 18 800
+m³ pumped, spill 20 000 → 38 800 m³; an emergency one at 30 % pumped 9000 m³).
+The pumped water used the borehole's annual cap and depleted the river, and
+the spill passed it downstream, so an unused borehole showed as extra river
+flow. On an irrigation day the rule is unchanged: the dam is topped up to
+capacity, so a borehole smaller than the peak demand still stores ahead of
+the peak. `boreholes.test.ts` › "a dam-target borehole pumps nothing on a day
+with no demand …" pins both sides. Pending the hydrologist (followups.md): a
+top-up on a day with only a little demand still fills the dam by up to a
+day's capacity; a fill-to level or season per borehole is the finer control
+if a farm's practice needs it. The farm
 balance gains GWd beside GW: `(H + I + J + Pd + GW + GWd) − (G − T) − E − ΔQ −
 U − Dep − seepage lost = 0`. With one combined unit this reduces exactly to WP-1.34's
 formulas (a test runs a node's combined capacity and one uncapped
