@@ -292,6 +292,16 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
 	});
 
+	it('a removed node takes its demand objects with it (engine 1.7.0)', () => {
+		const b = base();
+		b.model.demandObjects = [
+			{ id: 'do1', nodeId: 'B', name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(10), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		];
+		const gone = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }]);
+		expect(gone.input.model.demandObjects).toEqual([]);
+		expect(gone.applied.flatMap((a) => a.notes)).toContain('dropped 1 demand object(s)');
+	});
+
 	it('borehole.add / remove (WP-3.9), and a removed node takes its boreholes with it', () => {
 		const b = { id: 'bh1', nodeId: 'A', name: 'New', capacityM3Day: 500, annualCapM3: 40_000, mode: 'supplemental' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0.2 };
 		const added = one({ op: 'borehole.add', borehole: b });

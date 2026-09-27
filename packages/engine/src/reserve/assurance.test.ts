@@ -406,8 +406,9 @@ describe('Reserve compliance in a run', () => {
 		for (let seed = 1; seed <= 60; seed++) {
 			const base = randomInput(seed, { maxDays: 900 });
 			const x = cloneInput(base);
-			// No development: no crops, dams, diversions or transfers, so every site carries its natural flow.
+			// No development: no crops, demand objects, dams, diversions or transfers, so every site carries its natural flow.
 			x.model.cropAreas = [];
+			x.model.demandObjects = [];
 			x.model.transfers = [];
 			for (const n of x.model.nodes) Object.assign(n, { damCapacityM3: 0, divertCapacityM3Day: 0 });
 			const gauges = x.model.nodes.filter((n) => n.kind === 'gauge').map((n) => n.id);
