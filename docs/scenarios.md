@@ -136,7 +136,12 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `riverFirst` and `pumpCapacityM3Day` → 1200.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
-- gauge: `name` only (a gauge only measures).
+- gauge: `name`, and `ewrSite` (engine ≥ 1.3.0, true or false): whether the
+  EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
+  can't be taken off (a model rule), and the op is always a baseline
+  assumption (§ Classification). A scenario can't change a Reserve rule table
+  (`settings.set` has no `ewrRules` path), so there is no changed table to
+  mark.
 
 Ranges are the backend's (`backend/src/model/validate.ts`).
 
@@ -221,7 +226,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale` | never | baseline (settings, calibration, EWR, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`); so the own farm's supply rule and river pump are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, and the catchment's partition of runoff |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`) or a gauge's `ewrSite`; so the own farm's supply rule and river pump are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, and where the EWR is assessed |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |

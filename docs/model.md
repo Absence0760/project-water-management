@@ -1959,13 +1959,27 @@ proportion to their net impact. AB stays in the output as the diagnostic
 **reach shortfall**; it no longer drives curtailment.
 
 **EWR sites** are the catchment outlet (simulated outflow against the full
-pragmatic EWR, the catchment `ewr_shortfall`) and every gauge (its flow
-against the EWR of everything upstream, `MIN(ΣU − ΣZ, 0)`, G1). With no gauge
-the outlet is the only site, and the curtailment panel says so: *EWR assessed
-at 1 site (outlet). Add gauges at the Reserve determination's EWR sites to
-protect upstream reaches.* Reserve compliance is judged at EWR sites (DWS
-Reserve determinations and RQOs are set per resource unit / EWR site), not
-per property.
+pragmatic EWR, the catchment `ewr_shortfall`) and every gauge that is an EWR
+site (its flow against the EWR of everything upstream, `MIN(ΣU − ΣZ, 0)`,
+G1). With no such gauge the outlet is the only site, and the curtailment
+panel says so: *EWR assessed at 1 site (outlet). Add gauges at the Reserve
+determination's EWR sites to protect upstream reaches.* Reserve compliance is
+judged at EWR sites (DWS Reserve determinations and RQOs are set per resource
+unit / EWR site), not per property. Sites are listed outlet first, then
+gauges by node id (`network/topology.ts` `ewrSiteNodes`, one function for the
+run, the stored-run recompute and the checks).
+
+**The EWR site flag (engine ≥ 1.3.0, Q17 follow-on, WP-3.7).** A gauge has
+`ewrSite` (default true, every gauge before 1.3.0). Untick it for a gauge that
+only records flow, a weir that is no Reserve site: it keeps its `outflow` and
+`ewr_shortfall` series, but its shortfall charges nobody (no `ewr_charged` /
+`ewr_natural` series, no row in the EWR sites table), and a Reserve rule
+table sited there is skipped with a warning. The outlet is always a site, and
+only a gauge can be taken off: both are model rules (`modelRules.ts`), which
+the API applies on save and `applyScenario` on a scenario op. The flag is a
+`node.set` field of a gauge in a scenario, and always a baseline assumption
+([scenarios.md](./scenarios.md)); run comparison lists the site list changing
+([run-comparison.md](./run-comparison.md)).
 
 For site *s* on day *t* (shortfalls as positive magnitudes here; the run
 series keep the engine's ≤ 0 sign):
@@ -2003,7 +2017,17 @@ R_f     = MAX over the sites f is upstream of of A_f,s   (series ewr_charge = �
   below it, so summing counts the same water twice. The site that sets it is
   the **binding site** (on a tie within 1e-9, the most downstream one); the
   curtailment table names the site that set most of the charged volume over
-  the reporting window. *Known limitation:* a cut upstream can be recaptured
+  the reporting window. From engine 1.3.0 the run stores it per day as the
+  series `ewr_binding_site` (`network/bindingSeries.ts`): the site's index in
+  the run's site list (0 = the outlet, then gauges by id), blank on a day
+  without a charge, and only for a farm upstream of two or more sites (for any
+  other farm it follows from the charge). A saved run's curtailment over
+  another window and the farmer projection read it (`views/farmProjection.ts`);
+  a run from before 1.3.0 has none, so there the attribution is recomputed on
+  the stored flows, exact except after a transfer loop (`bindingApproximate`).
+  On the example catchments the series adds nothing to the two single-site
+  examples and 6 series, about 195 kB before compression (1.6 % of the run's
+  series), to Sandspruit (15 years, two sites). *Known limitation:* a cut upstream can be recaptured
   by a dam between two nested sites; only a re-run with the cuts applied can
   show that.
 - **Order-free.** Pro rata is symmetric, sums run over sets, and ties go by
@@ -2046,7 +2070,11 @@ not upstream of the site or with `e ≤ 0`; `D = 0 ⇒` every `A = 0`;
 `E = 0 ⇒ N = D`; `R = MAX_s A`; `R ≥ A_irr ≥ 0` and `A_irr ≤ c`; and order
 invariance. The per-run check recomputes a site exactly where no transfer
 crosses its catchment boundary (always the outlet), because per-rule transfer
-volumes are not run series.
+volumes are not run series. From engine 1.3.0 it also checks the stored
+binding site: given exactly on the days the farm is charged, a site below
+the farm, and, where that site can be recomputed, the charge equals the
+farm's share there, so a charge set at an exact site is checked even when
+another site above the farm is crossed by a transfer.
 
 ### 2.7c Other water users (engine ≥ 0.22.0, roadmap WP-1.33)
 
@@ -3907,10 +3935,13 @@ floating-point noise.
 several windows) recomputes the whole table (farms, other water users, EWR
 sites) over any window of a saved run from its stored daily series, with no
 re-run: what `runModel` reports with that window as `reportStart … reportEnd`.
-The EWR site setting each farm's charge needs each day's binding site, which
-a run doesn't store, so it re-runs the attribution (§2.7b) on the stored
-flows; that is exact unless the transfer rules form a loop, when the loop's
-closing rule is carried round the rest of it (`bindingApproximate`). The
+The EWR site setting each farm's charge needs each day's binding site: a run
+from engine 1.3.0 stores it (`ewr_binding_site`, §2.7b), so it is read and
+exact. A run saved before 1.3.0 doesn't, so the attribution (§2.7b) is re-run
+on the stored flows; that is exact unless the transfer rules form a loop,
+when the loop's closing rule is carried round the rest of it
+(`bindingApproximate`). `curtailmentSeriesKeys` lists what it reads: given the
+run's stored series, the binding sites and no flows for a 1.3.0 run. The
 farmer projection's season and the Runs tab's reporting-window picker both use
 it; `curtailmentOverWindow.test.ts` checks it against `runModel` on seeded
 networks. It is a view over a saved run, so it leaves `ENGINE_VERSION` alone.
@@ -4737,7 +4768,7 @@ from the workbook.
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
-| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. | Confirm the rule and the site list (a per-gauge EWR-site flag and gazetted tables are WP-3.7). It changes every farm's curtailment. |
+| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.3.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
 | Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. No dam in the client catchment feeds more than one transfer, so no result is affected. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
 
 ---
