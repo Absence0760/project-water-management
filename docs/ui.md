@@ -10,11 +10,18 @@ sign-in pages (`AuthCard`). The root layout wraps the page in it once a
 session exists. A **Skip to content** link comes first.
 
 - **900 px and wider:** a full-height sidebar (15rem, 240 px) from the top
-  edge, sticky while the page scrolls and scrolling on its own when taller
-  than the window. From the top: the app mark (a link to `/`), the **Main**
-  navigation (Projects / Teams / Help, `aria-current="page"` on the section
-  the URL is in; the project workspace counts as Projects), the page's own
-  navigation in the slot (below), and the account menu at the foot. Nothing
+  edge, sticky while the page scrolls. From the top: the app mark (a link to
+  `/`), the **Main** navigation (Projects / Teams / Help,
+  `aria-current="page"` on the section the URL is in; the project workspace
+  counts as Projects), the page's own navigation in the slot (below), and the
+  account menu at the foot. It is spaced so that, with a project open, every
+  section an owner sees fits a 1440 × 960 window with the account menu in
+  view and room for one more row (a two-line catchment name included;
+  `app-sidebar.spec.ts`). On a shorter window (1280 × 800) the slot scrolls
+  on its own instead of the whole sidebar, so the brand, Main and the account
+  menu stay on screen, and the open section is scrolled into view in it (the
+  slot's `scroll-padding` keeps it clear of the edges). Only below about
+  8rem of slot does the whole sidebar scroll. Nothing
   is fixed across the top, so `--header-h` (`app.css`) is 0 and sticky bars
   and in-page link targets stop at the top edge. A page (`.page`) starts at
   the sidebar's edge rather than centring in the width left, which left a
@@ -126,8 +133,10 @@ the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
-  under a "Catchment" label, the project's name (a link to its Summary) and
-  your role badge (owner, editor, viewer), the section labels shown, with a
+  a "Catchment" label with your role badge (owner, editor, viewer) beside it,
+  the project's name (a link to its Summary; a long name is clamped to two
+  lines, the full name its tooltip and accessible name), the section labels
+  shown, with a
   viewer's **Show model inputs** at the end. **Data** carries an amber badge
   counting the series behind: the series a run is driven by (recorded rain,
   A-pan evaporation; never a forecast or a flow) ending more than

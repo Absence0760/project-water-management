@@ -97,7 +97,13 @@ section it belongs to, with the example that taught it.
   (`layout/sidebar.svelte.ts`, `fillSidebar`) and only one copy of a nav is
   rendered at a time. Below 900 px a slim bar with a Menu; every layout
   stacks to one column with no sideways scroll, sheets go full screen. Keep
-  the sidebar short enough to fit a 960 px-high window.
+  the sidebar short enough to fit a 960 px-high window: with the 15 sections
+  an owner sees it measured 1033 px until the rows went to 34 px, the section
+  gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare
+  now, room for one more row). Below that height the slot scrolls on its own
+  (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
+  never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
+  entry re-runs that spec.
 
 ## 3. Colour, wording, content
 
