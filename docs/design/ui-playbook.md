@@ -311,12 +311,8 @@ Interaction details that bit:
 
 - Every new page gets its own spec with a11y scans at desktop and phone
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
-<<<<<<< HEAD
-  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`, `scenarios.ts`).
-=======
   (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
-  `allocations.ts`).
->>>>>>> worktree-agent-a1290794e20246180
+  `scenarios.ts`, `allocations.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card (see `network-map.spec.ts`,
