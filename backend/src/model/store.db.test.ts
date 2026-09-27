@@ -93,7 +93,8 @@ describe('model store', () => {
 		});
 		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
 		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
-		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior' });
+		// The town carries the GN 538 property area and Table 2 rate (engine 1.10.0, 089_ga538_property).
+		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45 });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
 		const maize = { id: crypto.randomUUID(), name: 'Maize', sortOrder: 1, cropFactor: monthly(0.8) };
 		const transfer = (priority: number, dailyCapM3: number | null) => ({
@@ -154,6 +155,8 @@ describe('model store', () => {
 			supplyTriggerPct: 0.4,
 			supplyStopPct: 0.6,
 			ewrSite: true,
+			gaPropertyAreaHa: null,
+			gaRateM3HaYear: null,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.

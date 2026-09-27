@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -66,7 +66,14 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
 				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
-				ewrSite: z.boolean().default(true)
+				ewrSite: z.boolean().default(true),
+				// GN 538 context (engine ≥ 1.10.0): the property's size and its quaternary's Table 2 rate; null = unknown.
+				gaPropertyAreaHa: nonNeg.max(10_000_000).nullable().default(null),
+				gaRateM3HaYear: z
+					.number()
+					.refine(isGa538Rate, { message: `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}` })
+					.nullable()
+					.default(null)
 			})
 		)
 		.max(500),

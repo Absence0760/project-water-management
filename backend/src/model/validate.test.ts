@@ -100,6 +100,16 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, weir, { ...farm, ewrSite: false } as never])).join()).toMatch(/"A": only a gauge can be taken off the EWR sites/);
 	});
 
+	it('GN 538 property area and rate (engine 1.10.0): null unless set; the rate is one of the six Table 2 values', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id);
+		const parse = (over: object) => ModelBody.safeParse({ nodes: [out, { ...farm, ...over }], crops: [], cropAreas: [], transfers: [] });
+		expect(ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] }).nodes[1]).toMatchObject({ gaPropertyAreaHa: null, gaRateM3HaYear: null });
+		for (const r of [0, 45, 75, 150, 275, 400]) expect(parse({ gaPropertyAreaHa: 60, gaRateM3HaYear: r }).success).toBe(true);
+		expect(parse({ gaPropertyAreaHa: 0.5, gaRateM3HaYear: null }).success).toBe(true);
+		for (const bad of [{ gaRateM3HaYear: 100 }, { gaRateM3HaYear: '45' }, { gaPropertyAreaHa: -1 }, { gaPropertyAreaHa: 1e8 }]) expect(parse(bad).success, JSON.stringify(bad)).toBe(false);
+	});
+
 	it('supply rule and river pump (WP-3.8): fills the dam-only defaults, accepts each rule, refuses bad values and invalid combinations', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });
