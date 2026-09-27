@@ -735,6 +735,8 @@ export const af: Catalogue = {
 	'6aa266af': 'Die rivier stroomaf',
 	// What is left reaches the outlet. Every day, the model checks it against the ecological reserve the river needs.
 	'643c2d08': 'Wat oorbly, bereik die uitloop. Elke dag toets die model dit teen die ekologiese reserwe wat die rivier nodig het.',
+	// m³/s, on a square-root scale
+	'f161fe05': 'm³/s, op ’n vierkantswortelskaal',
 	// Flow at the outlet
 	'916671c6': 'Vloei by die uitloop',
 	// Reserve
@@ -745,6 +747,8 @@ export const af: Catalogue = {
 	'f8c0f358': 'jaar se daaglikse waterbalans',
 	// days in one run
 	'e4291d84': 'dae in een lopie',
+	// fit to the weir’s measured flow (NSE, where 1 is perfect)
+	'32f438d7': 'ooreenstemming met die meetstuwal se gemete vloei (NSE, waar 1 perfek is)',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
@@ -755,6 +759,8 @@ export const af: Catalogue = {
 	'49027b5c': 'Elke projek is privaat vir sy lede, afgedwing deur die databasis self (row-level security).',
 	// Daily data from CHIRPS rainfall and the DWS gauges.
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
+	// In the example catchment
+	'fb86138c': 'In die voorbeeld-opvanggebied',
 	// This is the farm as it is today. Move a slider to change it.
 	'8b81fde5': 'Dit is die plaas soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve
@@ -789,14 +795,14 @@ export const af: Catalogue = {
 	'37645529': 'Besproeiingswater gelewer',
 	// {pct} % of what the farm needs
 	'b57d6692': '{pct} % van wat die plaas nodig het',
-	// River below the reserve
-	'c8adc657': 'Rivier onder die reserwe',
-	// {days} days a year
-	'aa84b70d': '{days} dae per jaar',
 	// Today
 	'e7c0775e': 'Vandag',
 	// This plan
 	'ec26a6ec': 'Hierdie plan',
+	// River below the reserve
+	'c8adc657': 'Rivier onder die reserwe',
+	// {days} days a year
+	'aa84b70d': '{days} dae per jaar',
 	// Change from today: supply {supply} points, river {days} days a year.
 	'a3a08f59': 'Verandering teenoor vandag: lewering {supply} punte, rivier {days} dae per jaar.',
 	// Legal
