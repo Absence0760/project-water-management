@@ -1392,3 +1392,41 @@ export function diffInputs(
 		...diffSeries(a?.series, b?.series, values)
 	];
 }
+
+// ---------------------------------------------------------------------------
+// Field history (WP-2.4 UI, docs/api.md § Field history): which input a change
+// line is about. The change list stores sentences, not paths; these tables say
+// which setting a settings line's subject names and which node field a node
+// line's label names, so the backend can count changes per field. Labels only:
+// nothing a run computes depends on them.
+// ---------------------------------------------------------------------------
+
+/** A settings change's subject → the setting's path (`gr4j.x1`, `calibration.rainThresholdMm`). */
+export function settingsChangePaths(): [subject: string, path: string][] {
+	const out: [string, string][] = [];
+	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) out.push([f.label, k]);
+	for (const [k, f] of Object.entries(SETTINGS_MONTHLY)) out.push([f.label, k]);
+	out.push(
+		['Monthly dam evaporation factors', 'lakeEvapFactorMonthly'],
+		['Monthly effective rain fractions', 'effectiveRainFractionMonthly'],
+		[PE_LABEL, 'pe'],
+		['Hi/lo MAP split', 'hiLoSplit']
+	);
+	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
+	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);
+	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) out.push([`Calibration ${f.label}`, `calibration.${k}`]);
+	out.push(['Flagged zero-rain runs', 'zeroRainRuns.mode'], ['Multi-day rain accumulations', 'zeroRainRuns.accumulationMode']);
+	return out;
+}
+
+/** A node change's label (the words after "Name: ") → the node's field. */
+export function nodeChangeFields(): [label: string, key: string][] {
+	return [
+		...NODE_FIELDS.map(([k, label]): [string, string] => [label, String(k)]),
+		['demand', 'userDemandM3Day'],
+		['demand factor', 'demandFactor'],
+		['dam release', 'damReleaseM3Day'],
+		['dam survey curve', 'damCurve'],
+		['drains into', 'downstreamNodeId']
+	];
+}

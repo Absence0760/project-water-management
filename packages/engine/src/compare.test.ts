@@ -6,7 +6,9 @@ import {
 	sharedDaysChange,
 	matchByIdThenName,
 	metricDelta,
+	nodeChangeFields,
 	peText,
+	settingsChangePaths,
 	type ComparableRun,
 	type RunInputsSnapshot
 } from './compare';
@@ -1215,5 +1217,34 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		d.settings.ewrRules![0]!.lowFlow = null;
 		d.settings.ewrRules![0]!.highFlows = [];
 		expect(texts(a, d)).toEqual([]);
+	});
+});
+
+describe('field history tables (settingsChangePaths, nodeChangeFields)', () => {
+	it('names the setting a settings line is about, by its subject', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.lakeEvapFactor = 0.6;
+		b.settings.gr4j!.x1 += 10;
+		const paths = new Map(settingsChangePaths());
+		const subjects = diffInputs(a, b).map((c) => c.subject);
+		expect(subjects.map((s) => paths.get(s))).toEqual(['lakeEvapFactor', 'gr4j.x1']);
+		// One path per subject, no subject twice.
+		expect(paths.size).toBe(settingsChangePaths().length);
+	});
+
+	it('names the node field a node line is about, by the label after "Name: "', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		f.damCapacityM3 += 1000;
+		f.irrigationEfficiency = 0.5;
+		const labels = nodeChangeFields();
+		const keyOf = (text: string) => {
+			const rest = text.slice('Rooikloof: '.length);
+			return labels.filter(([l]) => rest.startsWith(`${l} `)).sort((x, y) => y[0].length - x[0].length)[0]?.[1];
+		};
+		expect(diffInputs(a, b).map((c) => keyOf(c.text))).toEqual(['damCapacityM3', 'irrigationEfficiency']);
+		expect(new Set(labels.map(([l]) => l)).size).toBe(labels.length);
 	});
 });

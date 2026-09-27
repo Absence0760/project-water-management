@@ -210,6 +210,7 @@ describe('route auth inventory', () => {
 	it('inventories the history routes as auth-gated', () => {
 		const history = [
 			'GET /projects/:id/history',
+			'GET /projects/:id/history/fields',
 			'GET /projects/:id/history/revisions/:revId',
 			'POST /projects/:id/history/revisions/:revId/restore',
 			'GET /projects/:id/runs/:runId/changes-since',
