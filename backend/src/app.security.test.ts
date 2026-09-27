@@ -40,3 +40,21 @@ describe('cross-origin writes', () => {
 		expect((await post(ORIGIN)).status).not.toBe(403);
 	});
 });
+
+describe('the Lambda entry point fails closed without the secret', () => {
+	it('refuses a missing or short secret and accepts a Terraform-length one (positive control)', async () => {
+		const { assertEdgeSecret } = await import('./app.js');
+		expect(() => assertEdgeSecret({})).toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		expect(() => assertEdgeSecret({ CLOUDFRONT_SHARED_SECRET: 'short' })).toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		expect(() => assertEdgeSecret({ CLOUDFRONT_SHARED_SECRET: 'x'.repeat(48) })).not.toThrow();
+	});
+
+	it('lambda.ts will not load without it, and loads with it', async () => {
+		vi.resetModules();
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', '');
+		await expect(import('./lambda.js')).rejects.toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		vi.resetModules();
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', 'x'.repeat(48));
+		await expect(import('./lambda.js')).resolves.toHaveProperty('handler');
+	});
+});
