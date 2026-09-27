@@ -174,7 +174,7 @@ scale. An alarm fires at 60 connections.
 | --- | --- | --- |
 | RDS master (`water`, schema owner) | `manage_master_user_password`: RDS generates it, stores it in Secrets Manager and rotates it (every 7 days by default) | **No.** Only the migrate Lambda reads it, at run time |
 | `water_app` password | sops `db_app_password` → API `DATABASE_URL` + migrate `WATER_APP_PASSWORD` | Yes |
-| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → API env | Yes |
+| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → API and worker env (the worker's re-run job stamps the runs it stores) | Yes |
 | CloudFront shared secret | `random_password` | Yes |
 
 This follows the estate. project-flakey uses the same RDS-managed master plus

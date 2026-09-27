@@ -152,3 +152,15 @@ export async function backdateApplication(scenarioId: string, days: number): Pro
 		}
 	});
 }
+
+/**
+ * Change a stored run's summary behind the API's back, as someone with SQL
+ * could: its server stamp (077_run_stamp, docs/security.md § Run stamps) no
+ * longer matches, so the run reads as unverified.
+ */
+export async function tamperRunSummary(runId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET summary = summary || '{"tampered": true}' WHERE id = $1`, [runId]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}

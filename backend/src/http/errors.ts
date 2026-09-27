@@ -58,7 +58,8 @@ export const ERROR_CODES = [
 	'unsubscribe_link_gone',
 	'export_throttled',
 	'alerts_resume_throttled',
-	'body_refused'
+	'body_refused',
+	'run_unverified'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

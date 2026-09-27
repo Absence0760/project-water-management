@@ -709,6 +709,13 @@ scenario is `'team'`, and behaves exactly as above).
   `app_scenario_run_meta` and `app_trim_application_runs`, and of its series
   they read the application's own nodes and the catchment allowlist only
   (046, [data-model.md § Applicants](./data-model.md#applicants-044045)).
+  RLS still lets an applicant insert their own application's run rows
+  (045), so the backend stamps every run it stores (077,
+  [security.md § Run stamps](./security.md#run-stamps)): an application
+  isn't decided (`409 run_unverified`), nor its run signed off, while any
+  of its runs lacks a matching stamp; the assessors get the ids
+  (`unverifiedRunIds`) and a warning in the application panel, and delete
+  those runs from the Runs tab.
 - **Names kept with the ops** (`op_names`, above) are captured from the full
   published base, server-side, and a contributor is only ever shown those of
   the scenario's own nodes (`names.ts` `applicantOpNames`): a neighbour's

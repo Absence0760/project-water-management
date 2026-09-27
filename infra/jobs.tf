@@ -158,8 +158,12 @@ resource "aws_lambda_function" "worker" {
       DATABASE_URL        = local.worker_database_url
       DB_POOL_MAX         = "2"
       NODE_EXTRA_CA_CERTS = local.rds_ca_path
-      JOB_TRANSPORT       = "sqs"
-      JOBS_QUEUE_URL      = aws_sqs_queue.jobs.url
+      # A re-run job stores a run, which the backend stamps under a key derived
+      # from the session secret (backend/src/runs/stamp.ts, docs/security.md
+      # § Run stamps). The worker never signs or reads a session.
+      AUTH_JWT_SECRET = local.auth_jwt_secret
+      JOB_TRANSPORT   = "sqs"
+      JOBS_QUEUE_URL  = aws_sqs_queue.jobs.url
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url

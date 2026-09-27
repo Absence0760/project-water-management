@@ -115,8 +115,8 @@ export const SETTINGS: Record<string, Setting> = {
 	// --- The edge and the session ---------------------------------------------------------
 	CLOUDFRONT_SHARED_SECRET: { why: 'CloudFront stamps it on every /api request; unset, app.ts skips the check (local dev).', checks: { api: secret(32) } },
 	AUTH_JWT_SECRET: {
-		why: 'Signs sessions. Only the API signs or verifies one; the worker reaches session.ts through shared modules but never calls it.',
-		checks: { api: secret(32) }
+		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
+		checks: { api: secret(32), worker: secret(32) }
 	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
