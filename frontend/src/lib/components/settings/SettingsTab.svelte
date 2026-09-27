@@ -1,9 +1,13 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { page } from '$app/state';
+	import { holdAnchor } from '$lib/help/anchor';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
 		CALIBRATION_FLOW_KINDS,
+		fitRecordCaveats,
+		fitRecordStatus,
 		hasPotentialEvaporation,
 		PAN_COEFFICIENT_PRESET_SOURCE,
 		PAN_COEFFICIENT_PRESETS,
@@ -34,14 +38,15 @@
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
+	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { dataQualityError } from './dataQuality';
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
 	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
-	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
+	import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
@@ -51,19 +56,18 @@
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-
-	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
-	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
-	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
-	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
-	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
-	// API keys for the ingest endpoint, owners only: likewise (docs/ui.md § API keys).
-	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
-	// The outcome matrix's settings (issue #53 R4): part of the form, but its own chunk (this one is at its ceiling).
-	const loadOutcomes = () => import('$lib/components/outcomes/OutcomeSettingsSection.svelte');
-	// The seasonal outlook's settings (issue #53 R5): likewise its own chunk.
-	const loadOutlook = () => import('$lib/components/outlook/OutlookSettingsSection.svelte');
+	// These panels render on every visit of the tab, so they are in its chunk rather than chunks of
+	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
+	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
+	// reports save through their own APIs, never through Save settings (docs/ui.md § Data feeds,
+	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
+	// (R5) settings are part of the form.
+	import DataFeedsPanel from '$lib/components/feeds/DataFeedsPanel.svelte';
+	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
+	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
+	import ApiKeysPanel from '$lib/components/apiKeys/ApiKeysPanel.svelte';
+	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
+	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 
 	let {
 		project,
@@ -293,19 +297,47 @@
 			root.style.scrollPaddingBottom = '';
 		};
 	});
-	const navGroups = $derived([{ label: null, sections: SETTINGS_SECTIONS.map((sec) => ({ ...sec, problem: blockers.some((b) => b.id === sec.id) })) }]);
+	const navLabel = (id: string) => SETTINGS_SECTIONS.find((sec) => sec.id === id)?.label ?? AFTER_FORM_LABELS[id] ?? id;
+	const navGroups = $derived(
+		settingsNavGroups(project.role === 'owner').map((g) => ({
+			label: g.label,
+			sections: g.ids.map((id) => ({ id, label: navLabel(id), problem: blockers.some((b) => b.id === id) }))
+		}))
+	);
+
+	// The section header (issue #17): where the parameters came from, and the way to the fit.
+	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
+	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
+
+	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
+	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
+	// panels settle (as River & reserve does), and focus its heading.
+	onMount(() => {
+		const hash = page.url.hash.slice(1);
+		const el = hash.startsWith('set-') ? document.getElementById(hash) : null;
+		if (!el) return;
+		const release = holdAnchor(el);
+		const heading = el.querySelector<HTMLElement>('h2, h3');
+		if (heading) {
+			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+			heading.focus({ preventScroll: true });
+		}
+		return release;
+	});
 </script>
+
+{#snippet headerContext()}<span data-testid="fit-summary">{summary}</span>{/snippet}
+{#snippet headerActions()}
+	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if s.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
+{/snippet}
 
 <form onsubmit={save} novalidate>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
-	<p class="muted small lead">
-		Grouped by what each setting drives: irrigation <strong>demand</strong>, natural <strong>flow generation</strong> from rainfall, how
-		flow is <strong>shared</strong> between units, and the <strong>EWR</strong> at the outflow gauge. Monthly values run through the water
-		year, October → September.
-	</p>
-
-	<!-- In-page menu: sticks under the app header down this long form and marks the group being read. -->
+	<!-- In-page menu: sticks under the app header down this long form and marks the group being read.
+	     Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
+	     the header's context says where the parameters came from. -->
 	<SectionNav groups={navGroups} label="Settings sections" />
 
 	<!-- Demand ------------------------------------------------------------------>
@@ -440,7 +472,8 @@
 			{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
 				<div class="field">
 					<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" /></span>
-					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
+					<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
+					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
 					<span class="hint" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
 				</div>
 			{/each}
@@ -553,17 +586,13 @@
 				<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; the source note below records which preset. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
 			</div>
 			{#if !readonly}
-				<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; code-split, it is collapsed until opened. -->
-				<Lazy load={loadPanHelper}>
-					{#snippet children(PanCoefficientHelper)}
-						<PanCoefficientHelper
-							onapply={(v: number[], note: string) => {
-								s.panCoefficient = [...v] as typeof s.panCoefficient;
-								s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
-							}}
-						/>
-					{/snippet}
-				</Lazy>
+				<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; it is collapsed until opened. -->
+				<PanCoefficientHelper
+					onapply={(v: number[], note: string) => {
+						s.panCoefficient = [...v] as typeof s.panCoefficient;
+						s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
+					}}
+				/>
 			{/if}
 			<div class="table-wrap">
 				<table class="data compact monthly">
@@ -864,18 +893,10 @@
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">
-		<Lazy load={loadOutcomes}>
-			{#snippet children(OutcomeSettingsSection)}
-				<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
-			{/snippet}
-		</Lazy>
+		<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
 	</div>
 	<div id="set-outlook">
-		<Lazy load={loadOutlook}>
-			{#snippet children(OutlookSettingsSection)}
-				<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
-			{/snippet}
-		</Lazy>
+		<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
 	</div>
 
 	<!-- Automatic runs (WP-2.11) ------------------------------------------------------------------>
@@ -942,31 +963,23 @@
 	{/if}
 </form>
 
-<!-- Outside the form: feeds save themselves, never through Save settings. -->
-<Lazy load={loadFeeds}>
-	{#snippet children(DataFeedsPanel)}
-		<DataFeedsPanel projectId={project.id} />
-	{/snippet}
-</Lazy>
+<!-- Outside the form: feeds, keys and schedules save themselves, never through Save settings. -->
+{#if !readonly}
+	<p class="muted small after-form">
+		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with Save settings.
+	</p>
+{/if}
+<DataFeedsPanel projectId={project.id} />
 
 {#if project.role === 'owner'}
-	<Lazy load={loadApiKeys}>
-		{#snippet children(ApiKeysPanel)}
-			<ApiKeysPanel projectId={project.id} />
-		{/snippet}
-	</Lazy>
+	<ApiKeysPanel projectId={project.id} />
 {/if}
 
-<Lazy load={loadReportSchedules}>
-	{#snippet children(ReportSchedulesPanel)}
-		<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
-	{/snippet}
-</Lazy>
+<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
 
 <style>
-	.lead {
-		max-width: 80ch;
-		margin: -0.25rem 0 0.9rem;
+	.after-form {
+		margin: 1.5rem 0 0.75rem;
 	}
 	.u {
 		font-weight: 400;
@@ -992,7 +1005,8 @@
 		gap: 0 1.25rem;
 		margin-top: 0.5rem;
 	}
-	.field :global(input),
+	/* Not a checkbox: stretched, "Vary it by month" sat half a field away from its box. */
+	.field :global(input:not([type='checkbox'])),
 	.field select {
 		width: 100%;
 	}

@@ -41,10 +41,11 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	const upper = nodes.find((n) => n.name === 'Upper farm')!.id;
 	const lower = nodes.find((n) => n.name === 'Lower farm')!.id;
 
-	await page.goto(`/projects/${project.id}?tab=scenarios`);
-	await expect(page.getByLabel('Base run')).toHaveValue(baseRun);
-	await page.getByLabel('Name', { exact: true }).fill(NAME);
-	await page.getByRole('button', { name: 'Create scenario' }).click();
+	await page.goto(`/projects/${project.id}?tab=scenarios&new=1`);
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await expect(create.getByLabel('Base run')).toHaveValue(baseRun);
+	await create.getByLabel('Name', { exact: true }).fill(NAME);
+	await create.getByRole('button', { name: 'Create scenario' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
 
 	// The form: farms by default, every farm of the model listed, months Oct first.

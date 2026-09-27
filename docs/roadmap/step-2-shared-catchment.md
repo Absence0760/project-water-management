@@ -97,7 +97,10 @@ Must be true before starting:
 5. **Production DB running** (RDS, Phase 6). All Step 2 schema changes are
    new migrations: `001` is frozen once deployed.
 6. **An Afrikaans translator/reviewer** is named (the client, or someone they
-   trust). Machine translation is not shipped without review.
+   trust). The Afrikaans now in the app (2026-09-26, issue #49) is written
+   by the `af-translator` agent and reviewed by the `af-checker` agent, at
+   the operator's call; a native speaker's review before Afrikaans-speaking
+   farmers are invited stays open (docs/followups.md § Afrikaans).
 
 Decisions still open that block specific WPs: D1–D4 block WP-2.1 and WP-2.3,
 D6 blocks WP-2.10, D7 blocks WP-2.12, D9 blocks WP-2.15 (see §11).
@@ -319,7 +322,7 @@ untouched.
 now answer 403 to farmers. Document this in api.md § Errors and add the role
 to § Projects.
 
-**UI.** In the Members panel (`overview/MembersPanel.svelte`), farmers are
+**UI.** In the Members panel (`project/MembersPanel.svelte`), farmers are
 listed separately as "Farmers (N)" with their linked farms. The Network tab
 shows a "2 farmers linked" chip on a farm row. Deleting a linked farm warns
 that its links go with it (the cascade).
@@ -369,7 +372,7 @@ the aggregate rule), api.md.
 ### WP-2.2 Farmer invites (single and bulk)
 
 > **Status: built** (issue #27; `034_farmer_invites.sql`,
-> `backend/src/farms/routes.ts`, `overview/InviteFarmersDialog.svelte`;
+> `backend/src/farms/routes.ts`, `project/InviteFarmersDialog.svelte`;
 > [api.md § Farmers](../api.md#farmers)). Where the build departs from the
 > plan below, and why:
 > - **`PUT /farmers/:userId` stays** (the plan's `PATCH`), and there is no
@@ -385,8 +388,7 @@ the aggregate rule), api.md.
 >   farmer's links or to a pending invite's farms. The single form replaces
 >   an invite's farms, as re-sending an invite replaces its role.
 > - **`invite.locale`** takes `en` or `af`; an `af` invite goes out through
->   the email catalogue (WP-2.5), in English until the reviewed Afrikaans
->   lands. A new account takes its `app_user.locale` from the invite
+>   the email catalogue (WP-2.5), in Afrikaans (`lang="af"`). A new account takes its `app_user.locale` from the invite
 >   (050_user_locale.sql).
 > - The e2e plants the invite token instead of reading Mailpit, like the
 >   other invite specs (e2e mails go to the server log).
@@ -783,18 +785,21 @@ audit log of model changes yet" from Known gaps).
 
 ### WP-2.5 Internationalisation foundation and Afrikaans
 
-> **Status: plumbing built, translation pending** (`050_user_locale.sql`,
+> **Status: built; Afrikaans complete, native review pending** (`050_user_locale.sql`,
 > `frontend/src/lib/i18n/`, `backend/src/mail/i18n/`;
 > [ui.md § Language](../ui.md#language), [api.md § Auth](../api.md#auth)).
 > Where the build departs from the plan below, and why:
-> - **`af.ts` is `Partial`**, not a full `Record`: no Afrikaans is reviewed
->   yet and nothing is invented, so a missing key shows in English and must be
->   on `docs/i18n/af-translation-sheet.md` (432 strings; the catalogue tests
->   fail otherwise). An unknown key still fails `pnpm check`.
-> - **`<html lang>` follows the words**, not the choice: it stays `en` until
->   the Afrikaans catalogue is complete, and dates follow it too; numbers
->   switch to the decimal comma at once, and so does the WUA's own notice
->   (its Afrikaans is real). The workspace stays `en`.
+> - **`af.ts` is `Partial`**, not a full `Record`: a key without Afrikaans
+>   shows in English and must be on `docs/i18n/af-translation-sheet.md` (the
+>   catalogue tests fail otherwise), so a new string never blocks a build.
+>   An unknown key still fails `pnpm check`. Every string has Afrikaans now
+>   (2026-09-26, issue #49: 505 site messages, 70 email strings, 8 glossary
+>   entries), written by the `af-translator` agent and reviewed by the
+>   `af-checker` agent; a native speaker's review is open.
+> - **`<html lang>` follows the words**, not the choice: it is `af` only
+>   while the Afrikaans catalogue is complete (it is), and dates follow it
+>   too; numbers switch to the decimal comma at once, and so does the WUA's
+>   own notice. The workspace stays `en`.
 > - **The switch** is on the sign-in pages, the farm header, the `/share`
 >   header and the account page, not the workspace header (the workspace
 >   isn't translated).
@@ -2197,7 +2202,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Threat | Status | Test or fix |
 | --- | --- | --- |
 | Farmer IDOR on `nodeId` (another farm, a gauge, an unknown id, a malformed id) | ✅ | `publish/publication.db.test.ts` "404s a farm the farmer isn't linked to" (view and CSV, own farm as control); `farms/farms.db.test.ts` "404s any other node" |
-| Every other project route refuses a farmer | ✅ | `farms/farms.db.test.ts` "%s refuses a farmer" (every `/projects/:id` route not on `FARMER_ALLOWED`) |
+| Every other project route refuses a farmer | ✅ | `projects/role-ladder.db.test.ts` "answers a farmer 403 on every route that needs viewer or above" (every `/projects/:id` route not on `BELOW_VIEWER`, with a request its validation accepts) |
 | Response scan per farmer route (no other farm's id or name) | ✅ | `publish/publication.db.test.ts` (farm view, publication list, CSV), `farms/series-privacy.db.test.ts` (series, the access list), `notes/notes.db.test.ts` (list and counts) |
 | Differencing through totals (the `k` rule) | ✅ | `publish/publication.db.test.ts` "the aggregate rule on the even share"; `share/share.db.test.ts` k boundary at 4 and 5 holders; `farms/farms.db.test.ts` holder count (one user's farms once) |
 | Flow volumes reveal a neighbour's use | ✅ | `farms/series-privacy.db.test.ts` (downstream farmer gets no series equal to the upstream outflow; positive control as a viewer) |

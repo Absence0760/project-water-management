@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas and **More on Units & supply** opens that page. The **Dams today** card opens the **Dams** tab. The checklist and the project’s details follow below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas and **More on Units & supply** opens that page. The **Dams today** card opens the **Dams** tab. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
 					}
 				]
 			},
@@ -143,11 +143,15 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
 					},
 					{
 						type: 'p',
-						text: '**Dams** has a card for each farm dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network and the farm’s planted areas, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level.'
+						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
+					},
+					{
+						type: 'p',
+						text: '**Dams** has a card for each unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
 					},
 					{
 						type: 'p',
@@ -155,12 +159,20 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary, the farms and dams on the Network), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series), **Add data** uploads a file, and **Run model** runs the saved model and opens the run in Runs & results. The Network adds **Grids** and **+ Add node**, Crops & demand **Grids** and **+ Add crop**. Notices sit in one line under the header: that you can only view the project, or that new data has arrived since the last run, with **Re-run model**.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the farms and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**.'
+					},
+					{
+						type: 'p',
+						text: 'Each page adds its own actions to the header. The Network has **Grids** and **+ Add node**; Crops & demand **Grids** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Units & supply have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+					},
+					{
+						type: 'p',
+						text: 'Nothing you edit takes you off the page. **Grids** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors, planted areas and irrigation demand. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the unit on the Network (the link appears under the drawing), or pick the unit’s name in the Summary’s **Supply by unit** (or the link on a unit in its **Needs attention**). It opens beside the page and saves with the rest of the model.'
+						text: 'To change one unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the unit on the Network and follow **Irrigated** on its card beside the map, pick the unit’s name in the Summary’s **Supply by unit** (or **Its planted areas** on a unit in its **Needs attention**), its name beside its bar on Crops & demand, or **Planted areas** on its card on Units & supply or Dams. It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
@@ -222,7 +234,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project.'
+						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
 					}
 				]
 			}
@@ -262,15 +274,15 @@ export const GUIDES: Guide[] = [
 							'Press **+ Add node** for each unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
-							'For a unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card on the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
+							'For a unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
 							'Set the unit’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
-							'Press **Save changes** on the save bar.'
+							'Press **Save changes** on the save bar (or in the node’s sheet).'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour units by** › **Supply, latest run**, on by default); a unit added since the run is hatched.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour units by** › **Supply, latest run**, on by default); a unit added since the run is hatched. The same menu colours the units by their dam level at the end of the latest run, or by irrigated area.'
 					}
 				]
 			},
@@ -338,8 +350,8 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a card with its area, the month it needs most water and a small chart of its factors; **Edit** on the card opens the sheet again.',
-							'Under **Planted area by unit**, press **Edit areas** and enter the hectares of each crop on each unit in the grid. Leave a crop blank on units that don’t grow it. Each unit then gets a bar split by crop; a note under the bars names any unit with nothing planted, whose demand is zero.',
+							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors; **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
+							'Under **Planted area by unit**, press **Edit areas** and enter the hectares of each crop on each unit in the grid. Leave a crop blank on units that don’t grow it. Each unit then gets a bar split by crop in the list’s colours, largest unit first (hover a segment for its crop and hectares); a note under the bars names any unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per unit and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
@@ -349,7 +361,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Grids** at the top of the page (Crop factors, Planted areas, Irrigation demand): they open over the page, and Done brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one unit, click its name beside its bar, or select it on the **Network** and open its irrigated area on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas, Irrigation demand): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
@@ -390,11 +402,11 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0. Commas, semicolons or tabs, and decimal points or decimal commas, are worked out from the file. A daily table exported from the DWS hydrology site loads as it is: days its quality code marks as missing, and negative placeholders such as -999, become gaps.',
-							'Press **Add data** in the project header, or drop the file anywhere on the page.',
+							'Press **Add data** in the section header, or drop the file anywhere on the page.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
 							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: put them back from the **History** tab with **Restore the earlier values**.',
-							'Press **Re-run model** on the banner when you are ready.'
+							'Press **Re-run model** in the notice under the header when you are ready.'
 						]
 					},
 					{
@@ -410,12 +422,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'Coverage per year, % missing and the last date of each series.',
+							'The table lists the series that are **behind** first: rainfall or evaporation a run reads whose data is more than a week old, the same ones the number beside **Data** counts, each marked **Behind**. Then the last date of each series, its coverage per year and % missing. Click a row (or its **View**) to chart it; the link can be shared, and Back returns to the series before.',
 							'**Data checks**: negative values, outliers, flat stretches, suspect zero rain and breaks in catchment rain’s ratio to CHIRPS, which the [[double-mass|double-mass]] chart shows by water year.',
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
-							'**Preview all data** (card header) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
+							'**Preview all data** (in the header, beside **Add data**) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
 						]
 					}
 				]
@@ -437,11 +449,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **Add transfer** and pick its source (**From**) and destination (**To**) units.',
+							'On **Transfers**, press **+ Add transfer** in the section header and pick its source (**From**) and destination (**To**) units.',
 							'Tick the [[transfer-months|months]] it runs in: one toggle per month, Oct … Sep.',
 							'Enter the [[transfer-rate|maximum rate]] in m³/s, and a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
 							'With several transfers, set each one’s [[transfer-priority|priority]]: lower moves first.',
+							'Check **When water moves** under the rules: each month’s enabled rules and the most they can move in a day together, before the dams’ own limits.',
 							'Save, then run.'
 						]
 					}
@@ -664,7 +677,8 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Save any unsaved changes.',
-							'On **Runs & results**, optionally give the run a label, and press **Run model**. It needs a network and a rainfall series; until then the page says what is missing.',
+							'On **Runs & results**, optionally type a **Run label** in the header (where the other pages have Run model), and press **Run model**. It needs a network and a rainfall series; until then the line under the header says what is missing.',
+							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **River & reserve** and **Units & supply** for that run.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
 					}
@@ -677,8 +691,6 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which units fell short, the fit when there is observed flow), and the headline figures. The per-unit table is on **Units & supply** (see below).',
-							'**River & Reserve**: a link to the **River & reserve** page for the same run, where the river’s results now are (see below).',
-							'**Units & users**: a link to the **Units & supply** page for the same run, where the units’ results now are (see below).',
 							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, **Calibration** with **Where the parameters came from**, the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
 							'**Dig deeper**: **Self-checks** (whether each unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
@@ -690,7 +702,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Units & supply**, also under *Outcomes*, is the units’ page for one run (the newest, or pick another from its **Run** menu; the Summary’s **Supply by unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the units below 95 %, the units short on any of the run’s last 7 days (it opens the curtailment over those days) and the total shortfall. Then a card per unit, least supplied first, in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared. Below them: the **Unit results** table (units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
+						text: '**Units & supply**, also under *Outcomes*, is the units’ page for one run (the newest, or pick another from the run menu in its header; the Summary’s **Supply by unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the units below 95 %, the units short on any of the run’s last 7 days (**Short this week**, which opens the curtailment over those days) and the total shortfall. Then a card per unit, least supplied first, in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared. Below them: the **Unit results** table (units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
 					},
 					{
 						type: 'note',
@@ -736,7 +748,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Run a baseline.',
 							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if.',
-							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
+							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
 							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value, and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
 							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.'

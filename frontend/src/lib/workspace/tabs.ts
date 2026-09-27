@@ -36,6 +36,9 @@ export const TAB_GROUP = {
 	scenarios: 'core',
 	// Registered volumes vs modelled use (WP-3.10): viewers read volumes, not names.
 	allocations: 'core',
+	// What the project is and who can open it (issue #17 option A): the model's facts, details, import
+	// record, notes, team, members, farmers and share links, moved from below the Summary's first screen.
+	project: 'core',
 	// Submitted applications, for the assessors to decide (WP-3.3).
 	applications: 'assess',
 	// The change log of the inputs, with restore actions a viewer can't use.
@@ -62,6 +65,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	compare: 'Compare runs',
 	scenarios: 'Scenarios',
 	allocations: 'Allocations',
+	project: 'Project',
 	applications: 'Applications',
 	history: 'History'
 };
@@ -123,6 +127,17 @@ export function visibleTabs<T extends string = TabId>(
 }
 
 /**
+ * Whether `role` may open tab `id` at all, from a link as well as the
+ * sidebar. Hiding is presentation (a viewer's hidden model inputs still open
+ * from a deep link), except for the assessors' tabs, which the API refuses a
+ * viewer: an old or shared `?tab=applications` link lands on the Summary
+ * instead of an error.
+ */
+export function canOpenTab(role: Role | null | undefined, id: string): boolean {
+	return groupOf(id) !== 'assess' || role === 'owner' || role === 'editor';
+}
+
+/**
  * The strip's tabs: `visible`, plus the open tab when a deep link opened one
  * that is hidden, in its `rendered` place, so the strip always shows where you
  * are (and the tab body's aria-labelledby has its tab).
@@ -141,7 +156,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 export const NAV_SECTIONS = [
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
-	{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
+	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
 export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];

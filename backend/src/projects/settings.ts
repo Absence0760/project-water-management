@@ -466,8 +466,12 @@ export const FitRecord = z
 	.strict();
 
 /**
- * Validates the known fields; extra keys (e.g. calibration parameters the
- * engine adds later) pass through but the whole object is size-capped.
+ * Validates the known fields and drops any other key (zod's default strip),
+ * so a body can't store what the schema doesn't name: an unknown key used to
+ * pass through into project.settings and from there into every revision,
+ * copy and run input (http/mass-assignment.security.db.test.ts). Stripped
+ * rather than refused so a project file from another version still imports;
+ * a setting the engine adds is added here too. The whole object is size-capped.
  */
 export const SettingsPatch = z
 	.object({
@@ -575,5 +579,4 @@ export const SettingsPatch = z
 		outlook: OutlookPatch
 	})
 	.partial()
-	.passthrough()
 	.refine((s) => JSON.stringify(s).length <= 64_000, 'settings too large');

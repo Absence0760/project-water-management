@@ -126,6 +126,9 @@ export async function listYieldResults(
 
 /** Queued or running yield jobs the user has, in any project they can still see. */
 export async function pendingYieldJobs(db: Db): Promise<number> {
+	// Count and enqueue one request at a time per user (the lock is held to
+	// commit), so a burst of requests can't all pass the cap together.
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('yield_job_cap:' || app_current_user_id()::text, 0))`);
 	const { rows } = await db.query<{ n: number }>(
 		`SELECT count(*)::int AS n FROM job WHERE kind = 'yield' AND acting_user_id = app_current_user_id() AND status IN ('queued', 'running', 'failed')`
 	);

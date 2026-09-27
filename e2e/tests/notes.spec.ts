@@ -3,7 +3,7 @@
 // farmer's page lists only the farm-visible one under "Notes about your
 // farm", and the farmer's own note reaches the WUA. Notes are plain text:
 // markup shows as typed, and line breaks are kept. Settings groups take notes
-// too, and the Overview lists the newest.
+// too, and the Project page lists the newest.
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, seedRunnableProject } from '../support/api.ts';
@@ -54,8 +54,8 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	await expect(notes.getByRole('list', { name: 'Notes' }).getByRole('listitem').first()).toContainText('Logger moved in March');
 	await expect(notes.getByRole('list', { name: 'Notes' }).getByRole('listitem').first()).toContainText('You');
 
-	// The WUA sees it on the Overview's recent notes, against the farm.
-	await page.goto(`/projects/${project.id}`);
+	// The WUA sees it on the Project page's recent notes, against the farm.
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const recent = page.getByRole('region', { name: 'Recent notes' });
 	await expect(recent.getByRole('listitem').first()).toContainText('Logger moved in March');
 	await expect(recent.getByRole('listitem').first().getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', `?tab=network&node=${upper}`);

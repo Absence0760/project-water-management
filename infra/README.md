@@ -40,7 +40,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 - **`/api` prefix.** The `api_strip_prefix` CloudFront Function turns
   `/api/auth/login` into `/auth/login` before it reaches Lambda. The Hono app
   routes are unprefixed, the same as in local dev on `:3001`. **Do not also
-  add `basePath('/api')` in the app.**
+  add `basePath('/api')` in the app.** It also sets `X-Viewer-Address` to the
+  viewer's IP (overwriting any value sent), the one client address the API
+  trusts, and only with the shared secret (the sign-up throttle,
+  `backend/src/http/clientAddress.ts`).
 - **SPA deep links.** The `spa_rewrite` function serves `/index.html` with a
   200 for any path whose last segment has no file extension
   (`/projects/<id>`). There is deliberately **no** distribution-wide
@@ -92,6 +95,19 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   under `reports/` in the reports bucket. It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
+  Its egress is open: its Chromium is confined to the site's origin by the
+  app (Playwright routing plus Chromium's own resolver, proxy and WebRTC
+  flags; [docs/security.md § Render tokens](../docs/security.md#render-tokens)),
+  not by the network. An egress allowlist would make that hold even against
+  a browser bug, at a price, so it is a tradeoff, not a change: put the
+  renderer in the VPC (SQS already has an endpoint; an S3 gateway endpoint
+  is free) and send its traffic through either AWS Network Firewall with a
+  domain allowlist (about $0.40/hour per AZ endpoint, ~$290/month for one
+  AZ at us-east-1 list price and more in af-south-1, plus a NAT at
+  ~$33/month and per-GB processing), or a Squid allowlist proxy on a
+  t4g.nano with an Elastic IP (~$7–10/month, but a public subnet, an
+  internet gateway and an instance to patch, which the VPC deliberately
+  has none of).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
@@ -161,7 +177,7 @@ scale. An alarm fires at 60 connections.
 | --- | --- | --- |
 | RDS master (`water`, schema owner) | `manage_master_user_password`: RDS generates it, stores it in Secrets Manager and rotates it (every 7 days by default) | **No.** Only the migrate Lambda reads it, at run time |
 | `water_app` password | sops `db_app_password` → API `DATABASE_URL` + migrate `WATER_APP_PASSWORD` | Yes |
-| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → API env | Yes |
+| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → API and worker env (the worker's re-run job stamps the runs it stores) | Yes |
 | CloudFront shared secret | `random_password` | Yes |
 
 This follows the estate. project-flakey uses the same RDS-managed master plus

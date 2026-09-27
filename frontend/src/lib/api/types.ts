@@ -664,6 +664,12 @@ export interface Run extends RunMeta {
 	 * saved before 032). The fit record compares the CHIRPS one.
 	 */
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
+	/**
+	 * Its server stamp still matches its rows (GET …/runs/:runId only;
+	 * docs/security.md § Run stamps): false for a run written past the model
+	 * run, or changed since, which can't be signed off.
+	 */
+	verified?: boolean;
 }
 
 /** One output series available for a run (values fetched separately). */
@@ -881,6 +887,13 @@ export interface ScenarioWithCheck {
 	scenario: Scenario;
 	check: ScenarioCheck | null;
 	checkError: string | null;
+	/**
+	 * An application's runs whose server stamp is missing or no longer matches
+	 * (docs/security.md § Run stamps), to an editor or owner: it can't be
+	 * decided until they're deleted. null for a team scenario or a lower role;
+	 * absent from an older API.
+	 */
+	unverifiedRunIds?: string[] | null;
 }
 
 const RANK: Record<Role, number> = { farmer: -2, contributor: -1, viewer: 0, editor: 1, owner: 2 };

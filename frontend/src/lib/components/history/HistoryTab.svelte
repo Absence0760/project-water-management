@@ -13,7 +13,7 @@
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { filterEntries, groupByChangeSet, groupByDay, itemLines, KIND_FILTERS, localDay, localTime, revisionTitle, seriesRestore } from './timeline';
 
 	let {
@@ -194,7 +194,7 @@
 		<div class="alert alert-success-ish" role="status">
 			<p>Restored the version of {fmtDate(restored.at, true)}. The model and settings are as they were then; run the model again to update the results.</p>
 			{#if restored.relink.length}
-				<p>Farmers aren't linked back automatically. Re-link them on the Summary tab's farmers list:</p>
+				<p>Farmers aren't linked back automatically. Re-link them in the Farmers list on the <a href="?tab=project#farmers-h">Project page</a>:</p>
 				<ul>
 					{#each restored.relink as r (r.userId + r.nodeId)}<li>{r.displayName} to {r.nodeName}</li>{/each}
 				</ul>

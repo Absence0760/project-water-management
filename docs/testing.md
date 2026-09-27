@@ -45,6 +45,31 @@ so it catches a change in the query's shape, not machine noise.
 4. Don't pipe e2e output into `grep`/`head`/`tail`: the web servers hold the
    pipe open and the command hangs after the tests finish. Redirect to a file.
 
+## Tests that need a service or a browser
+
+A test that needs something a fresh laptop may not run (MinIO, Mailpit,
+Playwright's Chromium) skips locally, with a warning naming the command
+that provides it, and **fails under CI** (`process.env.CI`) instead of
+skipping, so CI can never go green on a check it never ran. CI provides each
+one to the job the test runs in:
+
+| Test | Needs | CI job that provides it |
+| --- | --- | --- |
+| `backend/src/reports/render.db.test.ts` | MinIO + Chromium | `db-test` (starts MinIO, cached Chromium) |
+| `backend/src/reports/render.origin.db.test.ts` | Chromium (no DB) | `db-test` |
+| `e2e/tests/server-report.spec.ts` | MinIO + Mailpit | e2e shards |
+| `e2e/tests/alerts-mailpit.spec.ts` | Mailpit | e2e shards |
+
+`render.origin.db.test.ts` needs no database but is in the db project
+(`.db.test.ts`) on purpose: `db-test` already needs a browser for
+`render.db.test.ts`, so it is the one vitest job with Chromium, and the unit
+job doesn't pay a second Chromium install (the cache restore plus the apt
+`install-deps` step) for one file. Locally it runs with
+`pnpm -C backend exec vitest run --project db src/reports`.
+A new test of this kind follows the same rule and goes in the table.
+The only skips CI allows are for the gitignored client data (`data/`, the
+source workbooks), which CI never has (CLAUDE.md rule 10).
+
 ## Why the slow ones are shaped the way they are
 
 - **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds

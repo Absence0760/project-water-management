@@ -5,7 +5,7 @@
 // unpublished; the assessors (editors) see what has been submitted. Every
 // "cannot see" has its positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -395,72 +395,11 @@ describe('roles', () => {
 	});
 });
 
-/**
- * The project routes a contributor may call: the farmer's (publication, farm
- * view) and the scenario routes, where RLS and the route's own rules say what
- * they reach. Every other one refuses them (400 or 403), the fail-closed
- * default of ranking below viewer.
- */
-const CONTRIBUTOR_ALLOWED = new Set([
-	'GET /projects/:id/publication',
-	'GET /projects/:id/farm',
-	'GET /projects/:id/farm/:nodeId',
-	'GET /projects/:id/farm/:nodeId/export.csv',
-	'GET /projects/:id/farm/:nodeId/access',
-	'GET /projects/:id/scenarios',
-	'POST /projects/:id/scenarios',
-	'GET /projects/:id/scenarios/:sid',
-	'PATCH /projects/:id/scenarios/:sid',
-	'DELETE /projects/:id/scenarios/:sid',
-	'GET /projects/:id/scenarios/:sid/base',
-	'POST /projects/:id/scenarios/:sid/runs',
-	'POST /projects/:id/scenarios/:sid/rebase',
-	'POST /projects/:id/scenarios/:sid/submit',
-	'POST /projects/:id/scenarios/:sid/withdraw',
-	'POST /projects/:id/scenarios/:sid/reopen',
-	'GET /projects/:id/scenarios/:sid/share-candidates',
-	'POST /projects/:id/scenarios/:sid/members',
-	'DELETE /projects/:id/scenarios/:sid/members/:userId',
-	// Alerts (WP-2.13): min role farmer, and a contributor gets an empty list
-	// (alerts/routes.ts), never an event; checked below.
-	'GET /projects/:id/alert-events',
-	// Notes (WP-2.7): min role farmer, and RLS gives a contributor what a farmer
-	// with the same links reads (their own farm's farm-visible notes); the
-	// route lets them write only there (scenarios/contributor-tables.db.test.ts).
-	'GET /projects/:id/notes',
-	'GET /projects/:id/notes/counts',
-	'POST /projects/:id/notes',
-	'PATCH /projects/:id/notes/:noteId',
-	'DELETE /projects/:id/notes/:noteId'
-]);
-
+// Which routes admit a contributor (and that every other one refuses them at
+// the role check, with a request its validation accepts, and an unknown id
+// answers 404) is swept in projects/role-ladder.db.test.ts (BELOW_VIEWER).
 describe('project routes for a contributor', () => {
-	const allRoutes = [
-		...new Set(app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS' && r.path.startsWith('/projects/:id')).map((r) => `${r.method} ${r.path}`))
-	];
-	const refused = allRoutes.filter((r) => !CONTRIBUTOR_ALLOWED.has(r));
-
-	it('finds the project routes, the contributor-allowed ones among them', () => {
-		expect(refused.length).toBeGreaterThan(40);
-		for (const r of CONTRIBUTOR_ALLOWED) expect(allRoutes).toContain(r);
-	});
-
 	it('answers a contributor’s alert-events with no event', async () => {
 		expect(await applicantB.call('GET', `/projects/${projectId}/alert-events`)).toEqual({ status: 200, body: { events: [] } });
-	});
-
-	it.each(refused)('%s refuses a contributor', async (route) => {
-		const [method, path] = route.split(' ') as [string, string];
-		const url = path.replace(':id', projectId).replace(/:[A-Za-z]+/g, ZERO);
-		const res = await applicantB.call(method, url, method === 'GET' ? undefined : {});
-		expect([400, 403]).toContain(res.status);
-	});
-
-	// The allowed ones answer an unknown id with 404 (or a validation 400), never data.
-	it.each([...CONTRIBUTOR_ALLOWED].filter((r) => r.includes(':sid') || r.includes(':nodeId')))('%s answers an unknown id without data', async (route) => {
-		const [method, path] = route.split(' ') as [string, string];
-		const url = path.replace(':id', projectId).replace(/:[A-Za-z]+/g, ZERO);
-		const res = await applicantB.call(method, url, method === 'GET' ? undefined : {});
-		expect([400, 404]).toContain(res.status);
 	});
 });

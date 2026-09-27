@@ -136,9 +136,10 @@ export async function inviteByEmail(
 	if (!send) return { invite: toInvite(row), mail: null };
 	let link = siteLink('/register', token, 'invite');
 	if (unverifiedUserId) {
-		const verifyToken = await issueEmailToken(db, unverifiedUserId, 'verify');
-		if (!verifyToken) return { invite: toInvite(row), mail: null };
-		link = siteLink('/verify-email', verifyToken);
+		// On the address's shared count (078): the inviter's browser is no device of theirs.
+		const verify = await issueEmailToken(db, unverifiedUserId, 'verify');
+		if (!('token' in verify)) return { invite: toInvite(row), mail: null };
+		link = siteLink('/verify-email', verify.token);
 	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
 	const mode = unverifiedUserId ? 'confirm' : 'sign-up';

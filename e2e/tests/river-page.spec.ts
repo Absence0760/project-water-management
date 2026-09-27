@@ -203,14 +203,11 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	const baseline = await createRun(page.request, id, 'Baseline');
 	await createRun(page.request, id, 'Second');
 
-	// Where the River & Reserve group was: one row, keeping the run.
+	// The run header links here, keeping the run.
 	await page.goto(`/projects/${id}?tab=runs&run=${baseline}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
-	const row = page.locator('#res-river');
-	await expect(row).toContainText('are on River & reserve');
-	const link = row.getByRole('link', { name: 'River & reserve for this run' });
+	const link = page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'River & reserve for this run' });
 	await expect(link).toHaveAttribute('href', `?tab=river&run=${baseline}`);
-	await expect(page.getByRole('navigation', { name: 'Result sections' }).getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['On River & reserve']);
 	await link.click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${baseline}$`));
 	await expect(page.getByTestId('river-context')).toContainText('Baseline');

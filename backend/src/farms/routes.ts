@@ -178,12 +178,14 @@ async function inviteFarmer(
 		 ON CONFLICT DO NOTHING`,
 		[invite.id, projectId, farms]
 	);
-	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role: 'farmer', farms: farms.length, mailed: !!mail });
+	// No `mailed` flag (see POST /members): it would tell the owner whether the address has an account.
+	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role: 'farmer', farms: farms.length });
 	return { invite: (await invitedFarmers(db, projectId, invite.id))[0]!, mail };
 }
 
 type UserRow = { id: string; email: string; display_name: string; verified: boolean };
-const USER_SQL = 'SELECT id, email, display_name, email_verified_at IS NOT NULL AS verified FROM app_user WHERE email = ANY($1::citext[])';
+/** The accounts with these addresses, whoever they are: RLS (068) shows only people you work with, so the by-address lookup. */
+const USER_SQL = 'SELECT id, email, display_name, verified FROM app_user_by_email($1::citext[])';
 
 /** Language names a CSV may use in its `language` column. */
 const LANGUAGE_NAMES: Record<string, Locale> = { en: 'en', english: 'en', af: 'af', afrikaans: 'af' };

@@ -136,6 +136,8 @@ pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 +
 pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
 pnpm gen:i18n:sheet         # rewrite the Afrikaans translation sheet (after changing a message or landing a translation); check:i18n checks it
 pnpm gen:i18n:stamp <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it
+pnpm gen:i18n:export <dir>  # the sheet's untranslated rows as JSON batches (for the af-translator agent, .claude/agents/i18n/)
+pnpm gen:i18n:apply <f.json …>  # write checked Afrikaans (sheet Id → text; later files win) into the catalogues and rewrite the sheet
 ```
 
 ## Running tests
@@ -218,6 +220,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/testing.md`: which test command when, and how long each takes
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
+- `docs/design/ui-playbook.md`: how screens are designed, built and tested (process, layout rules, reusable pieces, testing traps; the `ui-designer` agent works from it)
 - `docs/design/`: design specs written before a build (the farmer view, issue #14; the licensing evidence report, issue #15), each with its prototype; planning outputs (share the pain, outcome matrix, seasonal outlook, licence impact by year class, issue #53), research and recommendations only
 - `docs/roadmap/`: the four-step growth plan (hydrologist tool → shared catchment → licensing → platform), one build plan per step
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
@@ -266,8 +269,10 @@ Prefer reading these over guessing. Update them when behaviour changes.
   or variable is `msg('…')`, a counted word `plural({ one, other })`, and a
   file's messages sit under an `// i18n-section:` marker. Farmer emails come
   from `backend/src/mail/i18n/en.ts` (keyed) through `mailT()`. Never show a
-  string there without `t()`, never write Afrikaans that hasn't been
-  reviewed, and run `pnpm gen:i18n:sheet` after changing a message (the
+  string there without `t()`, never write Afrikaans by hand: a new or
+  changed message goes through the `af-translator` and `af-checker` agents
+  and `pnpm gen:i18n:apply` (ui.md § Language), and run
+  `pnpm gen:i18n:sheet` after changing a message (the
   tests throw on English that isn't on the sheet; [ui.md §
   Language](./ui.md#language)). The workspace stays English. Those pages
   show a server error through `errorText` (`lib/i18n/apiError.ts`, from the

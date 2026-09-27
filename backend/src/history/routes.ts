@@ -231,17 +231,8 @@ async function restoreInputs(
 }
 
 const RestoreBody = z.object({ reason: Reason }).strict();
-const readRestoreBody = async (c: Context): Promise<{ reason?: string }> => {
-	// An empty body is fine: the reason is optional.
-	const text = await c.req.text();
-	if (!text.trim()) return {};
-	try {
-		return RestoreBody.parse(JSON.parse(text));
-	} catch (err) {
-		if (err instanceof SyntaxError) throw new ApiError(400, 'invalid JSON');
-		throw err;
-	}
-};
+// An empty body is fine: the reason is optional.
+const readRestoreBody = async (c: Context): Promise<{ reason?: string }> => RestoreBody.parse(await readJson(c, { optional: true }));
 
 /** A run's settings and model (its input snapshot minus series), or null when the run isn't visible. */
 async function runInputs(db: Db, projectId: string, runId: string) {

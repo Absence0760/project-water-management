@@ -9,11 +9,14 @@ CloudFront at `/api`. All bodies are JSON, except the CSV exports. Shared TypeSc
 Session = an HS256 JWT in an **httpOnly cookie** `wm_session` (`SameSite=Lax`,
 `Secure` in prod, 7-day expiry). The browser sends it with `credentials: 'include'`;
 CORS allows the frontend origin with credentials. There is no token in JS-readable
-storage.
+storage. Register, login, reset-password and change-password also set a
+`wm_device` cookie (httpOnly, 180 days): with it, that browser's sign-in
+attempts count on their own lockout record, so someone else locking the
+address doesn't lock it out ([security.md § Authentication](./security.md#authentication)).
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account; `429 signup_throttled` past the sign-up throttle |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
@@ -24,7 +27,7 @@ storage.
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
-| POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago (signed in) |
+| POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
@@ -47,9 +50,10 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
 - **`forgot-password`** answers the same `202` whether or not the address has
-  an account, and sends at most one email per address per minute (later
-  requests inside the window get `202` and no email). Requesting again replaces
-  the previous link.
+  an account, and sends at most one email per address per minute and ten
+  reset or verification emails per address in 24 hours (a browser trusted for
+  the address has its own ten; later requests get `202` and no email).
+  Requesting again replaces the previous link.
 - **`logout-everywhere`** is reachable from the frontend header's account menu
   ("Sign out everywhere", next to plain "Sign out"), which asks for
   confirmation before calling it (docs/ui.md § Header).
@@ -102,8 +106,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   was in). Without one, an account that accepts an invite takes the invite's
   `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
   The verification, reset and farmer-invite emails go out in the account's
-  (or the invite's) language, English where the Afrikaans isn't reviewed yet
-  ([ui.md § Language](./ui.md#language)).
+  (or the invite's) language, English for any key with no Afrikaans (none
+  today; [ui.md § Language](./ui.md#language)).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
@@ -161,11 +165,13 @@ unless it is listed there with why its status says enough.
 | `wrong_credentials` | 401 | sign-in with a wrong email or password |
 | `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up with an address that has an account |
+| `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `wrong_current_password` | 403 | `POST /auth/change-password` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
 | `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
 | `verification_sent_recently` | 429 | the same, within the resend cooldown |
+| `verification_limit` | 429 | the same, once the address's daily cap on reset and verification emails is reached (078) |
 | `invite_invalid` | 404 | `POST /auth/invite-info` for a dead invitation |
 | `note_farmer_own_farm` | 403 | a farmer's note anywhere but their own farm, shown to the farm |
 | `note_farm_visibility` | 400 | a farm-visible note on something that isn't a farm |
@@ -174,6 +180,8 @@ unless it is listed there with why its status says enough.
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
+| `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
+| `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
@@ -350,8 +358,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
-  values, each `wr2012` group, `fitRecord` and `pe` are replaced whole. Unknown
-  keys pass through, and the settings patch is capped at 64 000 characters
+  values, each `wr2012` group, `fitRecord` and `pe` are replaced whole. An
+  unknown top-level key is dropped (never stored; a new setting must be added to
+  `SettingsPatch`), and the settings patch is capped at 64 000 characters
   of JSON.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
@@ -686,6 +695,10 @@ move or copy into it). `role` in the member and invite bodies is one of
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 | GET | `/teams/:id/portfolio` | – | `Portfolio` (see [Portfolio](#portfolio) below) | viewer |
 
+- **History.** A team role is a role on every project of the team, so adding,
+  re-roling and removing a member (or their leaving, or accepting a team
+  invite), and deleting the team, record `team_member.added/role/removed` /
+  `team.deleted` on each of the team's projects (072).
 - `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds }` — `role` is
   **your** role in the team. `settings` is the stored document
   (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
@@ -1055,7 +1068,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day. The engine runs with no database connection held; your role is checked again before the run is stored, so if you lose editor access meanwhile the answer is `403`/`404` and nothing is stored. The run records the inputs it was computed from, even if the project changes while it runs ([architecture.md § A model run](./architecture.md#a-model-run)) | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
-| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it) | viewer |
+| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
@@ -1433,7 +1446,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
-| DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
+| DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario, and for one with a signed-off run (the signed run keeps its scenario; 072) | editor |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `409 this scenario changed while it ran (its ops or base run); run it again` when its ops, base run or owned nodes changed while the engine ran, and `404` when it was deleted (nothing is stored in either case; a rename doesn't count); `400 model run failed: …` as for any run | editor |
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`), or once for an edit group of `node.set` ops on one node that breaks a rule (`ops 2–4 (node.set, "Upper farm"): …`, [scenarios.md § Engine](./scenarios.md#engine-applyscenario)). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
@@ -1505,7 +1518,7 @@ below work on it too, for an editor.
 | POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
-| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted | editor |
+| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor |
 | GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
@@ -1531,8 +1544,8 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain) | editor |
+| GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
@@ -2192,8 +2205,10 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
 - **The render session** (`POST /auth/render-session`) is for the renderer,
   not people: it exchanges a single-use, 5-minute render token (issued by the
   worker as the requester) for a 10-minute session that may only `GET`
-  `/auth/me`, `/projects/:id`, `/projects/:id/series` and
-  `/projects/:id/runs/:runId[/…]` of the one project and run; everything else
+  `/auth/me`, `/projects/:id`, `/projects/:id/series`,
+  `/projects/:id/runs/:runId` and its `/series`, `/day` and `/signoffs` (the
+  report page's reads) of the one project and run; everything else, the
+  run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
   ([security.md § Render tokens](./security.md#render-tokens)).
 

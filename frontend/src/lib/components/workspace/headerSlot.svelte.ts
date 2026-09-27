@@ -13,20 +13,28 @@ export interface HeaderParts {
 	context?: Snippet;
 	/** The section's own actions, placed before Add data and Run model. */
 	actions?: Snippet;
+	/**
+	 * The section's main action where the page's Run model would be: last, after Add data.
+	 * Runs & results puts its run form (label, Run forecast, Run model) here.
+	 */
+	main?: Snippet;
 }
 
-export const headerSlot = $state<{ context: Snippet | null; actions: Snippet | null }>({ context: null, actions: null });
+export const headerSlot = $state<{ context: Snippet | null; actions: Snippet | null; main: Snippet | null }>({ context: null, actions: null, main: null });
 
 /** Puts `parts` in the header while `on`; call from an $effect so they clear when the tab goes. */
 export function fillHeader(parts: HeaderParts, on = true): (() => void) | void {
 	if (!on) return;
 	const context = parts.context ?? null;
 	const actions = parts.actions ?? null;
+	const main = parts.main ?? null;
 	headerSlot.context = context;
 	headerSlot.actions = actions;
+	headerSlot.main = main;
 	return () => {
 		// Only clear what is still ours: the next tab may already have filled it.
 		if (headerSlot.context === context) headerSlot.context = null;
 		if (headerSlot.actions === actions) headerSlot.actions = null;
+		if (headerSlot.main === main) headerSlot.main = null;
 	};
 }

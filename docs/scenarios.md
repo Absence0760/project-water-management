@@ -577,7 +577,14 @@ recorded as one edit group whatever the save rules tie together; every edit
 no op can express is named; the engine's refusals in the form's words; a
 fuzz over the engine's own random ops, `randomOps`, round-trips, and one
 over any valid supply rule, pump, levels and dam from any valid start), and
-`e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
+`scenarios/summary.test.ts` (the header's counts), `e2e/tests/scenarios-page.spec.ts`
+(the layout, issue #17: the header's counts and + New scenario, the create
+dialog at `new=1` closed by Back and Esc, creating picking the new one, the
+newest opened in place; thirty scenarios at 1440 × 960 and 1280 × 800 with
+the rail reaching the window's bottom, scrolling inside and staying in view
+as the scenario scrolls, Run in the head row; a phone; override mode's
+banner clear of the record bar; a viewer; an applicant with thirty
+applications; axe), `e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
 read only; a `trigger` farm taken to run of river one change at a time
@@ -657,8 +664,13 @@ scenario is `'team'`, and behaves exactly as above).
   receives either.
 - **Own nodes** are the owner's farm links (`app_farm_nodes`), set at create
   and each time the ops change while a draft. A contributor can't claim
-  others' (`403`), so a dam raise on their own farm is a proposal and the
-  same raise on a neighbour's is a baseline assumption.
+  others' (`403`; the `scenario_owned_nodes` trigger refuses it in the table
+  too, 071), so a dam raise on their own farm is a proposal and the same
+  raise on a neighbour's is a baseline assumption. To a contributor the own
+  nodes are the stored ones still linked to the owner
+  (`app_application_own_nodes`): a farm the owner unlinks is anonymised in
+  the base and its series hidden, even in an application made before; the
+  assessors keep the stored list.
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
@@ -697,6 +709,13 @@ scenario is `'team'`, and behaves exactly as above).
   `app_scenario_run_meta` and `app_trim_application_runs`, and of its series
   they read the application's own nodes and the catchment allowlist only
   (046, [data-model.md § Applicants](./data-model.md#applicants-044045)).
+  RLS still lets an applicant insert their own application's run rows
+  (045), so the backend stamps every run it stores (077,
+  [security.md § Run stamps](./security.md#run-stamps)): an application
+  isn't decided (`409 run_unverified`), nor its run signed off, while any
+  of its runs lacks a matching stamp; the assessors get the ids
+  (`unverifiedRunIds`) and a warning in the application panel, and delete
+  those runs from the Runs tab.
 - **Names kept with the ops** (`op_names`, above) are captured from the full
   published base, server-side, and a contributor is only ever shown those of
   the scenario's own nodes (`names.ts` `applicantOpNames`): a neighbour's
@@ -719,8 +738,8 @@ scenario is `'team'`, and behaves exactly as above).
 Tests: `backend/src/scenarios/applications.db.test.ts` (RLS with positive
 controls: drafts hidden from the other applicant, the editors and viewers;
 the published run's row unreadable, its catchment series readable; submit,
-freeze, decide; sharing; the per-application run cap; the contributor route
-inventory), `oracles.db.test.ts` (049: identical answers for member and
+freeze, decide; sharing; the per-application run cap; the contributor's
+routes are `projects/role-ladder.db.test.ts`), `oracles.db.test.ts` (049: identical answers for member and
 non-member ids and addresses, hidden and free farm, crop and application
 names, hidden and free item ids, a hidden farm's removal counting nothing,
 each with its positive control; the party prune), `applicant.test.ts`

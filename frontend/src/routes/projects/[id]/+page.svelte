@@ -17,6 +17,7 @@
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
 		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
+		project: () => import('$lib/components/project/ProjectTab.svelte'),
 		applications: () => import('$lib/components/scenarios/ApplicationsTab.svelte'),
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
@@ -57,11 +58,12 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import { headerSlot } from '$lib/components/workspace/sectionHeader.svelte';
+	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
+		canOpenTab,
 		hasModelInputsToggle,
 		navSections,
 		stripTabs,
@@ -86,17 +88,23 @@
 		reserve: 'river',
 		units: 'supply',
 		farms: 'supply',
-		changes: 'history'
+		changes: 'history',
+		details: 'project',
+		members: 'project',
+		sharing: 'project'
 	};
 
 	const projectId = $derived(page.params.id ?? '');
+	let project = $state<Project | null>(null);
 	const tab = $derived.by<TabId>(() => {
 		const raw = page.url.searchParams.get('tab') ?? '';
 		const t = TAB_ALIASES[raw] ?? raw;
-		return (TAB_IDS as string[]).includes(t) ? (t as TabId) : 'overview';
+		if (!(TAB_IDS as string[]).includes(t)) return 'overview';
+		// A tab the role may not open (a viewer's old Applications link) is the Summary.
+		if (project && !canOpenTab(project.role, t)) return 'overview';
+		return t as TabId;
 	});
 
-	let project = $state<Project | null>(null);
 	/** Set when the caller is an applicant here (the contributor role): the page is the Applicant view. */
 	let applicantProject = $state<ProjectSummary | null>(null);
 	// Which tabs each role is shown (presentation only; a hidden tab still
@@ -229,8 +237,9 @@
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// Run model on the Summary and the Build-the-model pages; the Runs tab has
-	// its own form (with a label), and Data's main action is Add data.
+	// Run model on the Summary and the Build-the-model pages; the Runs tab puts
+	// its own form (with a label) in the same place (headerSlot.main), and
+	// Data's main action is Add data.
 	const RUN_TABS: TabId[] = ['overview', 'network', 'crops', 'transfers', 'settings'];
 	const showRun = $derived(canEdit && RUN_TABS.includes(tab));
 	// What a run still needs (the Runs tab's check: the engine refuses without these).
@@ -464,9 +473,8 @@
      catchment's name. Phones: behind a "Sections" button here. One copy only. -->
 {#snippet projectSidebar()}
 	<div class="project-side">
-		<span class="side-kicker">Catchment</span>
-		<a class="side-project" href={tabHref('overview')} data-testid="project-name">{project?.name}</a>
-		<span class="side-role">{@render roleBadge()}</span>
+		<span class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}</span>
+		<a class="side-project" href={tabHref('overview')} title={project?.name} data-testid="project-name">{project?.name}</a>
 		{@render sectionsNav()}
 	</div>
 {/snippet}
@@ -516,7 +524,7 @@
 		<button
 			type="button"
 			class="btn add"
-			class:btn-primary={!showRun}
+			class:btn-primary={!showRun && !headerSlot.main}
 			onclick={() => openAddData()}
 			onpointerenter={() => prefetch(loadAddData)}
 			onfocus={() => prefetch(loadAddData)}
@@ -525,6 +533,7 @@
 			Add data
 		</button>
 	{/if}
+	{@render headerSlot.main?.()}
 	{#if showRun}
 		<button
 			type="button"
@@ -620,18 +629,7 @@
 
 			<section class="tab-body" class:readonly={!canEdit} aria-labelledby="tab-{tab}">
 				{#if tab === 'overview'}
-					<OverviewTab
-						{project}
-						{editor}
-						{series}
-						{runs}
-						{canEdit}
-						{isOwner}
-						currentUserId={session.user?.id ?? ''}
-						visibleTabs={shownIds}
-						{onProjectChange}
-						{onLeftProject}
-					/>
+					<OverviewTab {project} {editor} {series} {runs} {canEdit} visibleTabs={shownIds} />
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
 					<Lazy load={LOAD.network}>
@@ -645,7 +643,7 @@
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
 					<Lazy load={LOAD.transfers}>
-						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} />{/snippet}
+						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} page />{/snippet}
 					</Lazy>
 				{:else if tab === 'settings'}
 					<Lazy load={LOAD.settings}>
@@ -714,6 +712,23 @@
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>
 						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} />{/snippet}
+					</Lazy>
+				{:else if tab === 'project'}
+					<Lazy load={LOAD.project}>
+						{#snippet children(ProjectTab)}
+							<ProjectTab
+								project={project!}
+								{editor}
+								{series}
+								{runs}
+								{canEdit}
+								{isOwner}
+								canSeeHistory={shownIds.includes('history')}
+								currentUserId={session.user?.id ?? ''}
+								{onProjectChange}
+								{onLeftProject}
+							/>
+						{/snippet}
 					</Lazy>
 				{:else if tab === 'applications'}
 					<Lazy load={LOAD.applications}>
@@ -790,9 +805,11 @@
 		   tab's own sticky actions (Settings). */
 		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
 	}
-	/* A page sized to the window (the Network's Map, issue #17) needs only a
-	   gutter below it, plus the save bar when it shows. */
-	.page:has(:global(.map-layout)) {
+	/* A page sized to the window (the Network's Map, Transfers, Applications; issue #17) needs
+	   only a gutter below it, plus the save bar when it shows. */
+	.page:has(:global(.map-layout)),
+	.page:has(:global(.transfers.fit)),
+	.page:has(:global(.applications.fit)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add {
@@ -933,28 +950,50 @@
 		}
 	}
 	/* The sections, one vertical list: in the app sidebar (wide) or in the
-	   phone's Sections menu. Each section is labelled; the open one is marked. */
+	   phone's Sections menu. Each section is labelled; the open one is marked.
+	   In the sidebar the rows are tighter than in the phone menu, so every
+	   section an owner sees fits a 960 px-high window (AppShell). */
 	.project-side {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.15rem;
+	}
+	.side-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0 0.75rem;
 	}
 	.side-kicker {
-		padding: 0 0.75rem;
 		color: var(--text-muted);
 		font-size: 0.72rem;
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
 	}
+	/* A long name wraps to two lines at most; the full name is its tooltip,
+	   and still its accessible name (the clamp is visual only). */
 	.side-project {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+		margin-bottom: 0.6rem;
 		padding: 0 0.75rem;
 		color: var(--text);
 		font-weight: 600;
+		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
-	.side-role {
-		padding: 0.15rem 0.75rem 0.5rem;
+	.project-side .tabs {
+		gap: 0.75rem;
+	}
+	.project-side .section-label {
+		padding-bottom: 0.1rem;
+	}
+	.project-side .tabs a {
+		min-height: 34px;
 	}
 	/* Phones: the catchment's name and your role, above the Sections button. */
 	.phone-project {

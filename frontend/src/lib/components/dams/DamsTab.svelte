@@ -11,7 +11,7 @@
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';

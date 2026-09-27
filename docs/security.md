@@ -29,7 +29,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the watermark, so it signs out every device, including a thief's, and so
   does `POST /auth/logout-everywhere` ("sign out everywhere", for a lost
   laptop or a suspected copied cookie). Changing the password while signed
-  in (`POST /auth/change-password`, the Account page) sets it too, then
+  in (`POST /auth/change-password`, the Account page) sets it too. The
+  watermark only moves forward (`app_user_sessions_watermark`, 067): an
+  update to an earlier time or to NULL keeps the later one, so no update can
+  revive a signed-out session. It then
   re-issues this device's cookie, so only the device that changed it stays
   signed in. Plain logout clears the cookie only
   (that one token stays valid until expiry if it was copied). Rotating
@@ -44,15 +47,51 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   It is keyed by the typed address, not the account, so an address with no
   account locks exactly the same way and the lockout reveals nothing about
   which accounts exist. Attempts are counted *before* the bcrypt check under
-  a row lock, so parallel guesses can't slip past. Accepted trade-off: anyone
-  can lock someone else's address for up to 15 minutes at a time (sessions
-  already signed in are unaffected, and a password reset lifts it). The
-  WAF's per-IP rate limits (below) are still the first line against spraying
-  many addresses. Changing the password while signed in checks the current
-  password through the same lockout (keyed by the account's address), so a
-  stolen session can't guess it faster than the sign-in form; the flip side
-  is that a locked address can't change its password until the lock ends
-  (a reset still works).
+  a row lock, so parallel guesses can't slip past. Attempts made during a
+  lock never extend it.
+- **Trusted devices keep the lockout bounded** (070, `auth/device.ts`).
+  Anyone can lock an address, and one wrong guess each time a lock ends
+  locks it again, so a script could otherwise keep its owner out
+  indefinitely (a reset cleared the count, and five guesses re-locked it).
+  A browser that proved it knows the address's password (a correct
+  sign-in, a password reset, sign-up, a password change) gets an
+  `HttpOnly` `wm_device` cookie (180 days): a random device id and an HMAC
+  (a key derived from `AUTH_JWT_SECRET`) over the address, the account's
+  session watermark and the id. With a valid one, that browser's attempts
+  count on its own `(address, device)` record in `login_device_throttle`
+  (same 5 free attempts, same doubling to 15 minutes, a day to forget), so a
+  stranger filling the shared record can't lock it, and its own sign-in
+  clears only its own record. A cookie for another address, from before the
+  watermark moved (reset, password change, "sign out everywhere"), or with a
+  bad MAC counts on the shared record like any stranger; an unknown address
+  can never have a valid one, so the no-enumeration property holds. A
+  stolen device cookie buys its thief one more bucket at the same pace, no
+  more. Plain logout keeps the cookie (it is what lets you back in during
+  an attack); "sign out everywhere" retires it. The WAF's per-IP rate
+  limits (below) are still the first line against spraying many addresses.
+  Changing the password while signed in checks the current password through
+  the same lockout (the device's record on a trusted device, else the
+  address's), so a stolen session can't guess it faster than the sign-in
+  form. Tests: `auth/login-throttle.security.db.test.ts` (the owner's
+  device, a reset's browser and a new account's signing in through a
+  stranger's lock with a no-cookie positive control; the device's own
+  lock, doubling and cap; binding to address, watermark and MAC; hammering
+  never extends a lock; the day boundary at 23 and 25 hours; the reset-mail
+  cooldown at 50 and 70 seconds; time moved in the database, never slept).
+- **Credentials never stand in for each other.** Most of the app's
+  credentials share one shape (43 base64url characters, stored as SHA-256:
+  verify, reset, invite, share, render and unsubscribe tokens), so each is
+  looked up only in its own table and, for email tokens, for its own purpose.
+  The backend reads a credential in exactly three places: the `wm_session`
+  cookie (`auth/session.ts`), `Authorization: Bearer` on `/ingest/*` only
+  (`ingest/auth.ts`), and `?token=` on the one-click unsubscribe; every other
+  token travels in its public route's JSON body. No route takes a token from a
+  path parameter. An unsubscribe token turns off only its own subscription,
+  whose person, project, kind and farm can never change (trigger
+  `alert_subscription_stamp`). `auth/token-confusion.security.db.test.ts`
+  presents every credential in every other kind's slot and sweeps the live
+  route inventory, with each credential's own slot as the positive control;
+  its source sweep fails when a new place starts reading a credential.
 
 ## Password reset, email verification and invites
 
@@ -66,13 +105,58 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **No account enumeration:** `POST /auth/forgot-password` answers `202` with
   the same body for known and unknown addresses. Accepted residual risk:
   response *timing* differs slightly (a known address does a DB write and an
-  SES call), and `POST /auth/register` already answers `409` for a taken
-  address, so enumeration is not fully closed — the WAF's per-IP rate limit is
-  the backstop. Don't "fix" this by making register lie without also making
-  sign-up email-first.
+  SES call), and `POST /auth/register` answers `409` for a taken address
+  (sign-up is not email-first), so enumeration is not closed, only slow: see
+  the sign-up throttle below. Don't "fix" this by making register lie without
+  also making sign-up email-first.
+- **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
+  at most **10 sign-ups per client address an hour** and **500 in all an
+  hour**, in Postgres so it holds across Lambda instances; past either,
+  `429 signup_throttled` with `Retry-After`. Each attempt is counted before
+  the address is looked at, so once throttled a taken and a free address get
+  the same answer, and a refused attempt isn't counted, so hammering never
+  extends the wait. The WAF's per-IP `/api/auth/*` rule (100 per 5 minutes)
+  stays in front of it.
+  - *The client address* (`http/clientAddress.ts`) is the `X-Viewer-Address`
+    header, which the `/api` CloudFront Function (`api_strip_prefix`,
+    `infra/s3_cloudfront.tf`) sets from the connection's IP, overwriting any
+    value the viewer sent, and it is read only on a request that passed the
+    shared-secret check (`edgeVerified`, `app.ts`). X-Forwarded-For is never
+    read. An edge-verified request without a usable address shares one key
+    (fails closed). IPv6 is keyed by its /64. Locally (no shared secret) the
+    header is ignored and the key is the socket peer, or one fixed key under
+    `app.request`. Only a SHA-256 of the key is stored, deleted when its
+    window ends.
+  - *Tests:* `SIGNUP_THROTTLE=off` turns it off for the backend test setup and
+    the e2e API server, which sign up hundreds of accounts from one address.
+    It is test-only: the API Lambda refuses to start with it
+    (`config/production.ts`), and the code ignores it in Lambda anyway.
+    `signupThrottle.security.db.test.ts` tests the throttle with it on. A
+    developer who trips it locally can set it in `backend/.env.development.local`.
+  - *Accepted residual risk:* a `409` still reveals a taken address, at 10
+    guesses per address an hour (more for someone with many addresses, up to
+    the global 500). The global ceiling also means a distributed sign-up flood
+    can hold up real sign-ups for up to an hour; invites still work for
+    existing accounts, and the ceiling is far above real use.
 - **Mail-bombing throttle:** at most one reset, verification or invite email
   per address per minute, enforced in Postgres (`app_issue_email_token` with an
   advisory lock; `invite.last_sent_at`) so it holds across Lambda instances.
+  On top, a **daily cap** (078, `account_mail_quota`): at most 10 reset and
+  verification emails per address in a rolling 24 hours, so a distributed
+  sender can't have one inbox mailed ~1440 times a day. A request from a
+  browser holding a valid `wm_device` cookie for the address (auth/device.ts,
+  the same trust as the sign-in lockout) counts on that device's own 10
+  instead, so a stranger who uses up the shared count can't block the owner's
+  own browser. Forgot-password answers the same `202` whether the cap held the
+  email back or not (known address or not); resend-verification, which only
+  mails the signed-in account's own address, says `verification_limit`.
+  `mail-cap.security.db.test.ts` pins the boundary, the window's edge, the
+  device allowance and the identical answers. **Accepted residual:** someone
+  with no device cookie for the address (a new browser, cleared cookies, a
+  reset or "sign out everywhere" since, which retires older devices) can be
+  denied a reset link, or a verification email, for up to a day after such an
+  attack. They can still sign in with their password, and a trusted device
+  keeps its own sign-in lockout (070) and its own reset allowance.
 - **Mail failures never change the response** (`trySendMail` logs the error
   without the body, which contains a live token). Mail is sent after the
   transaction commits, so a mailed link always refers to a stored token.
@@ -88,7 +172,11 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Adding an existing but unverified account** doesn't make it a member:
   `POST …/members` adds only **verified** accounts directly. An unverified one
   gets a pending invite (the same response as an address with no account, so
-  the owner learns nothing about whether it's registered) and an email to the
+  the owner learns nothing about whether it's registered; the `invite.sent`
+  audit row, and so History and the data export, are the same too, with no
+  "was mailed" flag, since an unverified account inside its verification
+  cooldown gets no new email; `account-tokens.security.db.test.ts` compares
+  all of them, and a failed send is logged server-side only) and an email to the
   address asking to confirm it; confirming accepts the invite. This stops
   someone who pre-registers a colleague's address from being added in their
   place. Residual risk: if the real inbox owner clicks "confirm" on an account
@@ -99,13 +187,28 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   Closing this fully means sign-up that is email-first (confirm before the
   account exists), which is an operator decision (see Known gaps).
 - **Email content:** every user-controlled value (project/team names, display
-  names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
+  names) is HTML-escaped; subjects and extra header values are stripped of
+  CR/LF; `sendMail` refuses a recipient that isn't one bare address (a
+  one-lined "a@x Bcc: b@y" is a group to b@y for nodemailer).
+  `mail/outbound.security.test.ts` feeds hostile text to every exported
+  `…Mail` builder (the list comes from the modules' exports) and sends each
+  through the SMTP and SES transports. Links use `SITE_URL`
   from config, never the request's Host header. The reset and verify pages
   strip the token from the address bar and set a `no-referrer` policy
   (`<meta name="referrer">`; the invite sign-up page does the same).
 - **Transport:** SES via the Lambda's IAM role in production (no SMTP password
   to hold). The `log` transport refuses to print message bodies inside Lambda,
   so a misconfigured deploy can't write live links into CloudWatch.
+- **Guard:** `backend/src/auth/account-tokens.security.db.test.ts` sweeps the
+  catalogue (every credential-like column must be a CHECK-constrained 32-byte
+  `bytea` digest, allowlist with reasons) and every text/json/bytea column for
+  the raw tokens just mailed; pins the 1 h / 48 h / 7 day lifetimes (a re-sent
+  invite included); races `app_consume_email_token` across two open
+  transactions; refuses forged session JWTs (unsigned, other key, HS512, other
+  issuer, expired, non-uuid subject, tampered) and pins the 7-day cookie; and
+  checks that adding a member, team member or farmer (single and bulk) and
+  signing in answer the same for an unknown address and an unverified or
+  wrong-password one.
 
 ## Render tokens
 
@@ -136,10 +239,13 @@ buys a **render session** that can read one report and nothing else.
   is closed with the browser after the render.
 - **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
   session may make **only `GET`** requests, and only to `/auth/me`,
-  `/projects/<p>`, `/projects/<p>/series` and `/projects/<p>/runs/<r>[/…]`:
-  exactly the reads the report route makes. Any other method, project, run
-  or route (the run list, members, exports, jobs, reports, teams, compare,
-  every write) answers `403`. A path with encoded characters or dot segments
+  `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
+  `/series`, `/day` and `/signoffs`: exactly the reads the report route
+  makes. Any other method, project, run or route (the run list, members,
+  jobs, reports, teams, compare, every write, and the run's own reads the
+  report doesn't make: its CSV exports, the workbook's bulk series,
+  reproduction, allocation comparison, model input, ensembles) answers
+  `403`. A path with encoded characters or dot segments
   is refused outright. A `scope` claim that isn't a well-formed pair of UUIDs
   makes the whole token invalid, so a render session can never widen into a
   full one. RLS still applies underneath: the session is the requester's, so
@@ -149,7 +255,14 @@ buys a **render session** that can read one report and nothing else.
   scope on another project, another run and every other kind of route, with a
   positive control (the report's own reads answer `200`), a requester who
   lost access between issue and use, and that farmers and strangers can't
-  issue one; `reports/scope.test.ts` pins the path rules; and
+  issue one; `reports/render-session.security.db.test.ts` sweeps every
+  route in the live inventory (`app.routes`) with a render session: it
+  reaches exactly its allowlist of the report's reads (each `200`, and `403`
+  for another run or project the requester fully owns) and gets the scope's
+  `403` everywhere else; it also checks the session's 10-minute life, its
+  revocation by "sign out everywhere", that a malformed `scope` claim opens
+  nothing, and that eight simultaneous exchanges of one token give exactly
+  one session; `reports/scope.test.ts` pins the path rules; and
   `reports/render.db.test.ts` has a real Chromium check that the session is
   refused the project list mid-render.
 - **What the renderer can reach.** Locally, the dev site and API. In
@@ -159,6 +272,32 @@ buys a **render session** that can read one report and nothing else.
   `render-results` and put objects under `reports/` in the reports bucket:
   it can't read, list or delete a PDF. It opens only its configured
   `RENDER_SITE_URL`: a render request carries ids and the token, never a URL.
+  Its browser is confined to that site and `RENDER_API_URL` whatever the
+  page asks for (`reports/render.ts` `confineToOrigins`): any request to
+  another origin (an image, a fetch, a frame, a script navigation) is aborted
+  before it leaves, a navigation's redirect chain is walked hop by hop first
+  and refused if any hop leaves, a render whose page tries to leave fails at
+  once without retry, and only a page of the site is ever printed. What
+  Playwright can't route (the redirect hops of a subresource, WebSockets,
+  preconnects, WebRTC, service workers) is refused by Chromium itself, from
+  its launch flags (`confinementArgs`): no host but the site's and the API's
+  resolves (IP literals included, so no DNS-prefetch channel either), every
+  other origin goes to a proxy that can't exist (`*.invalid`, with the
+  implicit loopback bypass removed, so the site's own host on another port is
+  refused too), WebRTC may use only proxied UDP (none), and service workers
+  are blocked. The site's CSP is a third layer in production only.
+  `reports/render.origin.db.test.ts` checks each case with real Chromium
+  against a counting "elsewhere" server that also counts raw TCP
+  connections, WebSocket upgrades and STUN packets, with a positive control
+  (the report prints, and a same-site subresource redirect still loads;
+  skipped locally where Playwright's Chromium isn't installed; under CI a
+  missing browser fails it, docs/testing.md § Tests that need a service or a
+  browser);
+  `reports/reports.test.ts` pins the flags. Residual: this is the browser
+  policing itself, so a Chromium bug that ignored its own flags, or code in
+  the renderer's Node process, could still reach the internet (the Lambda
+  has open egress). The infra-level fix is an egress allowlist, a tradeoff
+  not taken ([infra/README.md](../infra/README.md), the renderer).
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
   or taken from a message), deleted after 7 days. A download is a pre-signed
@@ -169,6 +308,10 @@ buys a **render session** that can read one report and nothing else.
   Recipients must be direct project members with viewer or above, checked
   when asked for and again when the mail is sent; a viewer may email only
   themselves; on-demand PDFs are capped at 10 an hour per user and project.
+  A PDF or schedule emails at most 20 people, and a project has at most 10
+  schedules. The hourly and schedule caps are counted under an advisory lock
+  (per user and project, per project), so a burst of concurrent requests
+  can't pass them together (`jobs/costCaps.security.db.test.ts`).
 - **Accepted residual risks.** A pre-signed link works for its hour for
   whoever holds it (as any download link would); keep it short and don't log
   it. A render request dead-lettered in production still holds its token
@@ -200,6 +343,12 @@ result without signing in, until it expires or its owner revokes it.
   may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
   catalogue test pins both): a revoked link stays as the record of who made
   and withdrew it. An insert trigger stamps `created_by` and `created_at`.
+  Revocation is final in the schema, not just in the API: the
+  `share_link_revoke_final` trigger (065) refuses an update that clears or
+  moves `revoked_at` or names someone else in `revoked_by`, so not even an
+  owner's own transaction can bring a withdrawn link back (only the
+  foreign key's `SET NULL` on the revoker's account deletion passes; 067
+  refuses clearing `revoked_by` while that account exists).
   Lifetime 1–365 days (API and `CHECK`).
 - **What it reveals.** Only through `SECURITY DEFINER app_share_view` (search
   path pinned): for a live, unrevoked, unexpired token of a project with a
@@ -231,8 +380,14 @@ result without signing in, until it expires or its owner revokes it.
 - **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
   control, the dead-link cases against a live one, the response scan for the
   note and every farm name and id, the `last_used_at` throttle, farm keys,
-  and the k boundary at 4 and 5 holders) and `routes.test.ts` (the two reads
-  on the public allowlist, answering `400` rather than `401`).
+  and the k boundary at 4 and 5 holders), `share/share.security.db.test.ts`
+  (a link made under one publication reads only the current one, view and
+  series; a sweep over every key the published run stores, catchment and
+  node level, answers exactly the allowlisted catchment series, one row
+  each, with no farm name, id or note; the TypeScript and SQL allowlists
+  pinned to one list; revocation final even in SQL, with the account-deletion
+  control) and `routes.test.ts` (the two reads on the public allowlist,
+  answering `400` rather than `401`).
 
 ## API keys
 
@@ -347,7 +502,13 @@ and nothing else.
   UPDATE for owners. `water_app` may update only `revoked_at` / `revoked_by`
   and may not `DELETE` (the catalogue test pins both), so a key's hash,
   scopes and series can't change after it is made. Revocation applies to
-  the next request. A key belongs to the project, not to the owner who made
+  the next request, and is final in the schema, as a share link's is: the
+  `api_key_revoke_final` trigger (067) refuses an update that clears or
+  moves `revoked_at` or changes `revoked_by`, except the foreign key's `SET
+  NULL` when the revoker's account is deleted. `db/final-columns.security.db.test.ts`
+  sweeps every column `water_app` may update whose name records a one-way
+  event (`revoked`, `superseded`, `consumed`, `used`, `deleted`, `decided`,
+  …) and fails on one no probe there covers. A key belongs to the project, not to the owner who made
   it: it keeps working if that owner leaves, and any owner can revoke it
   (the list says who made each one). Audit events `api_key.created` / `api_key.revoked`, and
   every ingest merge is `series.created` / `series.merged` by `API key
@@ -366,7 +527,16 @@ and nothing else.
   before any database work, and the comparison going through
   `timingSafeEqual` whichever byte differs), `routes.test.ts` (the ingest
   routes key-gated, the owner routes session-gated) and
-  `e2e/tests/api-keys.spec.ts`.
+  `e2e/tests/api-keys.spec.ts`. `ingest/ingest.security.db.test.ts` sweeps
+  the live inventories: every policy a key context can pass (`pg_policies`)
+  is on an allowlist with its reason and calls `app_api_key_project`, so
+  revocation and expiry reach every one; a key of the **same** project reads,
+  updates and deletes nothing in any RLS table or view but its own allowed
+  series and `series_key_days` rows (`isolation.db.test.ts` does another
+  project's key; `app_user` is in the sweep, under RLS since 068); no GET route returns the secret or its hash after the `201`
+  (`no-store`); an expired key's context sees nothing; a key can't rename
+  or move its series out of bounds; and a wrong secret under a real prefix
+  (which the History shows) takes nothing from the key's bucket.
 
 ## Alerts
 
@@ -521,6 +691,34 @@ In short:
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at
   the route, and RLS alone must hold if a route forgets it.
+- **Accounts under RLS** (`068_app_user_rls.sql`). `app_user` had no RLS
+  (sign-in reads it before anyone is signed in), so any `water_app`
+  transaction, an API key's or the job tick's included, could read every
+  account's address and password hash and update any account. Now a
+  signed-in person sees their own row and the people they work with
+  (`app_user_visible`: anyone who is, or was, part of a project they can
+  open, or in a team with them; "was" keeps a removed member's name on the
+  runs, scenarios and jobs they made, which the routes inner-join), and
+  updates only their own row. A farmer (073) sees, in a project they are
+  only a farmer in, just the accounts their pages name (the publication's
+  publisher and last editor, a farm note's author on their farm, whoever
+  linked them), never another farmer's or a member's address. An applicant
+  (a `contributor`, 076) sees the same, plus the owner, the other shared
+  members and the deciding assessor of the applications they read, never
+  another applicant's or a member's address. No user (an API key, pre-sign-in, the tick)
+  sees no account. Nobody inserts or deletes one directly: sign-up is
+  `app_register`, deletion the operator's. The pre-sign-in paths use narrow
+  `SECURITY DEFINER` lookups that answer one account (`app_auth_account` for
+  sign-in and forgot-password, `app_session_revoked_at` for the session
+  check), adding a member by address uses `app_user_by_email` (signed-in
+  callers only), and the token-proven flows (verify, reset) act as the
+  account the token proved (`actAsUser`, `db/tx.ts`).
+  `backend/src/auth/app-user.security.db.test.ts` proves each, with positive
+  controls, and lists every inner join to `app_user` in the backend
+  (`JOIN … ON`, an `UPDATE`'s or a comma join's `FROM app_user`) so a new
+  one needs a decision. Every view must be `security_invoker` (an
+  owner-rights view skips RLS): `db/catalogue.db.test.ts` fails on one that
+  isn't, or on a materialized view, unless it is allowlisted with a reason.
 - **RLS refusing a write is never a silent success** (issue #56). A write
   on a row the route has already authorised goes through `mustChange`
   (`backend/src/http/errors.ts`): zero rows changed means RLS refused it,
@@ -528,6 +726,24 @@ In short:
   `backend/src/rlsSecondLayer.db.test.ts` switches the role check off and
   proves a viewer's project, series and team writes each get that 404 and
   change nothing.
+- **Same-project references are swept from `pg_constraint`**
+  (`backend/src/db/cross-project-refs.security.db.test.ts`). RLS can't stop
+  an editor of *both* A and B pointing a row of A at a row of B, and a
+  foreign key is checked without RLS (so an id, even another project's, is
+  enough). Every foreign key onto a table with a `project_id` is therefore
+  either composite on `(project_id, …)` or held by a same-project trigger
+  (`assert_same_project` or the table's own guard), except three with a
+  checked reason (`api_key_throttle` and `report_schedule_recipient` have
+  no `project_id`; `alert_delivery` has no write policy). The test tries each
+  as `water_app`, INSERT and (where `water_app` may) UPDATE, with A's row
+  (accepted) and B's (refused), then every write route whose body names a
+  row (inventoried from the zod schemas' uuid fields), and finally checks no
+  row of A or B references the other. A new foreign key or request field
+  fails until it is classified. 069_cross_project_refs closed the two it
+  found: `model_revision.restored_from` (sequential ids, so any editor could
+  plant a "restore" of another project's revision and, the key being NO
+  ACTION, block that project's deletion; `restored_from_run` is held the
+  same way) and `alert_event.run_id`.
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of
@@ -535,7 +751,36 @@ In short:
   **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
   explicit and an unrecognised team role grants nothing, in SQL
   (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
-  later can't silently become an editor. The role functions every policy
+  later can't silently become an editor. `backend/src/teams/teams.security.db.test.ts`
+  guards it from the live `team_role` and `project_role` enums: a new team
+  role fails until its mapping is pinned there, every team role × direct role
+  pair resolves to the higher of the two, and a team role the mapping doesn't
+  name (a renamed enum value, rolled back) grants nothing. It also proves that
+  losing the team (removed, left, the team deleted, the project moved out)
+  leaves the user no row of the project in any `project_id` table, not even
+  the runs, notes and scenarios they wrote, no RLS update or delete, and no
+  route under `/projects/:id` that answers; and that no one below team admin
+  can promote, add or remove members through RLS.
+  **The ladder is swept, not sampled** (`backend/src/projects/role-ladder.db.test.ts`):
+  every `/projects/:id` route is called with a request its validation
+  accepts (so a route that parses before it checks the role can't hide
+  behind a `400`), and a wrapper on `requireRole` records the role each one
+  asks for. A write needs editor unless it is in `LOWER_ROLE_WRITES` (leave
+  the project, copy it, a report to yourself, your own alert preferences,
+  notes, scenario routes whose own rules decide), with the reason and the
+  status a viewer gets; the owner-only routes are exactly `OWNER_ONLY` and
+  the editor-only reads exactly `EDITOR_READS`, and the routes below viewer
+  (the farmer's and the contributor's) exactly `BELOW_VIEWER`, each with the
+  lowest role it admits and why. Viewer, contributor and farmer get `403`
+  from everything above them and nothing changes; a farmer gets `403` from
+  every contributor route; a farmer or contributor asking an allowed route
+  for an id that isn't there gets `404`; an editor gets `403` from every
+  owner-only route; the farmer, the contributor, the editor and the owner
+  pass their own checks (positive controls). This replaced the older
+  per-role sweeps in `farms.db.test.ts` and `applications.db.test.ts`,
+  which sent empty bodies and accepted `400`, so a route that validates
+  before its role check never reached it.
+  The role functions every policy
   calls (`app_current_user_id`, `app_team_role`, `app_project_role`,
   `app_has_role`) are PL/pgSQL since 026_rls_role_plpgsql: a SQL function with
   `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
@@ -558,7 +803,18 @@ In short:
   `series_revision` retention trigger deletes, and only that series' old
   rows. An audit row must name the caller as its actor. Viewers and above
   read history; farmers and strangers see nothing. Invite emails in events
-  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
+  are masked. A team role is a project role on every team project, so a
+  team member added (directly or by an accepted invite), re-roled, removed
+  or leaving, and a team deleted, is an event on each of the team's projects
+  (`team_member.*`, `team.deleted`; 072). Guards:
+  `history/write-routes.db.test.ts` sweeps every write route in `app.routes`
+  (under `/projects/:id` and outside it) for the row it must write, with a
+  reason for each exemption; `history/audit-trail.security.db.test.ts` tries
+  `UPDATE`, `DELETE` and `TRUNCATE` on the audit trail (the three tables,
+  `signoff`, `run_nomination`) as every actor (each project role, a team
+  admin, a stranger, an API key, no user) and lists the only functions whose
+  body rewrites a trail row (two triggers: the series retention trim and
+  account-deletion pseudonymisation). Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
 - **`SECURITY DEFINER` functions are executable by `water_app` only**
   (028_definer_grants, issue #37). They run as the owner, so Postgres's default
   `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
@@ -570,8 +826,9 @@ In short:
   function is executable by a role other than the owner and `water_app`.
 - **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
   existing policy and every `requireRole(…, 'viewer')` refuses them (fail
-  closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
-  expects `400`/`403`). Extra `SELECT` policies let them read their linked
+  closed; `projects/role-ladder.db.test.ts` calls every `/projects/:id` route
+  as a farmer with a request its validation accepts and expects `403` at the
+  role check, except the reasoned `BELOW_VIEWER` routes). Extra `SELECT` policies let them read their linked
   farms, the gauges and their own membership row, and nothing else: no other
   farm's name or figures, no member list, no series, runs or run series. A
   farmer-facing aggregate of farm quantities needs at least `k − 1` other
@@ -587,14 +844,24 @@ In short:
   and their own farms' farm-allowlist series of the published run
   (`run_series_select_farmer`: `demand`, `supplied`, `deficit`,
   `dam_storage`, `spill`, `transfer`; no flow series, no catchment series,
-  nothing of an earlier publication). The farm routes
+  nothing of an earlier publication). A superseded publication is history
+  and frozen in the schema (`run_publication_final`, 067): no column of it
+  changes, so an editor can't rewrite an old notice or bring an old
+  publication back as current. The farm routes
   (`/projects/:id/farm…`) admit the farmer role, answer `404` alike for a
   node the farmer isn't linked to, a gauge or a node that doesn't exist, and
   null the even share below `k − 1` other holders per viewer. Tests:
   `publish/publication.db.test.ts` scans a farmer's farm view and
   publication list for every other farm's id and name, with positive
-  controls; `farms.db.test.ts` keeps every other `/projects/:id` route
-  refusing a farmer. The modeller's publication `note` is withheld from
+  controls; `role-ladder.db.test.ts` keeps every other `/projects/:id` route
+  refusing a farmer. `farms/farmer-privacy.security.db.test.ts` sweeps the
+  inventories so a new table or route is covered the day it lands: every
+  `project_id` table read as each farmer (and a co-farmer on the same farm)
+  may show only rows naming their own farms, their own `user_id` rows, and
+  the reasoned `FARMER_MAY_READ` extras; every farmer GET answer is scanned
+  for the neighbour's farm, crop, note, allocation holder and name; every
+  farmer write aimed at the neighbour's farm is refused and changes none of
+  its rows (positive controls: each farmer's own farm, and a viewer). The modeller's publication `note` is withheld from
   farmers by the API but not by RLS (a column can't be hidden from one role
   there): the publish dialog tells the modeller farmers don't see it, and it
   must not be relied on as a secret. Publishing records `published_by`, and a
@@ -613,8 +880,8 @@ In short:
   exporter can read and never a deleted body, even to an editor; the import
   ignores them and a copy takes none, so a note is never re-authored under
   someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
-  `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
-  the note routes among the farmer-allowed ones.
+  `notes/notes.db.test.ts`, with positive controls; `role-ladder.db.test.ts`
+  lists the note routes among the farmer-allowed ones (`BELOW_VIEWER`).
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
@@ -703,6 +970,18 @@ In short:
   user and validates it as untrusted input. `water_app` has no `UPDATE` or
   `DELETE` on `job`. A job's stored error is written by the server, never
   database text, and wake messages carry a job id only.
+  Both halves are swept over the live handler registry
+  (`jobs/trust.security.db.test.ts`): every kind is dead once its user drops
+  below the handler's role (only `report_render` runs for a viewer, on an
+  allowlist with its reason), and a job queued in one project whose payload
+  names another project's feed, report, sweep, outlook or run changes nothing
+  there, even for someone who edits both (the handler scopes every read by
+  the job's project; `app_begin_feed_fetch` and the `yield_result` guard
+  check it again in the database). The per-user caps on queued
+  sweeps, outlooks and yield calculations (2 each) are counted under a
+  per-user advisory lock, so a concurrent burst can't pass them, and the
+  database refuses a sweep member or outlook level past the API's cap
+  (`jobs/costCaps.security.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
   `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's
@@ -744,8 +1023,14 @@ In short:
     controls), and can't point a run of theirs at it (the composite foreign
     key finds no such blob in their project).
   - **Immutable by privilege.** `water_app` has `SELECT` and `INSERT` only on
-    both tables (the catalogue test's `APPEND_ONLY`). Blobs are inserted by
-    editors; a reference only by an editor, to a run of the same project
+    `run_input_series`, and `SELECT` only on `series_blob` (the catalogue
+    test's `APPEND_ONLY` and `NO_INSERT`). A blob is written only through
+    `app_store_series_blob` (074_series_blob_digest, `SECURITY DEFINER`, for
+    an editor or a contributor), which takes the values as their JSON text
+    and keys the blob by that text's SHA-256 itself, so no caller, even past
+    the API, can put other values under the hash of content a later run will
+    store (that run would otherwise reference the planted blob and fail
+    `loadRunInput`'s check). A reference only by an editor, to a run of the same project
     saved **in the same transaction** (the insert policy checks
     `model_run.created_at = now()`), so an older run can't be given inputs
     after the fact. Removal is only the `series_blob_gc` trigger
@@ -784,10 +1069,10 @@ In short:
   inputs or anything unpublished.
   - **Fail closed.** `contributor` ranks below `viewer`, so every existing
     policy and every `requireRole(…, 'viewer')` route refuses it untouched;
-    `scenarios/applications.db.test.ts` calls every `/projects/:id` route as
-    a contributor and requires `400`/`403` except the listed ones (the
-    farmer's, and the scenario routes, where RLS and the route's own rules
-    decide), and the route inventory (`routes.test.ts`) lists every new
+    `projects/role-ladder.db.test.ts` calls every `/projects/:id` route as
+    a contributor with a request its validation accepts and requires `403`
+    at the role check except the `BELOW_VIEWER` ones (the farmer's, and the
+    scenario routes, where RLS and the route's own rules decide), and the route inventory (`routes.test.ts`) lists every new
     route as auth-gated.
   - **The published run stays on the server.** A contributor can't read any
     run's row (its `inputs` and `summary` hold every farm), `/runs/*` and
@@ -834,6 +1119,33 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **An application's own farms are its owner's farm links, now**
+    (071_application_own_nodes). The `scenario_owned_nodes` trigger refuses
+    an application whose `owned_node_ids` name a farm its owner isn't linked
+    to (`42501`), so a write past the route can't claim a neighbour's farm;
+    and what a contributor sees in full (the base projection, the check, a
+    new run, their runs' series through `app_contributor_run_nodes`) is the
+    stored list cut to the owner's *current* links
+    (`app_application_own_nodes`): once the owner unlinks a farm (it changed
+    hands), an application made while linked shows it anonymised like any
+    other. The stored list stays the assessors' record.
+  - **The "nothing else" sweep** (`scenarios/applicant.security.db.test.ts`)
+    runs as applicant A beside applicant B over every table with a
+    `project_id` (from `pg_catalog`): what A reads is a subset of its `READ`
+    map, what A updates or deletes of `CHANGE`, and no copy of a row A can't
+    read inserts; then every contributor route that takes an id, with B's
+    application, farm, note and consultant, answers `403`/`404`, names none
+    of them and leaves B's rows unchanged. No insert is a known gap
+    (`KNOWN_INSERTS` is empty): 045's `series_blob_insert_contributor`
+    admitted any blob, its hash unchecked, until 074_series_blob_digest
+    moved blob writes into `app_store_series_blob`, which computes the key
+    itself. `model_run_insert_contributor` (045) still lets an applicant
+    insert their own application's run rows (the database can't tell that
+    insert from the backend's: same role, same user), but such a row can't
+    be judged: every run the backend stores carries a server stamp
+    ([§ Run stamps](#run-stamps)), and a sign-off and an
+    application's decision refuse a run without a matching one, so a
+    summary the engine never produced is never signed or decided on.
   - **No existence oracles** (049_applicant_oracles,
     `scenarios/oracles.db.test.ts`: each probe answered identically for the
     hidden and the free case, each with a positive control).
@@ -872,6 +1184,39 @@ In short:
   only; the health update re-checks that the caller is an editor of the
   feed's project, and a direct write can never set the health columns (the
   `data_feed_stamp` trigger), so an owner can't make a dead feed look fresh.
+- <a id="run-stamps"></a>**Run stamps** (077_run_stamp,
+  `backend/src/runs/stamp.ts`). RLS decides who may write a run's rows, not
+  whether the engine produced them: an applicant may insert their own
+  application's runs (045) and an editor any run of the project (001, and
+  `UPDATE` on `run_series`), so someone with SQL as `water_app` could store
+  results the engine never computed. So the backend signs every run it
+  stores (`storeRun`, the one save path: `POST …/runs`, a scenario or
+  application run, an import's run, the re-run job): `model_run.stamp` is an
+  HMAC-SHA256 under a key derived by HKDF (its own label) from
+  `AUTH_JWT_SECRET`, which the database never holds, over
+  `app_run_digest(run)`, a SHA-256 of the run's evidence in a canonical,
+  session-independent encoding (id, project, engine version, dates, trigger,
+  the inputs snapshot, the summary, the stored input series' kinds, starts
+  and blob hashes, every output series' node, key, meta and values). The
+  stamp binds the run's id, so one copied onto another row doesn't verify.
+  `app_set_run_stamp` is the only writer (the run's maker, in the storing
+  transaction, once; `water_app` has no `UPDATE` on the column), and
+  `app_run_digest` answers only for a run the caller reads or has just
+  stored. Where a run is judged, it must verify: a sign-off refuses one that
+  doesn't (`409`, code `run_unverified`), and so does an application's
+  decision while any of its runs doesn't. `GET …/runs/:runId` says
+  `verified`, and the assessors see an application's unverified runs
+  (`unverifiedRunIds`, a warning in its panel). Editor-made runs are stamped
+  too (the same path, and an editor can write run rows directly just as
+  well), so every sign-off needs one. Runs stored before 077 have no stamp
+  and read as unverified: re-run them to sign one (there was no production
+  deployment then). Verifying re-hashes the run's rows (~0.2 s for a
+  400-series, 44-year run), which is why the run list doesn't carry it.
+  *Rotation:* a new `AUTH_JWT_SECRET` leaves every stored run unverified
+  (existing sign-offs and decisions stand; new ones need a fresh run), which
+  after a leak is what you want, since the old key could have signed
+  anything. The worker Lambda holds the secret too (its re-run job stores
+  runs); it never signs or reads a session.
 - The schema owner (`water`) is used only for migrations, never by the running
   API or the job worker.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
@@ -892,6 +1237,18 @@ In short:
 
 - Every request body is validated with **zod** before it reaches SQL. Queries
   are parameterised (`pg`), and there is no string-built SQL.
+- **No mass assignment.** A body sets only the fields its schema names:
+  unknown keys are refused (`.strict()`, most project routes) or dropped
+  (zod's default strip), never stored, and server-owned columns (ids,
+  `project_id`, `created_by`/`author_id`/`user_id`, `role`, `created_at`,
+  `revoked_at`, hashes, statuses) come from the session and the route, not the
+  body. `http/mass-assignment.security.db.test.ts` sweeps every POST/PUT/PATCH
+  in `app.routes` with the role ladder's sample bodies plus hostile extras
+  (top level and nested) and searches every row the request wrote (by `xmin`)
+  for them; a new route or table is covered without a list. It found the
+  settings patch passing unknown keys through into `project.settings`, every
+  revision, copy and run input (including engine-only inputs such as
+  `damStorageReset`); they are now dropped.
 - Model documents are validated as a whole: references resolve inside the
   document, the network is a tree with one outflow, and names are unique.
 - Series are capped at 60 000 values. The backend itself caps every request
@@ -900,6 +1257,36 @@ In short:
   one exception is `POST /projects/import` (a whole project document), capped
   at 5 MB on the route, after the session check, so an anonymous caller never
   gets a large body read.
+- **Hostile JSON bodies** are refused once, for every route, by `readJson`
+  (`backend/src/http/body.ts`) with `400` and the code `body_refused`: a NUL
+  (`\u0000`) in any string or key (Postgres refuses NUL in text and jsonb,
+  which was a `500` on `PATCH /projects/:id`, `POST /projects`, `/copy` and
+  `/teams`), a number that overflows to ±Infinity (`1e400`), and nesting past
+  64 levels (a deep `settings` value overflowed the stack). The walk is
+  iterative. A route whose fields are all optional (start a run, a scenario
+  run, restore a revision) calls `readJson(c, { optional: true })`, which
+  takes an empty body as `{}` but still checks one that is there: these had
+  read the body with `c.req.json().catch(() => ({}))`, so a NUL in a run
+  `label` reached Postgres as a `500`. `http/body.guard.test.ts` fails on any
+  source file under `backend/src` that reads a body itself (`req.json()`,
+  `req.text()`, `parseBody()`, `req.raw…`) outside `http/body.ts`.
+  `http/body.security.db.test.ts` sweeps every POST/PUT/PATCH in the live
+  route inventory with each, and then puts a NUL into every string and
+  `1e400` into every number of each route's own sample body
+  (`__tests__/routeSamples.ts` `SAMPLE`).
+- **Series values** must stay finite and below 10¹² in the canonical unit
+  *after* conversion (1e308 in inches was Infinity in mm), and a project holds
+  at most **1 000 series** (`series/limits.ts`): a new series past it is `409`
+  on PUT and merge, and a project file with more is `400`, where one 5 MB file
+  had created 50 000 in a 12-second transaction. The cap is hard
+  (`075_series_cap.sql`): `app_project_series_count` (SECURITY DEFINER,
+  answering only an editor or a live `series:write` key of the project)
+  counts every series, not just the ones an API key limited to some series
+  can see, under a per-project advisory lock, so a concurrent burst at the
+  limit gets exactly the room left. `series/limits.security.db.test.ts`.
+- **Allocation files** (`allocations/parse.ts`): 2 MB, 5 000 rows and
+  **200 columns** a row, the last checked while splitting so a million-column
+  header is refused before it is built (`allocations/parse.security.test.ts`).
 - The server never parses a workbook. A b023 `.xlsm` / `.xlsx` is parsed
   either offline by the Python importer or **in the browser**, and only the
   resulting project document reaches the API (`POST /projects/import`, the
@@ -976,9 +1363,11 @@ In short:
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
   - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
-    streamed, range reads for the grids. A GeoTIFF is parsed by our own
-    bounds-checked reader (dimensions, strip sizes and LZW codes checked;
-    anything outside the known layout refused), and a DWS page by a strict
+    streamed, range reads for the grids (`feeds/http.test.ts`). A GeoTIFF is parsed by our own
+    bounds-checked reader (dimensions up to 100 000 pixels, strips up to 8 MB
+    read and 2 MB decoded, GDAL metadata up to 1 MB, GeoKeys up to 4096, and
+    LZW codes checked, each before the read or allocation it bounds;
+    anything outside the known layout refused; `feeds/sources/tiff.test.ts`), and a DWS page by a strict
     parser that refuses a changed header, impossible or duplicate dates and
     the site's HTTP-200 error page. Values must be finite and non-negative
     (a DWS gap is null, never a zero); rainfall over 2 000 mm/day is refused.
@@ -1006,14 +1395,45 @@ In short:
   `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
   person types are text). Help text has its own parser (`lib/help`), not
   HTML. A real need for markup would need a sanitiser and a reasoned entry in
-  that guard. Mail templates escape every interpolated value
-  (`mail/templates.ts` `escapeHtml`, `templates.test.ts`).
+  that guard. The same guard checks the chart library: the uPlot build the
+  app bundles writes series labels (typed names) and its legend read-out
+  through `textContent`, never markup. Also banned there: `setHTMLUnsafe`,
+  `parseHTMLUnsafe`, `DOMParser.parseFromString`. Mail templates escape
+  every interpolated value (`mail/templates.ts` `escapeHtml`,
+  `templates.test.ts`).
+- **No script URLs.** Svelte escapes attribute text, not what it means:
+  `href={x}` runs script when x is `javascript:…`.
+  `frontend/src/lib/urlAttributes.security.test.ts` scans every component's
+  URL attributes (`href`, `src`, `srcset`, `action`, `formaction`, …, and
+  `{href}` shorthand). A value that starts with literal text (`/…`, `?tab=…`,
+  `#…`, `{base}/…`) sets its own scheme, and that scheme must be http(s),
+  mailto or tel, never protocol-relative. A value that starts with an
+  expression must be a *reviewed* head, listed with where its value comes
+  from and the components it was reviewed in (the same name in another
+  component is a new one). A new one fails until someone reviews it, and a
+  listed head a listed component no longer uses also fails. The app's URL builders (`runHref`,
+  `withParam`, `farmHref`, …) are called with hostile ids and must stay on
+  the app's origin. The same test bans `srcdoc`, frame, object and embed
+  elements, and URL writes from TypeScript (`location =`, `window.open`,
+  `.href =`, except the blob download link in `lib/export/download.ts`),
+  read from the whole file, since an inline handler in markup is code too. It
+  also requires `rel="noopener"` on every `target="_blank"` link. The
+  one link that comes from the API, the report PDF's pre-signed URL, is
+  dropped unless it is http(s) (`serverPdf.ts` `reportsApi.get`). `?next=`
+  after sign-in (`lib/auth/redirect.ts` `safeNext`) follows only a path
+  that resolves to the app's own origin, so `/\t/host` (a browser strips the
+  tab) is refused as well as `//host`.
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
-  (`backend/src/export/csv.ts`, OWASP "CSV injection"). Numbers are written as
+  (`backend/src/export/csv.ts`, OWASP "CSV injection"), and a cell holding a
+  comma, quote or line break is RFC 4180-quoted. Numbers are written as
   numbers. Export file names are ASCII slugs, so `Content-Disposition` can't be
-  injected.
+  injected. `export/export.security.db.test.ts` sweeps every `GET … .csv`
+  route in the live route table over a project seeded with formula-looking
+  names, run label, notes, notes author, series name and allocation fields: no
+  text cell may start with a trigger, the quoting must parse strictly, and an
+  ordinary name must round-trip unchanged.
 - **The `.xlsx` workbook treats names the same way.** It is built in the
   browser from the same API data (`frontend/src/lib/spreadsheet/export/`):
   the summary sheets are the summary CSV's cells, already defused; names the
@@ -1021,8 +1441,13 @@ In short:
   crops and references) go through `defuse` in `names.ts`, the same rule as
   `textCell`. Every name is a **string cell** and the workbook never writes a
   formula, so Excel shows `=cmd|…` as text; the apostrophe keeps it inert if
-  someone edits the cell or copies it into a CSV. Unit and e2e tests check
-  both (no cell in the file has a formula). Sheet names are cleaned to
+  someone edits the cell or copies it into a CSV. The daily sheets' column
+  headers are defused too. Cell text is XML-escaped with control characters
+  as `_xHHHH_`, and an underscore that would start such an escape in the
+  text itself is written `_x005F_` (`writer.ts` `escapeCellText`): Excel
+  decodes `_xHHHH_`, so a name typed as `_x003D_cmd` would otherwise open as
+  `=cmd`, past the defuse. Unit and e2e tests check both (no cell in the file
+  has a formula; `writer.security.test.ts` reads every cell as Excel does). Sheet names are cleaned to
   Excel's rules (none of `[ ] : * ? / \`, at most 31 characters, unique), and
   the file name is the summary CSV's server-made ASCII slug. The worker loads
   from `'self'` only (`worker-src 'self'`), and it only writes (`writer.ts`); it
@@ -1110,7 +1535,9 @@ by the WUA; nobody is added to a project without an owner acting.
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
   each person choosing right away, daily or off, with a one-click
   unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
-- Cookies: one session cookie (`wm_session`, strictly necessary). No
+- Cookies: the session cookie (`wm_session`) and the sign-in lockout's
+  trusted-device cookie (`wm_device`, [§ Authentication](#authentication)),
+  both strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
 - Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
@@ -1122,12 +1549,23 @@ by the WUA; nobody is added to a project without an owner acting.
 classified (cascade, set null, or restrict) in `catalogue.db.test.ts`
 `APP_USER_ON_DELETE`, and every foreign key to `project` cascades (the same
 file), so a new column can't ship without a decision.
-`auth/account-deletion.db.test.ts` checks the outcome end to end.
+`auth/account-deletion.db.test.ts` checks the outcome end to end, and
+`auth/personal-data.security.db.test.ts` sweeps it: an account with a row
+behind every cascade and set-null key is deleted, then every text, json,
+uuid and array column of every table is scanned for its email, name and
+id, which may survive only where this table keeps them (the audit log's
+random id, the typed sign-off name, the sign-in lockout's address). It
+found three guards that fought the deletion, fixed in 066: a sweep's or
+outlook's guard refused the key's SET NULL (so the account couldn't be
+deleted), `alert_rule_check` put the creator back (a dangling id), and a
+PDF someone else asked for kept the person as a recipient
+(`report.email_to`, now emptied of them by `app_user_pseudonymise`).
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
-| Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
+| Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
+| Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
@@ -1161,7 +1599,7 @@ file), so a new column can't ship without a decision.
   those records name (the actor who linked them, the people named in events
   they made). One export a minute per account. Every foreign key to
   `app_user` is classified as exported or left out, with why, in
-  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`): the
+  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`; `personal-data.security.db.test.ts` checks each exported key's section holds exactly the person's rows, and every exported `app_user` column its stored value): the
   project's own records that name the person only as their maker (runs,
   revisions, keys, publications…) are left out, because the act is in the
   audit events. The project exports (`export.json`, CSV, the farm CSV)
@@ -1262,6 +1700,25 @@ readable by anyone. The rules:
   dev), so the Lambda entry point (`lambda.ts`, `assertEdgeSecret`) refuses to
   start without a secret of at least 32 characters: a deploy missing it fails
   loudly instead of opening the Function URL (`app.security.test.ts`).
+- **Production configuration fails closed** (`backend/src/config/production.ts`).
+  Every setting falls back to the local stack when unset (`STORAGE=local`,
+  `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
+  localhost links), so a Lambda missing one would quietly serve synthetic data
+  or email localhost links rather than fail. All five entry points (`lambda.ts`,
+  `lambda-worker.ts`, `lambda-fetcher.ts`, `lambda-renderer.ts`,
+  `lambda-migrate.ts`) call `assertLambdaEnv(role)` at init: in Lambda (the
+  runtime always sets the reserved `AWS_LAMBDA_FUNCTION_NAME`) they refuse to
+  start on a missing or local-default setting, a `dev-only-`/`test-only-`
+  placeholder anywhere (the committed dev JWT secret), a non-https or localhost
+  URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
+  password, `VITEST`, or no explicit `ALERTS_ENABLED` on the worker. The error
+  names settings, never values. `config/production.security.test.ts` bundles
+  each entry point and fails on any `process.env` read that `SETTINGS` doesn't
+  classify, checks each Lambda's Terraform environment block sets every
+  required setting, sweeps every `backend/.env.development` value, and starts
+  each entry point with a production-shaped env (the positive control).
+  Terraform also refuses a placeholder `auth_jwt_secret` at plan time
+  (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
 - **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
   default 1000 per 5 minutes) covering the whole site and `/api/*`.
@@ -1317,10 +1774,20 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
     ticked; a legacy run (a stored run from before engine 1.0.0, which
-    removed that model) can't be signed (audit H1).
+    removed that model) can't be signed (audit H1), nor can a run whose
+    server stamp is missing or no longer matches its rows
+    ([§ Run stamps](#run-stamps)).
   - *Immutable:* `water_app` has no `UPDATE` or `DELETE` on `signoff` and no
     policy allows either (catalogue guard); the signed run is cited, so it
-    can't be deleted or trimmed. Each sign-off is in the audit log.
+    can't be deleted or trimmed, and `water_app` may change only its notes
+    and pin. A scenario with a signed-off run can't be deleted either (409;
+    the `scenario_signed_run_guard` trigger, 072, refuses it in SQL too,
+    which is what stops an applicant, who can't read the assessor's
+    sign-off of their withdrawn application's run),
+    since the run's `scenario_id` would go NULL and the signed scenario run
+    would pass for a run of the project's own inputs. Deleting the whole
+    project still takes its sign-offs with it (cascade), unless it has an
+    evidence nomination (035). Each sign-off is in the audit log.
   - *Limits, stated on the report and in the dialog:* the registration
     number is **self-declared** (not checked against the SACNASP register);
     dam safety classification (DW793) is for others; there is no MFA on
@@ -1331,8 +1798,6 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
-- No app-level rate limit on `/auth/register` beyond the WAF's per-IP
-  `/api/auth/*` rule. (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build
@@ -1353,7 +1818,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 ## Incident playbook
 
 1. **Suspected secret leak:** rotate the secret at its source.
-   `AUTH_JWT_SECRET` rotation logs every user out. DB passwords: `ALTER ROLE`
+   `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored
+   run unverified until re-run ([§ Run stamps](#run-stamps)). DB passwords: `ALTER ROLE`
    and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml` and
    `terraform apply`. The operator runs these steps by hand.
 2. **Suspected cross-project data exposure:** check the RLS policies and the

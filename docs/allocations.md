@@ -44,12 +44,12 @@ Number", "Registered Volume (m3/a)", "Resource Type", "Water Use Sector" and
 so on, or the app's own template headings (`registration_no`, `farm`,
 `holder`, `authorisation`, `purpose`, `water_source`, `volume_m3_year`,
 `storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`). The
-template is downloadable from the tab. The aliases are **pending a real
+template is downloadable from the Allocations page's Import sheet. The aliases are **pending a real
 extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
 
 - **File.** CSV, comma- or semicolon-separated (a `;` file reads a comma as
-  the decimal mark), UTF-8, at most 2 MB and 5 000 rows. Quoted fields,
+  the decimal mark), UTF-8, at most 2 MB, 5 000 rows and 200 columns. Quoted fields,
   doubled quotes and line breaks inside quotes are read. XLSX is not read
   yet: save the sheet as CSV.
 - **Refused files.** A heading that looks like an **ID number, passport,
@@ -81,8 +81,10 @@ is listed as "not read", never guessed.
   starts with `= + - @` (or a tab or CR) with `'`, as every export does
   (`backend/src/export/csv.ts textCell`).
 
-Hand entry, edits (including matching a row to a farm) and deletes are on
-the tab for editors.
+Hand entry (**+ Add volume** in the page header), edits (including
+matching a row to a farm, **Change** on a row) and deletes are on the
+Allocations page for editors; the page's layout is in
+[ui.md § Allocations](./ui.md#allocations-taballocations).
 
 ## The comparison
 

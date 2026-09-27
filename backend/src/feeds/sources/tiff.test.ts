@@ -276,6 +276,18 @@ describe('openGrid + readPoints', () => {
 			// A header claiming 100 000-pixel rows: refused before the decode buffer is allocated.
 			['a strip that would decode too large', writeGrid(spec({ override: { 256: [4, [100_000]], 278: [3, [6]] } })), /decode to an implausible size/],
 			['a short strip table',writeGrid(spec({ override: { 273: [4, [8, 9]] } })), /strip table/],
+			// Upper bounds on what a hostile header can make the reader request or allocate
+			// (docs/security.md § Outbound fetches). Each is checked before the read it bounds.
+			['no pixels across', writeGrid(spec({ override: { 256: [3, [0]] } })), /implausible dimensions/],
+			['a grid wider than 100 000 pixels', writeGrid(spec({ override: { 256: [4, [100_001]] } })), /implausible dimensions/],
+			['a grid taller than 100 000 pixels', writeGrid(spec({ override: { 257: [4, [100_001]] } })), /implausible dimensions/],
+			['a strip over 8 MB', writeGrid(spec({ override: { 279: [4, Array(6).fill(8 * 1024 * 1024 + 1)] } })), /strip of the grid has an implausible size/],
+			['GDAL metadata over 1 MB', writeGrid(spec({ override: { 42112: [2, Array(1024 * 1024 + 1).fill(0x20)] } })), /GDAL metadata is implausibly large/],
+			[
+				'a GeoKey directory over 4096 entries',
+				writeGrid(spec({ override: { 34735: [3, [1, 1, 0, 4, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, 4326, 2054, 0, 1, 9102, ...Array(4097 - 20).fill(0)]] } })),
+				/does not say its coordinate system/
+			],
 			['an IFD past the end of the file', good.subarray(0, 60), /ends before its image directory|truncated/]
 		];
 		it.each(cases)('%s', async (_, bytes, message) => {

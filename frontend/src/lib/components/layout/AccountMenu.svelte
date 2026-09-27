@@ -276,6 +276,7 @@
 	/* In the sidebar's foot the trigger fills the width and the menu opens above it. */
 	.up .account-trigger {
 		width: 100%;
+		text-align: left;
 	}
 	.up .menu {
 		top: auto;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { saveBlockers, SETTINGS_SECTIONS } from './sections';
+import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order starting with Demand', () => {
@@ -13,6 +13,21 @@ describe('SETTINGS_SECTIONS', () => {
 		expect(ids.at(-3)).toBe('set-outlook');
 		expect(ids.at(-4)).toBe('set-outcomes');
 		expect(ids.at(-5)).toBe('set-quality');
+	});
+});
+
+describe('settingsNavGroups', () => {
+	it('covers every section once, in page order, then the panels after Data feeds', () => {
+		const owner = settingsNavGroups(true);
+		expect(owner.map((g) => g.label)).toEqual(['Model inputs', 'How results are read', 'Runs, feeds and reports']);
+		expect(owner.flatMap((g) => g.ids)).toEqual([...SETTINGS_SECTIONS.map((s) => s.id), 'set-api-keys', 'set-report-schedules']);
+		expect(owner[0]!.ids.at(-1)).toBe('set-period');
+		expect(owner[1]!.ids).toEqual(['set-quality', 'set-outcomes', 'set-outlook']);
+		for (const id of ['set-api-keys', 'set-report-schedules']) expect(AFTER_FORM_LABELS[id]).toBeTruthy();
+	});
+
+	it('links API keys for an owner only, since only an owner sees that panel', () => {
+		expect(settingsNavGroups(false).at(-1)!.ids).toEqual(['set-auto', 'set-feeds', 'set-report-schedules']);
 	});
 });
 

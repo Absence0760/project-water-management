@@ -39,6 +39,20 @@ describe('reportsApi', () => {
 		]);
 		expect(request.mock.calls[0]![2]).toEqual({ runId: 'r', email: true });
 	});
+
+	it('keeps the download link only when it is an http(s) URL: the page renders it as an href', async () => {
+		const got = async (url: string | undefined) => {
+			const request = vi.fn(async () => ({ report: view({ status: 'done' }), ...(url === undefined ? {} : { url }) }) as never);
+			return (await reportsApi({ request } as never, 'p').get('j')).url;
+		};
+		// Positive control: the pre-signed S3 link (and MinIO's plain http one locally) comes through.
+		expect(await got('https://reports.s3.af-south-1.amazonaws.com/p/j.pdf?X-Amz-Signature=abc')).toBe('https://reports.s3.af-south-1.amazonaws.com/p/j.pdf?X-Amz-Signature=abc');
+		expect(await got('http://localhost:9002/reports/j.pdf')).toBe('http://localhost:9002/reports/j.pdf');
+		expect(await got(undefined)).toBeUndefined();
+		for (const hostile of ['javascript:alert(1)', 'JavaScript:alert(1)', ' javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'vbscript:msgbox(1)', '//evil.example/x.pdf']) {
+			expect(await got(hostile), hostile).toBeUndefined();
+		}
+	});
 });
 
 describe('describeReport', () => {

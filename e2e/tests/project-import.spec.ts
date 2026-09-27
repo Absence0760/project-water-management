@@ -76,7 +76,8 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	// Open it (the name opens the project; the Open button hides when the table is narrow beside the sidebar): the workspace shows the imported catchment and its run.
 	await row(page, 'Droëvlei — imported').getByRole('link', { name: 'Droëvlei — imported', exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Droëvlei — imported' })).toBeVisible();
-	// The Overview's import record names the project file; a file has no unmapped report, and this one no notes.
+	// The Project page's import record (issue #17) names the project file; a file has no unmapped report, and this one no notes.
+	await page.goto(`${page.url().split('?')[0]}?tab=project`);
 	const record = page.getByRole('region', { name: 'Import record' });
 	await expect(record.getByRole('paragraph').first()).toHaveText(
 		new RegExp(`^Imported from the project file droevlei_project\\.json on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${owner.displayName}\\.$`)

@@ -87,7 +87,8 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 		return null;
 	}
 	// Every authenticated request reads this: one statement, no transaction round trips.
-	const [row] = await queryWithoutUser<{ sessions_revoked_at: Date | null }>('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [userId]);
+	// app_user is under RLS (068) and this has no user yet: the narrow lookup.
+	const [row] = await queryWithoutUser<{ sessions_revoked_at: Date | null }>('SELECT sessions_revoked_at FROM app_session_revoked_at($1)', [userId]);
 	if (!row) return null;
 	if (row.sessions_revoked_at && issuedMs < row.sessions_revoked_at.getTime()) return null;
 	return { userId, scope };

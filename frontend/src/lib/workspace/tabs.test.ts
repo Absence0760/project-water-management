@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Role } from '$lib/api/types';
 import {
 	ALL_TABS,
+	canOpenTab,
 	NAV_SECTIONS,
 	navSections,
 	hasModelInputsToggle,
@@ -29,7 +30,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -125,8 +126,17 @@ describe('navSections', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
-			{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
+			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 		]);
+	});
+
+	it('puts the Project page first under Review, for owners, editors and viewers (no model inputs needed)', () => {
+		const rendered: TabId[] = ['overview', 'project', 'applications', 'history'];
+		for (const role of ['owner', 'editor'] as const) {
+			expect(navSections(visibleTabs(role, {}, rendered))).toContainEqual({ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] });
+		}
+		expect(navSections(visibleTabs('viewer', {}, rendered))).toContainEqual({ id: 'review', label: 'Review', tabs: ['project'] });
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
 	});
 
 	it('puts River & reserve under Outcomes, after the Summary, for owners, editors and viewers only', () => {
@@ -156,5 +166,22 @@ describe('navSections', () => {
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] }
 		]);
+	});
+});
+
+describe('canOpenTab', () => {
+	it('lets owners and editors open the assessors’ Applications tab', () => {
+		expect(canOpenTab('owner', 'applications')).toBe(true);
+		expect(canOpenTab('editor', 'applications')).toBe(true);
+	});
+	it('refuses it to everyone else, so an old link lands on the Summary', () => {
+		for (const role of ['viewer', 'farmer', 'contributor', null, undefined] as (Role | null | undefined)[]) {
+			expect(canOpenTab(role, 'applications')).toBe(false);
+		}
+	});
+	it('still opens a viewer’s hidden model-input tabs from a link (hiding is presentation)', () => {
+		expect(visibleTabs('viewer')).not.toContain('network');
+		expect(canOpenTab('viewer', 'network')).toBe(true);
+		expect(canOpenTab('viewer', 'overview')).toBe(true);
 	});
 });

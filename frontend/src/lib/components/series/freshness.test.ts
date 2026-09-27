@@ -1,6 +1,6 @@
 import type { SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { freshness, guessSeries, headerLine, newDataSinceRun } from './freshness';
+import { freshness, freshnessOrder, guessSeries, headerLine, newDataSinceRun } from './freshness';
 
 const meta = (id: string, kind: string, name: string, startDate: string, length: number, updatedAt?: string) =>
 	({ id, kind, name, unit: '', startDate, length, ...(updatedAt ? { updatedAt } : {}) }) as SeriesMeta & { updatedAt?: string };
@@ -96,5 +96,31 @@ describe('guessSeries', () => {
 	it('reads the header line only when the first cell is not a date', () => {
 		expect(headerLine('﻿date,rain mm\n2025-01-01,3')).toBe('date,rain mm');
 		expect(headerLine('2025-01-01,3\n')).toBe('');
+	});
+});
+
+describe('freshnessOrder', () => {
+	const ids = (l: { id: string }[]) => l.map((s) => s.id);
+	const list = [{ id: 'q' }, { id: 'r1' }, { id: 'r2' }, { id: 'c' }, { id: 'ref' }, { id: 'e' }];
+
+	it('puts the series behind first, most days behind first, then those a run reads, then the rest, keeping list order within a group', () => {
+		const behind = [
+			{ id: 'c', age: 12 },
+			{ id: 'e', age: 40 }
+		];
+		const inUse = new Set(['q', 'r1', 'c', 'e']);
+		expect(ids(freshnessOrder(list, behind, inUse))).toEqual(['e', 'c', 'q', 'r1', 'r2', 'ref']);
+	});
+
+	it('keeps the list order when nothing is behind and every series is read', () => {
+		expect(ids(freshnessOrder(list, [], new Set(ids(list))))).toEqual(ids(list));
+	});
+
+	it('orders by the same rule the badge counts: freshness().behind fed straight in', () => {
+		const m = (id: string, kind: string, length: number) => meta(id, kind, id, '2025-01-01', length);
+		const all = [m('q', 'flow_observed_m3s', 10), m('r', 'rain_catchment_mm', 100), m('c', 'rain_chirps_mm', 60)];
+		const f = freshness(all, '2025-04-12')!;
+		expect(f.behind.map((b) => b.id)).toEqual(['c']);
+		expect(ids(freshnessOrder(all, f.behind, new Set(['q', 'r', 'c'])))).toEqual(['c', 'q', 'r']);
 	});
 });

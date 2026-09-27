@@ -1,13 +1,17 @@
 <script lang="ts">
-	// Crops & demand (issue #17, option A · A3): a page of pictures over the
-	// crop grids. A card per crop (area, peak-need month, a sparkline of its
-	// 12 factors; Edit opens its name and factors in a side sheet,
-	// `crop=<cropId>`), the catchment's demand by month (its table behind
-	// Show table), and planted area per farm as stacked bars (a farm opens the
-	// farm drawer; Edit areas opens the planted-areas grid). The full grids
-	// open from the Grids menu in the grid modal (`grid=<id>`,
-	// lib/workspace/overlays.ts), which shows them through `sections`
-	// (CropGrids); scenario override mode shows all three inline the same way.
+	// Crops & demand (issue #17, option A · A3): the answers first, the crop
+	// grids one click away. A compact crop list, largest planted area first (a
+	// row per crop: its colour, area, peak-need month, a sparkline of its 12
+	// factors; Edit opens its name and factors in a side sheet,
+	// `crop=<cropId>`), the catchment's demand by month (its table behind Show
+	// table), and planted area per unit as stacked bars (a unit opens the farm
+	// drawer; Edit areas opens the planted-areas grid). From 1100 px of page
+	// width the list is a column that scrolls in itself and the chart and bars
+	// fill the window beside it, so they stay on the first screen whatever the
+	// number of crops or units. The full grids open from the Grids menu in the
+	// grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
+	// through `sections` (CropGrids); scenario override mode shows all three
+	// inline the same way.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -18,12 +22,25 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
-	import { CROP_PALETTE, cropCards, cropColours, cropsSummary, farmBarLabel, farmBars, SPARK_H, SPARK_W } from './cards';
+	import {
+		cropAreaTotals,
+		cropColouring,
+		cropRows,
+		cropsSummary,
+		farmBarLabel,
+		farmBars,
+		OTHER_COLOUR,
+		otherLabel,
+		rankCrops,
+		SPARK_H,
+		SPARK_W,
+		type CropRow
+	} from './cards';
 	import CropGrids from './CropGrids.svelte';
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	let {
 		editor,
@@ -52,8 +69,18 @@
 	const farmIds = $derived(farms.map((f) => f.id));
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 1, true);
 
-	const cards = $derived(cropCards(crops, editor.model.cropAreas, farmIds, settings.apanMm, WATER_YEAR_MONTHS));
-	const bars = $derived(farmBars(farms, crops, editor.model.cropAreas));
+	// One ranking (planted area, largest first) orders the list, picks the colours and stacks the chart and bars.
+	const areaTotals = $derived(cropAreaTotals(editor.model.cropAreas, farmIds));
+	const ranked = $derived(rankCrops(crops, areaTotals));
+	const colouring = $derived(cropColouring(ranked));
+	const colourOf = (id: string) => colouring.colours.get(id) ?? OTHER_COLOUR;
+	const inOther = $derived(new Set(colouring.other));
+	const rows = $derived(cropRows(ranked, areaTotals, settings.apanMm, WATER_YEAR_MONTHS));
+	const namedRows = $derived(rows.filter((r) => !inOther.has(r.id)));
+	const otherRows = $derived(rows.filter((r) => inOther.has(r.id)));
+	const otherAreaM2 = $derived(otherRows.reduce((s, r) => s + r.areaM2, 0));
+
+	const bars = $derived(farmBars(farms, ranked, editor.model.cropAreas));
 	const totalM2 = $derived(bars.reduce((s, b) => s + b.totalM2, 0));
 	const summary = $derived(cropsSummary(crops.length, totalM2, bars.length, ha));
 	const unplantedNote = $derived(noPlantedAreaNote(farms.filter((f) => !bars.some((b) => b.id === f.id)).map((f) => f.name || '(unnamed)')));
@@ -62,10 +89,7 @@
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
 	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, farmIds));
 	const demandTotal = $derived(catchmentDemand(demand));
-	const stackParts = $derived(cropStacks(demand, crops, CROP_PALETTE.length));
-	const colours = $derived(cropColours(crops, stackParts));
-	const colourOf = (id: string) => colours.get(id) ?? 'var(--text-muted)';
-	const stacks = $derived(stackParts.map((s) => ({ ...s, color: colourOf(s.id) })));
+	const stacks = $derived(cropStacks(demand, crops, colouring.named).map((s) => ({ ...s, color: s.id === 'other' ? OTHER_COLOUR : colourOf(s.id) })));
 	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));
 	const chartLabel = $derived(
 		`Catchment irrigation demand by month, stacked by crop (${stacks.map((s) => s.name).join(', ')}). ` +
@@ -73,20 +97,36 @@
 	);
 	let chartW = $state(0);
 	let chartH = $state(0);
-	// The legend under the bars: one line when wide, room for two when narrow.
-	const barsH = $derived(Math.max(140, chartH - (chartW < 520 ? 46 : 26)));
-	// From 1100 px the lower row (chart beside the farm bars) reaches the window's bottom, less what the
-	// page keeps below it (its padding, room for the save bar), as the Network's map does; measured, not assumed.
-	let lowerEl: HTMLDivElement | undefined = $state();
-	let lowerTop = $state(0);
-	let lowerBelow = $state(0);
+	// The chart's legend (MonthlyBars draws it under the bars) wraps with the width: measured after each render.
+	let figEl: HTMLElement | undefined = $state();
+	let legendH = $state(0);
 	$effect(() => {
-		if (!lowerEl) return;
+		void chartW;
+		void stacks.length;
+		const l = figEl?.querySelector<HTMLElement>('.legend');
+		legendH = l ? l.offsetHeight + 8 : 0;
+	});
+	const barsH = $derived(Math.max(120, chartH - legendH));
+
+	// The key under the unit bars: the named crops planted somewhere, then "Other" when any of its crops is.
+	const planted = $derived(new Set(bars.flatMap((b) => b.parts.map((p) => p.cropId))));
+	const barKey = $derived([
+		...ranked.filter((c) => planted.has(c.id) && !inOther.has(c.id)).map((c) => ({ id: c.id, name: c.name || '(unnamed)', color: colourOf(c.id) })),
+		...(colouring.other.some((id) => planted.has(id)) ? [{ id: 'other', name: 'Other', color: OTHER_COLOUR }] : [])
+	]);
+
+	// From 1100 px of page width the list and the results fill the window below the header, less what the page keeps
+	// below them (its padding, room for the save bar), as the Network's map does; measured, not assumed.
+	let layoutEl: HTMLDivElement | undefined = $state();
+	let layoutTop = $state(0);
+	let layoutBelow = $state(0);
+	$effect(() => {
+		if (!layoutEl) return;
 		const measure = () => {
-			if (!lowerEl) return;
-			const r = lowerEl.getBoundingClientRect();
-			lowerTop = r.top + window.scrollY;
-			lowerBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+			if (!layoutEl) return;
+			const r = layoutEl.getBoundingClientRect();
+			layoutTop = r.top + window.scrollY;
+			layoutBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
@@ -94,8 +134,10 @@
 		return () => ro.disconnect();
 	});
 	let tableOpen = $state(false);
-	// The crops planted somewhere, for the bars' legend.
-	const plantedCrops = $derived(crops.filter((c) => bars.some((b) => b.parts.some((p) => p.cropId === c.id))));
+	// Narrower than 1100 px the list is capped (it scrolls in itself) until "Show all N crops".
+	const LIST_CAP = 6;
+	const listLen = $derived(rows.length + (otherRows.length ? 1 : 0));
+	let listAll = $state(false);
 
 	// --- the crop sheet: one crop's name and factors, while the URL names it (`crop=<id>`) ---
 	const cropParam = $derived(sections ? null : page.url.searchParams.get('crop'));
@@ -156,107 +198,144 @@
 	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add crop</button>{/if}
 {/snippet}
 
+{#snippet cropRow(r: CropRow, member: boolean)}
+	<li class="crop-row" data-testid="crop-row">
+		<span class="key" class:hatch={member} style:background={member ? null : colourOf(r.id)} aria-hidden="true"></span>
+		<span class="who">
+			<span class="name">{r.name}</span>
+			<span class="facts">{ha(r.areaM2)} ha · {r.peak >= 0 ? `peak need in ${WATER_YEAR_MONTHS[r.peak]}` : 'no crop factors yet'}{member ? ' · in Other' : ''}</span>
+		</span>
+		<svg viewBox="0 0 {SPARK_W} {SPARK_H}" preserveAspectRatio="none" class="spark" role="img" aria-label={r.label}>
+			<path d={r.fill} class="spark-fill" />
+			<polyline points={r.line} class="spark-line" />
+		</svg>
+		{#if r.high.length}
+			{@const tip = `Factor above 1.0 in ${r.high.join(', ')}`}
+			<button type="button" class="warn-flag" aria-label="{tip}: check {r.name} isn't an FAO Kc" data-tip={tip} onclick={() => openCrop(r.id)}>
+				<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6 15.2 14.4H.8Z" class="tri" /><path d="M8 6v4" class="bang" /><circle cx="8" cy="12.2" r=".9" class="dot" /></svg>
+			</button>
+		{:else}
+			<span></span>
+		{/if}
+		<button type="button" class="btn btn-sm" aria-label="{readonly ? 'View' : 'Edit'} {r.name}" onclick={() => openCrop(r.id)}>{readonly ? 'View' : 'Edit'}</button>
+	</li>
+{/snippet}
+
 {#if sections}
 	<CropGrids {editor} {settings} {readonly} {sections} />
 {:else}
-	{#if crops.length === 0}
-		<section class="panel" aria-label="No crops yet">
-			<div class="empty">
-				<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
-				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
-			</div>
-		</section>
-	{:else}
-		<section class="cards" aria-label="Crops">
-			{#each cards as c (c.id)}
-				<article class="panel card" aria-labelledby="crop-card-{c.id}" data-testid="crop-card">
-					<div class="card-head">
-						<h3 id="crop-card-{c.id}"><span class="key" style:background={colourOf(c.id)} aria-hidden="true"></span>{c.name}</h3>
-						<button type="button" class="btn btn-sm" aria-label="{readonly ? 'View' : 'Edit'} {c.name}" onclick={() => openCrop(c.id)}>{readonly ? 'View' : 'Edit'}</button>
-					</div>
-					<p class="muted small facts">
-						{ha(c.areaM2)} ha · {c.peak >= 0 ? `peak need in ${WATER_YEAR_MONTHS[c.peak]}` : 'no crop factors yet'}
-					</p>
-					<svg viewBox="0 0 {SPARK_W} {SPARK_H}" preserveAspectRatio="none" class="spark" role="img" aria-label={c.label}>
-						<line x1="0" x2={SPARK_W} y1={SPARK_H - 4} y2={SPARK_H - 4} class="spark-base" />
-						<path d={c.fill} class="spark-fill" />
-						<polyline points={c.line} class="spark-line" />
-					</svg>
-					<div class="spark-months" aria-hidden="true"><span>Oct</span><span>Jan</span><span>Apr</span><span>Jul</span><span>Sep</span></div>
-					{#if c.high.length}
-						<p class="warn small">Factor above 1.0 in {c.high.join(', ')}: check it isn't an FAO Kc entered as it is.</p>
-					{/if}
-				</article>
-			{/each}
-		</section>
-	{/if}
-
-	<div class="lower" bind:this={lowerEl} style:--lower-top="{lowerTop}px" style:--lower-below="{lowerBelow}px">
-		<section class="panel dem-card" aria-labelledby="crop-dem-h">
-			<div class="panel-head">
-				<h3 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h3>
-				<span class="muted small">Gross demand, whole catchment, m³/day</span>
-			</div>
-			{#if !apanSet}
-				<div class="alert alert-info">
-					A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
-					(Settings & calibration, Demand).
+	<div class="crops-page">
+		{#if crops.length === 0}
+			<section class="panel" aria-label="No crops yet">
+				<div class="empty">
+					<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
+					{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
 				</div>
-			{/if}
-			{#if farms.length === 0}
-				<p class="muted">No units yet. Add units on the <a href="?tab=network">Network</a>.</p>
-			{:else}
-				{#if stacks.length && demandTotal.annual > 0}
-					<figure class="demand-chart" bind:clientWidth={chartW} bind:clientHeight={chartH}>
-						<div class="chart-in">
-							{#if chartW > 0 && chartH > 0}
-								<MonthlyBars {stacks} unit="m³/day" label="Irrigation demand" ariaLabel={chartLabel} width={chartW} height={barsH} />
-							{/if}
-						</div>
-					</figure>
-					<p class="small" data-testid="crops-demand-summary">
-						{fmtQty(demandTotal.annual, 3)} million m³ a year ({fmtQty((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average),
-						highest in {WATER_YEAR_MONTHS[peakMonth]} at {fmtNum(demandTotal.monthly[peakMonth])} m³/day. Before effective rain and irrigation efficiency.
-					</p>
-				{:else if apanSet}
-					<p class="muted">No demand yet: add crops with their factors and each unit's planted area.</p>
-				{/if}
-				<details class="show-table" bind:open={tableOpen}>
-					<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
-					<div class="table-body">
-						<DemandTable {farms} {demand} {settings} total={demandTotal} areaM2={totalM2} />
+			</section>
+		{/if}
+		<div
+			class="layout"
+			class:no-list={crops.length === 0}
+			class:table-open={tableOpen}
+			bind:this={layoutEl}
+			style:--layout-top="{layoutTop}px"
+			style:--layout-below="{layoutBelow}px"
+		>
+			{#if crops.length}
+				<section class="panel list-card" class:capped={!listAll} aria-labelledby="crop-list-h">
+					<div class="panel-head">
+						<h3 id="crop-list-h">Crops</h3>
+						<span class="muted small">Largest planted area first</span>
 					</div>
-				</details>
-			{/if}
-		</section>
-
-		<section class="panel area-card" aria-labelledby="crop-area-h">
-			<div class="panel-head">
-				<h3 id="crop-area-h">Planted area by unit</h3>
-				<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
-			</div>
-			{#if farms.length === 0 || crops.length === 0}
-				<p class="muted">Add at least one unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
-			{:else}
-				{#if bars.length}
-					<ul class="bars" aria-label="Planted area by unit">
-						{#each bars as b (b.id)}
-							<li>
-								<a class="farm" href={withParam(page.url, 'farm', b.id)} aria-label="{b.name}: planted areas">{b.name}</a>
-								<span class="track" role="img" aria-label={farmBarLabel(b, ha)}>
-									{#each b.parts as p (p.cropId)}<span class="seg" style:width="{p.pct}%" style:background={colourOf(p.cropId)} title="{p.name}: {ha(p.areaM2)} ha"></span>{/each}
+					<ul class="crop-list" aria-label="Crops, largest planted area first">
+						{#each namedRows as r (r.id)}{@render cropRow(r, false)}{/each}
+						{#if otherRows.length}
+							<li class="other-row" data-testid="crop-other">
+								<span class="key" style:background={OTHER_COLOUR} aria-hidden="true"></span>
+								<span class="who">
+									<span class="name">{otherLabel(otherRows.map((r) => r.name))}</span>
+									<span class="facts">{otherRows.length === 1 ? 'The smallest crop, past the colours' : `${otherRows.length} smaller crops share one colour`} · {ha(otherAreaM2)} ha</span>
 								</span>
-								<span class="total">{ha(b.totalM2)} ha</span>
 							</li>
-						{/each}
+							{#each otherRows as r (r.id)}{@render cropRow(r, true)}{/each}
+						{/if}
 					</ul>
-					<ul class="legend" aria-hidden="true">
-						{#each plantedCrops as c (c.id)}<li><span class="key" style:background={colourOf(c.id)}></span>{c.name || '(unnamed)'}</li>{/each}
-					</ul>
-				{/if}
-				{#if unplantedNote}<p class="muted small note">{unplantedNote}</p>{/if}
+					{#if listLen > LIST_CAP}
+						<button type="button" class="btn btn-sm show-all" aria-expanded={listAll} onclick={() => (listAll = !listAll)}>
+							{listAll ? 'Show fewer' : `Show all ${rows.length} crops`}
+						</button>
+					{/if}
+				</section>
 			{/if}
-		</section>
+
+			<div class="results">
+				<section class="panel dem-card" aria-labelledby="crop-dem-h">
+					<div class="panel-head">
+						<h3 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h3>
+						<span class="muted small">Gross demand, whole catchment, m³/day</span>
+					</div>
+					{#if !apanSet}
+						<div class="alert alert-info">
+							A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+							(Settings & calibration, Demand).
+						</div>
+					{/if}
+					{#if farms.length === 0}
+						<p class="muted">No units yet. Add units on the <a href="?tab=network">Network</a>.</p>
+					{:else}
+						{#if stacks.length && demandTotal.annual > 0}
+							<figure class="demand-chart" bind:this={figEl} bind:clientWidth={chartW} bind:clientHeight={chartH}>
+								<div class="chart-in">
+									{#if chartW > 0 && chartH > 0}
+										<MonthlyBars {stacks} unit="m³/day" label="Irrigation demand" ariaLabel={chartLabel} width={chartW} height={barsH} />
+									{/if}
+								</div>
+							</figure>
+							<p class="small" data-testid="crops-demand-summary">
+								{fmtQty(demandTotal.annual, 3)} million m³ a year ({fmtQty((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average),
+								highest in {WATER_YEAR_MONTHS[peakMonth]} at {fmtNum(demandTotal.monthly[peakMonth])} m³/day. Before effective rain and irrigation efficiency.
+							</p>
+						{:else if apanSet}
+							<p class="muted">No demand yet: add crops with their factors and each unit's planted area.</p>
+						{/if}
+						<details class="show-table" bind:open={tableOpen}>
+							<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
+							<div class="table-body">
+								<DemandTable {farms} {demand} {settings} total={demandTotal} areaM2={totalM2} />
+							</div>
+						</details>
+					{/if}
+				</section>
+
+				<section class="panel area-card" aria-labelledby="crop-area-h">
+					<div class="panel-head">
+						<h3 id="crop-area-h">Planted area by unit</h3>
+						<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
+					</div>
+					{#if farms.length === 0 || crops.length === 0}
+						<p class="muted">Add at least one unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
+					{:else}
+						{#if bars.length}
+							<ul class="bars" aria-label="Planted area by unit, largest first">
+								{#each bars as b (b.id)}
+									<li>
+										<a class="farm" href={withParam(page.url, 'farm', b.id)} aria-label="{b.name}: planted areas">{b.name}</a>
+										<span class="track" role="img" aria-label={farmBarLabel(b, ha)}>
+											{#each b.parts as p (p.cropId)}<span class="seg" style:width="{p.pct}%" style:background={colourOf(p.cropId)} title="{p.name}: {ha(p.areaM2)} ha"></span>{/each}
+										</span>
+										<span class="total">{ha(b.totalM2)} ha</span>
+									</li>
+								{/each}
+							</ul>
+							<ul class="legend" aria-hidden="true" data-testid="crops-bar-key">
+								{#each barKey as c (c.id)}<li><span class="key" style:background={c.color}></span>{c.name}</li>{/each}
+							</ul>
+						{/if}
+						{#if unplantedNote}<p class="muted small note">{unplantedNote}</p>{/if}
+					{/if}
+				</section>
+			</div>
+		</div>
 	</div>
 
 	{#if sheetCrop && onsave}
@@ -300,52 +379,103 @@
 	.grids-pop a:hover {
 		background: var(--surface-2);
 	}
-	.cards {
-		display: grid;
-		/* Four to a row where they fit (A3), fewer as the width shrinks; a lone crop keeps a card's width. */
-		grid-template-columns: repeat(auto-fill, minmax(max(15rem, calc(25% - 0.75rem)), 1fr));
-		gap: 1rem;
-		margin-bottom: 1rem;
+	.crops-page {
+		container: crops-page / inline-size;
 	}
-	.card {
+	.layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+	}
+	.results {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		min-width: 0;
+		min-height: 0;
+	}
+	.layout .panel {
 		margin: 0;
+		min-width: 0;
+	}
+	.panel-head h3 {
+		font-size: 1.05rem;
+	}
+	.small {
+		font-size: 0.85rem;
+	}
+
+	/* --- the crop list --- */
+	.list-card {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
-		min-width: 0;
+		min-height: 0;
 	}
-	.card-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
+	.list-card .panel-head {
+		margin-bottom: 0.4rem;
 	}
-	.card h3 {
-		display: flex;
+	.crop-list {
+		list-style: none;
+		margin: 0 -0.4rem;
+		padding: 0 0.4rem;
+		overflow-y: auto;
+	}
+	.capped .crop-list {
+		/* About six rows, then it scrolls in itself (until Show all). */
+		max-height: 21rem;
+	}
+	.crop-row,
+	.other-row {
+		display: grid;
+		grid-template-columns: 0.75rem minmax(0, 1fr) 4.5rem 1.6rem auto;
 		align-items: center;
-		gap: 0.45rem;
-		margin: 0;
-		font-size: 1.05rem;
-		min-width: 0;
-		overflow-wrap: anywhere;
+		gap: 0.55rem;
+		padding: 0.4rem 0;
+		border-top: 1px solid var(--border);
+	}
+	.crop-list > li:first-child {
+		border-top: 0;
+	}
+	.other-row {
+		grid-template-columns: 0.75rem minmax(0, 1fr);
 	}
 	.key {
 		flex: none;
-		width: 0.7rem;
-		height: 0.7rem;
+		display: inline-block;
+		width: 0.75rem;
+		height: 0.75rem;
 		border-radius: 2px;
 	}
+	/* A crop inside "Other": no colour of its own, so a neutral hatch, not the group's grey. */
+	.key.hatch {
+		background: repeating-linear-gradient(135deg, var(--text-muted) 0 1.5px, transparent 1.5px 4px);
+		box-shadow: inset 0 0 0 1px var(--text-muted);
+	}
+	.who {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.name {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	/* The group's member names: two lines, then an ellipsis (each member has its own row below). */
+	.other-row .name {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+	}
 	.facts {
-		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-muted);
 	}
 	.spark {
 		display: block;
 		width: 100%;
-		height: 64px;
-	}
-	.spark-base {
-		stroke: var(--border);
-		vector-effect: non-scaling-stroke;
+		height: 26px;
 	}
 	.spark-fill {
 		fill: var(--accent);
@@ -354,40 +484,80 @@
 	.spark-line {
 		fill: none;
 		stroke: var(--accent);
-		stroke-width: 2;
+		stroke-width: 1.5;
 		stroke-linejoin: round;
 		vector-effect: non-scaling-stroke;
 	}
-	.spark-months {
-		display: flex;
-		justify-content: space-between;
-		font-size: 0.72rem;
-		color: var(--text-muted);
-	}
-	.warn {
-		margin: 0.2rem 0 0;
+	.warn-flag {
+		position: relative;
+		display: inline-grid;
+		place-items: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
 		color: var(--warning);
+		cursor: pointer;
 	}
-	.small {
-		font-size: 0.85rem;
+	.warn-flag svg {
+		width: 1.05rem;
+		height: 1.05rem;
 	}
-	.lower {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 1rem;
-		align-items: start;
+	.warn-flag .tri {
+		fill: currentColor;
 	}
-	.lower > .panel {
-		margin: 0;
-		min-width: 0;
+	.warn-flag .bang {
+		stroke: var(--surface);
+		stroke-width: 1.8;
+		stroke-linecap: round;
 	}
-	.panel-head h3 {
-		font-size: 1.05rem;
+	.warn-flag .dot {
+		fill: var(--surface);
+	}
+	.warn-flag:hover {
+		background: var(--warning-soft);
+	}
+	/* Its text on hover and focus (the full warning is in the crop sheet it opens). */
+	.warn-flag::after {
+		content: attr(data-tip);
+		position: absolute;
+		right: 0;
+		bottom: calc(100% + 4px);
+		z-index: 5;
+		width: max-content;
+		max-width: 14rem;
+		padding: 0.3rem 0.5rem;
+		border-radius: var(--radius-sm);
+		background: var(--text);
+		color: var(--surface);
+		font-size: 0.78rem;
+		line-height: 1.3;
+		text-align: left;
+		pointer-events: none;
+		opacity: 0;
+		visibility: hidden;
+	}
+	.warn-flag:hover::after,
+	.warn-flag:focus-visible::after {
+		opacity: 1;
+		visibility: visible;
+	}
+	.show-all {
+		align-self: flex-start;
+		margin-top: 0.6rem;
+	}
+
+	/* --- demand chart --- */
+	.dem-card {
+		display: flex;
+		flex-direction: column;
 	}
 	/* The chart takes its box's measured size (no zoomed text); the box's height comes from the layout. */
 	.demand-chart {
 		position: relative;
-		height: 260px;
+		height: 280px;
 		margin: 0 0 0.5rem;
 	}
 	.chart-in {
@@ -407,12 +577,22 @@
 	.table-body {
 		margin-top: 0.75rem;
 	}
+
+	/* --- planted area by unit --- */
+	.area-card {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
 	.bars {
 		list-style: none;
-		margin: 0;
-		padding: 0;
+		margin: 0 -0.4rem;
+		padding: 0 0.4rem;
 		display: grid;
-		gap: 0.35rem;
+		align-content: start;
+		gap: 0.2rem;
+		max-height: 24rem;
+		overflow-y: auto;
 	}
 	.bars li {
 		display: grid;
@@ -424,7 +604,7 @@
 	.farm {
 		display: inline-flex;
 		align-items: center;
-		min-height: 32px;
+		min-height: 30px;
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
@@ -446,12 +626,15 @@
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 	}
+	/* The key stays under the bars (they scroll, it doesn't). */
 	.legend {
+		flex: none;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.25rem 0.9rem;
-		margin: 0.7rem 0 0;
-		padding: 0;
+		margin: 0.6rem 0 0;
+		padding: 0.5rem 0 0;
+		border-top: 1px solid var(--border);
 		list-style: none;
 		font-size: 0.75rem;
 		color: var(--text-2);
@@ -462,7 +645,8 @@
 		gap: 0.35rem;
 	}
 	.note {
-		margin: 0.6rem 0 0;
+		flex: none;
+		margin: 0.5rem 0 0;
 	}
 	.empty {
 		padding: 1.5rem;
@@ -471,31 +655,73 @@
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
 	}
-	/* Demand chart beside the farm bars once there's room for both (A3's lower row). */
-	@media (min-width: 1100px) {
-		.lower {
-			grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem);
-			min-height: max(380px, calc(100vh - var(--lower-top, 0px) - var(--lower-below, 0px)));
-			align-items: stretch;
+
+	/* From a 60rem (840 px) page column, a window of about 1100 px beside the sidebar: the list a column that scrolls in itself, the chart over the bars filling the
+	   window beside it, so both stay on the first screen however many crops and units there are. */
+	@container crops-page (min-width: 60rem) {
+		.layout {
+			grid-template-columns: minmax(19rem, 25rem) minmax(0, 1fr);
+			height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--layout-below, 0px)));
 		}
-		.dem-card {
-			display: flex;
-			flex-direction: column;
+		.layout.no-list {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		/* An open demand table needs the room: the row grows and the page scrolls. */
+		.layout.table-open {
+			height: auto;
+			min-height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--layout-below, 0px)));
+		}
+		.list-card .crop-list {
+			flex: 1;
+			min-height: 0;
+			max-height: none;
+		}
+		.show-all {
+			display: none;
+		}
+		.results {
+			grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr);
+		}
+		.table-open .results {
+			grid-template-rows: auto minmax(20rem, 1fr);
 		}
 		.demand-chart {
 			flex: 1;
 			height: auto;
-			min-height: 240px;
-			max-height: 480px;
+			min-height: 160px;
+		}
+		.table-open .demand-chart {
+			flex: none;
+			height: 320px;
+		}
+		.bars {
+			flex: 0 1 auto;
+			min-height: 0;
+			max-height: none;
+		}
+	}
+	/* Wide enough for the chart and the bars side by side. */
+	@container crops-page (min-width: 1500px) {
+		.results {
+			grid-template-columns: minmax(0, 1.5fr) minmax(22rem, 1fr);
+			grid-template-rows: minmax(0, 1fr);
+		}
+		.table-open .results {
+			grid-template-rows: auto;
 		}
 	}
 	@media (max-width: 640px) {
 		.demand-chart {
-			height: 230px;
+			height: 240px;
+		}
+		.crop-row {
+			grid-template-columns: 0.75rem minmax(0, 1fr) 3.5rem auto auto;
+			gap: 0.4rem;
 		}
 		.bars li {
 			grid-template-columns: minmax(0, 1fr) auto;
-			gap: 0.2rem 0.6rem;
+			gap: 0.1rem 0.6rem;
+			padding-bottom: 0.3rem;
 		}
 		.track {
 			grid-column: 1 / -1;
@@ -503,6 +729,11 @@
 		}
 		.farm {
 			min-height: 44px;
+		}
+		.crop-row .btn-sm,
+		.warn-flag {
+			min-height: 44px;
+			min-width: 44px;
 		}
 	}
 </style>

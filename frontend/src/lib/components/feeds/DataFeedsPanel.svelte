@@ -3,7 +3,7 @@
 	project's scheduled feeds (CHIRPS rainfall, the CHIRPS-GEFS forecast, DWS
 	gauge flow) with their health, "Run now", and a form to attach one. Owners
 	attach, switch off and remove feeds; editors can run one now; viewers read.
-	Its own chunk: SettingsTab loads it lazily. Helpers in ./feeds.ts.
+	Part of the Settings tab's chunk. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
 	import { onMount, tick } from 'svelte';

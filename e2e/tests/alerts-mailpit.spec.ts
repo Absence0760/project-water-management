@@ -11,6 +11,7 @@
 // spec is skipped and says why; in CI it never skips (server-report.spec.ts's
 // rule).
 import { putSeries, seedRunnableProject } from '../support/api.ts';
+import { afMail, afWords } from '../support/af.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -51,22 +52,43 @@ async function message(id: string): Promise<{ subject: string; text: string; htm
 	return { subject: m.Subject, text: m.Text, html: m.HTML, headers };
 }
 
+const fill = (template: string, vars: Record<string, string>) => template.replace(/\{(\w+)\}/g, (whole, name: string) => vars[name] ?? whole);
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const words = await afWords();
+const mailWords = await afMail();
+
 /**
- * The words the farmer's alert email is checked for, per language.
- *
- * AFRIKAANS HOOK (docs/followups.md § Alerts, "Alert wording in Afrikaans"):
- * the alert emails have no reviewed Afrikaans yet, so an Afrikaans reader
- * gets English (marked lang="en"). When the mail.alert.* translations land,
- * add `{ locale: 'af', … }` here with the reviewed subject and sentences;
- * the test below then runs once per language.
+ * The words the farmer's alert email and the unsubscribe page are checked
+ * for, per language. The Afrikaans comes from the catalogues
+ * (support/af.ts); the farmer's phone is in that language too (`browser`),
+ * so the signed-out unsubscribe page opens in it.
  */
-const LANGUAGES: { locale: 'en' | null; lang: string; subject: (farm: string, project: string) => string; forecast: RegExp; stop: string }[] = [
+const LANGUAGES: {
+	locale: 'en' | 'af' | null;
+	lang: string;
+	browser: string;
+	subject: (farm: string, project: string) => string;
+	forecast: RegExp;
+	stop: string;
+	stopped: (project: string) => string;
+}[] = [
 	{
 		locale: null,
 		lang: 'en',
+		browser: 'en-ZA',
 		subject: (farm, project) => `Dam low on ${farm} — ${project}`,
 		forecast: /On the rain forecast of .+, the model expects the dam on Lower farm to fall to about \d+\s% of capacity around .+, below the alert level of \d+\s%\. Forecasts change\./,
-		stop: 'Stop these emails'
+		stop: 'Stop these emails',
+		stopped: (project) => `You won’t get dam level emails for ${project} any more.`
+	},
+	{
+		locale: 'af',
+		lang: 'af',
+		browser: 'af-ZA',
+		subject: (farm, project) => fill(mailWords('mail.alert.subject'), { what: fill(mailWords('mail.alert.dam.what'), { farm }), project }),
+		forecast: new RegExp(escape(mailWords('mail.alert.dam.forecast')).replace(/\\\{(\w+)\\\}/g, (_, name: string) => (name === 'farm' ? 'Lower farm' : '.+'))),
+		stop: words('Stop these emails'),
+		stopped: (project) => fill(words('You won’t get {kind} emails for {project} any more.'), { kind: words('dam level'), project })
 	}
 ];
 
@@ -122,18 +144,19 @@ for (const L of LANGUAGES) {
 		expect(token, 'the Stop these emails link').toBeTruthy();
 		expect(mail.headers['List-Unsubscribe']).toEqual([`<${API_URL}/alerts/unsubscribe?token=${token}>`]);
 		expect(mail.headers['List-Unsubscribe-Post']).toEqual(['List-Unsubscribe=One-Click']);
-		// The WUA gets it too (the owner, by default).
-		expect((await mailsTo(owner.email)).map((m) => m.Subject)).toContain(L.subject('Lower farm', projectName));
+		// The WUA gets it too (the owner, by default), in the owner's own language (none set: English).
+		expect((await mailsTo(owner.email)).map((m) => m.Subject)).toContain(LANGUAGES[0]!.subject('Lower farm', projectName));
 
 		// The email's link, opened signed out (a phone, a mail app's browser).
 		const link = /(http\S+\/alerts\/unsubscribe#t=[A-Za-z0-9_-]{43})/.exec(mail.text)![1]!;
-		const context = await browser.newContext({ viewport: { width: 360, height: 740 } });
+		const context = await browser.newContext({ viewport: { width: 360, height: 740 }, locale: L.browser });
 		const p = await context.newPage();
 		try {
 			await p.goto(link);
 			await expect(p.locator('[data-state="ask"]')).toBeVisible();
 			await p.getByRole('button', { name: L.stop }).click();
-			await expect(p.getByRole('status')).toHaveText(`You won’t get dam level emails for ${projectName} any more.`);
+			await expect(p.locator('html')).toHaveAttribute('lang', L.lang);
+			await expect(p.getByRole('status')).toHaveText(L.stopped(projectName));
 			await expectNoViolations(p);
 		} finally {
 			await context.close();

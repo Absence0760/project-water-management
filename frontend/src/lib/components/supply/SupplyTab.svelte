@@ -12,7 +12,7 @@
 	// `run=` (a picker in the header), else the newest run, as on the Summary.
 	// On a wide, tall enough page the cards and the chart are the height left
 	// in the window, the cards scrolling inside their column (DamsTab's way).
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';

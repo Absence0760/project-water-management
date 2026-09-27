@@ -1,40 +1,31 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta } from '$lib/api';
 	import AlertsPanel from '$lib/components/alerts/AlertsPanel.svelte';
-	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { downloads } from '$lib/export';
-	import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
-	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention, runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
 	import { supplyHref } from '$lib/components/supply/links';
-	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { DAMS_HREF, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
-	import MembersPanel from './MembersPanel.svelte';
-	import FarmersPanel from './FarmersPanel.svelte';
-	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
+	import { projectAnchor, projectHref } from '$lib/components/project/links';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
-	import TeamPanel from './TeamPanel.svelte';
 
 	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
 	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
 	const loadSupply = () => import('./SupplyByFarm.svelte');
-	// The share links (owners only) sit far below the first screen and load their own data: their own
-	// chunk keeps the page's first chunk under its budget (room the section header, issue #17, needed).
-	const loadShareLinks = () => import('./ShareLinksPanel.svelte');
-	// Recent changes (issue #42) sit below the first screen and load their own data: their own chunk, as the share links.
-	const loadRecentChanges = () => import('./RecentChanges.svelte');
 
 	let {
 		project,
@@ -42,11 +33,7 @@
 		series,
 		runs,
 		canEdit,
-		isOwner,
-		currentUserId,
-		visibleTabs,
-		onProjectChange,
-		onLeftProject
+		visibleTabs
 	}: {
 		project: Project;
 		editor: ModelEditor;
@@ -55,41 +42,21 @@
 		/** The page's runs list (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		canEdit: boolean;
-		isOwner: boolean;
-		currentUserId: string;
 		/** The tabs this member is shown (lib/workspace/tabs.ts); the setup checklist links only to these. */
 		visibleTabs: readonly string[];
-		onProjectChange: (p: Project) => void;
-		onLeftProject: () => void;
 	} = $props();
 
-	// Form fields start from the loaded project and are reset after each save.
-	let name = $state(untrack(() => project.name));
-	let description = $state(untrack(() => project.description ?? ''));
-	// The project's time zone dates its downloads (issue #45); an older API sends none.
-	const DEFAULT_TIME_ZONE = 'Africa/Johannesburg';
-	let timeZone = $state(untrack(() => project.timeZone ?? DEFAULT_TIME_ZONE));
-	const zones = (() => {
-		try {
-			return Intl.supportedValuesOf('timeZone');
-		} catch {
-			return [DEFAULT_TIME_ZONE];
-		}
-	})();
-	let saving = $state(false);
-	let error = $state<string | null>(null);
-	let savedAt = $state<number | null>(null);
-
-	const detailsDirty = $derived(
-		name.trim() !== project.name || description.trim() !== (project.description ?? '') || timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE)
-	);
+	// The model's facts, the project's details, import record and notes, and who has access moved to
+	// the Project page (issue #17): an old link to one of their panels (`#members-h`) goes there,
+	// replacing this entry so Back skips it.
+	onMount(() => {
+		const hash = page.url.hash.slice(1);
+		if (projectAnchor(hash)) goto(projectHref(hash), { replaceState: true, noScroll: true });
+	});
 
 	// The series and runs lists come from the page, which loads them before any
-	// tab renders and refreshes them after an upload or a run, so the counts and
-	// checklist are final on the first frame and never go stale.
-	const seriesCount = $derived(series?.length ?? null);
-	const runCount = $derived(runs?.length ?? null);
-
+	// tab renders and refreshes them after an upload or a run, so the checklist
+	// is final on the first frame and never goes stale.
 	// Built from the model as edited (unsaved changes included) so the
 	// checklist ticks as soon as the user fills a step in.
 	const steps = $derived(
@@ -264,60 +231,10 @@
 		})
 	);
 
-	const stats = $derived.by(() => {
-		const m = editor.model;
-		const farms = m.nodes.filter((n) => n.kind === 'farm');
-		const outlet = m.nodes.find((n) => n.downstreamNodeId === null);
-		return {
-			farms: farms.length,
-			gauges: m.nodes.length - farms.length,
-			areaKm2: m.nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0),
-			// Only a farm has a dam in the engine; a capacity on a gauge is inert (as the Dams page counts them).
-			damM3: farms.reduce((s, n) => s + (n.damCapacityM3 || 0), 0),
-			dams: farms.filter((n) => n.damCapacityM3 > 0).length,
-			crops: m.crops.length,
-			irrigatedHa: m.cropAreas.reduce((s, a) => s + (a.areaM2 || 0), 0) / 10_000,
-			transfers: m.transfers.filter((t) => t.enabled).length,
-			outlet: outlet?.name ?? null
-		};
-	});
-
-	// Anyone who can open the project can take a copy of it (viewers included).
-	const projectDownloads = $derived([
-		{
-			label: 'Download project (JSON)',
-			url: downloads.project(project.id),
-			hint: 'Model, settings and input series (runs not included)'
-		}
-	]);
-
 	// The section header's context line: which run the Summary shows (issue #17 A1).
 	$effect(() => fillHeader({ context: runContext }, !!pick));
 	const LEGACY_TITLE =
 		'Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
-
-	async function saveDetails(e: SubmitEvent) {
-		e.preventDefault();
-		saving = true;
-		error = null;
-		try {
-			const zoneChanged = timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE);
-			const p = await api.projects.update(project.id, {
-				name: name.trim(),
-				description: description.trim(),
-				...(zoneChanged ? { timeZone: timeZone.trim() } : {})
-			});
-			onProjectChange(p);
-			name = p.name;
-			description = p.description ?? '';
-			timeZone = p.timeZone ?? DEFAULT_TIME_ZONE;
-			savedAt = Date.now();
-		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
-		} finally {
-			saving = false;
-		}
-	}
 </script>
 
 {#snippet runContext()}
@@ -383,90 +300,26 @@
 	</div>
 {/if}
 
-<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
-<AlertsPanel projectId={project.id} {canEdit} />
-
-<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
-<PublishedBaseline projectId={project.id} {runs} {canEdit} />
-
-<!-- Each dam's level, its storage chart and the Dam levels table live on the Dams page (issue #17). -->
-{#if shown && damsTotal}
-	<p class="dams-link"><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></p>
-{/if}
-
-{#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
-
-<h2 class="model-h">The model</h2>
-<!-- Each fact links to the tab where it is edited or looked at; the link is
-     stretched over the whole tile, so the tile is the click target. -->
-<dl class="stats">
-	<div class="stat"><dt><a href="?tab=network">Units</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
-	<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
-	<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
-	<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
-	<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
-	<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
-	<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
-	<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
-</dl>
-
-<div class="grid">
-	<div class="col">
-		<section class="panel" aria-labelledby="details-h">
-			<div class="panel-head">
-				<h2 id="details-h">Project details</h2>
-				<DownloadMenu items={projectDownloads} />
-			</div>
-			<form onsubmit={saveDetails}>
-				{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-				<div class="field">
-					<label for="pd-name">Name</label>
-					<input id="pd-name" required maxlength="200" readonly={!canEdit} bind:value={name} />
-				</div>
-				<div class="field">
-					<label for="pd-desc">Description</label>
-					<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={description}></textarea>
-				</div>
-				<div class="field">
-					<label for="pd-tz">Time zone</label>
-					<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={timeZone} aria-describedby="pd-tz-h" />
-					<datalist id="pd-tz-list">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
-					<span class="hint" id="pd-tz-h">An IANA name, like Africa/Johannesburg. Downloads are dated by the day here.</span>
-				</div>
-				{#if canEdit}
-					<div class="form-row">
-						<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim() || !timeZone.trim()}>
-							{saving ? 'Saving…' : 'Save details'}
-						</button>
-						{#if savedAt && !detailsDirty}<span class="muted" role="status">Saved.</span>{/if}
-					</div>
-				{/if}
-			</form>
-		</section>
-		<!-- An imported project's record of what the importer flagged; nothing for any other. -->
-		<ImportReportPanel projectId={project.id} />
-		<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
-		<RecentNotes projectId={project.id} />
-		<!-- Who changed the model or settings last, and when (issue #42); the History tab has the rest. -->
-		{#if visibleTabs.includes('history')}
-			<Lazy load={loadRecentChanges}>
-				{#snippet children(RecentChanges)}<RecentChanges projectId={project.id} updatedAt={project.updatedAt} saving={editor.saving} />{/snippet}
-			</Lazy>
-		{/if}
+<!-- Below the first screen, compact (issue #17): the alerts firing now, beside what stakeholders
+     and farmers see, then where the rest lives, then the setup line. -->
+<div class="below">
+	<div class="pair">
+		<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
+		<AlertsPanel projectId={project.id} {canEdit} />
+		<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
+		<PublishedBaseline projectId={project.id} {runs} {canEdit} />
 	</div>
 
-	<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
-	<div class="col access">
-		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
-		<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
-		<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
-		<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
-		{#if isOwner}
-			<Lazy load={loadShareLinks}>
-				{#snippet children(ShareLinksPanel)}<ShareLinksPanel projectId={project.id} />{/snippet}
-			</Lazy>
+	<!-- Each dam's level lives on the Dams page; the model's facts, the project's details, notes and
+	     who has access on the Project page (issue #17). -->
+	<ul class="more" aria-label="More about this project">
+		{#if shown && damsTotal}
+			<li><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></li>
 		{/if}
-	</div>
+		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
+	</ul>
+
+	{#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
 </div>
 
 <style>
@@ -530,90 +383,39 @@
 		min-height: 6rem;
 		overflow: auto;
 	}
-	.dams-link {
-		margin: 0 0 1rem;
+	/* The alerts beside the published baseline once the tab is wide enough for two (a container
+	   query: the sidebar takes 240 px), each unchanged; stacked below that. */
+	.below {
+		container: summary-below / inline-size;
 	}
-	.dams-link a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
-	}
-	.model-h {
-		margin: 1.25rem 0 0.5rem;
-		font-size: 1.05rem;
-	}
-	.grid {
+	.pair {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
+		margin-bottom: 1rem;
 	}
-	/* Eight facts: one row on wide screens, then 4 × 2, then 2 × 4. */
-	dl.stats {
-		grid-template-columns: repeat(8, minmax(0, 1fr));
+	.pair > :global(.panel) {
+		margin: 0;
 	}
-	@media (max-width: 1280px) {
-		dl.stats {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
+	@container summary-below (min-width: 56rem) {
+		.pair {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			align-items: stretch;
 		}
 	}
-	@media (max-width: 560px) {
-		dl.stats {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			gap: 0.5rem;
-		}
+	.more {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1.5rem;
+		margin: 0 0 1rem;
+		padding: 0;
+		list-style: none;
 	}
-	.col {
-		display: grid;
-		gap: 0;
-		min-width: 0;
-	}
-	@media (max-width: 900px) {
-		.grid {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-	textarea,
-	input {
-		width: 100%;
-	}
-	/* The description grows with its text (up to a cap) instead of hiding it
-	   behind an inner scrollbar, which on a phone showed only a few lines.
-	   Browsers without field-sizing keep the fixed four rows. */
-	textarea {
-		field-sizing: content;
-		min-height: 6.5rem;
-		max-height: 24rem;
-	}
-	.stat {
-		position: relative;
-	}
-	.stat:hover {
-		border-color: var(--accent);
-	}
-	.stat:has(a:focus-visible) {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.stat dt a {
-		color: inherit;
-		text-decoration: underline;
-		text-decoration-color: var(--border-strong);
-		text-underline-offset: 3px;
-	}
-	.stat dt a:focus-visible {
-		outline: none;
-	}
-	.stat dt a::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: var(--radius);
-	}
-	dd.text {
-		font-size: 1rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	/* Inline-block, so a long link wraps as text; at least 24 px tall (target size). */
+	.more a {
+		display: inline-block;
+		min-height: 24px;
+		line-height: 24px;
 	}
 </style>

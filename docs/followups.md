@@ -1050,21 +1050,32 @@ the suggested order (the IDs carry the detail):
       Code splitting). Moved: the Invite farmers dialog is its own chunk
       (+1.2 total), taking the workspace page chunk 40.7 → 38.5 KB. Numbers
       per step in the bundle guard's change log.
-- [ ] **Per-chunk ceiling vs always-rendered lazy panels.** Some lazy
-      chunks load on every visit of their tab, so they only add split
-      overhead; they were split to keep the tab under the 42 KB per-chunk
-      ceiling. Inline, the Settings tab's data feeds, scheduled reports, API
-      keys, outcome settings and pan-coefficient helper save 6.0 KB of total
-      (a 59 KB Settings chunk), and the Runs tab's uncertainty and outcome
-      panels 2.8 KB (a 48 KB Runs chunk). One file is also the lighter,
-      single-request load for that tab. Durable fix: the guard's
-      `largestChunkKb` measures page and route chunks (the first load)
-      separately from tab chunks, with a tab ceiling near 60 KB, then these
-      fold back in. Also on the workspace page (left alone while #17's
-      section header and Compare runs work is in flight): the Overview's
-      always-rendered lazy panels (Flow vs reserve, Supply by farm, Dam
-      levels) and CompareView's. Trigger: the operator's call on the
-      ceiling, or the next Settings/Runs feature that needs room.
+- [x] **Per-chunk ceiling vs always-rendered lazy panels** (issue #17,
+      2026-09-26). The bundle guard now measures the workspace tab chunks
+      (the modules the catchment page's `LOAD` map imports lazily, found
+      through the chunk map `vite.config.ts`'s `chunkModuleMap` writes to
+      `.svelte-kit/output/client/.vite/`) against a 60 KB ceiling of their
+      own, apart from the 42 KB page and route ceiling; it fails if it finds
+      no tabs, a tab in more or fewer than one chunk, or a tab in the
+      workspace page's chunk. The Settings tab took back its data feeds,
+      scheduled reports, API keys, outcome and outlook settings and
+      pan-coefficient helper (~−6.5 KB total; the tab 57 KB), the Runs tab
+      its plausibility checks (~−1.3 KB; 27 KB). The uncertainty and outcome
+      panels this entry counted for Runs had already moved into the River &
+      reserve tab's chunk. Total 987 → 979 KB (numbers in the guard's change
+      log). Left as they are: the Overview's lazy panels (Flow vs reserve,
+      Supply by farm, Share links) would fold into the workspace page chunk,
+      the one every catchment's cold load pays for, under the page ceiling;
+      and Flow vs reserve and the water-year bars are shared with other
+      tabs, so they stay chunks of their own.
+- [ ] **Compare runs' always-rendered lazy panels.** CompareView (the
+      Compare tab, and the `/compare` route's page) still loads the paired
+      uncertainty band and the daily series overlay as chunks of their own,
+      though every comparison renders both. With the tab ceiling (60 KB;
+      CompareView is ~15 KB) they can fold in like the Settings and Runs
+      panels did; measure the total, the tab chunk and `/compare`'s cold
+      load. The 2026-09-26 change was scoped to Settings and Runs.
+      Trigger: the next Compare runs change, or the next bundle trim.
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →
@@ -1345,32 +1356,39 @@ yet; each lands with the work package named.
 
 ## Afrikaans (WP-2.5)
 
-The items waiting on the translator were tracked in [issue #49](https://github.com/Absence0760/project-water-management/issues/49), closed 2026-09-26 once everything that could be built ahead of the translator was; the two open items below are the tracker now.
+Issue #49 (the translation turnaround) is closed: on 2026-09-26 every
+farmer-facing string got Afrikaans, written by the `af-translator` agent and
+reviewed by the `af-checker` agent ([ui.md § Language](./ui.md#language)).
 
 The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
-No Afrikaans wording ships yet: none is reviewed.
 
-- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (604
-      strings: site, emails, farmer glossary) goes to the client's named
-      translator (roadmap Step 2, prerequisite 6). When it comes back: copy
-      each line, by its Id (a site string's id is a hash of its English; a
-      counted word's `.one` / `.other` rows go in one entry), into
-      `frontend/src/lib/i18n/messages/af.ts`,
-      `backend/src/mail/i18n/af.ts` or `frontend/src/lib/help/content.af.ts`
-      (with the `sourceHash` from the sheet), run `pnpm gen:i18n:sheet`, and
-      add an e2e that the farm view, the login page and an invite email are
-      Afrikaans with `<html lang="af">` (the plan's WP-2.5 e2e; today it
-      can only check that the page stays `lang="en"`). Trigger: the
-      translator is named and returns the sheet.
-- [ ] **Afrikaans boards** at 360 px (strings run 20–30 % longer) and an axe
-      pass on every translated page in Afrikaans. Done ahead with a
-      stand-in: `e2e/tests/af-layout.spec.ts` checks every translated page
-      at 360 px, light and dark, with axe, against every message's English a
-      third longer ([ui.md § Language](./ui.md#language)); all pass. What
-      remains: when the first reviewed batch lands the spec fails (the
-      stand-in is only served while af.ts is empty), and it is switched to
-      the real words. Trigger: the first reviewed batch lands.
+- [x] **Translation turnaround.** All 607 rows of
+      `docs/i18n/af-translation-sheet.md` (505 site messages, some with a
+      row per plural form; 70 email strings; 8 glossary entries of three
+      rows each) are in the three catalogues, through
+      `pnpm gen:i18n:apply`; the sheet is empty. The plan's WP-2.5 e2e is
+      `e2e/tests/language.spec.ts` (the sign-in page and the farm view in
+      Afrikaans with `<html lang="af">`); the invite email is
+      `backend/src/farms/invites.db.test.ts` (Afrikaans, `lang="af"`), the
+      alert email `alerts-mailpit.spec.ts`.
+- [x] **Afrikaans boards** at 360 px and an axe pass on every translated
+      page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
+      green.
+- [ ] **A native speaker's review.** The Afrikaans is machine-written and
+      machine-checked. Before the first farmers are invited in Afrikaans,
+      someone fluent (the client's translator, roadmap Step 2 prerequisite
+      6) reads the three catalogues (`frontend/src/lib/i18n/messages/af.ts`,
+      `backend/src/mail/i18n/af.ts`, `frontend/src/lib/help/content.af.ts`,
+      each with the English beside every entry) and corrects them in place.
+      The checker's open questions, to look at first: "Advies" for the
+      Advisory level, "redigeerders" for the WUA's editors, "Model: tekort"
+      as the model band, the ordinal day (`9d963c34`, a bare number, since
+      `Intl.PluralRules('af-ZA', ordinal)` only ever picks `other`), and
+      the upstream/downstream sentence, reworded as a label list
+      (`7f35d413`). The specs read the words from the catalogues, so a
+      correction needs no test change. Trigger: before Afrikaans-speaking
+      farmers are invited.
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
       `share.*` keys, with the switch in its header; it still imports none
       of the workspace's code, `boundary.test.ts`), the notes list inside
@@ -2569,16 +2587,13 @@ Left, each with its trigger:
       the API with the link's token), opens its *Stop these emails* link
       signed out, and checks the next crossing mails the WUA but not the
       farmer. It needs `pnpm dev:mail:up` and skips without it locally,
-      never in CI (`server-report.spec.ts`'s rule). The Afrikaans run waits
-      for the reviewed wording: the spec's `LANGUAGES` list has a marked
-      hook for it (next item).
-- [ ] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
-      `alerts.*`, `unsubscribe.*` and `farm.alerts.*` page keys are on
-      `docs/i18n/af-translation-sheet.md`; until they come back an Afrikaans
-      reader gets English (marked `lang="en"`). When they land, add the
-      `af` entry to `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` (the
-      AFRIKAANS HOOK), so the Mailpit e2e checks the Afrikaans mail too.
-      Trigger: § Afrikaans.
+      never in CI (`server-report.spec.ts`'s rule). It runs once per language,
+      English and Afrikaans (next item).
+- [x] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
+      alert and unsubscribe pages are in Afrikaans (§ Afrikaans), and
+      `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` has its `af` entry:
+      the Mailpit e2e checks the Afrikaans mail and the unsubscribe page on a
+      phone set to Afrikaans.
 - [x] **Per-feed staleness levels.** Built (057 `alert_rule.feed_id`):
       one `data_stale` rule per feed, each at its own level past that
       feed's usual delay, with a default per source (CHIRPS 3 days,

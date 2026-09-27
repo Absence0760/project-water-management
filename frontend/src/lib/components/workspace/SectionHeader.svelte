@@ -2,7 +2,7 @@
 	// One header per workspace section (issue #17, option A · the boards'
 	// header): the section's title, a one-line context under it, and the
 	// actions on the right (the page's rain-freshness pill, Add data and Run
-	// model around the tab's own, sectionHeader.svelte.ts). Under them, one
+	// model around the tab's own, headerSlot.svelte.ts). Under them, one
 	// slim line of notices (view only, new data) instead of full-width banners.
 	import type { Snippet } from 'svelte';
 

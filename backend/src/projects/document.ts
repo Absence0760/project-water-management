@@ -16,7 +16,7 @@ import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
-import { checkProvenance, ProvenanceFields, toCanonicalUnit } from '../series/merge.js';
+import { checkProvenance, ProvenanceFields, SERIES_PER_PROJECT_MAX, toCanonicalUnit } from '../series/merge.js';
 import { targetOf } from '../notes/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 import { DEFAULT_TIME_ZONE, TimeZone } from './timeZone.js';
@@ -53,6 +53,8 @@ export const ProjectFile = z.object({
 			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
 			.transform(toCanonicalUnit)
 		)
+		// A project's series cap (series/limits.ts), so one file can't create more than the series routes allow.
+		.max(SERIES_PER_PROJECT_MAX, `a project holds at most ${SERIES_PER_PROJECT_MAX} series`)
 		.default([])
 });
 export type ProjectFile = z.infer<typeof ProjectFile>;

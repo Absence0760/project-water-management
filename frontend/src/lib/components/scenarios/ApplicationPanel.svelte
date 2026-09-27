@@ -14,6 +14,7 @@
 		isOwner,
 		canDecide,
 		problems,
+		unverifiedRuns = 0,
 		locked = false,
 		onchange,
 		onleft
@@ -26,6 +27,13 @@
 		canDecide: boolean;
 		/** How many of its changes don't apply to its base (a submit is refused until none). */
 		problems: number;
+		/**
+		 * How many of its runs don't carry a matching server stamp (the API's
+		 * `unverifiedRunIds`, docs/security.md § Run stamps): written past the
+		 * model run, or changed since. The server refuses the decision until
+		 * none remain.
+		 */
+		unverifiedRuns?: number;
 		/**
 		 * The scenario editor is running it or saving it: the status moves wait,
 		 * or the run's re-read of the scenario could land after a submit and put
@@ -164,6 +172,14 @@
 		{#if s.status === 'draft' && problems > 0}<p class="hint">Remove the changes that don't apply before submitting.</p>{/if}
 	{/if}
 
+	{#if canDecide && unverifiedRuns > 0}
+		<div class="alert alert-warning" role="status" data-testid="application-unverified">
+			{unverifiedRuns === 1 ? '1 run of this application wasn’t' : `${unverifiedRuns} runs of this application weren’t`} stored by the model run itself: the server’s
+			stamp is missing or no longer matches the results, so {unverifiedRuns === 1 ? 'it can’t be signed off' : 'they can’t be signed off'}{s.status === 'submitted'
+				? `, and the application can’t be decided until ${unverifiedRuns === 1 ? 'it is' : 'they are'} deleted (Runs tab)`
+				: ''}.
+		</div>
+	{/if}
 	{#if canDecide && s.status === 'submitted'}
 		<form class="decide" onsubmit={decide} aria-labelledby="decide-h">
 			<h4 id="decide-h">Decide</h4>
@@ -177,7 +193,7 @@
 				<label for="decide-note">Reasons and conditions</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons}></textarea>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome}>Record the decision</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || unverifiedRuns > 0}>Record the decision</button>
 			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
 	{/if}

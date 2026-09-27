@@ -21,10 +21,12 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
+import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
+import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
 import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
@@ -38,8 +40,6 @@ import {
 } from './execute.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
-
-const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -57,11 +57,15 @@ function checkView(c: ScenarioCheck, role: Role) {
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
 	const scenario = applicantOpNames(s, role);
+	// An application's runs whose server stamp is missing or wrong (077,
+	// runs/stamp.ts), for the assessors: its decision waits until none remain.
+	// null for a team scenario and for anyone below editor.
+	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null };
+		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null, unverifiedRunIds };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
 	}
 }
@@ -82,6 +86,9 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 	throw err;
 };
 
+/** restrict_violation: scenario_signed_run_guard (072) refused the DELETE. */
+const PG_RESTRICT = '23001';
+const signedKept = () => new ApiError(409, 'this scenario has a signed-off run, so it is kept: the run stays the scenario run that was signed');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
 
@@ -141,7 +148,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios', async (c) => {
 		const id = c.req.param('id');
-		const body = CreateScenarioBody.parse(await json(c));
+		const body = CreateScenarioBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			// A viewer reads scenarios but makes none; a contributor makes applications.
@@ -202,7 +209,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.patch('/:id/scenarios/:sid', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = PatchScenarioBody.parse(await json(c));
+		const body = PatchScenarioBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const userId = c.get('userId');
@@ -272,14 +279,22 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (s.status === 'submitted' || s.status === 'decided') throw new ApiError(409, `a ${s.status} scenario can't be deleted`);
 			// Its base run stops being cited and may be trimmed: under the project's run lock, as a trim is.
 			await lockProjectRuns(db, id);
-			mustChange(await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]));
+			// A signed-off run stays the run that was signed, its scenario included
+			// (model_run.scenario_id would go NULL). The scenario_signed_run_guard
+			// trigger (072) refuses the DELETE too, whoever runs it, and sees the
+			// sign-offs a contributor can't read; its restrict_violation is the same 409.
+			const signed = await db.query('SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1 LIMIT 1', [sid]);
+			if (signed.rowCount) throw signedKept();
+			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string }) => {
+				throw err.code === PG_RESTRICT ? signedKept() : err;
+			});
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
 		});
 	})
 	.post('/:id/scenarios/:sid/runs', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = ScenarioRunBody.parse(await json(c));
+		const body = ScenarioRunBody.parse(await readJson(c, { optional: true }));
 		// A team scenario: an editor runs it. An application: whoever reads it
 		// as its owner or a shared member, and the assessors; never a viewer.
 		// Checked when the run is read and again when it is stored (runScenario).
@@ -313,7 +328,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios/:sid/rebase', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = RebaseBody.parse(await json(c));
+		const body = RebaseBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const current = await loadScenario(db, id, scenarioId(sid));
@@ -384,11 +399,17 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	// The assessor's decision: an editor who didn't make the application.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = DecideBody.parse(await json(c));
+		const body = DecideBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			const s = await loadScenario(db, id, scenarioId(sid));
 			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant can’t decide their own application');
+			// Decided on runs the model run stored, never on one written past it (077, runs/stamp.ts).
+			const unverified = await unverifiedScenarioRuns(db, id, s.id);
+			if (unverified.length)
+				throw runUnverified(
+					`this scenario can't be decided: ${unverified.length} of its runs (unverifiedRunIds) weren't stored by the model run itself (a server stamp missing or no longer matching its results); delete them and run it again`
+				);
 			await move(db, id, s, 'decided', { outcome: body.outcome, note: body.note });
 			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome }, true));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
@@ -416,7 +437,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios/:sid/members', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = ShareBody.parse(await json(c));
+		const body = ShareBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const s = await loadScenario(db, id, scenarioId(sid));
@@ -428,8 +449,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			let userId: string;
 			if ('email' in body) {
 				if (rank[role] < rank.viewer) throw new ApiError(403, 'an applicant shares with someone from …/share-candidates, by id');
-				// app_user has no RLS (sign-in needs it); the insert's trigger checks
-				// the address belongs to a contributor-or-above member.
+				// RLS on app_user (068) shows the project's people, so an outsider's
+				// address finds nothing; the insert's trigger checks the address
+				// belongs to a contributor-or-above member.
 				const { rows: users } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [body.email]);
 				if (!users[0]) throw new ApiError(404, 'no contributor or above on this project has that address');
 				userId = users[0].id;

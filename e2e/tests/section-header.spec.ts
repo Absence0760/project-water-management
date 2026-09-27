@@ -57,17 +57,19 @@ test.describe('desktop', () => {
 		await expect(h.getByTestId('crops-summary')).toContainText(/crops? · /);
 		await expect(actions).toHaveText(['+ Add crop', 'Add data', 'Run model']);
 
-		// Data: Add data is the section's main action; no Run model here. The context counts the series.
+		// Data: Add data is the section's main action, after the tab's Preview all data; no Run model here. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('2 input series · 1 behind');
-		await expect(actions).toHaveText(['Add data']);
+		await expect(actions).toHaveText(['Preview all data', 'Add data']);
 		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
 
-		// Runs: the tab's own form runs the model (with a label), so the header doesn't repeat it.
+		// Runs: the tab's own run form (with a label) takes Run model's place, last in the header, after a plain Add data.
 		await nav(page).getByRole('link', { name: 'Runs & results' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Run model' })).toHaveCount(0);
+		await expect(actions).toHaveText(['Add data', 'Run model']);
+		await expect(h.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
+		await expect(h.getByLabel(/^Run label/)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(1);
 	});
 

@@ -21,11 +21,13 @@ const CODES: Record<string, Msg> = {
 	account_exists: msg('An account with that email address already exists. Sign in, or reset your password.'),
 	wrong_credentials: msg('Wrong email or password.'),
 	signin_locked: msg('Too many sign-in attempts for this address. Try again in {wait}, or reset your password.'),
+	signup_throttled: msg('Too many accounts were made from your network. Try again in {wait}.'),
 	wrong_current_password: msg('Your current password is wrong.'),
 	password_changed_elsewhere: msg('Your password was changed somewhere else a moment ago. Sign in again.'),
 	link_invalid: msg('This link is invalid or has expired. Ask for a new one.'),
 	already_verified: msg('Your email address is already confirmed.'),
 	verification_sent_recently: msg('A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.'),
+	verification_limit: msg('Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.'),
 	invite_invalid: msg('This invitation is invalid or has expired.'),
 	note_farmer_own_farm: msg('You can add notes only to your own farm.'),
 	note_farm_visibility: msg('Only a note on a farm can be shown to its farmers.'),
@@ -33,7 +35,9 @@ const CODES: Record<string, Msg> = {
 	note_delete_denied: msg('Only the person who wrote a note, or the WUA, can delete it.'),
 	unsubscribe_link_gone: msg('This link doesn’t work any more.'),
 	export_throttled: msg('You downloaded your data a moment ago. Try again in {wait}.'),
-	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.')
+	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'),
+	body_refused: msg('Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.'),
+	run_unverified: msg('This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.')
 };
 
 // i18n-section: error.minutes
@@ -63,7 +67,7 @@ interface HttpFailure {
 const isHttpFailure = (e: unknown): e is HttpFailure => e instanceof Error && typeof (e as { status?: unknown }).status === 'number';
 
 /** Codes whose wording says how long to wait: `params.seconds`, as whole minutes. */
-const WAITS = new Set(['signin_locked', 'export_throttled']);
+const WAITS = new Set(['signin_locked', 'signup_throttled', 'export_throttled']);
 
 /** What to tell the reader about a failed request (anything thrown: anything else reads as a generic failure). */
 export function errorText(err: unknown): string {

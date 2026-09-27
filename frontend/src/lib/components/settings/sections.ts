@@ -1,7 +1,7 @@
 // The Settings & calibration page's in-page menu, one link per group in page
 // order, and the list of what blocks Save, each pointing at its group. The ids
 // are set on the panels in SettingsTab.svelte (and around Wr2012Section and EwrRulesSection,
-// and on DataFeedsPanel, which follows the form).
+// and on DataFeedsPanel, ApiKeysPanel and ReportSchedulesPanel, which follow the form).
 
 export const SETTINGS_SECTIONS = [
 	{ id: 'set-demand', label: 'Demand' },
@@ -26,6 +26,26 @@ export const SETTINGS_SECTIONS = [
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
+
+/**
+ * The menu's groups (issue #17): the model's inputs; the settings that only
+ * decide how results are read (they change no result); and what runs or
+ * connects by itself. The last group also links the panels after Data feeds,
+ * which save on their own: API keys (owners only) and Scheduled reports.
+ */
+export function settingsNavGroups(isOwner: boolean): { label: string; ids: string[] }[] {
+	const ids = SETTINGS_SECTIONS.map((s) => s.id as string);
+	const read = ids.indexOf('set-quality');
+	const auto = ids.indexOf('set-auto');
+	return [
+		{ label: 'Model inputs', ids: ids.slice(0, read) },
+		{ label: 'How results are read', ids: ids.slice(read, auto) },
+		{ label: 'Runs, feeds and reports', ids: [...ids.slice(auto), ...(isOwner ? ['set-api-keys'] : []), 'set-report-schedules'] }
+	];
+}
+
+/** Menu labels of the panels after Data feeds, which aren't Save blockers. */
+export const AFTER_FORM_LABELS: Record<string, string> = { 'set-api-keys': 'API keys', 'set-report-schedules': 'Scheduled reports' };
 
 export interface SaveBlocker {
 	id: SettingsSectionId;

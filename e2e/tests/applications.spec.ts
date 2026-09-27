@@ -3,26 +3,19 @@
 // farm, opens the project and gets the Applicant view; starts an application
 // on the published baseline, sees their own farm in full and the other farm
 // only as "Farm 1", raises their dam, runs and submits it. The assessor (the
-// project's owner) finds it in the Applications tab and decides it. Axe on
+// project's owner) finds it in the Applications tab and decides it; an
+// application whose run was changed behind the API (its server stamp no
+// longer matches, docs/security.md § Run stamps) shows the assessor a
+// warning and can't be decided. Axe on
 // both views, light and dark. Synthetic data only.
-import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, seedRunnableProject, type TestUser } from '../support/api.ts';
+import { addMember } from '../support/api.ts';
+import { seedApplicantProject } from '../support/applications.ts';
+import { tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const NAME = 'Raise the Upper farm dam';
-
-/** A published run, and an applicant linked to the Upper farm. */
-async function seedApplicantProject(page: Page, name: string, applicant: TestUser) {
-	const project = await seedRunnableProject(page.request, name);
-	const runId = await createRun(page.request, project.id, 'Baseline');
-	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
-	await addMember(page.request, project.id, applicant.email, 'contributor');
-	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
-	expect((await page.request.put(`${API_URL}/projects/${project.id}/farmers/${applicant.id}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
-	return { project, runId, upper };
-}
 
 test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
 	void owner;
@@ -38,9 +31,12 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(a.getByRole('link', { name: 'Upper farm' })).toBeVisible();
 	await expect(a.getByTestId('scenarios-empty')).toContainText('No applications yet.');
 
-	// A new application starts on the published baseline.
-	await a.getByLabel('Name', { exact: true }).fill(NAME);
-	await a.getByRole('button', { name: 'Create application' }).click();
+	// A new application starts on the published baseline: New application, at the top of their list, opens the dialog.
+	await a.getByRole('region', { name: 'Your applications' }).getByRole('link', { name: 'New application', exact: true }).click();
+	const create = a.getByRole('dialog', { name: 'New application' });
+	await expect(create.getByLabel('Base run')).toHaveCount(0);
+	await create.getByLabel('Name', { exact: true }).fill(NAME);
+	await create.getByRole('button', { name: 'Create application' }).click();
 	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
 	await expect(a.getByTestId('scenario-base')).toContainText('Based on run Baseline');
 
@@ -73,6 +69,9 @@ test('an applicant submits an application on the published baseline, and the ass
 	await row.getByRole('link', { name: NAME }).click();
 	await expect(page).toHaveURL(/tab=scenarios&scenario=/);
 	const decide = page.getByRole('form', { name: 'Decide' });
+	// Its run is the one the model run stored: no stamp warning (the control for the test below).
+	await expect(decide).toBeVisible();
+	await expect(page.getByTestId('application-unverified')).toHaveCount(0);
 	await decide.getByLabel('Approved with conditions').check();
 	await decide.getByLabel('Reasons and conditions').fill('Release 5 % of inflow in dry months.');
 	await decide.getByRole('button', { name: 'Record the decision' }).click();
@@ -83,6 +82,31 @@ test('an applicant submits an application on the published baseline, and the ass
 	await a.reload();
 	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
 	await expect(a.getByTestId('application-decision')).toContainText('Approved with conditions');
+});
+
+test('an application whose run was changed behind the API shows the assessor a warning and waits for its decision', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Stamped applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications unverified', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	const made = await req.post(`${P}/scenarios`, {
+		data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
+	});
+	expect(made.status()).toBe(201);
+	const sid = (await made.json()).scenario.id as string;
+	const ran = await req.post(`${P}/scenarios/${sid}/runs`, { data: {} });
+	expect(ran.status()).toBe(201);
+	expect((await req.post(`${P}/scenarios/${sid}/submit`, { data: {} })).status()).toBe(200);
+	await tamperRunSummary((await ran.json()).run.id);
+
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	await expect(page.getByTestId('application-unverified')).toHaveText(
+		'1 run of this application wasn’t stored by the model run itself: the server’s stamp is missing or no longer matches the results, so it can’t be signed off, and the application can’t be decided until it is deleted (Runs tab).'
+	);
+	const decide = page.getByRole('form', { name: 'Decide' });
+	await decide.getByLabel('Approved', { exact: true }).check();
+	await expect(decide.getByRole('button', { name: 'Record the decision' })).toBeDisabled();
 });
 
 test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
@@ -114,7 +138,7 @@ test('the owner puts an applicant and their consultant in one party, and the app
 	await expect(a.getByRole('textbox', { name: /email/i })).toHaveCount(0);
 
 	// The owner groups the applicant and the consultant in the Members panel.
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	for (const u of [applicant.user, consultant.user]) {
 		const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${u.id}`));

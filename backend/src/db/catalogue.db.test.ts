@@ -5,8 +5,28 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
 const APP_URL = process.env.DATABASE_URL!;
-/** Tables deliberately without RLS: app_user is needed before sign-in. */
-const NO_RLS = new Set(['app_user', 'schema_migrations']);
+/**
+ * Tables deliberately without RLS: only the migration runner's bookkeeping.
+ * app_user was here until 068_app_user_rls.sql (sign-in reads it before
+ * anyone is signed in; it now does so through SECURITY DEFINER lookups).
+ */
+const NO_RLS = new Set(['schema_migrations']);
+/**
+ * Views that may run with their owner's rights (security_invoker off), each
+ * with why. An owner-rights view reads its tables as the schema owner, so RLS
+ * never applies to it: whoever can select from the view sees every row.
+ * None today; an entry needs the same scrutiny as a SECURITY DEFINER function.
+ */
+const OWNER_RIGHTS_VIEWS = new Map<string, string>();
+/**
+ * Views in public that don't run as the caller: materialized views (always
+ * the owner's snapshot, never under RLS) and plain views without
+ * security_invoker=true, less the allowlist.
+ */
+const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+	WHERE n.nspname = 'public' AND (c.relkind = 'm' OR (c.relkind = 'v'
+	  AND NOT coalesce('security_invoker=true' = ANY (c.reloptions) OR 'security_invoker=on' = ANY (c.reloptions), false)))
+	ORDER BY 1`;
 /**
  * Tables water_app may UPDATE only column by column, and the only columns it
  * may update. A run is evidence: everything but its note (007_run_notes.sql)
@@ -83,9 +103,11 @@ const APPEND_ONLY = new Set([
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
  * soft-deleted: the body stays for the audit trail, hidden from all but
  * editors (037_notes.sql). An API key too: audit events name it
- * (audit_event.actor_api_key_id, 039_api_keys.sql).
+ * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
+ * only by the operator, as the schema owner, on a POPIA request
+ * (068_app_user_rls.sql; deployment.md § Runbooks item 7).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
@@ -93,6 +115,13 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
  * job, and goes with its outlook (063_seasonal_outlook.sql).
  */
 const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member']);
+/**
+ * Written only through a SECURITY DEFINER function, never inserted by
+ * water_app: a stored run input's key is the SHA-256 the database computes
+ * from its text, so no caller can choose it (074_series_blob_digest,
+ * app_store_series_blob).
+ */
+const NO_INSERT = new Set(['series_blob']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -131,6 +160,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'audit_event.actor_user_id': 'set null',
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
+	'account_mail_quota.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
 	'farm_link.added_by': 'set null',
 	'invite.invited_by': 'cascade',
@@ -188,6 +218,27 @@ describe('schema catalogue', () => {
 		expect(missing).toEqual([]);
 	});
 
+	it('runs every view as its caller (security_invoker), so RLS applies through it, bar the allowlist', async () => {
+		const { rows } = await db.query<{ relname: string }>(OWNER_RIGHTS_VIEWS_SQL);
+		expect(rows.map((r) => r.relname).filter((v) => !OWNER_RIGHTS_VIEWS.has(v))).toEqual([]);
+		// Every allowlisted view still exists and still needs its entry.
+		expect([...OWNER_RIGHTS_VIEWS.keys()].filter((v) => !rows.some((r) => r.relname === v))).toEqual([]);
+	});
+
+	it('positive control: the view guard sees an owner-rights view and passes an invoker one', async () => {
+		await db.query('BEGIN');
+		try {
+			await db.query('CREATE VIEW zz_probe_owner AS SELECT id FROM project');
+			await db.query('CREATE VIEW zz_probe_invoker WITH (security_invoker = true) AS SELECT id FROM project');
+			await db.query('CREATE MATERIALIZED VIEW zz_probe_mat AS SELECT id FROM project');
+			const { rows } = await db.query<{ relname: string }>(OWNER_RIGHTS_VIEWS_SQL);
+			const probes = rows.map((r) => r.relname).filter((v) => v.startsWith('zz_probe_'));
+			expect(probes).toEqual(['zz_probe_mat', 'zz_probe_owner']);
+		} finally {
+			await db.query('ROLLBACK');
+		}
+	});
+
 	it('has at least one policy on every RLS table', async () => {
 		const { rows } = await db.query<{ relname: string }>(
 			`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -207,6 +258,7 @@ describe('schema catalogue', () => {
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
 				if (NO_UPDATE.has(t.relname) && priv === 'UPDATE') continue;
 				if (NO_DELETE.has(t.relname) && priv === 'DELETE') continue;
+				if (NO_INSERT.has(t.relname) && priv === 'INSERT') continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
 			}
@@ -251,6 +303,15 @@ describe('schema catalogue', () => {
 				`public.${table}`
 			]);
 			expect(policies.map((p) => p.polname), `${table} delete policies`).toEqual([]);
+		}
+	});
+
+	it('grants water_app no INSERT, and has no insert policy, on tables written through a function (series_blob)', async () => {
+		for (const table of NO_INSERT) {
+			const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, 'INSERT') AS ok`, [`public.${table}`]);
+			expect(rows[0]!.ok, `${table} INSERT`).toBe(false);
+			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('a', '*')`, [`public.${table}`]);
+			expect(policies.map((p) => p.polname), `${table} insert policies`).toEqual([]);
 		}
 	});
 

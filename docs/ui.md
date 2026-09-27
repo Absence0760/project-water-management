@@ -1,5 +1,7 @@
 # The catchment workspace (UI)
 
+What each screen is and does. How to design, build and test a screen (process, layout rules, reusable pieces) is in [design/ui-playbook.md](./design/ui-playbook.md).
+
 ## App shell and account menu
 
 Every signed-in page sits in one frame (`lib/components/layout/AppShell.svelte`,
@@ -8,11 +10,18 @@ sign-in pages (`AuthCard`). The root layout wraps the page in it once a
 session exists. A **Skip to content** link comes first.
 
 - **900 px and wider:** a full-height sidebar (15rem, 240 px) from the top
-  edge, sticky while the page scrolls and scrolling on its own when taller
-  than the window. From the top: the app mark (a link to `/`), the **Main**
-  navigation (Projects / Teams / Help, `aria-current="page"` on the section
-  the URL is in; the project workspace counts as Projects), the page's own
-  navigation in the slot (below), and the account menu at the foot. Nothing
+  edge, sticky while the page scrolls. From the top: the app mark (a link to
+  `/`), the **Main** navigation (Projects / Teams / Help,
+  `aria-current="page"` on the section the URL is in; the project workspace
+  counts as Projects), the page's own navigation in the slot (below), and the
+  account menu at the foot. It is spaced so that, with a project open, every
+  section an owner sees fits a 1440 × 960 window with the account menu in
+  view and room for one more row (a two-line catchment name included;
+  `app-sidebar.spec.ts`). On a shorter window (1280 × 800) the slot scrolls
+  on its own instead of the whole sidebar, so the brand, Main and the account
+  menu stay on screen, and the open section is scrolled into view in it (the
+  slot's `scroll-padding` keeps it clear of the edges). Only below about
+  8rem of slot does the whole sidebar scroll. Nothing
   is fixed across the top, so `--header-h` (`app.css`) is 0 and sticky bars
   and in-page link targets stop at the top edge. A page (`.page`) starts at
   the sidebar's edge rather than centring in the width left, which left a
@@ -116,7 +125,7 @@ the standard "Loading…" state in the meantime
 The tabs are grouped into three sections (issue #17, option A · Results
 first): **Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
-calibration) and **Review** (Applications, History). The sections are
+calibration) and **Review** (Project, Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
@@ -124,8 +133,10 @@ the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
-  under a "Catchment" label, the project's name (a link to its Summary) and
-  your role badge (owner, editor, viewer), the section labels shown, with a
+  a "Catchment" label with your role badge (owner, editor, viewer) beside it,
+  the project's name (a link to its Summary; a long name is clamped to two
+  lines, the full name its tooltip and accessible name), the section labels
+  shown, with a
   viewer's **Show model inputs** at the end. **Data** carries an amber badge
   counting the series behind: the series a run is driven by (recorded rain,
   A-pan evaporation; never a forecast or a flow) ending more than
@@ -167,6 +178,7 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 | Transfers | `transfers` | | `lib/components/transfers/` |
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
+| Project | `project` | `details`, `members`, `sharing` | `lib/components/project/` ([§ Project](#project)) |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
 
@@ -177,7 +189,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, Data, Runs & results, Compare runs, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -191,9 +203,11 @@ checkbox isn't saved: it resets when the project is opened again.
 This is **presentation, not access control**: RLS still lets a viewer read
 every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
 opens it, and the sections list then shows that tab in its place while it is
-open (`stripTabs`), so you can see where you are. The Summary's checklist keeps a
-hidden tab's step and its status, but as plain text rather than a link; its
-headline facts still link to their tabs (a deep link, as above). The
+open (`stripTabs`), so you can see where you are. The one exception is
+Applications, which the API refuses a viewer: a viewer's `?tab=applications`
+link opens the Summary instead of an error (`canOpenTab`). The Summary's checklist keeps a
+hidden tab's step and its status, but as plain text rather than a link; the
+Project page's headline facts still link to their tabs (a deep link, as above). The
 per-member "choose your own tabs" preference is not built yet
 ([followups.md](./followups.md#roles-and-what-each-member-sees)); it will
 arrive through `prefs`.
@@ -248,23 +262,36 @@ role, freshness, Add data) and each tab's own header:
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
   **Unsaved changes** shows beside it while the model has edits (editors).
 - **A one-line context** under it. A tab gives its own through
-  `fillHeader({ context, actions })` (`workspace/sectionHeader.svelte.ts`,
+  `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
   run it shows (label, workbook-comparison and evidence badges, period,
   engine, "ran N days ago", **Open in Runs**); the Network its summary
   ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
-  line ("3 crops · 675 ha irrigated on 8 farms · …"); History what it holds.
-  The others count what they hold (`workspace/context.ts`): "2 runs",
-  "4 input series · 1 behind", "3 transfer rules · 2 active", "No runs yet"
-  on a Summary before the first run.
+  line ("3 crops · 675 ha irrigated on 8 farms · …"); Settings & calibration
+  where the runoff parameters came from; Runs & results its run count and
+  when the newest ran; River & reserve the run it shows (label, badges,
+  period, engine, the EWR rule); Units & supply, Dams, Scenarios,
+  Allocations, Project and Applications a summary of what they hold; History
+  what it holds. The others count what they hold (`workspace/context.ts`):
+  "2 runs" on Compare runs, "4 input series · 1 behind",
+  "3 transfer rules · 2 active", "No runs yet" on a Summary before the
+  first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
+  **Fit the parameters** (a viewer: **Fit record**, when there is one),
+  River & reserve's **Run** menu and **Open in Runs & results**, Units &
+  supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
+  **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
+  **+ Add volume**, Project's **Download** menu, Applications' **Decide the
+  longest waiting**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
-  same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
-  own form (with a label and Run forecast), so the header doesn't repeat it
-  there, and on Data **Add data** is the main (primary) action. Run model is
+  same `startRun` as the new-data line's Re-run model. On Runs & results the
+  tab's own run form (**Run label**, Run forecast, Run model) takes its place,
+  last, after a plain Add data (`fillHeader({ main })`, the header slot's
+  `main` part), and on Data **Add data** is the main (primary) action. Run model is
   disabled until there is a network and a rainfall series, and its
   accessible description says which is missing. A tab shown inside the grid
   modal or scenario override mode fills nothing.
@@ -362,24 +389,20 @@ put the results first; its first screen follows board A1 of the redesign
    side column's cards scroll inside themselves, and the page doesn't need
    scrolling to see any of it. Narrower, the columns stack and the chart is
    240 px tall; on a phone the KPIs are 2 × 2.
-3. **Below the first screen**, until the planned Project page exists: the
-   active alerts ([§ Alerts](#alerts)), the published baseline, a one-line
-   link **Dam levels for each dam → Dams** (once the latest run has dams; the
-   table moved to the [Dams](#dams) page), the setup checklist (usually the one-line "Setup
-   complete"), then **The model**: eight headline facts, project details,
-   the import record (an imported project only), recent notes
-   ([§ Notes](#notes)), **Recent changes**, team, members, farmers and share links.
-
-- **Recent changes** (`overview/RecentChanges.svelte`, issue #42; its own
-  chunk, as the share links, to keep the Summary's first chunk in budget):
-  the three newest saved changes to the model or settings
-  (`GET /history?kind=revision`), each in one line with the History tab's
-  wording (`overview/recentChanges.ts`: "Model changed: Upper farm: dam
-  capacity 150,000 m³ → 180,000 m³ and 2 more"), then who, when and the
-  save's reason, and a link to the History tab. Shown only to members who
-  have the History tab; reloads after a save of the model (the save bar) or
-  of the settings or details. e2e:
-  `e2e/tests/history.spec.ts`.
+3. **Below the first screen**, compact: the active alerts
+   ([§ Alerts](#alerts)) beside the published baseline (two columns once the
+   tab is 56rem wide, a container query; stacked below that), each panel
+   unchanged; one line of links, **Dam levels for each dam → Dams** (once the
+   latest run has dams; the table moved to the [Dams](#dams) page) and
+   **Model facts, details, team and sharing → Project**; then the setup
+   checklist, the one-line "Setup complete" once every step is done. The
+   model's headline facts, project details, import record, recent notes,
+   team, members, farmers and share links moved to the [Project](#project)
+   page (2026-09-27, issue #17). A link to one of their panels' old
+   fragments on the Summary (`#details-h`, `#import-record-h`,
+   `#recent-notes-h`, `#team-h`, `#members-h`, `#farmers-h`, `#share-h`,
+   and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
+   sent there, replacing the history entry so Back skips it.
 
 - **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
   record is in: the Runs tab's *EWR vs simulated outflow* chart
@@ -494,83 +517,6 @@ put the results first; its first screen follows board A1 of the redesign
   drawer; several: Crops; before anything is planted the checklist's crops
   step covers it). Run items wait for the run's summary.
 
-- **Headline facts** each link to the tab where they are edited or looked at
-  (farms, area, dams and the outflow gauge to Network, irrigated area to
-  Crops, transfers to Transfers, time series to Data, runs to Runs). The
-  whole tile is the click target (the label's link is stretched over it), and
-  a focused tile gets an outline.
-- **Import record** (`overview/ImportReportPanel.svelte`, 017_project_import),
-  under Project details, only for a project imported through the import dialog
-  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
-  shows nothing). "Imported from the b023 workbook *file* on *date time* by
-  *name*.", the importer and web build, then the review's two lists, shared
-  with it (`import/ImportReportLists.svelte`): **Importer notes** and the
-  **Unmapped report** (a workbook's only), each with its count sentence and
-  the list behind a *Show the N notes* / *Show the N items* disclosure, closed
-  at first. Items the client trimmed past the caps show as "And N more …, not
-  kept." Every member sees it, viewers included, so a reviewer or assessor
-  can check what the importer interpreted long after the import. All the text
-  came from the file and renders as text only.
-- **Time zone** (Project details, under Description; issue #45): the
-  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
-  from the browser's list of zones, saved with **Save details** (editors;
-  read-only for viewers). Every download of the project (CSV, JSON, the
-  .xlsx workbook, the server report PDF) is dated by the calendar day there,
-  so an export made just after local midnight carries today's date, not
-  UTC's yesterday. The same day dates what the server counts for a person:
-  the portfolio's ages, the feeds' health, the farm page's "not recent"
-  notice and forecast date, and the alerts (their "today" and the 06:00
-  digest). A zone the server doesn't know is refused with its error.
-- **Layout**: Project details (and the import record) on the left; on the
-  right, "who has access": Team above Members (or "Shared directly with" for a
-  team project), so the two panels that refer to each other sit together, then
-  **Farmers**. Below 900 px it is one column in the order details, import
-  record, team, members, farmers, share links.
-- **Members**: each applicant row has an **Applying party** box for owners
-  (saved on change; blank for none): an applicant shares applications only
-  with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text.
-- **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
-  farms linked to them, by name. Owners change a farmer's farms and remove
-  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
-  opens a dialog with two modes: *One farmer* (email, a tick box per farm,
-  the email's language) and *Several, from a CSV* (`email,farm,language`,
-  one farm per row, pasted or uploaded, header optional; parsing in
-  `overview/farmers.ts`). A CSV is previewed first: a table of every row's
-  line, email, farm and what will happen (added, invited, or the row's
-  error), from a server dry run that sends nothing; **Send** then does it and
-  the table shows the results. A verified account is added at once; anyone
-  else is invited and listed under **Pending farmer invitations** (owners
-  only) with their farms, who sent it and when it expires, with Resend and
-  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
-  Farmers aren't in the Members list (it hides the `farmer` role), and a
-  farmer never sees this tab: their own view is WP-2.6. A link to a farm
-  deleted but not yet saved reads "a removed farm".
-- **Share links** (WP-2.3 phase 2, `overview/ShareLinksPanel.svelte`, rules
-  in `overview/shareLinks.ts`), owners only, under Farmers: read-only links
-  to the published baseline for people outside the project. *Make link*
-  takes who it's for (up to 100 characters) and how long it works (1 week,
-  30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
-  field with **Copy** (it falls back to selecting the field when the
-  clipboard is refused), because the token isn't kept. The list shows each
-  link's label and state (Live, Expired, Withdrawn), who made it and when,
-  when it ends or who withdrew it, and when it was last opened (to the
-  hour), live links first. **Withdraw** asks first, then the link shows the
-  dead-link state to whoever holds it. With nothing published, a note says
-  a link opens only once a run is published.
-- On the **Network** tab, a farm with linked farmers says how many in its
-  detail panel, and removing it asks first, naming the farmers who lose
-  access when the model is saved.
-- The **description** box grows with its text (up to about 24rem) instead of
-  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
-  without it keep four rows).
-
-Email addresses (member rows here and on team pages,
-pending invitations, the confirm-email banner) render through
-`common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
-`-`, `_` or `+` rather than mid-word on a phone.
-
 ## Dams
 
 `?tab=dams` (`dams/DamsTab.svelte`, rules in `dams/dams.ts` and
@@ -642,6 +588,120 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart or table.
+
+## Project
+
+`?tab=project` (`project/ProjectTab.svelte`; aliases `details`, `members`,
+`sharing`), first under **Review** (issue #17, option A): what the project is
+and who can open it. Every member who sees the Summary sees it
+(`TAB_GROUP.project = 'core'`, no model inputs needed); an applicant sees the
+Applicant view instead. Its own chunk. Everything on it sat below the
+Summary's first screen until 2026-09-27 and moved unchanged (the panels'
+files moved from `overview/` to `project/`); the Summary links here and
+sends its old `#…-h` fragments here ([§ Summary](#summary)). A reading page:
+it scrolls, and isn't fitted to the window.
+
+- **Header**: the section header titled "Project", with the context line
+  "Personal project · created 3 Sep 2026 · time zone Africa/Johannesburg"
+  (or "Team “North WUA” · …"; `project/project.ts` `projectContext`) and
+  **Download** (Download project (JSON): the model, settings and input
+  series; every member, viewers included), both through `fillHeader`. The
+  download menu was in the Project details panel's head.
+- **The model**: eight headline facts (units and gauges, catchment area, dam
+  capacity and farm dams, irrigated area and crops, active transfers, time
+  series, model runs, the outflow gauge), counted from the page's lists and
+  the model as edited, so an upload or a run shows at once.
+- **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`)
+  waits for that panel's heading, scrolls it to the top and holds it while
+  the page settles (`holdAnchor`), with focus on the heading. History's
+  "farmers to link again" notes link to `#farmers-h`.
+- **Headline facts** each link to the tab where they are edited or looked at
+  (farms, area, dams and the outflow gauge to Network, irrigated area to
+  Crops, transfers to Transfers, time series to Data, runs to Runs). The
+  whole tile is the click target (the label's link is stretched over it), and
+  a focused tile gets an outline.
+- **Import record** (`project/ImportReportPanel.svelte`, 017_project_import),
+  under Project details, only for a project imported through the import dialog
+  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
+  shows nothing). "Imported from the b023 workbook *file* on *date time* by
+  *name*.", the importer and web build, then the review's two lists, shared
+  with it (`import/ImportReportLists.svelte`): **Importer notes** and the
+  **Unmapped report** (a workbook's only), each with its count sentence and
+  the list behind a *Show the N notes* / *Show the N items* disclosure, closed
+  at first. Items the client trimmed past the caps show as "And N more …, not
+  kept." Every member sees it, viewers included, so a reviewer or assessor
+  can check what the importer interpreted long after the import. All the text
+  came from the file and renders as text only.
+- **Time zone** (Project details, under Description; issue #45): the
+  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
+  from the browser's list of zones, saved with **Save details** (editors;
+  read-only for viewers). Every download of the project (CSV, JSON, the
+  .xlsx workbook, the server report PDF) is dated by the calendar day there,
+  so an export made just after local midnight carries today's date, not
+  UTC's yesterday. The same day dates what the server counts for a person:
+  the portfolio's ages, the feeds' health, the farm page's "not recent"
+  notice and forecast date, and the alerts (their "today" and the 06:00
+  digest). A zone the server doesn't know is refused with its error.
+- **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
+  on a phone), then Project details, the import record, recent notes and
+  recent changes on the left; on the right, "who has access": Team above
+  Members (or "Shared directly with" for a team project), so the two panels
+  that refer to each other sit together, then **Farmers** and share links. The columns answer to
+  the page's width (container queries on `project-page`: two columns from
+  about 760 px of page), then one column in the order facts, details, import
+  record, notes, changes, team, members, farmers, share links.
+- **Recent changes** (`project/RecentChanges.svelte`, issue #42): the three
+  newest saved changes to the model or settings
+  (`GET /history?kind=revision`), each in one line with the History tab's
+  wording (`project/recentChanges.ts`: "Model changed: Upper farm: dam
+  capacity 150,000 m³ → 180,000 m³ and 2 more"), then who, when and the
+  save's reason, and a link to the History tab. Shown only to members who
+  have the History tab; reloads after a save of the model (the save bar) or
+  of the settings or details. e2e: `e2e/tests/history.spec.ts`.
+- **Members**: each applicant row has an **Applying party** box for owners
+  (saved on change; blank for none): an applicant shares applications only
+  with the members of their own party, so put an applicant and their
+  consultant or client in the same one. Others see the party as text.
+- **Farmers** (WP-2.1, `project/FarmersPanel.svelte`): each farmer with the
+  farms linked to them, by name. Owners change a farmer's farms and remove
+  one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
+  opens a dialog with two modes: *One farmer* (email, a tick box per farm,
+  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  one farm per row, pasted or uploaded, header optional; parsing in
+  `project/farmers.ts`). A CSV is previewed first: a table of every row's
+  line, email, farm and what will happen (added, invited, or the row's
+  error), from a server dry run that sends nothing; **Send** then does it and
+  the table shows the results. A verified account is added at once; anyone
+  else is invited and listed under **Pending farmer invitations** (owners
+  only) with their farms, who sent it and when it expires, with Resend and
+  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
+  Farmer invites stay out of the Members panel's pending list.
+  Farmers aren't in the Members list (it hides the `farmer` role), and a
+  farmer never sees this page: their own view is WP-2.6. A link to a farm
+  deleted but not yet saved reads "a removed farm".
+- **Share links** (WP-2.3 phase 2, `project/ShareLinksPanel.svelte`, rules
+  in `project/shareLinks.ts`), owners only, under Farmers: read-only links
+  to the published baseline for people outside the project. *Make link*
+  takes who it's for (up to 100 characters) and how long it works (1 week,
+  30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
+  field with **Copy** (it falls back to selecting the field when the
+  clipboard is refused), because the token isn't kept. The list shows each
+  link's label and state (Live, Expired, Withdrawn), who made it and when,
+  when it ends or who withdrew it, and when it was last opened (to the
+  hour), live links first. **Withdraw** asks first, then the link shows the
+  dead-link state to whoever holds it. With nothing published, a note says
+  a link opens only once a run is published.
+- On the **Network** tab, a farm with linked farmers says how many in its
+  detail panel, and removing it asks first, naming the farmers who lose
+  access when the model is saved.
+- The **description** box grows with its text (up to about 24rem) instead of
+  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
+  without it keep four rows).
+
+Email addresses (member rows here and on team pages,
+pending invitations, the confirm-email banner) render through
+`common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
+`-`, `_` or `+` rather than mid-word on a phone.
 
 ## Project list
 
@@ -1205,9 +1265,9 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 
 ## Crops & demand
 
-A page of pictures over the crop grids (issue #17, option A · A3;
-`components/crops/CropsTab.svelte`). Like the Network it answers first and
-keeps every grid one click away:
+The answers first, the crop grids one click away (issue #17, option A · A3;
+`components/crops/CropsTab.svelte`). Built to hold a real catchment's 9 crops
+on 10 units, and 30 on 20, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
@@ -1215,50 +1275,83 @@ keeps every grid one click away:
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas|demand`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
-- **Crop cards**, four to a row where they fit (one column on a phone): the
-  crop's colour key and name, its planted area on the farms shown and the
-  month of its **peak need** (A-pan × factor; the factor alone while A-pan is
-  unset; "no crop factors yet" when every factor is 0), and a sparkline of its
-  12 factors, Oct → Sep, an image whose name gives the range and highest
-  month (`cropCards` in `crops/cards.ts`). A crop with a factor above 1.0
-  says so on its card ("Factor above 1.0 in Jan: check it isn't an FAO Kc").
-  **Edit** (viewers: **View**) opens the **crop sheet**.
+- **Crop list** ("Crops", *Largest planted area first*): one compact row per
+  crop, sorted by planted area on the units shown, largest first (equal areas,
+  unplanted crops included, keep crop order; `rankCrops`). A row has the
+  crop's colour key, its name, its area and the month of its **peak need**
+  (A-pan × factor; the factor alone while A-pan is unset; "no crop factors
+  yet" when every factor is 0), a small sparkline of its 12 factors, Oct →
+  Sep, an image whose name gives the range and highest month (`cropRows` in
+  `crops/cards.ts`), and **Edit** (viewers: **View**), which opens the **crop
+  sheet**. A crop with a factor above 1.0 gets a warning icon, a button named
+  "Factor above 1.0 in Jan: check Vines isn't an FAO Kc" whose short text
+  shows on hover and focus; it opens the sheet, which carries the full
+  warning. The display order the engine and the grids use is still set in the
+  Crop factors grid; the list only sorts what it shows. When there are more
+  crops than colours, an **Other** row after the coloured ones names its
+  members ("Other: Crop 10, Crop 11 and …", two lines at most) with their
+  total area, and each member's row follows it with a hatched key and "in
+  Other" instead of the group's grey.
 - **Irrigation demand by month:** the catchment's gross demand per
-  water-year month, stacked by crop (`MonthlyBars` in stacked mode, drawn at
-  the card's measured size so its text isn't scaled), with the annual volume,
-  mean m³/s and peak month under it. **Show table** opens the demand table
-  (`crops/DemandTable.svelte`: the formula, m³/day per month, the mean and
-  Mm³/a per farm and for the catchment) in place. An alert says when A-pan
-  isn't set (demand is then zero).
-- **Planted area by farm:** one stacked bar per farm with something planted,
-  split by crop in the chart's colours, scaled to the largest farm, with its
-  total ha (`farmBars`). Each bar is an image named with its parts
-  ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha"); a legend line follows.
-  A farm's name opens the [farm drawer](#farm-drawer) (`farm=<nodeId>`,
-  keeping the page's other parameters). **Edit areas** (viewers: **Areas
-  table**) opens the planted-areas grid. Under the bars, a muted note names
-  every farm whose planted area adds up to zero ("Farm 5, Farm 6 and Farm 8
-  have no planted area, so their irrigation demand counts as zero."), at
-  most five names then "and N more" (`noPlantedAreaNote`).
-- **Layout:** from 1100 px the demand chart and the farm bars sit side by
-  side and that row reaches the window's bottom (its top and the room the
-  page keeps below it are measured, as the Network's map); the chart grows
-  with it (240–480 px). Below that they stack, and the page scrolls (it isn't a
-  dashboard). On a phone the bars put the farm and total above a full-width
-  bar.
+  water-year month, stacked by crop in the list's order, largest at the
+  bottom, "Other" on top (`MonthlyBars` in stacked mode, drawn at the card's
+  measured size so its text isn't scaled; its legend's height is measured
+  after each render and taken off the plot). Hovering a segment names the
+  month, crop and value. The annual volume, mean m³/s and peak month sit
+  under it. **Show table** opens the demand table (`crops/DemandTable.svelte`:
+  the formula, m³/day per month, the mean and Mm³/a per unit and for the
+  catchment) in place. An alert says when A-pan isn't set (demand is then
+  zero).
+- **Planted area by unit:** one stacked bar per unit with something planted,
+  largest total first, split by crop in the list's colours and order, scaled
+  to the largest unit, with its total ha (`farmBars`). Each bar is an image
+  named with its parts ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha");
+  hovering a segment names its crop and area. The bars scroll inside the card
+  and the crop key stays pinned under them (the coloured crops planted
+  somewhere, then Other), so it is never cut off. A unit's name opens the
+  [farm drawer](#farm-drawer) (`farm=<nodeId>`, keeping the page's other
+  parameters). **Edit areas** (viewers: **Areas table**) opens the
+  planted-areas grid. Under the key, a muted note names every unit whose
+  planted area adds up to zero ("Farm 5, Farm 6 and Farm 8 have no planted
+  area, so their irrigation demand counts as zero."), at most five names then
+  "and N more" (`noPlantedAreaNote`).
+- **Layout** (a container query on the page column, `crops-page`): from a
+  60rem (840 px) column, which is a window of about 1100 px beside the
+  sidebar, the crop list is a left column (19–25rem) that scrolls inside
+  itself, and the demand chart over the unit bars fills the rest; the row
+  reaches the window's bottom (its top and the room the page keeps below it
+  are measured with a ResizeObserver, as the Network's map), so the chart and
+  the bars stay on the first screen however many crops and units there are.
+  From a 1500 px column the chart and the bars sit side by side. An open
+  demand table lets the row grow and the page scroll. Narrower, the list
+  comes first, capped at about six rows (it scrolls inside itself, and
+  **Show all N crops** / **Show fewer** lift the cap, `aria-expanded`), then
+  the chart, then the bars (also capped, key pinned). On a phone everything
+  is one column with no sideways scroll, the bars put the unit and total
+  above a full-width bar, and the row buttons are 44 px targets.
 
-Everything follows unsaved edits, and one set of crop colours serves the
-chart, the bars and the cards' keys: theme tokens (`--series-1…3`,
-`--brand-node`, `--warning`, `--accent`), so light and dark mode both work.
-A crop with its own part in the chart keeps that part's colour; with more
-than six crops the five largest by annual demand keep a colour and the rest
-are grouped as "Other" in grey; a crop with no demand yet takes the next
-unused colour (`cropColours`). The chart's parts come from the same per-farm
+**Crop colours.** One set serves the list, the chart and the bars: nine
+theme tokens (`--series-1…3`, `--series-5…10` in `app.css`, each with a
+light and a dark step; `--series-4` is the line charts' own violet and the
+crop set skips it), in an order validated so every adjacent pair stays apart
+for colour-blind readers in both themes (the dataviz palette check: adjacent
+CVD ΔE ≥ 8.4, normal-vision ΔE ≥ 19.3, every colour ≥ 3:1 on the dark
+surface; aqua, yellow and pink are under 3:1 on the light one, which the
+row names, the key and the table carry). The chart and the bars stack crops
+in that same order, so neighbouring segments are the validated pairs. The
+colours go to the crops **ranked by planted area** (`cropColouring`): the
+largest nine get one each, so no two named crops ever share a colour, and
+any further crops are grouped as "Other" in a neutral grey (`--text-muted`)
+that no named crop uses. Area rather than annual demand because it is known
+before A-pan is set (demand is then zero for every crop), it is what the
+list and the unit bars show, and editing a month's evaporation doesn't
+repaint the crops. The chart's parts come from the same per-farm
 computation as the table: `farmDemands` splits each farm's engine demand
 (`grossFarmDemandM3PerDay`) by crop, `catchmentDemand` gives the totals and
-`cropStacks` the parts, which sum to them. It is gross demand, before the
-daily effective-rain reduction (and the soil-water store that carries rain
-over, engine ≥ 0.14.0).
+`cropStacks` the parts (the named crops, then "Other (N crops)"), which sum
+to them. It is gross demand, before the daily effective-rain reduction (and
+the soil-water store that carries rain over, engine ≥ 0.14.0). The Irrigation
+demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
 ### Crop sheet
 
@@ -1419,28 +1512,104 @@ the Network tab.
 
 ## Transfers
 
-One row per transfer rule: source and destination node, the months it runs
-(twelve toggles, water-year order, with **All**/**None**), a maximum rate
-(m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
-which it stops, a **Priority** and an enabled switch. Priority is a whole
-number, lower moves first; equal priorities share a source dam pro rata to
-their limits ([engine-audit Q18](./engine-audit.md)). A new rule starts after
-the existing ones (the highest priority + 1). The help explains the
-destination's room cap (N4). The empty state says what a transfer
-is (most catchments have none); with fewer than two nodes it links to the
-Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
-its remove button on top, From and To side by side, the month toggles six to a
-row at tap size, then the numbers and an **Enabled** switch whose label is
-part of the tap target. The table's column headers and their ⓘ tips move into
-each card's field labels.
+A page of two cards under the section header, which counts the rules ("3
+transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
+map** (the Network, where transfers are dashed arrows) and **+ Add transfer**
+(editors, with at least two units). A new rule starts after the existing ones
+(the highest priority + 1), and the cursor lands in its **From**, scrolled into
+view.
+
+**Transfer rules** is one row per rule: its number (with **off** under it when
+the rule is switched off, and a tinted row), **From → To** (side by side from
+an 80rem-wide container, stacked below that), the months it runs (twelve
+toggles in water-year order, with the months in words and **All**/**None**
+under them), a maximum rate (m³/s), an optional daily cap (m³), the minimum
+source-dam storage (%) below which it stops, a **Priority**, an **On** switch
+(named "transfer N enabled") and remove. Priority is a whole number, lower
+moves first; equal priorities share a source dam pro rata to their limits
+([engine-audit Q18](./engine-audit.md)). The help explains the destination's
+room cap (N4). Thirty rules fit at 1280 × 800 without scrolling the table
+sideways.
+
+**When water moves** has a bar per month, Oct … Sep: how many enabled rules
+run in it and the most they can move in a day together, each rule's
+min(rate × 86 400, daily cap) summed (`transfers/capacity.ts`). It is an upper
+bound: on the day the source dam's minimum and the destination's room also
+limit it. A screen reader hears each month as a sentence ("Nov: 2 rules, up to
+6,912 m³ a day").
+
+From 1100 × 620 the two cards are the height left in the window (less the save
+bar) and the page doesn't scroll: the rules scroll inside their card and When
+water moves takes what they leave, so with a few rules its bars are tall and
+with thirty they keep a strip at the bottom. The empty state says what a
+transfer is (most catchments have none) and has its own **Add transfer**; with
+fewer than two units it links to the Network tab.
+
+In a container up to 64rem (a phone, a narrow window) each rule becomes a card,
+two to a row where there is room: "Transfer N" with its remove button on top,
+From and To side by side, the month toggles six to a row at tap size, then the
+numbers and an **Enabled** switch whose label is part of the tap target. The
+column headers and their ⓘ tips move into each card's field labels, the page
+scrolls rather than a box inside it, and the months show six to a row.
+
+The Network's **Transfers** grid (`grid=transfers`) and scenario override mode
+show the same table alone, with **+ Add transfer** under it and no months
+card.
 
 ## Data
 
-Each series shows its role in the model, its period, its last date and age,
+`?tab=series` (`?tab=data` and `?tab=timeseries` also work;
+`series/SeriesTab.svelte`), under **Build the model** (issue #17, option A;
+no board of its own, so it follows the Dams page's list-and-chart layout
+with the table the data needs).
+
+- **Header**: the section header titled "Data", its context line counting
+  the series and those behind ("5 input series · 2 behind",
+  `workspace/context.ts`), then the Rain up to pill, **Preview all data**
+  (filled through `fillHeader`; absent with no series) and **Add data**, the
+  main (primary) action for editors. The tab's own notices (new data since
+  the latest run with its *Re-run the model* link, a feed rebuilding a
+  series, a failed delete or relabel) are slim lines under the header, like
+  the page's.
+- **Freshness first**: the table lists the series **behind** first, most
+  days behind first, then the series a run reads, then the rest (another
+  series of that kind is read, reference only), keeping the list's order
+  within each group (`series/freshness.ts` `freshnessOrder`). *Behind* is
+  exactly the sidebar badge's rule (`freshness().behind`): a series a run is
+  driven by (recorded rain, daily A-pan) ending more than 7 days
+  (`STALE_DAYS`) before the viewer's date; a forecast runs ahead and observed
+  flow only scores a run, so neither is. Each such row carries a **Behind**
+  pill beside its age and an amber edge, the key line says what it means,
+  and the panel head repeats "2 behind (more than 7 days old)", so the
+  table, the header and the badge always give the same count. **Data up
+  to** is the column straight after the series. (Until 2026-09-26 any row
+  older than 31 days, flow included, was amber, which disagreed with the
+  badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
+  (`describeAge`; those two days used to read "1 months" / "1 years").
+- **Picking a series**: clicking a row (or its **View** button) charts it
+  through the URL (`series=<id>`, `withParam`), so the link can be shared
+  and Back returns to the series before. Without `series=` (or with one that
+  no longer exists) the observed flow a run reads is charted, else the main
+  rainfall, else the first. Deleting the charted series drops the parameter
+  (`replaceState`); an upload through the form below charts the new series.
+  When the layout is stacked, the chart comes into view after a pick.
+- **Layout**: when the page is at least 720 px wide and the window at least
+  720 px tall, the table and the chart are the height left in the window
+  below their top (measured with a `ResizeObserver` on `body`, less the save
+  bar; at least 540 px): the table takes up to 55 % and its rows scroll
+  inside its box (the sticky column headers stay), the chart fills the rest
+  (the plot takes what the chart's head, legend and caption leave). Shorter
+  or narrower, the page scrolls as before, and below 640 px each row is a
+  card. The gauge-vs-logger table, the double mass panel, Data checks, the
+  Upload CSV form and *What the model uses* follow below.
+- **Add data from the header** refreshes the table at once: the tab takes
+  the page's new series list when it changes (before 2026-09-26 the table
+  kept its own copy until the page was reloaded).
+
+Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Editors can **Delete** a series (after a
+their kind by name) are marked. Editors can **Delete** a series (after a
 confirm; runs already stored are not affected). A CHIRPS series shows which
 product and version it holds (issue #40 part c): editors get a select
 (*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
@@ -1467,7 +1636,7 @@ timestamp closes its interval. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card
-(series and role on top, then labelled Period / Data up to / Missing (% of
+(series and role on top, then labelled Data up to / Period / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. For editors the
@@ -1543,7 +1712,7 @@ side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
 and the window's height, with the table filling what's left and only the rows
 in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
-The card header's **Preview all data** button opens it with every column shown; a
+The section header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
 un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its
@@ -1615,11 +1784,36 @@ running. The workbook code loads only then, in a worker, never with the page.
 
 ## Settings & calibration
 
-- **On this page.** Under the intro, a **Settings sections** menu links to
+A reading page (issue #17, option A): the long form scrolls under the
+section header, which it fills (`fillHeader`) like the other sections.
+
+- **Header.** The context line says where the GR4J parameters in the form
+  came from (`fitSummary`, `settings/calibration.ts`): "GR4J · fitted 15 Jan
+  2025 · KGE′ 0.93 in calibration" (the fit record's day and its in-sample
+  score on its own objective), with "· changed since the fit" whenever the fit
+  record below lists a caveat (a parameter edited by hand, the forcing, the
+  window or the record changed; it follows the unsaved form), or "GR4J · no
+  fit record: the parameters were set by hand or imported". The actions add
+  **Fit the parameters** for editors (a link to `#set-fit`), or **Fit record**
+  for a viewer when there is one, before Add data and Run model. The old
+  intro paragraph is gone: the header and the menu's groups say what it
+  said, and the monthly tables' own Oct … Sep headers show the water year.
+- **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
+  Project page's recent notes, `notes.ts` `noteHref`; `?tab=calibration`
+  still works) land on that group once the tab's chunk has drawn it, held
+  while the page settles (`holdAnchor`), with focus on its heading. Before,
+  the browser's own jump ran before the lazy tab existed and the page opened
+  at the top.
+- **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, then `#set-feeds` after the form; listed by
-  `settings/sections.ts`). It is the shared in-page menu
+  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
+  form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
+  listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
+  named for screen readers and set apart by a wider gap: **Model inputs**
+  (Demand … Simulation period), **How results are read** (Data quality,
+  Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
+  and reports**. It is the shared in-page menu
   (`common/SectionNav.svelte`, also on Runs & results): a bar of pill links
   that sticks at the top (under the phone bar on a phone) down the long form and marks the group
   being read with `aria-current="location"` (scroll spy: `activeSectionId`
@@ -1637,7 +1831,9 @@ running. The workbook code loads only then, in a worker, never with the page.
   only). When something blocks Save it says how many groups have a problem
   and links to each one (`saveBlockers`; the link's accessible name carries
   the message), and that group's menu link gets a red dot ("has a problem").
-  Each problem is also shown next to its field.
+  Each problem is also shown next to its field. The bar ends with the form;
+  a line under it tells editors that Data feeds, API keys (owners) and
+  scheduled reports save as they change, not with Save settings.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
@@ -1680,7 +1876,9 @@ which checks every catchment tab).
   Advanced, the recession tables; they are gone with the model.)
   - **GR4J**: X1, X3 and X4, each with its typical and allowed range
     (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
-    input refuses values outside those bounds. The GR4J view also has the
+    input refuses values outside those bounds, and shows at most three
+    decimals (display only: a fit writes nine, which stay stored until the
+    field is edited). The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0.
@@ -1703,8 +1901,8 @@ which checks every catchment tab).
       the row stays editable after, and the preset's name goes into the
       **Pan coefficient source** note below the row. Below it, a collapsed **Suggest from
       FAO-56 Table 5 (humidity, wind, siting)** helper
-      (`settings/PanCoefficientHelper.svelte`, loaded as its own chunk and
-      hidden on a read-only view): the pan siting (Case A, green crop, or
+      (`settings/PanCoefficientHelper.svelte`, part of the Settings tab's
+      chunk, hidden on a read-only view): the pan siting (Case A, green crop, or
       Case B, dry fallow) as radios, the windward fetch as a select (1, 10,
       100 or 1000 m), an optional reduction for bare surroundings (0–20 %),
       the mean RH (%) and wind at 2 m (m/s) for each of the 12 months, and a
@@ -1970,8 +2168,7 @@ which checks every catchment tab).
   whole minutes blocks Save. Saving only this group doesn't mark the runs as
   out of date (it changes no input).
 - **Outcome matrix** (`#set-outcomes`, issue #53 R4, `settings.outcomes`;
-  `outcomes/OutcomeSettingsSection.svelte`, a lazy chunk inside the form,
-  since the Settings chunk is at its bundle ceiling): how the Runs tab's
+  `outcomes/OutcomeSettingsSection.svelte`, part of the form): how the Runs tab's
   [outcome matrix](#outcome-matrix) reads a demand sweep. **Water-year
   classes**: *Automatic* (terciles, quintiles once the record has 25
   complete years; the default), *Terciles* or *Quintiles*. **Risk
@@ -1988,8 +2185,8 @@ which checks every catchment tab).
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
 - **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
-  `outlook/OutlookSettingsSection.svelte`, a lazy chunk inside the form,
-  like the outcome matrix's): how the Runs tab's
+  `outlook/OutlookSettingsSection.svelte`, part of the form, like the
+  outcome matrix's): how the Runs tab's
   [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
   the default season (1 Oct – 30 Apr)** ticked by default and a **Default
   pending the client** badge while it is (O3); unticked, the decision date
@@ -2004,7 +2201,7 @@ which checks every catchment tab).
 
 Below the settings form (it saves on its own, never through the save bar) is
 **Data feeds** (`#set-feeds`; `lib/components/feeds/DataFeedsPanel.svelte`,
-its own chunk loaded with the tab; WP-2.10,
+part of the Settings tab's chunk; WP-2.10,
 [architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
@@ -2088,8 +2285,8 @@ its own chunk loaded with the tab; WP-2.10,
 ### API keys
 
 Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
-`lib/components/apiKeys/ApiKeysPanel.svelte`, its own chunk loaded with the
-tab; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
+`lib/components/apiKeys/ApiKeysPanel.svelte`, part of the Settings tab's
+chunk; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
 or a script uses to push daily readings into the project's series.
 
 - **Make an API key**: a name, how long it works (until revoked, 90 days, 1
@@ -2113,8 +2310,8 @@ or a script uses to push daily readings into the project's series.
 ### Scheduled reports
 
 Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
-`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
-the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+`lib/components/report/ReportSchedulesPanel.svelte`, part of the Settings
+tab's chunk; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
 
 - **The list**, one card per schedule: "Every Monday at 07:00
@@ -2278,20 +2475,44 @@ read it before.
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
   week", the Summary's *Supply by unit* and its short-units card, and the
-  Runs & results link row lead here.
+  run header's *Units & supply* link on Runs & results lead here.
 - **Empty states:** no run yet (editors get **Run the model (Runs &
   results)**; a viewer reads that an editor can run it); no units in the model
   (a link to the Network); a run with no units (added since: run again).
 
 ## Runs & results
 
-- **The rail.** On wide screens (over 900px) a left rail holds the runs
-  list. It is sticky, and a long list scrolls inside its panel (at least
-  7.5rem tall) so the rail fits the window without clipping. Narrower, the
-  rail stacks above the results.
+- **The page** (issue #17): a reading page with the runs list beside the
+  shown run. The section header's line counts the runs and says when the
+  newest ran ("20 runs · newest ran today", "No runs yet"), and for an
+  editor the **run form** sits where the other pages have Run model, last in
+  the header: a **Run label** field, **Run forecast** (with a forecast
+  series) and **Run model**. Its status (what a run still needs, flow shares
+  over 100 %, unsaved model changes, inputs changed since the latest run,
+  the progress while a run goes, else "Runs use the saved network…") is one
+  slim line under the header (`#run-note`, the buttons' accessible
+  description), with the progress bar under it. A viewer gets no form, and
+  the inputs-changed note as before.
+- **The rail.** Where the page is at least 50rem (700 px) wide (a container
+  query, `runs-page`), a 250 px left rail holds the runs list beside the
+  results. It is sticky and never taller than the window from where it
+  starts (under the header at the top of the page, at its sticky offset
+  once scrolled, less the save bar): a long list scrolls inside its panel
+  (at least 7.5rem tall), so nothing in the rail is clipped. Narrower, the
+  rail stacks above the results and the list scrolls inside its panel past
+  20rem (about five rows), so the shown run starts near the top.
+- **Outcomes for this run.** The run header has one line, "For this run:
+  River & reserve → · Units & supply →" (a navigation landmark, *Outcomes
+  for this run*; the links are named "River & reserve for this run" and
+  "Units & supply for this run"), to the [River & reserve](#river--reserve)
+  and [Units & supply](#units--supply) pages for the shown run. It replaced
+  the two link rows (`#res-river`, `#res-units`) and their groups, which a
+  link still reaching Runs & results with those anchors is sent to (the page
+  itself, same run, and the reporting window for Units & supply; the entry
+  is replaced, so Back skips it; `movedHref` in `runs/sections.ts`).
 - **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
   When the project has a forecast series (`rain_forecast_mm`, uploaded or
-  fed by CHIRPS-GEFS), the run bar has **Run forecast** beside Run model: the
+  fed by CHIRPS-GEFS), the run form has **Run forecast** beside Run model: the
   record as an ordinary run, then the days after the last recorded rain on
   forecast rain, shown apart. The project keeps one forecast run (a new one
   replaces the last unless it is pinned, published or cited). **Run model**
@@ -2318,7 +2539,7 @@ read it before.
 - **On this page.** Above the results, the same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
-  `runs/sections.ts` in groups). Each group's name leads its pills, and each
+  `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper). Each group's name leads its pills, and each
   group is a list labelled by that name. It sticks at the top (under the
   phone bar on a phone) down the long results page, marks the section being read, wraps to about two
   rows on a laptop, and on phones is one sideways strip.
@@ -2341,32 +2562,23 @@ read it before.
      stretches). Then one line of **model checks** (`credibility`): the
      self-checks, the plausibility findings, the WR2012 flag and the calibration
      fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
-  2. **River & Reserve**: one row (`#res-river`, menu entry **On River &
-     reserve**) linking to [River & reserve](#river--reserve) for the shown
-     run (`?tab=river&run=<id>`). Its panels (Reserve compliance by month,
-     EWR vs outflow, EWR by month, the **Uncertainty bands**, the **Outcome
-     matrix**, the **Seasonal outlook** and the water account) moved there
-     (issue #17); they are still described below. A link to one of them here
-     (`#res-reserve`, …) is sent there, and the headline's "by month of the
-     year" goes there too.
-  3. **Units & users**: one row (`#res-units`, menu entry **On Units &
-     supply**) linking to [Units & supply](#units--supply) for the shown run
-     (`?tab=supply&run=<id>`). Its panels (curtailment, led by the
-     share-the-pain board, with the other water users and the EWR sites
-     tables; assurance of supply; unit detail) and the summary's per-unit
-     table moved there (issue #17); they are still described below. A link to
-     one of them here (`#res-curtailment`, …) is sent there.
-  4. **Model quality**: the hydrograph with the flow-duration curve under it
+  2. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
      observed, plausibility checks.
-  5. **Record**: notes & evidence (with the run's inputs), publication:
+  3. **Record**: notes & evidence (with the run's inputs), publication:
      sign-off, after the results.
-  6. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
+  4. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
-  The menu names the same groups. The bullets below describe each panel; the
-  order above is the page's.
-- **Run model** takes an optional **Run label** (e.g. "Baseline"). The
+  The menu names the same groups. The river's panels (Reserve compliance,
+  EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
+  the seasonal outlook, the water account) are on River & reserve and the
+  units' (curtailment, assurance of supply, unit detail, the per-unit table)
+  on Units & supply (issue #17); a link to one of them here (`#res-reserve`,
+  `#res-curtailment`, …) is sent to its panel there. They are still
+  described below. The bullets below describe each panel; the order above
+  is the page's.
+- **Run model** (in the section header, above) takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
   rainfall series, and while the farms' flow shares add up to more than 100 %
   (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
@@ -2807,7 +3019,7 @@ read it before.
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
   there is no table. The **Plausibility checks** (`#res-plausibility`,
-  `runs/PlausibilityPanel.svelte`, its own chunk, helpers in
+  `runs/PlausibilityPanel.svelte`, part of the Runs tab's chunk, helpers in
   `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
   only on runs that have them): the dry season in one sentence, a line per
   check (*no finding*, *see below* or *not checked*, with a coloured edge and
@@ -3069,13 +3281,30 @@ the project. Viewers read every scenario and its comparison; farmers never
 see the tab (the workspace sends them to the farm page, and the API refuses
 them scenarios).
 
-- **The list** (left on wide screens, above the scenario under 900px): each
-  scenario's name, status, number of changes, base run and last run. Empty:
-  "No scenarios yet. A scenario changes the published baseline without
-  copying it." **New scenario** (editors): a name and a base run, the
-  published run by default, else the latest; scenario runs aren't offered (a
-  scenario run can't be a base). With no runs it says to run the model
-  first. The chosen scenario is `&scenario=<id>` in the URL.
+- **Layout** (issue #17, option A; the Dams and Units & supply pattern of a
+  list beside the picked item): the section header's context line counts
+  the scenarios by status and how many have results ("5 scenarios · 4
+  drafts · 1 submitted · 2 with results", `scenarios/summary.ts`), and its
+  action is **+ New scenario** (editors, once there is a run to start
+  from). The list is a rail beside the scenario from a 784 px wide section
+  (a container query), as tall as the window from where it starts (less the
+  save bar) and sticky, so it stays in view while the scenario scrolls; its
+  rows scroll inside it. The scenario is an editing page and scrolls with
+  the page. Narrower, the list stacks above the scenario, capped at a few
+  rows that scroll inside it. With none picked, the first (newest) opens in
+  place (`replaceState`, so Back leaves the section rather than stopping on
+  the bare list).
+- **The list**, newest first: each scenario's name (two lines at most),
+  status as a pill in words, number of changes, base run and last run.
+  Empty: "No scenarios yet. A scenario changes the published baseline
+  without copying it.", with **Start a scenario** for editors, or, with no
+  runs, that the model must be run first. The chosen scenario is
+  `&scenario=<id>` in the URL.
+- **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
+  it, dropping `new` in place): a name and a base run, the published run by
+  default, else the latest; scenario runs aren't offered (a scenario run
+  can't be a base). **Create scenario** picks the new one and replaces the
+  dialog's history entry. `new=1` opens nothing for a viewer or with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
 - **Changes** (`OpList.svelte`): the ops in order, each in words against the
@@ -3116,7 +3345,9 @@ them scenarios).
   `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
   Transfers tables, switched with a **Network / Crops / Transfers** control,
   on the scenario's model (its base run with its changes applied), under a
-  banner in the warning colour: "Editing the scenario *X*, not the
+  banner in the warning colour, scrolled to the top of the window as it
+  opens (below a long scenario the sticky record bar would otherwise cover
+  it and its Close button): "Editing the scenario *X*, not the
   catchment", saying the catchment's own model isn't touched, with **Close
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
@@ -3140,7 +3371,10 @@ them scenarios).
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
-- **Actions** (editors): **Run scenario** (labelled with the scenario's name;
+- **Actions** (editors), in the scenario's head row beside its name, status
+  and Rename, so they're on the first screen however long the changes and
+  the node list get; a run's error shows under the base banner: **Run
+  scenario** (labelled with the scenario's name;
   the run joins the runs list and counts toward the 20-run cap), the status
   moves (**Submit** behind a confirm, **Withdraw**, **Mark decided**, **Back
   to draft**; only a draft's changes, nodes and base change), **Delete
@@ -3175,41 +3409,96 @@ them scenarios).
 ## Allocations (`?tab=allocations`)
 
 WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
-[allocations.md](./allocations.md)). A core tab: owners, editors and viewers
-see it; farmers never reach the workspace.
+[allocations.md](./allocations.md)); laid out as an option A page (issue
+#17). A core tab: owners, editors and viewers see it; farmers never reach the
+workspace.
 
-- **Modelled use vs registered volume** (`AllocationCompare.svelte`), on top:
-  a run picker (the published run by default, else the latest), a sentence
-  saying modelled use is *modelled, not metered* and a difference is
-  something to look into, not a finding; a warning listing the farms and
-  sources whose modelled use was above the registered volume, with how many
-  whole water years; notes for allocations not matched to a farm, or matched
-  to a farm the run doesn't have. The table has one row per farm, source and
-  water year: registered m³, modelled use m³ ("modelled, not metered" under
-  the heading), modelled ÷ registered, and a status badge (*Above
-  registered*, *Within band*, *Below registered*, *No registered volume*, *No
-  use, none registered*; the full sentence in its title). A part year is
-  marked "part (N d)". A source with neither use nor a volume is left out.
-  On a phone each row is a card of label–value lines.
-- **Registered volumes**: the list (farm, registration, the registered user
-  for editors only, authorisation, purpose, source, volume, storage, validity,
-  and where it came from: the file name and the first 12 hex digits of its
-  SHA-256, or "Entered by hand"). Unmatched rows are highlighted. **Download
-  CSV** (the export, names for editors only). Editors: **Add a volume**, and
-  **Change** / **Delete** per row (the form's farm picker is how a row is
-  matched by hand). Viewers see "Names of registered users are shown to
-  editors only." Below the list, **Imported files**: each with its full hash,
-  reference, row count, who and when, and **Remove this import**.
-- **Import registered volumes** (`AllocationImport.svelte`, editors): what
-  the file is (WARMS extract or CSV template), a reference, the file, and a
-  **Download the CSV template** link. The preview says how many rows matched,
-  didn't, or have problems; the table lists rows with problems first (the
-  problem in red), then unmatched rows, each with a farm picker ("by farm
-  name", "chosen by you"). **Import N rows** stores the valid ones; the
-  message says how many were imported, left out and still unmatched. Errors
-  (a refused file, a file already imported) show in an alert.
+**Section header.** The context counts the registered volumes, the ones not
+matched to a unit, and the units above registered in the run shown ("40
+registered volumes · 4 not matched · 13 units above registered";
+`allocationsContext` in `allocations.ts`; "No registered volumes yet" when
+there are none). The actions: the **run picker** (with more than one run;
+`run=`, else the published run, else the latest; a `run=` that no longer
+exists shows the default with a note), **Download CSV** (the export, names
+for editors only), and for editors **Import** (`import=1`) and **+ Add
+volume** (`volume=new`), each a side sheet that closes in place, so Back goes
+to where it was opened from. A viewer opening a sheet link gets the page.
+
+**Under the header**, a sentence naming the run and saying modelled use is
+*modelled, not metered* and a difference is something to look into, not a
+finding; slim notes for volumes not matched to a unit (editors: "Change a
+volume to match it"), or matched to a unit the run doesn't have.
+
+**Modelled use vs registered volume** is a list of each unit and water
+source with use or a volume, the ones to look into first (`unitRows`): above
+registered (most whole years over, then the largest ratio), use with no
+registered volume (the most use), below registered (the smallest ratio),
+within the band, then neither. Each row: the unit (a link, `unit=`), the
+source, a status in words ("Above registered in 3 of 3 whole years", *No
+registered volume*, *Below registered*, *Within band*), modelled ÷
+registered, and the mean water year's registered volume and modelled use
+("Nothing registered" when there is none; the part year's own figures when
+the run covers no whole water year). The left edge is amber for above
+registered or unregistered use, green within the band, grey otherwise; the
+words say the same.
+
+**The picked unit** (`unit=`, else the first row) sits beside the list: its
+name with links to it **On the Network** and in **Units & supply**; a bar per
+water year and source (modelled use, amber above registered, green within
+the band, with the registered volume as a line across it; decorative, the
+table under it carries the numbers); the same years as a table (registered
+m³, modelled use m³ "modelled, not metered", modelled ÷ registered, the
+status badge with its full sentence in the title, "part (N d)" for a part
+year); its registered storage beside the dam capacity in the run; and its
+registered volumes (volume, source, authorisation, registration number, the
+holder for editors only, validity), each with **Change** and **Delete** for
+editors. From 1100 × 620 the list and the picked unit are the height left in
+the window, each scrolling inside its card; a link to a unit further down the
+list scrolls the list (not the page) to its row.
+
+**Registered volumes** (below the first screen): the list, stacked so it
+fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
+with the registration number under it, the registered user for editors only,
+authorisation with purpose, volume with source, storage, validity with where
+it came from (the file name and the first 12 hex digits of its SHA-256, or
+"Entered by hand"), and **Change** / **Delete** for editors (the form's unit
+picker is how a row is matched by hand). Viewers see "Names of registered
+users are shown to editors only." Under it, **Imported files**: each with its
+full hash, reference, row count, who and when, and **Remove this import**.
+
+**Every unit and water year**: the whole comparison as one table (one row
+per unit, source and water year, the run's order; a source with neither use
+nor a volume is left out) with the band note under it, scrolling inside its
+box.
+
+**Import registered volumes** (the Import sheet, `AllocationImport.svelte`):
+what the file is (WARMS extract or CSV template), a reference, the file, and
+**Download the CSV template**. The preview says how many rows matched,
+didn't, or have problems; the table lists rows with problems first (the
+problem in red), then unmatched rows, each with a unit picker ("by farm
+name", "chosen by you"); type and source share a column. **Import N rows**
+(pinned at the sheet's foot, with Cancel) stores the valid ones, closes the
+sheet and says how many were imported, left out and still unmatched. Errors
+(a refused file, a file already imported) show in an alert in the sheet;
+closing the sheet drops a preview.
+
+**Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
+`volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
+source, purpose, volume, storage, valid from/to, registration number,
+property, the registered user (editors), reference; Save and Cancel pinned.
+
+**Phone and narrow windows**: one column (list, picked unit, volumes, every
+year); the list shows six rows until **Show all N units and sources** and the
+volumes eight until **Show all N registered volumes**; each volume and each
+year row is a card with its values two to a line under their labels
+(container queries); picking a unit scrolls its detail into view.
+
 - e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
-  viewer without names, phone cards, axe).
+  viewer without names, phone cards, axe) and
+  `e2e/tests/allocations-page.spec.ts` (the header, the order, window fit,
+  `unit=` and Back, a shared unit link, the sheets, `run=` and a deleted run,
+  empty states, 1280 and phone layouts, a viewer, axe in both themes; a
+  30-unit catchment with 40 volumes from `e2e/support/allocations.ts`).
 
 ## Applications (WP-3.3)
 
@@ -3223,8 +3512,12 @@ that other farms show only by an anonymous name), links to their own farms'
 farm view if they have links, and the Scenarios tab in applicant mode
 ("Your applications"; `?scenario=<id>` selects one):
 
-- **New application**: a name only; it starts on the current publication's
-  run. With nothing published, a note says so and there is no form.
+- **New application**: a button at the top of the list (the Applicant view
+  has no section header), opening the same dialog at `new=1` with a name
+  only; it starts on the current publication's run. With nothing
+  published, a note says so and there is no button. The list scrolls inside
+  its card, so the button stays on the first screen with thirty
+  applications.
 - **The editor** is the Scenarios editor, with the base from
   `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
   values blank, so an op on one isn't described "from" a value). Their own
@@ -3251,20 +3544,46 @@ farm view if they have links, and the Scenarios tab in applicant mode
   applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
-(`?tab=applications`): every submitted, withdrawn or decided application
-(drafts stay with the applicant), as a table of name (a link to it in the
-Scenarios tab), applicant (and how many they shared it with), status
-("Awaiting a decision", or the outcome), submitted date, changes and runs,
-sortable newest first or by status (awaiting a decision first, the
-longest-waiting on top; `applications.ts`), with loading, error ("Retry")
-and empty ("No applications submitted.") states. In the Scenarios tab an
+(`?tab=applications`, issue #17 option A): every submitted, withdrawn or
+decided application (drafts stay with the applicant). A viewer never sees it.
+
+- **Section header:** the count, how many await a decision and how long the
+  oldest has waited ("30 applications · 20 awaiting a decision, the longest
+  for 30 days"; "No applications submitted yet"), and **Decide the longest
+  waiting**, a link to that application in the Scenarios tab (only while
+  one awaits a decision). The counts and wording are `applications.ts`.
+- **Submitted applications** card: a one-line note (on the published
+  baseline; open one to see its changes and runs and decide it; drafts stay
+  with the applicant), a status filter (**All**, **Awaiting a decision**,
+  **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
+  in the URL, so Back steps through the filters and a link keeps one; an
+  unknown value shows all) and **Sort by** newest first or status (awaiting
+  a decision first, the longest-waiting on top).
+- **The table:** name (a link to it in the Scenarios tab), applicant ("shared
+  with N" under it), status as a pill in words (Awaiting a decision;
+  Approved, Approved with conditions or Refused in the band colours, with
+  "decided <date>" under it; Withdrawn), submitted (date and time, and
+  "waiting N days" while it awaits a decision), changes and runs.
+- **Fit:** from 1100 × 620 the card fills the window and the rows scroll
+  inside it under a sticky header; below a 640 px column each application is
+  a card (name, status, applicant, submitted, "1 change · 0 runs") and the
+  page scrolls.
+- **States:** loading, error ("Retry"), empty ("No applications submitted.",
+  with where they come from: applicants on the Project page, the baseline
+  published in Runs & results) and a filter with none ("Nothing is awaiting a
+  decision." and **Show all**).
+
+In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it, and an editor who isn't its owner gets the
 **Decide** form (outcome radios, reasons and conditions, **Record the
 decision**; final). Evidence packs (WP-3.14) will be linked from the list.
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
-the assessor's decision, the empty list, axe in light and dark).
+the assessor's decision, the empty list, axe in light and dark) and
+`e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
+fit and a 30-application queue, the status filter's URL and Back, empty
+states, a viewer, the phone cards, axe at desktop light and dark and phone).
 
 ## History (`?tab=history`)
 
@@ -3283,8 +3602,8 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   inputs** (not for a scenario run).
 - **Elsewhere** (issue #42): the compare page's *What changed* says who
   changed each model or settings line between two runs and when
-  ([run-comparison.md](./run-comparison.md)), and the Summary lists the
-  three newest changes (**Recent changes**, [§ Summary](#summary)).
+  ([run-comparison.md](./run-comparison.md)), and the Project page lists
+  the three newest changes (**Recent changes**, [§ Project](#project)).
 - **Series values** aren't part of a version. A series change that kept
   the values it replaced (a replace, a person's merge, a delete, or a restore
   of them; `timeline.ts` `seriesRestore`) shows **Restore the earlier
@@ -3502,9 +3821,11 @@ under the search box, and close again when you pick a page.
   guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
   the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
   *The whole process* has a **Getting around a project** section (the three
-  sections, where they sit in the app sidebar under the catchment's name,
-  Projects / Teams / Help at its top, the phone bar's Menu and the phone
-  Sections button, and the farm drawer),
+  sections, the Project and Dams pages, where the sections sit in the app
+  sidebar under the catchment's name, Projects / Teams / Help at its top, the
+  Data badge, the phone bar's Menu and the phone Sections button, the section
+  header and each page's actions in it, the notice line, the Grids menu's grid
+  modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
@@ -3733,23 +4054,34 @@ digest). The modeller workspace stays English.
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
-- **Long Afrikaans layouts.** Afrikaans runs 20–30 % longer than English,
-  with long compound words. `e2e/tests/af-layout.spec.ts` opens every
-  translated page at 360 px (sign-in, register, forgot password, the farm
+- **Afrikaans layouts.** Afrikaans runs 20–30 % longer than English, with
+  long compound words. `e2e/tests/af-layout.spec.ts` opens every translated
+  page in Afrikaans at 360 px (sign-in, register, forgot password, the farm
   view with its why and dam pages, `/farm/words`, the account and alert
-  pages, `/share`) with a complete stand-in catalogue: every message's
-  English with each word a third longer (`e2e/support/stretched-af.ts`,
-  served in place of the empty af chunk; no Afrikaans is written). It checks
-  that `<html lang>` turns `af`, nothing scrolls sideways, no text is cut
-  off in its box, and axe finds nothing, in light and dark. Once reviewed
-  wording lands the chunk isn't empty, the stand-in isn't served, and the
-  spec fails until it checks the real words.
+  pages, `/share`) and checks that `<html lang>` is `af`, nothing scrolls
+  sideways, no text is cut off in its box, and axe finds nothing, in light
+  and dark. Specs read the Afrikaans from the catalogues
+  (`e2e/support/af.ts`), so a corrected translation doesn't break them.
 - **Numbers and dates** (D8). The farm view writes a decimal comma in
   Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
   both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
   the Afrikaans words are in), so an English sentence never carries Afrikaans
   month names.
-- **Translation.** Nothing is invented: the wording goes to real farmers.
+- **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
+  issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
+  entries. It was written by the `af-translator` agent and reviewed by the
+  `af-checker` agent (`.claude/agents/i18n/`: meaning, placeholders, bold,
+  plural forms, register, and one term for one English word across the whole
+  set, with §5.1 of `docs/design/farmer-view.md` as the word list); no native
+  speaker has reviewed it yet (docs/followups.md § Afrikaans). The wording
+  goes to real farmers, so a new string goes through the same two steps:
+  `pnpm gen:i18n:export <dir>` writes what's on the sheet as JSON batches,
+  the translator agent fills them, the checker reviews the whole set, and
+  `pnpm gen:i18n:apply <translations.json> <corrections.json>`
+  (`scripts/guards/i18n_apply.mjs`) refuses a translation that drops or adds
+  a placeholder or bold mark, or covers only part of a counted word or a
+  glossary entry, then writes the rest into the three catalogues (the
+  glossary stamped with its `sourceHash`) and rewrites the sheet.
   `docs/i18n/af-translation-sheet.md` (generated by `pnpm gen:i18n:sheet`)
   lists every untranslated string with its English, context and placeholders,
   and an empty Afrikaans column for the client's translator; the farmer

@@ -22,6 +22,7 @@ import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
+import { stampRun } from './stamp.js';
 
 /**
  * SHA-256 hex of a series' values (engine `seriesDigest`: the values as JSON,
@@ -422,7 +423,9 @@ export function runFailure(err: Error): never {
  * later, whatever happens to the live series, and (for a run of the live
  * model, `plan.seriesIds`) which series it was read from: a manual run's is
  * what the ingest hold takes as a person's accepted values
- * (056_accepted_series, series/hold.ts).
+ * (056_accepted_series, series/hold.ts). Last, the run is stamped
+ * (runs/stamp.ts, 077): sign-off and an application's decision take only a
+ * run whose stamp still matches its rows.
  */
 export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Promise<{ id: string; output: ModelOutput }> {
 	const { projectId, label, input, scenario, trigger } = plan;
@@ -472,6 +475,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
 	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
+	// Last of the run's rows: sign what was stored (077_run_stamp, runs/stamp.ts),
+	// so a run written past this path (a direct insert as water_app) is told apart.
+	await stampRun(db, runId);
 	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {
 		runId,
@@ -516,11 +522,11 @@ async function storeRunInputs(
 		const sha = hashes[kind]!;
 		if (have.has(sha)) continue;
 		have.add(sha);
-		await db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, $3::float8[]) ON CONFLICT DO NOTHING`, [
-			projectId,
-			sha,
-			series[kind]!.values
-		]);
+		// The database keys the blob itself, by the SHA-256 of this very text
+		// (seriesDigest, which seriesHash hashes), so no caller can plant other
+		// values under a hash a later run uses (074_series_blob_digest).
+		const { rows } = await db.query<{ sha: string }>('SELECT app_store_series_blob($1, $2) AS sha', [projectId, seriesDigest(series[kind]!.values)]);
+		if (rows[0]!.sha !== sha) throw new Error(`stored run input ${kind} under ${rows[0]!.sha}, expected ${sha}`);
 	}
 	await db.query(
 		`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256, series_id)

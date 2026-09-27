@@ -45,11 +45,13 @@ export const ERROR_CODES = [
 	'account_exists',
 	'wrong_credentials',
 	'signin_locked',
+	'signup_throttled',
 	'wrong_current_password',
 	'password_changed_elsewhere',
 	'link_invalid',
 	'already_verified',
 	'verification_sent_recently',
+	'verification_limit',
 	'invite_invalid',
 	'note_farmer_own_farm',
 	'note_farm_visibility',
@@ -57,7 +59,9 @@ export const ERROR_CODES = [
 	'note_delete_denied',
 	'unsubscribe_link_gone',
 	'export_throttled',
-	'alerts_resume_throttled'
+	'alerts_resume_throttled',
+	'body_refused',
+	'run_unverified'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

@@ -106,14 +106,16 @@ export interface CropStack {
 /**
  * The catchment's monthly demand split by crop, for the stacked chart: the
  * parts sum to catchmentDemand(demand).monthly. Crops with no demand are left
- * out. With more than `max` crops, the `max − 1` largest by annual demand keep
- * their own series (in crop order) and the rest are summed into "Other", so
- * the chart never needs more colours than it has.
+ * out. Without `named`, every crop is a part, in crop order. With `named`
+ * (the crops with a colour of their own, ranked: cards.ts `cropColouring`),
+ * those are the parts in that order, bottom first, and every other crop with
+ * demand is summed into one "Other" part on top, so the chart never needs
+ * more colours than it has and matches the crop list and the unit bars.
  */
 export function cropStacks(
 	demand: readonly FarmDemand[],
 	crops: readonly { id: string; name: string }[],
-	max = 6
+	named?: readonly string[]
 ): CropStack[] {
 	const all = crops
 		.map((c) => {
@@ -125,17 +127,15 @@ export function cropStacks(
 			return { id: c.id, name: c.name || '(unnamed)', values };
 		})
 		.filter((s) => s.values.some((v) => v > 0));
-	if (all.length <= max) return all;
-	const total = (s: CropStack) => s.values.reduce((a, b) => a + b, 0);
-	const keep = new Set(
-		[...all]
-			.sort((a, b) => total(b) - total(a))
-			.slice(0, max - 1)
-			.map((s) => s.id)
-	);
+	if (!named) return all;
+	const byId = new Map(all.map((s) => [s.id, s]));
+	const keep = new Set(named);
+	const parts = named.flatMap((id) => byId.get(id) ?? []);
+	const rest = all.filter((s) => !keep.has(s.id));
+	if (rest.length === 0) return parts;
 	const other = new Array<number>(12).fill(0);
-	for (const s of all) if (!keep.has(s.id)) for (let m = 0; m < 12; m++) other[m]! += s.values[m]!;
-	return [...all.filter((s) => keep.has(s.id)), { id: 'other', name: `Other (${all.length - keep.size} crops)`, values: other }];
+	for (const s of rest) for (let m = 0; m < 12; m++) other[m]! += s.values[m]!;
+	return [...parts, { id: 'other', name: `Other (${rest.length} crop${rest.length === 1 ? '' : 's'})`, values: other }];
 }
 
 /** ["A"] → "A"; ["A", "B"] → "A and B"; ["A", "B", "C"] → "A, B and C". */

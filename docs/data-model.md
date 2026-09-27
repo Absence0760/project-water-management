@@ -302,6 +302,16 @@ editor-on-both-sides rule) limits even that to editors and owners; a viewer's
 ([api.md](./api.md#runs)); the catalogue test pins `model_run`'s updatable
 columns to exactly `notes` and `pinned` (below).
 
+**Run stamps (077_run_stamp.sql).** `model_run.stamp` (`bytea`, 32 bytes, or
+NULL) is the backend's HMAC over `app_run_digest(id)`, the canonical digest
+of the run's inputs snapshot, summary, stored input series and output
+series, written once by `app_set_run_stamp` in the storing transaction
+(`storeRun`); `water_app` has no `UPDATE` on it. NULL (a run from before
+077, or one inserted past the API) and a stamp that no longer matches the
+rows both read as unverified: such a run can't be signed off, and an
+application with one can't be decided
+([security.md § Run stamps](./security.md#run-stamps)).
+
 **Pinned runs (015_run_pinned.sql).** `model_run.pinned` (boolean, default
 `false`) keeps a run, typically a baseline, past the storage cap: `trimRuns`
 skips it and it doesn't count against `RUNS_KEPT_PER_PROJECT`, and
@@ -457,7 +467,9 @@ the result change?", and put back any earlier version.
   `baseline`), the optional `reason` (≤ 500, from the save bar), `snapshot`
   `{ settings, model }` (the shape of `model_run.inputs` without series),
   `changes` (the engine's `diffInputs` lines against the previous revision),
-  `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`.
+  `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`
+  (each must be the same project's revision or run when written:
+  `model_revision_same_project`, 069).
   The compare page credits each line of its input diff to the revision
   between the two runs that set it (issue #42, `history/attribute.ts`;
   [api.md § Compare runs](./api.md#compare-runs)).
@@ -484,7 +496,8 @@ the result change?", and put back any earlier version.
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
   in `app_accept_invites`), `invite.sent/revoked` (email masked
-  `j•••@domain`; a farmer invite adds its number of `farms`),
+  `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
+  flag, which would say whether the address has an account),
   `publication.published/notice_changed`, `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
@@ -511,6 +524,12 @@ the result change?", and put back any earlier version.
   traffic-light thresholds, `{ teamId, team, from, to }`, each side
   `{ green, amber, source }`; written on every project of the team, see
   [§ Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql)),
+  `team_member.added/role/removed` and `team.deleted` (072: who reaches the
+  project through its team; `{ teamId, team, userId, displayName, teamRole,
+  role }` with `role` the project role the team role gives, `from`/`to`
+  for a role change, `self` for a leaver, `via: 'invite'` for an accepted
+  invite, which app_accept_invites records; `team.deleted` has `members`;
+  each written on every project of the team),
   and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
@@ -619,6 +638,12 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   references. A reference may only be inserted by an editor, for a run of the
   same project saved in the same transaction (`model_run.created_at =
   now()`). Nothing updates either table.
+- **Writes.** A blob is stored only through `app_store_series_blob(project,
+  valuesJson)` (074_series_blob_digest; `SECURITY DEFINER`, an editor or a
+  contributor): it keys the blob by the SHA-256 of the JSON text it is given
+  (`seriesDigest`, so the key is `seriesHash`) and stores the values parsed
+  from that same text, `ON CONFLICT DO NOTHING`. `water_app` has no
+  `INSERT` on `series_blob`, so a caller never chooses the key.
 - **Reads.** `series_blob` is visible through a `run_input_series` row the
   user can see, which is visible through a `model_run` the user can see
   (viewer). `loadRunInput` re-hashes each blob and checks it against the
@@ -985,8 +1010,9 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   only when it is at least `k − 1` (`k = 5`, pending the client). One owner
   holding three of five farms therefore can't read the other two's combined
   figures.
-- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
-  and every `/projects/:id` route answering a farmer `400`/`403`), and a
+- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls),
+  `src/projects/role-ladder.db.test.ts` (every `/projects/:id` route but the
+  `BELOW_VIEWER` ones answering a farmer `403` at the role check), and a
   catalogue test that every table with a node column has a farmer-aware
   `SELECT` policy or is listed as never read by farmers (none since 022 gave
   `run_series` its publication-scoped farmer policy).
@@ -1123,8 +1149,9 @@ application has a name.
   above, for `loadPublishedRunInput`; the API never returns them to a
   contributor. `app_run_brief` gives the base banner its label and date.
 - Guards: `src/scenarios/applications.db.test.ts` (every "cannot see" with
-  its positive control, and every `/projects/:id` route answering a
-  contributor `400`/`403` except the listed ones), the catalogue tests.
+  its positive control), `src/projects/role-ladder.db.test.ts` (every
+  `/projects/:id` route answering a contributor `403` at the role check
+  except the `BELOW_VIEWER` ones), the catalogue tests.
 
 ### Publications (022_publication.sql)
 
@@ -1214,7 +1241,10 @@ Read-only links to the current publication for people outside the project
 - **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
   `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
   catalogue test's column-only and keep-forever lists): a link is revoked,
-  never removed, and goes with its project.
+  never removed, and goes with its project. The `share_link_revoke_final`
+  trigger (065) makes a revocation permanent: once `revoked_at` is set,
+  neither it nor `revoked_by` changes, except `revoked_by` going `NULL` when
+  that account is deleted (067: only then, never for a live account).
 - `app_share_view(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live link
   of a project with a current publication, one row of `project_name,
   published_at, published_by (display name), catchment_view (allowlisted
@@ -1316,7 +1346,11 @@ merges daily readings without a session (WP-2.9;
 - **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
   `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
   catalogue test's column-only and keep-forever lists): a key is revoked,
-  never removed, so the audit events that name it keep their link.
+  never removed, so the audit events that name it keep their link. The
+  `api_key_revoke_final` trigger (067) makes a revocation permanent, as
+  065 does for share links: once `revoked_at` is set, neither it nor
+  `revoked_by` changes, except `revoked_by` going `NULL` when that account
+  is deleted.
 - `api_key_throttle (key_id PK → api_key CASCADE, tokens, refilled_at)`: a
   token bucket per key, the `login_throttle` pattern (deny-all policy,
   reached only through `app_api_key_take`).
@@ -1495,8 +1529,21 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - RLS is `ENABLE`d but not `FORCE`d. The table owner (`water`) and the
   `SECURITY DEFINER` helpers bypass it on purpose, and `water_app` is never the
   owner.
-- `app_user` has no RLS: login has to look a user up by email before anyone is
-  signed in. The backend never selects `password_hash` into a response.
+- `app_user` is under RLS since `068_app_user_rls.sql`: your own row and the
+  people you work with (`app_user_visible`), update your own row only; the
+  pre-sign-in lookups are `SECURITY DEFINER` functions answering one account
+  ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)).
+  In a project where you are only a farmer (073), the people you work with are
+  just those your pages name: who published or last changed a publication,
+  the author of a farm note on one of your farms, and whoever linked you; no
+  other farmer or member. Where you are only an applicant (a `contributor`,
+  076), the same, plus the owner, the other shared members and the deciding
+  assessor of the applications you read (your own and those shared with you);
+  no other applicant. `app_user_visible` runs per row of every `app_user`
+  read, so each branch is an indexed lookup on the account id (every foreign
+  key has a covering index) against your own projects; keep a new branch that
+  way. The backend never selects `password_hash` into a response.
+- Every view is `security_invoker`, so RLS applies through it (catalogue guard).
 
 ### Email tokens and invites (004_email.sql)
 
@@ -1505,12 +1552,15 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (accounts that predate 004 were backfilled as verified) |
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
+| `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (`en` / `af`, the email's language, default `en`; 034); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
-  functions: `app_issue_email_token()` (per-address cooldown, replaces older
-  tokens of the purpose) and `app_consume_email_token()` (deletes = single
+  functions: `app_issue_email_token()` (per-address cooldown, then the daily
+  cap on `account_mail_quota`, per trusted device or shared since 078;
+  returns `issued`, `cooldown` or `capped`; replaces older tokens of the
+  purpose) and `app_consume_email_token()` (deletes = single
   use; `NULL` if unknown/expired; also clears tokens expired over 7 days). The RLS policies on `email_token` only allow
   a signed-in user their own rows.
 - `invite` RLS: project owners (via `app_has_role(…, 'owner')`) or team admins
@@ -1540,14 +1590,33 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | Table | Holds |
 | --- | --- |
 | `login_throttle` | One row per **typed email address** (not per account, so unknown addresses behave the same): `failures` since the last correct password, `locked_until`, `last_attempt_at` |
+| `login_device_throttle` (070) | The same, per **(address, trusted device)**: the attempts of a browser holding a valid `wm_device` cookie for that address, so a stranger's lock on the shared row can't shut it out. `device` is the cookie's random id (its MAC is never stored) |
 
 - Only touched through `SECURITY DEFINER` functions, before sign-in:
   `app_login_attempt(email, free, base, max)` counts the attempt (row lock, so
   parallel guesses are counted one by one) and returns the seconds left on a
   lock, and `app_login_succeeded(email)` deletes the row (correct password or
-  password reset). A deny-all policy (`USING (false)`) closes direct access.
+  password reset; since 070 it also deletes the address's device rows).
+  `app_login_device_attempt(email, device, …)` and
+  `app_login_device_succeeded(email, device)` are the per-device pair. A
+  deny-all policy (`USING (false)`) closes direct access to both tables.
   Rows untouched for a day are deleted on the next attempt. Numbers:
   [security.md § Authentication](./security.md#authentication).
+
+### Sign-up throttle (079_signup_throttle.sql)
+
+| Table | Holds |
+| --- | --- |
+| `signup_throttle` | One row per `bucket`: `global` (every sign-up) or `client:` + the SHA-256 of a client address key (`http/clientAddress.ts`; the address itself is never stored), with its `window_start` and `attempts` in that window |
+
+- Only touched through `app_signup_attempt(client, per_client, global, window)`
+  (`SECURITY DEFINER`, row locks global first then the client's), which
+  `POST /auth/register` calls before it looks at the address: it counts the
+  attempt in both buckets and returns 0, or, when either is full, counts
+  nothing and returns the seconds until that window ends. A client's row is
+  deleted once its window is over (at the next sign-up); the global row is
+  reset. Deny-all policy, as `login_throttle`. Numbers:
+  [security.md § Password reset, email verification and invites](./security.md#password-reset-email-verification-and-invites).
 
 ### Jobs (016_jobs.sql)
 
@@ -1795,6 +1864,22 @@ never re-run, and a scenario op is hashed (`ops_sha256`), so an op on a
 retired settings path stays stored and the engine refuses it with a reason
 ([scenarios.md](./scenarios.md)). No table, column, policy or grant changes.
 
+### Account deletion reaches every key (066_account_fk_clears.sql)
+
+Deleting an account ([security.md § Personal information](./security.md#personal-information-popia))
+does what `catalogue.db.test.ts` `APP_USER_ON_DELETE` says for every key
+(`auth/personal-data.security.db.test.ts` sweeps it). 066 redefines four
+functions and changes no table, policy or grant:
+
+- `scenario_sweep_complete` and `seasonal_outlook_complete` pass an update
+  that only clears `created_by` (the key's SET NULL; water_app has no UPDATE
+  on the column), so an account that asked for a sweep or an outlook can be
+  deleted;
+- `alert_rule_check` lets `created_by` go to NULL once that account no longer
+  exists, instead of putting the old creator back;
+- `app_user_pseudonymise` removes the person from `report.email_to` (a
+  `uuid[]` with no key) on reports someone else asked for.
+
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
@@ -2000,7 +2085,8 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     for editors (the `alert_eval` job's acting user). `water_app` may update
     only `state`, `cleared_at`, `value` and `detail` (a column grant; the
     catalogue test lists it), and `alert_event_guard` refuses reopening a
-    cleared event or moving one to another rule. No DELETE policy.
+    cleared event, moving one to another rule, or (069) citing another
+    project's run. No DELETE policy.
   - `alert_subscription`: one policy for everything: your own rows, for a
     project you can still open (not as an applicant), and a farmer's
     `node_id` must be one of their farms (`app_farm_nodes`).

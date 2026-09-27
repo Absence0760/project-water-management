@@ -1,5 +1,5 @@
 <!--
-	The Overview's recent changes (issue #42): the newest saved changes to the
+	The Project page's recent changes (issue #42): the newest saved changes to the
 	model and settings, who made them and when, from the change history
 	(GET /projects/:id/history?kind=revision). The History tab has the rest.
 	Shown only to members who have the History tab (farmers never do).

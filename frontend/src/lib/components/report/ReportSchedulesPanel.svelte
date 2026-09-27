@@ -2,7 +2,7 @@
 	Settings → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
 	reports): email the latest run's report PDF to chosen project members
 	every week or month. Editors and owners add, pause and remove schedules;
-	viewers read. Its own chunk: SettingsTab loads it lazily. Helpers in
+	viewers read. Part of the Settings tab's chunk. Helpers in
 	./serverPdf.ts.
 -->
 <script lang="ts">

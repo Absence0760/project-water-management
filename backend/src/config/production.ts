@@ -1,0 +1,242 @@
+// Production config fails closed (docs/security.md § Production configuration).
+//
+// Every setting the code reads falls back to the local stack when it is unset:
+// STORAGE=local (MinIO and its minioadmin login), FEED_SOURCE=fixtures
+// (synthetic data), MAIL_TRANSPORT=log (sends nothing), JOB_TRANSPORT=inprocess
+// (no worker is ever woken), http://localhost URLs in every link, and so on.
+// That is what lets a fresh clone run with no setup, and it means a Lambda
+// deployed with a setting missing would not fail: it would quietly serve
+// synthetic data, email localhost links, or never send mail. So each Lambda
+// entry point checks its environment at init and refuses to start (throws)
+// when anything it needs in production is missing or still a local default.
+//
+// SETTINGS classifies every variable a Lambda can reach. The guard test
+// (production.security.test.ts) bundles each entry point, collects every
+// process.env read in the modules it reaches, and fails on one that isn't
+// listed here, so a new setting has to be classified: checked in production
+// for the Lambdas that need it, or listed with the reason it needs no check.
+// The same test checks Terraform sets each required one (infra/*.tf).
+//
+// Problems name the setting, never its value: the value may be a secret.
+// This module imports nothing, so every Lambda bundle can carry it.
+
+export const ROLES = ['api', 'worker', 'fetcher', 'renderer', 'migrate'] as const;
+export type Role = (typeof ROLES)[number];
+
+type Env = Record<string, string | undefined>;
+/** A problem with the value (unset included), or null when it is fine. */
+type Check = (value: string | undefined) => string | null;
+
+interface Setting {
+	/** What it is, and why a Lambda that reaches it but has no check needs none. */
+	why: string;
+	/** The production check, per Lambda. A role not listed doesn't check it. */
+	checks?: Partial<Record<Role, Check>>;
+}
+
+/** Placeholders the committed dev and test env use (scripts/guards/check_env_isolation.mjs keeps them so). */
+const PLACEHOLDER = /^(dev|test)-only-/;
+
+const LOCAL_HOSTS = /^(localhost|.*\.localhost|127(\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\]|::1?|host\.docker\.internal|minio|mailpit|postgres)$/i;
+const isLocalHost = (host: string) => LOCAL_HOSTS.test(host);
+
+const set = (v: string | undefined): v is string => v !== undefined && v.trim() !== '';
+
+const required: Check = (v) => (set(v) ? null : 'is not set');
+
+const oneOf =
+	(...allowed: string[]): Check =>
+	(v) =>
+		!set(v) ? `is not set (production needs ${allowed.join(' or ')})` : allowed.includes(v.trim()) ? null : `must be ${allowed.join(' or ')} in production`;
+
+const secret =
+	(min: number): Check =>
+	(v) =>
+		!set(v) ? 'is not set' : v.length < min ? `must be at least ${min} characters` : PLACEHOLDER.test(v) ? 'is a committed dev/test placeholder' : null;
+
+const publicHttps: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const url = URL.parse(v.trim());
+	if (!url) return 'is not a URL';
+	if (url.protocol !== 'https:') return 'must be an https URL';
+	if (isLocalHost(url.hostname)) return 'points at a local host';
+	return null;
+};
+
+const publicHttpsList: Check = (v) => {
+	const items = (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+	if (!items.length) return 'is not set';
+	return items.some((item) => publicHttps(item)) ? 'has an origin that is not a public https URL' : null;
+};
+
+const optional =
+	(check: Check): Check =>
+	(v) =>
+		set(v) ? check(v) : null;
+
+const arn: Check = (v) => (!set(v) ? 'is not set' : /^arn:aws[a-z-]*:[a-z0-9-]+:/.test(v.trim()) ? null : 'is not an ARN');
+
+/** The RLS-bound app connection: RDS over verified TLS, with a generated password (infra/lambda.tf). */
+const postgresUrl: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const url = URL.parse(v.trim());
+	if (!url || !/^postgres(ql)?:$/.test(url.protocol)) return 'is not a postgresql:// URL';
+	if (isLocalHost(url.hostname)) return 'points at a local host';
+	if (url.searchParams.get('sslmode') !== 'verify-full') return 'must use sslmode=verify-full';
+	if (decodeURIComponent(url.password).length < 24) return 'has a password shorter than 24 characters (a dev login?)';
+	return null;
+};
+
+/** The sender: a real domain, not the dev default's no-reply@localhost. */
+const mailFrom: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const domain = /@([^\s>]+)>?\s*$/.exec(v)?.[1];
+	if (!domain || !domain.includes('.') || isLocalHost(domain)) return 'must be an address on a real domain';
+	return null;
+};
+
+/** An explicit decision, not the code default. */
+const decision: Check = (v) => (v === 'true' || v === 'false' ? null : 'must be set to true or false (an explicit decision)');
+
+const host: Check = (v) => (!set(v) ? 'is not set' : isLocalHost(v.trim()) ? 'points at a local host' : null);
+
+const port: Check = (v) => {
+	const n = Number(v);
+	return Number.isInteger(n) && n > 0 && n < 65536 ? null : 'is not a port number';
+};
+
+const appPassword: Check = (v) => (set(v) && /^[A-Za-z0-9]{24,}$/.test(v) ? null : 'must be 24+ alphanumeric characters');
+
+const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
+
+const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
+
+export const SETTINGS: Record<string, Setting> = {
+	// --- The edge and the session ---------------------------------------------------------
+	CLOUDFRONT_SHARED_SECRET: { why: 'CloudFront stamps it on every /api request; unset, app.ts skips the check (local dev).', checks: { api: secret(32) } },
+	AUTH_JWT_SECRET: {
+		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
+		checks: { api: secret(32), worker: secret(32) }
+	},
+	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
+	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
+	PASSWORD_HASH_COST: { why: 'bcrypt cost override for the local e2e server; auth/password.ts refuses it in Lambda.', checks: { api: optional(oneOf('12')), worker: optional(oneOf('12')) } },
+	SIGNUP_THROTTLE: {
+		why: 'off turns the sign-up throttle off for the backend tests and the e2e server only (auth/signupThrottle.ts); Lambda ignores it too.',
+		checks: { api: unset }
+	},
+	VITEST: { why: 'Set by the test runner; lowers the bcrypt cost to 4.', checks: ALL(unset) },
+	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
+
+	// --- The database ---------------------------------------------------------------------
+	DATABASE_URL: { why: 'The water_app (RLS-bound) connection.', checks: { api: postgresUrl, worker: postgresUrl } },
+	NODE_EXTRA_CA_CERTS: {
+		why: 'Read by Node itself: the RDS CA bundle, without which sslmode=verify-full cannot connect.',
+		checks: { api: required, worker: required, migrate: required }
+	},
+	DB_POOL_MAX: { why: 'Pool size tuning; the code default (5) is safe.' },
+	DB_HOST: { why: 'The migrate Lambda builds the owner URL from these.', checks: { migrate: host } },
+	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
+	DB_NAME: { why: 'The database to migrate.', checks: { migrate: required } },
+	MASTER_SECRET_ARN: { why: 'The RDS-managed owner credentials in Secrets Manager.', checks: { migrate: arn } },
+	WATER_APP_PASSWORD: { why: 'The runtime role password the migrate Lambda sets (sops db_app_password).', checks: { migrate: appPassword } },
+	MIGRATION_DATABASE_URL: { why: 'Read only by scripts/migrate.ts run as a CLI; the migrate Lambda passes its own URL.' },
+
+	// --- Email -----------------------------------------------------------------------------
+	MAIL_TRANSPORT: { why: 'log (the default) sends nothing; smtp is Mailpit.', checks: { api: oneOf('ses'), worker: oneOf('ses') } },
+	MAIL_FROM: { why: 'The sender; the default is no-reply@localhost.', checks: { api: mailFrom, worker: mailFrom } },
+	SITE_URL: { why: 'Every link in an email or share page; the default is the dev site.', checks: { api: publicHttps, worker: publicHttps } },
+	SES_CONFIGURATION_SET: {
+		why: 'Routes SES bounce and complaint events to the mail-events queue; without it suppression never hears of one.',
+		checks: { api: required, worker: required }
+	},
+	SES_REGION: { why: 'Optional; the SDK uses the Lambda region.' },
+	SMTP_HOST: { why: 'SMTP transport only, which production refuses (MAIL_TRANSPORT=ses).' },
+	SMTP_PORT: { why: 'SMTP transport only.' },
+	SMTP_SECURE: { why: 'SMTP transport only.' },
+	SMTP_USER: { why: 'SMTP transport only.' },
+	SMTP_PASSWORD: { why: 'SMTP transport only.' },
+	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
+
+	// --- Alerts ----------------------------------------------------------------------------
+	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe links; only the worker signs (the API checks a link by its hash).', checks: { worker: secret(32) } },
+	ALERTS_ENABLED: { why: 'The alert-email kill switch: the worker must be told explicitly (Terraform var.alerts_enabled).', checks: { worker: decision } },
+	ALERTS_DAILY_CAP: { why: 'Per-person immediate mails a day; the code default (5) is safe.' },
+	API_PUBLIC_URL: {
+		why: 'Where a mail client posts the one-click unsubscribe; defaults to SITE_URL/api.',
+		checks: { api: optional(publicHttps), worker: optional(publicHttps) }
+	},
+
+	// --- Background jobs -------------------------------------------------------------------
+	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs'), worker: oneOf('sqs') } },
+	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps, worker: publicHttps } },
+	JOB_LEASE_SECONDS: { why: 'Tick tuning; the code default is safe.' },
+	JOB_MAX_PER_TICK: { why: 'Tick tuning; the code default is safe.' },
+	RUNS_KEPT_PER_PROJECT: { why: 'Run retention; the code default is safe.' },
+
+	// --- Data feeds ------------------------------------------------------------------------
+	FEED_FETCHER: {
+		why: 'inline (the default) fetches in the job from FEED_SOURCE; the worker has no internet, so production hands fetches to the fetcher. Other Lambdas reach it through jobs/transport.ts but run no fetch job.',
+		checks: { worker: oneOf('sqs') }
+	},
+	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests.', checks: { worker: publicHttps } },
+	FEED_SOURCE: {
+		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production; the API and worker never call feedHttp there.',
+		checks: { fetcher: oneOf('live') }
+	},
+	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
+
+	// --- Reports ---------------------------------------------------------------------------
+	REPORT_RENDERER: {
+		why: 'inline (the default) renders in the job; the worker has no Chromium, so production hands renders to the renderer. Other Lambdas reach it through jobs/transport.ts but run no render job.',
+		checks: { worker: oneOf('sqs') }
+	},
+	RENDER_REQUESTS_QUEUE_URL: { why: 'Where the worker sends render requests.', checks: { worker: publicHttps } },
+	RENDER_RESULTS_QUEUE_URL: { why: 'Where the renderer answers.', checks: { renderer: publicHttps } },
+	RENDER_SITE_URL: {
+		why: 'The site the renderer prints; the default is the dev site. Only the renderer renders in production.',
+		checks: { renderer: publicHttps, api: optional(publicHttps), worker: optional(publicHttps) }
+	},
+	RENDER_API_URL: {
+		why: 'The API the renderer signs in to; the default is the dev API.',
+		checks: { renderer: publicHttps, api: optional(publicHttps), worker: optional(publicHttps) }
+	},
+	REPORT_RENDER_TIMEOUT_MS: { why: 'Render time limit; out-of-range values fall back to the safe default.' },
+	CHROMIUM_PATH: { why: 'A Chromium other than Playwright’s own; the renderer image uses the bundled one.' },
+	STORAGE: { why: 'local (the default) is MinIO with its public dev login.', checks: { api: oneOf('s3'), worker: oneOf('s3'), renderer: oneOf('s3') } },
+	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
+	S3_ENDPOINT: { why: 'MinIO only (STORAGE=local), which production refuses; STORAGE=s3 ignores it.' },
+	S3_REGION: { why: 'MinIO only.' },
+	S3_ACCESS_KEY_ID: { why: 'MinIO only.' },
+	S3_SECRET_ACCESS_KEY: { why: 'MinIO only.' }
+};
+
+/** What is wrong with `env` for `role` in production: one line per setting, naming it but never its value. */
+export function productionEnvProblems(role: Role, env: Env): string[] {
+	const problems: string[] = [];
+	for (const [name, setting] of Object.entries(SETTINGS)) {
+		const check = setting.checks?.[role];
+		const p = check?.(env[name]);
+		if (p) problems.push(`${name} ${p}`);
+	}
+	// A committed placeholder in any setting at all (dev-only-…, test-only-…).
+	for (const [name, value] of Object.entries(env)) {
+		if (value && PLACEHOLDER.test(value) && !problems.some((p) => p.startsWith(`${name} `))) problems.push(`${name} is a committed dev/test placeholder`);
+	}
+	return problems;
+}
+
+/** Throw unless `env` is production-shaped for `role`. */
+export function assertProductionEnv(role: Role, env: Env = process.env): void {
+	const problems = productionEnvProblems(role, env);
+	if (problems.length) throw new Error(`refusing to start the ${role} Lambda: ${problems.join('; ')}`);
+}
+
+/**
+ * The entry points' init check: in Lambda (the runtime always sets
+ * AWS_LAMBDA_FUNCTION_NAME), refuse to start with a local default. Off Lambda
+ * (tests, a local call of a handler) it does nothing.
+ */
+export function assertLambdaEnv(role: Role, env: Env = process.env): void {
+	if (env.AWS_LAMBDA_FUNCTION_NAME) assertProductionEnv(role, env);
+}

@@ -18,3 +18,11 @@ export const parseToken = (token: string): Buffer | null => (TOKEN_RE.test(token
 /** Lifetimes and per-address re-send throttles (Postgres interval literals). */
 export const TOKEN_TTL = { verify: '48 hours', reset: '1 hour', invite: '7 days' } as const;
 export const RESEND_COOLDOWN = { verify: '60 seconds', reset: '60 seconds', invite: '60 seconds' } as const;
+
+/**
+ * The daily cap on reset and verification emails per address (078): at most
+ * this many in a rolling window, on the address's shared count, and as many
+ * again per trusted device (`wm_device`, auth/device.ts) on its own count.
+ */
+export const ACCOUNT_MAIL_CAP = 10;
+export const ACCOUNT_MAIL_WINDOW = '24 hours';

@@ -22,6 +22,12 @@ export const WATER_SOURCES: readonly WaterSource[] = ['surface', 'groundwater'];
 export const IMPORT_MAX_CHARS = 2 * 1024 * 1024;
 /** Most data rows in one file. */
 export const IMPORT_MAX_ROWS = 5000;
+/**
+ * Most columns in a row. A WARMS extract has a few dozen; without a cap a
+ * 2 MB header of a million empty columns took 300 ms to map and came back
+ * as a 4 MB ignored-columns list.
+ */
+export const IMPORT_MAX_COLUMNS = 200;
 
 /** A column the importer reads. */
 export type Field =
@@ -108,7 +114,7 @@ export interface ParsedTable {
 	rows: ParsedRow[];
 }
 
-/** Split CSV text into records of string fields (RFC 4180 quoting, `,` or `;`). */
+/** Split CSV text into records of string fields (RFC 4180 quoting, `,` or `;`); ImportRefused past IMPORT_MAX_COLUMNS in a row. */
 export function splitCsv(text: string, delimiter: ',' | ';'): { line: number; cells: string[] }[] {
 	const s = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 	const out: { line: number; cells: string[] }[] = [];
@@ -135,6 +141,8 @@ export function splitCsv(text: string, delimiter: ',' | ';'): { line: number; ce
 		else if (ch === delimiter) {
 			cells.push(cell);
 			cell = '';
+			// Stops a hostile row early, before it builds a million cells.
+			if (cells.length >= IMPORT_MAX_COLUMNS) throw new ImportRefused(`line ${recordLine} has more than ${IMPORT_MAX_COLUMNS} columns`);
 		} else if (ch === '\n' || ch === '\r') {
 			if (ch === '\r' && s[i + 1] === '\n') i++;
 			cells.push(cell);

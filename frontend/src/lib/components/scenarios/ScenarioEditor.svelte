@@ -3,8 +3,8 @@
 	// changes (ops) with their class and the server's check, the red
 	// "Baseline assumptions changed" callout, and for an editor on a draft the
 	// "Add a change" form or override mode (the model tables, OverrideEditor),
-	// undo, the proposer's nodes, rename, rebase onto another run, run, status
-	// and delete. Every edit is a PATCH that answers
+	// undo, the proposer's nodes, rename, rebase onto another run, and in the
+	// head row beside the name (issue #17): run, status and delete. Every edit is a PATCH that answers
 	// with the scenario's check against its base, so problems show without
 	// running. Viewers get the same page read only.
 	//
@@ -298,12 +298,34 @@
 </script>
 
 <section class="panel" aria-labelledby="scenario-h">
-	<div class="panel-head">
-		<h2 id="scenario-h">{s.name}</h2>
-		<span class="status status-{s.status}">{STATUS_LABEL[s.status]}</span>
-		{#if isApplication}<span class="status">Application</span>{/if}
-		{#if canChange && !renaming}<button type="button" class="btn btn-sm btn-ghost" onclick={startRename}>Rename</button>{/if}
+	<!-- The scenario's name and status, with what to do with it on the right (issue #17): Run stays on the first
+	     screen however long the changes and the node list below get. -->
+	<div class="sc-head">
+		<div class="sc-title">
+			<h2 id="scenario-h">{s.name}</h2>
+			<span class="status status-{s.status}">{STATUS_LABEL[s.status]}</span>
+			{#if isApplication}<span class="status">Application</span>{/if}
+			{#if canChange && !renaming}<button type="button" class="btn btn-sm btn-ghost" onclick={startRename}>Rename</button>{/if}
+		</div>
+		{#if canRun || canChange}
+			<div class="actions" data-testid="scenario-actions">
+				{#if canRun}
+					<button type="button" class="btn btn-primary" disabled={running || busy || !data.check || problems > 0 || !s.ops.length} onclick={run}
+						>{running ? 'Running…' : 'Run scenario'}</button
+					>
+				{/if}
+				{#if canChange && !isApplication}
+					{#each SCENARIO_STATUS_MOVES[s.status] as to (to)}
+						<button type="button" class="btn" disabled={busy} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
+					{/each}
+				{/if}
+				{#if canChange && (s.status === 'draft' || s.status === 'withdrawn')}
+					<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>Delete {isApplication ? 'application' : 'scenario'}</button>
+				{/if}
+			</div>
+		{/if}
 	</div>
+	{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint run-hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
 
 	{#if renaming}
 		<form class="rename" onsubmit={saveName}>
@@ -329,6 +351,16 @@
 		{#if s.owner}Created by {s.owner}.{/if}
 		The base can't be deleted or trimmed while this scenario exists.
 	</p>
+	{#if error}
+		<div class="alert alert-error" role="alert">
+			{error}
+			{#if runProblems.length}
+				<ul>
+					{#each runProblems as p, i (i)}<li>{nameIds(p, names)}</li>{/each}
+				</ul>
+			{/if}
+		</div>
+	{/if}
 
 	{#if data.checkError}
 		<div class="alert alert-warning" role="status">These changes can't be checked: {data.checkError}</div>
@@ -395,36 +427,8 @@
 		</fieldset>
 	{/if}
 
-	{#if canRun || canChange}
-		<div class="actions">
-			{#if canRun}
-				<button type="button" class="btn btn-primary" disabled={running || busy || !data.check || problems > 0 || !s.ops.length} onclick={run}
-					>{running ? 'Running…' : 'Run scenario'}</button
-				>
-			{/if}
-			{#if canChange && !isApplication}
-				{#each SCENARIO_STATUS_MOVES[s.status] as to (to)}
-					<button type="button" class="btn" disabled={busy} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
-				{/each}
-			{/if}
-			{#if canChange && (s.status === 'draft' || s.status === 'withdrawn')}
-				<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>Delete {isApplication ? 'application' : 'scenario'}</button>
-			{/if}
-		</div>
-		{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
-	{/if}
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
-	{/if}
-	{#if error}
-		<div class="alert alert-error" role="alert">
-			{error}
-			{#if runProblems.length}
-				<ul>
-					{#each runProblems as p, i (i)}<li>{nameIds(p, names)}</li>{/each}
-				</ul>
-			{/if}
-		</div>
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 
 	{#if editable && !isApplication && !overriding}
@@ -527,12 +531,31 @@
 {/if}
 
 <style>
-	.panel-head {
-		justify-content: flex-start;
+	.sc-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		margin-bottom: 0.75rem;
 	}
-	.panel-head h2 {
+	.sc-title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.6rem;
+		flex: 1 1 18rem;
+		min-width: 0;
+	}
+	.sc-title h2 {
+		margin: 0;
+		font-size: 1.15rem;
 		overflow-wrap: anywhere;
 		min-width: 0;
+	}
+	/* The Yield panel keeps the plain panel head. */
+	.panel-head {
+		justify-content: flex-start;
 	}
 	.status {
 		font-size: 0.75rem;
@@ -609,7 +632,10 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin-top: 1rem;
+	}
+	.run-hint {
+		margin-top: -0.4rem;
+		text-align: right;
 	}
 	.rebase {
 		margin-top: 1rem;
@@ -628,6 +654,9 @@
 		margin: 0.4rem 0 0;
 	}
 	@media (max-width: 640px) {
+		.run-hint {
+			text-align: left;
+		}
 		.owned-list label,
 		.rebase summary {
 			min-height: var(--tap);

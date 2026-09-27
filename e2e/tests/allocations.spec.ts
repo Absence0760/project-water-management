@@ -2,7 +2,8 @@
 // editor imports a CSV of registered volumes, sees the preview with the bad
 // row and the unmatched row first, matches the unmatched one by hand and
 // imports; the list shows each volume with its source file, and the run's
-// modelled use sits next to the registered volume per water year. A viewer
+// modelled use sits next to the registered volume per water year (the page's
+// layout, the sheets and the big case: allocations-page.spec.ts). A viewer
 // sees the volumes but no names and can't import. Axe-scanned, and on a
 // phone. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
@@ -27,7 +28,8 @@ test('an editor imports registered volumes and compares them with modelled use',
 	const compare = page.getByTestId('allocation-compare-table');
 	await expect(compare.getByRole('row', { name: /Upper farm/ }).first()).toContainText('No registered volume');
 
-	// Import the template-shaped CSV.
+	// Import the template-shaped CSV, in the header's Import sheet.
+	await page.getByTestId('section-header').getByRole('link', { name: 'Import', exact: true }).click();
 	const wizard = page.getByTestId('allocation-import');
 	await wizard.getByLabel('What the file is').selectOption('csv');
 	await wizard.getByLabel('Reference (optional)').fill('e2e synthetic');
@@ -69,8 +71,8 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(vList).not.toContainText('Invented Holder');
 	await expect(vList.getByRole('columnheader', { name: 'Registered user' })).toHaveCount(0);
 	await expect(v.getByText('Names of registered users are shown to editors only.')).toBeVisible();
-	await expect(v.getByTestId('allocation-import')).toHaveCount(0);
-	await expect(v.getByRole('button', { name: 'Add a volume' })).toHaveCount(0);
+	await expect(v.getByRole('link', { name: 'Import', exact: true })).toHaveCount(0);
+	await expect(v.getByRole('link', { name: '+ Add volume' })).toHaveCount(0);
 	await expectNoViolations(v);
 
 	// On a phone, the comparison is one card per row.

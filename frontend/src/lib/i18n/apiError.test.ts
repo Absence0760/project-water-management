@@ -20,11 +20,13 @@ describe('errorText', () => {
 		account_exists: 'An account with that email address already exists. Sign in, or reset your password.',
 		wrong_credentials: 'Wrong email or password.',
 		signin_locked: 'Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.',
+		signup_throttled: 'Too many accounts were made from your network. Try again in 1 minute.',
 		wrong_current_password: 'Your current password is wrong.',
 		password_changed_elsewhere: 'Your password was changed somewhere else a moment ago. Sign in again.',
 		link_invalid: 'This link is invalid or has expired. Ask for a new one.',
 		already_verified: 'Your email address is already confirmed.',
 		verification_sent_recently: 'A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.',
+		verification_limit: 'Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.',
 		invite_invalid: 'This invitation is invalid or has expired.',
 		note_farmer_own_farm: 'You can add notes only to your own farm.',
 		note_farm_visibility: 'Only a note on a farm can be shown to its farmers.',
@@ -33,7 +35,9 @@ describe('errorText', () => {
 		unsubscribe_link_gone: 'This link doesn’t work any more.',
 		export_throttled: 'You downloaded your data a moment ago. Try again in 1 minute.',
 		alerts_resume_throttled:
-			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'
+			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.',
+		body_refused: 'Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.',
+		run_unverified: 'This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.'
 	};
 
 	it('has its own words for every code the API sends', () => {
@@ -56,6 +60,12 @@ describe('errorText', () => {
 		expect(locked(45)).toBe('Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.');
 		expect(locked(61)).toBe('Too many sign-in attempts for this address. Try again in 2 minutes, or reset your password.');
 		expect(locked(undefined)).toMatch(/Try again in 1 minute,/);
+	});
+
+	it('says how long the sign-up throttle lasts, in whole minutes (up to its hour window)', () => {
+		const throttled = (seconds: number) => errorText(new ApiError(429, 'x', undefined, 'signup_throttled', { seconds }));
+		expect(throttled(3599)).toBe('Too many accounts were made from your network. Try again in 60 minutes.');
+		expect(throttled(90)).toBe('Too many accounts were made from your network. Try again in 2 minutes.');
 	});
 
 	it('words a failed download (the account page’s “Download my data”) the same way', () => {

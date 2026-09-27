@@ -3,11 +3,13 @@ import { fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, type
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
+import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
+import { runVerified } from './stamp.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, runFailure, runLiveModel, trimRuns } from './execute.js';
 
@@ -64,7 +66,7 @@ export const runRoutes = new Hono<AuthEnv>()
 		// forecast (WP-2.12): a forecast-mode run, kept apart from the manual runs' cap (one per project).
 		const body = z
 			.object({ label: z.string().trim().max(200).default(''), forecast: z.boolean().default(false) })
-			.parse(await c.req.json().catch(() => ({})));
+			.parse(await readJson(c, { optional: true }));
 		const id = c.req.param('id');
 		// Inputs read in one transaction, the engine run with none open, the run
 		// stored in a second (runLiveModel): a long run holds no pooled connection.
@@ -116,6 +118,9 @@ export const runRoutes = new Hono<AuthEnv>()
 				]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			// Its server stamp still matches its rows (077, runs/stamp.ts): false for a
+			// run written past the model run, or changed since, which can't be signed off.
+			rows[0].verified = await runVerified(db, runId);
 			const { rows: series } = await db.query(
 				`SELECT node_id AS "nodeId", key, meta->>'label' AS label, meta->>'unit' AS unit
 				 FROM run_series WHERE run_id = $1 ORDER BY node_id NULLS FIRST, key`,
@@ -238,7 +243,7 @@ export const runRoutes = new Hono<AuthEnv>()
 	// handler does.
 	.patch('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
-		const body = RunPatchBody.parse(await c.req.json().catch(() => ({})));
+		const body = RunPatchBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');

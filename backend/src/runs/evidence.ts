@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
+import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
 import { inputFlowShares, overAllocationError, type ModelInput } from '@water-management/engine';
@@ -115,7 +116,7 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/evidence', async (c) => {
 		const id = c.req.param('id');
-		const body = NominateBody.parse(await c.req.json().catch(() => ({})));
+		const body = NominateBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// Friendly answers first; the stamp trigger enforces each of these again.

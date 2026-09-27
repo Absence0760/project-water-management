@@ -20,8 +20,16 @@ const BEST_PRACTICE = { rules: ['empty-table-header', 'landmark-unique'] };
 
 // Each tab waits for the content axe should see, not just the tab shell.
 const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
-	// (The Email column folds into the name cell on a phone, so wait on a member row.)
-	{ id: 'overview', ready: (p) => expect(p.getByRole('region', { name: 'Members' }).getByRole('rowheader').first()).toBeVisible() },
+	// The first screen with its chart drawn, and the alerts and published baseline below it (issue #17).
+	{
+		id: 'overview',
+		ready: async (p) => {
+			await expect(p.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Active alerts' })).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
+		}
+	},
 	{ id: 'network', ready: (p) => expect(p.getByRole('list', { name: 'Drainage tree' })).toBeVisible() },
 	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by unit' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('Source of transfer 1')).toBeVisible() },
@@ -56,6 +64,15 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	// Nothing made yet on these three: their empty states, once their lists have loaded.
 	{ id: 'scenarios', ready: (p) => expect(p.getByTestId('scenarios-empty')).toBeVisible() },
 	{ id: 'allocations', ready: (p) => expect(p.getByTestId('allocations-empty')).toBeVisible() },
+	// The model's facts, details and who has access, moved from the Summary (issue #17).
+	// (The Email column folds into the name cell on a phone, so wait on a member row.)
+	{
+		id: 'project',
+		ready: async (p) => {
+			await expect(p.getByRole('region', { name: 'Members' }).getByRole('rowheader').first()).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Recent notes' })).toHaveAttribute('data-notes-ready', 'true');
+		}
+	},
 	{ id: 'applications', ready: (p) => expect(p.getByTestId('applications-empty')).toBeVisible() },
 	{ id: 'history', ready: (p) => expect(p.getByTestId('history-entry').first()).toBeVisible() }
 ];
@@ -177,7 +194,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			});
 
 			// One tab per test, like TABS above: each scan gets its own budget.
-			for (const t of TABS.filter((x) => ['overview', 'network', 'runs'].includes(x.id))) {
+			for (const t of TABS.filter((x) => ['overview', 'project', 'network', 'runs'].includes(x.id))) {
 				test(`the view-only ${t.id} tab has no violations`, async ({ page, owner, signIn }) => {
 					void owner;
 					const project = await seedRunnableProject(page.request, `A11y view only ${t.id}`);

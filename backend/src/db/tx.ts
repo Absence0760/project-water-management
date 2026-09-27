@@ -50,7 +50,19 @@ export async function withApiKey<T>(keyId: string, fn: (db: Db) => Promise<T>): 
 }
 
 /**
- * Transaction with no user context: app_user lookups during auth, and the job
+ * Inside a withoutUser transaction, act as `userId` from here on: for the
+ * few auth flows whose identity is proven mid-transaction, by a consumed
+ * email token (verify, reset) or by the account the sign-up just created
+ * (068_app_user_rls.sql). Only ever with an id such a proof returned, never
+ * one from a request.
+ */
+export async function actAsUser(db: Db, userId: string): Promise<void> {
+	await db.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+}
+
+/**
+ * Transaction with no user context: pre-sign-in auth (through the SECURITY
+ * DEFINER lookups of 068_app_user_rls.sql; app_user shows no row here), and the job
  * queue's cross-project SECURITY DEFINER calls (claim, failed finish, purge,
  * stats; jobs/runner.ts). Project data is never read here: RLS shows nothing.
  */

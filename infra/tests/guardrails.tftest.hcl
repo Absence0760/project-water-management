@@ -514,6 +514,23 @@ run "rejects_short_jwt_secret" {
   expect_failures = [aws_lambda_function.backend]
 }
 
+run "rejects_dev_placeholder_jwt_secret" {
+  command = plan
+
+  # Long enough, so only the placeholder check can refuse it.
+  override_data {
+    target = data.sops_file.prod
+    values = {
+      data = {
+        auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
+        db_app_password = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
 run "rejects_non_alphanumeric_db_password" {
   command = plan
 
@@ -573,6 +590,10 @@ run "edge_security" {
   assert {
     condition     = aws_cloudfront_distribution.frontend.default_cache_behavior[0].viewer_protocol_policy == "redirect-to-https" && aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].viewer_protocol_policy == "https-only"
     error_message = "HTTP must redirect (site) or be refused (API)."
+  }
+  assert {
+    condition     = strcontains(aws_cloudfront_function.api_strip_prefix.code, "request.headers['x-viewer-address'] = { value: event.viewer.ip }")
+    error_message = "The /api viewer-request function must overwrite X-Viewer-Address with the viewer's IP (the sign-up throttle's client address, backend/src/http/clientAddress.ts)."
   }
   assert {
     condition     = aws_cloudfront_distribution.frontend.price_class == "PriceClass_All"

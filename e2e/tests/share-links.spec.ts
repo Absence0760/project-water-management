@@ -1,15 +1,17 @@
 // Read-only share links (WP-2.3 phase 2, docs/ui.md § Share links): an owner
-// makes a link on the Overview tab and copies it; someone signed out opens it
+// makes a link on the Project page and copies it; someone signed out opens it
 // on a phone and sees the catchment's reserve status and the WUA's notice, the
 // token gone from the address bar; the owner withdraws it and the link shows
 // the dead-link state. A catchment with too few farms gets no flow chart.
 import type { APIRequestContext } from '@playwright/test';
+import { afWords } from '../support/af.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
+const words = await afWords();
 const NOTICE = 'Water is short on the river.\nIrrigate at night and cut back where you can.';
 
 /** The sample network with three more farms: five farm holders, enough for the flow chart (FARMER_K). */
@@ -40,7 +42,7 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await publish(page.request, project.id);
 	await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: 'Share links' });
 	await expect(panel.getByText('No share links yet.')).toBeVisible();
 	const form = panel.getByRole('form', { name: 'Make a share link' });
@@ -88,16 +90,19 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await expectNoViolations(shared);
 	await shared.emulateMedia({ colorScheme: 'light' });
 
-	// The page is translated (WP-2.5): its header has the language switch. No
-	// Afrikaans is reviewed yet, so the words and <html lang> stay English; the
-	// WUA wrote only an English notice, and the card says so.
+	// The page is translated (WP-2.5): its header has the language switch.
+	// Afrikaans turns the page's words and <html lang>; the WUA wrote only an
+	// English notice, so that stays English, marked lang="en", and the card
+	// says so.
 	await expect(shared.locator('html')).toHaveAttribute('lang', 'en');
-	const af = shared.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' });
-	await af.click();
-	await expect(af).toHaveAttribute('aria-pressed', 'true');
-	await expect(notice).toContainText('The WUA wrote this notice in English only.');
-	await expect(shared.locator('html')).toHaveAttribute('lang', 'en');
-	await expect(reserve.getByText('At the catchment outlet')).toBeVisible();
+	await shared.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' }).click();
+	await expect(shared.locator('html')).toHaveAttribute('lang', 'af');
+	await expect(shared.getByRole('group', { name: words('Language') }).getByRole('button', { name: 'Afrikaans' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(notice).toContainText(words('The WUA wrote this notice in English only.'));
+	await expect(notice.getByRole('heading', { name: 'Water is short on the river.' })).toHaveAttribute('lang', 'en');
+	const reserveAf = shared.getByRole('region', { name: words('The river’s ecological reserve') });
+	await expect(reserveAf.getByText(words('At the catchment outlet'))).toBeVisible();
+	await expectNoViolations(shared);
 
 	// Opening it counts as a use.
 	await page.reload();
@@ -111,7 +116,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 
 	// The same tab again: only the fragment changes, so the page must pick the new token up without a reload.
 	await shared.goto(url);
-	await expect(shared.getByRole('alert')).toHaveText('This link has expired or was withdrawn. Ask whoever sent it for a new one.');
+	// Still in the Afrikaans this browser chose above.
+	await expect(shared.getByRole('alert')).toHaveText(words('This link has expired or was withdrawn. Ask whoever sent it for a new one.'));
 	await expect(shared).toHaveURL(/\/share$/);
 	await expectNoViolations(shared);
 	await stranger.close();

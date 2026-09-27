@@ -409,7 +409,7 @@ pnpm dev:db:reset           # DELETE all local data, recreate and migrate
 ```bash
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
-pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF when MinIO is up, and skips (saying so) when it isn't
+pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF (skips, saying so, without MinIO) and reports/render.origin.db.test.ts drives Chromium (skips without it); under CI both fail instead of skipping (testing.md)
 pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 pnpm check:i18n             # what has no Afrikaans yet, and any stale translation; fails if the sheet (docs/i18n/af-translation-sheet.md) or the message id list is out of date, or a translation is stale
@@ -418,10 +418,9 @@ pnpm gen:i18n:stamp <id>    # re-stamp a glossary translation from the current E
 ```
 
 **Afrikaans locally.** Pick "Afrikaans" on the sign-in page, the farm view
-or the account page. Until reviewed wording lands in
-`frontend/src/lib/i18n/messages/af.ts`, the words stay English and only the
-farm view's decimal comma changes; the farmer emails in Mailpit likewise
-stay English ([ui.md § Language](./ui.md#language)).
+or the account page. The words, `<html lang>`, dates and numbers all turn
+Afrikaans (a decimal comma), and an account or invite in Afrikaans gets its
+emails in Afrikaans in Mailpit ([ui.md § Language](./ui.md#language)).
 
 The client catchment regression data comes from the import step above
 (`expected.json`) and from the extractors in `scripts/wbt-import/`, all written

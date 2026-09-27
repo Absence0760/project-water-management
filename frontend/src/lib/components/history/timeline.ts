@@ -225,6 +225,17 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		// A team admin changed the portfolio's traffic lights (D11, 055): recorded on each team project.
 		case 'team_thresholds.changed':
 			return `Changed the portfolio traffic lights of the team “${str(s.team)}” from ${trafficLights(s.from)} to ${trafficLights(s.to)}`;
+		// Who reaches the project through its team (072): each is recorded on every team project, with the role it gives here.
+		case 'team_member.added':
+			return s.via === 'invite'
+				? `${who} joined the team “${str(s.team)}” as ${str(s.teamRole)} (accepted an invite), so ${str(s.role)} here`
+				: `Added ${who} to the team “${str(s.team)}” as ${str(s.teamRole)}, so ${str(s.role)} here`;
+		case 'team_member.role':
+			return `Changed ${who}’s role in the team “${str(s.team)}” from ${str(s.from)} to ${str(s.to)}, so ${str(s.role)} here`;
+		case 'team_member.removed':
+			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${str(s.teamRole)}) from the team “${str(s.team)}”`;
+		case 'team.deleted':
+			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;
 		default:
 			return e.kind;
 	}
