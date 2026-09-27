@@ -114,7 +114,21 @@ section it belongs to, with the example that taught it.
   space. Name the container (`container: dams-page / inline-size`).
   The root font size is **14 px** (`app.css`), so `1rem` in a query is
   14 px: Transfers' first `70rem` breakpoint matched a 1016 px column it was
-  meant to miss. Work the pixels out at 14 px.
+  meant to miss. Work the pixels out at 14 px. **A container query never
+  styles the container itself**: Scenarios first named its grid the
+  container and set that grid's columns in the query, and the page stayed
+  one column at 1440. Put the container on a wrapper.
+- **A sticky rail beside a reading page.** When the picked item is a page
+  to read or edit (Scenarios), not a chart to fit, the list is a sticky
+  rail as tall as the window from where it starts, its rows scrolling
+  inside it, while the detail scrolls with the page. Measure the top on a
+  non-sticky ancestor: a stuck element's `getBoundingClientRect()` is where
+  it is stuck, so measuring the rail itself grew its top with the scroll
+  and shrank it to a sliver.
+- **Pick a default rather than show an empty half.** With nothing in the
+  URL, open the first item and write it with `replaceState`, so Back leaves
+  the section instead of stopping on the bare list (Scenarios; Dams and
+  Units & supply show a default without writing it).
 - **Fit a wide table by stacking, not by scrolling sideways.** Transfers at
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
@@ -247,11 +261,21 @@ Interaction details that bit:
   scroll, and axe fails the covered ones (target size). Put a picker in the
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
-  closes the overlay rather than leaving the page.
+  closes the overlay rather than leaving the page. A create dialog
+  (Scenarios' `new=1`) that navigates on success lets the URL close it: drop
+  the param in the same `goto` that picks the new item (with
+  `replaceState`), rather than setting its `open` to false first, which
+  starts a second `goto` that races the first.
 - **Svelte drops the space at the edge of an element.** A narrow-layout
   label `<span class="cell-label"> change</span>` after a number read "1change"
   (and so did its accessible text) on the Applications phone cards. Write
   the space as `{' '}` inside the span.
+- **Move a page's main actions to where they're seen.** Scenarios' Run sat
+  under the changes, the form and a checkbox per node, off the first screen
+  on a big network; it now sits in the scenario's head row. A section's
+  "new" action goes in the section header (or at the top of the list where
+  there is no header, as in the Applicant view), never under the list,
+  where thirty items pushed it 2,700 px down.
 - **A tab that copies a list from the page must take the page's updates.**
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from
@@ -261,7 +285,7 @@ Interaction details that bit:
 
 - Every new page gets its own spec with a11y scans at desktop and phone
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
-  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`).
+  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`, `scenarios.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card (see `network-map.spec.ts`,

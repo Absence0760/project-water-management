@@ -47,10 +47,12 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await page.goto(`/projects/${project.id}?tab=scenarios`);
 	await expect(page.getByTestId('scenarios-empty')).toHaveText('No scenarios yet. A scenario changes the published baseline without copying it.');
 
-	// Start one on the only run.
-	await expect(page.getByLabel('Base run')).toHaveValue(/.+/);
-	await page.getByLabel('Name', { exact: true }).fill(NAME);
-	await page.getByRole('button', { name: 'Create scenario' }).click();
+	// Start one on the only run: + New scenario in the section header opens the create dialog.
+	await page.getByTestId('section-header').getByRole('link', { name: '+ New scenario', exact: true }).click();
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await expect(create.getByLabel('Base run')).toHaveValue(/.+/);
+	await create.getByLabel('Name', { exact: true }).fill(NAME);
+	await create.getByRole('button', { name: 'Create scenario' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
 	await expect(page).toHaveURL(/[?&]scenario=[0-9a-f-]{36}/);
 	await expect(page.getByTestId('scenario-base')).toContainText('Based on run Baseline (run ');
@@ -191,10 +193,11 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Scenario river pump');
 	await createRun(page.request, project.id, 'Baseline');
-	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	await page.goto(`/projects/${project.id}?tab=scenarios&new=1`);
 	const name = 'Upper river pump';
-	await page.getByLabel('Name', { exact: true }).fill(name);
-	await page.getByRole('button', { name: 'Create scenario' }).click();
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await create.getByLabel('Name', { exact: true }).fill(name);
+	await create.getByRole('button', { name: 'Create scenario' }).click();
 	await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
 	const list = page.getByRole('list', { name: `Changes in ${name}` });
 
@@ -385,11 +388,14 @@ test('submitting freezes a scenario; withdrawn, it can be deleted and its base i
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
 	page.on('dialog', (d) => d.accept());
 	await page.getByRole('button', { name: 'Submit', exact: true }).click();
-	await expect(page.getByText('Submitted', { exact: true })).toBeVisible();
+	// The status in the scenario's head (the list row shows the same pill).
+	const scenario = page.getByRole('region', { name: NAME, exact: true });
+	await expect(scenario.getByText('Submitted', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: new RegExp(`^${NAME.replace('+', '\\+')}`) }).getByText('Submitted', { exact: true })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Delete scenario' })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Withdraw', exact: true }).click();
-	await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible();
+	await expect(scenario.getByText('Withdrawn', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Delete scenario' }).click();
 	await expect(page.getByTestId('scenarios-empty')).toBeVisible();
 	await expect(page).not.toHaveURL(/scenario=/);

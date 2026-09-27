@@ -3233,13 +3233,30 @@ the project. Viewers read every scenario and its comparison; farmers never
 see the tab (the workspace sends them to the farm page, and the API refuses
 them scenarios).
 
-- **The list** (left on wide screens, above the scenario under 900px): each
-  scenario's name, status, number of changes, base run and last run. Empty:
-  "No scenarios yet. A scenario changes the published baseline without
-  copying it." **New scenario** (editors): a name and a base run, the
-  published run by default, else the latest; scenario runs aren't offered (a
-  scenario run can't be a base). With no runs it says to run the model
-  first. The chosen scenario is `&scenario=<id>` in the URL.
+- **Layout** (issue #17, option A; the Dams and Units & supply pattern of a
+  list beside the picked item): the section header's context line counts
+  the scenarios by status and how many have results ("5 scenarios · 4
+  drafts · 1 submitted · 2 with results", `scenarios/summary.ts`), and its
+  action is **+ New scenario** (editors, once there is a run to start
+  from). The list is a rail beside the scenario from a 784 px wide section
+  (a container query), as tall as the window from where it starts (less the
+  save bar) and sticky, so it stays in view while the scenario scrolls; its
+  rows scroll inside it. The scenario is an editing page and scrolls with
+  the page. Narrower, the list stacks above the scenario, capped at a few
+  rows that scroll inside it. With none picked, the first (newest) opens in
+  place (`replaceState`, so Back leaves the section rather than stopping on
+  the bare list).
+- **The list**, newest first: each scenario's name (two lines at most),
+  status as a pill in words, number of changes, base run and last run.
+  Empty: "No scenarios yet. A scenario changes the published baseline
+  without copying it.", with **Start a scenario** for editors, or, with no
+  runs, that the model must be run first. The chosen scenario is
+  `&scenario=<id>` in the URL.
+- **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
+  it, dropping `new` in place): a name and a base run, the published run by
+  default, else the latest; scenario runs aren't offered (a scenario run
+  can't be a base). **Create scenario** picks the new one and replaces the
+  dialog's history entry. `new=1` opens nothing for a viewer or with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
 - **Changes** (`OpList.svelte`): the ops in order, each in words against the
@@ -3280,7 +3297,9 @@ them scenarios).
   `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
   Transfers tables, switched with a **Network / Crops / Transfers** control,
   on the scenario's model (its base run with its changes applied), under a
-  banner in the warning colour: "Editing the scenario *X*, not the
+  banner in the warning colour, scrolled to the top of the window as it
+  opens (below a long scenario the sticky record bar would otherwise cover
+  it and its Close button): "Editing the scenario *X*, not the
   catchment", saying the catchment's own model isn't touched, with **Close
   override mode**. Notes, farmer links, the yield panel and colouring farms
   by a run's results are left out (they belong to the live model). The
@@ -3304,7 +3323,10 @@ them scenarios).
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
-- **Actions** (editors): **Run scenario** (labelled with the scenario's name;
+- **Actions** (editors), in the scenario's head row beside its name, status
+  and Rename, so they're on the first screen however long the changes and
+  the node list get; a run's error shows under the base banner: **Run
+  scenario** (labelled with the scenario's name;
   the run joins the runs list and counts toward the 20-run cap), the status
   moves (**Submit** behind a confirm, **Withdraw**, **Mark decided**, **Back
   to draft**; only a draft's changes, nodes and base change), **Delete
@@ -3387,8 +3409,12 @@ that other farms show only by an anonymous name), links to their own farms'
 farm view if they have links, and the Scenarios tab in applicant mode
 ("Your applications"; `?scenario=<id>` selects one):
 
-- **New application**: a name only; it starts on the current publication's
-  run. With nothing published, a note says so and there is no form.
+- **New application**: a button at the top of the list (the Applicant view
+  has no section header), opening the same dialog at `new=1` with a name
+  only; it starts on the current publication's run. With nothing
+  published, a note says so and there is no button. The list scrolls inside
+  its card, so the button stays on the first screen with thirty
+  applications.
 - **The editor** is the Scenarios editor, with the base from
   `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
   values blank, so an op on one isn't described "from" a value). Their own
