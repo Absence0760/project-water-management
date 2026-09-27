@@ -11,7 +11,18 @@
 	import { drainageTree } from '$lib/model/tree';
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
-	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, wrappedSchematicLayout, type SchematicNode } from './schematic';
+	import {
+		arcPath,
+		bandCrossings,
+		labelBox,
+		paperBands,
+		schematicLayout,
+		symbolBox,
+		transferArc,
+		wrappedSchematicLayout,
+		type SchematicEdge,
+		type SchematicNode
+	} from './schematic';
 	import type { Colouring } from './farmColour';
 
 	let {
@@ -202,6 +213,45 @@
 	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(name(ln.node)), metaText(ln))));
 	const symbols = $derived(layout.nodes.map((ln) => ({ id: ln.node.id, box: symbolBox(pos.get(ln.node.id)!) })));
 
+	/**
+	 * What one SVG draws: rows between y0 and y1 of the whole drawing, and the
+	 * columns (px) where rivers run off its bottom (`outs`) and on from its top (`ins`).
+	 */
+	type View = { key: string; y0: number; y1: number; nodes: SchematicNode[]; edges: SchematicEdge[]; outs: number[]; ins: number[] };
+	/**
+	 * A4 inside the report's `@page` margins (14 mm 12 mm), in CSS px: the
+	 * paper drawing prints at most this wide, scaled down to fit.
+	 */
+	const PAGE_W = 703;
+	const PAGE_H = 1016;
+	/** Room on a band's page for the section heading (first band), a continuation note above and below, and some slack. */
+	const HEADING_H = 60;
+	const NOTE_H = 22;
+	const SLACK = 16;
+	// On paper, a drawing taller than its page is split into page-high bands at row boundaries
+	// (paperBands), each its own SVG that prints whole; one that fits prints as one, as on screen.
+	const views = $derived.by((): View[] => {
+		const whole: View = { key: 'all', y0: 0, y1: height, nodes: layout.nodes, edges: layout.edges, outs: [], ins: [] };
+		if (!paper) return [whole];
+		const scale = Math.min(1, PAGE_W / width);
+		if (height * scale <= PAGE_H - HEADING_H - SLACK) return [whole];
+		const rest = (PAGE_H - 2 * NOTE_H - SLACK) / scale;
+		const bands = paperBands({ rows: layout.rows, rowH, padY: PAD_Y, height }, { first: rest - HEADING_H / scale, rest });
+		if (bands.length < 2) return [whole];
+		const rowOf = new Map(layout.nodes.map((n) => [n.node.id, n.row]));
+		const xOf = (col: number) => PAD_X + 12 + col * colW;
+		return bands.map((b, i) => ({
+			key: String(b.first),
+			y0: b.y0,
+			y1: b.y1,
+			nodes: layout.nodes.filter((n) => n.row >= b.first && n.row <= b.last),
+			// A river drawn in every band it passes through; the band's edges clip it.
+			edges: layout.edges.filter((e) => (rowOf.get(e.from) ?? -1) <= b.last && (rowOf.get(e.to) ?? -1) >= b.first),
+			outs: i < bands.length - 1 ? bandCrossings(layout, b.last).map(xOf) : [],
+			ins: i > 0 ? bandCrossings(layout, b.first - 1).map(xOf) : []
+		}));
+	});
+
 	function transferPath(t: Transfer): string {
 		const a = pos.get(t.fromNodeId);
 		const b = pos.get(t.toNodeId);
@@ -214,95 +264,118 @@
 
 <svelte:window onkeydown={onKey} />
 
+{#snippet drawing(v: View, id: string)}
+	<svg
+		bind:this={svgEl}
+		viewBox="0 {v.y0} {width} {v.y1 - v.y0}"
+		width={width}
+		height={v.y1 - v.y0}
+		aria-hidden="true"
+		class="schematic"
+		class:dragging={drag?.moved}
+		style:--sch-hatch="url(#{id}-hatch)"
+	>
+		<defs>
+			<marker id="{id}-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+				<path d="M0,0 L8,4 L0,8 z" class="arrow-river" />
+			</marker>
+			<!-- Fill for farms in the model but not in the run being coloured by. -->
+			<pattern id="{id}-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+				<rect class="hatch-bg" width="4" height="4" />
+				<line class="hatch-line" x1="0" y1="0" x2="0" y2="4" />
+			</pattern>
+			<marker id="{id}-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+				<path d="M0,0 L8,4 L0,8 z" class="arrow-transfer" />
+			</marker>
+		</defs>
+
+		{#each v.edges as e (e.from)}
+			<path class="river" d={edgePath(e.from, e.to, e.via)} stroke-width={strokeFor(e.from)} marker-end="url(#{id}-flow)" />
+		{/each}
+
+		{#each transfers as t (t.id)}
+			{@const d = transferPath(t)}
+			{#if d}
+				<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{id}-transfer)">
+					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId)}{t.enabled ? '' : ' (disabled)'}</title>
+				</path>
+			{/if}
+		{/each}
+
+		{#if drag?.moved}
+			{@const from = pos.get(drag.id)}
+			{#if from}
+				<line class="preview" class:bad={overCheck && !overCheck.ok} x1={from.x} y1={from.y} x2={drag.x} y2={drag.y} />
+			{/if}
+		{/if}
+
+		{#each v.nodes as ln (ln.node.id)}
+			{@const p = pos.get(ln.node.id)!}
+			{@const n = ln.node}
+			{@const dam = hasDam(n)}
+			{@const sup = supplyOf(n.id)}
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+			<g
+				class="node"
+				class:selected={n.id === selectedId}
+				class:editable
+				class:drop-ok={drag?.moved && drag.id !== n.id && drag.valid.has(n.id)}
+				class:drop-no={drag?.moved && drag.id !== n.id && !drag.valid.has(n.id)}
+				class:drop-over={drag?.moved && drag.over === n.id}
+				class:dragged={drag?.moved && drag.id === n.id}
+				data-supply={sup?.band}
+				transform="translate({p.x},{p.y})"
+				onclick={() => !editable && onselect?.(n.id)}
+				onpointerdown={(e) => onDown(e, n.id)}
+				onpointermove={onMove}
+				onpointerup={onUp}
+				onpointercancel={() => (drag = null)}
+			>
+				<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
+				<circle class="halo" r="17" />
+				{#if n.kind === 'user'}
+					<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
+					<path class="user" d="M0,-10 L10,0 L0,10 L-10,0 Z" />
+				{:else if n.kind === 'gauge'}
+					<path class="gauge" class:outlet={isOutlet(n)} d={isOutlet(n) ? 'M-12,-9 H12 L0,11 Z' : 'M-9,-7 H9 L0,9 Z'} />
+				{:else if dam}
+					<rect class="farm dam" x="-9" y="-9" width="18" height="18" rx="3" />
+					<path class="dam-water" d="M-6,1 q3,-3 6,0 t6,0" />
+				{:else}
+					<circle class="farm" r="8" />
+				{/if}
+				<text class="label" x="17" y="-2">{short(name(n))}</text>
+				<text class="meta" x="17" y="12">{metaText(ln)}</text>
+			</g>
+		{/each}
+
+		<!-- On paper, where a band is cut: an arrowhead on each river running off its foot or on from its top. -->
+		{#each v.outs as x (x)}
+			<path class="arrow-river continues" d="M{x - 5},{v.y1 - 8} h10 l-5,7 z" />
+		{/each}
+		{#each v.ins as x (x)}
+			<path class="arrow-river continues" d="M{x - 5},{v.y0 + 1} h10 l-5,7 z" />
+		{/each}
+	</svg>
+{/snippet}
+
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
 	<div class="sch" class:fill>
-	<div class="scroller" class:fill data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW} bind:clientHeight={boxH}>
-		<svg
-			bind:this={svgEl}
-			viewBox="0 0 {width} {height}"
-			width={width}
-			height={height}
-			aria-hidden="true"
-			class="schematic"
-			class:dragging={drag?.moved}
-			style:--sch-hatch="url(#{uid}-hatch)"
-		>
-			<defs>
-				<marker id="{uid}-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-					<path d="M0,0 L8,4 L0,8 z" class="arrow-river" />
-				</marker>
-				<!-- Fill for farms in the model but not in the run being coloured by. -->
-				<pattern id="{uid}-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
-					<rect class="hatch-bg" width="4" height="4" />
-					<line class="hatch-line" x1="0" y1="0" x2="0" y2="4" />
-				</pattern>
-				<marker id="{uid}-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-					<path d="M0,0 L8,4 L0,8 z" class="arrow-transfer" />
-				</marker>
-			</defs>
-
-			{#each layout.edges as e (e.from)}
-				<path class="river" d={edgePath(e.from, e.to, e.via)} stroke-width={strokeFor(e.from)} marker-end="url(#{uid}-flow)" />
+	<div class="scroller" class:fill class:banded={views.length > 1} data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW} bind:clientHeight={boxH}>
+		{#if views.length === 1}
+			{@render drawing(views[0]!, uid)}
+		{:else}
+			<!-- Paper, taller than a page: one SVG per page-high band, each printed whole. -->
+			{#each views as v, i (v.key)}
+				<div class="band">
+					{#if i > 0}<p class="band-note">Continued from the previous page: rivers run on from the top.</p>{/if}
+					{@render drawing(v, `${uid}-${i}`)}
+					{#if i < views.length - 1}<p class="band-note">Continues on the next page: rivers run off the foot.</p>{/if}
+				</div>
 			{/each}
-
-			{#each transfers as t (t.id)}
-				{@const d = transferPath(t)}
-				{#if d}
-					<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{uid}-transfer)">
-						<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId)}{t.enabled ? '' : ' (disabled)'}</title>
-					</path>
-				{/if}
-			{/each}
-
-			{#if drag?.moved}
-				{@const from = pos.get(drag.id)}
-				{#if from}
-					<line class="preview" class:bad={overCheck && !overCheck.ok} x1={from.x} y1={from.y} x2={drag.x} y2={drag.y} />
-				{/if}
-			{/if}
-
-			{#each layout.nodes as ln (ln.node.id)}
-				{@const p = pos.get(ln.node.id)!}
-				{@const n = ln.node}
-				{@const dam = hasDam(n)}
-				{@const sup = supplyOf(n.id)}
-				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-				<g
-					class="node"
-					class:selected={n.id === selectedId}
-					class:editable
-					class:drop-ok={drag?.moved && drag.id !== n.id && drag.valid.has(n.id)}
-					class:drop-no={drag?.moved && drag.id !== n.id && !drag.valid.has(n.id)}
-					class:drop-over={drag?.moved && drag.over === n.id}
-					class:dragged={drag?.moved && drag.id === n.id}
-					data-supply={sup?.band}
-					transform="translate({p.x},{p.y})"
-					onclick={() => !editable && onselect?.(n.id)}
-					onpointerdown={(e) => onDown(e, n.id)}
-					onpointermove={onMove}
-					onpointerup={onUp}
-					onpointercancel={() => (drag = null)}
-				>
-					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
-					<circle class="halo" r="17" />
-					{#if n.kind === 'user'}
-						<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
-						<path class="user" d="M0,-10 L10,0 L0,10 L-10,0 Z" />
-					{:else if n.kind === 'gauge'}
-						<path class="gauge" class:outlet={isOutlet(n)} d={isOutlet(n) ? 'M-12,-9 H12 L0,11 Z' : 'M-9,-7 H9 L0,9 Z'} />
-					{:else if dam}
-						<rect class="farm dam" x="-9" y="-9" width="18" height="18" rx="3" />
-						<path class="dam-water" d="M-6,1 q3,-3 6,0 t6,0" />
-					{:else}
-						<circle class="farm" r="8" />
-					{/if}
-					<text class="label" x="17" y="-2">{short(name(n))}</text>
-					<text class="meta" x="17" y="12">{metaText(ln)}</text>
-				</g>
-			{/each}
-		</svg>
+		{/if}
 	</div>
 
 	{#if fill}
@@ -679,6 +752,26 @@
 		--sch-node: var(--text);
 		--sch-fill: var(--surface);
 		--sch-transfer: #7a4fc4;
+	}
+	/* Paper bands (taller than a page): each prints whole, its notes with it,
+	   in a box of its own rather than one box broken across the pages. */
+	.scroller.banded {
+		border: 0;
+		background: none;
+	}
+	.band {
+		break-inside: avoid;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-sunken);
+	}
+	.band + .band {
+		margin-top: 0.75rem;
+	}
+	.band-note {
+		margin: 0.2rem 0.5rem;
+		font-size: 0.75rem;
+		color: var(--text-muted);
 	}
 	.alert {
 		margin-top: 0.75rem;

@@ -2275,14 +2275,23 @@ role and not before it.
       drawing isn't split at a page break on purpose, so a network more than
       ~12 rows deep (a long main stem wraps down, not across) runs over the
       A4 height as one picture; see the entry below.
-- [ ] **A printed schematic taller than a page (2026-09-27).** The paper
+- [x] **A printed schematic taller than a page (2026-09-27).** The paper
       layout bounds the width, not the height: a main stem of 12+ gauges
       in a chain, or many wrapped rows, is taller than A4's ~1,000 px and
       Chromium carries the one SVG over the page break wherever it falls,
       possibly through a row of names. Durable fix: split the paper drawing
       into page-high bands at a row boundary (draw each band as its own SVG
       with the rivers continuing off its edge). Trigger: a real catchment
-      deeper than ~12 rows, or a client report with a cut name.
+      deeper than ~12 rows, or a client report with a cut name. **Done
+      (2026-09-27):** `paperBands` cuts a paper drawing taller than its page
+      just below a row's names, each band its own SVG printed whole
+      (`break-inside: avoid`), the first leaving room for the heading;
+      rivers crossing a cut run off one band and on from the next, with an
+      arrowhead at each end (`bandCrossings`) and a "Continues on the next
+      page" / "Continued from the previous page" note. A drawing that fits
+      prints as one, as before. `report-schematic-print.spec.ts` prints a
+      25-gauge main stem (four pages) and checks every name is whole on one
+      page, inside its margins, at ≥ 9.5 pt boxes.
 - [ ] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move

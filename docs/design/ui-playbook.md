@@ -243,7 +243,11 @@ section it belongs to, with the example that taught it.
   30-unit schematic printed its names at ~1.4 pt. Give paper its own layout
   (the report draws `NetworkSchematic paper`, wrapped to five columns, and
   hides the screen copy in print) and measure the type in the PDF
-  (`report-schematic-print.spec.ts`).
+  (`report-schematic-print.spec.ts`). Bound the height too: one SVG taller
+  than a page is sliced wherever the break falls, through a row of names if
+  that's where it is. Split it into page-high SVGs at clean boundaries, each
+  `break-inside: avoid` (the schematic's `paperBands`), and check in the PDF
+  that every name lands whole on exactly one page.
 - **An absolutely positioned bit inside a scrolling table escapes it**
   unless the box is its containing block: the visually-hidden words in
   `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of

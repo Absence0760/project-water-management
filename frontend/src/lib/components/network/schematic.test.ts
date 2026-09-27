@@ -4,7 +4,10 @@ import { newNode } from '$lib/model/editor.svelte';
 import {
 	arcHits,
 	arcPath,
+	BAND_CUT,
+	bandCrossings,
 	labelBox,
+	paperBands,
 	schematicLayout,
 	symbolBox,
 	transferArc,
@@ -153,6 +156,95 @@ describe('wrappedSchematicLayout (the printed report)', () => {
 	it('reports nodes caught in a loop, as the usual layout does', () => {
 		const l = wrappedSchematicLayout([node('Out', null), node('X', 'Y'), node('Y', 'X')], 5);
 		expect(l.orphans.map((n) => n.id)).toEqual(['X', 'Y']);
+	});
+});
+
+describe('paperBands and bandCrossings (a printed schematic taller than a page)', () => {
+	// NetworkSchematic's metrics: 74 px rows, 22 px padding, 30 px for the last row's names.
+	const ROW_H = 74;
+	const PAD_Y = 22;
+	const geometry = (rows: number) => ({ rows, rowH: ROW_H, padY: PAD_Y, height: PAD_Y * 2 + (rows - 1) * ROW_H + 30 });
+	const rowY = (r: number) => PAD_Y + r * ROW_H;
+
+	/** A main stem of `n` gauges, each with a unit beside it. */
+	function stem(n: number): NetworkNode[] {
+		const nodes = [node('G0', null, 0)];
+		for (let i = 1; i < n; i++) nodes.push(node(`G${i}`, `G${i - 1}`));
+		for (let i = 0; i < n; i++) nodes.push(node(`F${i}`, `G${i}`));
+		return nodes;
+	}
+
+	it('is one band, the whole drawing, when it fits the first page', () => {
+		const g = geometry(9);
+		expect(paperBands(g, { first: g.height, rest: g.height })).toEqual([{ first: 0, last: 8, y0: 0, y1: g.height }]);
+		expect(paperBands(geometry(0), { first: 100, rest: 100 })).toEqual([]);
+	});
+
+	it('cuts a deep drawing at row boundaries, every band within its page and every row in exactly one band', () => {
+		const g = geometry(26);
+		const budget = { first: 900, rest: 1000 };
+		const bands = paperBands(g, budget);
+		expect(bands.length).toBeGreaterThan(1);
+		// Contiguous from the top to the foot, rows in order, none twice or missing.
+		expect(bands[0]).toMatchObject({ first: 0, y0: 0 });
+		expect(bands.at(-1)).toMatchObject({ last: 25, y1: g.height });
+		for (let i = 1; i < bands.length; i++) {
+			expect(bands[i]!.first).toBe(bands[i - 1]!.last + 1);
+			expect(bands[i]!.y0).toBe(bands[i - 1]!.y1);
+		}
+		bands.forEach((b, i) => {
+			expect(b.y1 - b.y0).toBeLessThanOrEqual(i === 0 ? budget.first : budget.rest);
+			expect(b.last).toBeGreaterThanOrEqual(b.first);
+		});
+		// Each cut sits under its last row's names (which end 16 px below the
+		// row) and above the next row's confluence line (half a row above it).
+		for (const b of bands.slice(0, -1)) {
+			expect(b.y1).toBe(rowY(b.last) + BAND_CUT);
+			expect(b.y1).toBeGreaterThan(rowY(b.last) + 16);
+			expect(b.y1).toBeLessThan(rowY(b.last + 1) - ROW_H / 2);
+		}
+		// Greedy: a band ends only where the next row wouldn't fit.
+		expect(rowY(bands[0]!.last + 1) + BAND_CUT).toBeGreaterThan(budget.first);
+	});
+
+	it("keeps the last row with the drawing's foot, and ends even when a row is taller than the budget", () => {
+		const g = geometry(12);
+		const bands = paperBands(g, { first: 40, rest: 40 });
+		expect(bands.map((b) => [b.first, b.last])).toEqual(Array.from({ length: 12 }, (_, i) => [i, i]));
+		expect(bands.at(-1)!.y1).toBe(g.height);
+		// A budget that fits every row but not the foot never leaves an empty last band.
+		const room = rowY(11) + BAND_CUT;
+		const tight = paperBands(g, { first: room, rest: room });
+		expect(tight.map((b) => [b.first, b.last])).toEqual([
+			[0, 10],
+			[11, 11]
+		]);
+	});
+
+	it('finds the main stem crossing a cut, straight down from the row above', () => {
+		const l = schematicLayout(stem(25));
+		const at = (id: string) => l.nodes.find((n) => n.node.id === id)!;
+		const r = at('G5').row;
+		expect(at('G4').row).toBe(r + 1);
+		// F4 joins G4 from G5's row too: both rivers cross the cut under that row.
+		expect(bandCrossings(l, r)).toEqual([at('G5').col, at('F4').col].sort((a, b) => a - b));
+		expect(bandCrossings(l, at('G0').row)).toEqual([]);
+	});
+
+	it('puts a river wrapped from a higher row in its gutter where it crosses a cut', () => {
+		const l = wrappedSchematicLayout([node('Out', null, 0), ...Array.from({ length: 30 }, (_, i) => node(`U${i + 1}`, 'Out'))], 5);
+		const at = (id: string) => l.nodes.find((n) => n.node.id === id)!;
+		const top = at('U30').row;
+		// Under the top row: its own rivers leave from their nodes.
+		const first = bandCrossings(l, top);
+		for (const n of l.nodes.filter((x) => x.row === top)) expect(first).toContain(n.col);
+		// Lower down, the rivers of every row above run down the one gutter, beside that row's own.
+		const r = at('U1').row - 1;
+		const lower = bandCrossings(l, r);
+		expect(lower).toContain(WRAP_GUTTER / 2);
+		for (const n of l.nodes.filter((x) => x.row === r)) expect(lower).toContain(n.col);
+		expect(lower).toHaveLength(1 + l.nodes.filter((x) => x.row === r).length);
+		expect([...lower].sort((a, b) => a - b)).toEqual(lower);
 	});
 });
 
