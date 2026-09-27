@@ -160,4 +160,51 @@ describe('a flow record’s site (084_gauge_records)', () => {
 		// And it can be moved back to the outlet.
 		expect((await site(u, q.id, q.gaugeRecord, null)).body.siteNodeId).toBeNull();
 	});
+
+	it('a deleted gauge record restored from its revision is back at its gauge; an outlet record restores to the outlet (085)', async () => {
+		const u = await signUp('SiteRestore');
+		const q = await gaugedProject(u, 'Restore');
+		expect((await site(u, q.id, q.gaugeRecord, q.upper.id)).status).toBe(200);
+		const revisionOf = async (seriesId: string) => {
+			const res = await u.call('GET', `/projects/${q.id}/series/${seriesId}/revisions`);
+			return res.body.revisions[0] as { id: string; siteNodeId: string | null };
+		};
+		const restore = (seriesId: string, revId: string) => u.call('POST', `/projects/${q.id}/series/${seriesId}/revisions/${revId}/restore`, {});
+
+		// The gauge's record: deleted, then restored.
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.gaugeRecord}`)).status).toBe(204);
+		const gaugeRev = await revisionOf(q.gaugeRecord);
+		expect(gaugeRev.siteNodeId).toBe(q.upper.id);
+		const back = await restore(q.gaugeRecord, gaugeRev.id);
+		expect(back.status).toBe(200);
+		expect(back.body).toMatchObject({ name: 'Upper weir', siteNodeId: q.upper.id });
+		// It is the gauge's again, not the outlet's: the run reads it under its gauge's key.
+		const i = await input(u, q.id);
+		expect(i.series[gaugeSeriesKey('flow_observed_m3s', q.upper.id)]!.values).toEqual(flow(1));
+		expect(i.series.flow_observed_m3s!.values).toEqual(flow(2));
+
+		// Positive control: the outlet's record, deleted and restored, is the outlet's.
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.outletRecord}`)).status).toBe(204);
+		const outletRev = await revisionOf(q.outletRecord);
+		expect(outletRev.siteNodeId).toBeNull();
+		const outletBack = await restore(q.outletRecord, outletRev.id);
+		expect(outletBack.status).toBe(200);
+		expect(outletBack.body.siteNodeId).toBeNull();
+		expect((await input(u, q.id)).series.flow_observed_m3s!.values).toEqual(flow(2));
+	});
+
+	it('refuses to restore a gauge record whose gauge has left the model, rather than put it at the outlet', async () => {
+		const u = await signUp('SiteRestoreGone');
+		const q = await gaugedProject(u, 'Restore gone');
+		expect((await site(u, q.id, q.gaugeRecord, q.upper.id)).status).toBe(200);
+		expect((await u.call('DELETE', `/projects/${q.id}/series/${q.gaugeRecord}`)).status).toBe(204);
+		const rev = (await u.call('GET', `/projects/${q.id}/series/${q.gaugeRecord}/revisions`)).body.revisions[0] as { id: string };
+		const farm = { ...q.farm, downstreamNodeId: q.outlet.id };
+		expect((await u.call('PUT', `/projects/${q.id}/model`, { ...q.model, nodes: [q.outlet, farm] })).status).toBe(200);
+		const refused = await u.call('POST', `/projects/${q.id}/series/${q.gaugeRecord}/revisions/${rev.id}/restore`, {});
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/measured at a gauge that is no longer in the model/);
+		// Nothing was written: the record is still gone.
+		expect((await seriesList(u, q.id)).some((s) => s.name === 'Upper weir')).toBe(false);
+	});
 });

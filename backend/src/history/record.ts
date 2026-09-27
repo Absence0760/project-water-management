@@ -299,10 +299,13 @@ export async function recordSeriesRevision(
 	s: SeriesRow,
 	reason: 'replace' | 'delete' | 'manual_merge' | 'feed_replace'
 ): Promise<string> {
-	// The product and version, and the day boundary, go with the values, so a restore puts them back too (032, 033).
+	// The product and version, and the day boundary, go with the values, so a restore puts them back too (032, 033),
+	// and so does a flow record's site (085), read from the row as it stands before the change.
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version, day_boundary)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11, $12) RETURNING id`,
+		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version, day_boundary,
+			site_node_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11, $12,
+			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2)) RETURNING id`,
 		[projectId, s.id, s.kind, s.name, s.unit, s.startDate, s.values, valuesSha256(s.values), reason, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null]
 	);
 	return String(rows[0]!.id);

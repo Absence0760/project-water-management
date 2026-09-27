@@ -782,9 +782,11 @@ the reports):
             the summary CSV and the warnings
             ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6),
             [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)).
-            A series revision doesn't keep the site: a deleted gauge record
-            restored from its revision comes back at the outlet, to move
-            again by hand.
+            A series revision keeps the site too (2026-09-27, migration 085):
+            a deleted gauge record restored from its revision is back at its
+            gauge, and a restore whose gauge has left the model is refused
+            rather than put at the outlet
+            ([data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)).
       - [x] **The checks in the run comparison.** Done 2026-09-27 (issue
             #64): Compare's *Plausibility checks* panel gives, per site (the
             outlet and each gauge), both runs' failing years with those newly
