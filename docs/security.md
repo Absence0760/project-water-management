@@ -1169,8 +1169,17 @@ In short:
   which was a `500` on `PATCH /projects/:id`, `POST /projects`, `/copy` and
   `/teams`), a number that overflows to ±Infinity (`1e400`), and nesting past
   64 levels (a deep `settings` value overflowed the stack). The walk is
-  iterative. `http/body.security.db.test.ts` sweeps every POST/PUT/PATCH in
-  the live route inventory with each.
+  iterative. A route whose fields are all optional (start a run, a scenario
+  run, restore a revision) calls `readJson(c, { optional: true })`, which
+  takes an empty body as `{}` but still checks one that is there: these had
+  read the body with `c.req.json().catch(() => ({}))`, so a NUL in a run
+  `label` reached Postgres as a `500`. `http/body.guard.test.ts` fails on any
+  source file under `backend/src` that reads a body itself (`req.json()`,
+  `req.text()`, `parseBody()`, `req.raw…`) outside `http/body.ts`.
+  `http/body.security.db.test.ts` sweeps every POST/PUT/PATCH in the live
+  route inventory with each, and then puts a NUL into every string and
+  `1e400` into every number of each route's own sample body
+  (`__tests__/routeSamples.ts` `SAMPLE`).
 - **Series values** must stay finite and below 10¹² in the canonical unit
   *after* conversion (1e308 in inches was Infinity in mm), and a project holds
   at most **1 000 series** (`series/limits.ts`): a new series past it is `409`

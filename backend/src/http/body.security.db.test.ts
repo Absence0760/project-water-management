@@ -3,11 +3,13 @@
 // with a 400 and the code `body_refused` by readJson (http/body.ts), never a
 // 500 from Postgres (NUL is 22021 / 22P05) or a stack overflow. The route
 // list is the app's live inventory, so a new route is swept too.
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { app, signUp } from '../__tests__/helpers.js';
+import { buildLadder, SAMPLE, type LadderCtx, type Sample } from '../__tests__/routeSamples.js';
 import { MAX_JSON_DEPTH } from './body.js';
 
 const ORIGIN = 'http://localhost:7777';
+const ZERO = '00000000-0000-4000-8000-000000000000';
 const deep = (n: number) => '['.repeat(n) + ']'.repeat(n);
 
 /** Each hostile body as raw text (JSON.stringify can't write 1e400). */
@@ -77,4 +79,92 @@ describe('hostile JSON bodies', () => {
 		const r2 = await app.request(`/projects/${projectId}`, { method: 'PATCH', headers: { cookie: u.cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: over });
 		expect(r2.status).toBe(400);
 	});
+});
+
+/**
+ * Bodies for the routes whose every field is optional, so SAMPLE has none (or
+ * only a flag): each with its free-text fields filled in, so the per-field
+ * sweep below reaches them. These are the routes that read the body with
+ * `c.req.json().catch(() => ({}))` before readJson took an optional body.
+ */
+const OPTIONAL: Record<string, (c: LadderCtx) => Sample> = {
+	'POST /projects/:id/runs': () => ({ body: { label: 'Sweep run', forecast: false } }),
+	'PATCH /projects/:id/runs/:runId': () => ({ body: { notes: 'Sweep notes', pinned: true } }),
+	'POST /projects/:id/scenarios/:sid/runs': () => ({ body: { label: 'Sweep scenario run' } }),
+	'POST /projects/:id/history/revisions/:revId/restore': () => ({ body: { reason: 'Sweep restore' } }),
+	'POST /projects/:id/runs/:runId/restore-inputs': () => ({ body: { reason: 'Sweep restore' } })
+};
+const OVERFLOW = '__overflowing_number__';
+
+/** One copy of `body` per string (a NUL appended) and per number (1e400 in its place), as raw text, each named by its path. */
+function perField(body: unknown): [string, string][] {
+	const out: [string, string][] = [];
+	const walk = (v: unknown, path: (string | number)[]) => {
+		if (typeof v === 'string' || typeof v === 'number') {
+			const copy = structuredClone(body);
+			let at = copy as Record<string | number, unknown>;
+			for (const k of path.slice(0, -1)) at = at[k] as Record<string | number, unknown>;
+			at[path.at(-1)!] = typeof v === 'string' ? `${v}\u0000` : OVERFLOW;
+			out.push([`${path.join('.')} (${typeof v === 'string' ? 'NUL' : '1e400'})`, JSON.stringify(copy).replace(`"${OVERFLOW}"`, '1e400')]);
+		} else if (v !== null && typeof v === 'object') {
+			for (const [k, x] of Object.entries(v)) walk(x, [...path, Array.isArray(v) ? Number(k) : k]);
+		}
+	};
+	walk(body, []);
+	return out;
+}
+
+describe("hostile values in every field of each route's own body", () => {
+	let ctx: LadderCtx;
+	beforeAll(async () => {
+		ctx = await buildLadder('BodyField');
+	}, 60_000);
+	const samples = { ...SAMPLE, ...OPTIONAL };
+
+	const request = (route: string, s: Sample, text: string) => {
+		const [method, pattern] = route.split(' ') as [string, string];
+		const ids: Record<string, string> = { ...ctx.ids, ...s.params };
+		let path = pattern.replace(/:([A-Za-z]+)/g, (_, name: string) => ids[name] ?? ZERO);
+		if (s.query) path += `?${new URLSearchParams(s.query)}`;
+		return app.request(path, { method, headers: { cookie: ctx.owner.cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: text });
+	};
+
+	it('a NUL in any string, or 1e400 in any number, of every SAMPLE body is 400 body_refused', async () => {
+		const routes = Object.keys(samples).filter((r) => /^(POST|PUT|PATCH) /.test(r) && samples[r]!(ctx).body !== undefined);
+		expect(routes.length).toBeGreaterThanOrEqual(40);
+		const wrong: string[] = [];
+		let cases = 0;
+		for (const route of routes) {
+			const s = samples[route]!(ctx);
+			for (const [field, text] of perField(s.body)) {
+				cases++;
+				const r = await request(route, s, text);
+				const got = await r.text();
+				if (r.status !== 400 || JSON.parse(got).code !== 'body_refused') wrong.push(`${route} ${field}: ${r.status} ${got.slice(0, 120)}`);
+			}
+		}
+		expect(wrong).toEqual([]);
+		expect(cases).toBeGreaterThan(100);
+	}, 180_000);
+
+	// Regression: a NUL in a run label went through `c.req.json().catch(() => ({}))`, past zod, into Postgres (22021, a 500).
+	it('POST /projects/:id/runs: a NUL in the label is 400 body_refused; a clean label and an empty body run (positive control)', async () => {
+		const at = `/projects/${ctx.projectId}/runs`;
+		const nul = await request('POST /projects/:id/runs', {}, JSON.stringify({ label: 'Run\u0000one' }));
+		expect(nul.status).toBe(400);
+		expect(await nul.json()).toMatchObject({ code: 'body_refused' });
+		const clean = await ctx.owner.call('POST', at, { label: 'Run one' });
+		expect(clean.status).toBe(201);
+		expect(clean.body.run.label).toBe('Run one');
+		const empty = await app.request(at, { method: 'POST', headers: { cookie: ctx.owner.cookie, origin: ORIGIN } });
+		expect(empty.status).toBe(201);
+	}, 60_000);
+
+	it('the optional-body routes take their bodies untouched (positive control for the sweep)', async () => {
+		for (const route of ['POST /projects/:id/scenarios/:sid/runs', 'PATCH /projects/:id/runs/:runId', 'POST /projects/:id/evidence']) {
+			const s = samples[route]!(ctx);
+			const r = await request(route, s, JSON.stringify(s.body));
+			expect(r.status, `${route}: ${await r.clone().text()}`).toBeLessThan(300);
+		}
+	}, 60_000);
 });
