@@ -66,6 +66,7 @@ import {
 	type UserSummary
 } from './project';
 import { ENGINE_VERSION } from './version';
+import { damFigures } from './network/damLevel';
 import { alignSeries, monthly, prepareRun } from './prepare';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
@@ -515,7 +516,9 @@ function runNetwork(
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
 			...groundwaterMeans(plan.nodes[i]!, r),
-			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {})
+			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
+			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
+			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate) ?? {})
 		});
 	});
 

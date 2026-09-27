@@ -397,8 +397,10 @@ put the results first; its first screen follows board A1 of the redesign
   chunk (it waits for the run's record anyway).
 - **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
   the Summary keeps only the **Dams today** card (which links there) and the
-  one-line link below the first screen. `OverviewTab` still fetches each
-  dam's series for the card (`loadDamLevels`).
+  one-line link below the first screen. `OverviewTab` reads the card's
+  levels from the run summary (`FarmSummary.dam*`, engine ≥ 1.2.0, issue
+  #55, [model.md §2.8](./model.md#28-outputs); `damLevelsFromSummary`), and
+  fetches each dam's series (`loadDamLevels`) only for an older run.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -424,10 +426,10 @@ put the results first; its first screen follows board A1 of the redesign
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
-  days"; none when the run is shorter), flagged below 30 %; it reads each
-  dam's `dam_storage` series (fetched for it through the Runs cache), so it
-  says "loading dam levels" until they are in, and "no dams in the run"
-  without any. The card links to the [Dams](#dams) page: its term is a link
+  days"; none when the run is shorter), flagged below 30 %; it reads the
+  run summary's dam figures (engine ≥ 1.2.0, issue #55), or for an older run
+  each dam's `dam_storage` series through the Runs cache, when it says
+  "loading dam levels" until they are in; "no dams in the run" without any. The card links to the [Dams](#dams) page: its term is a link
   (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
   facts' tiles are. *Mean simulated outflow*
   (m³/s, % of natural, its change) is the line under the cards, with the
@@ -614,9 +616,10 @@ for every workspace tab. Its own chunk.
   fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
   one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
   fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
-  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The
-  per-dam fetches' durable fix, dam figures in the run summary, needs an
-  engine change and is open work ([followups.md](./followups.md), #55).
+  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The page
+  keeps fetching every dam's series even though the run summary carries the
+  table's figures (engine ≥ 1.2.0, issue #55), because each card's sparkline
+  and the storage chart draw them.
 - **Empty states**: no dams in the model says how to add one, with **Open the
   Network** and **Node table** (the grid modal over this page, where a node's
   dam capacity is set or a node added; a new dam shows as a card at once).
@@ -996,15 +999,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
   - **Dam level, end of latest run** (offered with a run and a dam): each
-    dam's storage on the run's last day, from its `dam_storage` series,
-    fetched only while this mode is picked, four at a time
-    (`overview/damLevels.ts` `loadDamLevels`, shared with the Dams page and
-    the Summary's Dams today; "Loading dam levels (N of M)…", Retry on failure). Bands on the
+    dam's storage on the run's last day, from the run summary's dam figures
+    (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
+    from its `dam_storage` series, fetched only while this mode is picked,
+    four at a time (`overview/damLevels.ts` `loadDamLevels`, shared with the
+    Dams page and the Summary's Dams today; "Loading dam levels (N of M)…",
+    Retry on failure). Bands on the
     same three colours: **60 % full or more** (`DAM_FULL_PCT`), **30–60 %**,
     **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
     the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and
-    minimum come from the run's own model. (Issue #55 would make this one
-    request.)
+    minimum come from the run's own model.
   - **Irrigated area** (no run needed; follows unsaved edits at once): each
     farm's planted hectares, in one hue over three steps (thirds of the
     largest farm's area, since more area is neither good nor bad) and

@@ -38,6 +38,7 @@ export * from './verify/columns';
 export { verifyRun } from './verify/verify';
 export { buildTopology, type Topology } from './network/topology';
 export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
+export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, type CalibrationWindow } from './network/stats';
