@@ -192,8 +192,8 @@ reviewer.
 
 ### Region
 
-`aws_region` has no default, on purpose: the operator chooses. The
-recommendation (**af-south-1**, with SES in the same region) and its
+`aws_region` has no default, on purpose: it is set in tfvars. The decision
+(**af-south-1**, with SES in the same region, 2026-09-26) and its
 reasoning, with sources, are in
 [docs/deployment.md § Region](../docs/deployment.md#region-recommendation).
 In short: SES, its DKIM/MAIL FROM feedback endpoints and the SES API VPC
@@ -274,6 +274,11 @@ recommended because it is the spend and brute-force guard for the API. A NAT
 instead of the endpoints would cost more (~$33 + data), and the fetcher
 Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
 needing one.
+
+These are the minimal (default) figures. The full, highly available
+configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $110–115 in
+us-east-1) is costed in
+[docs/deployment-tiers.md](../docs/deployment-tiers.md).
 
 ## Operator steps
 
