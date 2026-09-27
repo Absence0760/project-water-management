@@ -2522,7 +2522,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Which run.** `run=<id>` picks it; without one (or when it names a run
   that is gone) the newest run by `createdAt`, as the Summary shows
   (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
-  against. The **Run** menu in the header lists every run, newest first
+  against. The **Run** menu in the header (named for screen readers only,
+  `aria-label="Run"`, like Units & supply's picker, so on a phone the select fills a row of its own with
+  no "Run" line above it) lists every run, newest first
   (`runOptionLabel`, the compare picker's labels); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
@@ -3087,7 +3089,10 @@ read it before.
   not today's. The **runoff model** panel for GR4J runs (`RunoffPanel`:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
-  `runs/runoff.ts`), and the production and routing stores through time),
+  `runs/runoff.ts`), and the production and routing stores through time,
+  the chart beside the table only where the panel is 44rem wide or more (a
+  container query on the panel, so at 1024 px, with the sidebar and the runs
+  rail, it stacks under the table)),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

@@ -218,12 +218,11 @@
 {/snippet}
 {#snippet headerActions()}
 	{#if pick}
-		<div class="field inline run-pick">
-			<label for="river-run">Run</label>
-			<select id="river-run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
-				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
-			</select>
-		</div>
+		<!-- Laid out like the other sections' run pickers (Units & supply, Allocations): the name is for screen readers,
+		     so on a phone the select fills a row of its own instead of sitting under a "Run" line. -->
+		<select class="run-pick" aria-label="Run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
+			{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+		</select>
 		<a class="btn" href={runHref(pick.run.id)}>Open in Runs &amp; results</a>
 	{/if}
 {/snippet}
@@ -348,18 +347,6 @@
 	.river-context .lbl {
 		color: var(--text);
 	}
-	.inline {
-		flex-direction: row;
-		align-items: center;
-		gap: 0.5rem;
-		margin: 0;
-		min-width: 0;
-		max-width: 100%;
-	}
-	.inline select {
-		max-width: min(34rem, 100%);
-		min-width: 0;
-	}
 	.empty {
 		max-width: 44rem;
 	}
@@ -460,14 +447,13 @@
 	.panels > .panel {
 		min-width: 0;
 	}
+	.run-pick {
+		max-width: min(34rem, 60vw);
+		min-height: 36px;
+	}
+	/* The section header gives the picker a full row on a phone (workspace/SectionHeader). */
 	@media (max-width: 640px) {
-		.inline {
-			flex-wrap: wrap;
-			width: 100%;
-		}
-		.inline select {
-			width: 100%;
-			max-width: 100%;
+		.run-pick {
 			min-height: 44px;
 		}
 	}

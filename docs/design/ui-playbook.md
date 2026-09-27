@@ -179,6 +179,21 @@ section it belongs to, with the example that taught it.
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
   every column fit; side by side only where the container is wide enough.
+- **Put a panel's columns side by side by the panel's width, not the
+  window's.** Runs & results' runoff panel set its table beside the stores
+  chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
+  left the panel 465 px, the chart got 91 px and its Earlier / Later buttons
+  poked 20 px past the window. A container query on the panel
+  (`container: runoff / inline-size`) fixed it; `reflow.spec.ts` sweeps every
+  tab at 1024 px with a five-year run (a record past three years is what
+  gives a chart its full toolbar).
+- **A header picker's label is for screen readers.** River & reserve's
+  visible "Run" label sat on a line of its own above the select on a phone;
+  the other pickers (Units & supply, Allocations) wrap the select in a
+  `<label>` with a visually hidden word, and River's select now carries
+  `aria-label="Run"` (a wrapping label would fold the chosen option into
+  its name), so the select fills its row (`workspace-phone.spec.ts` checks
+  no picker drops below its control's top).
 - **Lay drawings out to their box; don't zoom text.** Scaling the Network
   drawing made labels huge; spacing columns and rows to the box, with a cap,
   looked right.
