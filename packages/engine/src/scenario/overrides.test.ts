@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { diffInputs } from '../compare';
 import { buildTopology } from '../network/topology';
-import { blankEwrRuleTable } from '../reserve/rules';
+import { blankEwrRuleTable, type EwrRuleTable } from '../reserve/rules';
 import { runModel } from '../run';
 import type { ModelInput, NetworkNode, RunSeries } from '../project';
 import { scrambleOrder } from '../testing/fuzz';
@@ -655,6 +655,101 @@ describe('demand.scale (issue #53 R1)', () => {
 	});
 });
 
+describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
+	/** A usable rule table at `site`: invented values, falling with the % point. */
+	const table = (site: string | null, over: Partial<EwrRuleTable> = {}): EwrRuleTable => ({
+		...blankEwrRuleTable(site),
+		source: 'Invented Reserve study, table 4',
+		sourceKind: 'gazetted',
+		ewr: Array.from({ length: 12 }, () => [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]),
+		...over
+	});
+	const set = (t: EwrRuleTable): ScenarioOp => ({ op: 'ewrRule.set', table: t });
+	/** The base with a second gauge W (an EWR site) on B's way to the outlet, and no table at the farm A. */
+	const withWeir = () => {
+		const b = base();
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0, sortOrder: 4 }));
+		nodeOf(b, 'B')!.downstreamNodeId = 'W';
+		b.settings.ewrRules = [blankEwrRuleTable('G')];
+		return b;
+	};
+
+	it('replaces the outlet’s table, whether the base keys it by null or by the outlet’s id, never touching the base', () => {
+		const b = deepFreeze(withWeir());
+		const r = applyScenario(b, [set(table(null))]);
+		expect(r.problems).toEqual([]);
+		// It keeps the key the site's table had, so run comparison sees that table changed.
+		expect(r.input.settings.ewrRules).toEqual([table('G')]);
+		expect(r.applied[0]!.notes).toEqual([]);
+		expect(b.settings.ewrRules).toEqual([blankEwrRuleTable('G')]);
+	});
+
+	it('adds a table at a gauge without one, and a later op replaces it', () => {
+		const desktop = table('W', { source: '  Desktop Reserve Model run  ', sourceKind: 'desktop' });
+		const r = applyScenario(withWeir(), [set(desktop), set(table('W', { sourceKind: 'other' }))]);
+		expect(r.problems).toEqual([]);
+		expect(r.applied).toHaveLength(2);
+		expect(r.input.settings.ewrRules).toEqual([blankEwrRuleTable('G'), table('W', { sourceKind: 'other' })]);
+		// The source is kept trimmed, as Settings saves it.
+		expect(applyScenario(withWeir(), [set(desktop)]).input.settings.ewrRules![1]!.source).toBe('Desktop Reserve Model run');
+	});
+
+	it('is used by the run: the scenario’s table is the one assessed at the site', () => {
+		const r = one(set(table(null, { naturalSource: 'run' })), withWeir());
+		const sites = runModel(r.input).summary.ewrAssurance ?? [];
+		expect(sites.map((x) => [x.isOutlet, x.source, x.sourceKind])).toEqual([[true, 'Invented Reserve study, table 4', 'gazetted']]);
+		// The base's blank table isn't usable, so the base assesses no site.
+		expect(runModel(withWeir()).summary.ewrAssurance ?? []).toEqual([]);
+	});
+
+	it('refuses a site that isn’t the outlet or a gauge marked as an EWR site, and a table Settings wouldn’t save', () => {
+		const b = withWeir();
+		expect(one(set(table('A')), b).problems).toEqual(['op 1 (ewrRule.set): an EWR site is the outlet or a gauge; "Farm A" is a farm']);
+		expect(one(set(table('Z')), b).problems).toEqual(['op 1 (ewrRule.set): node Z not found']);
+		nodeOf(b, 'W')!.ewrSite = false;
+		expect(one(set(table('W')), b).problems).toEqual(['op 1 (ewrRule.set): "Weir" is not marked as an EWR site: set its EWR site flag first']);
+		// Flag it first in the same scenario, and the table applies.
+		expect(applyScenario(b, [{ op: 'node.set', nodeId: 'W', field: 'ewrSite', value: true }, set(table('W'))]).problems).toEqual([]);
+		// Unchecked input (a stored op) meets the Settings form's checks.
+		expect(one(set(table(null, { source: ' ' })), b).problems[0]).toMatch(/^op 1 \(ewrRule\.set\): the rule table isn't usable: source Say where the table comes from/);
+		expect(one(set(table(null, { points: [50, 10] })), b).problems[0]).toMatch(/points The % points must rise/);
+		// At most EWR_RULE_TABLES_MAX tables: a 21st site is refused.
+		const full = withWeir();
+		full.settings.ewrRules = Array.from({ length: 20 }, (_, i) => blankEwrRuleTable(`s${i}`));
+		expect(one(set(table('W')), full).problems).toEqual(['op 1 (ewrRule.set): At most 20 rule tables.']);
+		// A skipped op changes nothing.
+		expect(one(set(table('A')), withWeir()).input.settings).toEqual(withWeir().settings);
+	});
+
+	it('is always a baseline assumption, even with the site’s gauge and every node owned', () => {
+		const b = withWeir();
+		const all = b.model.nodes.map((n) => n.id);
+		expect(classifyOp(set(table('W')), all, b)).toBe('baseline');
+		expect(classifyOp(set(table(null)), all)).toBe('baseline');
+		expect(classifyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 }, set(table(null))], ['A'])).toEqual(['proposal', 'baseline']);
+	});
+
+	it('applies in an application’s namespace like any op (the Reserve is a setting the applicant sees in full), still baseline', () => {
+		const masked = { nodes: { B: 'Farm 1', C: 'Farm 2' } };
+		const b = withWeir();
+		const r = applyScenario(b, [set(table('W'))], { mask: masked });
+		expect(r.problems).toEqual([]);
+		expect(r.input.settings.ewrRules![1]).toEqual(table('W'));
+		expect(classifyScenario(b, [set(table('W'))], ['A'], { mask: masked })).toEqual(['baseline']);
+		// A hidden farm as the site reads by the name the applicant sees it by.
+		expect(applyScenario(b, [set(table('B'))], { mask: masked }).problems).toEqual(['op 1 (ewrRule.set): an EWR site is the outlet or a gauge; "Farm 1" is a farm']);
+	});
+
+	it('run comparison lists the changed table, with its kind of source', () => {
+		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+		const r = one(set(table(null)), withWeir());
+		const text = diffInputs(snap(withWeir()), snap(r.input)).map((c) => c.text);
+		expect(text).toContain('EWR rule table at Outlet gauge: source none → "Invented Reserve study, table 4"');
+		expect(text).toContain('EWR rule table at Outlet gauge: kind of source not stated → Gazetted Reserve');
+		expect(text).toContain('EWR rule table at Outlet gauge: EWR values changed in Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep');
+	});
+});
+
 describe('classifyOp', () => {
 	const owned = ['A'];
 	const b = base();
@@ -741,7 +836,8 @@ describe('validateScenarioOps', () => {
 			{ op: 'settings.set', path: 'reportStart', value: null },
 			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2021-01-01', to: '2021-12-31' },
 			{ op: 'demand.scale', factor: 0.85 },
-			{ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm', junk: true }
+			{ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm', junk: true },
+			{ op: 'ewrRule.set', table: { ...blankEwrRuleTable(null), source: 'Invented study', junk: 1, highFlows: [{ label: 'Freshet', months: [11], peakM3s: 2, durationDays: 3, perYear: 1, junk: 2 }] } }
 		];
 		const { ops, errors } = validateScenarioOps(raw);
 		expect(errors).toEqual([]);
@@ -751,6 +847,33 @@ describe('validateScenarioOps', () => {
 		// Optional fields stay out when not given, so the stored op (and its hash) is what was sent.
 		expect(ops[12]).toEqual({ op: 'demand.scale', factor: 0.85 });
 		expect(ops[13]).toEqual({ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm' });
+		expect(ops[14]).toEqual({ op: 'ewrRule.set', table: { ...blankEwrRuleTable(null), source: 'Invented study', highFlows: [{ label: 'Freshet', months: [11], peakM3s: 2, durationDays: 3, perYear: 1 }] } });
+	});
+
+	it('checks ewrRule.set’s table with the Settings form’s own checks (engine ≥ 1.6.0)', () => {
+		const t = { ...blankEwrRuleTable('W'), source: 'Invented study' };
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'ewrRule.set', table: t },
+			{ op: 'ewrRule.set', table: { ...t, sourceKind: 'desktop' } },
+			{ op: 'ewrRule.set' },
+			{ op: 'ewrRule.set', table: { ...t, source: '' } },
+			{ op: 'ewrRule.set', table: { ...t, sourceKind: 'rumour', unit: 'gallons' } },
+			{ op: 'ewrRule.set', table: { ...t, naturalSource: 'table', natural: null } },
+			{ op: 'ewrRule.set', table: { ...t, siteNodeId: undefined } },
+			{ op: 'ewrRule.set', table: { ...t, ewr: [[1]] } },
+			{ op: 'ewrRule.set', table: { ...t, highFlows: [{ label: 'Flood', months: [1], peakM3s: 1, durationDays: 90, perYear: 12 }] } }
+		]);
+		expect(ops).toHaveLength(2);
+		expect(errors).toEqual([
+			'ops[2].table: must be a rule table',
+			'ops[3].table.source: Say where the table comes from (Reserve determination, gazette notice, table).',
+			'ops[4].table.sourceKind: must be one of gazetted, desktop, other',
+			'ops[4].table.unit: must be one of mcm, m3s',
+			'ops[5].table.natural: Enter the natural flow at each point, or find the percentile from the run.',
+			'ops[6].table.siteNodeId: missing',
+			'ops[7].table.ewr: Enter 12 rows of EWR values (Oct … Sep).',
+			"ops[8].table.highFlows: High flow 1: 12 events of 90 days don't fit in a year."
+		]);
 	});
 
 	it('takes node.set of the supply rule and river pump (WP-3.8), each value checked', () => {
