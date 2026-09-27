@@ -201,6 +201,22 @@ section it belongs to, with the example that taught it.
   doesn't add its own `scroll-margin-top` on top (the notice's 72 px then
   doubled it). `farm-view.spec.ts` checks a link lands below the header at
   both widths.
+- **Print is a layout too.** The report route feeds the server PDF, so the
+  frame must never reach paper: the shell's `.app-header` was renamed when
+  the sidebar came in, the report's print rule kept hiding the old name, and
+  the phone bar printed on every report's cover (A4 is under 900 px). Worse,
+  whichever frame was drawn when printing began changed the whole PDF: the
+  sidebar's grid column made 37 pages of 22, and the PDF with the phone bar
+  on its cover printed every word at ~80 % of the stylesheet's size. The frame now hides itself in print (`AppShell.svelte`). Check a
+  print change by comparing the PDF (`page.pdf()`, `pdftotext -bbox` for type
+  size, `pdfinfo` for pages), and keep screen-only fixes in `@media screen`.
+- **An absolutely positioned bit inside a scrolling table escapes it**
+  unless the box is its containing block: the visually-hidden words in
+  `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of
+  sideways scroll on a phone while the workspace, which had its own
+  `position: relative` rule, didn't. `.table-wrap` is `position: relative`
+  app-wide now; `expectNoSidewaysScroll` (`support/reflow.ts`) on a phone
+  catches the next one.
 
 ## 3. Colour, wording, content
 
