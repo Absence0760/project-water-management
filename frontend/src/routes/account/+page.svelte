@@ -497,7 +497,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		min-height: 2rem;
+		min-height: 32px;
 	}
 	@media (pointer: coarse), (max-width: 640px) {
 		.radio {

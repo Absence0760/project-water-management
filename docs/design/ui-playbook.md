@@ -326,6 +326,21 @@ Interaction details that bit:
   at its measured top, then set the list's own `scrollTop` from the two
   bounding boxes; the spec asserts the row is in the viewport and
   `window.scrollY` is 0.
+- **Don't disable a control while its own change saves.** The alert emails
+  page disabled each catchment's fieldset during a save, so an arrow key on
+  a radio moved the choice and then threw the keyboard's focus to the page.
+  Keep the controls live, mark the card `aria-busy`, and send one item's
+  saves in order, taking the server's answer once the last is back.
+- **A joined switch of radios: cover the border box.** A radio laid over
+  its segment with `inset: 0` sits inside the border, so a 32 px segment
+  gave a 30 px target; use `inset: -1px` and `calc(100% + 2px)`. And
+  `2rem` is 28 px at the 14 px root: the account page's "32 px" radio rows
+  were 28 px until `alerts.spec.ts` measured one.
+- **On a translated page, reuse messages before adding one.** A new
+  message has no Afrikaans until the translator agents run, so the page's
+  `<html lang>` stays `en` and `af-layout.spec.ts` fails. The alert emails
+  redesign marked not-yet-on alerts with a star and reused the existing
+  sentence as the card's footnote instead of adding a "Not on yet" badge.
 - **A tab that copies a list from the page must take the page's updates.**
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from

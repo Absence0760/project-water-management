@@ -8,6 +8,8 @@
 	// from the message catalogue (WP-2.5): lib/components/share/share.ts and
 	// the share.* keys. The page is in the language this device chose, else
 	// the browser's (the root layout), with the EN | AF switch in its header.
+	// One column on a phone; two on a laptop, so the result fits the window
+	// (issue #17, docs/ui.md § Share page).
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -53,12 +55,16 @@
 </svelte:head>
 
 <div class="share">
+	<!-- The app's name with "Shared view" under it, so the header stays one
+	     row on a 360 px phone with the EN | AF switch beside it. -->
 	<header class="share-header">
-		<span class="brand"><BrandMark size={26} /><span class="title">Water Management</span></span>
-		<div class="end"><span class="tag">{t('Shared view')}</span><LanguageSwitch compact /></div>
+		<div class="header-in">
+			<span class="brand"><BrandMark size={26} /><span class="names"><span class="title">Water Management</span><span class="tag">{t('Shared view')}</span></span></span>
+			<LanguageSwitch compact />
+		</div>
 	</header>
 
-	<main class="share-main" data-share-state={result?.state ?? 'loading'} aria-busy={result ? undefined : 'true'}>
+	<main class="share-main" class:wide={result?.state === 'ready'} data-share-state={result?.state ?? 'loading'} aria-busy={result ? undefined : 'true'}>
 		{#if !result}
 			<p class="sub" role="status">{t('Loading…')}</p>
 		{:else if result.state === 'nolink' || result.state === 'dead'}
@@ -76,48 +82,57 @@
 			{@const view = result.view}
 			{@const cv = view.publication.catchmentView}
 			{@const notice = shareNotice(view)}
-			<div>
+			<div class="head">
 				<h1>{view.project.name}</h1>
 				<p class="sub">{t('Catchment water balance, shared read-only')}</p>
 				<p class="dates">{publishedLine(view)}</p>
 			</div>
 
-			<NoticeCard {notice} noneText={t('No restriction from the WUA')} pageLang={wordsLang()} />
+			<!-- Phone: one column, the notice and the reserve first. From 860 px
+			     wide: those two on the left, the flow chart and About on the
+			     right, so the whole result fits a laptop screen. -->
+			<div class="cols">
+				<div class="col">
+					<NoticeCard {notice} noneText={t('No restriction from the WUA')} pageLang={wordsLang()} />
 
-			<section class="card" aria-labelledby="reserve-h">
-				<h2 id="reserve-h">{t('The river’s ecological reserve')}</h2>
-				<ul class="sites">
-					{#each reserveRows(cv) as row, i (i)}
-						<li class="site {row.state}">
-							<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-								{#if row.state === 'met'}
-									<circle cx="12" cy="12" r="9" /><path d="M7.5 12.5 L10.5 15.5 L16.5 9" />
-								{:else}
-									<path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /><path d="M12 17.5 V17.6" />
-								{/if}
-							</svg>
-							<div>
-								<p class="place">{row.place}</p>
-								<p>{row.last30}</p>
-								<p class="fine">{row.season}</p>
-							</div>
-						</li>
-					{/each}
-				</ul>
-			</section>
+					<section class="card" aria-labelledby="reserve-h">
+						<h2 id="reserve-h">{t('The river’s ecological reserve')}</h2>
+						<ul class="sites">
+							{#each reserveRows(cv) as row, i (i)}
+								<li class="site {row.state}">
+									<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+										{#if row.state === 'met'}
+											<circle cx="12" cy="12" r="9" /><path d="M7.5 12.5 L10.5 15.5 L16.5 9" />
+										{:else}
+											<path d="M12 3 L22 20 H2 Z" /><path d="M12 10 V14" /><path d="M12 17.5 V17.6" />
+										{/if}
+									</svg>
+									<div>
+										<p class="place">{row.place}</p>
+										<p>{row.last30}</p>
+										<p class="fine">{row.season}</p>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				</div>
 
-			{#if result.months}
-				<FlowChart months={result.months} />
-			{:else}
-				<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use.')}</p>
-			{/if}
+				<div class="col">
+					{#if result.months}
+						<FlowChart months={result.months} />
+					{:else}
+						<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use.')}</p>
+					{/if}
 
-			<section class="card" aria-labelledby="about-h">
-				<h2 id="about-h">{t('About this page')}</h2>
-				<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.')}</p>
-				<p class="sub">{farmsLine(cv)}</p>
-				<p class="fine">{t('A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.')}</p>
-			</section>
+					<section class="card" aria-labelledby="about-h">
+						<h2 id="about-h">{t('About this page')}</h2>
+						<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.')}</p>
+						<p class="sub">{farmsLine(cv)}</p>
+						<p class="fine">{t('A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.')}</p>
+					</section>
+				</div>
+			</div>
 		{/if}
 	</main>
 </div>
@@ -130,33 +145,46 @@
 		background: var(--bg);
 	}
 	.share-header {
+		background: var(--surface);
+		border-bottom: 1px solid var(--border);
+	}
+	/* The header's content lines up with the page's (1120 px on a wide
+	   screen) rather than sitting at the window's far edges. */
+	.header-in {
+		max-width: 1120px;
 		min-height: 56px;
-		padding: 0 16px;
+		margin: 0 auto;
+		padding: 4px 16px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
 	}
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-width: 0;
+	}
+	.names {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		line-height: 1.2;
 	}
 	.title {
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 17px;
-	}
-	.end {
-		display: flex;
-		align-items: center;
-		gap: 12px;
+		white-space: nowrap;
 	}
 	.tag {
-		font-size: 14px;
+		font-size: 13px;
 		color: var(--text-2);
+	}
+	/* The switch and its (empty until it fails) status line don't wrap the header. */
+	.header-in :global(.lang) {
+		flex-wrap: nowrap;
 	}
 	.share-main {
 		max-width: 560px;
@@ -165,6 +193,29 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		container: share / inline-size;
+	}
+	/* The result is wider than a message: room for two columns. */
+	.share-main.wide {
+		max-width: 1120px;
+	}
+	.cols,
+	.col {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		min-width: 0;
+	}
+	@container share (min-width: 860px) {
+		.cols {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			align-items: start;
+			gap: 16px;
+		}
+		.col {
+			gap: 16px;
+		}
 	}
 	.sites {
 		list-style: none;
