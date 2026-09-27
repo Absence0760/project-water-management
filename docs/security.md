@@ -99,7 +99,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   Closing this fully means sign-up that is email-first (confirm before the
   account exists), which is an operator decision (see Known gaps).
 - **Email content:** every user-controlled value (project/team names, display
-  names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
+  names) is HTML-escaped; subjects and extra header values are stripped of
+  CR/LF; `sendMail` refuses a recipient that isn't one bare address (a
+  one-lined "a@x Bcc: b@y" is a group to b@y for nodemailer).
+  `mail/outbound.security.test.ts` feeds hostile text to every exported
+  `…Mail` builder (the list comes from the modules' exports) and sends each
+  through the SMTP and SES transports. Links use `SITE_URL`
   from config, never the request's Host header. The reset and verify pages
   strip the token from the address bar and set a `no-referrer` policy
   (`<meta name="referrer">`; the invite sign-up page does the same).
@@ -159,6 +164,18 @@ buys a **render session** that can read one report and nothing else.
   `render-results` and put objects under `reports/` in the reports bucket:
   it can't read, list or delete a PDF. It opens only its configured
   `RENDER_SITE_URL`: a render request carries ids and the token, never a URL.
+  Its browser is confined to that site and `RENDER_API_URL` whatever the
+  page asks for (`reports/render.ts` `confineToOrigins`): any request to
+  another origin (an image, a fetch, a frame, a script navigation) is aborted
+  before it leaves, a navigation's redirect chain is walked hop by hop first
+  and refused if any hop leaves, a render whose page tries to leave fails at
+  once without retry, and only a page of the site is ever printed. The
+  site's CSP is a second layer in production only. `reports/render.origin.test.ts`
+  checks each case with real Chromium against a counting "elsewhere" server,
+  with a positive control (skipped only where Playwright's Chromium isn't
+  installed). Residual: a redirect of a *subresource* is followed by the
+  browser unrouted (Playwright can't route those hops); in production the
+  CSP checks them.
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
   or taken from a message), deleted after 7 days. A download is a pre-signed
@@ -976,9 +993,11 @@ In short:
     `FEED_SOURCE=fixtures` is the default
     everywhere but the production fetcher, so dev and CI never fetch.
   - Every response is bounded: 20 s timeout (all hops and the body), 4 MB cap whether declared or
-    streamed, range reads for the grids. A GeoTIFF is parsed by our own
-    bounds-checked reader (dimensions, strip sizes and LZW codes checked;
-    anything outside the known layout refused), and a DWS page by a strict
+    streamed, range reads for the grids (`feeds/http.test.ts`). A GeoTIFF is parsed by our own
+    bounds-checked reader (dimensions up to 100 000 pixels, strips up to 8 MB
+    read and 2 MB decoded, GDAL metadata up to 1 MB, GeoKeys up to 4096, and
+    LZW codes checked, each before the read or allocation it bounds;
+    anything outside the known layout refused; `feeds/sources/tiff.test.ts`), and a DWS page by a strict
     parser that refuses a changed header, impossible or duplicate dates and
     the site's HTTP-200 error page. Values must be finite and non-negative
     (a DWS gap is null, never a zero); rainfall over 2 000 mm/day is refused.
