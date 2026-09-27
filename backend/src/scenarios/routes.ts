@@ -21,6 +21,7 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
+import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
@@ -38,8 +39,6 @@ import {
 } from './execute.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
-
-const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -144,7 +143,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios', async (c) => {
 		const id = c.req.param('id');
-		const body = CreateScenarioBody.parse(await json(c));
+		const body = CreateScenarioBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			// A viewer reads scenarios but makes none; a contributor makes applications.
@@ -205,7 +204,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.patch('/:id/scenarios/:sid', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = PatchScenarioBody.parse(await json(c));
+		const body = PatchScenarioBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const userId = c.get('userId');
@@ -290,7 +289,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios/:sid/runs', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = ScenarioRunBody.parse(await json(c));
+		const body = ScenarioRunBody.parse(await readJson(c, { optional: true }));
 		// A team scenario: an editor runs it. An application: whoever reads it
 		// as its owner or a shared member, and the assessors; never a viewer.
 		// Checked when the run is read and again when it is stored (runScenario).
@@ -324,7 +323,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios/:sid/rebase', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = RebaseBody.parse(await json(c));
+		const body = RebaseBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const current = await loadScenario(db, id, scenarioId(sid));
@@ -395,7 +394,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	// The assessor's decision: an editor who didn't make the application.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = DecideBody.parse(await json(c));
+		const body = DecideBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			const s = await loadScenario(db, id, scenarioId(sid));
@@ -427,7 +426,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/scenarios/:sid/members', async (c) => {
 		const { id, sid } = c.req.param();
-		const body = ShareBody.parse(await json(c));
+		const body = ShareBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'contributor');
 			const s = await loadScenario(db, id, scenarioId(sid));

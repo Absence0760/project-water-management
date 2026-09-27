@@ -44,11 +44,20 @@ export function jsonBodyProblem(value: unknown): string | null {
  * would become in `handleError`. So is a body no route can store (a NUL, an
  * overflowing number, nesting past MAX_JSON_DEPTH): refused here, once for
  * every route, with the code `body_refused` (docs/security.md § Input limits).
+ *
+ * `optional`: a route whose every field is optional (start a run, restore a
+ * revision) takes an empty body as `{}`. A body that is there is still
+ * parsed and checked, so malformed JSON stays a 400.
+ *
+ * Every JSON body goes through here: body.guard.test.ts fails on a route
+ * that reads one any other way.
  */
-export async function readJson(c: Context): Promise<unknown> {
+export async function readJson(c: Context, opts: { optional?: boolean } = {}): Promise<unknown> {
 	let body: unknown;
 	try {
-		body = await c.req.json();
+		const text = await c.req.text();
+		if (opts.optional && !text.trim()) return {};
+		body = JSON.parse(text);
 	} catch (err) {
 		if (err instanceof SyntaxError) throw new ApiError(400, 'invalid JSON');
 		throw err;
