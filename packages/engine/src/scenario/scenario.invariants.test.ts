@@ -111,6 +111,16 @@ describe('scenarios on random networks', () => {
 		expect(changed).toBeGreaterThan(CASES * 4);
 	}, 300_000);
 
+	/** The 0-based ops a problem names: `op 3 (…)`, `ops 3–5 (…)` or `ops 3, 5 (…)` (1-based). */
+	const opsNamed = (p: string): number[] => {
+		const m = /^ops? ([\d–, ]+?) \(/.exec(p);
+		if (!m) return [];
+		return m[1]!.split(', ').flatMap((part) => {
+			const [a, b = a] = part.split('–').map(Number) as [number, number?];
+			return Array.from({ length: b! - a + 1 }, (_, k) => a + k - 1);
+		});
+	};
+
 	it('applied ops keep a valid tree and never touch the base', () => {
 		let problems = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES; seed++) {
@@ -120,7 +130,9 @@ describe('scenarios on random networks', () => {
 			problems += r.problems.length;
 			expect(JSON.stringify(base)).toBe(before);
 			expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
-			expect(r.applied.length + r.problems.length).toBe(12);
+			// Every op applied or named by exactly one problem; an edit group's problem names each of its ops (`ops 4–5 (node.set, …)`).
+			const named = r.problems.flatMap((p) => opsNamed(p));
+			expect([...r.applied.map((a) => a.index), ...named].sort((a, b) => a - b), `seed ${seed}: ${JSON.stringify(r.problems)}`).toEqual(Array.from({ length: 12 }, (_, i) => i));
 		}
 		// The generator aims some ops at missing or invalid targets: the problem path runs.
 		expect(problems).toBeGreaterThan(CASES / 2);
