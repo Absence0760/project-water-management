@@ -1,7 +1,8 @@
 <!--
 	The report page's server-side PDF (WP-2.15 Phase B; docs/ui.md § Report):
-	"Generate PDF" and "Email me the PDF" queue a render of this run in the
-	background worker (the same page, in headless Chromium), then follow the
+	"Generate PDF" and "Email me the PDF" queue a render of this run (its impact
+	report when `against` names a baseline) in the background worker (the same
+	page, in headless Chromium), then follow the
 	job's status until the PDF is ready to download. Its own chunk: the report
 	page loads it lazily. Helpers in ./serverPdf.ts.
 -->
@@ -10,7 +11,7 @@
 	import { api } from '$lib/api';
 	import { describeReport, isPending, type ReportStatus, reportsApi } from './serverPdf';
 
-	let { projectId, runId }: { projectId: string; runId: string } = $props();
+	let { projectId, runId, against = null }: { projectId: string; runId: string; against?: string | null } = $props();
 
 	const reports = $derived(reportsApi(api, projectId));
 	/** How often to ask while the worker has it. */
@@ -57,7 +58,7 @@
 		misses = 0;
 		emailed = email;
 		try {
-			const jobId = await reports.create({ runId, email: email || undefined });
+			const jobId = await reports.create({ runId, ...(against ? { against } : {}), email: email || undefined });
 			await follow(jobId);
 		} catch (e) {
 			error = msg(e);

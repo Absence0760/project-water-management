@@ -167,12 +167,9 @@ test("Export impact report opens each what-if's report with its impact against t
 	await expect(table.getByRole('rowheader', { name: /^Dam storage, end of run/ })).toBeVisible();
 	await expect(impact.getByTestId('impact-takeaways')).toContainText(/“More orchard and a bigger dam” costs the reserve \d+ more days a year\./);
 	await expect(impact.getByText('Upper farm: dam capacity 150,000 m³ → 300,000 m³')).toBeVisible();
-	// The server PDF prints the plain report, so it is offered by name, not as a PDF without the impact.
-	await expect(page.getByRole('button', { name: 'Generate PDF' })).toHaveCount(0);
-	await expect(page.getByRole('link', { name: "The run's report without the impact (server PDF)" })).toHaveAttribute(
-		'href',
-		`/projects/${p.id}/report?run=${p.whatIf2}`
-	);
+	// The server PDF prints this impact report too (server-report.spec.ts renders one).
+	await expect(page.getByRole('button', { name: 'Generate PDF' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Email me the PDF' })).toBeEnabled();
 	await expect(page.getByRole('link', { name: '← Back to the comparison' })).toHaveAttribute(
 		'href',
 		`/projects/${p.id}?tab=compare&a=${ref(p.baseline)}&b=${ref(p.whatIf2)}`
@@ -188,6 +185,9 @@ test("Export impact report opens each what-if's report with its impact against t
 	await expect(page.getByRole('region', { name: '1. Impact against the baseline' }).getByRole('status')).toHaveText(
 		"This run couldn't be compared with the baseline: The baseline doesn't exist any more, or its project isn't shared with you."
 	);
+	// No server PDF of it: the API would refuse that baseline too. The browser's print stays.
+	await expect(page.getByRole('button', { name: 'Generate PDF' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeEnabled();
 });
 
 test('+ New what-if opens the Scenarios dialog on the baseline, and Back returns to the comparison; a viewer has no New what-if', async ({
