@@ -909,7 +909,7 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 		yield csvRow(['Natural-flow percentile from', r.naturalSource === 'run' ? "the run's simulated natural flow at the site" : "the table's natural flows"]);
 		yield csvRow(['Scale applied to the table', r.scale]);
 		yield csvRow(['% points', ...r.points]);
-		// Engine ≥ 1.7.0 (model.md §2.9c): the run's natural MAR against the determination's, only when the table records one.
+		// Engine ≥ 1.10.0 (model.md §2.9c): the run's natural MAR against the determination's, only when the table records one.
 		if (r.naturalMar) yield csvRow(['Natural MAR (Mm³/a): run', r.naturalMar.runMcm, 'determination', r.naturalMar.tableMcm, 'Difference (%)', r.naturalMar.differencePct]);
 		const o = r.overall;
 		yield csvRow(['Months met', o.met, 'of', o.months, 'Met (%)', pct(o.rate) as Cell]);

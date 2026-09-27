@@ -150,7 +150,7 @@ describe('storage bands', () => {
 describe('the trigger table', () => {
 	// Edges at 200 000 and 400 000 m³; demand from 100 % down to 10 %.
 	const table = runReviewTriggers(pumped, { reviewDate: REVIEW, seasonEnd: END, levels: levels([1, 0.7, 0.5, 0.3, 0.1]), edgesM3: [200_000, 400_000], baseRun: pumpedBase });
-	// The lowest storage the base run had on 1 January (engine ≥ 1.7.0): where the lowest band runs from.
+	// The lowest storage the base run had on 1 January (engine ≥ 1.10.0): where the lowest band runs from.
 	const driest = Math.min(...reviewStorageHistory(pumped, pumpedBase, REVIEW).map((x) => x.storageM3));
 
 	it('picks, per band, the highest level that meets the planning rule, fullest band first', () => {
@@ -202,7 +202,7 @@ describe('the trigger table', () => {
 		expect(describeTriggerRow(midpoint, { ...table.rows[1]!, startStorageM3: 300_000 })).toMatch(/^At or above 200 000 m³ on 1 January 2013 \(run from 300 000 m³\): /);
 	});
 
-	it('the lowest band runs from the lowest storage on record for the date, else from empty dams (engine ≥ 1.7.0)', () => {
+	it('the lowest band runs from the lowest storage on record for the date, else from empty dams (engine ≥ 1.10.0)', () => {
 		const sample = (storageM3: number, waterYear: number): ReviewStorageSample => ({ waterYear, date: `${waterYear + 1}-01-01`, storageM3 });
 		const hist = [sample(250_000, 2001), sample(90_000, 2002), sample(310_000, 2003)];
 		expect(lowestBandFloor(hist, { fromM3: 0, toM3: 200_000 })).toEqual({ floorM3: 90_000, fromRecord: true, warning: null });

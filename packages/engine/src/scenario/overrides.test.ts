@@ -704,7 +704,7 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 		expect(applyScenario(withWeir(), [set(desktop)]).input.settings.ewrRules![1]!.source).toBe('Desktop Reserve Model run');
 	});
 
-	it('carries the determination’s natural MAR (engine ≥ 1.7.0) when set, drops a null one, and refuses a bad one', () => {
+	it('carries the determination’s natural MAR (engine ≥ 1.10.0) when set, drops a null one, and refuses a bad one', () => {
 		const r = applyScenario(withWeir(), [set(table('W', { naturalMarMcm: 14 })), set(table(null, { naturalMarMcm: null }))]);
 		expect(r.problems).toEqual([]);
 		const [outlet, weir] = r.input.settings.ewrRules!;

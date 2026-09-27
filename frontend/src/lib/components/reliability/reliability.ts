@@ -136,9 +136,9 @@ export function accountBars(r: WaterAccountRow): { inBar: Segment[]; outBar: Seg
 export const ewrMetShare = (e: { requiredM3: number; metM3: number }): number | null => (e.requiredM3 > 0 ? e.metM3 / e.requiredM3 : null);
 
 /**
- * Part water years the annual measure left out (engine ≥ 1.7.0, docs/model.md
+ * Part water years the annual measure left out (engine ≥ 1.10.0, docs/model.md
  * §2.11a): the most any unit or user had, since a part year counts only for
- * one with demand in it. null on a run before 1.7.0, which counted them.
+ * one with demand in it. null on a run before 1.10.0, which counted them.
  */
 export function partWaterYears(a: Pick<SupplyAssurance, 'reliability'>): number | null {
 	const known = a.reliability.map((r) => r.partWaterYears).filter((n): n is number => typeof n === 'number');

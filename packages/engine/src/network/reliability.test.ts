@@ -45,7 +45,7 @@ describe('reliability (hand-worked)', () => {
 		expect(r!.longestFailureDays).toBe(2);
 		expect(r!.meanFailureDeficitM3).toBe(10.5);
 		expect(r!.maxFailureDeficitM3).toBe(16);
-		// Both water years are part years (engine ≥ 1.7.0): the annual measure counts neither.
+		// Both water years are part years (engine ≥ 1.10.0): the annual measure counts neither.
 		expect(r!.waterYears).toBe(0);
 		expect(r!.partWaterYears).toBe(2);
 		expect(r!.waterYearsMet).toBe(0);
@@ -75,7 +75,7 @@ describe('reliability (hand-worked)', () => {
 		expect([n!.timeReliability, n!.volumetricReliability, n!.annualReliability]).toEqual([null, null, null]);
 	});
 
-	it('the annual measure counts complete water years only, and says how many part years it left out (engine ≥ 1.7.0)', () => {
+	it('the annual measure counts complete water years only, and says how many part years it left out (engine ≥ 1.10.0)', () => {
 		// 29–30 Sep 2000 (part of water year 1999), all of water year 2000 (365 days), 1–4 Oct 2001 (part of 2001).
 		const days = 2 + 365 + 4;
 		const demand = new Array<number>(days).fill(10);

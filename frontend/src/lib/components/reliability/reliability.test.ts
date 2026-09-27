@@ -53,7 +53,7 @@ describe('assurance helpers', () => {
 		expect(classCounts(a.stress.nodes[0]!)).toEqual({ low: 0, moderate: 0, high: 1, severe: 0, critical: 1 });
 	});
 
-	it('the part water years the annual measure left out (engine ≥ 1.7.0), null on an older run', () => {
+	it('the part water years the annual measure left out (engine ≥ 1.10.0), null on an older run', () => {
 		// Both water years of the six days are part years.
 		expect(partWaterYears(a)).toBe(2);
 		const r = a.reliability[0]!;

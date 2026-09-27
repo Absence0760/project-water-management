@@ -65,7 +65,7 @@ describe('errors', () => {
 		expect(rulesError([table(), table()])).toBe('Each EWR site can have one rule table.');
 	});
 
-	it('the determination’s natural MAR (engine ≥ 1.7.0) is optional; a cleared input (null) is fine, 0 is not', () => {
+	it('the determination’s natural MAR (engine ≥ 1.10.0) is optional; a cleared input (null) is fine, 0 is not', () => {
 		expect(tableErrors(table({ naturalMarMcm: 12.5 }))).toEqual({});
 		expect(tableErrors(table({ naturalMarMcm: null }))).toEqual({});
 		expect(tableErrors(table({ naturalMarMcm: 0 }))).toEqual({ naturalMarMcm: 'The natural MAR must be above 0 and at most 1,000,000 Mm³ a year, or left blank.' });

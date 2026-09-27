@@ -186,7 +186,7 @@ describe('low flows and high-flow components (engine ≥ 0.33.0)', () => {
 	});
 });
 
-describe("the determination's natural MAR (engine ≥ 1.7.0, issue #46)", () => {
+describe("the determination's natural MAR (engine ≥ 1.10.0, issue #46)", () => {
 	it('is optional: absent, null or a number above 0 up to the value ceiling; anything else is refused on its own field', () => {
 		expect(ewrRuleTableIssues(table())).toEqual([]);
 		for (const v of [null, 0.001, 12.5, 1e6]) expect(ewrRuleTableIssues(table({ naturalMarMcm: v }))).toEqual([]);

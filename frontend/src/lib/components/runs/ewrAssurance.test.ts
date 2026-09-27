@@ -68,7 +68,7 @@ describe('verdict and method', () => {
 	});
 });
 
-describe('naturalMarLine (engine ≥ 1.7.0)', () => {
+describe('naturalMarLine (engine ≥ 1.10.0)', () => {
 	it('is null without the determination’s natural MAR, and flags a gap beyond ±15 % only with the percentile from the run', () => {
 		expect(naturalMarLine({ naturalSource: 'run' })).toBeNull();
 		const wet = { runMcm: 12, tableMcm: 10, differencePct: 20 };

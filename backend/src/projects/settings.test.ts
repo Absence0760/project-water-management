@@ -896,7 +896,7 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues([table({ sourceKind: 'guess' })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.sourceKind');
 	});
 
-	it('accepts the determination’s natural MAR, absent or null, and refuses one that isn’t above 0 (engine ≥ 1.7.0)', () => {
+	it('accepts the determination’s natural MAR, absent or null, and refuses one that isn’t above 0 (engine ≥ 1.10.0)', () => {
 		for (const naturalMarMcm of [12.5, null]) expect(issues([table({ naturalMarMcm })])).toEqual([]);
 		for (const naturalMarMcm of [0, -2, '12']) expect(issues([table({ naturalMarMcm })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.naturalMarMcm');
 	});

@@ -921,7 +921,7 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});
 
-	it("compares the run's natural MAR with the determination's only when the table records one (engine ≥ 1.7.0)", () => {
+	it("compares the run's natural MAR with the determination's only when the table records one (engine ≥ 1.10.0)", () => {
 		expect([...ewrAssuranceLines([report])].some((l) => l.startsWith('Natural MAR'))).toBe(false);
 		const r = assessSite(start, days, { table: { ...table, naturalMarMcm: 10 }, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
 		const row = [...ewrAssuranceLines([r])].find((l) => l.startsWith('Natural MAR'))!.split(',');

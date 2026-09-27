@@ -2796,7 +2796,7 @@ natural percentile comes from (`naturalSource`):
   determination's own curve, so the requirement is the gazette's for a given
   natural flow, but a model biased against that curve shifts the conditions.
 
-**The determination's natural MAR** (engine ≥ 1.7.0, issue #46; optional
+**The determination's natural MAR** (engine ≥ 1.10.0, issue #46; optional
 `naturalMarMcm`, Mm³ a year, above 0, × `scale` like every table value).
 With it, the site's report carries `naturalMar`: the run's natural MAR at
 the site (Σ over the 12 calendar months of the mean complete-month natural
@@ -2893,7 +2893,7 @@ run warnings: an EWR row that rises with the % point, a natural row that rises
 (its running minimum is used), and an EWR above the natural flow at a point
 (`table` source), which even natural flow can't meet. A calendar month the
 run has no complete year of is named, and so is a record shorter than 10
-years of a calendar month. From engine 1.7.0, a run natural MAR more than
+years of a calendar month. From engine 1.10.0, a run natural MAR more than
 ±15 % from the determination's with the percentile from the run (above).
 
 **Invariants (tested, `reserve/assurance.test.ts`).**
@@ -4373,7 +4373,7 @@ New outputs only: every figure is read off the run's own daily `demand` and
 | --- | --- |
 | Time-based | days whose demand D > 0 was fully met ÷ days with D > 0. "Fully met": D − G ≤ 10⁻⁹ D (float noise). Days without demand are neither met nor failed, so a winter without irrigation doesn't inflate it. |
 | Volumetric | Σ G ÷ Σ D. Equals the curtailment table's I ÷ H for the same farm (an invariant). |
-| Annual | **complete** water years (1 Oct … 30 Sep all inside the window) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ complete water years with demand (`waterYears`). A part year at either end of the window is left out and counted in `partWaterYears` (engine ≥ 1.7.0, issue #46; up to 1.6.0 it counted as a whole year, so a few wet or dry months weighed a year and the window could be picked to catch or drop them). Default 0.9, a project setting, not a standard. |
+| Annual | **complete** water years (1 Oct … 30 Sep all inside the window) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ complete water years with demand (`waterYears`). A part year at either end of the window is left out and counted in `partWaterYears` (engine ≥ 1.10.0, issue #46; up to 1.9.0 it counted as a whole year, so a few wet or dry months weighed a year and the window could be picked to catch or drop them). Default 0.9, a project setting, not a standard. |
 | Resilience | a failure is a run of consecutive demand days not fully met (a day without demand ends it); the mean and the longest length in days. Hashimoto et al. (1982) define resilience as the probability of recovering, 1 ÷ the mean length. |
 | Vulnerability | Σ (D − G) over each failure run: the mean and the largest, m³ (Hashimoto's "severity"). |
 
@@ -4390,7 +4390,7 @@ demand has no class.
 
 Decisions pending the hydrologist: demand days rather than all days for the
 time-based measure (kept, as the licensing-authority draft on #46 confirms);
-the annual measure on complete water years only (engine 1.7.0, from the same
+the annual measure on complete water years only (engine 1.10.0, from the same
 **draft, pending the client's hydrologist**; as the Reserve, the year classes
 and the allocation summary already count whole years); the v004 thresholds
 as they stand.
@@ -4952,7 +4952,7 @@ is one band over the whole range (`wholeRange`).
 band's **lower edge**: a row reads "at or above X m³", and the run is then
 the band's least favourable start, the cautious reading (design §2
 finding 4, after Kaune et al. 2020). The **lowest band** (from 0) runs,
-from engine 1.7.0 (issue #46, `lowestBandFloor`), from the **lowest total
+from engine 1.10.0 (issue #46, `lowestBandFloor`), from the **lowest total
 storage on record for the review date**: the minimum over every year of
 `reviewStorageHistory` (taken for explicit edges too), still shared pro rata
 to capacity. Running "below X" from empty dams was a start the catchment may
@@ -5006,7 +5006,7 @@ before it is used.
 **Warnings**: too few analogue years (every row `notEnoughYears`, as
 §2.15), a band where no level meets the rule, a table that isn't
 monotone, band edges left out, tercile bands from a short history, and
-(engine ≥ 1.7.0) a lowest band run from empty dams because the record has
+(engine ≥ 1.10.0) a lowest band run from empty dams because the record has
 no lower start on the date.
 
 **Wording** (`describeTriggerRow`): counted years only, never "recommend",

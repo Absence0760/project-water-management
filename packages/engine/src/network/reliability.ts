@@ -8,7 +8,7 @@
 //   (settings.reportStart … reportEnd, the curtailment window): time-based
 //   (share of demand days fully met), volumetric (Σ supplied / Σ demand) and
 //   annual (share of complete water years whose supply ratio reaches a
-//   threshold; engine ≥ 1.7.0 leaves part years out), by
+//   threshold; engine ≥ 1.10.0 leaves part years out), by
 //   water-year month and overall; resilience (mean length of a failure run)
 //   and vulnerability (mean and largest deficit per failure run), after
 //   Hashimoto, Stedinger & Loucks (1982).
@@ -87,13 +87,13 @@ export interface SupplyReliability {
 	volumetricReliability: number | null;
 	/**
 	 * Complete water years in the window (1 Oct … 30 Sep all inside it) with
-	 * demand > 0: the years the annual measure counts. Up to engine 1.6.0 a
+	 * demand > 0: the years the annual measure counts. Up to engine 1.9.0 a
 	 * part year at either end counted too.
 	 */
 	waterYears: number;
 	/**
 	 * Part water years at the window's ends with demand > 0, left out of the
-	 * annual measure (engine ≥ 1.7.0, issue #46; absent on earlier runs, which
+	 * annual measure (engine ≥ 1.10.0, issue #46; absent on earlier runs, which
 	 * counted them).
 	 */
 	partWaterYears?: number;
@@ -394,7 +394,7 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 	let wyPart = 0;
 	for (const [row, y] of years) {
 		if (!(y.d > 0)) continue;
-		// Only a whole water year counts (engine ≥ 1.7.0): a part year at either end of the window would weigh a few months as a year.
+		// Only a whole water year counts (engine ≥ 1.10.0): a part year at either end of the window would weigh a few months as a year.
 		if (y.days < waterYearLength(cal.wy0 + row)) {
 			wyPart++;
 			continue;

@@ -44,7 +44,7 @@ export function sourceLine(s: Pick<EwrAssuranceSite, 'source' | 'sourceKind'>): 
 
 /**
  * The run's natural MAR at the site against the determination's (engine ≥
- * 1.7.0, model.md §2.9c), or null when the table records none. `caution`
+ * 1.10.0, model.md §2.9c), or null when the table records none. `caution`
  * when the percentile comes from the run and the gap is beyond
  * EWR_NATURAL_MAR_TOLERANCE, the case the run warns about.
  */

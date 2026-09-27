@@ -34,7 +34,7 @@ export const EWR_ASSURANCE_MIN_YEARS = 10;
 /**
  * How far the run's natural MAR at a site may differ from the determination's
  * (EwrRuleTable.naturalMarMcm) before a run whose percentile comes from its
- * own natural flow warns: ±15 % (engine ≥ 1.7.0, issue #46). A judgement,
+ * own natural flow warns: ±15 % (engine ≥ 1.10.0, issue #46). A judgement,
  * not a published standard: the tolerance the hydrologist and licensing
  * persona drafts proposed, roughly the gap between WR2012 and quinary
  * natural MARs (calibration-research.md CR-7). Pending the client's
@@ -200,7 +200,7 @@ export interface EwrAssuranceSite {
 	lowFlowMeasure?: 'baseflow';
 	/**
 	 * The run's natural MAR at the site against the determination's (engine ≥
-	 * 1.7.0): present when the table records one (naturalMarMcm) and the run
+	 * 1.10.0): present when the table records one (naturalMarMcm) and the run
 	 * has every calendar month at least once. runMcm = Σ over the 12 calendar
 	 * months of the mean complete-month natural volume, Mm³/a; tableMcm =
 	 * naturalMarMcm × scale; differencePct = 100 (run − table) ÷ table.

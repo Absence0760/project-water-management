@@ -510,7 +510,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
-- [x] **Issue #46 persona drafts, three changes built** (engine 1.7.0,
+- [x] **Issue #46 persona drafts, three changes built** (engine 1.10.0,
       2026-09-27; drafts from the licensing-authority and hydrologist
       personas, **pending the client's hydrologist**, who may reverse any
       of them on #46): (1) an optional `naturalMarMcm` on a Reserve rule

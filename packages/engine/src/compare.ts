@@ -932,7 +932,7 @@ const RULE_FIELDS: Record<string, ScalarField> = {
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
 	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },
 	scale: { label: 'scale', fmt: (v) => fmtValue(v) },
-	// Engine ≥ 1.7.0: the determination's natural MAR at the site; absent = not recorded.
+	// Engine ≥ 1.10.0: the determination's natural MAR at the site; absent = not recorded.
 	naturalMarMcm: { label: 'natural MAR (determination)', fmt: (v) => (v === null || v === undefined ? 'not recorded' : `${fmtValue(v)} Mm³/a`) },
 	points: { label: '% points', fmt: (v) => (Array.isArray(v) ? v.join(', ') : String(v)) }
 };

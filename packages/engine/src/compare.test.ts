@@ -1245,7 +1245,7 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
-	it('lists the determination’s natural MAR changing (engine ≥ 1.7.0); absent and null are both not recorded', () => {
+	it('lists the determination’s natural MAR changing (engine ≥ 1.10.0); absent and null are both not recorded', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];
 		const b = structuredClone(a);

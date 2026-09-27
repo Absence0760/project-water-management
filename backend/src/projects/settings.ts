@@ -216,7 +216,7 @@ const EwrRuleTable = z
 		// Engine ≥ 0.33.0, both optional so a table saved before stays valid: the low-flow grid of a total table, and the high-flow components.
 		lowFlow: ruleGrid.nullable().optional(),
 		highFlows: z.array(EwrHighFlow).max(EWR_HIGH_FLOWS_MAX).optional(),
-		// Engine ≥ 1.7.0 (issue #46), optional: the determination's natural MAR at the site, Mm³/a, for the run's nMAR check.
+		// Engine ≥ 1.10.0 (issue #46), optional: the determination's natural MAR at the site, Mm³/a, for the run's nMAR check.
 		naturalMarMcm: z.number().finite().gt(0).max(EWR_RULE_VALUE_MAX).nullable().optional()
 	})
 	.strict()

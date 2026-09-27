@@ -2510,7 +2510,7 @@ which checks every catchment tab).
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
   is for a different catchment size), the optional **Natural MAR in the
-  determination** (Mm³/a, engine ≥ 1.7.0; blank = not recorded; its hint
+  determination** (Mm³/a, engine ≥ 1.10.0; blank = not recorded; its hint
   says the run warns beyond ±15 % when the percentile is from the run) and the **% points** (default 10, 20 …
   90, 99; changing them keeps each value under its point and leaves a new
   point blank). Then the **EWR** grid (Oct … Sep rows × one input per point,
@@ -3436,7 +3436,7 @@ read it before.
   "Gazetted Reserve: …", "Desktop estimate, low confidence: …" set apart in
   the caution colour, "Other source, confidence not stated: …"; the printed
   report shows the same line, since it reuses the panel), then, when the
-  table records the determination's natural MAR (engine ≥ 1.7.0), the run's
+  table records the determination's natural MAR (engine ≥ 1.10.0), the run's
   natural MAR against it ("Natural MAR at the site: 12.0 Mm³/a in this run,
   20 % above the determination's 10.0 Mm³/a", in the caution colour with the
   reason when it is beyond ±15 % and the percentile is from the run),
@@ -3515,7 +3515,7 @@ read it before.
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, complete water years met against the annual threshold (Settings;
-  from engine 1.7.0 a part year at either end of the window is left out, and
+  from engine 1.10.0 a part year at either end of the window is left out, and
   the note under the table says how many), the
   failures and their mean and longest length, and the mean and largest
   deficit per failure. Below it the **stress classes by month**: a heat map

@@ -66,7 +66,7 @@ function* reliabilityLines(a: SupplyAssurance | undefined): Generator<string> {
 			pct(r.timeReliability),
 			pct(r.volumetricReliability),
 			r.waterYears,
-			// Engine ≥ 1.7.0: the annual measure leaves part years out; blank on an earlier run, which counted them.
+			// Engine ≥ 1.10.0: the annual measure leaves part years out; blank on an earlier run, which counted them.
 			r.partWaterYears ?? null,
 			r.waterYearsMet,
 			pct(r.annualReliability),

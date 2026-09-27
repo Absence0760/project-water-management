@@ -472,7 +472,7 @@ describe('Reserve compliance in a run', () => {
 	});
 });
 
-describe("the run's natural MAR against the determination's (engine ≥ 1.7.0, issue #46)", () => {
+describe("the run's natural MAR against the determination's (engine ≥ 1.10.0, issue #46)", () => {
 	// One water year, every month the same natural volume, so the run's natural MAR is 12 × that.
 	const start = '2000-10-01';
 	const days = daysBetween(start, '2001-09-30');

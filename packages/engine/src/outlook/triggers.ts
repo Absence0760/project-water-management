@@ -166,7 +166,7 @@ export function storageBands(edgesM3: readonly number[], capacityM3: number): { 
  * band's lowest storage, so a row's "at or above X" is what was run for the
  * band's least favourable start, the cautious reading (design §2 finding 4,
  * [Kaune 2020]). `midpoint`: the band's middle. A **judgement, pending the
- * hydrologist**. From engine 1.7.0 (issue #46) the lowest band's floor is
+ * hydrologist**. From engine 1.10.0 (issue #46) the lowest band's floor is
  * not empty dams but the lowest total storage on record for the review date
  * (lowestBandFloor), so it runs from the driest start the record had.
  */
@@ -193,7 +193,7 @@ export function bandStartStorage(input: ModelInput, band: StorageBand, represent
 }
 
 /**
- * Where the lowest band's start comes from (engine ≥ 1.7.0, issue #46,
+ * Where the lowest band's start comes from (engine ≥ 1.10.0, issue #46,
  * model.md §2.15a): the lowest total farm dam storage the base run had on
  * the review date in any year (reviewStorageHistory), when that is below
  * the band's upper edge; else empty dams (0), with a warning. A band from
@@ -227,7 +227,7 @@ export interface ReviewTriggerRow {
 	/** The total storage the band was run from, and its split over the dams. */
 	startStorageM3: number;
 	storageM3ByDam: Record<string, number>;
-	/** 'lowestOnRecord' on the lowest band when it ran from the lowest storage on record for the review date (engine ≥ 1.7.0, lowestBandFloor); absent otherwise. */
+	/** 'lowestOnRecord' on the lowest band when it ran from the lowest storage on record for the review date (engine ≥ 1.10.0, lowestBandFloor); absent otherwise. */
 	startFrom?: 'lowestOnRecord';
 	/** The highest level meeting the planning rule; null when none does (or too few years). */
 	level: { id: string; label: string } | null;
@@ -251,7 +251,7 @@ export interface ReviewTriggers {
 	bandSource: TriggerBandSource;
 	/** The history the default edges came from (empty with explicit edges). */
 	history: ReviewStorageSample[];
-	/** The lowest total storage on record for the review date, which the lowest band ran from (engine ≥ 1.7.0); null when it ran from empty dams. */
+	/** The lowest total storage on record for the review date, which the lowest band ran from (engine ≥ 1.10.0); null when it ran from empty dams. */
 	lowestOnRecordM3?: number | null;
 	share: number;
 	shareIsDefault: boolean;
@@ -271,7 +271,7 @@ export interface TriggerBandMembers {
 	band: StorageBand;
 	startStorageM3: number;
 	storageM3ByDam: Record<string, number>;
-	/** The lowest band ran from the lowest storage on record (engine ≥ 1.7.0). */
+	/** The lowest band ran from the lowest storage on record (engine ≥ 1.10.0). */
 	startFrom?: 'lowestOnRecord';
 	levels: { id: string; label: string; problems: string[]; members: OutlookMember[] }[];
 }
@@ -436,7 +436,7 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 	}
 	const drawn = storageBands(edges, capacity);
 	bandWarnings.push(...drawn.warnings);
-	// The lowest band's floor (engine ≥ 1.7.0): the lowest storage on record for the review date, whatever drew the edges.
+	// The lowest band's floor (engine ≥ 1.10.0): the lowest storage on record for the review date, whatever drew the edges.
 	const floor = lowestBandFloor(bandSource === 'explicit' ? reviewStorageHistory(input, baseRun, options.reviewDate) : history, drawn.bands[0]!);
 	if (floor.warning) bandWarnings.push(floor.warning);
 	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
@@ -487,7 +487,7 @@ const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(i
  * "At or above 250 000 m³ on 1 January 2027: 85 % met the EWR on every day
  * of the season in 17 of 21 analogue years." The lowest band reads "Below
  * X m³ … (run from the lowest storage on record for the date, Y m³)" (engine
- * ≥ 1.7.0), or "(run from empty dams)" without one; a midpoint band names
+ * ≥ 1.10.0), or "(run from empty dams)" without one; a midpoint band names
  * the storage it ran from.
  */
 export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'metric' | 'share' | 'representative'>, row: ReviewTriggerRow): string {
