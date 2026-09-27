@@ -370,7 +370,7 @@ describe('individual boreholes (WP-3.9)', () => {
 	});
 });
 
-describe('GN 538 context (engine 1.7.0, issue #46 item 7)', () => {
+describe('GN 538 context (engine 1.10.0, issue #46 item 7)', () => {
 	it('the property volume is area × Table 2 rate, capped at 40 000 m³/a; without both, the ceiling', () => {
 		expect(GA538_GROUNDWATER_RATES).toEqual([0, 45, 75, 150, 275, 400]);
 		expect(GA538_GROUNDWATER_LIMIT_M3_YEAR).toBe(40_000);

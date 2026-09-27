@@ -235,7 +235,7 @@ export function twelveMonthsStart(e: number): number {
  * into the dam), the stream depletion taken, each unit's volume against its
  * annual cap, and the GN 538 volume for context: the property's own (area ×
  * Table 2 rate, capped at 40 000 m³/a) when the node carries both, else the
- * ceiling (engine ≥ 1.7.0). Also the most pumped in any 12 consecutive months
+ * ceiling (engine ≥ 1.10.0). Also the most pumped in any 12 consecutive months
  * ending in the year, GN 538's "year". `start` is the run's first epoch day.
  */
 export function groundwaterAnnualUse(
@@ -296,7 +296,7 @@ export function groundwaterAnnualUse(
 }
 
 /**
- * Run warnings about the GN 538 context (engine ≥ 1.7.0, docs/model.md §2.7d)
+ * Run warnings about the GN 538 context (engine ≥ 1.10.0, docs/model.md §2.7d)
  * for the nodes that pump: those without a property area and Table 2 rate
  * (their tables show the 40 000 m³/a ceiling only), and pumping units whose
  * stream depletion share (≥ GA538_ALLUVIAL_DEPLETION_FRAC) suggests an

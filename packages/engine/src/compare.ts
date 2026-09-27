@@ -1073,7 +1073,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['supplyStopPct', 'supply switch-back level', pct],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
 	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')],
-	// GN 538 property area and Table 2 rate (engine ≥ 1.7.0), context for the groundwater tables.
+	// GN 538 property area and Table 2 rate (engine ≥ 1.10.0), context for the groundwater tables.
 	['gaPropertyAreaHa', 'GN 538 property area', (v) => (v === null || v === undefined ? 'not set' : `${fmtValue(v)} ha`)],
 	['gaRateM3HaYear', 'GN 538 rate', (v) => (v === null || v === undefined ? 'not set' : `${fmtValue(v, 0)} m³/ha/a`)]
 ];

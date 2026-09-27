@@ -218,7 +218,7 @@ export const OUTLIER_MIN_POSITIVE = 100;
  * value. Zero stretches are normal (dry spells, a river that stops flowing).
  * For flow this is the limit in the upper flow range only (above the
  * record's Q30, FLATLINE_FLOW_HIGH_EXCEEDANCE); lower flows need
- * FLATLINE_FLOW_LOW_MIN_DAYS (engine ≥ 1.7.0).
+ * FLATLINE_FLOW_LOW_MIN_DAYS (engine ≥ 1.10.0).
  */
 export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_catchment_mm: 5,
@@ -233,7 +233,7 @@ export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	evap_apan_mm: 7
 };
 /**
- * Flow flat-lines by flow level (engine ≥ 1.7.0, issue #46 item 17, pending
+ * Flow flat-lines by flow level (engine ≥ 1.10.0, issue #46 item 17, pending
  * the hydrologist): a repeated flow counts as a flat-line after
  * FLATLINE_MIN_DAYS (14) only when it is above the record's own Q30, the
  * flow exceeded 30 % of the time; at or below it, only after

@@ -1266,7 +1266,7 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(diffInputs(off, copyWithFreshIds(off))).toEqual([]);
 	});
 
-	it('lists the GN 538 property area and rate changing (engine ≥ 1.7.0); absent and null are the same', () => {
+	it('lists the GN 538 property area and rate changing (engine ≥ 1.10.0); absent and null are the same', () => {
 		const a = snapshot();
 		const nulls = structuredClone(a);
 		for (const n of nulls.model.nodes) Object.assign(n, { gaPropertyAreaHa: null, gaRateM3HaYear: null });
