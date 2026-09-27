@@ -88,6 +88,18 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, set as never]))).toEqual([]);
 	});
 
+	it('EWR site flag (engine 1.5.0): true unless set; a gauge may be taken off, never the outlet or a farm', () => {
+		const out = node('Gauge', null);
+		const weir = node('Weir', out.id, { kind: 'gauge', damCapacityM3: 0 });
+		const farm = node('A', weir.id);
+		const parsed = ModelBody.parse({ nodes: [out, weir, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes.map((n) => n.ewrSite)).toEqual([true, true, true]);
+		expect(ModelBody.safeParse({ nodes: [out, { ...weir, ewrSite: 'no' }], crops: [], cropAreas: [], transfers: [] }).success).toBe(false);
+		expect(modelProblems(model([out, { ...weir, ewrSite: false } as never, farm]))).toEqual([]);
+		expect(modelProblems(model([{ ...out, ewrSite: false } as never, weir, farm])).join()).toMatch(/"Gauge" is the outlet, which is always an EWR site/);
+		expect(modelProblems(model([out, weir, { ...farm, ewrSite: false } as never])).join()).toMatch(/"A": only a gauge can be taken off the EWR sites/);
+	});
+
 	it('supply rule and river pump (WP-3.8): fills the dam-only defaults, accepts each rule, refuses bad values and invalid combinations', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });

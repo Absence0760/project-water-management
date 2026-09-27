@@ -22,6 +22,7 @@
 		reserveCellText,
 		reserveGrid,
 		shareOfRequired,
+		sourceLine,
 		UNIT_LABEL,
 		verdict
 	} from './ewrAssurance';
@@ -43,6 +44,7 @@
 	const rateClass = (r: number | null) => (r === null ? 'none' : r >= 1 ? 'good' : r >= 0.8 ? 'ok' : 'bad');
 	const grid = $derived(reserveGrid(site));
 	const split = $derived(!!site.lowFlow);
+	const src = $derived(sourceLine(site));
 
 	// The chart: share of months met per month of the year, on a fixed 0–100 % axis.
 	const W = 480;
@@ -62,7 +64,8 @@
 			</select>
 		</div>
 	{/if}
-	<p class="muted small">{describeMethod(site)} Source: {site.source}</p>
+	<p class="muted small">{describeMethod(site)}</p>
+	<p class="small" class:muted={!src.low} class:caution={src.low}>{src.text}</p>
 
 	<p class="flag {rateClass(site.overall.rate)}" role="status">
 		<strong>{site.isOutlet ? `Outlet (${site.name})` : site.name}:</strong>

@@ -24,7 +24,11 @@ describe('field specs cover the engine’s op catalogue', () => {
 	});
 
 	it('lists a node kind’s fields in the engine’s order', () => {
-		expect(nodeFields('gauge')).toEqual([{ field: 'name', label: 'Name' }]);
+		// A gauge: its name, and whether it is an EWR site (engine 1.5.0).
+		expect(nodeFields('gauge')).toEqual([
+			{ field: 'name', label: 'Name' },
+			{ field: 'ewrSite', label: 'EWR site' }
+		]);
 		expect(nodeFields('farm').map((f) => f.field)).toEqual([...NODE_SET_FIELDS.farm]);
 	});
 

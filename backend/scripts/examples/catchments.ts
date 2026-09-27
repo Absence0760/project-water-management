@@ -225,11 +225,12 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damAreaExponent: DAM_AREA_EXPONENT,
 			damSeepagePerDay: f.seepage ?? 0,
 			// Not an other water user (WP-1.33), no boreholes (WP-1.34), no dam survey curve or release rule (WP-3.5),
-			// the dam only with no river pump (WP-3.8): the inert defaults.
+			// the dam only with no river pump (WP-3.8), every gauge an EWR site: the inert defaults.
 			...USER_DEFAULTS,
 			...BOREHOLE_DEFAULTS,
 			...DAM_STORAGE_DEFAULTS,
-			...SUPPLY_DEFAULTS
+			...SUPPLY_DEFAULTS,
+			ewrSite: true
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>

@@ -13,6 +13,7 @@
 	import SupplyFields from './SupplyFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { hasSupplySettings } from './supply';
+	import { ewrSiteIssue } from '$lib/model/validate';
 
 	let {
 		node,
@@ -78,6 +79,9 @@
 	const hints = $derived(damHints(node));
 	// History's unit filter takes units (farms); another node's link filters by its name alone.
 	const unit = $derived(node.kind === 'farm' ? node.id : null);
+	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
+	const showEwrSite = $derived(node.kind === 'gauge' || node.ewrSite === false);
+	const ewrSiteProblem = $derived(ewrSiteIssue(node));
 </script>
 
 <div class="detail">
@@ -118,6 +122,30 @@
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
 	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this unit’s farm page as its farmer sees it, from the current publication.</p>{/if}
+	{#if showEwrSite}
+		<div class="field ewr-site">
+			<label class="check">
+				<input
+					id={id('ewrSite')}
+					type="checkbox"
+					disabled={readonly || (node.downstreamNodeId === null && node.ewrSite !== false)}
+					checked={node.ewrSite !== false}
+					onchange={(e) => (node.ewrSite = e.currentTarget.checked)}
+				/>
+				EWR site
+			</label>
+			<HelpTip key="node.ewrSite" />
+			<span class="hint">
+				{node.downstreamNodeId === null
+					? 'The outlet is always an EWR site.'
+					: node.ewrSite === false
+						? 'Measures flow only: its EWR shortfall is shown but charges nobody, and a Reserve rule table here is skipped.'
+						: 'The EWR is assessed here: a shortfall is charged to the units upstream. Untick for a gauge that only records flow.'}
+			</span>
+			{#if ewrSiteProblem}<p class="problem" role="alert">{ewrSiteProblem.charAt(0).toUpperCase() + ewrSiteProblem.slice(1)}</p>{/if}
+			<FieldHistoryLine field="node:{node.id}:ewrSite" {unit} />
+		</div>
+	{/if}
 	{#if node.kind === 'gauge'}
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
@@ -298,6 +326,29 @@
 		grid-column: 1 / -1;
 		margin: 0 0 0.5rem;
 		font-size: 0.85rem;
+	}
+	.ewr-site {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.5rem;
+		margin: 0 0 0.5rem;
+	}
+	.ewr-site .hint,
+	.ewr-site .problem {
+		flex-basis: 100%;
+	}
+	.problem {
+		margin: 0.25rem 0 0;
+		font-size: 0.85rem;
+		color: var(--danger);
+	}
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-weight: 500;
+		font-size: 0.9rem;
 	}
 	.gauge-note {
 		margin: 0 0 0.5rem;

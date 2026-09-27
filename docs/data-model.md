@@ -118,6 +118,7 @@ erDiagram
 | `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; inert under `damFirst`. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
+| `ewr_site` | (none: b023 checks the EWR at every gauge) | Gauges (migration 086, engine ≥ 1.5.0, [model.md §2.7b](./model.md)): whether the EWR is assessed here. `true` (default, every existing row); `false` only on a gauge (CHECK `node_ewr_site_gauge`), never the outlet (a model rule the API applies on save). False = the gauge charges nobody and a Reserve rule table there is skipped |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
@@ -1256,9 +1257,12 @@ chose for the project's stakeholders, with the WUA's restriction notice.
 - **The season.** Every projection figure is over 1 October (the water
   year's start) to the run's last day (`dataUntil`), and the curtailment
   row is `computeCurtailment` over that season, not the modeller's report
-  window (E5). The binding EWR site, which a run doesn't store, is
-  recomputed with the engine's attribution on the run's stored flows
-  (exact unless the transfer rules form a loop; see the file header).
+  window (E5). The binding EWR site is read from the run's
+  `ewr_binding_site` series (engine ≥ 1.5.0, stored for every farm upstream
+  of two or more EWR sites; other farms' follows from the charge). A run
+  saved before 1.5.0 has none, and there it is recomputed with the engine's
+  attribution on the run's stored flows (exact unless the transfer rules form
+  a loop; see the file header).
 - **Immutable but for the notice.** `water_app` has `UPDATE` on the notice
   columns (`restriction_level`, `restriction_pct`, `notice`),
   `note`, `next_expected_on`, `superseded_at`, `updated_at` and `updated_by`

@@ -40,7 +40,9 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		// No survey curve, no release, all seepage returning (WP-3.5).
 		...DAM_STORAGE_DEFAULTS,
 		// The dam only, no river pump (WP-3.8).
-		...SUPPLY_DEFAULTS
+		...SUPPLY_DEFAULTS,
+		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
+		ewrSite: true
 	};
 }
 

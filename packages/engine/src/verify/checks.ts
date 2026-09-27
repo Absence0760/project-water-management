@@ -13,6 +13,8 @@ import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../deman
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
+import { EWR_BINDING_SERIES } from '../network/bindingSeries';
+import { cmpStr } from '../order';
 import { supplyOf, type PlanSupply } from '../network/supply';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 
@@ -39,7 +41,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  */
 // ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
 // month at either end of the run is not assessed against the Reserve rules.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
+// ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * The irrigation efficiency runModel used for farm `n` (run.ts irrigation):
@@ -1105,7 +1108,7 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 /**
  * EWR shortfall attribution (engine ≥ 0.17.0, audit Q17; docs/model.md
  * §2.7b), from the run's own series. Sites are the outlet (the catchment
- * series) and every other gauge.
+ * series) and every other gauge that is an EWR site (engine ≥ 1.5.0).
  * - per site per day: charged + natural = shortfall, both ≤ 0, and a day the
  *   EWR is met has neither;
  * - per farm per day: charge ≤ irrigation part ≤ 0, and the irrigation part is
@@ -1116,7 +1119,12 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
  *   share is charged × MAX(e, 0) / Σ MAX(e, 0), and a farm's charge is at
  *   least that share (it carries the largest over its sites) and, when every
  *   site it is upstream of can be recomputed, exactly the largest;
- * - Σ farm charges upstream of a site ≥ the site's charged part.
+ * - Σ farm charges upstream of a site ≥ the site's charged part;
+ * - the stored binding site (engine ≥ 1.5.0, farms upstream of two or more
+ *   sites): given exactly on the days the farm is charged, one of the sites
+ *   below it, and, where that site can be recomputed, the charge is exactly
+ *   the farm's share there. That checks a charge set at an exact site even
+ *   when another site above the farm is crossed by a transfer.
  * Runs saved before 0.17.0 have no attribution series: nothing to check.
  */
 export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string | null {
@@ -1127,7 +1135,9 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 	if (farms.length && !get.has(`${farms[0]!.id}|ewr_charge`)) return null;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null);
 	if (!outlet) return null;
-	const sites = [outlet, ...nodes.filter((n) => n.kind === 'gauge' && n !== outlet)];
+	// The EWR sites (engine ≥ 1.5.0: a gauge whose ewrSite flag is false isn't one).
+	// In the engine's order (outlet, then gauges by id): the stored binding site is an index into it.
+	const sites = [outlet, ...nodes.filter((n) => n.kind === 'gauge' && n !== outlet && n.ewrSite !== false).sort((a, b) => cmpStr(a.id, b.id))];
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const ancestors = (site: string) => {
 		const set = new Set([site]);
@@ -1189,10 +1199,19 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		})
 	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
+	// The stored binding site, for every farm upstream of two or more sites (engine ≥ 1.5.0; older runs have none).
+	const binding = new Map<string, ArrayLike<number>>();
+	for (const f of farms) {
+		const v = get.get(`${f.id}|${EWR_BINDING_SERIES.key}`);
+		if (v) binding.set(f.id, v);
+	}
 	const best = new Map<string, number>();
+	/** Each farm's share at each exact site today (the binding check reads the binding site's). */
+	const shareAt = siteInfo.map(() => new Map<string, number>());
 	for (let t = 0; t < out.days; t++) {
 		best.clear();
-		for (const s of siteInfo) {
+		for (const m of shareAt) m.clear();
+		for (const [si, s] of siteInfo.entries()) {
 			const D = Math.max(-s.D[t]!, 0);
 			const ch = -s.charged![t]!;
 			const nat = -s.natural![t]!;
@@ -1217,6 +1236,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			s.farms.forEach((f, k) => {
 				const A = E > 0 ? (ch * e[k]!) / E : 0;
 				best.set(f.id, Math.max(best.get(f.id) ?? 0, A));
+				shareAt[si]!.set(f.id, A);
 			});
 			for (const [k, f] of s.farms.entries()) {
 				const A = E > 0 ? (ch * e[k]!) / E : 0;
@@ -1231,6 +1251,17 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			if (R < 0 || Ri < 0 || Ri > R + tol(R)) return `${where}: EWR charge ${-R} and its irrigation part ${-Ri} must satisfy charge ≤ irrigation part ≤ 0`;
 			if (Ri > x.G[t]! * x.k + tol(x.G[t]!)) return `${where}: irrigation part ${Ri} of the EWR charge > consumptive irrigation ${x.G[t]! * x.k}`;
 			if (allExact.get(f.id) && Math.abs(R - (best.get(f.id) ?? 0)) > tol(Math.max(R, x.U[t]!, x.H[t]! + x.I[t]!))) return `${where}: EWR charge ${-R} ≠ its largest share ${best.get(f.id) ?? 0} over the sites below it`;
+			const b = binding.get(f.id)?.[t];
+			if (b === undefined) continue;
+			if (!Number.isFinite(b)) {
+				if (R > 0) return `${where}: charged ${-R} but no binding site stored`;
+				continue;
+			}
+			if (!(R > 0)) return `${where}: binding site ${b} stored on a day without a charge`;
+			const site = siteInfo[b];
+			if (!Number.isInteger(b) || !site || !site.farms.includes(f)) return `${where}: binding site ${b} is not an EWR site below it`;
+			const A = shareAt[b]!.get(f.id);
+			if (A !== undefined && Math.abs(R - A) > tol(Math.max(R, x.U[t]!, x.H[t]! + x.I[t]!))) return `${where}: EWR charge ${-R} ≠ its share ${A} at its binding site ${site.name}`;
 		}
 	}
 	return null;

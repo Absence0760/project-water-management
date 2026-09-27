@@ -196,6 +196,14 @@ bottom:
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
    *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
    *"Fit record: parameters edited since the fit (x1)"*.
+   **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list
+   of EWR sites differs (a gauge added or removed, turned into a unit, or
+   ticked or unticked as an EWR site), one network line names both runs'
+   sites and why each came or went: *"EWR sites: Outlet (outlet), Weir →
+   Outlet (outlet) (removed Weir (taken off the EWR sites))"*. A flag change
+   is also its node's own line (*"Weir: EWR site yes → no"*), which the
+   field history counts. A run saved before the flag reads as every gauge a
+   site, so it compares equal to a model with every flag ticked.
    A change of GR4J's PE input (`settings.pe`, engine ≥ 0.31.0,
    [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4))
    is a settings line labelled **Potential evaporation (GR4J)**. Each side
@@ -258,8 +266,10 @@ bottom:
    says the rates measure against different rules. *What changed* lists each
    table added or removed (*"EWR rule table at the outlet added ("Reserve
    determination, table 4", 10 % points, natural percentile from the run)"*),
-   each field changed (source, what it covers, unit, natural source, scale,
-   % points) and the months whose EWR values or natural flows changed. From
+   each field changed (source, the kind of source, engine ≥ 1.5.0: *"kind
+   of source not stated → Desktop estimate, low confidence"*, what it covers,
+   unit, natural source, scale, % points) and the months whose EWR values or
+   natural flows changed. From
    engine 0.33.0 (model.md §2.9d), when either run has them, *Low flows:
    months met* and *High flows: years met* (years met ÷ years the natural
    flow had the event, over every component) join the table, a changed

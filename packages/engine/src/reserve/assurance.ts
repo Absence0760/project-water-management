@@ -26,7 +26,7 @@
 // depends only on natural flow, so more abstraction can only lose months.
 import { toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import { lyneHollickBaseflow } from './baseflow';
-import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleTable, EwrRuleUnit, LowFlowMeasure } from './rules';
+import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleSourceKind, EwrRuleTable, EwrRuleUnit, LowFlowMeasure } from './rules';
 
 const SEC_PER_DAY = 86_400;
 /** Years of a calendar month below which the run's natural-flow percentiles are coarse. */
@@ -149,6 +149,8 @@ export interface EwrAssuranceSite {
 	name: string;
 	isOutlet: boolean;
 	source: string;
+	/** The table's source kind (engine ≥ 1.5.0); absent when the table doesn't state one. */
+	sourceKind?: EwrRuleSourceKind;
 	component: EwrRuleComponent;
 	unit: EwrRuleUnit;
 	naturalSource: EwrNaturalSource;
@@ -487,6 +489,7 @@ export function assessSite(
 		name: site.name,
 		isOutlet: site.isOutlet,
 		source: table.source,
+		...(table.sourceKind ? { sourceKind: table.sourceKind } : {}),
 		component: table.component,
 		unit,
 		naturalSource: table.naturalSource,

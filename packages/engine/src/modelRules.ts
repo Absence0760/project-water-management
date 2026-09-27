@@ -61,6 +61,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
 			add(`bhDrought:${n.id}`, `"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
 		if (n.downstreamNodeId === n.id) add(`self:${n.id}`, `"${n.name}" drains into itself`);
+		// EWR sites (engine ≥ 1.5.0): the outlet always is one; only another gauge can be taken off the list.
+		if (n.ewrSite === false) {
+			if (n.downstreamNodeId === null) add(`ewrSiteOutlet:${n.id}`, `"${n.name}" is the outlet, which is always an EWR site`);
+			else if (n.kind !== 'gauge') add(`ewrSiteKind:${n.id}`, `"${n.name}": only a gauge can be taken off the EWR sites`);
+		}
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		const supply = n.supplyRule ?? 'damFirst';
 		if (n.kind !== 'farm' && (supply !== 'damFirst' || (n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined)))

@@ -98,6 +98,26 @@ describe('the reporting window, worked out by the engine', () => {
 		}
 	});
 
+	it('given the run’s stored series, fetches the stored binding sites and not the flows (engine ≥ 1.5.0), and works from those alone', () => {
+		let withBinding = 0;
+		for (const { input, run } of cases) {
+			const keys = curtailmentSeriesKeys(run.summary.curtailment!, network(input), run.series)!;
+			expect(missingSeries(keys, run.series)).toEqual([]);
+			expect(keys.some((k) => k.key === 'outflow' || k.key === 'runoff')).toBe(false);
+			if (keys.some((k) => k.key === 'ewr_binding_site')) withBinding++;
+			// Only the listed series are handed over: the table is still the stored one.
+			const listed = new Set(keys.map((k) => `${k.nodeId ?? ''}|${k.key}`));
+			const get = storedLookup(run);
+			const only = (nodeId: string | null, key: string) => (listed.has(`${nodeId ?? ''}|${key}`) ? get(nodeId, key) : undefined);
+			const res = resolveWindow({ preset: 'project' }, run, run.summary.curtailment!);
+			if (!res.ok) throw new Error(res.error);
+			const got = prepareWindowed(run, network(input), only).over(res.window);
+			expect(got.bindingApproximate).toBe(false);
+			expect(got.curtailment).toEqual(run.summary.curtailment);
+		}
+		expect(withBinding).toBeGreaterThan(0);
+	});
+
 	it('fetches a rule-table site’s own shortfall when the charge followed the rule table (engine 1.3.0), and windows it as runModel does', () => {
 		let ruled = 0;
 		for (const { input } of runs(40)) {

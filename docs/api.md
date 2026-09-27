@@ -365,7 +365,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `ewrRules` (engine ≥ 0.21.0; model.md §2.9c) is a list, default `[]`, of at
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
   outlet, else a gauge's node id; checked by the run, not here), `source`
-  1–500 chars, `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
+  1–500 chars, optional `sourceKind` (engine ≥ 1.5.0: `gazetted` | `desktop`
+  | `other` | `null`, absent = not stated), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
@@ -987,6 +988,14 @@ a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
 
+EWR sites (engine ≥ 1.5.0, migration 086, [model.md §2.7b](./model.md)):
+every node carries `ewrSite` (boolean; a body without it gets `true`, no
+change to any run). `false` takes a gauge off the EWR sites: its shortfall
+charges nobody, its `ewr_charged` / `ewr_natural` series and its row in
+`summary.curtailment.ewrSites` go, and a Reserve rule table there is skipped
+with a warning. `PUT` refuses `false` on the outlet or on a farm or other
+user.
+
 Validation on `PUT`: ids unique, node and crop names unique (ignoring case),
 one crop area per node + crop; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a
@@ -1290,7 +1299,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall_incremental` ("reach shortfall"). New run series: per farm
   `ewr_charge` and `ewr_charge_irrigation`; per site `ewr_charged` and
   `ewr_natural` (catchment scope for the outlet, the gauge's node for a
-  gauge), all ≤ 0.
+  gauge), all ≤ 0. Engine ≥ 1.5.0 adds, per farm upstream of two or more EWR
+  sites, `ewr_binding_site`: the site that set the day's charge, as its index
+  in `summary.curtailment.ewrSites` order (0 = the outlet, then gauges by node
+  id), `null` on a day without a charge.
 
 - `summary.runoff` (engine ≥ 0.5.0, GR4J runs only) is the runoff model's water
   balance in mm over the catchment: `{ model, params, warmupDays, areaKm2,
@@ -1315,6 +1327,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   per EWR site with a table, outlet first then gauges by node id
   (`EwrAssuranceSite` in `packages/engine/src/reserve/assurance.ts`):
   `nodeId` (`null` = outlet), `name`, `isOutlet`, the table's `source`,
+  its `sourceKind` (engine ≥ 1.5.0, only when the table states one),
   `component`, `unit`, `naturalSource`, `scale` and `points`; `months` (each
   complete calendar month: `{ year, month, waterYear, days, natural,
   percentile, beyond: 'wetter' | 'drier' | null, required, actual, met,

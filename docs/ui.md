@@ -1326,6 +1326,15 @@ note's link on the Summary, `notes.ts` `noteHref`).
   evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
   are in the one-node form and the field guide only, not the table
   (`detailOnly` in `fields.ts`), so the table still fits a 1440px screen.
+- **EWR site** (engine ≥ 1.5.0, [model.md §2.7b](./model.md)): the one-node
+  form of a gauge has an **EWR site** checkbox (ticked by default, and on
+  every gauge before 1.5.0) with a line saying what it means: ticked, a
+  shortfall there is charged to the units upstream; unticked, the gauge only
+  measures flow and a Reserve rule table there is skipped. The outlet's is
+  ticked and disabled (the outlet is always a site). It also shows on a unit
+  or other user that has it off (an imported model), with the problem the API
+  would refuse it for (`ewrSiteIssue` in `model/validate.ts`), and has its
+  field-history line. Not in the table.
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
@@ -2392,10 +2401,13 @@ which checks every catchment tab).
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
   rule table** starts one at the first EWR site without one (the outlet, then
-  each gauge in network order; a farm can't be a site); it is disabled once
+  each gauge in network order; a farm can't be a site, and a table at a gauge
+  unticked as an EWR site is skipped by the run with a warning); it is disabled once
   every site has one, with a hint to add a gauge on the Network tab. Each
   table (a group headed "Rule table at …") has the **EWR site**, the
-  required **Source**, what **the table covers** (total flow, or low flows
+  required **Source**, the **Kind of source** (not stated, gazetted Reserve,
+  desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
+  line), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -3017,8 +3029,12 @@ read it before.
   charged and natural (`curtailmentSeriesKeys` lists them). They are fetched
   once per run the first time another window is picked, and the run is read
   once, so switching between windows is instant. Every column is recomputed,
-  the **EWR site setting each farm's charge** included (the engine recomputes
-  each day's binding site from the stored flows); only when the transfer rules
+  the **EWR site setting each farm's charge** included: a run from engine
+  1.5.0 stores each day's binding site (`ewr_binding_site`, per farm upstream
+  of two or more sites), so the panel fetches that instead of the flows and
+  the column is exact. For an older run the engine recomputes each day's
+  binding site from the stored flows (the inflow, outflow, runoff, dam storage
+  and transfer series above, fetched only then); only when the transfer rules
   form a loop is that column approximate, and the status line says so. Nothing is re-run and nothing is saved: the project
   setting, the stored run, the downloads and the printable report keep the
   project window, and the status line under the picker says so. A viewer can use
@@ -3314,6 +3330,10 @@ read it before.
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
   when there are several, the method in one sentence and the table's source,
+  led by its confidence when the table states its kind (engine ≥ 1.5.0:
+  "Gazetted Reserve: …", "Desktop estimate, low confidence: …" set apart in
+  the caution colour, "Other source, confidence not stated: …"; the printed
+  report shows the same line, since it reuses the panel),
   a verdict line ("Met in 18 of 24 months (75.0%); not met in 6.", with a
   coloured edge and the words, never colour alone), a caution when a calendar
   month has fewer than 10 years, four figures (months met, longest run not

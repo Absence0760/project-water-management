@@ -35,6 +35,18 @@ export function supplyIssues(
 	return out;
 }
 
+/**
+ * Why a node's EWR site flag (engine ≥ 1.5.0) can't be saved, as the API
+ * refuses it (engine modelRules), or null: the outlet is always an EWR site,
+ * and only a gauge can be taken off.
+ */
+export function ewrSiteIssue(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 'ewrSite'>): string | null {
+	if (n.ewrSite !== false) return null;
+	if (n.downstreamNodeId === null) return 'the outlet is always an EWR site; tick “EWR site”.';
+	if (n.kind !== 'gauge') return 'only a gauge can be taken off the EWR sites; tick “EWR site”.';
+	return null;
+}
+
 export function validateModel(model: ProjectModel): ModelIssue[] {
 	const issues: ModelIssue[] = [];
 	const { nodes, crops, cropAreas, transfers } = model;
@@ -102,6 +114,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		}
 		// Supply rule and river pump (WP-3.8), as the API checks them.
 		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
+		// EWR site flag (engine ≥ 1.5.0), as the API checks it.
+		const ewrSite = ewrSiteIssue(n);
+		if (ewrSite) issues.push({ area: 'network', message: `${label}: ${ewrSite}` });
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });

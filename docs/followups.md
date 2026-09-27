@@ -214,12 +214,25 @@ collected as a checklist in issue #46; tick it there as they answer.
         kept as "reach shortfall"; zero-demand farms get no irrigation cut;
         "Demand left %" bounded, "—" under 1 m³/day; equitable share labelled
         a fairness benchmark, not an allocation.
-- [ ] **Attribution follow-ons (Q17):** add the EWR site list to run
-      comparison's *What changed*; a per-gauge "is an EWR site" flag
-      (WP-3.7); the per-run attribution self-check is exact only where no
-      transfer crosses a site's catchment boundary, because per-rule transfer
+- [x] **Attribution follow-ons (Q17): the site flag and the site list**
+      (engine 1.5.0, migration 086, issue #64). A gauge has an "EWR site"
+      flag (`ewrSite`, default true, so every existing project runs as
+      before): unticked, it charges nobody and a Reserve rule table there is
+      skipped; the outlet is always a site and only a gauge can be unticked
+      (model rules, the API and scenarios). It is on the one-node form, a
+      gauge's `node.set` field in a scenario (always a baseline
+      assumption), and run comparison's *What changed* lists the EWR site
+      list changing ([model.md §2.7b](./model.md), [run-comparison.md](./run-comparison.md)).
+- [ ] **The per-run attribution self-check is exact only where no transfer
+      crosses a site's catchment boundary** (Q17), because per-rule transfer
       volumes aren't stored as run series (the full invariants run in
-      `network/attribution.test.ts` and the fuzz suite).
+      `network/attribution.test.ts` and the fuzz suite). Narrowed in engine
+      1.5.0: with the binding site stored, a farm's charge is checked exactly
+      against its share at its binding site whenever that site is exact, even
+      when another site above the farm is crossed. Durable fix: store the
+      per-rule transfer volumes as run series (they are small: one per
+      enabled rule). Trigger: a hydrologist or assessor asking for the
+      per-site recompute on a network with transfers across a gauge.
 - [ ] **Client regression suite is thinner since N1.** Nearly every client
       farm has return flow, which the new efficiency model can't reproduce,
       so the replay skips those farms' balance columns and everything
@@ -743,15 +756,18 @@ the reports):
             default stays the month's total volume. Left for the
             hydrologist: which measure a Reserve monitoring report uses, and
             the filter parameter (plan.md question 17).
-      - [ ] **Site source and confidence labels (WP-3.7 UI).** Each rule
-            table has a free-text source; the WP asks for a typed source
-            (`gazetted` | `desktop` | `other`) with a confidence line
-            ("Desktop estimate, low confidence" / "Gazetted Reserve, GN …")
-            and, in scenarios and evidence packs, a changed table shown in
-            red as a baseline assumption. Durable fix: an optional
-            `sourceKind` on `EwrRuleTable` (engine, schema, editor,
-            the panel and packs). Trigger: WP-3.5 packs quoting the
-            Reserve, or the assessor persona asking.
+      - [x] **Site source and confidence labels (WP-3.7 UI)** (engine
+            1.5.0, issue #64). An optional typed `sourceKind`
+            (`gazetted` | `desktop` | `other`) on `EwrRuleTable`, checked
+            by the engine, the settings API and the rule-table editor; the
+            Reserve panel and the printed report put the confidence line
+            ("Desktop estimate, low confidence", "Gazetted Reserve") before
+            the source, and run comparison lists it changing. The "changed
+            table in red as a baseline assumption" part has no place yet: a
+            scenario can't change a rule table (`settings.set` has no
+            `ewrRules` path), so there is nothing to mark; if that op is
+            ever added it is `settings.set`, already always baseline, and
+            the callout lists it.
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -2172,14 +2188,15 @@ role and not before it.
         with published" (the compare page's default and offer, and the Runs
         header link), and `publishedAt` on `GET /projects` for every member
         ([ui.md § Summary](./ui.md#summary), [run-comparison.md](./run-comparison.md)).
-  - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
-        store which site bound a farm's charge each day, so the projection
-        re-runs the engine's attribution on the stored flows. Exact, except
-        when the transfer rules form a loop (per-rule volumes can't be solved
-        from the farms' net transfer series; the loop is cut and
-        `bindingApproximate` says so). Durable fix: store the per-rule
-        transfer volumes (or the per-day binding site) as run series. Trigger:
-        the next change that bumps `ENGINE_VERSION`.
+  - [x] **The binding EWR site is stored** (engine 1.5.0, issue #64). A
+        run stores `ewr_binding_site` per farm upstream of two or more EWR
+        sites (the site's index, blank on a day without a charge; any other
+        farm's follows from its charge), and the projection and the Runs
+        tab's window picker read it, so the binding site is exact on a
+        transfer loop too; a run from before 1.5.0 falls back to the
+        recompute ([model.md §2.7b](./model.md)). About 195 kB before
+        compression (1.6 % of the run's series) on Sandspruit, nothing on
+        the single-site examples.
   - [ ] **The chart series and per-farm history routes** of WP-2.6
         (`…/farm/:nodeId/series`, `…/history`): with the farm page.
 

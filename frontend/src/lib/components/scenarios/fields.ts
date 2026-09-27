@@ -122,7 +122,9 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	},
 	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
-	supplyStopPct: { label: 'Supply switch-back level', spec: pct() }
+	supplyStopPct: { label: 'Supply switch-back level', spec: pct() },
+	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
+	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };
 
 /** The fields node.set may change on a node of this kind, in the engine's order. */

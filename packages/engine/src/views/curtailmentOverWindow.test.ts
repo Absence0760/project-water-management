@@ -8,6 +8,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ReportWindow } from '../network/curtailment';
 import type { ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
+import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { randomInput } from '../testing/fuzz';
 import { curtailmentOverWindow, curtailmentSeriesKeys, prepareCurtailment, ProjectionInputError, type CurtailmentRun } from './farmProjection';
 
@@ -28,6 +29,12 @@ function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): Curtail
 			return byKey.get(`${nodeId ?? ''}|${key}`);
 		}
 	};
+}
+
+/** The same run as one saved before engine 1.5.0, which stored no binding site: it is recomputed from the flows. */
+function asOldRun(input: ModelInput, out: ModelOutput, read?: Set<string>): CurtailmentRun {
+	const r = asRun(input, out, read);
+	return { ...r, series: (nodeId, key) => (key === EWR_BINDING_SERIES.key ? undefined : r.series(nodeId, key)) };
 }
 
 const withWindow = (input: ModelInput, w: ReportWindow): ModelInput => ({ ...input, settings: { ...input.settings, reportStart: w.reportStart, reportEnd: w.reportEnd } });
@@ -118,7 +125,75 @@ describe('curtailmentOverWindow', () => {
 		expect(gaugeBinds).toBeGreaterThan(0);
 	});
 
-	it('reads exactly the series curtailmentSeriesKeys lists', () => {
+	it('reads exactly the series curtailmentSeriesKeys lists, the stored binding sites and no flows (engine ≥ 1.5.0)', () => {
+		let flowsSkipped = 0;
+		for (const { input, run } of runs) {
+			const stored = new Set(run.series.map((s) => `${s.nodeId ?? ''}|${s.key}`));
+			const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
+			for (const otherUsers of [true, false]) {
+				const read = new Set<string>();
+				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
+				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
+				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				expect(new Set(keys)).toEqual(used);
+				expect(keys).toHaveLength(used.size);
+				if (![...read].some((k) => k.endsWith('|outflow'))) flowsSkipped++;
+			}
+		}
+		expect(flowsSkipped).toBe(runs.length * 2);
+	});
+
+	it('reads exactly the series curtailmentSeriesKeys lists for a run saved before 1.5.0 (the recompute’s flows)', () => {
+		let recomputed = 0;
+		for (const { input, run } of runs) {
+			const stored = new Set(run.series.filter((s) => s.key !== EWR_BINDING_SERIES.key).map((s) => `${s.nodeId ?? ''}|${s.key}`));
+			const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
+			const read = new Set<string>();
+			curtailmentOverWindow(asOldRun(input, run, read), win(run, 0, run.days - 1));
+			for (const k of [...read]) if (k.endsWith('|ewr_charge_shortfall') && !stored.has(k)) read.delete(k);
+			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, {}, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+			// Without `has` too (and the rule-table sites as the Runs tab passes them): the flows are listed.
+			const ruleTableSites = run.summary.curtailment!.ewrSites!.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
+			const blind = new Set(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { ruleTableSites }).map((k) => `${k.nodeId ?? ''}|${k.key}`));
+			const needsRecompute = run.series.some((s) => s.key === EWR_BINDING_SERIES.key);
+			if (needsRecompute) {
+				recomputed++;
+				expect(new Set(keys)).toEqual(read);
+				expect(blind).toEqual(read);
+			} else {
+				// No farm upstream of two sites: the binding site follows from the charge, nothing is recomputed.
+				for (const k of read) expect(new Set(keys).has(k)).toBe(true);
+			}
+		}
+		expect(recomputed).toBeGreaterThan(5);
+	});
+
+	it('the stored binding site equals the recompute’s off a transfer loop, and is exact on one (engine ≥ 1.5.0)', () => {
+		let compared = 0;
+		let loops = 0;
+		for (const { input, run } of cases(80, 600)) {
+			const now = prepareCurtailment(asRun(input, run));
+			const before = prepareCurtailment(asOldRun(input, run));
+			for (const w of windows(run)) {
+				const stored = now.over(w);
+				const old = before.over(w);
+				expect(stored.bindingApproximate).toBe(false);
+				if (old.bindingApproximate) {
+					// A loop: only the stored series gives runModel's binding sites.
+					loops++;
+					expect(stored.curtailment.farms).toEqual(runModel(withWindow(input, w)).summary.curtailment!.farms);
+				} else {
+					compared++;
+					expect(stored.curtailment).toEqual(old.curtailment);
+				}
+			}
+		}
+		expect(compared).toBeGreaterThan(100);
+		expect(loops).toBeGreaterThan(0);
+	});
+
+	it('reads exactly the series curtailmentSeriesKeys lists, a rule-table site’s own shortfall included', () => {
 		let ruleRuns = 0;
 		for (const { input, run } of runs) {
 			// As the Runs tab passes them: the stored sites whose charge followed a rule table (engine ≥ 1.3.0).
@@ -130,7 +205,9 @@ describe('curtailmentOverWindow', () => {
 				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
 				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
 				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
-				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites }).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				// With the run's stored series too, as the Runs tab passes them: its binding sites (engine ≥ 1.5.0) replace the flows.
+				const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 				expect(new Set(keys)).toEqual(used);
 				expect(keys).toHaveLength(used.size);
 			}

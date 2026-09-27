@@ -1201,6 +1201,41 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(changed!.highFlowRate).toEqual({ a: null, b: 1, delta: null });
 	});
 
+	it('lists a rule table’s kind of source changing (engine ≥ 1.5.0); absent and null are both not stated', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.sourceKind = 'desktop';
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: kind of source not stated → Desktop estimate, low confidence']);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.sourceKind = 'gazetted';
+		expect(texts(b, c)).toEqual(['EWR rule table at the outlet: kind of source Desktop estimate, low confidence → Gazetted Reserve']);
+		const d = structuredClone(a);
+		d.settings.ewrRules![0]!.sourceKind = null;
+		expect(texts(a, d)).toEqual([]);
+	});
+
+	it('lists the EWR site list changing: a gauge added, taken off the sites, turned into a farm (engine ≥ 1.5.0)', () => {
+		const a = snapshot();
+		a.model.nodes.push(node('w', 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0 }));
+		// A run saved before the flag (absent) compares equal to one with it set true.
+		const flagged = structuredClone(a);
+		for (const n of flagged.model.nodes) n.ewrSite = true;
+		expect(texts(a, flagged)).toEqual([]);
+		const off = structuredClone(a);
+		off.model.nodes.find((n) => n.id === 'w')!.ewrSite = false;
+		expect(texts(a, off)).toEqual(['Weir: EWR site yes → no', 'EWR sites: Outlet (outlet), Weir → Outlet (outlet) (removed Weir (taken off the EWR sites))']);
+		expect(texts(off, a)).toEqual(['Weir: EWR site no → yes', 'EWR sites: Outlet (outlet) → Outlet (outlet), Weir (added Weir (marked as an EWR site))']);
+		const none = snapshot();
+		expect(texts(none, a)).toEqual(['Gauge "Weir" added (10 km², drains into Outlet)', 'EWR sites: Outlet (outlet) → Outlet (outlet), Weir (added Weir (new node))']);
+		const farm = structuredClone(a);
+		farm.model.nodes.find((n) => n.id === 'w')!.kind = 'farm';
+		expect(texts(a, farm)).toContain('EWR sites: Outlet (outlet), Weir → Outlet (outlet) (removed Weir (now a farm))');
+		// Every change line is about the network; a copy of the project (fresh ids) is no change.
+		expect(diffInputs(a, off).every((c) => c.area === 'network')).toBe(true);
+		expect(diffInputs(off, copyWithFreshIds(off))).toEqual([]);
+	});
+
 	it('lists low-flow values and high-flow components changed in the inputs (engine ≥ 0.33.0)', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];

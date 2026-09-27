@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { modelRuleIssues, SUPPLY_RULES, type NetworkNode, type ProjectModel } from '@water-management/engine';
-import { supplyIssues, validateModel } from './validate';
+import { ewrSiteIssue, supplyIssues, validateModel } from './validate';
 
 function node(id: string, name: string, down: string | null): NetworkNode {
 	return {
@@ -205,6 +205,19 @@ describe('validateModel', () => {
 		expect(messages(model([{ ...g, supplyRule: 'riverFirst' }, farm({})]))).toEqual([
 			'"Gauge": only a unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
 		]);
+	});
+
+	it('refuses the EWR site flag off the outlet or a unit, exactly as the backend does (engine 1.5.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const weir = { ...node('w', 'Weir', 'g'), kind: 'gauge' as const };
+		const a = node('a', 'A', 'w');
+		for (const [n, ok] of [[{ ...weir, ewrSite: false }, true], [{ ...weir, ewrSite: true }, true], [{ ...g, ewrSite: false }, false], [{ ...a, ewrSite: false }, false]] as const) {
+			expect(ewrSiteIssue(n) === null, n.id).toBe(ok);
+			const nodes = [g, weir, a].map((x) => (x.id === n.id ? n : x));
+			const backend = [...modelRuleIssues(model(nodes)).keys()].some((k) => k.startsWith('ewrSite'));
+			expect(backend, n.id).toBe(!ok);
+		}
+		expect(ewrSiteIssue({ ...g, ewrSite: false })).toMatch(/the outlet is always an EWR site/);
 	});
 
 	it('refuses exactly the supply combinations the backend refuses (engine modelRules)', () => {

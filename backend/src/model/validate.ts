@@ -64,7 +64,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				supplyRule: z.enum(SUPPLY_RULES).default('damFirst'),
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
-				supplyStopPct: frac.default(0.6)
+				supplyStopPct: frac.default(0.6),
+				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
+				ewrSite: z.boolean().default(true)
 			})
 		)
 		.max(500),

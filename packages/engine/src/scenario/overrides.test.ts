@@ -118,6 +118,21 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'settings.set', path: 'hiLoSplit.hi', value: 0.95 }, hiLo).problems[0]).toMatch(/sum to 114\.00%/);
 	});
 
+	it('node.set takes a gauge off the EWR sites (engine ≥ 1.5.0), never the outlet, always a baseline assumption', () => {
+		const b = base();
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, divertCapacityM3Day: 0 }));
+		nodeOf(b, 'B')!.downstreamNodeId = 'W';
+		const op: ScenarioOp = { op: 'node.set', nodeId: 'W', field: 'ewrSite', value: false };
+		const r = one(op, b);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'W')!.ewrSite).toBe(false);
+		// Where the EWR is assessed is the Reserve's: never the applicant's proposal, even on a node they own.
+		expect(classifyOp(op, ['W', 'B'], b)).toBe('baseline');
+		expect(one({ op: 'node.set', nodeId: 'G', field: 'ewrSite', value: false }, b).problems[0]).toMatch(/is the outlet, which is always an EWR site/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'ewrSite', value: false }, b).problems[0]).toMatch(/can't be set on a farm/);
+		expect(validateScenarioOps([{ op: 'node.set', nodeId: 'W', field: 'ewrSite', value: 'no' }]).errors).toEqual(['ops[0].value: must be true or false']);
+	});
+
 	it('node.set refuses a drought borehole rule on a farm without a dam', () => {
 		const b = base();
 		nodeOf(b, 'B')!.boreholeCapacityM3Day = 100;

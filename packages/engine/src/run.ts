@@ -27,6 +27,7 @@ import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
+import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { supplyOf } from './network/supply';
@@ -38,7 +39,7 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
-import { buildTopology, canonicalOrder } from './network/topology';
+import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
@@ -351,17 +352,16 @@ function runNetwork(
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
 
 	// Who is charged for a shortfall (engine ≥ 0.17.0, audit Q17): the EWR is
-	// assessed at the outlet and every gauge, and each site's shortfall is
-	// charged to the farms upstream of it pro rata to their net impact
-	// (./network/attribution.ts). Sites: the outlet first, then gauges by node id.
-	const gaugeSites = nodes
-		.flatMap((n, i) => (n.kind === 'gauge' && i !== topo.outflow ? [i] : []))
-		.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	// assessed at the outlet and every gauge that is an EWR site (engine ≥
+	// 1.5.0: a gauge whose ewrSite flag is false only measures), and each
+	// site's shortfall is charged to the farms upstream of it pro rata to their
+	// net impact (./network/attribution.ts). Sites: the outlet first, then
+	// gauges by node id (./network/topology.ts ewrSiteNodes).
+	const siteNodes = ewrSiteNodes(nodes, topo.outflow);
 	// A canonical order (network/topology.ts canonicalOrder), not the
 	// calculation order, which follows sortOrder: the attribution sums impacts
 	// in it, so the charges don't depend on the display order in their last bit.
 	const ranked = canonicalOrder(nodes, topo);
-	const siteNodes = [...(topo.outflow >= 0 ? [topo.outflow] : []), ...gaugeSites];
 	const kinds = plan.nodes.map((n) => n.kind);
 	// The Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6): monthly
 	// compliance at each EWR site with a rule table (./reserve/assurance.ts).
@@ -492,6 +492,12 @@ function runNetwork(
 		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
 		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
 		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
+		// Which site set the charge each day (engine ≥ 1.5.0), so a stored run's
+		// projection reads it instead of recomputing the attribution
+		// (views/farmProjection.ts). Only where it can't be told from the charge
+		// alone: a farm upstream of two or more sites (./network/bindingSeries.ts).
+		const binding = bindingSeries(attribution, i, days);
+		if (binding) push(node.id, EWR_BINDING_SERIES.key, EWR_BINDING_SERIES.label, EWR_BINDING_SERIES.unit, binding);
 	});
 
 	// --- summary -----------------------------------------------------------------
@@ -1520,6 +1526,11 @@ function assessEwrRules(
 		}
 		if (!isOutlet && nodes[node]!.kind !== 'gauge') {
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: an EWR site is the outlet or a gauge`);
+			continue;
+		}
+		// Engine ≥ 1.5.0: a gauge taken off the EWR sites only measures.
+		if (!isOutlet && !siteOf.has(node)) {
+			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: the gauge is not marked as an EWR site`);
 			continue;
 		}
 		const natural = new Float64Array(days);

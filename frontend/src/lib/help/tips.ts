@@ -151,8 +151,9 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'element-gauge',
 		term: 'Gauge element',
-		short: 'A measuring point that only passes flow through and reports it, with its EWR check. It has no runoff, dam or demand.',
-		category: 'network'
+		short: 'A measuring point that only passes flow through and reports it, with its EWR check unless it isn’t an EWR site. No runoff, dam or demand.',
+		category: 'network',
+		fields: ['node.ewrSite']
 	},
 	{
 		id: 'element-user',
@@ -702,7 +703,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'A unit’s share of the EWR shortfall at the EWR sites below it, pro rata to its net impact that day.',
 		units: 'm³/day, shown as a positive volume charged (negative in the daily series)',
 		category: 'ewr',
-		fields: ['run.ewr_charge', 'run.ewr_charged', 'run.ewr_natural', 'summary.avgEwrShortfallM3Day']
+		fields: ['run.ewr_charge', 'run.ewr_charged', 'run.ewr_natural', 'run.ewr_binding_site', 'summary.avgEwrShortfallM3Day']
 	},
 	{
 		id: 'ewr-charge-split',

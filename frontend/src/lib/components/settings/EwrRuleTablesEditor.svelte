@@ -1,7 +1,7 @@
 <!--
 	The per-table editor of Settings → Reserve rule tables (EwrRulesSection.svelte,
 	which loads it only once the project has a table, so a project without one
-	downloads none of it): site, source, what it covers, unit, natural source,
+	downloads none of it): site, source and its kind, what it covers, unit, natural source,
 	scale, % points, the EWR and natural grids, paste from a spreadsheet, the
 	plausibility notes and Remove. Helpers in ./ewrRules.ts.
 -->
@@ -143,6 +143,24 @@
 					aria-describedby="{uid}-{i}-src-e"
 				/>
 				{#if errs.source}<span class="err" id="{uid}-{i}-src-e">{errs.source}</span>{/if}
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-kind">Kind of source</label>
+				<select
+					id="{uid}-{i}-kind"
+					disabled={readonly}
+					value={t.sourceKind ?? ''}
+					onchange={(e) => (t.sourceKind = (e.currentTarget.value || null) as EwrRuleTable['sourceKind'])}
+					aria-describedby="{uid}-{i}-kind-h"
+				>
+					<option value="">Not stated</option>
+					<option value="gazetted">Gazetted Reserve</option>
+					<option value="desktop">Desktop estimate (low confidence)</option>
+					<option value="other">Other</option>
+				</select>
+				<span class="hint" id="{uid}-{i}-kind-h">
+					{#if errs.sourceKind}<span class="err">{errs.sourceKind}</span>{:else}Shown beside the Reserve results and in the printed report as its confidence.{/if}
+				</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-{i}-comp">The table covers</label>
