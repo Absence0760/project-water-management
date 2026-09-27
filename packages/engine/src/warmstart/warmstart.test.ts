@@ -186,7 +186,10 @@ describe('what the resumed input may and may not change', () => {
 
 	it('refuses a snapshot from another engine version or format', () => {
 		expect(() => runModelFrom({ ...snapshot, engineVersion: '0.0.1' }, input)).toThrow(/captured by engine 0\.0\.1, and this is engine/);
-		expect(() => runModelFrom({ ...snapshot, format: 2 as never }, input)).toThrow(/format 2/);
+		expect(() => runModelFrom({ ...snapshot, format: (MODEL_STATE_FORMAT + 1) as never }, input)).toThrow(new RegExp(`format ${MODEL_STATE_FORMAT + 1}`));
+		// Format 1 (engine < 1.6.0) carried a part month's base-flow sum, not the days a resumed run's base flow is filtered over.
+		expect(MODEL_STATE_FORMAT).toBe(2);
+		expect(() => runModelFrom({ ...snapshot, format: 1 as never }, input)).toThrow(/format 1; this engine reads format 2/);
 		expect(() => runModelFrom({ ...snapshot, kind: 'x' as never }, input)).toThrow(/not a model-state snapshot/);
 		try {
 			runModelFrom({ ...snapshot, engineVersion: '0.0.1' }, input);

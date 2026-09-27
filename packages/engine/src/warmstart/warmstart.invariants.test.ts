@@ -83,7 +83,8 @@ describe('capture and resume on random networks', () => {
 			const v = variantInput(seed, 'plain');
 			if (!v) continue;
 			const dams = v.input.model.nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
-			if (!dams.length) continue;
+			// A day inside the run after its first needs two days: on a one-day run rng.int(1, 0) is 1, the day after it.
+			if (!dams.length || v.full.days < 2) continue;
 			tested++;
 			const at = fromEpochDay(toEpochDay(v.full.startDate) + new Rng(seed).int(1, v.full.days - 1));
 			const storageM3 = Object.fromEntries(dams.map((n, i) => [n.id, (n.damCapacityM3 * ((seed + i) % 5)) / 4]));

@@ -681,7 +681,9 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     #64, `settings.ewrChargeSource`, the pragmatic EWR by default).* Should a
     low-flow requirement be judged on the month's base flow rather than its
     volume, and with which filter parameter? *Built as an option
-    (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, the volume by default;
+    (`settings.lowFlowMeasure`, Lyne–Hollick α 0.995, three passes, the volume
+    by default; from engine 1.6.0 each month filtered over its own days and
+    the two years before it, so later days never change a month's verdict;
     model.md §2.9d).*
 18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
     criteria (engine 0.26.0, model.md §2.10e), defaults to confirm.* Is a
