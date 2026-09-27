@@ -6,6 +6,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { historyDetail } from '../support/history.ts';
 import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -48,8 +49,10 @@ test('edit a dam capacity with a reason, see it in History, restore the earlier 
 	await page.getByLabel('Parameter').fill('');
 
 	// The version before the save: the seeding's settings change, the next entry that has a version to restore.
+	// On a wide page the restore buttons are in the picked change's detail, beside the list.
 	const before = entries(page).filter({ hasText: 'Settings changed' }).first();
-	await before.getByRole('button', { name: 'Restore this version' }).click();
+	await before.getByRole('link').click();
+	await historyDetail(page).getByRole('button', { name: 'Restore this version' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Restore this version?' });
 	await expect(dialog).toBeVisible();
 	await expect(dialog).toContainText('Upper farm: dam capacity 200,000 m³ → 150,000 m³');
@@ -143,7 +146,8 @@ test("a series merge in History restores the series' earlier values, and the res
 
 	await page.goto(`/projects/${project.id}?tab=history`);
 	const entry = entries(page).filter({ hasText: 'Merged days into the Rainfall — catchment series' });
-	await entry.getByRole('button', { name: 'Restore the earlier values' }).click();
+	await entry.getByRole('link').click();
+	await historyDetail(page).getByRole('button', { name: 'Restore the earlier values' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Restore the earlier values?' });
 	await expect(dialog).toContainText('The Rainfall — catchment series goes back to the values it held before the change of');
 	await dialog.getByRole('button', { name: 'Restore values' }).click();
@@ -153,7 +157,9 @@ test("a series merge in History restores the series' earlier values, and the res
 
 	// The restore is an entry of its own, and it kept the values it replaced.
 	const restore = entries(page).filter({ hasText: 'Restored earlier values of the Rainfall — catchment series' });
-	await restore.getByRole('button', { name: 'Restore the earlier values' }).click();
+	// The restore is the newest entry, picked once the page reloads its list.
+	await expect(restore.getByRole('link')).toHaveAttribute('aria-current', 'true');
+	await historyDetail(page).getByRole('button', { name: 'Restore the earlier values' }).click();
 	await dialog.getByRole('button', { name: 'Restore values' }).click();
 	await expect(dialog).toBeHidden();
 	expect(await stored()).toEqual([1, 2, 30, 4]);
@@ -167,11 +173,13 @@ test('a viewer sees series changes in History but no restore button', async ({ p
 	// Positive control: the owner has the button.
 	await page.goto(`/projects/${project.id}?tab=history`);
 	const replaced = entries(page).filter({ hasText: 'Replaced the Rainfall — catchment series' });
-	await expect(replaced.getByRole('button', { name: 'Restore the earlier values' })).toBeVisible();
+	await replaced.getByRole('link').click();
+	await expect(historyDetail(page).getByRole('button', { name: 'Restore the earlier values' })).toBeVisible();
 	const viewer = await signIn('History series viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(`/projects/${project.id}?tab=history`);
 	const seen = viewer.page.getByTestId('history-entry').filter({ hasText: 'Replaced the Rainfall — catchment series' });
-	await expect(seen).toBeVisible();
-	await expect(seen.getByRole('button', { name: 'Restore the earlier values' })).toHaveCount(0);
+	await seen.getByRole('link').click();
+	await expect(historyDetail(viewer.page)).toContainText('Replaced the Rainfall — catchment series');
+	await expect(viewer.page.getByRole('button', { name: 'Restore the earlier values' })).toHaveCount(0);
 });
