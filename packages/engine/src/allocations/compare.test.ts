@@ -133,7 +133,8 @@ describe('compareAllocations', () => {
 
 	// Invariant (WP-3.10 checkAllocations): the modelled use, summed over water
 	// years and both sources, is the run's supplied series summed (plus what was
-	// pumped into the dam, WP-3.9), and every run day falls in exactly one water year.
+	// pumped into the dam, WP-3.9, less what of it each water year drew back out:
+	// MIN(Σ pumped in, Σ dam draw) per year), and every run day falls in exactly one water year.
 	it('keeps modelled use equal to the Σ supplied series', () => {
 		let seed = 7;
 		const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -153,6 +154,43 @@ describe('compareAllocations', () => {
 		}
 	});
 
+	it('counts groundwater pumped into the dam once: Σ modelled = Σ supplied + Σ pumped in − Σ_y MIN(pumped in, dam draw)', () => {
+		let seed = 11;
+		const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+		for (let k = 0; k < 20; k++) {
+			const n = 50 + Math.floor(rnd() * 900);
+			const supplied = Array.from({ length: n }, () => rnd() * 500);
+			const gw = supplied.map((v) => v * rnd() * 0.5);
+			const river = supplied.map((v, i) => (v - gw[i]!) * rnd());
+			const toDam = Array.from({ length: n }, () => (rnd() < 0.3 ? rnd() * 800 : 0));
+			const startDate = fromEpochDay(toEpochDay('1990-01-01') + Math.floor(rnd() * 5000));
+			const r = compareAllocations({
+				startDate,
+				nodes: [farm(supplied, gw, { groundwaterToDam: toDam, riverAbstraction: river })],
+				allocations: []
+			});
+			const x = r.nodes[0]!;
+			let netted = 0;
+			let t = 0;
+			for (const y of x.surface.years) {
+				let pumped = 0;
+				let draw = 0;
+				for (let d = 0; d < y.days; d++, t++) {
+					pumped += toDam[t]!;
+					draw += supplied[t]! - gw[t]! - river[t]!;
+				}
+				netted += Math.min(pumped, draw);
+				// The surface side never goes below the year's river pumping.
+				expect(y.modelledM3).toBeGreaterThanOrEqual(river.slice(t - y.days, t).reduce((s, v) => s + v, 0) - 1e-6);
+			}
+			const total = [...x.surface.years, ...x.groundwater.years].reduce((s, y) => s + y.modelledM3, 0);
+			const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
+			expect(total).toBeCloseTo(sum(supplied) + sum(toDam) - netted, 6);
+			// The groundwater side still counts every m³ pumped, to the crop and into the dam.
+			expect(x.groundwater.years.reduce((s, y) => s + y.modelledM3, 0)).toBeCloseTo(sum(gw) + sum(toDam), 6);
+		}
+	});
+
 	it('counts groundwater pumped into the dam as groundwater use when pumped (WP-3.9)', () => {
 		// 10 days of 1 October 2001: 100 supplied/day of which 30 groundwater to the crop, and 20/day pumped into the dam.
 		const supplied = new Array(10).fill(100);
@@ -163,9 +201,57 @@ describe('compareAllocations', () => {
 		});
 		const x = r.nodes[0]!;
 		expect(x.groundwater.years[0]!.modelledM3).toBeCloseTo(500, 9);
-		expect(x.surface.years[0]!.modelledM3).toBeCloseTo(700, 9);
-		// Σ over both sources = Σ supplied + Σ pumped into the dam.
-		expect(x.groundwater.years[0]!.modelledM3 + x.surface.years[0]!.modelledM3).toBeCloseTo(1200, 9);
+		// 700 drawn from the dam, 200 of it the pumped water: 500 surface (issue #46).
+		expect(x.surface.years[0]!.modelledM3).toBeCloseTo(500, 9);
+		// Σ over both sources = Σ supplied: the pumped water counts once.
+		expect(x.groundwater.years[0]!.modelledM3 + x.surface.years[0]!.modelledM3).toBeCloseTo(1000, 9);
+	});
+
+	it('does not count groundwater pumped into the dam again as surface use when it is drawn (issue #46)', () => {
+		// A whole water year: 10 000 m³ pumped into the dam, 40 000 m³ drawn from
+		// it (all of supplied; no groundwater to the crop). 10 000 of the draw is
+		// the pumped water: 30 000 m³ surface + 10 000 m³ groundwater, not 40 000 + 10 000.
+		const n = span('2001-10-01', '2002-09-30');
+		const toDam = new Array(n).fill(0);
+		toDam[0] = 10_000;
+		const supplied = new Array(n).fill(0);
+		for (let d = 100; d < 140; d++) supplied[d] = 1000;
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(supplied, new Array(n).fill(0), { groundwaterToDam: toDam })],
+			allocations: [alloc(30_000), alloc(10_000, { id: 'g', waterSource: 'groundwater' })]
+		});
+		const x = r.nodes[0]!;
+		expect(x.surface.years[0]!.modelledM3).toBeCloseTo(30_000, 9);
+		expect(x.surface.years[0]!.status).toBe('within');
+		expect(x.groundwater.years[0]!.modelledM3).toBeCloseTo(10_000, 9);
+	});
+
+	it('nets out no more than the year drew from the dam (the river pump and groundwater to the crop are not dam draws)', () => {
+		// Per day: 100 supplied = 30 groundwater to the crop + 60 river pump + 10 from the dam; 20 pumped into the dam.
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(new Array(10).fill(100), new Array(10).fill(30), { groundwaterToDam: new Array(10).fill(20), riverAbstraction: new Array(10).fill(60) })],
+			allocations: []
+		});
+		const x = r.nodes[0]!;
+		// Dam draw 100 over the days, pumped in 200: 100 netted, the river's 600 stays surface.
+		expect(x.surface.years[0]!.modelledM3).toBeCloseTo(600, 9);
+		expect(x.groundwater.years[0]!.modelledM3).toBeCloseTo(500, 9);
+	});
+
+	it('nets per water year: water pumped in before 1 October and drawn after it is not netted', () => {
+		// Pumped on 30 September 2002 (water year 2001), drawn on 1 October 2002 (water year 2002).
+		const n = span('2001-10-01', '2003-09-30');
+		const last2001 = span('2001-10-01', '2002-09-30') - 1;
+		const toDam = new Array(n).fill(0);
+		toDam[last2001] = 500;
+		const supplied = new Array(n).fill(0);
+		supplied[last2001 + 1] = 500;
+		const r = compareAllocations({ startDate: '2001-10-01', nodes: [farm(supplied, new Array(n).fill(0), { groundwaterToDam: toDam })], allocations: [] });
+		const x = r.nodes[0]!;
+		expect(x.groundwater.years.map((y) => y.modelledM3)).toEqual([500, 0]);
+		expect(x.surface.years.map((y) => y.modelledM3)).toEqual([0, 500]);
 	});
 
 	it('gives the same result at UTC+14 and UTC−11', () => {
