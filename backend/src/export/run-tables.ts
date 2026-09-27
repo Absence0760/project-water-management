@@ -331,7 +331,8 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * The hydrologist plausibility checks (engine ≥ 0.25.0, model.md §2.10d): the
  * dry season, then natural vs observed + abstraction per water year, EWR days
  * by rain source, the double-mass check of observed flow against rain and the
- * dry-season low-flow duration curves. Unrounded.
+ * dry-season low-flow duration curves, then the first and last of those again
+ * at each gauge node with a record of its own (engine ≥ 1.3.0). Unrounded.
  */
 export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
 	yield csvRow(['Plausibility checks']);
@@ -352,6 +353,14 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	yield* flowDoubleMassLines(p.flowDoubleMass);
 	yield '';
 	yield* lowFlowLines(p.lowFlow);
+	// Checks 1 and 4 at each gauge node with a record of its own (engine ≥ 1.3.0), against the simulated flow there.
+	for (const g of p.gauges ?? []) {
+		yield '';
+		yield csvRow([`At gauge ${g.name}`, 'Share of the catchment natural flow above it (%)', pct(g.naturalShare) as Cell]);
+		yield* naturalisedLines(g.naturalised);
+		yield '';
+		yield* lowFlowLines(g.lowFlow);
+	}
 }
 
 function* naturalisedLines(c: Plausibility['naturalised']): Generator<string> {
