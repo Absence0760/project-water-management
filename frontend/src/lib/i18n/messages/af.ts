@@ -745,8 +745,6 @@ export const af: Catalogue = {
 	'f8c0f358': 'jaar se daaglikse waterbalans',
 	// days in one run
 	'e4291d84': 'dae in een lopie',
-	// runs behind the what-if above
-	'9842bf51': 'lopies vir die wat-as hierbo',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.

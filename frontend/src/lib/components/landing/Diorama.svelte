@@ -228,7 +228,8 @@
 	.streams .glow {
 		stroke: #8fe3ff;
 		stroke-width: 9;
-		opacity: 0.18;
+		/* The loop's rest (glow at 62–92 %), so starting the loop changes nothing. */
+		opacity: 0.2;
 	}
 	.streams .pulse {
 		stroke: #e6fbff;
@@ -256,9 +257,17 @@
 		transform: translate(14px, -50%);
 	}
 
-	/* ---- hero: one loop of about 10 s, then a 4 s rest ---- */
+	/* ---- hero: one loop of about 10 s, then a 4 s rest ----
+	   Every 14 s loop starts 11.2 s in (80 %, inside the rest: the dams full, the
+	   rivers lit, the needle settled, the tag shown), which is the still frame the
+	   page shows before the script runs. So turning motion on changes nothing on
+	   screen; the rest runs out and the next loop begins with the rain. */
+	.hero [data-motion='on'] {
+		--rest: -11.2s;
+	}
 	.hero [data-motion='on'] .rain {
 		animation: rain-window 14s linear infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-motion='on'] .rain path {
 		opacity: 0.85;
@@ -266,20 +275,25 @@
 	}
 	.hero [data-motion='on'] .streams .glow {
 		animation: glow 14s ease-out infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-motion='on'] .streams .pulse {
 		animation: pulse 14s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-motion='on'] .dams path {
 		animation: fill 14s ease-out infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-motion='on'] .gauge path {
 		transform-box: fill-box;
 		transform-origin: 0 100%;
 		animation: needle 14s ease-out infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-motion='on'] .tag {
 		animation: tag 14s ease-out infinite;
+		animation-delay: var(--rest);
 	}
 	.hero [data-playing='no'] *,
 	.hero [data-playing='no'] {

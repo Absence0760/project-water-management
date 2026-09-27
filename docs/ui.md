@@ -132,15 +132,23 @@ other signed-out route still goes to `/login?next=`.
   rendered) and a large Twitter card, with absolute URLs from the build's
   `SITE_ORIGIN` ([deployment.md](./deployment.md)).
 - **Figures** come from the invented Kleinberg example (the engine at build
-  time, `data.generated.ts`), named as the example catchment's where shown. The art, the motion rules and the
+  time, `data.generated.ts`), named as the example catchment's where shown:
+  the hero's reserve tag, the story's charts (the river's on a square-root
+  scale, which its unit says), the what-if (each bar labelled **Today** or
+  **This plan**; the plan's supply in the app's supply bands), and *Why trust
+  it*'s three figures under "In the example catchment", the last the run's
+  calibration NSE. The art, the motion rules and the
   pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
 
 ## Legal pages
 
 `/privacy` (the privacy notice) and `/terms` (terms of use),
 `routes/privacy`, `routes/terms`, framed by `lib/components/legal/LegalPage.svelte`:
-a slim header with the way home and **Sign in**, a contents list, a readable
-column, and footer links. Prerendered like `/welcome` (static HTML, open to
+a slim header with the way home and **Open the app** (to `/login`, which sends
+a signed-in reader on to their projects: a static page can't know the session,
+so it doesn't claim "Sign in"), a contents list (folded behind a
+**Contents (13 sections)** disclosure on a phone, where the list alone filled
+the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in

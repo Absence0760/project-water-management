@@ -18,4 +18,23 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+3 strings: 3 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### landing.story
+
+Landing page: “From rainfall to river”, five steps of what the model does, each with a small chart (its unit, what its lines are, and a short summary under it that screen readers read).
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `f161fe05` | m³/s, on a square-root scale |  |  |
+
+### landing.trust
+
+Landing page: “Why trust it”, and three figures from the example catchment.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `32f438d7` | fit to the weir’s measured flow (NSE, where 1 is perfect) |  |  |
+| `fb86138c` | In the example catchment |  |  |
