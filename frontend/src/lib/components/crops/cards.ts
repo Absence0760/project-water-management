@@ -1,40 +1,84 @@
-// The Crops & demand page's pictures (issue #17, option A · A3): a card per
-// crop with its factor sparkline, one stacked bar per farm, the header's one
-// line, and the crop colours the demand chart and the farm bars share. Pure,
-// so the page stays markup and the numbers are unit-tested.
-import type { CropStack } from './demand';
+// The Crops & demand page's pictures (issue #17, option A · A3): a row per
+// crop in the compact crop list with its factor sparkline, one stacked bar
+// per unit, the header's one line, and the crop colours the list, the demand
+// chart and the unit bars share. Pure, so the page stays markup and the
+// numbers are unit-tested.
 import { joinNames } from './demand';
 
 type CropLike = { id: string; name: string; cropFactor: readonly number[] };
 type AreaLike = { nodeId: string; cropId: string; areaM2: number };
 
-/** Crop colours: theme tokens, so they follow light and dark mode. Past these, grey ("Other"). */
-export const CROP_PALETTE = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--brand-node)', 'var(--warning)', 'var(--accent)'];
+/**
+ * Crop colours: theme tokens (app.css, a light and a dark step each), in the
+ * order that keeps neighbouring series apart for colour-blind readers (every
+ * adjacent pair validated in both themes; the chart and the unit bars stack
+ * crops in this order). `--series-4` is the line charts' own violet, so the
+ * crop set skips it. Nine named colours, then "Other".
+ */
+export const CROP_PALETTE = [
+	'var(--series-1)',
+	'var(--series-2)',
+	'var(--series-3)',
+	'var(--series-5)',
+	'var(--series-6)',
+	'var(--series-7)',
+	'var(--series-8)',
+	'var(--series-9)',
+	'var(--series-10)'
+];
+/** The "Other" group's colour: neutral, never one of the named crops' hues. */
 export const OTHER_COLOUR = 'var(--text-muted)';
 
+/** Planted area per crop id on the units shown (`nodeIds`), m². */
+export function cropAreaTotals(areas: readonly AreaLike[], nodeIds: readonly string[]): Map<string, number> {
+	const nodes = new Set(nodeIds);
+	const out = new Map<string, number>();
+	for (const a of areas) if (nodes.has(a.nodeId)) out.set(a.cropId, (out.get(a.cropId) ?? 0) + a.areaM2);
+	return out;
+}
+
 /**
- * A colour per crop id, shared by the demand chart and the farm bars. A crop
- * with its own part in the chart takes that part's colour (the chart's parts
- * are in crop order, `cropStacks`); one grouped into "Other" is grey; a crop
- * with no demand yet (no A-pan, no area, factors all 0) takes the next unused
- * colour in crop order, then grey.
+ * The crops by planted area, largest first; equal areas (unplanted crops
+ * included) keep crop order, so the ranking is stable. The list's order, the
+ * colour ranking and the stacking order of the chart and the bars.
  */
-export function cropColours(crops: readonly { id: string }[], stacks: readonly CropStack[], palette: readonly string[] = CROP_PALETTE): Map<string, string> {
-	const out = new Map<string, string>();
-	let used = 0;
-	stacks.forEach((s, i) => {
-		if (s.id !== 'other') {
-			out.set(s.id, palette[i] ?? OTHER_COLOUR);
-			used = i + 1;
+export function rankCrops<C extends { id: string }>(crops: readonly C[], areaM2: ReadonlyMap<string, number>): C[] {
+	return crops
+		.map((c, i) => ({ c, i, a: areaM2.get(c.id) ?? 0 }))
+		.sort((x, y) => y.a - x.a || x.i - y.i)
+		.map((x) => x.c);
+}
+
+export interface CropColouring {
+	/** A colour per crop id: a palette colour for a named crop, OTHER_COLOUR for one in "Other". */
+	colours: Map<string, string>;
+	/** Crops with their own colour, in rank order. */
+	named: string[];
+	/** Crops grouped as "Other" (past the palette), in rank order; empty when every crop has a colour. */
+	other: string[];
+}
+
+/**
+ * Colours for crops already ranked (`rankCrops`): each of the first
+ * `palette.length` takes the next palette colour, so no two named crops share
+ * one; the rest are grouped as "Other". Ranked by planted area, not demand:
+ * area is known before A-pan is set, it is what the list and the unit bars
+ * show, and it doesn't move when a month's evaporation is edited.
+ */
+export function cropColouring(ranked: readonly { id: string }[], palette: readonly string[] = CROP_PALETTE): CropColouring {
+	const colours = new Map<string, string>();
+	const named: string[] = [];
+	const other: string[] = [];
+	ranked.forEach((c, i) => {
+		if (i < palette.length) {
+			colours.set(c.id, palette[i]!);
+			named.push(c.id);
+		} else {
+			colours.set(c.id, OTHER_COLOUR);
+			other.push(c.id);
 		}
 	});
-	const grouped = stacks.some((s) => s.id === 'other');
-	for (const c of crops) {
-		if (out.has(c.id)) continue;
-		// A crop left out of the chart's own parts while "Other" exists is in "Other" (it has demand) or has none.
-		out.set(c.id, grouped ? OTHER_COLOUR : (palette[used++] ?? OTHER_COLOUR));
-	}
-	return out;
+	return { colours, named, other };
 }
 
 /** Index of the largest value (the first on a tie), or -1 when every value is 0 or less. */
@@ -46,10 +90,10 @@ function peakIndex(values: readonly number[]): number {
 	return best;
 }
 
-export interface CropCard {
+export interface CropRow {
 	id: string;
 	name: string;
-	/** Planted area on the farms shown, m². */
+	/** Planted area on the units shown, m². */
 	areaM2: number;
 	/** Water-year month index of the highest gross need (A-pan × factor; the factor alone while A-pan is unset), or -1. */
 	peak: number;
@@ -67,15 +111,13 @@ export const SPARK_W = 240;
 export const SPARK_H = 70;
 const SPARK_BASE = SPARK_H - 4;
 
-/** One card per crop, in crop order. `farmIds`: the farms whose areas count (the Crops tab's rows). */
-export function cropCards(
+/** One row per crop, in the order given (the page passes them ranked, `rankCrops`). `areaM2`: `cropAreaTotals`. */
+export function cropRows(
 	crops: readonly CropLike[],
-	areas: readonly AreaLike[],
-	farmIds: readonly string[],
+	areaM2: ReadonlyMap<string, number>,
 	apanMm: readonly number[],
 	months: readonly string[]
-): CropCard[] {
-	const farms = new Set(farmIds);
+): CropRow[] {
 	const apanSet = apanMm.some((v) => v > 0);
 	return crops.map((c) => {
 		const f = Array.from({ length: 12 }, (_, i) => Math.max(0, c.cropFactor[i] || 0));
@@ -93,7 +135,7 @@ export function cropCards(
 		return {
 			id: c.id,
 			name,
-			areaM2: areas.filter((a) => a.cropId === c.id && farms.has(a.nodeId)).reduce((s, a) => s + a.areaM2, 0),
+			areaM2: areaM2.get(c.id) ?? 0,
 			peak,
 			line: pts.join(' '),
 			fill: `M0,${SPARK_BASE} L${pts.join(' L')} L${SPARK_W},${SPARK_BASE} Z`,
@@ -101,6 +143,11 @@ export function cropCards(
 			high: f.flatMap((v, i) => (v > 1 ? [months[i] ?? String(i + 1)] : []))
 		};
 	});
+}
+
+/** The list's "Other" row: "Other: Pecan, Peaches and Pears". */
+export function otherLabel(names: readonly string[]): string {
+	return `Other: ${joinNames(names)}`;
 }
 
 const round = (n: number) => Math.round(n * 10) / 10;
@@ -111,14 +158,16 @@ export interface FarmBar {
 	name: string;
 	/** Total planted area, m². */
 	totalM2: number;
-	/** Each crop's share of the widest farm's total, in crop order; crops not planted here are left out. */
+	/** Each crop's share of the widest unit's total, in the crops' order (ranked); crops not planted here are left out. */
 	parts: { cropId: string; name: string; areaM2: number; pct: number }[];
 }
 
 /**
- * One stacked bar per farm with something planted, in the farms' order; the
- * widest farm's bar fills the track. Farms with nothing planted are left out
- * (the page names them in the no-planted-area note).
+ * One stacked bar per unit with something planted, largest total first
+ * (equal totals keep the units' order); the widest unit's bar fills the
+ * track. Parts follow `crops`' order (the page passes them ranked, so every
+ * bar stacks like the chart). Units with nothing planted are left out (the
+ * page names them in the no-planted-area note).
  */
 export function farmBars(farms: readonly { id: string; name: string }[], crops: readonly { id: string; name: string }[], areas: readonly AreaLike[]): FarmBar[] {
 	const rows = farms.map((f) => {
@@ -128,7 +177,7 @@ export function farmBars(farms: readonly { id: string; name: string }[], crops: 
 		});
 		return { id: f.id, name: f.name || '(unnamed)', totalM2: parts.reduce((s, p) => s + p.areaM2, 0), parts };
 	});
-	const planted = rows.filter((r) => r.totalM2 > 0);
+	const planted = rows.filter((r) => r.totalM2 > 0).sort((a, b) => b.totalM2 - a.totalM2);
 	const widest = Math.max(0, ...planted.map((r) => r.totalM2));
 	for (const r of planted) for (const p of r.parts) p.pct = widest ? (p.areaM2 / widest) * 100 : 0;
 	return planted;

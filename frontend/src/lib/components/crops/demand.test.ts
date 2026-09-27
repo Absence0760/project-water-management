@@ -99,21 +99,22 @@ describe('catchmentDemand and cropStacks', () => {
 		expect(totals.mean).toBeCloseTo((totals.annual * 1e6) / 365.25, 6);
 	});
 
-	it('stacks every crop when there are few enough, and the stacks sum to the table totals', () => {
-		const stacks = cropStacks(demand, crops, 10);
+	it('stacks every crop in crop order without a named set, and the stacks sum to the table totals', () => {
+		const stacks = cropStacks(demand, crops);
 		expect(stacks.map((s) => s.id)).toEqual(crops.map((c) => c.id));
 		sumOf(stacks).forEach((v, m) => expect(v).toBeCloseTo(totals.monthly[m]!, 9));
 	});
 
-	it('groups the smallest crops as "Other" past the colour limit, still summing to the totals', () => {
-		const stacks = cropStacks(demand, crops, 6);
-		expect(stacks).toHaveLength(6);
-		expect(stacks[5]!.id).toBe('other');
+	it('stacks the named crops in the order given, bottom first, and sums the rest as "Other", still summing to the totals', () => {
+		const named = ['c6', 'c2', 'c0', 'c4', 'c5'];
+		const stacks = cropStacks(demand, crops, named);
+		expect(stacks.map((s) => s.id)).toEqual([...named, 'other']);
 		expect(stacks[5]!.name).toBe('Other (2 crops)');
-		// Kept crops stay in crop order.
-		const kept = stacks.slice(0, 5).map((s) => crops.findIndex((c) => c.id === s.id));
-		expect(kept).toEqual([...kept].sort((a, b) => a - b));
 		sumOf(stacks).forEach((v, m) => expect(v).toBeCloseTo(totals.monthly[m]!, 9));
+		// One crop left over is still "Other" (it has no colour of its own), in the singular.
+		expect(cropStacks(demand, crops, crops.slice(0, 6).map((c) => c.id)).at(-1)!.name).toBe('Other (1 crop)');
+		// Every crop named: no "Other".
+		expect(cropStacks(demand, crops, crops.map((c) => c.id)).some((s) => s.id === 'other')).toBe(false);
 	});
 
 	it('leaves out crops with no demand', () => {

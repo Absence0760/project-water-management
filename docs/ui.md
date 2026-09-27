@@ -1194,9 +1194,9 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 
 ## Crops & demand
 
-A page of pictures over the crop grids (issue #17, option A · A3;
-`components/crops/CropsTab.svelte`). Like the Network it answers first and
-keeps every grid one click away:
+The answers first, the crop grids one click away (issue #17, option A · A3;
+`components/crops/CropsTab.svelte`). Built to hold a real catchment's 9 crops
+on 10 units, and 30 on 20, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
@@ -1204,50 +1204,83 @@ keeps every grid one click away:
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas|demand`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
-- **Crop cards**, four to a row where they fit (one column on a phone): the
-  crop's colour key and name, its planted area on the farms shown and the
-  month of its **peak need** (A-pan × factor; the factor alone while A-pan is
-  unset; "no crop factors yet" when every factor is 0), and a sparkline of its
-  12 factors, Oct → Sep, an image whose name gives the range and highest
-  month (`cropCards` in `crops/cards.ts`). A crop with a factor above 1.0
-  says so on its card ("Factor above 1.0 in Jan: check it isn't an FAO Kc").
-  **Edit** (viewers: **View**) opens the **crop sheet**.
+- **Crop list** ("Crops", *Largest planted area first*): one compact row per
+  crop, sorted by planted area on the units shown, largest first (equal areas,
+  unplanted crops included, keep crop order; `rankCrops`). A row has the
+  crop's colour key, its name, its area and the month of its **peak need**
+  (A-pan × factor; the factor alone while A-pan is unset; "no crop factors
+  yet" when every factor is 0), a small sparkline of its 12 factors, Oct →
+  Sep, an image whose name gives the range and highest month (`cropRows` in
+  `crops/cards.ts`), and **Edit** (viewers: **View**), which opens the **crop
+  sheet**. A crop with a factor above 1.0 gets a warning icon, a button named
+  "Factor above 1.0 in Jan: check Vines isn't an FAO Kc" whose short text
+  shows on hover and focus; it opens the sheet, which carries the full
+  warning. The display order the engine and the grids use is still set in the
+  Crop factors grid; the list only sorts what it shows. When there are more
+  crops than colours, an **Other** row after the coloured ones names its
+  members ("Other: Crop 10, Crop 11 and …", two lines at most) with their
+  total area, and each member's row follows it with a hatched key and "in
+  Other" instead of the group's grey.
 - **Irrigation demand by month:** the catchment's gross demand per
-  water-year month, stacked by crop (`MonthlyBars` in stacked mode, drawn at
-  the card's measured size so its text isn't scaled), with the annual volume,
-  mean m³/s and peak month under it. **Show table** opens the demand table
-  (`crops/DemandTable.svelte`: the formula, m³/day per month, the mean and
-  Mm³/a per farm and for the catchment) in place. An alert says when A-pan
-  isn't set (demand is then zero).
-- **Planted area by farm:** one stacked bar per farm with something planted,
-  split by crop in the chart's colours, scaled to the largest farm, with its
-  total ha (`farmBars`). Each bar is an image named with its parts
-  ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha"); a legend line follows.
-  A farm's name opens the [farm drawer](#farm-drawer) (`farm=<nodeId>`,
-  keeping the page's other parameters). **Edit areas** (viewers: **Areas
-  table**) opens the planted-areas grid. Under the bars, a muted note names
-  every farm whose planted area adds up to zero ("Farm 5, Farm 6 and Farm 8
-  have no planted area, so their irrigation demand counts as zero."), at
-  most five names then "and N more" (`noPlantedAreaNote`).
-- **Layout:** from 1100 px the demand chart and the farm bars sit side by
-  side and that row reaches the window's bottom (its top and the room the
-  page keeps below it are measured, as the Network's map); the chart grows
-  with it (240–480 px). Below that they stack, and the page scrolls (it isn't a
-  dashboard). On a phone the bars put the farm and total above a full-width
-  bar.
+  water-year month, stacked by crop in the list's order, largest at the
+  bottom, "Other" on top (`MonthlyBars` in stacked mode, drawn at the card's
+  measured size so its text isn't scaled; its legend's height is measured
+  after each render and taken off the plot). Hovering a segment names the
+  month, crop and value. The annual volume, mean m³/s and peak month sit
+  under it. **Show table** opens the demand table (`crops/DemandTable.svelte`:
+  the formula, m³/day per month, the mean and Mm³/a per unit and for the
+  catchment) in place. An alert says when A-pan isn't set (demand is then
+  zero).
+- **Planted area by unit:** one stacked bar per unit with something planted,
+  largest total first, split by crop in the list's colours and order, scaled
+  to the largest unit, with its total ha (`farmBars`). Each bar is an image
+  named with its parts ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha");
+  hovering a segment names its crop and area. The bars scroll inside the card
+  and the crop key stays pinned under them (the coloured crops planted
+  somewhere, then Other), so it is never cut off. A unit's name opens the
+  [farm drawer](#farm-drawer) (`farm=<nodeId>`, keeping the page's other
+  parameters). **Edit areas** (viewers: **Areas table**) opens the
+  planted-areas grid. Under the key, a muted note names every unit whose
+  planted area adds up to zero ("Farm 5, Farm 6 and Farm 8 have no planted
+  area, so their irrigation demand counts as zero."), at most five names then
+  "and N more" (`noPlantedAreaNote`).
+- **Layout** (a container query on the page column, `crops-page`): from a
+  60rem (840 px) column, which is a window of about 1100 px beside the
+  sidebar, the crop list is a left column (19–25rem) that scrolls inside
+  itself, and the demand chart over the unit bars fills the rest; the row
+  reaches the window's bottom (its top and the room the page keeps below it
+  are measured with a ResizeObserver, as the Network's map), so the chart and
+  the bars stay on the first screen however many crops and units there are.
+  From a 1500 px column the chart and the bars sit side by side. An open
+  demand table lets the row grow and the page scroll. Narrower, the list
+  comes first, capped at about six rows (it scrolls inside itself, and
+  **Show all N crops** / **Show fewer** lift the cap, `aria-expanded`), then
+  the chart, then the bars (also capped, key pinned). On a phone everything
+  is one column with no sideways scroll, the bars put the unit and total
+  above a full-width bar, and the row buttons are 44 px targets.
 
-Everything follows unsaved edits, and one set of crop colours serves the
-chart, the bars and the cards' keys: theme tokens (`--series-1…3`,
-`--brand-node`, `--warning`, `--accent`), so light and dark mode both work.
-A crop with its own part in the chart keeps that part's colour; with more
-than six crops the five largest by annual demand keep a colour and the rest
-are grouped as "Other" in grey; a crop with no demand yet takes the next
-unused colour (`cropColours`). The chart's parts come from the same per-farm
+**Crop colours.** One set serves the list, the chart and the bars: nine
+theme tokens (`--series-1…3`, `--series-5…10` in `app.css`, each with a
+light and a dark step; `--series-4` is the line charts' own violet and the
+crop set skips it), in an order validated so every adjacent pair stays apart
+for colour-blind readers in both themes (the dataviz palette check: adjacent
+CVD ΔE ≥ 8.4, normal-vision ΔE ≥ 19.3, every colour ≥ 3:1 on the dark
+surface; aqua, yellow and pink are under 3:1 on the light one, which the
+row names, the key and the table carry). The chart and the bars stack crops
+in that same order, so neighbouring segments are the validated pairs. The
+colours go to the crops **ranked by planted area** (`cropColouring`): the
+largest nine get one each, so no two named crops ever share a colour, and
+any further crops are grouped as "Other" in a neutral grey (`--text-muted`)
+that no named crop uses. Area rather than annual demand because it is known
+before A-pan is set (demand is then zero for every crop), it is what the
+list and the unit bars show, and editing a month's evaporation doesn't
+repaint the crops. The chart's parts come from the same per-farm
 computation as the table: `farmDemands` splits each farm's engine demand
 (`grossFarmDemandM3PerDay`) by crop, `catchmentDemand` gives the totals and
-`cropStacks` the parts, which sum to them. It is gross demand, before the
-daily effective-rain reduction (and the soil-water store that carries rain
-over, engine ≥ 0.14.0).
+`cropStacks` the parts (the named crops, then "Other (N crops)"), which sum
+to them. It is gross demand, before the daily effective-rain reduction (and
+the soil-water store that carries rain over, engine ≥ 0.14.0). The Irrigation
+demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
 ### Crop sheet
 
