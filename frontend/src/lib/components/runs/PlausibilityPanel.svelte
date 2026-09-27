@@ -3,7 +3,7 @@
 	0.25.0; docs/model.md §2.10d): natural vs observed + net abstraction per
 	water year, EWR days by rain source, the double-mass check of observed flow
 	against rain, and the dry-season low-flow duration curves, overlaid with the
-	latest run of each other runoff model. Its own chunk (RunsTab.svelte).
+	latest run of each other runoff model. Part of the Runs tab's chunk (RunsTab.svelte).
 -->
 <script lang="ts">
 	import type { LowFlowCurve, PlausibilityChecks } from '@water-management/engine';

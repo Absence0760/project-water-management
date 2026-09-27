@@ -2,8 +2,7 @@
 	// Settings → Seasonal outlook (issue #53 R5, docs/ui.md § Seasonal
 	// outlook): the season a new outlook runs (a decision date and a season
 	// end, as a month and day) and the planning share. Part of the Settings
-	// form (Save settings saves it), but its own chunk: the Settings chunk is at
-	// its ceiling. No model input. The defaults are the engine's and wait on
+	// form (Save settings saves it), in the Settings tab's chunk. No model input. The defaults are the engine's and wait on
 	// the client (plan.md O3, O6); the section says so while they are in use.
 	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, OUTLOOK_SEASON_PENDING_CLIENT, PLANNING_SHARE_PENDING_CLIENT } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
