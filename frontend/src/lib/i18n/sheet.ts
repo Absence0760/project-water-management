@@ -12,7 +12,7 @@
 
 export const SECTIONS: Record<string, string> = {
 	common: 'Words used on several pages (buttons, field labels, the page title in the browser tab).',
-	password: 'Password rules, shown under a password field when the password is not accepted.',
+	password: 'Password fields: the Show / Hide button inside each one (it shows the typed password as text), and the rules shown under the field when the password is not accepted.',
 	auth: 'The sign-in pages: the brand panel beside every sign-in form.',
 	login: 'The sign-in page.',
 	register: 'The create-an-account page, including an emailed invitation (from the WUA or a colleague).',
