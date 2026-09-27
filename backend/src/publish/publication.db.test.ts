@@ -227,8 +227,15 @@ describe('changing the notice', () => {
 			await holder.query('COMMIT');
 			expect(await patch).toEqual({ status: 409, body: { error: 'this publication has been superseded; change the current one' } });
 		} finally {
-			// Put it back as the current one for the tests below.
-			await holder.query('UPDATE run_publication SET superseded_at = NULL WHERE id = $1', [cur.id]).catch(() => {});
+			// Put it back as the current one for the tests below. A superseded
+			// publication is frozen (067_final_states.sql), so only the schema
+			// owner, with the guard off for this one statement, can undo it.
+			await holder.query('ROLLBACK').catch(() => {});
+			await holder.query('BEGIN');
+			await holder.query('ALTER TABLE run_publication DISABLE TRIGGER run_publication_final');
+			await holder.query('UPDATE run_publication SET superseded_at = NULL WHERE id = $1', [cur.id]);
+			await holder.query('ALTER TABLE run_publication ENABLE TRIGGER run_publication_final');
+			await holder.query('COMMIT');
 			await holder.end();
 		}
 		expect((await asOwner('SELECT note FROM run_publication WHERE id = $1', [cur.id]))[0].note).not.toBe('raced');

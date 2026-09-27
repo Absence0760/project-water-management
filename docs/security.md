@@ -29,7 +29,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the watermark, so it signs out every device, including a thief's, and so
   does `POST /auth/logout-everywhere` ("sign out everywhere", for a lost
   laptop or a suspected copied cookie). Changing the password while signed
-  in (`POST /auth/change-password`, the Account page) sets it too, then
+  in (`POST /auth/change-password`, the Account page) sets it too. The
+  watermark only moves forward (`app_user_sessions_watermark`, 067): an
+  update to an earlier time or to NULL keeps the later one, so no update can
+  revive a signed-out session. It then
   re-issues this device's cookie, so only the device that changed it stays
   signed in. Plain logout clears the cookie only
   (that one token stays valid until expiry if it was copied). Rotating
@@ -245,7 +248,8 @@ result without signing in, until it expires or its owner revokes it.
   `share_link_revoke_final` trigger (065) refuses an update that clears or
   moves `revoked_at` or names someone else in `revoked_by`, so not even an
   owner's own transaction can bring a withdrawn link back (only the
-  foreign key's `SET NULL` on the revoker's account deletion passes).
+  foreign key's `SET NULL` on the revoker's account deletion passes; 067
+  refuses clearing `revoked_by` while that account exists).
   Lifetime 1–365 days (API and `CHECK`).
 - **What it reveals.** Only through `SECURITY DEFINER app_share_view` (search
   path pinned): for a live, unrevoked, unexpired token of a project with a
@@ -399,7 +403,13 @@ and nothing else.
   UPDATE for owners. `water_app` may update only `revoked_at` / `revoked_by`
   and may not `DELETE` (the catalogue test pins both), so a key's hash,
   scopes and series can't change after it is made. Revocation applies to
-  the next request. A key belongs to the project, not to the owner who made
+  the next request, and is final in the schema, as a share link's is: the
+  `api_key_revoke_final` trigger (067) refuses an update that clears or
+  moves `revoked_at` or changes `revoked_by`, except the foreign key's `SET
+  NULL` when the revoker's account is deleted. `db/final-columns.security.db.test.ts`
+  sweeps every column `water_app` may update whose name records a one-way
+  event (`revoked`, `superseded`, `consumed`, `used`, `deleted`, `decided`,
+  …) and fails on one no probe there covers. A key belongs to the project, not to the owner who made
   it: it keeps working if that owner leaves, and any owner can revoke it
   (the list says who made each one). Audit events `api_key.created` / `api_key.revoked`, and
   every ingest merge is `series.created` / `series.merged` by `API key
@@ -671,7 +681,10 @@ In short:
   and their own farms' farm-allowlist series of the published run
   (`run_series_select_farmer`: `demand`, `supplied`, `deficit`,
   `dam_storage`, `spill`, `transfer`; no flow series, no catchment series,
-  nothing of an earlier publication). The farm routes
+  nothing of an earlier publication). A superseded publication is history
+  and frozen in the schema (`run_publication_final`, 067): no column of it
+  changes, so an editor can't rewrite an old notice or bring an old
+  publication back as current. The farm routes
   (`/projects/:id/farm…`) admit the farmer role, answer `404` alike for a
   node the farmer isn't linked to, a gauge or a node that doesn't exist, and
   null the even share below `k − 1` other holders per viewer. Tests:
