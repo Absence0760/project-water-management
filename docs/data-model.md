@@ -1540,12 +1540,16 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | Table | Holds |
 | --- | --- |
 | `login_throttle` | One row per **typed email address** (not per account, so unknown addresses behave the same): `failures` since the last correct password, `locked_until`, `last_attempt_at` |
+| `login_device_throttle` (076) | The same, per **(address, trusted device)**: the attempts of a browser holding a valid `wm_device` cookie for that address, so a stranger's lock on the shared row can't shut it out. `device` is the cookie's random id (its MAC is never stored) |
 
 - Only touched through `SECURITY DEFINER` functions, before sign-in:
   `app_login_attempt(email, free, base, max)` counts the attempt (row lock, so
   parallel guesses are counted one by one) and returns the seconds left on a
   lock, and `app_login_succeeded(email)` deletes the row (correct password or
-  password reset). A deny-all policy (`USING (false)`) closes direct access.
+  password reset; since 076 it also deletes the address's device rows).
+  `app_login_device_attempt(email, device, …)` and
+  `app_login_device_succeeded(email, device)` are the per-device pair. A
+  deny-all policy (`USING (false)`) closes direct access to both tables.
   Rows untouched for a day are deleted on the next attempt. Numbers:
   [security.md § Authentication](./security.md#authentication).
 

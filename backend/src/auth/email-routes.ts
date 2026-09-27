@@ -12,6 +12,7 @@ import { trySendMail, type Mail } from '../mail/transport.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { hashPassword } from './password.js';
 import { clearSession } from './session.js';
+import { issueDevice } from './device.js';
 import { newToken, parseToken, RESEND_COOLDOWN, TOKEN_TTL } from './tokens.js';
 import { readJson } from '../http/body.js';
 
@@ -79,20 +80,20 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 		const hash = parseToken(body.token);
 		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		const newHash = await hashPassword(body.password);
-		const ok = await withoutUser(async (db) => {
+		const watermark = new Date();
+		const email = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ user_id: string | null }>(
 				"SELECT app_consume_email_token($1, 'reset') AS user_id",
 				[hash]
 			);
 			const userId = rows[0]?.user_id;
-			if (!userId) return false;
+			if (!userId) return null;
 			// Watermark from this server's clock, the same clock that stamps
 			// session iat, so a sign-in right after this is never mistaken as older.
-			await db.query('UPDATE app_user SET password_hash = $2, sessions_revoked_at = $3 WHERE id = $1', [
-				userId,
-				newHash,
-				new Date()
-			]);
+			const { rows: updated } = await db.query<{ email: string }>(
+				'UPDATE app_user SET password_hash = $2, sessions_revoked_at = $3 WHERE id = $1 RETURNING email',
+				[userId, newHash, watermark]
+			);
 			// No other reset link is outstanding: app_issue_email_token keeps one
 			// per purpose and consuming it just deleted it. (A DELETE here would
 			// be a silent no-op anyway: this transaction has no user, and
@@ -100,10 +101,14 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			// is lifted (the link proved the inbox).
 			await db.query('SELECT app_login_succeeded(email) FROM app_user WHERE id = $1', [userId]);
 			await markVerified(db, userId);
-			return true;
+			return updated[0]?.email ?? null;
 		});
-		if (!ok) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!email) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
 		clearSession(c);
+		// The link proved the inbox: this browser signs in on its own lockout
+		// record from now on (auth/device.ts), so whoever keeps the address's
+		// shared record locked can't keep its owner out.
+		issueDevice(c, email, watermark);
 		return c.body(null, 204);
 	})
 	.post('/verify-email', async (c) => {

@@ -44,15 +44,37 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   It is keyed by the typed address, not the account, so an address with no
   account locks exactly the same way and the lockout reveals nothing about
   which accounts exist. Attempts are counted *before* the bcrypt check under
-  a row lock, so parallel guesses can't slip past. Accepted trade-off: anyone
-  can lock someone else's address for up to 15 minutes at a time (sessions
-  already signed in are unaffected, and a password reset lifts it). The
-  WAF's per-IP rate limits (below) are still the first line against spraying
-  many addresses. Changing the password while signed in checks the current
-  password through the same lockout (keyed by the account's address), so a
-  stolen session can't guess it faster than the sign-in form; the flip side
-  is that a locked address can't change its password until the lock ends
-  (a reset still works).
+  a row lock, so parallel guesses can't slip past. Attempts made during a
+  lock never extend it.
+- **Trusted devices keep the lockout bounded** (076, `auth/device.ts`).
+  Anyone can lock an address, and one wrong guess each time a lock ends
+  locks it again, so a script could otherwise keep its owner out
+  indefinitely (a reset cleared the count, and five guesses re-locked it).
+  A browser that proved it knows the address's password (a correct
+  sign-in, a password reset, sign-up, a password change) gets an
+  `HttpOnly` `wm_device` cookie (180 days): a random device id and an HMAC
+  (a key derived from `AUTH_JWT_SECRET`) over the address, the account's
+  session watermark and the id. With a valid one, that browser's attempts
+  count on its own `(address, device)` record in `login_device_throttle`
+  (same 5 free attempts, same doubling to 15 minutes, a day to forget), so a
+  stranger filling the shared record can't lock it, and its own sign-in
+  clears only its own record. A cookie for another address, from before the
+  watermark moved (reset, password change, "sign out everywhere"), or with a
+  bad MAC counts on the shared record like any stranger; an unknown address
+  can never have a valid one, so the no-enumeration property holds. A
+  stolen device cookie buys its thief one more bucket at the same pace, no
+  more. Plain logout keeps the cookie (it is what lets you back in during
+  an attack); "sign out everywhere" retires it. The WAF's per-IP rate
+  limits (below) are still the first line against spraying many addresses.
+  Changing the password while signed in checks the current password through
+  the same lockout (the device's record on a trusted device, else the
+  address's), so a stolen session can't guess it faster than the sign-in
+  form. Tests: `auth/login-throttle.security.db.test.ts` (the owner's
+  device, a reset's browser and a new account's signing in through a
+  stranger's lock with a no-cookie positive control; the device's own
+  lock, doubling and cap; binding to address, watermark and MAC; hammering
+  never extends a lock; the day boundary at 23 and 25 hours; the reset-mail
+  cooldown at 50 and 70 seconds; time moved in the database, never slept).
 
 ## Password reset, email verification and invites
 
@@ -1215,7 +1237,9 @@ by the WUA; nobody is added to a project without an owner acting.
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
   each person choosing right away, daily or off, with a one-click
   unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
-- Cookies: one session cookie (`wm_session`, strictly necessary). No
+- Cookies: the session cookie (`wm_session`) and the sign-in lockout's
+  trusted-device cookie (`wm_device`, [§ Authentication](#authentication)),
+  both strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
 - Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
@@ -1242,7 +1266,7 @@ PDF someone else asked for kept the person as a recipient
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
-| Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
+| Sign-in attempts, keyed by the typed address (and a trusted device's id, 076) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
