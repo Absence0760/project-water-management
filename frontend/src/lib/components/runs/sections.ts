@@ -1,9 +1,12 @@
 // The Runs & results page's in-page menu: the results panels in page order,
-// grouped by the question they answer (the river, the units, whose panels
-// have their own page now, the model's quality, then digging deeper). Each id
-// is set on its panel (RunsTab.svelte, RunCharts.svelte); each group's
-// heading is on the page too.
+// grouped by the question they answer (the model's quality, the record, then
+// digging deeper). Each id is set on its panel (RunsTab.svelte,
+// RunCharts.svelte); each group's heading is on the page too. The river and
+// unit panels have their own pages (issue #17): the run header links there,
+// and their old anchors here are sent on (movedHref).
 import type { RunSummary } from '@water-management/engine';
+import { riverAnchor, riverHref } from '$lib/components/river/links';
+import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
 
 export interface ResultSection {
 	id: string;
@@ -25,19 +28,6 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			label: null,
 			// A forecast run's forecast days (WP-2.12) follow the summary, apart from it.
 			sections: [{ id: 'res-summary', label: 'Summary' }, ...(summary.forecast ? [{ id: 'res-forecast', label: 'Forecast' }] : [])]
-		},
-		{
-			// Its panels (Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the
-			// outcome matrix, the seasonal outlook, the water account) moved to the River & reserve page (issue #17,
-			// river/RiverTab.svelte); the group keeps its place as one row linking there.
-			label: 'River & Reserve',
-			sections: [{ id: 'res-river', label: 'On River & reserve' }]
-		},
-		{
-			// The unit results, curtailment, assurance of supply and unit detail moved to their own page
-			// (Units & supply, `?tab=supply`, issue #17): a link row keeps the group's place.
-			label: 'Units & users',
-			sections: [{ id: 'res-units', label: 'On Units & supply' }]
 		},
 		{
 			label: 'Model quality',
@@ -77,3 +67,18 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 
 /** Every section in page order: the scroll spy's list. */
 export const resultSections = (summary: SectionInput): ResultSection[] => resultGroups(summary).flatMap((g) => g.sections);
+
+/**
+ * Where a `#res-…` fragment on Runs & results now lives, when it moved: a panel
+ * of River & reserve or Units & supply (the same panel there, keeping the run
+ * and the curtailment's reporting window), or the link rows those groups left
+ * here for a while (`#res-river`, `#res-units`: the page itself). null for a
+ * panel that is still on this page.
+ */
+export function movedHref(hash: string, runId: string | null, window: string | null = null): string | null {
+	if (hash === 'res-river') return riverHref(runId);
+	if (riverAnchor(hash)) return riverHref(runId, hash);
+	if (hash === 'res-units') return supplyHref(runId, { window });
+	if (supplyAnchor(hash)) return supplyHref(runId, { window, hash });
+	return null;
+}

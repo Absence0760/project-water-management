@@ -23,7 +23,7 @@ test('running the model shows the run with a farm summary and a chart', async ({
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
-	// The per-unit table moved to Units & supply (issue #17, supply-page.spec.ts): a link row for this run keeps its place.
+	// The per-unit table moved to Units & supply (issue #17, supply-page.spec.ts): the run header links there for this run.
 	await expect(summary.getByRole('heading', { name: 'Units', exact: true })).toHaveCount(0);
 	const runId = new URL(page.url()).searchParams.get('run')!;
 	await expect(page.getByRole('link', { name: 'Units & supply for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
@@ -240,8 +240,6 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
-		'On River & reserve',
-		'On Units & supply',
 		'Hydrograph',
 		'Flow duration',
 		'Calibration',
@@ -254,12 +252,11 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Explore outputs'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
-	const groups = ['River & Reserve', 'Units & users', 'Model quality', 'Record', 'Dig deeper'];
+	const groups = ['Model quality', 'Record', 'Dig deeper'];
 	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
-	// River & Reserve is one row now, linking to its own page (river-page.spec.ts).
-	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['On River & reserve']);
-	// So is Units & users (supply-page.spec.ts).
-	await expect(menu.getByRole('list', { name: 'Units & users' }).getByRole('link')).toHaveText(['On Units & supply']);
+	// The river and unit groups have their own pages, linked from the run header (runs-page.spec.ts), not the menu.
+	await expect(menu.getByRole('list', { name: 'River & Reserve' })).toHaveCount(0);
+	await expect(menu.getByRole('list', { name: 'Units & users' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
 	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
 	// The summary opens with the model checks, each linking to its panel.

@@ -669,7 +669,8 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Save any unsaved changes.',
-							'On **Runs & results**, optionally give the run a label, and press **Run model**. It needs a network and a rainfall series; until then the page says what is missing.',
+							'On **Runs & results**, optionally type a **Run label** in the header (where the other pages have Run model), and press **Run model**. It needs a network and a rainfall series; until then the line under the header says what is missing.',
+							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **River & reserve** and **Units & supply** for that run.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
 					}
@@ -682,8 +683,6 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which units fell short, the fit when there is observed flow), and the headline figures. The per-unit table is on **Units & supply** (see below).',
-							'**River & Reserve**: a link to the **River & reserve** page for the same run, where the river’s results now are (see below).',
-							'**Units & users**: a link to the **Units & supply** page for the same run, where the units’ results now are (see below).',
 							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, **Calibration** with **Where the parameters came from**, the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
 							'**Dig deeper**: **Self-checks** (whether each unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
@@ -741,7 +740,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Run a baseline.',
 							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if.',
-							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
+							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
 							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value, and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
 							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.'

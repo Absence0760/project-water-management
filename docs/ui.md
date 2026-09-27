@@ -277,9 +277,10 @@ role, freshness, Add data) and each tab's own header:
   **+ Add transfer**, Data's **Preview all data**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
-  same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
-  own form (with a label and Run forecast), so the header doesn't repeat it
-  there, and on Data **Add data** is the main (primary) action. Run model is
+  same `startRun` as the new-data line's Re-run model. On Runs & results the
+  tab's own run form (**Run label**, Run forecast, Run model) takes its place,
+  last, after a plain Add data (`fillHeader({ main })`, the header slot's
+  `main` part), and on Data **Add data** is the main (primary) action. Run model is
   disabled until there is a network and a rainfall series, and its
   accessible description says which is missing. A tab shown inside the grid
   modal or scenario override mode fills nothing.
@@ -2426,20 +2427,44 @@ read it before.
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
   week", the Summary's *Supply by unit* and its short-units card, and the
-  Runs & results link row lead here.
+  run header's *Units & supply* link on Runs & results lead here.
 - **Empty states:** no run yet (editors get **Run the model (Runs &
   results)**; a viewer reads that an editor can run it); no units in the model
   (a link to the Network); a run with no units (added since: run again).
 
 ## Runs & results
 
-- **The rail.** On wide screens (over 900px) a left rail holds the runs
-  list. It is sticky, and a long list scrolls inside its panel (at least
-  7.5rem tall) so the rail fits the window without clipping. Narrower, the
-  rail stacks above the results.
+- **The page** (issue #17): a reading page with the runs list beside the
+  shown run. The section header's line counts the runs and says when the
+  newest ran ("20 runs · newest ran today", "No runs yet"), and for an
+  editor the **run form** sits where the other pages have Run model, last in
+  the header: a **Run label** field, **Run forecast** (with a forecast
+  series) and **Run model**. Its status (what a run still needs, flow shares
+  over 100 %, unsaved model changes, inputs changed since the latest run,
+  the progress while a run goes, else "Runs use the saved network…") is one
+  slim line under the header (`#run-note`, the buttons' accessible
+  description), with the progress bar under it. A viewer gets no form, and
+  the inputs-changed note as before.
+- **The rail.** Where the page is at least 50rem (700 px) wide (a container
+  query, `runs-page`), a 250 px left rail holds the runs list beside the
+  results. It is sticky and never taller than the window from where it
+  starts (under the header at the top of the page, at its sticky offset
+  once scrolled, less the save bar): a long list scrolls inside its panel
+  (at least 7.5rem tall), so nothing in the rail is clipped. Narrower, the
+  rail stacks above the results and the list scrolls inside its panel past
+  20rem (about five rows), so the shown run starts near the top.
+- **Outcomes for this run.** The run header has one line, "For this run:
+  River & reserve → · Units & supply →" (a navigation landmark, *Outcomes
+  for this run*; the links are named "River & reserve for this run" and
+  "Units & supply for this run"), to the [River & reserve](#river--reserve)
+  and [Units & supply](#units--supply) pages for the shown run. It replaced
+  the two link rows (`#res-river`, `#res-units`) and their groups, which a
+  link still reaching Runs & results with those anchors is sent to (the page
+  itself, same run, and the reporting window for Units & supply; the entry
+  is replaced, so Back skips it; `movedHref` in `runs/sections.ts`).
 - **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
   When the project has a forecast series (`rain_forecast_mm`, uploaded or
-  fed by CHIRPS-GEFS), the run bar has **Run forecast** beside Run model: the
+  fed by CHIRPS-GEFS), the run form has **Run forecast** beside Run model: the
   record as an ordinary run, then the days after the last recorded rain on
   forecast rain, shown apart. The project keeps one forecast run (a new one
   replaces the last unless it is pinned, published or cited). **Run model**
@@ -2466,7 +2491,7 @@ read it before.
 - **On this page.** Above the results, the same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
-  `runs/sections.ts` in groups). Each group's name leads its pills, and each
+  `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper). Each group's name leads its pills, and each
   group is a list labelled by that name. It sticks at the top (under the
   phone bar on a phone) down the long results page, marks the section being read, wraps to about two
   rows on a laptop, and on phones is one sideways strip.
@@ -2489,32 +2514,23 @@ read it before.
      stretches). Then one line of **model checks** (`credibility`): the
      self-checks, the plausibility findings, the WR2012 flag and the calibration
      fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
-  2. **River & Reserve**: one row (`#res-river`, menu entry **On River &
-     reserve**) linking to [River & reserve](#river--reserve) for the shown
-     run (`?tab=river&run=<id>`). Its panels (Reserve compliance by month,
-     EWR vs outflow, EWR by month, the **Uncertainty bands**, the **Outcome
-     matrix**, the **Seasonal outlook** and the water account) moved there
-     (issue #17); they are still described below. A link to one of them here
-     (`#res-reserve`, …) is sent there, and the headline's "by month of the
-     year" goes there too.
-  3. **Units & users**: one row (`#res-units`, menu entry **On Units &
-     supply**) linking to [Units & supply](#units--supply) for the shown run
-     (`?tab=supply&run=<id>`). Its panels (curtailment, led by the
-     share-the-pain board, with the other water users and the EWR sites
-     tables; assurance of supply; unit detail) and the summary's per-unit
-     table moved there (issue #17); they are still described below. A link to
-     one of them here (`#res-curtailment`, …) is sent there.
-  4. **Model quality**: the hydrograph with the flow-duration curve under it
+  2. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
      observed, plausibility checks.
-  5. **Record**: notes & evidence (with the run's inputs), publication:
+  3. **Record**: notes & evidence (with the run's inputs), publication:
      sign-off, after the results.
-  6. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
+  4. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
-  The menu names the same groups. The bullets below describe each panel; the
-  order above is the page's.
-- **Run model** takes an optional **Run label** (e.g. "Baseline"). The
+  The menu names the same groups. The river's panels (Reserve compliance,
+  EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
+  the seasonal outlook, the water account) are on River & reserve and the
+  units' (curtailment, assurance of supply, unit detail, the per-unit table)
+  on Units & supply (issue #17); a link to one of them here (`#res-reserve`,
+  `#res-curtailment`, …) is sent to its panel there. They are still
+  described below. The bullets below describe each panel; the order above
+  is the page's.
+- **Run model** (in the section header, above) takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
   rainfall series, and while the farms' flow shares add up to more than 100 %
   (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
