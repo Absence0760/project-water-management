@@ -6,6 +6,7 @@
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { APP_USER_EXCLUDED, APP_USER_EXPORTED, EXPORT_COOLDOWN_SECONDS, USER_FK_COVERAGE } from './export.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -89,6 +90,8 @@ describe('GET /auth/me/export', () => {
 		expect(doc.account.dataExportedAt).toEqual(expect.any(String));
 		// Whether SES suppressed the address (057): nothing here, so all null.
 		expect(doc.account).toMatchObject({ mailSuppressedAt: null, mailSuppressedReason: null, mailResumedAt: null });
+		// The terms the account accepted at sign-up, and when (087).
+		expect(doc.account).toMatchObject({ termsVersion: LEGAL_VERSION, termsAcceptedAt: expect.any(String) });
 		expect(doc.projectMemberships).toEqual([expect.objectContaining({ projectId, projectName: 'Export catchment', role: 'farmer' })]);
 		expect(doc.farms).toHaveLength(1);
 		const farm = doc.farms[0];

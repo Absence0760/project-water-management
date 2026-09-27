@@ -2,6 +2,7 @@
 // session cookie (credentials: 'include') and turns a non-2xx response into an
 // ApiError carrying the HTTP status and the server's message.
 import type { Locale } from '@water-management/engine/languages';
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import type {
 	AllocationComparison,
 	DailySeries,
@@ -221,13 +222,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * confirmation link and answers `{ confirm, email }` (the same for a
 			 * taken address, issue #57). `inviteToken` from a `/register?invite=…`
 			 * link: a live invite for the same address starts the account
-			 * confirmed, joined and signed in, `{ user }`.
+			 * confirmed, joined and signed in, `{ user }`. Sends `acceptTerms`,
+			 * the terms version this build shows (LEGAL_VERSION): the form says
+			 * signing up accepts them, and the server records which (087).
 			 */
 			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: Locale | null) =>
 				request<{ user: User } | { confirm: true; email: string }>('POST', '/auth/register', {
 					email,
 					password,
 					displayName,
+					acceptTerms: LEGAL_VERSION,
 					...(inviteToken ? { inviteToken } : {}),
 					...(locale ? { locale } : {})
 				}),

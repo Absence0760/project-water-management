@@ -11,6 +11,7 @@
 //   - the reset-mail cooldown's boundary.
 // Time is moved in the database (locked_until, last_attempt_at, created_at),
 // never by sleeping. Every "cannot" has a positive control.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
 import { DEVICE_COOKIE, deviceCookieValue } from './device.js';
@@ -65,7 +66,7 @@ describe('a stranger cannot keep an address locked against its owner', () => {
 
 	it('a new account trusts the browser that confirmed it (the link proved the inbox)', async () => {
 		const email = `new-${crypto.randomUUID()}@example.com`;
-		const made = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New' });
+		const made = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New', acceptTerms: LEGAL_VERSION });
 		expect(made.status).toBe(202);
 		const confirmed = await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) });
 		expect(confirmed.status).toBe(200);

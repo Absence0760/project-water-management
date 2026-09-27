@@ -5,6 +5,7 @@
 // The Afrikaans email catalogue is replaced by a made-up one that marks each
 // word it supplies ("[af] …"), so the tests can see which language an email
 // came out in: test data only, never wording that ships.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { anon, asOwner, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -22,7 +23,7 @@ const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
  * (202, issue #57), so the account is read as the schema owner.
  */
 async function register(body: Record<string, unknown>) {
-	const res = await anon('POST', '/auth/register', { password: 'correct horse', displayName: 'Lang', ...body });
+	const res = await anon('POST', '/auth/register', { password: 'correct horse', displayName: 'Lang', acceptTerms: LEGAL_VERSION, ...body });
 	if (body.inviteToken && res.status === 201) return res.body.user as { id: string; locale: string | null; volumeUnit: string };
 	expect(res.status).toBe(202);
 	const [row] = (await asOwner('SELECT id, locale, volume_unit FROM app_user WHERE email = $1', [body.email])) as { id: string; locale: string | null; volume_unit: string }[];
@@ -39,7 +40,7 @@ describe('PATCH /auth/me { locale, volumeUnit }', () => {
 		const u = await signUp('Prefs');
 		const a = await u.call('PATCH', '/auth/me', { locale: 'af' });
 		expect(a.status).toBe(200);
-		expect(a.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Prefs', emailVerified: true, locale: 'af', volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] } });
+		expect(a.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Prefs', emailVerified: true, locale: 'af', volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
 		const b = await u.call('PATCH', '/auth/me', { volumeUnit: 'ML' });
 		expect(b.body.user).toMatchObject({ displayName: 'Prefs', locale: 'af', volumeUnit: 'ML' });
 		const c = await u.call('PATCH', '/auth/me', { displayName: 'Renamed' });
@@ -83,7 +84,7 @@ describe('emails follow the account’s language', () => {
 	});
 
 	it('refuses a language it does not know at sign-up', async () => {
-		expect((await anon('POST', '/auth/register', { email: newEmail('fr'), password: 'correct horse', displayName: 'F', locale: 'fr' })).status).toBe(400);
+		expect((await anon('POST', '/auth/register', { email: newEmail('fr'), password: 'correct horse', displayName: 'F', acceptTerms: LEGAL_VERSION, locale: 'fr' })).status).toBe(400);
 	});
 });
 

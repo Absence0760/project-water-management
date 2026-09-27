@@ -3,6 +3,8 @@
 // sign-in pages and the sign-up form (which says that signing up accepts
 // them). docs/ui.md § Legal pages.
 import { expectNoViolations } from '../support/a11y.ts';
+import { LEGAL_VERSION } from '../support/api.ts';
+import { legalEffective } from '../../packages/engine/src/legal.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -18,6 +20,8 @@ for (const p of PAGES) {
 		const html = await res.text();
 		expect(html).toMatch(new RegExp(`<h1[^>]*>${p.title}</h1>`));
 		for (const text of p.must) expect(html, text).toContain(text);
+		// The effective line is the version the sign-up form sends (engine LEGAL_VERSION).
+		expect(html).toContain(legalEffective(LEGAL_VERSION));
 	});
 }
 
