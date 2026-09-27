@@ -14,7 +14,7 @@ import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, rea
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
-import { type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
+import { duplicateLogger, type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
 import { downstreamLinks, readNetwork } from './network';
 import { type ImportNote, Report, type UnmappedItem } from './report';
@@ -282,6 +282,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	}
 	const zero = zeroRainNote(flow.series);
 	if (zero) report.note('zero-rain-runs', zero, { sheet: 'Flow data' });
+	duplicateLogger(flow.series, settings, report);
 	if (reference !== false) gaugeAsReference(flow.series, settings, scaling, report);
 	if (flow.pitmanDays) {
 		report.note(

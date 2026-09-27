@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from extract_project import gauge_as_reference, parse_args  # noqa: E402
+from extract_project import duplicate_logger_note, gauge_as_reference, parse_args  # noqa: E402
 
 
 def flow_series() -> list[dict]:
@@ -104,3 +104,43 @@ class CommandLine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DuplicateLogger(unittest.TestCase):
+    """A logger column that copies the gauge column is not a second record (issue #54)."""
+
+    def copied(self) -> list[dict]:
+        series = flow_series()
+        series[2]["values"] = list(series[1]["values"])
+        return series
+
+    def test_a_copy_is_dropped_and_a_logger_choice_moves_to_the_gauge(self):
+        series, settings = self.copied(), {"calibrationFlowKind": "flow_logger_m3s"}
+        note = duplicate_logger_note(series, settings)
+        self.assertEqual([s["kind"] for s in series], ["rain_catchment_mm", "flow_observed_m3s"])
+        self.assertEqual(settings["calibrationFlowKind"], "flow_observed_m3s")
+        self.assertTrue(note.startswith("WARNING: [Flow data] the logger column is a copy of the gauge column"))
+        self.assertIn("now names the gauge", note)
+
+    def test_a_gauge_choice_is_kept(self):
+        series, settings = self.copied(), {"calibrationFlowKind": None}
+        note = duplicate_logger_note(series, settings)
+        self.assertIsNone(settings["calibrationFlowKind"])
+        self.assertNotIn("now names the gauge", note)
+
+    def test_a_logger_that_differs_on_one_day_or_starts_elsewhere_is_kept(self):
+        for change in ("value", "blank", "start"):
+            series, settings = self.copied(), {"calibrationFlowKind": "flow_logger_m3s"}
+            if change == "value":
+                series[2]["values"][4] = 0.001
+            elif change == "blank":
+                series[2]["values"][0] = None
+            else:
+                series[2]["startDate"] = "2009-12-31"
+            self.assertIsNone(duplicate_logger_note(series, settings), change)
+            self.assertEqual(len(series), 3)
+            self.assertEqual(settings["calibrationFlowKind"], "flow_logger_m3s")
+
+    def test_nothing_to_compare_without_both(self):
+        series = [s for s in flow_series() if s["kind"] != "flow_logger_m3s"]
+        self.assertIsNone(duplicate_logger_note(series, {}))

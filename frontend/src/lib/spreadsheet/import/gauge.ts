@@ -87,3 +87,30 @@ export function gaugeAsReference(
 		);
 	}
 }
+
+/**
+ * extract_project.py duplicate_logger_note: a logger column that is a copy of
+ * the gauge column (same start, same value on every day) is removed from
+ * `series`, in place, with a warning: imported, it would read as two
+ * instruments agreeing and could be picked as an independent validation
+ * record. A calibration choice of the logger moves to the gauge, the same
+ * record. Run before gaugeAsReference.
+ */
+export function duplicateLogger(series: ImportedSeries[], settings: { calibrationFlowKind: string | null }, report: Report): void {
+	const gauge = series.find((s) => s.kind === GAUGE_KIND);
+	const logger = series.find((s) => s.kind === LOGGER_KIND);
+	if (!gauge || !logger || gauge.startDate !== logger.startDate || gauge.values.length !== logger.values.length) return;
+	if (!gauge.values.every((v, i) => (v ?? null) === (logger.values[i] ?? null))) return;
+	series.splice(series.indexOf(logger), 1);
+	const moved = settings.calibrationFlowKind === LOGGER_KIND;
+	if (moved) settings.calibrationFlowKind = GAUGE_KIND;
+	report.note(
+		'duplicate-logger',
+		'WARNING: [Flow data] the logger column is a copy of the gauge column (the same value on every day), so it is ' +
+			'not imported as a second record: a copy would read as two instruments agreeing, and as an independent ' +
+			'validation record, which it is not' +
+			(moved ? "; rUseFlow's logger choice now names the gauge, the same record" : '') +
+			' (issue #54)',
+		{ sheet: 'Flow data' }
+	);
+}

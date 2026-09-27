@@ -168,7 +168,13 @@ rows and columns don't break it.
 ## The gauge column on another river (`--gauge-as-reference`)
 
 By default the gauge column becomes `flow_observed_m3s`, the catchment's own
-observed flow. Some workbooks hold a gauge on a *neighbouring* river there,
+observed flow. **A logger column that copies it** (the same start and the same
+value on every day, found in a client workbook) is not imported: a copy would
+read as two instruments agreeing, and could be picked as an independent
+validation record. A `WARNING:` says so, and an `rUseFlow` choice of the logger
+becomes the gauge, the same record (`duplicate_logger_note`, before
+`--gauge-as-reference`; the browser importer's `duplicateLogger` does the
+same, with the same text). Some workbooks hold a gauge on a *neighbouring* river there,
 sometimes scaled by a catchment-area ratio for part of the record. Such a
 record is not observed flow for the modelled river, so import it as a
 reference gauge instead:
@@ -200,7 +206,12 @@ data, so it's read from `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR`,
 set in `$WBT_SOURCE_DIR/wbt-import.<prefix>.env` beside the workbooks
 (`<prefix>`: the file name before `_WBT_b023`), never in the repo. Set `WBT_GAUGE_AS_REFERENCE=0` to import the
 column as observed flow. The seed re-extracts when these options change, or
-when the importer (`extract_project.py`, `calibration.py`) does.
+when the importer (`extract_project.py`, `calibration.py`) does. Two more
+per-workbook settings act on the extracted document at import, never on
+`data/`: `WBT_SETTINGS=<file>` (a settings patch, a JSON object, relative to
+`$WBT_SOURCE_DIR`) and `WBT_FIT=1` (fit GR4J and store the fit), through
+`pnpm import:project --settings … --fit` (docs/model.md §2.10b, "Fit at
+import").
 
 - **Expected results** (`expected.json`): every Element sheet's daily
   columns, the [Flow data] catchment columns over the same window, and `shortfalls`: the

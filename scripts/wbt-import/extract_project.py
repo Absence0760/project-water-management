@@ -742,6 +742,35 @@ def gauge_as_reference(
     return notes
 
 
+def duplicate_logger_note(series: list[dict[str, Any]], settings: dict[str, Any]) -> str | None:
+    """Drop a logger column that is a copy of the gauge column, in place, and say so; else None.
+
+    Some workbooks fill [Flow data]'s logger column with the gauge column
+    (the same value on every day). Imported, the copy would score as perfect
+    agreement between two instruments (docs/model.md section 2.10a) and could
+    be picked as an "independent" validation record (section 2.10b), which it
+    is not. So it is left out. A calibration choice of the logger moves to the
+    gauge, the same record. The browser importer (gauge.ts duplicateLogger)
+    does the same, with the same text. Run before --gauge-as-reference, so
+    the comparison is of the two columns as the workbook holds them.
+    """
+    gauge = next((s for s in series if s["kind"] == GAUGE_KIND), None)
+    logger = next((s for s in series if s["kind"] == LOGGER_KIND), None)
+    if gauge is None or logger is None or gauge["startDate"] != logger["startDate"] or gauge["values"] != logger["values"]:
+        return None
+    series.remove(logger)
+    moved = settings.get("calibrationFlowKind") == LOGGER_KIND
+    if moved:
+        settings["calibrationFlowKind"] = GAUGE_KIND
+    return (
+        "WARNING: [Flow data] the logger column is a copy of the gauge column (the same value on every day), so it is "
+        "not imported as a second record: a copy would read as two instruments agreeing, and as an independent "
+        "validation record, which it is not"
+        + ("; rUseFlow's logger choice now names the gauge, the same record" if moved else "")
+        + " (issue #54)"
+    )
+
+
 # Zero-rain runs (issue #2): the engine's zeroRainRuns rule in
 # packages/engine/src/quality.ts (docs/model.md section 2.10a). Keep in step.
 ZERO_RUN_MIN_WET_DAYS = 60
@@ -1095,6 +1124,9 @@ def extract(
         zero_note = zero_rain_note(flow["series"])
         if zero_note:
             wb.notes.append(zero_note)
+        dup_note = duplicate_logger_note(flow["series"], settings)
+        if dup_note:
+            wb.notes.append(dup_note)
         if gauge_reference:
             wb.notes.extend(gauge_as_reference(flow["series"], settings, scaling_from, scale_factor))
         if flow["pitman_days"]:
