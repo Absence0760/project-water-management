@@ -1302,7 +1302,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   gauge), all ≤ 0. Engine ≥ 1.5.0 adds, per farm upstream of two or more EWR
   sites, `ewr_binding_site`: the site that set the day's charge, as its index
   in `summary.curtailment.ewrSites` order (0 = the outlet, then gauges by node
-  id), `null` on a day without a charge.
+  id), `null` on a day without a charge. Engine ≥ 1.6.0 adds, per transfer
+  rule that can move water (enabled, between two farms, some month ticked,
+  a daily limit above 0), `transfer_rule@<rule id>` on the rule's source
+  farm: what that rule moved each day (m³/day, ≥ 0; the farms' `transfer`
+  series are their nets of these). The per-run attribution self-check and
+  the reporting-window recompute read it ([model.md §2.7b](./model.md)).
 
 - `summary.runoff` (engine ≥ 0.5.0, GR4J runs only) is the runoff model's water
   balance in mm over the catchment: `{ model, params, warmupDays, areaKm2,

@@ -2024,7 +2024,8 @@ R_f     = MAX over the sites f is upstream of of A_f,s   (series ewr_charge = �
   other farm it follows from the charge). A saved run's curtailment over
   another window and the farmer projection read it (`views/farmProjection.ts`);
   a run from before 1.5.0 has none, so there the attribution is recomputed on
-  the stored flows, exact except after a transfer loop (`bindingApproximate`).
+  the stored flows, exact except after a transfer loop (`bindingApproximate`)
+  in a run saved before 1.6.0, which lacks the per-rule transfer volumes below.
   On the example catchments the series adds nothing to the two single-site
   examples and 6 series, about 195 kB before compression (1.6 % of the run's
   series), to Sandspruit (15 years, two sites). *Known limitation:* a cut upstream can be recaptured
@@ -2068,13 +2069,34 @@ random-network tests (`network/attribution.test.ts`, the fuzz soak) assert:
 per site per day `Σ A + N = D` and `N ≥ 0`; `0 ≤ A ≤ e⁺`; `A = 0` for a farm
 not upstream of the site or with `e ≤ 0`; `D = 0 ⇒` every `A = 0`;
 `E = 0 ⇒ N = D`; `R = MAX_s A`; `R ≥ A_irr ≥ 0` and `A_irr ≤ c`; and order
-invariance. The per-run check recomputes a site exactly where no transfer
-crosses its catchment boundary (always the outlet), because per-rule transfer
-volumes are not run series. From engine 1.5.0 it also checks the stored
+invariance. From engine 1.5.0 the per-run check also checks the stored
 binding site: given exactly on the days the farm is charged, a site below
 the farm, and, where that site can be recomputed, the charge equals the
-farm's share there, so a charge set at an exact site is checked even when
-another site above the farm is crossed by a transfer.
+farm's share there.
+
+**Per-rule transfer volumes (engine ≥ 1.6.0).** A farm's `transfer` series
+is its net; `J_int` needs each rule's own volume wherever a rule crosses a
+site's catchment boundary (one end upstream of the site, the other not) or
+the rules form a loop, and the net can't be split back into rules there. So
+the run stores each rule's daily volume on its source farm as
+`transfer_rule@<rule id>` (m³/day, ≥ 0, `network/transferSeries.ts`), for
+every enabled farm-to-farm rule that can move water at all (some month
+ticked and a daily limit above 0; a rule that can't moves 0 every day in any
+engine version). That is decided by the rule, not by what the run moved, so a
+run resumed part-way stores the same series as the whole run's tail, and a
+reader tells a 1.6.0 run (every such rule has one) from an older run (none)
+without its engine version. With them the per-run check recomputes **every**
+site exactly (each farm's charge equals its largest share, the binding site's
+share included), after checking that the rules' volumes are ≥ 0, add up at
+every farm to its net `J`, and are stored for all such rules or none. A run
+from before 1.6.0 keeps the fallback: a site is recomputed only where no rule
+crosses its boundary (always the outlet), since `J` is then `J_int`. The farm
+projection's recompute (`views/farmProjection.ts`) reads them too, so it is
+exact on a transfer loop without `bindingApproximate`; a run from before
+1.6.0 still cuts the loop. On the example catchments they add 2 series to
+Kleinberg (86 kB before compression, 1.3 % of the run's series; 2 kB
+gzipped), 3 to Sandspruit (129 kB, 1.1 %; 3 kB gzipped) and nothing to
+Droëvlei, which has no transfers.
 
 ### 2.7c Other water users (engine ≥ 0.22.0, roadmap WP-1.33)
 
@@ -4065,8 +4087,12 @@ from engine 1.5.0 stores it (`ewr_binding_site`, §2.7b), so it is read and
 exact. A run saved before 1.5.0 doesn't, so the attribution (§2.7b) is re-run
 on the stored flows; that is exact unless the transfer rules form a loop,
 when the loop's closing rule is carried round the rest of it
-(`bindingApproximate`). `curtailmentSeriesKeys` lists what it reads: given the
-run's stored series, the binding sites and no flows for a 1.5.0 run. The
+(`bindingApproximate`), unless the run stores each rule's volume
+(`transfer_rule@<rule id>`, engine ≥ 1.6.0, §2.7b), which the recompute then
+reads instead. `curtailmentSeriesKeys` lists what it reads: given the run's
+stored series, the binding sites and no flows for a 1.5.0 run, and the
+per-rule volumes in place of the farms' net transfers where a recompute
+reads them. The
 farmer projection's season and the Runs tab's reporting-window picker both use
 it; `curtailmentOverWindow.test.ts` checks it against `runModel` on seeded
 networks. It is a view over a saved run, so it leaves `ENGINE_VERSION` alone.
@@ -5051,7 +5077,7 @@ text:
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
-| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
+| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
