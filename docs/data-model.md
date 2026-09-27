@@ -511,6 +511,12 @@ the result change?", and put back any earlier version.
   traffic-light thresholds, `{ teamId, team, from, to }`, each side
   `{ green, amber, source }`; written on every project of the team, see
   [§ Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql)),
+  `team_member.added/role/removed` and `team.deleted` (079: who reaches the
+  project through its team; `{ teamId, team, userId, displayName, teamRole,
+  role }` with `role` the project role the team role gives, `from`/`to`
+  for a role change, `self` for a leaver, `via: 'invite'` for an accepted
+  invite, which app_accept_invites records; `team.deleted` has `members`;
+  each written on every project of the team),
   and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).

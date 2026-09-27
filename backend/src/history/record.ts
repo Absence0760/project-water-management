@@ -211,6 +211,15 @@ export type AuditKind =
 	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14
 	// D11, 055_team_settings): recorded on each of the team's projects.
 	| 'team_thresholds.changed'
+	// Who reaches the project through its team (079_audit_trail): a team
+	// member added (directly or by accepting an invite), their team role
+	// changed, removed or leaving, and the team deleted. A team role is a
+	// project role on every team project (app_project_role), so each is
+	// recorded on each of the team's projects, like team_thresholds.changed.
+	| 'team_member.added'
+	| 'team_member.role'
+	| 'team_member.removed'
+	| 'team.deleted'
 	| 'restore';
 
 /**
