@@ -11,6 +11,26 @@ the history scrub #63, the disclaimer's legal review #47, POPIA #48,
 the hydrologist's decisions #46, applicant decisions #50, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
+The buildable work is filed in batches by area, one issue per batch, so a
+session can take a batch at a time; each batch issue names the section
+here that holds each item's detail. Tick an item in both places.
+
+| Batch | Issue |
+| --- | --- |
+| EWR and Reserve engine work | #64 |
+| Calibration workflow (CR items) | #65 |
+| Rainfall and data-quality tools | #66 |
+| Engine model structure (causal model, dams, time-varying development) | #67 |
+| Engine verification and regression coverage | #68 |
+| Data-feed hardening | #69 |
+| Printable and server-side reports | #70 |
+| Licensing evidence pack (WP-3.14) and its dependents | #71 |
+| Water-use allocations, second slice | #72 |
+| Applicants, scenarios and firm yield | #73 |
+| Farmer view and alerts | #74 |
+| CI, tooling and dependency hygiene | #75 |
+| UI consistency and help text | #76 |
+
 ## Blocking releases (operator)
 
 The checklist for these is issue #62; the history scrub is #63.
