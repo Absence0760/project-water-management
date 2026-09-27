@@ -2660,6 +2660,46 @@ from the WP:
       dialog, with parity on the synthetic workbook. Trigger: a user
       importing such a workbook in the app rather than through the seed.
 
+## Rain forcing and the second configuration's calibration (issue #54)
+
+- [x] **Areal rainfall correction** (2026-09-27, engine 1.8.0). A fixed
+      factor per month on the rain GR4J runs on, with its method and source,
+      recorded in the fit record's forcing ([model.md §2.4g](./model.md);
+      Settings → Flow calibration). Demand and the dams keep the recorded
+      rain. No project's numbers change until it is set.
+- [x] **Fit at import** (2026-09-27). `pnpm import:project --settings
+      <patch.json> --fit`; the seed's `WBT_SETTINGS` / `WBT_FIT=1` per
+      workbook ([model.md §2.10b](./model.md)). On for the second
+      configuration, with its gauge as the calibration record
+      (`WBT_GAUGE_AS_REFERENCE=0`).
+- [x] **A logger column that copies the gauge column** is left out by both
+      importers, with a warning (scripts/wbt-import/README.md).
+- [ ] **A river off-take into a side branch.** A transfer draws only from a
+      dam's storage, so a canal that diverts river water at a run-of-river
+      unit into another branch of the network can't be modelled; the second
+      configuration's town (a demand object on a dam fed by such a canal)
+      gets only its own branch's small runoff. Durable fix: a diversion rule
+      on a unit (a share or a capacity of the river passing it, by month,
+      after the Reserve and any senior user) routed to another unit, with the
+      diverted volume reported and charged like a transfer in the EWR
+      attribution. Until then, the workaround is the workbook's: a dummy dam
+      on the source unit with the transfer enabled (a dam the model then
+      reports on). Trigger: the client's answer to plan.md question 20 (how
+      the canal is fed).
+- [ ] **Calibrating at a gauge inside the network.** Calibration and the
+      observed-flow EWR test read the outlet's record only; a record
+      attached to an inner gauge (084) feeds the plausibility checks
+      (model.md §2.10d). Durable fix: `calibrationSiteNodeId` (null = the
+      outlet), with calibrate() scoring that gauge's simulated flow and the
+      fit record recording the site. Trigger: a project whose calibration
+      record sits at an inner gauge.
+- [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
+      is typed; `arealFactorFromMap` (engine) needs the forcing's values,
+      which Settings doesn't load. Durable fix: a small panel that fetches
+      the rain series the run would use and fills the flat factor and the
+      source note from an entered MAP. Trigger: the hydrologist setting a
+      correction by hand in the app.
+
 ## Notes (WP-2.7)
 
 - [x] **Notes in the project export and copy** (2026-09-26). The export

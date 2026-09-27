@@ -39,6 +39,8 @@ export type ImportNoteCode =
 	| 'transfer-unknown-element'
 	/** Runs of zero catchment rain that look like missing data (issue #2). */
 	| 'zero-rain-runs'
+	/** duplicateLogger: the logger column copies the gauge column, so it is left out (issue #54). */
+	| 'duplicate-logger'
 	/** gaugeAsReference: the gauge column was imported as a reference gauge. */
 	| 'gauge-as-reference'
 	/** gaugeAsReference, but the workbook has no gauge values. */

@@ -18,6 +18,7 @@ import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
 	RETIRED_CALIBRATION_KEYS,
+	resolveArealRain,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
 	OBSERVED_SERIES_LABEL,
@@ -31,6 +32,7 @@ import {
 	DEMAND_OBJECT_CATEGORY_LABEL,
 	type FarmSummary,
 	type NetworkNode,
+	type ArealRain,
 	type PeInput,
 	type ProjectModel,
 	type ProjectSettings,
@@ -613,6 +615,35 @@ function peChange(ra: unknown, rb: unknown): string | null {
 	return parts.length ? parts.join('; ') : null;
 }
 
+/** An areal rainfall correction in words (engine ≥ 1.8.0): "none", or "× 1.9 (map: …)" / "× 1.5–2.1 by month (…)". */
+export function arealRainText(a: ArealRain | null): string {
+	if (!a) return 'none';
+	const lo = Math.min(...a.factors);
+	const hi = Math.max(...a.factors);
+	const f = lo === hi ? `× ${fmtValue(lo, 3)}` : `× ${fmtValue(lo, 3)}–${fmtValue(hi, 3)} by month`;
+	return `${f} (${a.method}: ${a.source})`;
+}
+
+/**
+ * The change of settings.arealRain between two runs, or null. A run saved
+ * without one (engine < 1.8.0) ran with none. Two corrections name the months
+ * whose factor changed; a changed method or source note is listed too, since
+ * it is part of the run's record.
+ */
+function arealRainChange(ra: unknown, rb: unknown): string | null {
+	const a = resolveArealRain(ra, []);
+	const b = resolveArealRain(rb, []);
+	if (same(a, b)) return null;
+	if (!a || !b) return `${arealRainText(a)} → ${arealRainText(b)}`;
+	const parts: string[] = [];
+	const rows = monthlyChange(a.factors, b.factors, '');
+	if (rows) parts.push(`factors ${rows}`);
+	if (a.method !== b.method) parts.push(`method ${a.method} → ${b.method}`);
+	if (a.source !== b.source) parts.push(`source "${a.source}" → "${b.source}"`);
+	return parts.length ? parts.join('; ') : null;
+}
+const AREAL_RAIN_LABEL = 'Areal rainfall correction (GR4J)';
+
 type Fmt = (v: unknown) => string;
 const withUnit = (unit: string, digits = 3): Fmt => (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v, digits)} ${unit}`);
 const plain: Fmt = (v) => fmtValue(v);
@@ -777,6 +808,8 @@ function diffSettings(
 	if (er) push('Monthly effective rain fractions', `Monthly effective rain fractions: ${er}`);
 	const pe = peChange(a.pe, b.pe);
 	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
+	const areal = arealRainChange(a.arealRain, b.arealRain);
+	if (areal) push(AREAL_RAIN_LABEL, `${AREAL_RAIN_LABEL}: ${areal}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);

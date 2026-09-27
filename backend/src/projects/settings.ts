@@ -31,6 +31,9 @@ import {
 	provenanceError,
 	OBJECTIVES,
 	PE_SOURCE_MAX,
+	AREAL_RAIN_FACTOR_MAX,
+	AREAL_RAIN_FACTOR_MIN,
+	AREAL_RAIN_METHODS,
 	resolveFitRecord,
 	RETIRED_CALIBRATION_KEYS,
 	RUNOFF_MODELS,
@@ -111,9 +114,11 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 /**
  * Settings replaced whole by a patch, never merged: a fit record describes
  * one fit, and a PE input is one kind or the other (merging `{ kind: 'pan' }`
- * over a stored monthly row would keep a stale `mm` and `source`).
+ * over a stored monthly row would keep a stale `mm` and `source`), and an
+ * areal rainfall correction (engine ≥ 1.8.0) is one set of factors with its
+ * own source.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain']);
 
 /**
  * A settings patch applied over the stored settings: top-level keys replace,
@@ -331,6 +336,21 @@ const PeInput = z.discriminatedUnion('kind', [
 		.strict()
 ]);
 
+/**
+ * settings.arealRain (engine ≥ 1.8.0, docs/model.md §2.4g): the rain GR4J
+ * runs on × 12 water-year monthly factors (each within the CHIRPS clamp,
+ * 0.25–4), with how they were derived and a required source note; null =
+ * none. Replaced whole on a patch. The engine's arealRainError applies the
+ * same rules to a stored value.
+ */
+const ArealRain = z
+	.object({
+		factors: z.array(z.number().finite().min(AREAL_RAIN_FACTOR_MIN).max(AREAL_RAIN_FACTOR_MAX)).length(12),
+		method: z.enum(AREAL_RAIN_METHODS),
+		source: z.string().trim().min(1, 'an areal rainfall correction needs its source').max(PE_SOURCE_MAX)
+	})
+	.strict();
+
 const scoreValue = z.number().finite().nullable();
 const ScoredPeriod = z
 	.object({
@@ -436,6 +456,8 @@ export const FitRecord = z
 				rainSource: RainSource.optional(),
 				// Engine ≥ 0.31.0 (issue #39): GR4J's PE input. Optional, as above; absent = ran as 'pan'.
 				pe: PeInput.optional(),
+				// Engine ≥ 1.8.0: the areal rainfall correction (null = none). Optional, as above; absent = ran with none.
+				arealRain: ArealRain.nullable().optional(),
 				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
 				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
@@ -518,6 +540,8 @@ export const SettingsPatch = z
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		// GR4J's PE input (engine project.ts PeInput, issue #39); replaced whole.
 		pe: PeInput,
+		// The areal rainfall correction on GR4J's rain (engine ≥ 1.8.0, project.ts ArealRain); replaced whole, null = none.
+		arealRain: ArealRain.nullable(),
 		// Where the pan-coefficient row came from (engine ≥ 0.31.1): free text, provenance only; '' = none.
 		panCoefficientSource: z.string().trim().max(PE_SOURCE_MAX),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),

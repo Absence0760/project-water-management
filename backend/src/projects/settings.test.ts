@@ -312,6 +312,52 @@ describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
 	});
 });
 
+describe('SettingsPatch.arealRain (engine ≥ 1.8.0)', () => {
+	const ok = (arealRain: unknown) => SettingsPatch.safeParse({ arealRain }).success;
+	const areal = { factors: new Array(12).fill(1.9), method: 'map', source: 'invented MAP 560 mm ÷ the forcing’s mean annual rain' };
+
+	it('accepts none, 12 factors within 0.25–4 with a method and a source, and trims the source', () => {
+		expect(ok(null)).toBe(true);
+		expect(ok(areal)).toBe(true);
+		expect(ok({ ...areal, factors: [0.25, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], method: 'stations' })).toBe(true);
+		expect(ok({ ...areal, method: 'fitted' })).toBe(true);
+		const r = SettingsPatch.safeParse({ arealRain: { ...areal, source: '  MAP  ' } });
+		expect(r.success && (r.data.arealRain as { source: string }).source).toBe('MAP');
+		expect(mergeSettings({}).arealRain).toBeNull();
+		expect(mergeSettings({ arealRain: areal }).arealRain).toEqual(areal);
+	});
+
+	it('rejects a bad row, an unknown method, a missing/blank/too-long source, and extra keys', () => {
+		for (const [name, bad] of [
+			['11 factors', { ...areal, factors: areal.factors.slice(1) }],
+			['below 0.25', { ...areal, factors: [...areal.factors.slice(1), 0.2] }],
+			['above 4', { ...areal, factors: [...areal.factors.slice(1), 4.1] }],
+			['NaN', { ...areal, factors: [...areal.factors.slice(1), NaN] }],
+			['unknown method', { ...areal, method: 'guess' }],
+			['no source', { factors: areal.factors, method: 'map' }],
+			['a blank source', { ...areal, source: '  ' }],
+			['a too-long source', { ...areal, source: 'x'.repeat(PE_SOURCE_MAX + 1) }],
+			['an extra key', { ...areal, mapMm: 560 }],
+			['a bare number', 1.9]
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+		}
+	});
+
+	it('is replaced whole by a patch, and recorded in a fit record’s forcing, optionally', () => {
+		const stored = patchSettings({}, { arealRain: areal });
+		expect(stored.arealRain).toEqual(areal);
+		expect(patchSettings(stored, { arealRain: null }).arealRain).toBeNull();
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).arealRain).toEqual(areal);
+		const forcing = FitRecord.shape.forcing.unwrap();
+		const base = { panCoefficient: new Array(12).fill(0.7), apanMm: new Array(12).fill(150) };
+		expect(forcing.safeParse(base).success).toBe(true);
+		expect(forcing.safeParse({ ...base, arealRain: null }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, arealRain: areal }).success).toBe(true);
+		expect(forcing.safeParse({ ...base, arealRain: { ...areal, source: '' } }).success).toBe(false);
+	});
+});
+
 describe('SettingsPatch.gr4j and panCoefficient', () => {
 	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
 

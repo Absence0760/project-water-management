@@ -57,6 +57,7 @@
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
+	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
 	// These panels render on every visit of the tab, so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
 	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
@@ -146,6 +147,15 @@
 	const peSourceBad = $derived(pe.kind === 'monthly' && (!pe.source.trim() || pe.source.length > PE_SOURCE_MAX));
 	// A monthly row the form had before switching to pan, so switching back brings it back (unsaved).
 	let lastMonthlyPe = $state<EditablePe | null>(null);
+	// The areal rainfall correction on GR4J's rain (engine ≥ 1.8.0, §2.4g); the one switched off is kept until saved.
+	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
+	const arealError = $derived(arealRainFormError(areal));
+	const arealFlat = $derived(areal ? flatFactor(areal) : null);
+	let lastAreal = $state<EditableArealRain | null>(null);
+	function setArealOn(on: boolean) {
+		if (!on && areal) lastAreal = $state.snapshot(areal) as EditableArealRain;
+		s.arealRain = storedArealRain(withArealRain(on, lastAreal));
+	}
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
@@ -156,7 +166,7 @@
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!dateError || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -167,6 +177,7 @@
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-rain', message: rainSourceError },
 			{ id: 'set-flow', message: peError },
+			{ id: 'set-flow', message: arealError },
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: reserveError },
@@ -217,6 +228,7 @@
 		s = clone(JSON.parse(saved));
 		x2Open = s.gr4j.x2 !== 0;
 		lastMonthlyPe = null;
+		lastAreal = null;
 		error = null;
 		reason = '';
 	}
@@ -512,6 +524,104 @@
 			{/if}
 			<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 			<FieldHistoryLine field="settings:gr4j.x2" />
+		</fieldset>
+		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.8.0): GR4J's rain only;
+		     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
+		<fieldset class="plain areal" data-testid="areal-rain">
+			<legend>Areal rainfall correction <HelpTip key="settings.arealRain" /></legend>
+			<label class="check">
+				<input type="checkbox" disabled={readonly} checked={!!areal} onchange={(e) => setArealOn(e.currentTarget.checked)} />
+				Scale the rain GR4J runs on to the catchment’s areal rain
+			</label>
+			<span class="hint" id="st-areal-h">
+				For a rain record that misses the catchment’s rain, such as a valley gauge or CHIRPS under a mountain range. A fixed input with its
+				source, never a calibrated parameter. Demand and the dams keep the recorded rain.
+			</span>
+			{#if areal}
+				<div class="fields">
+					<div class="field">
+						<span class="lbl"><label for="st-areal-all">Factor in every month <span class="u">(×)</span></label></span>
+						<NumberInput
+							id="st-areal-all"
+							min={0.25}
+							max={4}
+							step={0.01}
+							decimals={3}
+							disabled={readonly}
+							value={arealFlat}
+							aria-describedby="st-areal-all-h"
+							onchange={(v) => {
+								if (v !== null && s.arealRain) s.arealRain = storedArealRain(withFactorEveryMonth(areal, v));
+							}}
+						/>
+						<span class="hint" id="st-areal-all-h">An independent MAP ÷ the forcing’s mean annual rain gives one factor. {arealFlat === null ? 'The months differ now (below).' : ''}</span>
+					</div>
+					<div class="field">
+						<span class="lbl"><label for="st-areal-method">Derived from</label></span>
+						<select
+							id="st-areal-method"
+							disabled={readonly}
+							value={areal.method}
+							aria-describedby="st-areal-method-h"
+							onchange={(e) => {
+								if (s.arealRain) s.arealRain = storedArealRain({ ...areal, method: e.currentTarget.value as EditableArealRain['method'] });
+							}}
+						>
+							{#each AREAL_METHOD_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+						</select>
+						<span class="hint" id="st-areal-method-h">{AREAL_METHOD_OPTIONS.find((o) => o.value === areal.method)?.hint}</span>
+					</div>
+				</div>
+				<div class="table-wrap">
+					<table class="data compact monthly">
+						<thead>
+							<tr>
+								<th scope="col" class="sticky">Month</th>
+								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<th scope="row" class="sticky">Areal factor <span class="u">×</span></th>
+								{#each WATER_YEAR_MONTHS as m, i (m)}
+									<td>
+										<NumberInput
+											label="Areal rainfall factor, {m}"
+											min={0.25}
+											max={4}
+											step={0.01}
+											decimals={3}
+											disabled={readonly}
+											value={areal.factors[i] ?? 1}
+											onchange={(v) => {
+												if (v !== null && s.arealRain) s.arealRain = storedArealRain({ ...areal, factors: areal.factors.map((f, j) => (j === i ? v : f)) });
+											}}
+										/>
+									</td>
+								{/each}
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="field pe-source">
+					<span class="lbl"><label for="st-areal-source">Source</label></span>
+					<input
+						id="st-areal-source"
+						readonly={readonly}
+						required
+						value={areal.source}
+						placeholder="e.g. catchment MAP 560 mm (reference) ÷ CHIRPS mean 1996–2024"
+						aria-invalid={(!!arealError && !areal.source.trim()) || undefined}
+						aria-describedby="st-areal-source-h"
+						oninput={(e) => {
+							if (s.arealRain) s.arealRain = storedArealRain({ ...areal, source: e.currentTarget.value });
+						}}
+					/>
+					<span class="hint" id="st-areal-source-h">Required: the MAP or gauges and their reference, and the years compared. A fit records the factors, so changing them marks it “Forcing changed since fit”.</span>
+					{#if arealError}<span class="err" role="status">{arealError}</span>{/if}
+				</div>
+				<FieldHistoryLine field="settings:arealRain" />
+			{/if}
 		</fieldset>
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->

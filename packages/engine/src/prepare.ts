@@ -52,6 +52,8 @@ import {
 	RETIRED_CALIBRATION_KEYS,
 	panCoefficientOutOfRange,
 	resolvePe,
+	resolveArealRain,
+	AREAL_RAIN_FITTED_WARNING,
 	PE_SOURCE_MAX,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
@@ -464,6 +466,9 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		s.runoffModel = d.runoffModel;
 	}
 	s.pe = resolvePe(raw?.pe, warnings);
+	// The areal rainfall correction (engine ≥ 1.8.0, docs/model.md §2.4g).
+	s.arealRain = resolveArealRain(raw?.arealRain, warnings);
+	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.

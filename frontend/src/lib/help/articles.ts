@@ -439,6 +439,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['pan-coefficient', 'apan', 'gr4j'],
 		source: 'Issue #39; FAO-56 (Allen et al. 1998); docs/model.md §2.4a'
 	},
+	'areal-rain': {
+		long: 'A valley rain gauge or a 0.05° satellite product such as CHIRPS can read well below the rain that falls on a mountain catchment as a whole: orographic rain on the ridges is what they miss most. GR4J conserves water, so on such rain it cannot make the flow the gauge records without importing water through X2, which would hide the rain error in a parameter.\n\nThe correction multiplies the rain GR4J runs on (catchment rain, else corrected CHIRPS, else forecast) by a factor per month (Oct … Sep, each 0.25–4), with the method and a required note of the source. The preferred basis is an **independent MAP**: the catchment’s mean annual precipitation from WR2012, an isohyetal map or a gridded MAP averaged over the catchment, divided by the forcing’s own mean annual rain over its complete water years (one flat factor, since an annual MAP says nothing about the seasons). **Rain gauges** in or near the catchment are the other independent basis. A factor **fitted** to the flow record is allowed but makes the rain level a calibrated multiplier that trades off against X1 and the evaporation, and every run says so.\n\nOnly the runoff model reads it. Irrigation demand’s effective rain and rain on the dams keep the recorded rain, because the fields and dams sit in the valley where the gauge is. The runoff coefficient, the WR2012 rain scaling, the water account and the plausibility checks read the corrected rain, which runs show as the daily “Areal catchment rainfall” column. A fit records the factors it ran under, so changing them marks the fit record “Forcing changed since fit”.',
+		aliases: ['areal rain', 'areal rainfall', 'rain factor', 'MAP correction', 'orographic rain', 'rain scaling', 'arealRain'],
+		related: ['gr4j', 'chirps-bias', 'rain-final', 'gr4j-pe'],
+		source: 'Engine 1.8.0; docs/model.md §2.4g; docs/calibration-research.md § Rain forcing'
+	},
 	'actual-evaporation': {
 		long: 'The part of potential evaporation that rain meets directly, plus what the soil-moisture store can give up. On dry days with a dry store it falls well below PET.',
 		related: ['gr4j', 'pan-coefficient'],

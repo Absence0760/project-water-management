@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidImportOptionsError } from './errors';
 import type { ImportedSeries } from './flowData';
-import { gaugeAsReference, validateScaling } from './gauge';
+import { duplicateLogger, gaugeAsReference, validateScaling } from './gauge';
 import { Report } from './report';
 
 // Ported from scripts/wbt-import/test_gauge_reference.py: synthetic series only (no workbook).
@@ -88,5 +88,52 @@ describe('gaugeAsReference', () => {
 		}
 		expect(validateScaling(undefined)).toBeNull();
 		expect(validateScaling({ scalingFrom: '2010-01-01', scaleFactor: 0.5 })).toEqual({ scalingFrom: '2010-01-01', scaleFactor: 0.5 });
+	});
+});
+
+// Ported from test_gauge_reference.py DuplicateLogger (issue #54).
+describe('duplicateLogger', () => {
+	const copied = () => {
+		const series = flowSeries();
+		series[2]!.values = [...series[1]!.values];
+		return series;
+	};
+	const dedupe = (series: ImportedSeries[], settings: { calibrationFlowKind: string | null }) => {
+		const report = new Report();
+		duplicateLogger(series, settings, report);
+		return report.notes;
+	};
+
+	it('drops a copy, and a logger choice moves to the gauge', () => {
+		const series = copied();
+		const settings = { calibrationFlowKind: 'flow_logger_m3s' as string | null };
+		const notes = dedupe(series, settings);
+		expect(series.map((s) => s.kind)).toEqual(['rain_catchment_mm', 'flow_observed_m3s']);
+		expect(settings.calibrationFlowKind).toBe('flow_observed_m3s');
+		expect(notes).toHaveLength(1);
+		expect(notes[0]!.message).toBe(
+			"WARNING: [Flow data] the logger column is a copy of the gauge column (the same value on every day), so it is not imported as a second record: a copy would read as two instruments agreeing, and as an independent validation record, which it is not; rUseFlow's logger choice now names the gauge, the same record (issue #54)"
+		);
+		expect(notes[0]!.severity).toBe('warning');
+	});
+
+	it('keeps a gauge choice', () => {
+		const settings = { calibrationFlowKind: null as string | null };
+		const notes = dedupe(copied(), settings);
+		expect(settings.calibrationFlowKind).toBeNull();
+		expect(notes[0]!.message).not.toContain('now names the gauge');
+	});
+
+	it('keeps a logger that differs on one day, has a blank where the gauge has a value, or starts elsewhere', () => {
+		for (const change of ['value', 'blank', 'start'] as const) {
+			const series = copied();
+			if (change === 'value') series[2]!.values[4] = 0.001;
+			else if (change === 'blank') series[2]!.values[0] = null;
+			else series[2]!.startDate = '2009-12-31';
+			const settings = { calibrationFlowKind: 'flow_logger_m3s' as string | null };
+			expect(dedupe(series, settings), change).toEqual([]);
+			expect(series).toHaveLength(3);
+			expect(settings.calibrationFlowKind).toBe('flow_logger_m3s');
+		}
 	});
 });

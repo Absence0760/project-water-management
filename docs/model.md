@@ -1009,6 +1009,7 @@ and the series explorer:
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
 | `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from with rain-source periods (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Only output when the settings list a period | NaN when no source has a value |
+| `rain_areal` (engine ≥ 1.8.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -1486,6 +1487,107 @@ Each GEFS issue replaces the one before from its issue date on, so the series
 may keep an older issue's first day before today's; after the last observed
 rain those days are forecast-sourced and so in the tail, never read as
 observed.
+
+### 2.4g Areal rainfall correction (engine ≥ 1.8.0)
+
+`settings.arealRain` (`ArealRain` in `packages/engine/src/project.ts`),
+applied in `runoffForcing` (`runoff/simulate.ts`). Absent or null (the
+default) = no correction: every run before 1.8.0, and every project that
+doesn't set it, gives the same numbers as before.
+
+**Why.** GR4J conserves water (§2.4a), so it can only make the flow a gauge
+records out of the rain it is given. A rain record that reads well below the
+catchment's areal rain leaves two ways to fit the flow, both wrong: parameters
+pushed to their bounds (a production store X1 of a few millimetres, so almost
+nothing evaporates), or water imported through X2, which hides a forcing error
+in a parameter. That happens when the only rain is a point gauge in a valley
+or a 0.05° product such as CHIRPS under a mountain range: orographic rain on
+the ridges is what both miss most (Pitman & Bailey 2021 found CHIRPS
+under-reads in nearly all of South Africa's winter-rainfall catchments;
+[calibration-research.md § Rain forcing](./calibration-research.md#rain-forcing-which-record-and-how-to-homogenise-it-issue-12)).
+The CHIRPS bias correction (§2.4b) can't help when the project has no
+catchment gauge to fit its factors against. South African practice builds a
+catchment's rainfall the same way this does: WR90 and WR2012 scale station
+records by the ratio of the catchment's MAP to the station's (Midgley, Pitman
+& Middleton 1994; Bailey & Pitman 2016).
+
+**The setting.** `{ factors, method, source }`:
+
+- `factors`: 12 multipliers, water-year order (Oct … Sep), each
+  `AREAL_RAIN_FACTOR_MIN`–`AREAL_RAIN_FACTOR_MAX` = **0.25–4** (the CHIRPS
+  bias-correction clamp, for the same reason: a factor beyond four either way
+  is more likely two series that don't describe the same area, or a unit
+  error).
+- `method`: how they were derived. `'map'`, an **independent mean annual
+  precipitation** for the catchment (the WR2012 quaternary MAP, an isohyetal
+  or gridded MAP averaged over the catchment) divided by the forcing's own
+  mean annual rain, is the preferred basis. `'stations'`: ratios against rain
+  gauges in or near the catchment. `'fitted'`: chosen by fitting the flow
+  record. That makes the rain level a calibrated multiplier, which trades off
+  against X1 and the evaporation, so every run warns
+  (`AREAL_RAIN_FITTED_WARNING`); the calibration research says the rain level
+  stays a fixed input, never a calibrated parameter (Renard et al. 2010).
+- `source`: required, at most 600 characters: the MAP and its reference, the
+  period the forcing was averaged over.
+
+`arealFactorFromMap(mapMm, rain, startDate)` computes the `'map'` factor:
+`mapMm` ÷ the forcing's mean annual rain over its **complete** water years
+(every day of the Oct–Sep year has a value), with the years it used. One flat
+factor goes in every month, because an annual MAP says nothing about the
+seasons; monthly factors need monthly evidence (a gauge, or a published
+monthly rainfall distribution).
+
+**Where it applies.** The day's rain GR4J runs on (catchment rain, else
+corrected CHIRPS, else forecast, §2.4a) × the factor of its water-year month.
+It is applied after every other rain step (zero-rain runs, accumulations,
+rain-source periods, the CHIRPS correction), so it scales the finished
+series. GR4J's `rain_used` shows the corrected rain, and a run with a
+correction adds the column **`rain_areal`** (rain_final × the month's factor,
+NaN where rain_final is) beside `rain_final`, which stays the rain before
+the correction. `summary.runoff.arealRain` records the correction with
+`rainBeforeMm`, the rain over the run before it (`summary.runoff.rainMm` is
+after).
+
+The catchment's own water balance reads the corrected rain, since it is the
+rain on the catchment: the runoff coefficient (W1), the WR2012 check's
+`areaRain` scaling and its calibration penalty (§2.10c), the water account's
+rain memo (§2.11b), the plausibility checks' observed runoff ratios (§2.10d)
+and the verification water balance (`summary.waterBalance`).
+
+**What doesn't.** Irrigation demand's effective rain (§2.3), the rain
+threshold, and rain on the dams (§2.7a) keep the recorded rain. The
+correction adds the rain a point or gridded record misses on the catchment as
+a whole, mostly on the high ground; the irrigated fields and the farm dams
+sit on the valley floor, where a valley gauge (or the gridded product's
+lowland cells) is the better estimate of what falls on them. Effective rain is
+a field-scale quantity: FAO Irrigation and Drainage Paper 25 (Dastane 1978)
+defines it from the rain on the irrigated field, and SAPWAT computes it from a
+weather station representative of the irrigated area (van Heerden & Walker
+2016). Applying a catchment-average (ridge-weighted) factor to the fields
+would cut irrigation demand for rain that doesn't fall there. This is the same
+split as the monthly PE input (§2.4a): a change of GR4J's forcing moves the
+runoff model and nothing else. When the fields' rain is itself in doubt, the
+answer is a better field series (an in-valley gauge as a rain-source period,
+§2.4e), not the areal factor.
+
+**Provenance.** A fit records the correction it ran under
+(`fitRecord.forcing.arealRain`, null = none; §2.10b). A different factor in
+any month, or a correction added or removed, is a forcing change ("Forcing
+changed since fit"); a changed `method` or `source` alone is not, as with the
+PE input's source note. A record made before 1.8.0 ran with none, so it is
+flagged only once a correction with some factor ≠ 1 is set. Run comparison
+lists a change of the correction among the settings ("Areal rainfall
+correction (GR4J): none → × 1.92 (map: …)"), and the report's inputs table
+shows it.
+
+**Choosing the factor** (the procedure is in
+[calibration-research.md § 6](./calibration-research.md#6-when-the-only-rain-record-misses-the-catchments-rain-an-areal-correction)):
+confirm where the flow gauge is and what area it drains; take the catchment's
+MAP from an independent source; divide by the forcing's mean annual rain;
+check the implied runoff ratio against a Budyko curve and the published MAR;
+then fit GR4J at the fixed factor (and at a small grid of factors around it,
+to report how much the fit and the results depend on it). Settings → Flow
+calibration → **Areal rainfall correction** edits it (ui.md).
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -3642,9 +3744,14 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   evaporation, which the run records). An old record without `pe` against
   monthly settings is flagged, since it ran on pan coefficient × A-pan. The
   caveat reads "The potential evaporation GR4J runs on (the PE input, or the
-  pan coefficient or A-pan evaporation it is taken from), CHIRPS bias
-  correction, CHIRPS fit period, rain-source periods or zero-rain run
-  handling has changed since the fit. …". The forcing
+  pan coefficient or A-pan evaporation it is taken from), the areal rainfall
+  correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods
+  or zero-rain run handling has changed since the fit. …".
+  **The areal rainfall correction (engine ≥ 1.8.0, §2.4g).**
+  `forcing.arealRain` is always recorded (null = none). A different factor
+  in any month, or a correction added or removed, is a forcing change; its
+  `method` and `source` alone are not. A record without it ran with none, so
+  it is flagged only once some month's factor is not 1. The forcing
   also records the CHIRPS series' product and version the fit ran on
   (`forcing.chirpsSource`, issue #40 part c; null = not recorded). The series'
   label isn't a setting, so the caller passes the current one
@@ -3673,6 +3780,20 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   three fits (full, split, dry → wet) take on the order of a minute in Node on
   a multi-decade catchment. `onProgress` reports every run and returns true to cancel, which
   keeps the best found so far.
+- **Fit at import** (`pnpm import:project … --settings <patch.json> --fit`,
+  `backend/scripts/fit-project.ts`). A settings patch (validated like a PATCH
+  of the project's settings: an areal rainfall correction, the calibration
+  window and flow series, say) is applied to the project document, then GR4J
+  is fitted with the defaults the app uses (KGE′, wide bounds, 5 starts, seed
+  1, 1 500 runs, split-sample and dry → wet validation, and the other record
+  when the document has both a gauge and a logger) and the parameters and
+  their fit record are stored, as Apply does, before the import; `--run`
+  then runs the fitted project. `--fit-seed`, `--fit-starts` and
+  `--fit-budget` change the search. The same engine, document, patch and
+  seed give the same fit, so a seeded project is reproducible from its files:
+  `pnpm seed:demo` reads the patch file and the switch per workbook from
+  `WBT_SETTINGS` and `WBT_FIT=1` in `wbt-import.<Prefix>.env`, beside the
+  workbooks (run-locally.md).
 
 On a short logger record, expect the validation columns to score well below
 the fit: a few years mostly of drought constrain the parameters poorly. That is

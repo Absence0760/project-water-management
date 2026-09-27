@@ -480,6 +480,102 @@ Fu 1981 and Zhang et al. 2004, *WRR* 40, W02502 (Budyko–Fu form) ·
 Pettitt 1979, *Appl. Statist.* 28:126 · Buishand 1982, *J. Hydrol.* 58:11 ·
 Milly 1994, *WRR* 30:2143 (seasonality and the water balance).
 
+### 6. When the only rain record misses the catchment's rain: an areal correction
+
+Added 2026-09-27 (issue #54, the second configuration). The earlier steps
+assume a catchment gauge whose level is roughly right. A project can instead
+have only a gridded product (CHIRPS) or one valley gauge, reading far below
+the rain on a mountain catchment. GR4J conserves water, so it then cannot
+make the observed flow: the fit drives X1 to its lower bound and still comes
+out dry, or it needs X2 to import water. The engine's answer is a fixed
+**areal rainfall correction** on GR4J's rain (model.md §2.4g). The procedure:
+
+1. **Pin down the flow record first.** Before judging the rain, confirm what
+   the observed record measures and where. For a DWS gauge, take the
+   station's drainage area from the DWS station list, or from a paper that
+   tabulates DWS gauged catchments, and compare it with the model's area
+   above the gauge node. Read tables carefully: design-flood papers list the
+   area (km²) beside the longest watercourse length (km) and the slope, and a
+   length that happens to equal a sub-catchment's area in km² can suggest the
+   gauge sits higher up the river than it does. Calibration scores the
+   outlet's record only: a record attached to a gauge node inside the
+   network (its site, data-model.md § Gauge records) feeds the plausibility
+   checks, not the fit (model.md §2.10d). So a gauge that measures only part
+   of the catchment can't be calibrated against in place yet
+   ([followups.md](./followups.md)); until it can, model the gauged part as
+   its own project.
+   Also check the workbook's logger column: some are a copy of the gauge
+   column, which the importers now leave out (it would read as a second,
+   agreeing instrument).
+2. **Show the forcing is short, with the runoff.** Over the years with flow,
+   compare the observed runoff (mm over the gauge's area) with the forcing's
+   rain. A runoff ratio above what a Budyko curve allows at the catchment's
+   aridity (§3; Fu's ω about 1.8–2.6, lower in a winter-rainfall climate) is
+   a rain record that misses rain, not a flashy catchment. So is a fit that
+   pins X1 at its lower bound and is still dry in volume.
+3. **Take the level from an independent MAP.** In order of preference: the
+   WR2012 MAP of the quaternary (or quinary) the catchment lies in (Bailey &
+   Pitman 2016); a gridded MAP averaged over the catchment (the 1′ grid of
+   Lynch 2004 underlies much South African work); a MAP published for the
+   gauged catchment itself. Design-flood studies of DWS gauged catchments
+   tabulate one per catchment (for example Gericke & Smithers 2018, Table 1,
+   a Thiessen average of the daily-rainfall stations of the national design
+   rainfall database in and around the catchment; Gericke & du Plessis 2011,
+   Table 7, which in a small catchment can rest on a single station, often
+   in the valley, and so read low). Two such sources can differ by a
+   factor of 1.5 or more for a small mountain catchment. Then let the
+   runoff check (step 4) rule out the one the flow record can't support,
+   and say so: that is picking by the physical checks, not fitting. Factor =
+   MAP ÷ the forcing's mean annual rain over its complete water years
+   (`arealFactorFromMap`). This is how WR90 and WR2012 build catchment
+   rainfall: station records scaled by the ratio of the catchment's MAP to
+   the station's (Midgley, Pitman & Middleton 1994). One flat factor: an
+   annual MAP says nothing about the seasons.
+   - **Mind the eras.** A MAP is a long-term mean; the forcing's mean covers
+     only its own years. A drought-heavy forcing period gives a factor that
+     is too high. Where the difference matters, compare over the same years
+     (a long gauge in the region against its own MAP), or state the bias.
+   - **Carry the spread.** Where MAP sources disagree, carry the low and high
+     factor through the results that decide anything (§5), refitting at each.
+4. **Check the factor against the runoff before fitting.** The corrected
+   rain's runoff ratio should sit inside the Budyko band, and the implied
+   natural MAR near the published one.
+5. **Fit at the fixed factor, and on a small grid around it.** Fit GR4J
+   (X2 off) at the MAP factor, then at a few factors either side. Report
+   the fit and validation scores, the volume error, X1 and the runoff ratio
+   at each. Expect the fit to be nearly flat in the factor across a wide
+   range: a larger X1 absorbs more rain. So the flow record cannot identify
+   the rain level (the X1–rain trade-off of §3), and a factor fitted to the
+   flow alone (`method: 'fitted'`, which warns on every run) says little. Use
+   the grid to show how much the results that matter (MAR, low flows, EWR
+   compliance, supply) move with the factor, not to choose it. Where no
+   factor lets X1 reach its typical range (100–1 200 mm, Perrin et al. 2003)
+   without an unphysical runoff ratio, suspect the flow record (its rating
+   or its site) or the evaporation as much as the rain.
+6. **Keep crop demand on the recorded rain.** Effective rain on the
+   irrigated fields is a field-scale quantity, taken from rain representative
+   of the fields (Dastane 1978, FAO Irrigation and Drainage Paper 25; SAPWAT,
+   van Heerden & Walker 2016). An areal factor adds mostly ridge-top
+   orographic rain, which the valley-floor fields and farm dams don't get, so
+   applying it to demand would cut irrigation demand for rain that doesn't
+   fall there. The engine applies it to GR4J only (model.md §2.4g). If the
+   fields' own rain is in doubt, supply a better field series.
+
+To make it reproducible for a seeded project, the correction and the
+calibration settings go in a settings patch and the fit is run at import
+(model.md §2.10b, "Fit at import").
+
+**References for this section** (unmarked ones are cited from their standard
+reference, not reopened). Gericke & Smithers 2018, *J. S. Afr. Inst. Civ.
+Eng.* 60(4):51–67, doi:10.17159/2309-8775/2018/v60n4a6 (verified 2026-09-27) ·
+Gericke & du Plessis 2011, *Water SA* 37(4):453–470,
+doi:10.4314/wsa.v37i4.4 (verified 2026-09-27) · Midgley, Pitman & Middleton
+1994, *Surface Water Resources of South Africa 1990* (WR90), WRC 298/1/94 ·
+Lynch 2004, *Development of a raster database of annual, monthly and daily
+rainfall for southern Africa*, WRC 1156/1/04 · Dastane 1978, *Effective
+rainfall in irrigated agriculture*, FAO Irrigation and Drainage Paper 25 ·
+Perrin, Michel & Andréassian 2003 and the others in [§ References](#references).
+
 ## Where no authoritative guidance was found
 
 - A DWS standard for WULA hydrology (methods, calibration thresholds,
