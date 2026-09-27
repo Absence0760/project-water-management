@@ -112,7 +112,10 @@ section it belongs to, with the example that taught it.
   leaned on the Data table's rows; cards would have lost the columns and
   broken them for nothing.
 - **Design for N.** Assume 30 crops, 40 units, 10 dams, 20 runs and names
-  three times longer than the seed's. A card per item works for a handful;
+  three times longer than the seed's. A farmer linked to 30 farms in one
+  catchment (or WUA staff previewing, who see them all) got 30 switcher
+  chips above the farm's name, pushing the notice 1,600 px down on a phone;
+  past 4 they now fold into a `<details>`. A card per item works for a handful;
   past that use a compact row list that scrolls inside its column, so the
   results stay on the first screen. Don't give a 0.2 ha crop the same space
   as a 363 ha one: sort by what matters (area, shortfall, % full).
@@ -160,6 +163,16 @@ section it belongs to, with the example that taught it.
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
   entry re-runs that spec.
+- **A frame outside the app shell owns `--header-h`.** The farmer view
+  (`farm/FarmShell.svelte`) has its own sticky 56 px header at every width,
+  but the app shell set `--header-h` to 0 from 900 px, so `html`'s
+  `scroll-padding-top` stopped clearing it and `/farm/words#farm-reserve`
+  landed 11 px from the top, under the header (it had matched only because
+  the old app bar was also 56 px). A frame with its own sticky bar sets
+  the token while it's on the page (`:root:has(.farm-header)`); an element
+  doesn't add its own `scroll-margin-top` on top (the notice's 72 px then
+  doubled it). `farm-view.spec.ts` checks a link lands below the header at
+  both widths.
 
 ## 3. Colour, wording, content
 

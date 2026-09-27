@@ -144,17 +144,25 @@
 </div>
 
 <style>
+	/* The farm header is sticky at every width, so in-page links and focus
+	   scrolling (html's scroll-padding-top, app.css) must clear it. The app
+	   shell sets --header-h to its own phone bar and to 0 from 900 px, where
+	   its sidebar replaces the bar; the farm pages don't use that shell. */
+	:global(:root:has(.farm-header)) {
+		--header-h: 56px;
+	}
+	/* No min-height: the body is already --bg, and a 100vh frame under the
+	   confirm-your-email banner made a page that fits scroll by the banner. */
 	.farm {
 		font-size: 16px;
 		line-height: 1.45;
-		min-height: 100vh;
 		background: var(--bg);
 	}
 	.farm-header {
 		position: sticky;
 		top: 0;
 		z-index: 10;
-		min-height: 56px;
+		min-height: var(--header-h);
 		padding: 0 8px 0 16px;
 		display: flex;
 		align-items: center;
