@@ -13,7 +13,7 @@
 	import { autoRunToPublish } from '$lib/components/autorun/autoRun';
 	import { api, type Publication, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { restrictionSummary } from '$lib/components/runs/publication';
+	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { runHref } from './attention';
 
@@ -72,8 +72,7 @@
 				<dd>{fmtDate(current.publishedAt, true)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}</dd>
 				<dt>Notice</dt>
 				<dd>{restrictionSummary(current.restriction)}</dd>
-				{#if current.restriction.noticeEn}<dt>English</dt><dd class="text">{current.restriction.noticeEn}</dd>{/if}
-				{#if current.restriction.noticeAf}<dt>Afrikaans</dt><dd class="text">{current.restriction.noticeAf}</dd>{/if}
+				{#each noticeLanguages(current.restriction.notice) as n (n.code)}<dt>{n.name}</dt><dd class="text" lang={n.code}>{n.text}</dd>{/each}
 				<dt>Next update</dt>
 				<dd>{current.nextExpectedOn ? fmtDay(current.nextExpectedOn) : 'Not set'}</dd>
 			</dl>

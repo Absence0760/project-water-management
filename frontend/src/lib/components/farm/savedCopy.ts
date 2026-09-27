@@ -15,9 +15,10 @@
 import type { FarmView } from '@water-management/engine';
 import type { VolumeUnit } from './format';
 
-// v2: FarmView's notice became noticeEn / noticeAf (WP-2.5); a v1 copy is dropped, never shown without its notice.
-export const SAVED_KEY = 'wm.farm.saved.v2';
-const OLD_SAVED_KEYS = ['wm.farm.saved.v1'];
+// v3: FarmView's notice became one map by language (issue #58); v2 had noticeEn / noticeAf (WP-2.5).
+// An older copy is dropped, never shown without its notice.
+export const SAVED_KEY = 'wm.farm.saved.v3';
+const OLD_SAVED_KEYS = ['wm.farm.saved.v1', 'wm.farm.saved.v2'];
 export const NO_COPY_KEY = 'wm.farm.no-copy';
 export const UNIT_KEY = 'wm.farm.unit';
 /** A copy nobody has opened for this long is dropped. */
