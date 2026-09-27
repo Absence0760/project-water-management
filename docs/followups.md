@@ -1345,7 +1345,7 @@ yet; each lands with the work package named.
 
 ## Afrikaans (WP-2.5)
 
-The items waiting on the translator are tracked in [issue #49](https://github.com/Absence0760/project-water-management/issues/49).
+The items waiting on the translator were tracked in [issue #49](https://github.com/Absence0760/project-water-management/issues/49), closed 2026-09-26 once everything that could be built ahead of the translator was; the two open items below are the tracker now.
 
 The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
@@ -1364,8 +1364,13 @@ No Afrikaans wording ships yet: none is reviewed.
       can only check that the page stays `lang="en"`). Trigger: the
       translator is named and returns the sheet.
 - [ ] **Afrikaans boards** at 360 px (strings run 20–30 % longer) and an axe
-      pass on every translated page in Afrikaans. Trigger: the first
-      reviewed batch lands.
+      pass on every translated page in Afrikaans. Done ahead with a
+      stand-in: `e2e/tests/af-layout.spec.ts` checks every translated page
+      at 360 px, light and dark, with axe, against every message's English a
+      third longer ([ui.md § Language](./ui.md#language)); all pass. What
+      remains: when the first reviewed batch lands the spec fails (the
+      stand-in is only served while af.ts is empty), and it is switched to
+      the real words. Trigger: the first reviewed batch lands.
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
       `share.*` keys, with the switch in its header; it still imports none
       of the workspace's code, `boundary.test.ts`), the notes list inside

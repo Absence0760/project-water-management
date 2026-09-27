@@ -3629,6 +3629,17 @@ digest). The modeller workspace stays English.
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
+- **Long Afrikaans layouts.** Afrikaans runs 20–30 % longer than English,
+  with long compound words. `e2e/tests/af-layout.spec.ts` opens every
+  translated page at 360 px (sign-in, register, forgot password, the farm
+  view with its why and dam pages, `/farm/words`, the account and alert
+  pages, `/share`) with a complete stand-in catalogue: every message's
+  English with each word a third longer (`e2e/support/stretched-af.ts`,
+  served in place of the empty af chunk; no Afrikaans is written). It checks
+  that `<html lang>` turns `af`, nothing scrolls sideways, no text is cut
+  off in its box, and axe finds nothing, in light and dark. Once reviewed
+  wording lands the chunk isn't empty, the stand-in isn't served, and the
+  spec fails until it checks the real words.
 - **Numbers and dates** (D8). The farm view writes a decimal comma in
   Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
   both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
