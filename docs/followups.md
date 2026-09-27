@@ -1590,9 +1590,19 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       as the model band, the ordinal day (`9d963c34`, a bare number, since
       `Intl.PluralRules('af-ZA', ordinal)` only ever picks `other`), and
       the upstream/downstream sentence, reworded as a label list
-      (`7f35d413`). The specs read the words from the catalogues, so a
-      correction needs no test change. Trigger: before Afrikaans-speaking
-      farmers are invited.
+      (`7f35d413`). Added 2026-09-27 from the landing, sign-up and legal
+      passes: the hero slogan "Elke druppel in die opvanggebied word
+      verreken" (`633902ad`, and its alt text `2f037a30`: change both
+      together); "punte" or "persentasiepunte" for percentage points (four
+      places, the farm pages' `a3e2d360` included: change all or none);
+      "magtiging vir watergebruik" or "watergebruiksmagtiging" (`7a517563`,
+      the share page; it will spread to the licensing pages);
+      "voorbeeld-opvanggebied" hyphenated or as one word (catalogue-wide);
+      "Regsinligting" for the Legal nav (`de7530aa`); and "Bevestig
+      wagwoord" on sign-up beside "Herhaal nuwe wagwoord" on the account
+      page (deliberate: the English differs). The specs read the words from
+      the catalogues, so a correction needs no test change. Trigger: before
+      Afrikaans-speaking farmers are invited.
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
       `share.*` keys, with the switch in its header; it still imports none
       of the workspace's code, `boundary.test.ts`), the notes list inside
@@ -2818,7 +2828,55 @@ Applicant view and the Applications tab. Left:
       per-request timing log, as #41 did) and fix whichever handler stalls;
       never a longer wait. Trigger: it recurs, in CI or a local loaded run.
 
+## Landing page (issue #57)
+
+- [ ] **Performance budgets on the deployed site.** Lighthouse ≥ 95 in all
+      four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
+      quality bar). They can't be measured on the local static server.
+      Trigger: the first deploy (Phase 6); then close #57.
+- [ ] **A public summary of the engine audit** for the trust strip's first
+      point. None exists and the repo isn't reliably public, so the page
+      gives no link ([design/landing-art.md](./design/landing-art.md)).
+      Durable fix: a short public page (the audit's findings and decisions,
+      no client data) linked from the trust strip. Trigger: before the page
+      is promoted, or the repo is made public.
+
+## Legal pages and POPIA (issues #47, #48)
+
+The tracker is [legal-status.md](./legal-status.md) (what the drafts
+assume, the questions for counsel); these are the actions, with triggers.
+
+- [ ] **Counsel review** of `/privacy` and `/terms` and the five questions in
+      legal-status.md (the CPA's reach over a free service; the Virginia
+      venue clause; roles before the s21 agreement and s55 registration
+      exist; email-only contact under s18; the National Water Act wording
+      alongside the report disclaimer, #47). Trigger: before the first
+      client's farmers are invited.
+- [ ] **Register the information officer** on the Information Regulator's
+      eServices portal ([legal/information-officer.md](./legal/information-officer.md);
+      the operator files it). Trigger: before production holds client data.
+- [ ] **The operator agreement signed** with each client
+      ([legal/operator-agreement.md](./legal/operator-agreement.md), a
+      template for counsel). Confirm the mailbox provider first: Migadu per
+      the estate's DNS, but the operator's own site names Gmail (list Google
+      too if mail is forwarded). Trigger: the first client going live.
+- [ ] **Re-acceptance when the terms change.** Each account records the
+      version it accepted (087) and `/auth/me` says whether it is current;
+      there is no screen yet that asks again. Durable fix in
+      legal-status.md. Trigger: the first change to `LEGAL_VERSION` after
+      real users exist (any material edit to either page must bump it).
+- [ ] **Self-service account deletion** and what happens to evidence an
+      account made: #48; the privacy notice discloses the current exception.
+
 ## Housekeeping
+
+- [ ] **Run the full suites once GitHub Actions is back** (it has been off
+      since 2026-09-24, billing). Work since then was verified with targeted
+      tests only; the email-first sign-up (2026-09-27) changed the shared
+      test helpers every DB and e2e test uses (`backend/src/__tests__/helpers.ts`
+      `signUp`, `e2e/support/api.ts` `register`). Trigger: Actions
+      re-enabled, or before the first release: run `test:backend:db` and
+      the 14 e2e shards (or both suites locally, not beside each other).
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other
