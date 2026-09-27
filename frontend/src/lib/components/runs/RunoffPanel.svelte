@@ -37,7 +37,7 @@
 	});
 </script>
 
-<section aria-labelledby="{uid}-h">
+<section class="runoff" aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Runoff model: {runoffModelName(balance)} <HelpTip key="settings.gr4j" /></h3>
 	<p class="muted small">
 		{describeParams(balance)} · warm-up {fmtNum(balance.warmupDays)} days · over {fmtNum(balance.areaKm2, 2)} km²
@@ -82,15 +82,21 @@
 </section>
 
 <style>
+	/* The table beside the stores chart only where the panel is wide enough for both: sized to the
+	   panel, not the window, since the runs rail and the app sidebar take their share first. A viewport
+	   query left the chart 91 px wide at 1024 px, its Earlier/Later buttons 20 px off the page's edge. */
+	.runoff {
+		container: runoff / inline-size;
+	}
 	.grid {
 		display: grid;
-		grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
-	@media (max-width: 900px) {
+	@container runoff (min-width: 44rem) {
 		.grid {
-			grid-template-columns: minmax(0, 1fr);
+			grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
 		}
 	}
 	caption {

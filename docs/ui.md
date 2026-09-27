@@ -1968,7 +1968,12 @@ prefix (`2015`, `2015-03-14`) or a value comparison (`> 20`, `= 0`); *Missing
 only* and *Flagged only* look only at the currently visible series columns.
 Rows are virtualised (fixed row height, only the rows near the scrollport are
 real `<tr>`s) so a multi-year daily record doesn't put thousands of rows in
-the DOM at once. This is a read-only view of what's already loaded; a CSV
+the DOM at once. As in Download → Preview, each body row is exactly 28 px,
+border included, and a spacer row exists only when it has height, so the
+first day starts right under the header and the last day sits at the foot of
+the box on a fifteen-year record; the pinned date keeps the row's hover, and
+the scroll box is a focusable, named region, so it scrolls from the keyboard
+(`series-preview.spec.ts`, with a11y scans at desktop and phone). This is a read-only view of what's already loaded; a CSV
 export of the same model-used columns is tracked separately
 ([followups.md](./followups.md)).
 
@@ -2578,7 +2583,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Which run.** `run=<id>` picks it; without one (or when it names a run
   that is gone) the newest run by `createdAt`, as the Summary shows
   (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
-  against. The **Run** menu in the header lists every run, newest first
+  against. The **Run** menu in the header (named for screen readers only,
+  `aria-label="Run"`, like Units & supply's picker, so on a phone the select fills a row of its own with
+  no "Run" line above it) lists every run, newest first
   (`runOptionLabel`, the compare picker's labels); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
@@ -3161,7 +3168,10 @@ read it before.
   not today's. The **runoff model** panel for GR4J runs (`RunoffPanel`:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
-  `runs/runoff.ts`), and the production and routing stores through time),
+  `runs/runoff.ts`), and the production and routing stores through time,
+  the chart beside the table only where the panel is 44rem wide or more (a
+  container query on the panel, so at 1024 px, with the sidebar and the runs
+  rail, it stacks under the table)),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

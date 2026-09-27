@@ -52,7 +52,9 @@ async function headerRows(page: Page) {
 			statusBottom: status ? box(status).bottom : null,
 			firstControlTop: Math.min(...[...own, ...main].map((e) => box(e).top)),
 			rows: [...rows.values()].sort((a, b) => a[0]!.top - b[0]!.top),
-			selects: [...h.querySelectorAll('[data-testid="header-own"] select')].map((s) => box(s).width)
+			selects: [...h.querySelectorAll('[data-testid="header-own"] select')].map((s) => box(s).width),
+			// How far each picker's select sits below the top of its control: 0 unless a visible label takes a line above it.
+			pickerDrops: own.filter((e) => e.querySelector('select')).map((e) => box(e.querySelector('select')!).top - box(e).top)
 		};
 	});
 }
@@ -100,6 +102,8 @@ test.describe('phone', () => {
 			}
 			// A run picker is the full width.
 			for (const w of m.selects) expect(w, at).toBeGreaterThan(m.right - m.left - 2);
+			// ...with no "Run" line of its own above it (River & reserve's had one): the word is for screen readers.
+			for (const d of m.pickerDrops) expect(d, at).toBeLessThan(2);
 			// Add data and Run model: one row, in that order, ending the header.
 			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
 			const last = m.rows.at(-1)!;

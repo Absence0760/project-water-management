@@ -6,6 +6,8 @@
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { seedRiverProject } from '../support/river.ts';
 import { LONG_LABEL, openRuns, runsList, seedManyRuns } from '../support/runs.ts';
 
 const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
@@ -127,6 +129,35 @@ test('on a phone the page stacks, the runs list scrolls inside its panel, and th
 	expect(field.x + field.width).toBeLessThanOrEqual(390);
 	expect((await header(page).getByRole('button', { name: 'Run model' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	await expectNoViolations(page);
+});
+
+test('at 1024 px the runoff panel stacks its chart under the table, so nothing pokes past the window; side by side at 1440', async ({ page, owner }) => {
+	void owner;
+	// Five water years: past three, the stores chart gets Earlier / Later and Last 3 years, the toolbar that
+	// ran 20 px off the window when a viewport query put the chart beside the table in a 465 px panel.
+	const id = await seedRiverProject(page.request, 'Runs 1024', 1827);
+	await createRun(page.request, id, 'Five years');
+	const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
+	const table = runoff.getByRole('table', { name: 'Where the rain went over the run' });
+	const stores = runoff.locator('figure.chart');
+	for (const [width, height, stacked] of [
+		[1024, 768, true],
+		[1440, 960, false]
+	] as const) {
+		await page.setViewportSize({ width, height });
+		await openRuns(page, id);
+		await runoff.scrollIntoViewIfNeeded();
+		await expect(stores).toHaveAttribute('data-ready', 'true');
+		await expect(stores.getByRole('button', { name: 'Last 3 years' })).toBeVisible();
+		const t = (await table.boundingBox())!;
+		const c = (await stores.boundingBox())!;
+		if (stacked) expect(c.y, `${width}`).toBeGreaterThan(t.y + t.height);
+		else expect(c.x, `${width}`).toBeGreaterThan(t.x + t.width);
+		// The chart's toolbar stays inside the chart.
+		const tools = (await stores.locator('.tools').boundingBox())!;
+		expect(tools.x + tools.width, `${width}`).toBeLessThanOrEqual(c.x + c.width + 0.5);
+		await expectNoSidewaysScroll(page);
+	}
 });
 
 test('a viewer sees the runs and the header line, no run form, and the page passes axe', async ({ page, owner, signIn }) => {

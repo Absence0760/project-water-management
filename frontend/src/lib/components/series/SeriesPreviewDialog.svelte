@@ -185,7 +185,17 @@
 			</details>
 		</div>
 
-		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll}>
+		<!-- Focusable, so the table scrolls from the keyboard (arrows, Page Up/Down) with nothing to focus inside it. -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div
+			class="scroll"
+			bind:this={scrollEl}
+			bind:clientHeight={viewportH}
+			onscroll={onScroll}
+			tabindex="0"
+			role="region"
+			aria-label="Input time series: the daily table"
+		>
 			<table class="data compact" aria-rowcount={filtered.length + 1}>
 				<caption class="visually-hidden">Daily values for every input series, plus how the model used them</caption>
 				<thead>
@@ -203,7 +213,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					<tr aria-hidden="true" style="height: {topH}px"><td colspan={colCount}></td></tr>
+					{#if topH > 0}<tr class="spacer" aria-hidden="true" style="height: {topH}px"><td colspan={colCount}></td></tr>{/if}
 					{#each visibleRows as row, i (row.date)}
 						<tr aria-rowindex={startIdx + i + 2}>
 							<td class="datecol">{row.date}</td>
@@ -235,7 +245,7 @@
 							{/each}
 						</tr>
 					{/each}
-					<tr aria-hidden="true" style="height: {bottomH}px"><td colspan={colCount}></td></tr>
+					{#if bottomH > 0}<tr class="spacer" aria-hidden="true" style="height: {bottomH}px"><td colspan={colCount}></td></tr>{/if}
 				</tbody>
 			</table>
 			{#if filtered.length === 0}
@@ -324,8 +334,24 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 	}
+	.scroll:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	/* Exactly ROW_H tall, border included, so the spacers' sums line up with the
+	   rows they stand for: with the table's own padding a row was ~29 px, and the
+	   rows drifted from their spacers down a long record (as Download → Preview's
+	   did, export/DailyTableDialog.svelte). */
 	table.data tbody tr {
 		height: 28px;
+	}
+	table.data tbody td {
+		padding-block: 0;
+		line-height: 27px;
+	}
+	/* A spacer is only its height, with no rule. */
+	table.data tbody tr.spacer td {
+		border: 0;
 	}
 	table.data th,
 	table.data td {
@@ -337,6 +363,10 @@
 		z-index: 1;
 		background: var(--surface);
 		box-shadow: 1px 0 0 var(--border);
+	}
+	/* The pinned date keeps the row's hover, which its own background would hide. */
+	table.data tbody tr:hover .datecol {
+		background: var(--row-hover);
 	}
 	thead th.datecol {
 		z-index: 3;
