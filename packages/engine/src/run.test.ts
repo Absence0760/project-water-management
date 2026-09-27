@@ -176,6 +176,17 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((150 + 50 + 1051) / 3, 10);
 	});
 
+	it('puts the dam storage figures in the summary of a farm with a dam only (engine 1.1.0, issue #55)', () => {
+		// dam_storage [800, 600, 1000]: the end 1000, the low 600 on day 1, no minimum level.
+		const a = out.summary.farms.find((f) => f.nodeId === 'A')!;
+		expect(a).toMatchObject({ damEndM3: 1000, damAgoM3: null, damLowM3: 600, damLowDate: '2020-10-02', damDaysAtMin: 0 });
+		const b = out.summary.farms.find((f) => f.nodeId === 'B')!;
+		for (const k of ['damEndM3', 'damAgoM3', 'damLowM3', 'damLowDate', 'damDaysAtMin']) expect(b).not.toHaveProperty(k);
+		// At a 60 % minimum, the day at 600 m³ counts.
+		const atMin = run({ nodes: nodes.map((n) => (n.id === 'A' ? { ...n, damMinPct: 0.6 } : n)), crops, cropAreas, settings, natural: [200, 0, 1601], startDate: '2020-10-01' });
+		expect(atMin.summary.farms[0]!.damDaysAtMin).toBeGreaterThan(0);
+	});
+
 	it('runs over the rainfall period and emits catchment series', () => {
 		expect(out.startDate).toBe('2020-10-01');
 		expect(out.endDate).toBe('2020-10-03');
