@@ -147,18 +147,26 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
 		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
-		const ok = await withoutUser(async (db) => {
+		const account = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ user_id: string | null }>(
 				"SELECT app_consume_email_token($1, 'verify') AS user_id",
 				[hash]
 			);
 			const userId = rows[0]?.user_id;
-			if (!userId) return false;
+			if (!userId) return null;
 			await actAsUser(db, userId);
 			await markVerified(db, userId);
-			return true;
+			const { rows: me } = await db.query<{ email: string; sessions_revoked_at: Date | null }>(
+				'SELECT email, sessions_revoked_at FROM app_user WHERE id = $1',
+				[userId]
+			);
+			return me[0] ?? null;
 		});
-		if (!ok) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!account) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		// The link proved the inbox: this browser signs in on its own lockout
+		// record (auth/device.ts), as after a password reset, so whoever keeps
+		// the address's shared record locked can't keep a new account out.
+		issueDevice(c, account.email, account.sessions_revoked_at);
 		return c.json({ verified: true });
 	})
 	.post('/resend-verification', requireUser, async (c) => {

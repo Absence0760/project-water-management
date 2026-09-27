@@ -19,6 +19,8 @@ export function emailAuthApi(api: Pick<Api, 'request'>) {
 		resetPassword: (token: string, password: string) =>
 			request<void>('POST', '/auth/reset-password', { token, password }),
 		verifyEmail: (token: string) => request<{ verified: true }>('POST', '/auth/verify-email', { token }),
+		/** Signed out, from the sign-in page (issue #57): always 202, whether or not the address has an account waiting to be confirmed. */
+		resendConfirmation: (email: string) => request<{ ok: true }>('POST', '/auth/resend-confirmation', { email }),
 		/** 202, or ApiError 429 (sent a moment ago) / 409 (already verified). */
 		resendVerification: () => request<{ sent: true }>('POST', '/auth/resend-verification'),
 		inviteInfo: (token: string) =>

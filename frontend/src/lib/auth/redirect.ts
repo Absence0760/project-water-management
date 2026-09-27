@@ -16,3 +16,10 @@ export function safeNext(next: string | null, fallback: string): string {
 	}
 	return origin === PROBE ? next : fallback;
 }
+
+/**
+ * sessionStorage key: the address a sign-up just emailed its confirmation link
+ * to, so the sign-in page can name it and fill it in (issue #57). Kept out of
+ * the URL, where it would sit in the history and the server logs.
+ */
+export const CONFIRM_EMAIL_KEY = 'wm:confirm-email';

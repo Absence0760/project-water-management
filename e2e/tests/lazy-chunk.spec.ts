@@ -9,7 +9,7 @@
 // banner (their own import() calls, not Lazy) say the same.
 import { readFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
-import { createProject, createRun, register, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, register, seedRunnableProject, signInUnconfirmed } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 
@@ -224,6 +224,7 @@ test('the account’s data download failing to load says so, and a reload recove
 // failed, hiding that an unconfirmed address holds back pending invitations.
 test('a verify-email banner that fails to download says so in its place, and a reload recovers', async ({ page }) => {
 	const user = await register(page.context().request, 'Unconfirmed chunk', { verified: false });
+	await signInUnconfirmed(page.context(), user);
 	const blockBanner = blockChunkWith('Please confirm your email address');
 	await page.route(BLOCKED, blockBanner);
 	await page.goto('/');

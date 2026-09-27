@@ -20,6 +20,7 @@ const CODES: Record<string, Msg> = {
 	not_signed_in: msg('You’re not signed in. Sign in and try again.'),
 	account_exists: msg('An account with that email address already exists. Sign in, or reset your password.'),
 	wrong_credentials: msg('Wrong email or password.'),
+	email_unconfirmed: msg('Confirm your email address before you sign in: open the link we emailed you.'),
 	signin_locked: msg('Too many sign-in attempts for this address. Try again in {wait}, or reset your password.'),
 	signup_throttled: msg('Too many accounts were made from your network. Try again in {wait}.'),
 	wrong_current_password: msg('Your current password is wrong.'),

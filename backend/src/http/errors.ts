@@ -44,6 +44,7 @@ export const ERROR_CODES = [
 	'not_signed_in',
 	'account_exists',
 	'wrong_credentials',
+	'email_unconfirmed',
 	'signin_locked',
 	'signup_throttled',
 	'wrong_current_password',

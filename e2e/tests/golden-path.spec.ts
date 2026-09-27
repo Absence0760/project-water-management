@@ -4,9 +4,11 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { PASSWORD, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { addCrop } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
+import { fillNewPassword } from '../support/signup.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -30,9 +32,18 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	// --- register --------------------------------------------------------------
 	await page.goto('/register');
 	await page.getByLabel('Display name').fill('Catchment Planner');
-	await page.getByLabel('Email').fill(uniqueEmail('planner'));
-	await page.getByLabel('Password').fill(PASSWORD);
+	const email = uniqueEmail('planner');
+	await page.getByLabel('Email').fill(email);
+	await fillNewPassword(page, PASSWORD);
 	await page.getByRole('button', { name: 'Create account' }).click();
+	// On to sign-in, until the emailed link confirms the address (issue #57).
+	await expect(page.getByRole('status').filter({ hasText: 'Check your email to finish signing up' })).toBeVisible();
+	await page.goto(`/verify-email?token=${await plantEmailToken(email, 'verify')}`);
+	await expect(page.getByRole('status')).toContainText('is confirmed');
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(email);
+	await page.getByLabel('Password').fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 
 	// --- a new project ------------------------------------------------------------

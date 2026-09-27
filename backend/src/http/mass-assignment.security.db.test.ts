@@ -110,6 +110,7 @@ async function scenario(steps: string[]) {
  */
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register' } }),
+	'POST /auth/resend-confirmation': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com` } }),
 	'POST /auth/login': () => ({ as: null, body: { email: ctx.owner.email, password: 'correct horse' } }),
 	'POST /auth/logout': async () => ({ as: await freshUser('Mlogout') }),
 	'POST /auth/logout-everywhere': async () => ({ as: await freshUser('Meverywhere') }),
@@ -237,6 +238,7 @@ const NO_WRITE = new Map<string, string>([
 	['POST /auth/login', 'the session is a signed cookie; a correct password leaves the lockout table as it was'],
 	['POST /auth/logout', 'the session is a signed cookie; logging out clears it in the browser'],
 	['POST /auth/invite-info', 'reads what an invite is for, so the sign-up page can name it'],
+	['POST /auth/resend-confirmation', 'an address with no account (the sweep’s): the same 202, and nothing to mail'],
 	['POST /me/alerts/resume', 'the owner’s alert emails are not paused, so there is nothing to resume']
 ]);
 
@@ -459,10 +461,10 @@ describe('positive control: the detector and the legitimate fields', () => {
 			headers: { 'content-type': 'application/json', origin: ORIGIN },
 			body: JSON.stringify({ ...hostile(), email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Kept Name', emailVerified: true, isAdmin: true })
 		});
-		expect(reg.status).toBe(201);
-		const { user } = (await reg.json()) as { user: { id: string; emailVerified: boolean } };
-		expect(user.emailVerified).toBe(false);
-		const { rows: u } = await db.query('SELECT display_name, email_verified_at FROM app_user WHERE id = $1', [user.id]);
+		// Waits for its confirmation link (202, issue #57): nothing it sent confirms it.
+		expect(reg.status).toBe(202);
+		const { email: regEmail } = (await reg.json()) as { email: string };
+		const { rows: u } = await db.query('SELECT display_name, email_verified_at FROM app_user WHERE email = $1', [regEmail]);
 		expect(u[0]).toEqual({ display_name: 'Kept Name', email_verified_at: null });
 	});
 

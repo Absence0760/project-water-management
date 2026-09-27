@@ -9,7 +9,7 @@
 // removed afterwards.
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { anon, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, asOwner, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { syncLanguages } from '../../scripts/migrate.js';
 
 vi.mock('@water-management/engine/languages', async (importOriginal) => {
@@ -52,8 +52,9 @@ describe('a stand-in language added to the table (and its email catalogue) only'
 	it('is accepted at sign-up, stored, and the confirmation email is in it', async () => {
 		const email = newEmail('xx-signup');
 		const res = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'X', locale: 'xx' });
-		expect(res.status).toBe(201);
-		expect(res.body.user.locale).toBe('xx');
+		// Waits for its confirmation link (issue #57): the account is read as the schema owner.
+		expect(res.status).toBe(202);
+		expect(await asOwner('SELECT locale FROM app_user WHERE email = $1', [email])).toEqual([{ locale: 'xx' }]);
 		const mail = lastMailTo(email)!;
 		expect(mail.subject).toMatch(/^\[xx\] /);
 		expect(mail.html).toContain('<html lang="xx">');

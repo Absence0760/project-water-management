@@ -99,6 +99,42 @@ also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
 
+## Landing page
+
+`/` for a signed-out visitor, and `/welcome` for anyone (issue #57;
+`lib/components/landing/`, `e2e/tests/landing.spec.ts`). What the app is, who
+it's for and why, before the sign-in: a first-time visitor to `/` no longer
+lands on the sign-in form. A signed-in `/` is still the project list, and every
+other signed-out route still goes to `/login?next=`.
+
+- **Routing.** `routeAccess` shows a signed-out `/` (`isLandingRoot`); the root
+  layout renders `Landing.svelte` there in place of the projects page, loaded
+  as its own chunk beside `/auth/me`. `/welcome` (`LANDING_PATH`, public) is
+  the same component, **prerendered** at build time (`routes/welcome/+page.ts`)
+  so crawlers and link previews get the page and its tags without running the
+  app; it renders at once, before the session is known, and even with the API
+  down. The canonical link and `og:url` point at `/welcome`.
+- **Frame.** Outside the app shell, like the sign-in pages: a slim header (the
+  mark and name, the language switch, **Sign in**), the page, a footer. A
+  reading page with a 1200 px column; on a phone the header keeps the mark only.
+- **Sections**, in order: the hero (headline, lede, **Sign in** and **Create an
+  account**, the animated catchment); *From rainfall to river* (five steps over
+  a pinned diorama, each with a small chart); *Try a what-if* (two sliders over
+  precomputed runs); *What you get* (real screens, framed); *Who it's for* (the
+  four audiences); *How it works* (three steps); *Why trust it*; a closing call
+  to action; the footer. Sign-up is open, so **Create an account** links
+  `/register` (issue #57's decision); Help stays behind sign-in.
+- **Language.** Translated (English and Afrikaans, § Language): the
+  `landing.*` sections of the translation sheet. `/welcome`'s prerendered HTML
+  is English and switches once the chosen language's words arrive, the one page
+  allowed to, so it never waits on the API.
+- **Tags.** Title, description, canonical, Open Graph (`og.jpg`, 1200 × 630,
+  rendered) and a large Twitter card, with absolute URLs from the build's
+  `SITE_ORIGIN` ([deployment.md](./deployment.md)).
+- **Figures** come from the invented Kleinberg example (the engine at build
+  time, `data.generated.ts`), named as the example catchment's where shown. The art, the motion rules and the
+  pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
+
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
@@ -108,6 +144,21 @@ brand panel with the catchment drawing on the left (55 %), the form on the
 right, 380 px wide. They are forms, not dashboards: each fits a 1280 × 800
 window with no page scroll, in every state (the longest is the sign-up form
 under a dead-invitation warning).
+
+- **The lockup is a link home** (`/`): the landing page signed out, the
+  project list signed in.
+- **Sign-up is email-first** (issue #57, the flow threkir uses). The form asks
+  for the password twice (**Confirm password**; compared exactly, a trailing
+  space included, before anything is sent) and says under the email field
+  that a confirmation link will be emailed. An ordinary sign-up then goes to
+  `/login?confirm=sent`: a notice says where the link went (the address kept
+  in this tab's `sessionStorage`, never the URL) and that sign-in waits for
+  it, with **Send the link again**, and the email field is filled in. Signing
+  in before confirming (`email_unconfirmed`) shows a warning naming the
+  address, with **Send the link again** (`POST /auth/resend-confirmation`,
+  the same answer for any address). A taken address gets exactly the same
+  pages. Sign-up through a live invitation link is still confirmed, joined and
+  signed in at once.
 
 - **One place for the title.** The form starts on the brand copy's top line
   rather than centred in the height, so the brand lockup, the language
@@ -124,7 +175,7 @@ under a dead-invitation warning).
   unsubscribe → done or a dead link, *Sign out and accept* on an invitation
   for someone else), focus moves to the title (`focusAuthTitle`), since the
   button that had it is gone.
-- **Phones (below 900 px):** one column, the drawing a 112 px band above
+- **Phones (below 900 px):** one column, the drawing an 84 px band above
   the form, so the title and first field sit in the top quarter of the
   screen, above the keyboard.
 - **Password fields** (`common/PasswordInput.svelte`, also on the account
@@ -4446,7 +4497,8 @@ view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
-public shared view (`/share`), and the emails a farmer receives (confirm
+public shared view (`/share`), the public landing page (`/` signed out,
+`/welcome`, [§ Landing page](#landing-page)), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
 digest). The modeller workspace stays English.
 

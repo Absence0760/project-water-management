@@ -629,6 +629,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/register', exempt: 'creates an account, not project data; joining a project by invite records member.added on verify' },
 	{ route: 'POST /auth/verify-email', exempt: 'confirms an address; the invites it accepts record member.added / team_member.added (app_accept_invites)' },
 	{ route: 'POST /auth/resend-verification', exempt: 'resends the caller’s verification email; changes no project' },
+	{ route: 'POST /auth/resend-confirmation', exempt: 'emails an unconfirmed account a new confirmation link, signed out; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/login', exempt: 'starts a session (auth rate limits and lockout cover abuse); changes no project' },
 	{ route: 'POST /auth/logout', exempt: 'ends the caller’s session; changes no project or its history' },
 	{ route: 'POST /auth/logout-everywhere', exempt: 'ends every session of the caller’s account; changes no project' },
@@ -740,14 +741,15 @@ describe('a team change in the history', () => {
 		const invited = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' });
 		expect(invited.body.invited).toBe(true);
 		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Tinvited' });
-		expect(reg.status).toBe(201);
+		expect(reg.status).toBe(202);
 		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		const { id } = ((await asOwner('SELECT id FROM app_user WHERE email = $1', [email])) as { id: string }[])[0]!;
 		const joined = (await teamEvents('team_member.added')).filter((e) => e.subject.via === 'invite');
 		expect(joined).toHaveLength(1);
 		expect(joined[0]).toMatchObject({
-			actor_user_id: reg.body.user.id,
+			actor_user_id: id,
 			actor_label: 'Tinvited',
-			subject: { teamId, userId: reg.body.user.id, teamRole: 'member', role: 'editor' }
+			subject: { teamId, userId: id, teamRole: 'member', role: 'editor' }
 		});
 	});
 

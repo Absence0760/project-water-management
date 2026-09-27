@@ -12,9 +12,10 @@
 // Time is moved in the database (email_token.created_at for the one-minute
 // cooldown, account_mail_quota.sent_at for the window), never by sleeping.
 // Every "cannot" has a positive control: under the cap the email goes out.
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
-import { DEVICE_COOKIE } from './device.js';
+import { DEVICE_COOKIE, deviceCookieValue } from './device.js';
 import { ACCOUNT_MAIL_CAP } from './tokens.js';
 import { withUser } from '../db/tx.js';
 
@@ -150,12 +151,12 @@ describe('the daily cap on reset and verification emails', () => {
 	});
 
 	it('resend-verification says the day’s limit is reached (not “a moment ago”), and a trusted browser still gets one', async () => {
-		const email = `resend-${crypto.randomUUID()}@example.com`;
-		const made = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Resend' });
-		expect(made.status).toBe(201);
-		const session = made.headers.getSetCookie().find((c) => c.startsWith('wm_session='))!.split(';')[0]!;
-		const device = deviceOf(made);
-		const { id } = (await asOwner('SELECT id FROM app_user WHERE email = $1', [email]))[0] as { id: string };
+		// A signed-in, unconfirmed account (a session from before confirmation
+		// was required, issue #57) on a browser trusted for its address.
+		const u = await signUp('Resend', { verified: false });
+		const { email, id } = u;
+		const session = u.cookie;
+		const device = `${DEVICE_COOKIE}=${deviceCookieValue(email, null, randomBytes(16).toString('base64url'))}`;
 		await pastCooldown(id);
 		await fill(id);
 		const before = mailCount(email);
@@ -165,7 +166,7 @@ describe('the daily cap on reset and verification emails', () => {
 		expect(capped.body.code).toBe('verification_limit');
 		expect(mailCount(email)).toBe(before);
 
-		// Positive control: the browser that made the account holds its device cookie.
+		// Positive control: the trusted browser still gets one.
 		const resent = await anon('POST', '/auth/resend-verification', undefined, `${session}; ${device}`);
 		expect(resent.status).toBe(202);
 		expect(mailCount(email)).toBe(before + 1);

@@ -20,6 +20,7 @@
 	// The language switch (WP-2.5) sits above the form: the sign-in pages are
 	// the first thing an invited farmer sees.
 	import type { Snippet } from 'svelte';
+	import { base } from '$app/paths';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import BrandMark from './BrandMark.svelte';
@@ -38,10 +39,11 @@
 	<main class="side-form">
 		<div class="form-box">
 			<div class="top">
-				<div class="lockup">
+				<!-- Home: the landing page signed out, the projects signed in. -->
+				<a class="lockup" href="{base}/" aria-label={t('Water Management, home')}>
 					<BrandMark size={40} />
 					<span>Water Management</span>
-				</div>
+				</a>
 				<LanguageSwitch compact />
 			</div>
 			<!-- tabindex -1: focusAuthTitle moves focus here when the page changes state. -->
@@ -92,6 +94,8 @@
 	.art {
 		position: absolute;
 		inset: 0;
+		/* The landing page's diorama carries the same name: Sign in there morphs it into this scene (landing/Hero.svelte). */
+		view-transition-name: catchment-scene;
 	}
 	.copy {
 		position: relative;
@@ -161,6 +165,8 @@
 		margin-bottom: 2rem;
 	}
 	.lockup {
+		text-decoration: none;
+		border-radius: var(--radius);
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
@@ -235,7 +241,9 @@
 		   of a phone, above the keyboard. */
 		.panel-brand {
 			position: relative;
-			height: 112px;
+			/* 84 px: short enough that the longest form (sign-up under a dead
+			   invitation, with its two password fields) fits a 390 × 844 phone. */
+			height: 84px;
 		}
 		.copy {
 			display: none;
@@ -244,7 +252,7 @@
 			padding-top: 1.25rem;
 		}
 		.top {
-			margin-bottom: 1.5rem;
+			margin-bottom: 1.25rem;
 		}
 	}
 </style>

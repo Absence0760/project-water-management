@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, PASSWORD, register, seedRunnableProject } from '../support/api.ts';
+import { plantEmailToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { fact, membersPanel, openProject } from '../support/project.ts';
@@ -246,7 +247,10 @@ test.describe('on a phone', () => {
 		const tag = `${process.pid}${Date.now()}`.slice(-7);
 		const email = `catchment.hydrology-consultant.${tag}@very-long-subdomain.example.com`;
 		const res = await page.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Long Address' } });
-		expect(res.status()).toBe(201);
+		expect(res.status()).toBe(202);
+		// Confirmed, then signed in (issue #57): this page is Long Address's.
+		expect((await page.request.post(`${API_URL}/auth/verify-email`, { data: { token: await plantEmailToken(email, 'verify') } })).status()).toBe(200);
+		expect((await page.request.post(`${API_URL}/auth/login`, { data: { email, password: PASSWORD } })).status()).toBe(200);
 		const project = await createProject(page.request, 'Long email');
 		await openProject(page, project.id);
 		const cell = region(page, 'Members').getByRole('rowheader', { name: /Long Address/ });

@@ -2,8 +2,9 @@
 // (users, projects, model, series), so each spec only drives the UI it is
 // actually about. Every test creates its own users, so tests are independent
 // and can run in parallel against the one e2e database.
-import { expect, type APIRequestContext } from '@playwright/test';
-import { plantEmailToken } from './db.ts';
+import { expect, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { plantEmailToken, userIdByEmail } from './db.ts';
+import { sessionToken } from './session.ts';
 import { API_URL } from './env.ts';
 
 export const PASSWORD = 'correct horse battery';
@@ -30,14 +31,15 @@ export function uniqueEmail(name: string): string {
 }
 
 /**
- * Registers a user. When `request` belongs to a browser context
- * (`page.request` / `context.request`), that context is now signed in as
- * the user, because it shares the context's cookie jar.
+ * Registers a user the way a person gets in (issue #57): sign up (which signs
+ * nobody in), confirm the address (the verify-email endpoint, with a planted
+ * link token), sign in. When `request` belongs to a browser context
+ * (`page.request` / `context.request`), that context is then signed in as the
+ * user, because it shares the context's cookie jar.
  *
- * The address is confirmed by default (through the verify-email endpoint,
- * with a planted link token), because only a verified account can be added
- * to a project or team directly; pass `{ verified: false }` for a fresh,
- * unconfirmed account.
+ * `{ verified: false }` leaves the address unconfirmed and signs nobody in
+ * (an unconfirmed account can't sign in); signInUnconfirmed gives a browser
+ * such an account's session, for the pages that still meet one.
  */
 export async function register(
 	request: APIRequestContext,
@@ -48,12 +50,24 @@ export async function register(
 	const res = await request.post(`${API_URL}/auth/register`, {
 		data: { email, password: PASSWORD, displayName }
 	});
-	const { user } = await json<{ user: { id: string } }>(res, 201);
+	await json(res, 202);
+	const id = await userIdByEmail(email);
 	if (verified) {
 		const token = await plantEmailToken(email, 'verify');
 		await json(await request.post(`${API_URL}/auth/verify-email`, { data: { token } }), 200);
+		await json(await request.post(`${API_URL}/auth/login`, { data: { email, password: PASSWORD } }), 200);
 	}
-	return { id: user.id, email, displayName, password: PASSWORD };
+	return { id, email, displayName, password: PASSWORD };
+}
+
+/**
+ * Signs `context` in as an account that never confirmed its address. Sign-in
+ * refuses such an account since issue #57, but a session made before that
+ * still reaches the app (the confirm-email banner, the account page's "Not
+ * confirmed"), so the session is minted with the e2e API's own key.
+ */
+export async function signInUnconfirmed(context: BrowserContext, user: TestUser): Promise<void> {
+	await context.addCookies([{ name: 'wm_session', value: sessionToken(user.id), url: API_URL, httpOnly: true, sameSite: 'Lax' }]);
 }
 
 export async function createProject(request: APIRequestContext, name: string, description?: string): Promise<{ id: string }> {

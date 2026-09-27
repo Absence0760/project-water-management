@@ -54,6 +54,15 @@ export const SECTIONS: Record<string, string> = {
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',
+	landing: 'The public landing page (/welcome, and / for someone not signed in): what the app is and who it is for, for a first-time visitor who may be a hydrologist, a water user association, a licence applicant or a farmer. Plain, specific, no sales talk. Every figure on it comes from an invented example catchment.',
+	'landing.hero': 'Landing page: the top of the page, its headline and the two buttons, and the tag beside the drawing’s river gauge.',
+	'landing.scene': 'Landing page: the text description of the drawing of a catchment (read by screen readers).',
+	'landing.story': 'Landing page: “From rainfall to river”, five steps of what the model does, each with a small chart (its unit, what its lines are, and a short summary under it that screen readers read).',
+	'landing.whatif': 'Landing page: “Try a what-if”, two sliders (more apple orchard, a bigger dam) and what the change does for the farm and for the river.',
+	'landing.screens': 'Landing page: “What you get”, pictures of the app’s own screens and their descriptions.',
+	'landing.audiences': 'Landing page: “Who it’s for”, four kinds of user.',
+	'landing.how': 'Landing page: “How it works”, three steps.',
+	'landing.trust': 'Landing page: “Why trust it”, and three figures from the example catchment.',
 	error: 'A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.',
 	'error.minutes': 'Error messages: a number of minutes inside “Try again in {wait}”.',
 	'error.status': 'Error messages for a problem the server gave no reason for.'
@@ -65,6 +74,12 @@ export const SECTIONS: Record<string, string> = {
  * edited message can't leave its note behind.
  */
 export const NOTES: Record<string, string> = {
+	'Reserve met on {pct} % of days': '{pct} is a number like “41.6”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”).',
+	'It costs the river {days} more days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'It gives the river {days} fewer days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'The river is below the reserve about as often as today': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'{dam} dam': '{dam} is a farm dam’s name, like “Rooikloof”.',
+	'mm a week': 'The unit on a chart’s axis: millimetres of rain in a week.',
 	'Couldn’t load the notes. {reason}': '{reason} is one of the “Error messages” below.',
 	'note from {date}': 'Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”.',
 	'Too long: {length} of {max} characters.': '{length} and {max} are numbers of characters.',
