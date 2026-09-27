@@ -20,7 +20,7 @@ import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { doubleMassCheck } from './doublemass';
-import { plausibilityChecks } from './plausibility';
+import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -50,6 +50,7 @@ import {
 	ESTIMATED_DAM_DEPTH_M,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
+	parseGaugeSeriesKey,
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
@@ -697,7 +698,9 @@ function runNetwork(
 		sim,
 		coverTotal,
 		ewrShort,
-		reserve: ewrAssurance.map((a) => a.report)
+		reserve: ewrAssurance.map((a) => a.report),
+		outflow: topo.outflow,
+		upstream: topo.upstream
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -841,6 +844,10 @@ function runPlausibility(r: {
 	coverTotal: Float64Array;
 	ewrShort: Float64Array;
 	reserve: EwrAssuranceSite[];
+	/** The outlet node (topology), −1 without one. */
+	outflow: number;
+	/** The nodes draining directly into each node (topology). */
+	upstream: readonly ArrayLike<number>[];
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -852,20 +859,26 @@ function runPlausibility(r: {
 	}
 	const nodes = input.model.nodes;
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-	const dams = new Float64Array(days);
-	for (const i of byId) {
-		const w = sim.workings?.[i];
-		if (!w || plan.nodes[i]!.kind !== 'farm') continue;
-		const q = sim.nodes[i]!.storage;
-		const set = sim.nodes[i]!.storageSet;
-		let prev = plan.nodes[i]!.initialStorageM3;
-		for (let t = 0; t < days; t++) {
-			// The storage reset's step (engine ≥ 0.46.0) is no water the dams took from the river.
-			if (set) prev += set[t]!;
-			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
-			prev = q[t]!;
+	/** Σ over the farms in `among` (every node when null) of their dams' storage gain + evaporation − rain on them, per day. */
+	const damsOf = (among: Uint8Array | null) => {
+		const dams = new Float64Array(days);
+		for (const i of byId) {
+			const w = sim.workings?.[i];
+			if (!w || plan.nodes[i]!.kind !== 'farm' || (among && !among[i])) continue;
+			const q = sim.nodes[i]!.storage;
+			const set = sim.nodes[i]!.storageSet;
+			let prev = plan.nodes[i]!.initialStorageM3;
+			for (let t = 0; t < days; t++) {
+				// The storage reset's step (engine ≥ 0.46.0) is no water the dams took from the river.
+				if (set) prev += set[t]!;
+				dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]! + w.damSeepageLost[t]!;
+				prev = q[t]!;
+			}
 		}
-	}
+		return dams;
+	};
+	const dams = damsOf(null);
+	const gauges = gaugeSites(r, byId, damsOf);
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -885,8 +898,76 @@ function runPlausibility(r: {
 		hasStation: !!series.rain_catchment_mm,
 		ewrShortfall: r.ewrShort,
 		reserve: r.reserve,
-		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input)
+		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
+		...(gauges.sites.length ? { gauges: gauges.sites } : {}),
+		...(gauges.warnings.length ? { gaugeRecordWarnings: gauges.warnings } : {})
 	});
+}
+
+/**
+ * The gauge nodes inside the network with an observed record of their own
+ * (a GaugeSeriesKey series, engine ≥ 1.3.0), with the flows the checks need
+ * at each: natural flow (the catchment's × the flow shares of the gauge and
+ * every node above it), the simulated flow there (the gauge's outflow), and
+ * the dams and land cover above it. In node-id order. A record whose node is
+ * gone, isn't a gauge or is the outlet is left out with a warning.
+ */
+function gaugeSites(
+	r: Parameters<typeof runPlausibility>[0],
+	byId: readonly number[],
+	damsOf: (among: Uint8Array | null) => Float64Array
+): { sites: GaugePlausibilityInput[]; warnings: string[] } {
+	const { input, start, days, plan, sim } = r;
+	const nodes = input.model.nodes;
+	const series = input.series ?? {};
+	const records = new Map<string, Partial<Record<CalibrationFlowKind, DailySeries>>>();
+	for (const [key, s] of Object.entries(series)) {
+		const g = s ? parseGaugeSeriesKey(key) : null;
+		if (!g) continue;
+		(records.get(g.nodeId) ?? records.set(g.nodeId, {}).get(g.nodeId)!)[g.kind] = s!;
+	}
+	const warnings: string[] = [];
+	const indexOf = new Map(nodes.map((n, i) => [n.id, i]));
+	for (const [id, recs] of [...records].sort(([a], [b]) => cmpStr(a, b))) {
+		const i = indexOf.get(id);
+		const what = Object.keys(recs).map((k) => OBSERVED_SERIES_LABEL[k as CalibrationFlowKind].toLowerCase()).join(' and ');
+		if (i === undefined) warnings.push(`An ${what} record is attached to a node that is no longer in the model: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
+		else if (nodes[i]!.kind !== 'gauge') warnings.push(`An ${what} record is attached to "${nodes[i]!.name}", which is not a gauge: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
+		else if (i === r.outflow) warnings.push(`An ${what} record is attached to the outlet node "${nodes[i]!.name}": the plausibility checks leave it out. The outlet's records are the ones with no site; move it there on the Data page.`);
+	}
+	const sites: GaugePlausibilityInput[] = [];
+	const hasCover = r.coverTotal.length > 0;
+	for (const g of byId) {
+		const recs = records.get(nodes[g]!.id);
+		if (!recs || nodes[g]!.kind !== 'gauge' || g === r.outflow) continue;
+		// The gauge and every node above it.
+		const above = new Uint8Array(nodes.length);
+		const stack = [g];
+		while (stack.length) {
+			const j = stack.pop()!;
+			if (above[j]) continue;
+			above[j] = 1;
+			const ups = r.upstream[j]!;
+			for (let k = 0; k < ups.length; k++) stack.push(ups[k]!);
+		}
+		let naturalShare = 0;
+		for (const j of byId) if (above[j]) naturalShare += plan.nodes[j]!.share;
+		const cover = new Float64Array(hasCover ? days : 0);
+		if (hasCover) for (const j of byId) if (above[j]) for (let t = 0; t < days; t++) cover[t]! += sim.nodes[j]!.landCoverReduction[t]!;
+		const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
+		for (const kind of CALIBRATION_FLOW_KINDS) if (recs[kind]) observed[kind] = alignSeries(recs[kind], start, days);
+		sites.push({
+			nodeId: nodes[g]!.id,
+			name: nodes[g]!.name,
+			naturalShare,
+			observed,
+			naturalM3Day: Float64Array.from(r.natural, (v) => v * naturalShare),
+			simulatedM3Day: sim.nodes[g]!.outflow,
+			damsM3Day: damsOf(above),
+			landCoverM3Day: cover
+		});
+	}
+	return { sites, warnings };
 }
 
 /**

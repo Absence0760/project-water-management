@@ -7,6 +7,11 @@
 //   4. dry-season low-flow duration curves (./lowFlow.ts), in the dry season
 //      of ./season.ts.
 // They only report and warn: none changes a model result.
+//
+// Checks 1 and 4 also run at each gauge node inside the network that has an
+// observed record of its own (engine ≥ 1.3.0, a GaugeSeriesKey series),
+// against the simulated flow there, reported per site in `gauges`. Checks 2
+// and 3 stay catchment-wide: the rain is the catchment's.
 import type { CalibrationFlowKind } from '../project';
 import type { EwrAssuranceSite } from '../reserve/assurance';
 import type { RunoffModelId } from '../runoff/types';
@@ -34,6 +39,43 @@ export interface PlausibilityChecks {
 	flowDoubleMass: FlowDoubleMass | null;
 	/** Check 4; null without a dry season. */
 	lowFlow: LowFlowCurves | null;
+	/**
+	 * Checks 1 and 4 at each gauge node with an observed record of its own
+	 * (engine ≥ 1.3.0), in node-id order; absent when none has one (every
+	 * project before 1.3.0, and any whose records are all the outlet's).
+	 */
+	gauges?: GaugePlausibility[];
+}
+
+/** Checks 1 and 4 at one gauge node inside the network (engine ≥ 1.3.0). */
+export interface GaugePlausibility {
+	nodeId: string;
+	name: string;
+	/** The record checked: the run's calibration kind when the gauge has one, else the gauge's other record. */
+	flowKind: CalibrationFlowKind;
+	/** The gauge's share of the catchment's natural flow: Σ flow shares of the gauge and every node above it. */
+	naturalShare: number;
+	/** Check 1 at the gauge; null without an observed day. */
+	naturalised: NaturalisedCheck | null;
+	/** Check 4 at the gauge, in the catchment's dry season; null without one. */
+	lowFlow: LowFlowCurves | null;
+}
+
+/** One gauge's inputs: its records and the network's flows at it, m³/day aligned to the run. */
+export interface GaugePlausibilityInput {
+	nodeId: string;
+	name: string;
+	naturalShare: number;
+	/** The gauge's own records, m³/s aligned to the run; at least one. */
+	observed: Partial<Record<CalibrationFlowKind, ArrayLike<number | null>>>;
+	/** Natural flow at the gauge: the catchment's × naturalShare. */
+	naturalM3Day: ArrayLike<number>;
+	/** The simulated flow at the gauge (its outflow). */
+	simulatedM3Day: ArrayLike<number>;
+	/** The dams above the gauge only (as PlausibilityInput.damsM3Day). */
+	damsM3Day: ArrayLike<number>;
+	/** The land-cover reduction above the gauge only (empty without land cover). */
+	landCoverM3Day: ArrayLike<number>;
 }
 
 export interface PlausibilityInput {
@@ -60,6 +102,10 @@ export interface PlausibilityInput {
 	ewrShortfall: ArrayLike<number>;
 	reserve: readonly EwrAssuranceSite[];
 	areaKm2: number;
+	/** Gauge nodes with a record of their own (engine ≥ 1.3.0), in node-id order; absent or empty = none. */
+	gauges?: readonly GaugePlausibilityInput[];
+	/** Warnings about gauge records the run can't place (a node gone, or no longer a gauge), in order. */
+	gaugeRecordWarnings?: readonly string[];
 }
 
 /** Run the four checks; returns the summary block and the run warnings (in check order). */
@@ -103,8 +149,52 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 		naturalM3Day: x.naturalM3Day,
 		excluded: x.excluded
 	});
-	const warnings = [naturalisedWarning(naturalised), ...rainSourceWarnings(rainSource), flowDoubleMassWarning(dm), lowFlowWarning(lowFlow)].filter(
-		(w): w is string => w !== null
-	);
-	return { checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow }, warnings };
+	const gauges = (x.gauges ?? []).map((g) => gaugeChecks(g, x, season, inSeason));
+	const atGauges = gauges.flatMap((g) => [naturalisedWarning(g.naturalised), lowFlowWarning(g.lowFlow)].flatMap((w) => (w ? [atGauge(g.name, w)] : [])));
+	const warnings = [
+		naturalisedWarning(naturalised),
+		...rainSourceWarnings(rainSource),
+		flowDoubleMassWarning(dm),
+		lowFlowWarning(lowFlow),
+		...(x.gaugeRecordWarnings ?? []),
+		...atGauges
+	].filter((w): w is string => w !== null);
+	return {
+		checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow, ...(gauges.length ? { gauges } : {}) },
+		warnings
+	};
+}
+
+/** A check's warning, said of a gauge: `At gauge "Upper weir": natural flow below …`. */
+const atGauge = (name: string, w: string) => `At gauge "${name}": ${w[0]!.toLowerCase()}${w.slice(1)}`;
+
+/** Checks 1 and 4 at one gauge, on the catchment's dry season and the run's exclusions. */
+function gaugeChecks(g: GaugePlausibilityInput, x: PlausibilityInput, season: DrySeason | null, inSeason: Uint8Array | null): GaugePlausibility {
+	const cal = x.calibrationKind;
+	const flowKind: CalibrationFlowKind =
+		cal && g.observed[cal] ? cal : g.observed.flow_observed_m3s ? 'flow_observed_m3s' : 'flow_logger_m3s';
+	const obs = g.observed[flowKind];
+	const naturalised = obs
+		? naturalisedCheck({
+				flowKind,
+				start: x.start,
+				naturalM3Day: g.naturalM3Day,
+				simulatedM3Day: g.simulatedM3Day,
+				observedM3s: obs,
+				damsM3Day: g.damsM3Day,
+				landCoverM3Day: g.landCoverM3Day,
+				excluded: x.excluded
+			})
+		: null;
+	const lowFlow = lowFlowCurves({
+		season,
+		inSeason: inSeason ?? new Uint8Array(x.days),
+		runoffModel: x.runoffModel,
+		observed: g.observed,
+		calibrationKind: flowKind,
+		simulatedM3Day: g.simulatedM3Day,
+		naturalM3Day: g.naturalM3Day,
+		excluded: x.excluded
+	});
+	return { nodeId: g.nodeId, name: g.name, flowKind, naturalShare: g.naturalShare, naturalised, lowFlow };
 }

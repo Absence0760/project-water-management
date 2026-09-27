@@ -436,6 +436,25 @@ export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] a
 export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
 /**
+ * The key of an observed record attached to a gauge node inside the network
+ * (engine ≥ 1.3.0, docs/model.md §2.10d): `<kind>@<node id>` in
+ * ModelInput.series, beside the outlet's records (plain kinds). The backend
+ * builds it from time_series.site_node_id (084_gauge_records.sql). Only the
+ * plausibility checks read it: calibration, the EWR agreement and every other
+ * check stay on the outlet's records.
+ */
+export type GaugeSeriesKey = `${CalibrationFlowKind}@${string}`;
+export const gaugeSeriesKey = (kind: CalibrationFlowKind, nodeId: string): GaugeSeriesKey => `${kind}@${nodeId}`;
+/** The kind and node of a gauge record's key; null for any other key. */
+export function parseGaugeSeriesKey(key: string): { kind: CalibrationFlowKind; nodeId: string } | null {
+	const at = key.indexOf('@');
+	if (at < 0) return null;
+	const kind = key.slice(0, at);
+	const nodeId = key.slice(at + 1);
+	return (CALIBRATION_FLOW_KINDS as readonly string[]).includes(kind) && nodeId ? { kind: kind as CalibrationFlowKind, nodeId } : null;
+}
+
+/**
  * The label of a run's observed-flow series by the record it holds: the
  * calibration record (`observed_flow`) and, when the project has both, the
  * other one (`observed_flow_other`, engine ≥ 0.39.0). A caller can tell the
@@ -1140,8 +1159,11 @@ export interface ModelInput {
 	/** Raw project settings; the engine merges them over defaultProjectSettings(). */
 	settings: Partial<ProjectSettings> & Record<string, unknown>;
 	model: ProjectModel;
-	/** Keyed by SeriesKind; only the first series of each kind is used. */
-	series: Partial<Record<SeriesKind, DailySeries>>;
+	/**
+	 * Keyed by SeriesKind; only the first series of each kind is used. A gauge
+	 * node's own observed records (engine ≥ 1.3.0) are keyed GaugeSeriesKey.
+	 */
+	series: Partial<Record<SeriesKind | GaugeSeriesKey, DailySeries>>;
 }
 
 /** One daily output series. nodeId null = catchment level. */
