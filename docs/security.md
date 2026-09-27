@@ -224,15 +224,19 @@ buys a **render session** that can read one report and nothing else.
   insert trigger sets the expiry whatever the caller sent), and tied to one
   user, one project and one run. Only the requester can issue it, as
   themselves, for a project they can view and a run of that project (RLS
-  and the trigger); a farmer can't. It is issued by the `report_render` job,
+  and the trigger); a farmer can't. An impact report's token (082) also names
+  its baseline run (`against_run_id`), which may be in another project but
+  must be one the issuer can read (the trigger, under their RLS). It is issued by the `report_render` job,
   which runs as the requester under RLS, and never leaves the server side:
   it goes to the local Chromium in memory, or in production over the
   SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
   logged, never put in a URL, and never stored raw.
 - **The exchange** (`POST /auth/render-session`, public: the token is the
   credential) consumes the token, re-checks that the requester can still see
-  the project and that the run is still one of its runs (`403` otherwise),
-  and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` and
+  the project and that the run is still one of its runs, and an impact
+  report's baseline too (`403` otherwise),
+  and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
+  `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes**. A used, expired, unknown or malformed token gets one
   answer, `400`. The renderer calls it through its browser context's own
   request client, so the cookie lives only in that throwaway context, which
@@ -241,7 +245,10 @@ buys a **render session** that can read one report and nothing else.
   session may make **only `GET`** requests, and only to `/auth/me`,
   `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
   `/series`, `/day` and `/signoffs`: exactly the reads the report route
-  makes. Any other method, project, run or route (the run list, members,
+  makes. An impact report's session may also `GET /compare/runs` with
+  exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
+  parameters, once each: the impact section's one read), and never the
+  baseline's project or run directly. Any other method, project, run or route (the run list, members,
   jobs, reports, teams, compare, every write, and the run's own reads the
   report doesn't make: its CSV exports, the workbook's bulk series,
   reproduction, allocation comparison, model input, ensembles) answers
@@ -255,7 +262,13 @@ buys a **render session** that can read one report and nothing else.
   scope on another project, another run and every other kind of route, with a
   positive control (the report's own reads answer `200`), a requester who
   lost access between issue and use, and that farmers and strangers can't
-  issue one; `reports/render-session.security.db.test.ts` sweeps every
+  issue one; its "impact reports" block checks the baseline: a requester who
+  reads both runs queues one and gets the one comparison (positive control),
+  one who can't read the baseline is refused by the route, the database and
+  the token, a baseline that becomes unreadable between issue and use is
+  refused at the exchange, and a baseline deleted or unshared after the
+  request fails the render without a retry (never a plain report instead);
+  `reports/render-session.security.db.test.ts` sweeps every
   route in the live inventory (`app.routes`) with a render session: it
   reaches exactly its allowlist of the report's reads (each `200`, and `403`
   for another run or project the requester fully owns) and gets the scope's
@@ -264,7 +277,10 @@ buys a **render session** that can read one report and nothing else.
   nothing, and that eight simultaneous exchanges of one token give exactly
   one session; `reports/scope.test.ts` pins the path rules; and
   `reports/render.db.test.ts` has a real Chromium check that the session is
-  refused the project list mid-render.
+  refused the project list mid-render, and that an impact report's session
+  makes its comparison. `db/cross-project-refs.security.db.test.ts`
+  classifies the two baseline references as cross-project by design, fixed
+  at insert.
 - **What the renderer can reach.** Locally, the dev site and API. In
   production the renderer Lambda is outside the VPC with no database access
   and no secrets; it opens the public site through CloudFront and the WAF

@@ -83,6 +83,14 @@ describe('the report messages (render-requests / render-results)', () => {
 		expect(parseRenderRequest('garbage')).toBeNull();
 	});
 
+	it('carries an impact report’s baseline as two ids, nothing else (082)', () => {
+		const against = { projectId: '00000000-0000-4000-8000-000000000004', runId: '00000000-0000-4000-8000-000000000005' };
+		expect(parseRenderRequest(JSON.stringify({ ...request, against }))).toEqual({ ...request, against });
+		expect(parseRenderRequest(JSON.stringify({ ...request, against: { ...against, runId: 'x' } }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, against: { ...against, url: 'http://169.254.169.254/' } }))).toBeNull();
+		expect(parseRenderRequest(JSON.stringify({ ...request, against: `${against.projectId}:${against.runId}` }))).toBeNull();
+	});
+
 	it('the worker understands a render result, success or failure, and nothing more', () => {
 		const ok = { v: 1, type: 'rendered', reportId: ids.reportId, result: { ok: true, pages: 9, bytes: 1000, ms: 4000 } };
 		const failed = { v: 1, type: 'rendered', reportId: ids.reportId, result: { ok: false, error: 'the render took longer than 90 s', retry: true } };

@@ -1,4 +1,5 @@
-// `report_render`: print a run's catchment report to a PDF, store it, and
+// `report_render`: print a run's catchment report (or its impact report
+// against a baseline run, 082) to a PDF, store it, and
 // email its link (WP-2.15 Phase B; docs/architecture.md § Server-side
 // reports). Queued by POST /projects/:id/reports (any viewer, as themselves)
 // and by the tick for a report schedule that is due (as its acting editor).
@@ -54,11 +55,20 @@ export const reportRenderHandler = defineHandler({
 
 		if (!report.runId) throw new JobError('the run was deleted before its report was made', { retry: false });
 		const runId = report.runId;
+		// An impact report prints against its baseline, which the acting user must still be able to read (RLS).
+		let against: { projectId: string; runId: string } | undefined;
+		if (report.impact) {
+			const { rows } = report.againstRunId
+				? await db.query<{ projectId: string }>('SELECT project_id AS "projectId" FROM model_run WHERE id = $1', [report.againstRunId])
+				: { rows: [] };
+			if (!rows[0]) throw new JobError("the baseline run was deleted, or its project isn't shared with you any more, before the impact report was made", { retry: false });
+			against = { projectId: rows[0].projectId, runId: report.againstRunId! };
+		}
 		// Committed now, on its own connection: the renderer uses it before this job commits.
-		const token = await withUser(job.actingUserId, (tx) => issueRenderToken(tx, job.projectId, runId));
+		const token = await withUser(job.actingUserId, (tx) => issueRenderToken(tx, job.projectId, runId, against?.runId));
 
 		if (reportRenderer() === 'sqs') {
-			const message: RenderRequestMessage = { v: 1, type: 'render', reportId: report.id, projectId: job.projectId, runId, token };
+			const message: RenderRequestMessage = { v: 1, type: 'render', reportId: report.id, projectId: job.projectId, runId, ...(against ? { against } : {}), token };
 			await sendToQueue(process.env.RENDER_REQUESTS_QUEUE_URL, 'RENDER_REQUESTS_QUEUE_URL', message);
 			await db.query(`UPDATE report SET status = 'rendering' WHERE id = $1`, [report.id]);
 			return;
@@ -66,7 +76,7 @@ export const reportRenderHandler = defineHandler({
 
 		let rendered;
 		try {
-			rendered = await renderReportPdf({ projectId: job.projectId, runId, token }, renderOptionsFromEnv());
+			rendered = await renderReportPdf({ projectId: job.projectId, runId, against, token }, renderOptionsFromEnv());
 		} catch (err) {
 			if (err instanceof RenderError) throw new JobError(err.message, { retry: err.retry });
 			throw err;

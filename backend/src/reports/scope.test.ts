@@ -69,3 +69,37 @@ describe('scopeAllows', () => {
 		expect(scopeAllows(scope, method, '/auth/me')).toBe(false);
 	});
 });
+
+describe('scopeAllows, for an impact report (082)', () => {
+	const BP = '44444444-4444-4444-8444-444444444444';
+	const BR = '55555555-5555-4555-8555-555555555555';
+	const impact = { ...scope, against: { projectId: BP, runId: BR } };
+	const q = (s: string) => new URLSearchParams(s);
+	const pair = `a=${BP}:${BR}&b=${P}:${R}`;
+
+	it('allows exactly the one comparison, baseline first (positive control), and still the report’s own reads', () => {
+		expect(scopeAllows(impact, 'GET', '/compare/runs', q(pair))).toBe(true);
+		expect(scopeAllows(impact, 'GET', '/compare/runs', q(`b=${P}:${R}&a=${BP.toUpperCase()}:${BR}`))).toBe(true);
+		expect(scopeAllows(impact, 'GET', `/projects/${P}/runs/${R}`)).toBe(true);
+	});
+
+	it.each([
+		['swapped', `a=${P}:${R}&b=${BP}:${BR}`],
+		['another baseline', `a=${BP}:${OTHER}&b=${P}:${R}`],
+		['another run', `a=${BP}:${BR}&b=${P}:${OTHER}`],
+		['a second a', `${pair}&a=${BP}:${OTHER}`],
+		['an extra parameter', `${pair}&x=1`],
+		['only a', `a=${BP}:${BR}`],
+		['nothing', '']
+	])('refuses the comparison: %s', (_, query) => {
+		expect(scopeAllows(impact, 'GET', '/compare/runs', q(query))).toBe(false);
+	});
+
+	it('never reads the baseline’s project or run directly, and a plain report never compares', () => {
+		expect(scopeAllows(impact, 'GET', `/projects/${BP}`)).toBe(false);
+		expect(scopeAllows(impact, 'GET', `/projects/${BP}/runs/${BR}`)).toBe(false);
+		expect(scopeAllows(impact, 'POST', '/compare/runs', q(pair))).toBe(false);
+		expect(scopeAllows(impact, 'GET', '/compare/runs/', q(pair))).toBe(false);
+		expect(scopeAllows(scope, 'GET', '/compare/runs', q(pair))).toBe(false);
+	});
+});

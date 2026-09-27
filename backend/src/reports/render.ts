@@ -1,11 +1,13 @@
 // Print the catchment report to a PDF in headless Chromium (WP-2.15 Phase B;
 // docs/architecture.md § Server-side reports).
 //
-// It opens the SAME route a person prints from (/projects/:id/report?run=…),
-// so there is one implementation of every chart and table:
+// It opens the SAME route a person prints from (/projects/:id/report?run=…,
+// with `&against=<project>:<run>` for an impact report), so there is one
+// implementation of every chart and table:
 //   1. exchange the single-use render token for a render session
 //      (POST /auth/render-session): a cookie that reads this one project and
-//      run, as the requesting user, under RLS (reports/scope.ts);
+//      run (and an impact report's one comparison with its baseline), as the
+//      requesting user, under RLS (reports/scope.ts);
 //   2. open the report, wait for main[data-report-ready] (every section
 //      loaded, every chart drawn), or stop at the page's own error message;
 //   3. page.pdf({ format: 'A4', printBackground: true }).
@@ -32,6 +34,8 @@ export class RenderError extends Error {
 export interface RenderTarget {
 	projectId: string;
 	runId: string;
+	/** An impact report's baseline (the report route's `against`); absent for the plain report. */
+	against?: { projectId: string; runId: string };
 	/** The raw render token (reports/tokens.ts). */
 	token: string;
 }
@@ -67,6 +71,11 @@ export function renderOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): Rend
 		timeoutMs: Number.isInteger(n) && n >= 5_000 && n <= 600_000 ? n : DEFAULT_RENDER_TIMEOUT_MS,
 		executablePath: env.CHROMIUM_PATH?.trim() || undefined
 	};
+}
+
+/** The report route's query for a target: its run, and an impact report's baseline. */
+export function reportQuery(t: Pick<RenderTarget, 'runId' | 'against'>): string {
+	return new URLSearchParams({ run: t.runId, ...(t.against ? { against: `${t.against.projectId}:${t.against.runId}` } : {}) }).toString();
 }
 
 /** Pages in a Chromium PDF (its page objects are never in compressed object streams). */
@@ -198,7 +207,7 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 			);
 		}
 		const page = await context.newPage();
-		const url = `${o.siteUrl}/projects/${encodeURIComponent(t.projectId)}/report?run=${encodeURIComponent(t.runId)}`;
+		const url = `${o.siteUrl}/projects/${encodeURIComponent(t.projectId)}/report?${reportQuery(t)}`;
 		await Promise.race([page.goto(url, { waitUntil: 'domcontentloaded', timeout: o.timeoutMs }), left]);
 		// Ready, or one of the page's own "can't show this" messages.
 		const settled = page.locator('main[data-report-ready="true"], main > [role="alert"], main > .alert-info');

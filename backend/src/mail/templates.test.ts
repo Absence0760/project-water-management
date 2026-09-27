@@ -103,6 +103,10 @@ describe('reportReadyMail', () => {
 		const m = reportReadyMail('ann@example.com', url, { projectName: 'P', runName: 'R', pages: 1, requestedBy: 'Cy', scheduled: true });
 		expect(m.text).toContain('This is the scheduled report of the latest run, R (1 page), set up by Cy.');
 	});
+	it('names an impact report as one', () => {
+		const m = reportReadyMail('ann@example.com', url, { projectName: 'P', runName: 'What-if', pages: 10, requestedBy: 'Bob', scheduled: false, impact: true });
+		expect(m.text).toContain('Bob made a PDF of the impact report for the run What-if (10 pages).');
+	});
 	it('sitePage joins SITE_URL and a path', () => {
 		vi.stubEnv('SITE_URL', 'https://water.example.com/');
 		expect(sitePage('/projects/p/reports/j')).toBe(url);

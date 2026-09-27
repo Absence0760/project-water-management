@@ -17,7 +17,8 @@ function secret(): Uint8Array {
 /**
  * A render session (POST /auth/render-session, reports/scope.ts): what the
  * headless report renderer gets for a render token. It reads one project and
- * one run, and lives long enough for one render.
+ * one run (and, for an impact report, compares it with one baseline), and
+ * lives long enough for one render.
  */
 export const RENDER_SESSION_TTL_SECONDS = 10 * 60;
 
@@ -25,7 +26,8 @@ export async function issueSession(c: Context, userId: string, scope?: RenderSco
 	const ttl = scope ? RENDER_SESSION_TTL_SECONDS : TTL_SECONDS;
 	// iat is whole seconds; iat_ms lets the revocation watermark compare
 	// precisely, so a sign-in right after a password reset isn't rejected.
-	const token = await new SignJWT({ iat_ms: Date.now(), ...(scope ? { scope: { p: scope.projectId, r: scope.runId } } : {}) })
+	const claim = scope ? { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) } : null;
+	const token = await new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : {}) })
 		.setProtectedHeader({ alg: 'HS256' })
 		.setSubject(userId)
 		.setIssuer(ISSUER)
@@ -64,8 +66,9 @@ export async function readSession(c: Context): Promise<string | null> {
  * expiry, the account must still exist and the token must have been issued
  * after the user's `sessions_revoked_at` watermark (set by a password reset),
  * so resetting a password signs out every existing session, render sessions
- * included. A `scope` claim that isn't a well-formed project + run makes the
- * whole token invalid: a render session never widens into a full one.
+ * included. A `scope` claim that isn't a well-formed project + run (with, if
+ * any, a well-formed baseline project + run) makes the whole token invalid: a
+ * render session never widens into a full one.
  */
 export async function readSessionClaims(c: Context): Promise<Session | null> {
 	const token = getCookie(c, SESSION_COOKIE);
@@ -79,9 +82,14 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 		userId = payload.sub;
 		issuedMs = typeof payload.iat_ms === 'number' ? payload.iat_ms : (payload.iat ?? 0) * 1000;
 		if (payload.scope !== undefined) {
-			const s = payload.scope as { p?: unknown; r?: unknown } | null;
+			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown } | null;
 			if (!s || typeof s.p !== 'string' || typeof s.r !== 'string' || !UUID.test(s.p) || !UUID.test(s.r)) return null;
 			scope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase() };
+			if (s.a !== undefined) {
+				const a = s.a as { p?: unknown; r?: unknown } | null;
+				if (!a || typeof a.p !== 'string' || typeof a.r !== 'string' || !UUID.test(a.p) || !UUID.test(a.r)) return null;
+				scope.against = { projectId: a.p.toLowerCase(), runId: a.r.toLowerCase() };
+			}
 		}
 	} catch {
 		return null;

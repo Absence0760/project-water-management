@@ -1,6 +1,6 @@
 // Server-side PDF reports (docs/api.md § Reports; WP-2.15 Phase B).
 //
-//   POST   /projects/:id/reports                        viewer   queue a PDF of a run (202 { jobId })
+//   POST   /projects/:id/reports                        viewer   queue a PDF of a run, or its impact report (202 { jobId })
 //   GET    /projects/:id/reports/:jobId                 viewer   its status, and a download link once done
 //   GET    /projects/:id/report-schedules               viewer   the project's schedules
 //   POST   /projects/:id/report-schedules               editor   add one
@@ -35,6 +35,12 @@ const CreateBody = z
 	.object({
 		/** The run to print; the latest when absent. */
 		runId: Uuid.optional(),
+		/**
+		 * An impact report: the baseline "<projectId>:<runId>" (the report route's
+		 * `against`, Compare runs' refs), a run the requester can read, possibly
+		 * in another project. Needs `runId`.
+		 */
+		against: z.string().max(80).regex(/^[0-9a-fA-F-]{36}:[0-9a-fA-F-]{36}$/, 'expected <projectId>:<runId>').optional(),
 		/** true: email me the link; a list: email these members (editors and owners only). */
 		email: z.union([z.boolean(), z.array(Uuid).min(1).max(MAX_RECIPIENTS)]).optional()
 	})
@@ -149,6 +155,20 @@ export const reportRoutes = new Hono<AuthEnv>()
 			);
 			const run = rows[0];
 			if (!run) throw new ApiError(body.runId ? 404 : 409, body.runId ? 'no such run in this project' : 'the project has no runs to report on');
+			let againstRunId: string | undefined;
+			if (body.against !== undefined) {
+				if (!body.runId) throw new ApiError(400, 'an impact report names its run (runId) as well as its baseline');
+				const [againstProject, baseline] = body.against.split(':') as [string, string];
+				if (!UUID.test(againstProject) || !UUID.test(baseline)) throw new ApiError(400, 'expected against as <projectId>:<runId>');
+				if (baseline.toLowerCase() === run.id.toLowerCase()) throw new ApiError(400, 'the baseline is the run itself');
+				// Under RLS as the requester: a baseline they can't read is "no such run", like Compare runs.
+				const { rows: b } = await db.query<{ id: string }>(
+					`SELECT id FROM model_run WHERE id = $1 AND project_id = $2 AND app_has_role(project_id, 'viewer')`,
+					[baseline, againstProject]
+				);
+				if (!b[0]) throw new ApiError(404, "no such baseline run, or its project isn't shared with you");
+				againstRunId = b[0].id;
+			}
 			let emailTo: string[] = [];
 			if (body.email === true) emailTo = [userId];
 			else if (Array.isArray(body.email)) {
@@ -157,7 +177,7 @@ export const reportRoutes = new Hono<AuthEnv>()
 				if (others.length && role === 'viewer') throw new ApiError(403, 'only editors and owners can email a report to other members');
 				emailTo = [...(body.email.includes(userId) ? [userId] : []), ...(await checkRecipients(db, id, others))];
 			}
-			return createReport(db, { projectId: id, runId: run.id, emailTo });
+			return createReport(db, { projectId: id, runId: run.id, againstRunId, emailTo });
 		});
 		await wakeWorker(result.jobId);
 		return c.json({ jobId: result.jobId }, 202);
@@ -255,7 +275,7 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
  * The headless renderer's sign-in (reports/render.ts). Public: the token is
  * the credential. It is consumed whatever happens next, and the session it
  * gives reads one project and one run as the requester (reports/scope.ts),
- * who must still be able to see both.
+ * who must still be able to see both (and an impact report's baseline).
  */
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));
@@ -264,12 +284,14 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 	const t = await withoutUser((db) => consumeRenderToken(db, hash));
 	if (!t) throw new ApiError(400, INVALID_TOKEN);
 	await withUser(t.userId, async (db) => {
+		// The run, and an impact report's baseline, both still readable by the requester (RLS: model_run is theirs).
 		const { rows } = await db.query<{ ok: boolean }>(
-			`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $2 AND project_id = $1) AS ok`,
-			[t.projectId, t.runId]
+			`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $2 AND project_id = $1)
+				AND ($4::uuid IS NULL OR (app_has_role($3, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $4 AND project_id = $3))) AS ok`,
+			[t.projectId, t.runId, t.against?.projectId ?? null, t.against?.runId ?? null]
 		);
 		if (!rows[0]?.ok) throw new ApiError(403, 'the requester can no longer see this report');
 	});
-	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId });
+	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}) });
 	return c.json({ ok: true });
 });

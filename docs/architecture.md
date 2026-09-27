@@ -1008,7 +1008,7 @@ sequenceDiagram
   participant W as Worker (report_render)
   participant C as Headless Chromium
   participant S as S3 / MinIO
-  U->>API: POST /projects/:id/reports { runId?, email? }
+  U->>API: POST /projects/:id/reports { runId?, against?, email? }
   API->>DB: report row + report_render job (as U)
   W->>DB: claim; as U: render token (committed at once)
   W->>C: launch (hard timeout, closed in finally)
@@ -1025,7 +1025,8 @@ sequenceDiagram
 
 - **The render token** (`render_token`, the `email_token` pattern with
   purpose `report`): 32 random bytes, stored as SHA-256, single use, 5
-  minutes, for one project and one run, issued by the job as the requester.
+  minutes, for one project and one run (and an impact report's baseline,
+  082), issued by the job as the requester.
   It is minted in its **own committed transaction**, because the browser
   presents it on another connection while the job's transaction is still
   open. `POST /auth/render-session` consumes it and sets a 10-minute session
