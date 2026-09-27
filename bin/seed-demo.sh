@@ -25,9 +25,16 @@
 # WBT_RUN_OF_RIVER=1 there imports the units the importer flags as probable
 # run-of-river (a dummy dam or no dam taking all the upstream inflow) with the
 # run-of-river supply rule and no dam (extract_project.py --run-of-river,
-# issue #54 2c/2d); off by default, since the modeller confirms each unit. A
-# project already imported under the same name is left alone: delete it (or
-# rename it) in the app to import it again with a changed setting.
+# issue #54 2c/2d); off by default, since the modeller confirms each unit.
+# WBT_SETTINGS=<file> there applies a settings patch (a JSON object, validated
+# like a PATCH of the project's settings; a path relative to $WBT_SOURCE_DIR)
+# before the import, e.g. an areal rainfall correction, a calibration window
+# and flow series; WBT_FIT=1 then fits GR4J to the calibration record and
+# stores the fit, as Settings -> Fit automatically -> Apply does, so the
+# initial run is the calibrated project (import-project.ts --settings / --fit,
+# docs/model.md §2.10b "Fit at import"). A project already imported under the
+# same name is left alone: delete it (or rename it) in the app to import it
+# again with a changed setting.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -128,8 +135,21 @@ for wb in "${workbooks[@]}"; do
 		fi
 		out="data/client-$slug-app"
 		extract "$wb" "$out" "${import_args[@]}" || exit 1
+		# A settings patch and a fit, applied to the document before it is imported (never to data/).
+		project_args=()
+		if [ -n "${WBT_SETTINGS:-}" ]; then
+			case "$WBT_SETTINGS" in
+			/*) patch="$WBT_SETTINGS" ;;
+			*) patch="$(cd "$WBT_SOURCE_DIR" && pwd)/$WBT_SETTINGS" ;;
+			esac
+			[ -f "$patch" ] || { echo "✗ WBT_SETTINGS file $patch not found" >&2; exit 1; }
+			project_args+=(--settings "$patch")
+		fi
+		if [ "${WBT_FIT:-0}" = 1 ]; then
+			project_args+=(--fit)
+		fi
 		# A project the demo user already has under this name is left alone, so the seed can run again.
-		pnpm -s import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run --skip-existing
+		pnpm -s import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run --skip-existing "${project_args[@]}"
 	) && imported=$((imported + 1))
 done
 echo

@@ -332,6 +332,21 @@ run-of-river supply rule (issue #54, 2c/2d; off unless set):
 WBT_RUN_OF_RIVER=1
 ```
 
+and, for a workbook whose gauge is the catchment's own and whose rain record
+needs an areal correction (issue #54's second configuration), to import the
+gauge as observed flow, apply a settings patch kept beside the workbooks (an
+areal rainfall correction from an independent MAP, the calibration window and
+flow series; [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--180))
+and fit GR4J to the gauge before the initial run
+([model.md §2.10b](./model.md#210b-automatic-calibration-engine--050-issue-4-phase-4),
+"Fit at import"; a few minutes):
+
+```bash
+WBT_GAUGE_AS_REFERENCE=0
+WBT_SETTINGS=wbt-import.<Prefix>.settings.json
+WBT_FIT=1
+```
+
 Details are in `scripts/wbt-import/README.md`.
 
 Then sign in at http://localhost:7777 as `demo@example.com` / `demo-password`.

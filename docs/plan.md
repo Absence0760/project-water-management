@@ -701,6 +701,31 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     and is "days not met over 30 days" the right measure (or months met
     against the Reserve rule table, see 17)? A team admin can already set
     other cut-offs on the team page; only the defaults' sign-off is open.
+20. **The second configuration's rain, gauge and canal (issue #54,
+    2026-09-27).** Its only rain record is CHIRPS, which reads far below
+    the rain the gauge's runoff needs, so the seed now scales it with an
+    areal rainfall correction from an independent MAP ÷ CHIRPS's own mean
+    (model.md §2.4g) and fits GR4J to the gauge at import (§2.10b). Details
+    and numbers are in the private source repo.
+    - **Rain:** is there a daily rain gauge record in or near the catchment
+      (any years), or which MAP does the hydrologist want used (the WR2012
+      quaternary MAP, a gridded MAP, a station)? Two published MAPs for the
+      gauge's catchment differ widely; the runoff record supports the higher,
+      which the seed uses.
+    - **The gauge:** confirm that the DWS gauge in the workbook's flow
+      column measures the whole modelled catchment. Its published drainage
+      area matches the model's total, so it is now the calibration record at
+      the outlet, no longer a reference gauge. The workbook's logger column
+      is a copy of it and is no longer imported.
+    - **Evaporation:** the fitted production store is below GR4J's usual
+      range at every rain level tried. Is the A-pan row representative of the
+      mountain catchment, or of a hotter valley station?
+    - **The town's water:** how does the municipal dam get its water? In the
+      workbook its canal branch receives only the runoff of its own few
+      hectares (the transfer from the upper river is the constant 0), so the
+      town's demand goes almost unmet whatever the rain. If the canal takes
+      water from the river, where, and up to what rate? (A river off-take
+      into a side branch is also new modelling, followups.md.)
 
 ### Product
 

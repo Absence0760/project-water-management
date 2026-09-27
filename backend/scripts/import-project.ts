@@ -2,11 +2,18 @@
 // a WBT workbook) as a new project owned by an existing or new user.
 //
 //   pnpm import:project <project.json> --email you@example.com [--name "…"] [--password …] [--run] [--skip-existing]
+//                       [--settings <patch.json>] [--fit [--fit-seed <n>] [--fit-starts <n>] [--fit-budget <n>]]
 //
 // With --password, the user is created if missing (local demo seeding only).
 // With --skip-existing, a project the user already owns under the same name
 // is left as it is and nothing is imported (so `pnpm seed:demo` can run again
-// without making copies).
+// without making copies). --settings applies a settings patch (a JSON object,
+// validated like a PATCH of the project's settings) to the file before
+// importing; --fit then fits GR4J to the file's calibration record with the
+// engine's calibrate() and stores the parameters and their fit record, as
+// Settings → Fit automatically → Apply does (./fit-project.ts, docs/model.md
+// §2.10b "Fit at import"). Both happen before the import, so --run runs the
+// fitted project.
 // Runs through the same RLS-bound path and validation as POST /projects/import
 // (src/projects/import.ts).
 import { config } from 'dotenv';
@@ -17,6 +24,7 @@ import { closePool } from '../src/db/pool.js';
 import { actAsUser, withoutUser, withUser } from '../src/db/tx.js';
 // The same validation and transaction as POST /projects/import.
 import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
+import { fitDocument, fitSummary, withSettingsPatch, type FitOptions, type ProjectDocument } from './fit-project.js';
 
 export async function importProject(file: string, email: string, opts: ImportOptions = {}) {
 	return importProjectData(JSON.parse(await readFile(file, 'utf8')), email, opts);
@@ -83,16 +91,30 @@ export async function findOwnedProject(email: string, name: string): Promise<str
 	});
 }
 
+/** The CLI's changes to the document before the import: a settings patch, then a fit. */
+export interface PrepareOptions {
+	/** A settings patch file (a JSON object). */
+	settings?: string;
+	/** Fit GR4J and store the fit (./fit-project.ts). */
+	fit?: FitOptions | null;
+}
+
 /** The CLI: import, or with --skip-existing leave an owned project of the same name alone. */
-async function main(file: string, email: string, opts: ImportOptions & { skipExisting?: boolean }): Promise<string> {
+async function main(file: string, email: string, opts: ImportOptions & PrepareOptions & { skipExisting?: boolean }): Promise<string> {
+	let raw = JSON.parse(await readFile(file, 'utf8')) as ProjectDocument;
+	const name = opts.name ?? (typeof raw.name === 'string' ? raw.name : undefined);
 	if (opts.skipExisting) {
-		const raw = JSON.parse(await readFile(file, 'utf8')) as { name?: unknown };
-		const name = opts.name ?? (typeof raw.name === 'string' ? raw.name : undefined);
 		const existing = name ? await findOwnedProject(email, name) : null;
 		if (existing) return `✓ ${name} already exists for ${email} (project ${existing}): skipped`;
-		return `imported project ${await importProjectData(raw, email, opts)}`;
 	}
-	return `imported project ${await importProject(file, email, opts)}`;
+	if (opts.settings) raw = withSettingsPatch(raw, JSON.parse(await readFile(opts.settings, 'utf8')));
+	if (opts.fit) {
+		console.log(`fitting GR4J for ${name ?? file} (the engine's calibrate(), with validation; minutes on a long record)…`);
+		const fitted = fitDocument(raw, opts.fit);
+		for (const l of fitSummary(fitted.report)) console.log(l);
+		raw = fitted.doc;
+	}
+	return `imported project ${await importProjectData(raw, email, opts)}`;
 }
 
 /** An import failure as the CLI prints it: the message plus any listed problems. */
@@ -115,15 +137,30 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			name: { type: 'string' },
 			password: { type: 'string' },
 			run: { type: 'boolean' },
-			'skip-existing': { type: 'boolean' }
+			'skip-existing': { type: 'boolean' },
+			settings: { type: 'string' },
+			fit: { type: 'boolean' },
+			'fit-seed': { type: 'string' },
+			'fit-starts': { type: 'string' },
+			'fit-budget': { type: 'string' }
 		}
 	});
 	const file = positionals[0];
 	if (!file || !values.email) {
-		console.error('usage: import-project <project.json> --email <email> [--name <name>] [--password <pw>] [--run] [--skip-existing]');
+		console.error(
+			'usage: import-project <project.json> --email <email> [--name <name>] [--password <pw>] [--run] [--skip-existing] [--settings <patch.json>] [--fit [--fit-seed <n>] [--fit-starts <n>] [--fit-budget <n>]]'
+		);
 		process.exit(1);
 	}
-	main(file, values.email, { name: values.name, password: values.password, run: values.run, skipExisting: values['skip-existing'] })
+	const int = (v: string | undefined) => (v === undefined ? undefined : Number.parseInt(v, 10));
+	const fit: FitOptions | null = values.fit
+		? {
+				...(values['fit-seed'] !== undefined ? { seed: int(values['fit-seed']) } : {}),
+				...(values['fit-starts'] !== undefined ? { starts: int(values['fit-starts']) } : {}),
+				...(values['fit-budget'] !== undefined ? { budget: int(values['fit-budget']) } : {})
+			}
+		: null;
+	main(file, values.email, { name: values.name, password: values.password, run: values.run, skipExisting: values['skip-existing'], settings: values.settings, fit })
 		.then((line) => console.log(line))
 		.catch((err) => {
 			console.error(describe(err));
