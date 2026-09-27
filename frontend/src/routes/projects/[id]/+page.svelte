@@ -804,11 +804,12 @@
 		   tab's own sticky actions (Settings). */
 		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
 	}
-	/* A page sized to the window (the Network's Map, Transfers, Applications; issue #17) needs
+	/* A page sized to the window (the Network's Map, Transfers, Applications, History; issue #17) needs
 	   only a gutter below it, plus the save bar when it shows. */
 	.page:has(:global(.map-layout)),
 	.page:has(:global(.transfers.fit)),
-	.page:has(:global(.applications.fit)) {
+	.page:has(:global(.applications.fit)),
+	.page:has(:global(.history.fit)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add {

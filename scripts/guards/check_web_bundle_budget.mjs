@@ -956,6 +956,17 @@
 //             ~4, for four new #17 pages being built in parallel: each one
 //             measured against this ceiling, not against the others. No new
 //             dependency.
+// 2026-09-27  total 1004 → 1007 KB (measured 1004); other ceilings
+//             unchanged. Issue #17's History page, the last of the four:
+//             main @ 14117da1 measured 1000 KB by this guard, this change
+//             1004 KB (+3.4 KB of JS/CSS gzip bytes). The History tab chunk
+//             is 7.1 KB JS + 1.2 KB CSS: rows beside the picked change with
+//             Newer/Older, its differences from now (ChangesList, already
+//             shared with Compare), the filters in the URL, the window fit,
+//             and the phone's whole entries kept beside them (one layout or
+//             the other is rendered, never both). Nothing to trim that the
+//             page doesn't show. The earlier raise's parallel-page headroom
+//             is spent; this leaves ~3 KB. No new dependency.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -966,7 +977,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1004,
+	totalCodeKb: 1007,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

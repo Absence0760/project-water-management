@@ -267,7 +267,7 @@ role, freshness, Add data) and each tab's own header:
   run it shows (label, workbook-comparison and evidence badges, period,
   engine, "ran N days ago", **Open in Runs**); the Network its summary
   ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
-  line ("3 crops · 675 ha irrigated on 8 farms · …"); History what it holds.
+  line ("3 crops · 675 ha irrigated on 8 farms · …"); History the latest change, by whom and when.
   The others count what they hold (`workspace/context.ts`): "2 runs",
   "4 input series · 1 behind", "3 transfer rules · 2 active", "No runs yet"
   on a Summary before the first run.
@@ -3568,14 +3568,51 @@ states, a viewer, the phone cards, axe at desktop light and dark and phone).
 
 ## History (`?tab=history`)
 
-WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
-settings revisions and audit events, grouped by the viewer's day, with a
-request's change set folded into one entry; filters by unit ("All units"), event kind and
-parameter. Each revision shows its change lines, and for editors a
-**Restore this version** button behind a confirm that previews the diff;
-restore buttons are disabled while there are unsaved model edits, and a
-restored farm lists the farmers to re-link. Viewers read it; farmers never
-see the tab. Empty: "No changes recorded yet. History starts from {date}."
+WP-2.4 (`lib/components/history/`, a lazy tab; laid out for issue #17 option
+A). A timeline of model and settings revisions and audit events, grouped by
+the viewer's day, with a request's change set folded into one entry.
+
+- **Section header:** the fact the page is opened for, the latest change of
+  the whole history (whatever the filters), who made it and when, and since
+  when changes are recorded: "Latest change today 14:05 by Ann: Model
+  changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
+  since …" (`timeline.ts` `historyContext`). No actions of its own beside
+  Add data and Run model.
+- **The card** "Changes, newest first": a line on what it holds (and for
+  editors "Restoring a version saves it as a new change: nothing is ever
+  erased"), then the filters: **Unit** ("All units"), **Kind of change** and
+  **Parameter** (typed words, narrowing what's loaded). Unit and kind are
+  the server's filters and live in the URL (`&unit=<nodeId>`,
+  `&kind=revision|series|run|…`), pushed, so Back steps back through them and
+  a link keeps them; an unknown kind, or a unit not in the model, is no
+  filter.
+- **Wide (the card's column from 840 px):** a list of compact rows beside the
+  picked change. A row is a link: time and author, what it was (a revision's
+  title, or an event's sentence), its first line with "+N more", and its
+  reason, one line each. The pick is `&entry=<key>` (Back returns to the
+  previous one; with none, or one no longer loaded, the newest shows,
+  without writing the URL). The detail: a heading (the revision's title, or
+  the kind of change: "Data series", "Members"), the day, time and author,
+  **Newer** / **Older**, every line and the reason, the restore buttons, and
+  for a revision **Differences from now**: the lines between the saved inputs
+  now and that version, grouped by area (`GET …/history/revisions/:id`'s
+  preview, cached per version until the list reloads), "what restoring it
+  would change" for an editor. From 1100 × 620 the card fills the window
+  (`.history.fit`) and the list and the detail scroll inside it; a linked
+  entry further down is scrolled into view inside the list, never the page.
+  **Show older changes** (50 items a page) sits at the foot of the list.
+- **Narrow (a phone):** no detail; each entry shows whole under its day, with
+  its buttons (44 px targets), and the page scrolls. The two selects share a
+  row, the parameter box has its own.
+- **Restore this version** (editors) opens a confirm that previews the diff,
+  with an optional reason; restore buttons are disabled while there are
+  unsaved model edits (a note says so), and a restored farm lists the
+  farmers to re-link (a link to the Project page's Farmers list). After a
+  restore the new entry (the restore itself) is picked, in place.
+- Viewers read everything, the differences included, with no restore
+  buttons; farmers never see the tab. Empty: "No changes recorded yet.
+  History starts from {date}."; a filter with none: "Nothing matches these
+  filters." `?tab=changes` is an old name for it.
 
 - The **save bar** and the Settings save row have an optional "Reason for
   this change", kept with the revision.
@@ -3592,6 +3629,14 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   series list. e2e: `e2e/tests/history.spec.ts`.
 - A small "history" affordance on individual fields is not built
   (followups.md).
+
+e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer) and
+`e2e/tests/history-page.spec.ts` (the page: header line, window fit and a
+44-entry history over eleven days from `e2e/support/history.ts` and
+`spreadHistoryOverDays`, the pick's URL, Back, reload, Newer/Older and a
+deep link, the filters' URL and Back, pagination, a restore picking itself,
+empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
+light and dark and phone).
 
 ## Notes
 

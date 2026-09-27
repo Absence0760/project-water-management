@@ -341,3 +341,54 @@ export function filterEntries(entries: readonly HistoryEntry[], query: string): 
 		return items.length ? [{ ...e, items, revision: e.revision && items.some((i) => i.type === 'revision') ? e.revision : null }] : [];
 	});
 }
+
+// --- The page (issue #17): the filters in the URL, the list's rows, the picked entry, the header's line ---
+
+/** The kind filter from the URL (`kind=`): one of `KIND_FILTERS`, else '' (every kind). */
+export function parseKind(v: string | null): string {
+	return v && KIND_FILTERS.some((k) => k.value === v) ? v : '';
+}
+
+/** An entry's row in the list: what it was, its first line, how many more lines it has, and whether it gives a reason. */
+export function entrySummary(e: HistoryEntry): { title: string; line: string; more: number; reason: boolean } {
+	const lines = e.items.flatMap((i) => itemLines(i));
+	const reason = e.items.some((i) => i.type === 'revision' && !!i.reason);
+	if (e.revision) return { title: revisionTitle(e.revision), line: lines[0] ?? '', more: Math.max(0, lines.length - 1), reason };
+	// An event is its own sentence: the title, with any others of its change set counted.
+	return { title: lines[0] ?? '', line: '', more: Math.max(0, lines.length - 1), reason };
+}
+
+/** The picked entry's heading: a revision's title, else what kind of change it is ("Data series", "Members"), else "Change". */
+export function entryHeading(e: HistoryEntry): string {
+	if (e.revision) return revisionTitle(e.revision);
+	const first = e.items[0];
+	const noun = first?.type === 'event' ? first.kind.split('.')[0] : '';
+	return KIND_FILTERS.find((k) => k.value && k.value === noun)?.label ?? 'Change';
+}
+
+/** The entry `key` names (the URL's `entry=`), else the newest; null when there are none. */
+export function pickEntry(entries: readonly HistoryEntry[], key: string | null): HistoryEntry | null {
+	return (key ? entries.find((e) => e.key === key) : undefined) ?? entries[0] ?? null;
+}
+
+/** "today 14:05", "yesterday 09:30", "3 Sep 2026 14:05", in the viewer's time zone. */
+export function whenText(iso: string, now: Date = new Date()): string {
+	const day = localDay(iso);
+	const y = new Date(now);
+	y.setDate(y.getDate() - 1);
+	const label = day === localIsoDate(now) ? 'today' : day === localIsoDate(y) ? 'yesterday' : fmtDay(day);
+	return `${label} ${localTime(iso)}`;
+}
+
+/**
+ * The section header's line, the fact the page is opened for: the latest
+ * change, who made it and when, and since when changes are recorded.
+ * "Latest change today 14:05 by Ann: Model changed · recorded since 3 Sep 2026",
+ * "No changes recorded yet · recorded since 3 Sep 2026".
+ */
+export function historyContext(latest: HistoryEntry | null, since: string | null, now: Date = new Date()): string {
+	const from = since ? ` · recorded since ${fmtDay(localDay(since))}` : '';
+	if (!latest) return `No changes recorded yet${from}`;
+	const { title } = entrySummary(latest);
+	return `Latest change ${whenText(latest.createdAt, now)} by ${latest.actor ?? 'a deleted account'}: ${title}${from}`;
+}

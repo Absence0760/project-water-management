@@ -164,3 +164,36 @@ export async function tamperRunSummary(runId: string): Promise<void> {
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
 	});
 }
+
+/**
+ * Spread a project's history over earlier days, `perDay` change sets a day
+ * (newest today), as a project edited over weeks has it. The history tables
+ * are append-only (030_history), so the update runs with triggers off for
+ * this one transaction; the project's `history_since` moves back with it.
+ * For the History page's day groups at size.
+ */
+export async function spreadHistoryOverDays(projectId: string, perDay: number): Promise<void> {
+	await withDb(async (db) => {
+		await db.query('BEGIN');
+		try {
+			await db.query('SET LOCAL session_replication_role = replica');
+			await db.query(
+				`CREATE TEMP TABLE history_shift ON COMMIT DROP AS
+				 SELECT t, id, ((dense_rank() OVER (ORDER BY created_at DESC) - 1) / $2)::int AS d
+				   FROM (SELECT 'r' AS t, id, created_at FROM model_revision WHERE project_id = $1
+				         UNION ALL SELECT 'e', id, created_at FROM audit_event WHERE project_id = $1) x`,
+				[projectId, perDay]
+			);
+			await db.query(`UPDATE model_revision m SET created_at = m.created_at - make_interval(days => s.d) FROM history_shift s WHERE s.t = 'r' AND s.id = m.id`);
+			await db.query(`UPDATE audit_event a SET created_at = a.created_at - make_interval(days => s.d) FROM history_shift s WHERE s.t = 'e' AND s.id = a.id`);
+			await db.query(
+				`UPDATE project SET history_since = history_since - make_interval(days => (SELECT coalesce(max(d), 0) FROM history_shift) + 1) WHERE id = $1`,
+				[projectId]
+			);
+			await db.query('COMMIT');
+		} catch (e) {
+			await db.query('ROLLBACK');
+			throw e;
+		}
+	});
+}

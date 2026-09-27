@@ -125,6 +125,14 @@ section it belongs to, with the example that taught it.
   non-sticky ancestor: a stuck element's `getBoundingClientRect()` is where
   it is stuck, so measuring the rail itself grew its top with the scroll
   and shrank it to a sliver.
+- **When the narrow layout shows different content, pick the layout in
+  script.** History's rows beside a detail become whole entries on a phone
+  (each with its own restore buttons, since a detail stacked under fifty rows
+  is out of reach). Rendering both and hiding one with a container query
+  would put every restore button in the DOM twice: duplicate names for
+  strict locators and axe. Measure the column (`bind:clientWidth`) and
+  render one or the other; keep container queries for restyling the same
+  markup.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
@@ -250,7 +258,9 @@ picker in the header, moved panels, anchor redirects),
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
 window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
-cards in a narrow column).
+cards in a narrow column), `history/HistoryTab.svelte` (a timeline: rows
+beside the picked entry with Newer/Older, filters in the URL, whole entries
+on a phone).
 
 Interaction details that bit:
 
@@ -288,7 +298,11 @@ Interaction details that bit:
   no count to show; Settings & calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the
   fit", or no fit record) and its action jumps to the fit. Find the one fact
-  a user opens the page to check, and put it there.
+  a user opens the page to check, and put it there. It describes the
+  section, not the filter: History's "Latest change today 14:05 by Ann:
+  Model changed" stays the latest of all while the list is filtered to one
+  unit (a small unfiltered read beside the filtered one), so a filter never
+  makes the header claim something false.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
