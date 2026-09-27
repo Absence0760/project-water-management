@@ -18,8 +18,8 @@ Invoke from a Claude Code session as `/audit/<name>`.
 | Command | What it checks |
 |---|---|
 | [/audit/deps](deps.md) | `pnpm audit` per workspace, Dependabot coverage, GitHub Actions pin status, pnpm override hygiene |
-| [/audit/infra](infra.md) | Terraform stacks under `infra/` — IAM least-privilege, OIDC subject conditions, S3 PAB, CloudFront security headers, KMS, drift hygiene, cost guardrails |
-| [/audit/cost-controls](cost-controls.md) | Per-IP rate limits, API Gateway throttling, AWS budget alarms, <email-service> / <CMS> quota headroom, denial-of-wallet paths |
+| [/audit/infra](infra.md) | Terraform under `infra/` via `infra-auditor` — IAM least privilege, network exposure, data protection and recovery, alarm coverage |
+| [/audit/cost-controls](cost-controls.md) | No runaway bill, via `infra-auditor`: Lambda worst-case ceilings, queue/job loops, retry storms, fan-out caps, growth, budget + alarms |
 
 ### Dispatcher
 
@@ -36,9 +36,9 @@ Invoke from a Claude Code session as `/audit/<name>`.
 
 ## Agent delegation
 
-The **secrets** and **xss** commands delegate to the `repo-security-auditor` agent (under `.claude/agents/`). That agent has the six trust boundaries baked in (frontend ↔ user, backend ↔ caller, backend ↔ the <CMS>, backend ↔ <payment-processor>, backend ↔ <email-service>, CI/CD ↔ AWS) plus the audit-area routing table — it picks up the project's conventions without re-reading them every run.
-
-The **deps**, **infra**, and **cost-controls** commands use a `general-purpose` agent with the command body as the prompt — they cross-cut code + IaC + docs and don't fit a specialised auditor.
+- **Security** commands (`secrets`, `xss`, `auth`) delegate to `repo-security-auditor`, which knows this app's trust boundaries (CloudFront shared secret + WAF, tokens, RLS via `withUser`, fetcher SSRF, renderer, SQS message trust, OIDC, the public repo).
+- **`infra`** and **`cost-controls`** delegate to `infra-auditor`, which knows the Terraform, the Lambdas and queues, and the expected cost in `docs/deployment-tiers.md`.
+- **`deps`** uses a `general-purpose` agent with the command body as the prompt.
 
 `/audit/all` spawns one agent per area in parallel.
 
