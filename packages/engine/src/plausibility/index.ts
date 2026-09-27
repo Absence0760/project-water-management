@@ -21,6 +21,7 @@ import { naturalisedCheck, naturalisedWarning, type NaturalisedCheck } from './n
 import { rainSourceEwr, rainSourceWarnings, type RainSourceEwr } from './rainSource';
 import { drySeason, seasonMask, type DrySeason } from './season';
 
+export * from './compare';
 export * from './flowDoubleMass';
 export * from './lowFlow';
 export * from './naturalised';

@@ -19,6 +19,8 @@ import {
 	RETIRED_CALIBRATION_KEYS,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
+	OBSERVED_SERIES_LABEL,
+	parseGaugeSeriesKey,
 	upgradeLegacyModel,
 	type Borehole,
 	type CalibrationFitStatus,
@@ -34,6 +36,7 @@ import {
 } from './project';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
+import { comparePlausibility, type PlausibilityComparison } from './plausibility/compare';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,6 +190,14 @@ export interface RunComparison {
 	 * neither run has one. Rates are 0–1, deltas in fraction points.
 	 */
 	ewrAssurance: EwrAssuranceDelta[] | null;
+	/**
+	 * The hydrologist plausibility checks side by side (./plausibility/compare.ts):
+	 * per site (the outlet, then each gauge with a record of its own) the failing
+	 * water years of check 1 and the Q90 ratio of check 4, with pass or fail,
+	 * and the catchment-wide checks 2 and 3. null when neither run has them
+	 * (both before engine 0.25.0).
+	 */
+	plausibility: PlausibilityComparison | null;
 	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
 	wr2012: {
 		marRatioOverlap: MetricDelta;
@@ -429,6 +440,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 				: null,
 		chirpsFit,
 		rainSource,
+		plausibility: comparePlausibility(a.summary.plausibility, b.summary.plausibility),
 		wr2012:
 			wa || wb
 				? {
@@ -1302,10 +1314,17 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${c.first} to ${c.last})${total}`;
 }
 
+/** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.3.0) named by its gauge. */
+function seriesLabel(key: string, nodeName: (id: string) => string): string {
+	const g = parseGaugeSeriesKey(key);
+	return g ? `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}` : (SERIES_LABELS[key] ?? key);
+}
+
 function diffSeries(
 	sa: RunInputsSnapshot['series'] | undefined,
 	sb: RunInputsSnapshot['series'] | undefined,
-	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {}
+	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {},
+	nodeName: (id: string) => string = (id) => id
 ): InputChange[] {
 	const a = sa ?? {};
 	const b = sb ?? {};
@@ -1316,7 +1335,7 @@ function diffSeries(
 	};
 	const kinds = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
 	for (const k of kinds) {
-		const label = SERIES_LABELS[k] ?? k;
+		const label = seriesLabel(k, nodeName);
 		const x = a[k];
 		const y = b[k];
 		if (x && !y) out.push({ area: 'series', kind: 'removed', subject: label, text: `${label} series removed` });
@@ -1398,7 +1417,7 @@ export function diffInputs(
 	return [
 		...diffModel(a?.model, b?.model),
 		...diffSettings(a?.settings, b?.settings, siteName),
-		...diffSeries(a?.series, b?.series, values)
+		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id)
 	];
 }
 
