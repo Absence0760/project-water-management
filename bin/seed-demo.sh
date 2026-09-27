@@ -22,6 +22,12 @@
 # name before _WBT_b023 (outside the repo, because the factor is client data;
 # the shared wbt-import.env still applies to every workbook). Set
 # WBT_GAUGE_AS_REFERENCE=0 there to import the column as observed flow instead.
+# WBT_RUN_OF_RIVER=1 there imports the units the importer flags as probable
+# run-of-river (a dummy dam or no dam taking all the upstream inflow) with the
+# run-of-river supply rule and no dam (extract_project.py --run-of-river,
+# issue #54 2c/2d); off by default, since the modeller confirms each unit. A
+# project already imported under the same name is left alone: delete it (or
+# rename it) in the app to import it again with a changed setting.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -109,15 +115,19 @@ for wb in "${workbooks[@]}"; do
 			# shellcheck disable=SC1090
 			. "$WBT_SOURCE_DIR/wbt-import.$prefix.env"
 		fi
-		gauge_args=()
+		import_args=()
 		if [ "${WBT_GAUGE_AS_REFERENCE:-1}" = 1 ]; then
-			gauge_args+=(--gauge-as-reference)
+			import_args+=(--gauge-as-reference)
 			if [ -n "${WBT_GAUGE_SCALING_FROM:-}" ] || [ -n "${WBT_GAUGE_SCALE_FACTOR:-}" ]; then
-				gauge_args+=(--gauge-scaling-from "${WBT_GAUGE_SCALING_FROM:-}" --gauge-scale-factor "${WBT_GAUGE_SCALE_FACTOR:-}")
+				import_args+=(--gauge-scaling-from "${WBT_GAUGE_SCALING_FROM:-}" --gauge-scale-factor "${WBT_GAUGE_SCALE_FACTOR:-}")
 			fi
 		fi
+		# Probable run-of-river units as run of river (issue #54, 2c/2d), when this workbook's settings ask for it.
+		if [ "${WBT_RUN_OF_RIVER:-0}" = 1 ]; then
+			import_args+=(--run-of-river)
+		fi
 		out="data/client-$slug-app"
-		extract "$wb" "$out" "${gauge_args[@]}" || exit 1
+		extract "$wb" "$out" "${import_args[@]}" || exit 1
 		# A project the demo user already has under this name is left alone, so the seed can run again.
 		pnpm -s import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run --skip-existing
 	) && imported=$((imported + 1))

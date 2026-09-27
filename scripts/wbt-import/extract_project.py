@@ -241,6 +241,33 @@ def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: f
     )
 
 
+def as_run_of_river(node: dict[str, Any], source_of_transfer: bool) -> str:
+    """With --run-of-river: turn a flagged unit (run_of_river_note) into a run-of-river unit, in place, and say so.
+
+    b023 has no pump capacity, and nothing in it caps what a dummy dam or a
+    dam-less farm takes from the water routed to it, so the river pump is left
+    uncapped (null), which is what the workbook did; the modeller enters the
+    real capacity. A dummy dam's storage is dropped: run of river has no dam
+    (the model rules refuse one). A unit that is the source of an enabled
+    transfer keeps its dam, since a transfer draws on that storage, and the
+    note says why nothing changed."""
+    name = node["name"]
+    if source_of_transfer:
+        return (
+            f"WARNING: farm {name}: not imported as run of river (--run-of-river): an enabled transfer draws on its dam, "
+            "so it stays a farm dam; convert it by hand once the transfer is settled (issue #54, 2d)"
+        )
+    dropped = node["damCapacityM3"]
+    node.update({"damCapacityM3": 0, "damInitialPct": 0, "supplyRule": "runOfRiver", "pumpCapacityM3Day": None})
+    what = f"its {math.floor(dropped + 0.5)} m³ dummy dam is dropped" if dropped > 0 else "it has no dam"
+    return (
+        f"WARNING: farm {name}: imported as run of river (--run-of-river): {what}, and a river pump takes its demand "
+        "from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this "
+        "unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply "
+        "section (issue #54, 2c/2d)"
+    )
+
+
 def month_list(v: Any) -> list[int]:
     """The months a b023 month-list cell ("1,2,11,12") names.
 
@@ -906,8 +933,10 @@ def extract(
     gauge_reference: bool = False,
     scaling_from: str | None = None,
     scale_factor: float | None = None,
+    run_of_river: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    """(project, expected, notes). gauge_reference and the scaling: see gauge_as_reference()."""
+    """(project, expected, notes). gauge_reference and the scaling: see gauge_as_reference().
+    run_of_river: import the units flagged as probable run-of-river as run of river (as_run_of_river)."""
     import openpyxl
 
     if not gauge_reference and (scaling_from is not None or scale_factor is not None):
@@ -963,11 +992,13 @@ def extract(
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}
+        flagged = []
         for n in nodes:
             if n["kind"] == "farm":
                 note = run_of_river_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"], n["pctRunoffToDam"])
                 if note:
                     wb.notes.append(note)
+                    flagged.append(n)
         dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
         if dams:
             wb.notes.append(
@@ -1024,6 +1055,12 @@ def extract(
                     "priority": len(model_transfers),
                 }
             )
+
+        # --run-of-river (issue #54, 2c/2d): the flagged units become run of river, after the transfers are known.
+        if run_of_river:
+            sources = {t["fromNodeId"] for t in model_transfers if t["enabled"]}
+            for n in flagged:
+                wb.notes.append(as_run_of_river(n, n["id"] in sources))
 
         if extract_calibration is not None:
             calibration = extract_calibration(wb.wb)
@@ -1137,6 +1174,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     p.add_argument("--gauge-scaling-from", metavar="YYYY-MM-DD", help="first day the workbook scaled the gauge column")
     p.add_argument("--gauge-scale-factor", metavar="F", type=float, help="divide gauge values from that day by F")
+    p.add_argument(
+        "--run-of-river",
+        action="store_true",
+        help="import the units flagged as probable run-of-river (dummy dam or no dam, 100 %% of the upstream inflow) "
+        "with the run-of-river supply rule and no dam (issue #54, 2c/2d)",
+    )
     a = p.parse_args(argv[1:])
     if (a.gauge_scaling_from is None) != (a.gauge_scale_factor is None):
         p.error("--gauge-scaling-from and --gauge-scale-factor go together")
@@ -1155,7 +1198,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str]) -> int:
     a = parse_args(argv)
     src, out = a.workbook, a.outdir
-    project, expected, notes = extract(src, a.gauge_as_reference, a.gauge_scaling_from, a.gauge_scale_factor)
+    project, expected, notes = extract(src, a.gauge_as_reference, a.gauge_scaling_from, a.gauge_scale_factor, a.run_of_river)
     out.mkdir(parents=True, exist_ok=True)
     (out / "project.json").write_text(json.dumps(project, separators=(",", ":")))
     (out / "expected.json").write_text(json.dumps(expected, separators=(",", ":")))
