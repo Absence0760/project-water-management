@@ -10,6 +10,7 @@
 //   - "why you got this" and a link to manage alerts;
 //   - the liability line: a model estimate, not an instruction (a restriction
 //     notice says it is the WUA's own words instead).
+import { language } from '@water-management/engine/languages';
 import type { AlertKind } from '../alerts/rules.js';
 import { mailT, type Locale, type MailKey, type MailTranslator } from './i18n/index.js';
 import { PRODUCT, render, sitePage } from './templates.js';
@@ -49,11 +50,18 @@ export function pctText(fraction: number): string {
 	return `${p}${NBSP}%`;
 }
 
-/** "2026-10-03" → "3 Oct 2026", in the mail's language. */
+/**
+ * "2026-10-03" → "3 Oct 2026", in the mail's language's Intl locale (the
+ * language table's). The day is written without a leading zero, as the farm
+ * view writes it (en-ZA's ICU data gives "03 Oct 2026").
+ */
 export function dateText(iso: string, lang: Locale): string {
 	const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return new Intl.DateTimeFormat(lang === 'af' ? 'af-ZA' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(d);
+	return new Intl.DateTimeFormat(language(lang).intl, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+		.formatToParts(d)
+		.map((p) => (p.type === 'day' ? String(Number(p.value)) : p.value))
+		.join('');
 }
 
 /** One alert's words: the subject's "what", and its sentences. */

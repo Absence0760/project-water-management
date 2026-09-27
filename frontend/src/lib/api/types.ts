@@ -1,4 +1,5 @@
 // Wire shapes from docs/api.md that aren't in @water-management/engine.
+import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
 	CatchmentView,
@@ -51,7 +52,7 @@ export interface User {
 	/** False until the address is confirmed via the emailed link (VerifyEmailBanner). */
 	emailVerified?: boolean;
 	/** The farmer-facing pages' and emails' language (app_user.locale, WP-2.5); null = not chosen, follow the browser. */
-	locale?: 'en' | 'af' | null;
+	locale?: Locale | null;
 	/** How the farm view shows volumes (app_user.volume_unit, WP-2.5). */
 	volumeUnit?: 'm3' | 'ML';
 	/**
@@ -235,8 +236,8 @@ export interface Farmer {
 	nodeIds: string[];
 }
 
-/** The languages a farmer invite email can be in (invite.locale; `af` is sent in English until WP-2.5). */
-export type InviteLocale = 'en' | 'af';
+/** The languages a farmer invite email can be in (invite.locale): any in the engine's language table. */
+export type InviteLocale = Locale;
 
 /** A pending farmer invite and the farms it will link (WP-2.2). Listed for owners only. */
 export interface InvitedFarmer {

@@ -19,13 +19,14 @@
 //
 // The thousands separator and the gap before a unit are no-break spaces
 // (U+00A0), so "324 247 m³" never wraps across two lines on a phone. The
-// decimal follows the chosen language (D8, WP-2.5): a point in English, as in
-// the design's boards, and a comma in Afrikaans ("84,9 ML"), as af-ZA writes
-// it. Written by hand rather than through Intl so the result doesn't depend
+// decimal follows the chosen language (D8, WP-2.5), from the engine's
+// language table: a point in English, as in the design's boards, and a comma
+// in Afrikaans ("84,9 ML"), as af-ZA writes it. Written by hand rather than through Intl so the result doesn't depend
 // on the browser's ICU data. Dates follow the language the words are in
-// (wordsLang), so an English sentence never carries Afrikaans month names.
+// (wordsLang, in the table's Intl locale), so an English sentence never
+// carries Afrikaans month names.
 import { M3_PER_DAY_PER_LS } from '@water-management/engine';
-import { i18n, wordsLang } from '$lib/i18n/state.svelte';
+import { i18n, language, wordsLang } from '$lib/i18n/state.svelte';
 
 /** No-break space: between digit groups and between a figure and its unit. */
 export const NBSP = ' ';
@@ -37,8 +38,8 @@ function grouped(intPart: string): string {
 	return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
 }
 
-/** The decimal mark in the chosen language: a comma in Afrikaans, else a point. */
-export const decimalMark = () => (i18n.locale === 'af' ? ',' : '.');
+/** The decimal mark in the chosen language (the language table's: a comma in Afrikaans, a point in English). */
+export const decimalMark = () => language(i18n.locale).decimalMark;
 
 /** A number with `digits` decimals (trimmed when `trim`), grouped. */
 export function fmtNumber(n: number, digits = 0, trim = false): string {
@@ -88,7 +89,7 @@ export function fmtPct(fraction: number): string {
 }
 
 /** The Intl locale for dates: the words' language, as South Africa writes it. */
-export const dateLocale = () => (wordsLang() === 'af' ? 'af-ZA' : 'en-ZA');
+export const dateLocale = () => language(wordsLang()).intl;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 /** A cached UTC formatter for the current date locale. */

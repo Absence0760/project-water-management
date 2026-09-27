@@ -122,6 +122,12 @@ const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member']);
  */
 const NO_INSERT = new Set(['series_blob']);
 /**
+ * Reference data water_app only reads: the languages a person or an invite
+ * can have, written by the migration runner from the engine's language table
+ * (080_language.sql, scripts/migrate.ts syncLanguages).
+ */
+const READ_ONLY = new Set(['language']);
+/**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
  * (034_farmer_invites.sql). yield_result is a dam's yield on a whole-catchment
@@ -258,6 +264,7 @@ describe('schema catalogue', () => {
 				if (NO_UPDATE.has(t.relname) && priv === 'UPDATE') continue;
 				if (NO_DELETE.has(t.relname) && priv === 'DELETE') continue;
 				if (NO_INSERT.has(t.relname) && priv === 'INSERT') continue;
+				if (READ_ONLY.has(t.relname) && priv !== 'SELECT') continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
 			}
@@ -311,6 +318,17 @@ describe('schema catalogue', () => {
 			expect(rows[0]!.ok, `${table} INSERT`).toBe(false);
 			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('a', '*')`, [`public.${table}`]);
 			expect(policies.map((p) => p.polname), `${table} insert policies`).toEqual([]);
+		}
+	});
+
+	it('grants water_app only SELECT, and has only a read policy, on reference tables (language)', async () => {
+		for (const table of READ_ONLY) {
+			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd <> 'r'`, [`public.${table}`]);
+			expect(policies.map((p) => p.polname), `${table} write policies`).toEqual([]);
 		}
 	});
 

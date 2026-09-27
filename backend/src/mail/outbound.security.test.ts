@@ -60,15 +60,15 @@ const alertKinds: AlertFacts[] = [
 
 /** One hostile call per template (and locale); every free-text argument is EVIL. */
 const builders: Record<string, () => Mail[]> = {
-	verifyEmailMail: () => (['en', 'af'] as const).map((l) => templates.verifyEmailMail(TO, URL_, l)),
-	resetPasswordMail: () => (['en', 'af'] as const).map((l) => templates.resetPasswordMail(TO, URL_, l)),
+	verifyEmailMail: () => templates.LOCALES.map((l) => templates.verifyEmailMail(TO, URL_, l)),
+	resetPasswordMail: () => templates.LOCALES.map((l) => templates.resetPasswordMail(TO, URL_, l)),
 	inviteMail: () =>
 		(['sign-up', 'confirm'] as const).flatMap((mode) =>
 			(['project', 'team'] as const).map((kind) => templates.inviteMail(TO, URL_, EVIL, { kind, name: EVIL, role: 'editor' }, mode))
 		),
 	farmerInviteMail: () =>
 		(['sign-up', 'confirm'] as const).flatMap((mode) =>
-			(['en', 'af'] as const).map((l) => templates.farmerInviteMail(TO, URL_, EVIL, { catchment: EVIL, farms: [EVIL, EVIL] }, mode, l))
+			templates.LOCALES.map((l) => templates.farmerInviteMail(TO, URL_, EVIL, { catchment: EVIL, farms: [EVIL, EVIL] }, mode, l))
 		),
 	reportReadyMail: () => [true, false].map((scheduled) => templates.reportReadyMail(TO, URL_, { projectName: EVIL, runName: EVIL, pages: 3, requestedBy: EVIL, scheduled })),
 	alertMail: () =>
