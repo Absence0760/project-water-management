@@ -64,12 +64,26 @@ export function reportsApi(api: Pick<Api, 'request'>, projectId: string) {
 	return {
 		/** Queue a PDF: of `runId` (the latest without one), emailed to me (true) or to these members. */
 		create: (body: { runId?: string; email?: boolean | string[] }) => api.request<{ jobId: string }>('POST', `${p}/reports`, body).then((r) => r.jobId),
-		get: (jobId: string) => api.request<ReportStatus>('GET', `${p}/reports/${encodeURIComponent(jobId)}`),
+		get: (jobId: string) => api.request<ReportStatus>('GET', `${p}/reports/${encodeURIComponent(jobId)}`).then(downloadable),
 		schedules: () => api.request<{ schedules: ReportSchedule[] }>('GET', `${p}/report-schedules`).then((r) => r.schedules),
 		addSchedule: (body: ScheduleBody) => api.request<{ schedule: ReportSchedule }>('POST', `${p}/report-schedules`, body).then((r) => r.schedule),
 		updateSchedule: (id: string, patch: Partial<ScheduleBody>) => api.request<{ schedule: ReportSchedule }>('PATCH', sched(id), patch).then((r) => r.schedule),
 		removeSchedule: (id: string) => api.request<void>('DELETE', sched(id))
 	};
+}
+
+/**
+ * The status with its download link kept only when it is an http(s) URL. The
+ * link is rendered as an `href`, and the API mints it (a pre-signed S3 URL),
+ * so anything else (a script or data URL) is a misconfigured or tampered
+ * response: the page shows no link rather than a script one
+ * (urlAttributes.security.test.ts).
+ */
+function downloadable(s: ReportStatus): ReportStatus {
+	if (s.url === undefined) return s;
+	if (/^https?:\/\//i.test(s.url)) return s;
+	const { url: _dropped, ...rest } = s;
+	return rest;
 }
 
 /** Still in hand: poll again. */

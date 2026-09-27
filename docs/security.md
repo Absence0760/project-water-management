@@ -1111,8 +1111,32 @@ In short:
   `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
   person types are text). Help text has its own parser (`lib/help`), not
   HTML. A real need for markup would need a sanitiser and a reasoned entry in
-  that guard. Mail templates escape every interpolated value
-  (`mail/templates.ts` `escapeHtml`, `templates.test.ts`).
+  that guard. The same guard checks the chart library: the uPlot build the
+  app bundles writes series labels (typed names) and its legend read-out
+  through `textContent`, never markup. Also banned there: `setHTMLUnsafe`,
+  `parseHTMLUnsafe`, `DOMParser.parseFromString`. Mail templates escape
+  every interpolated value (`mail/templates.ts` `escapeHtml`,
+  `templates.test.ts`).
+- **No script URLs.** Svelte escapes attribute text, not what it means:
+  `href={x}` runs script when x is `javascript:…`.
+  `frontend/src/lib/urlAttributes.security.test.ts` scans every component's
+  URL attributes (`href`, `src`, `srcset`, `action`, `formaction`, …, and
+  `{href}` shorthand). A value that starts with literal text (`/…`, `?tab=…`,
+  `#…`, `{base}/…`) sets its own scheme, and that scheme must be http(s),
+  mailto or tel, never protocol-relative. A value that starts with an
+  expression must be a *reviewed* head, listed with where its value comes
+  from. A new one fails until someone reviews it, and a listed head nothing
+  uses any more also fails. The app's URL builders (`runHref`,
+  `withParam`, `farmHref`, …) are called with hostile ids and must stay on
+  the app's origin. The same test bans `srcdoc`, frame, object and embed
+  elements, and URL writes from TypeScript (`location =`, `window.open`,
+  `.href =`, except the blob download link in `lib/export/download.ts`). It
+  also requires `rel="noopener"` on every `target="_blank"` link. The
+  one link that comes from the API, the report PDF's pre-signed URL, is
+  dropped unless it is http(s) (`serverPdf.ts` `reportsApi.get`). `?next=`
+  after sign-in (`lib/auth/redirect.ts` `safeNext`) follows only a path
+  that resolves to the app's own origin, so `/\t/host` (a browser strips the
+  tab) is refused as well as `//host`.
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
