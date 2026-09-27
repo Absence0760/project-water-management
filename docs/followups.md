@@ -76,7 +76,15 @@ The checklist for these is issue #62; the history scrub is #63.
       client's legal adviser review both (and an Afrikaans version if the
       farmer view shows it); then set the agreed text, bump both versions and
       flip the status. Sign-offs made before that record the draft versions
-      they were shown.
+      they were shown. The pack to send is
+      [legal/disclaimer-review.md](./legal/disclaimer-review.md) (2026-09-27):
+      every liability text quoted word for word, including the farmer view's
+      and alert emails' own lines in English and Afrikaans, questions for the
+      adviser, and the steps once agreed; tests fail if it falls behind the
+      code. Afrikaans: the full disclaimer is shown only on English workspace
+      screens, so it needs none; the farmer lines already have Afrikaans, and
+      the adviser reviews both languages. Left: send the pack, get the
+      agreed wording, apply it (§ 5 of the pack).
 
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and

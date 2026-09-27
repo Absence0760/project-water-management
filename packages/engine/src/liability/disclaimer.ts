@@ -1,6 +1,8 @@
 // The disclaimer printed on the report and its results (roadmap WP-3.13,
 // Step 2 decision D10). DRAFT: the wording has not been through the client's
-// legal adviser; docs/followups.md § Blocking releases (operator) tracks that.
+// legal adviser; docs/followups.md § Blocking releases (operator) tracks that,
+// and docs/legal/disclaimer-review.md is the pack sent for the review (its
+// quotes are tested against this file).
 // Every surface that shows it also shows `DISCLAIMER.status === 'draft'` as a
 // visible "draft, pending legal review" line, so an unreviewed text can't
 // pass for the agreed one. Change the words → bump `version` (a sign-off
