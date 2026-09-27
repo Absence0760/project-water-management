@@ -118,8 +118,9 @@ for wb in "${workbooks[@]}"; do
 		fi
 		out="data/client-$slug-app"
 		extract "$wb" "$out" "${gauge_args[@]}" || exit 1
-		pnpm import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run
+		# A project the demo user already has under this name is left alone, so the seed can run again.
+		pnpm -s import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run --skip-existing
 	) && imported=$((imported + 1))
 done
 echo
-echo "Imported $imported client project(s). Sign in at http://localhost:7777 as $EMAIL / $PASSWORD"
+echo "Client projects ready: $imported. Sign in at http://localhost:7777 as $EMAIL / $PASSWORD"

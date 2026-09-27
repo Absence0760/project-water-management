@@ -121,7 +121,7 @@ pnpm test:e2e               # Playwright, incl. the new-catchment golden path (f
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
-pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run]
+pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
                              # GR4J at a few pan-coefficient choices, fixed vs refitted (no DB; refuses a monthly PE, settings.pe; model.md §2.4a)
 pnpm test:scripts           # guard: root scripts point at real targets

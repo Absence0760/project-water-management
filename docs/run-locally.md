@@ -304,8 +304,13 @@ A project is named from its workbook's file name, the part before
 `data/client-<name>-app/`; both are worked out when the seed runs, since the
 file names name the clients and never appear in the repo. Set
 `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm` to import just one. Running the
-seed again adds the projects again (it doesn't replace them); `pnpm
-dev:db:reset` first for a clean database.
+seed again makes no copies: a client project the demo user already owns
+under the same name is skipped (`import:project --skip-existing`), and so
+are the example catchments once they exist (all three: a partial set stops
+the seed with a message, since they're linked by a team, shares, farmers and
+an application). It never updates a project either: to reload one from a
+changed workbook, delete it in the app (or `pnpm dev:db:reset` for a clean
+database) and seed again.
 
 A client workbook's gauge column may be a neighbouring river's gauge, so the
 seed imports it as a reference gauge (`--gauge-as-reference`) rather than as
