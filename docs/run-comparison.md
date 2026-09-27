@@ -56,6 +56,19 @@ If a project has fewer than two runs, the page explains what to do: run the
 model, change something, and run it again, or pick a run from another project
 as what-if 1.
 
+### Export impact report and New what-if
+
+Two actions sit in the section header (beside **Back to runs** on the
+standalone page). **Export impact report** opens a what-if's printable
+report with its impact against the baseline as the first section
+(`/projects/<id>/report?run=<what-if>&against=<baseline ref>`, [ui.md §
+Report](./ui.md#report)): the same outcomes, takeaways and input changes as
+this page, for printing or saving as a PDF. With two what-ifs it is a menu,
+one entry per what-if. **+ New what-if**, for owners and editors of the
+baseline's project, opens the Scenarios tab's create dialog on the baseline
+(`?tab=scenarios&new=1&base=<run>`); a scenario's run is then picked here
+like any other run.
+
 ### The summary (board A4)
 
 Above the detail, for the baseline and every what-if at once
@@ -74,8 +87,15 @@ Above the detail, for the baseline and every what-if at once
   of demand), farms below 95 % supplied, a row for each of the (at most two)
   farms whose supply moves by at least 1 point in some what-if (matched on
   the baseline's node, so a farm missing from one what-if's comparison is
-  "–" there, not 0), mean outflow and, when either run has it, calibration
-  NSE. Each what-if cell has its value and its change from the baseline
+  "–" there, not 0), **dam storage at the end of the run** (when a run has
+  a farm dam: all its dams' storage on the last day over their total
+  capacity, weighted by capacity like the Summary's "Dams today", from the
+  run summary's dam figures, engine ≥ 1.2.0, issue #55, and each run's own
+  model's capacities, so a raised dam is a share of its new size; "–" for a
+  run saved before those figures; no better/worse verdict and no takeaway,
+  since a bigger dam can end emptier as a share yet hold more;
+  `damStorageShare`, `compareDamStorage`), mean outflow and, when either run
+  has it, calibration NSE. Each what-if cell has its value and its change from the baseline
   through the same `Delta` / `formatDelta` as the detail tables (sign, ▲/▼,
   and "better"/"worse" in words).
 - **Takeaways** (`takeaways`), what-if by what-if, only for material

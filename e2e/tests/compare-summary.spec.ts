@@ -3,13 +3,19 @@
 // what-if's change from the baseline, plain-language takeaways, the days
 // below the reserve each water year, and the full two-run comparison below
 // for the what-if picked. Old two-run links keep working; the second what-if
-// is the optional `c` parameter.
+// is the optional `c` parameter. The extras (issue #17): a dam storage row,
+// Export impact report (the what-if's printable report with an impact
+// section, `report?run=…&against=…`) and + New what-if (the Scenarios
+// dialog on the baseline, `new=1&base=…`), both in the section header.
 import type { Page } from '@playwright/test';
+import { addMember } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { runCard, runSelect, seedWhatIfs, whatChanged } from '../support/compare.ts';
+import { runCard, runSelect, sectionHeader, seedWhatIfs, whatChanged } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const outcomes = (page: Page) => page.getByRole('table', { name: /^Headline outcomes of the baseline and each what-if/ });
+/** Export impact report with two what-ifs: a menu (a `<details>`), one item per what-if. */
+const exportMenu = (page: Page) => page.locator('summary', { hasText: 'Export impact report' });
 const reserveChart = (page: Page) => page.getByRole('img', { name: /^Days below the reserve per water year\./ });
 
 test('three runs side by side: cards, outcomes with deltas, takeaways, the yearly chart, and adding and removing what-if 2', async ({ page, owner }) => {
@@ -19,10 +25,10 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 
 	// An old two-run link opens the same pair, with room for a second what-if.
 	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}`);
-	// One title, the section header's; the view's context line sits under it (no second "Compare runs" heading).
-	await expect(page.getByRole('heading', { name: 'Compare runs', exact: true })).toHaveCount(1);
+	// One page title: the section header's h1, with the view's context line in it.
 	await expect(page.getByRole('heading', { level: 1, name: 'Compare runs' })).toBeVisible();
-	await expect(page.getByTestId('section-header').getByTestId('compare-context')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Compare runs' })).toHaveCount(1);
+	await expect(sectionHeader(page).getByTestId('compare-context')).toBeVisible();
 	await expect(runSelect(page, 'Baseline')).toHaveValue(p.baseline);
 	await expect(runSelect(page, 'What-if 1')).toHaveValue(p.whatIf1);
 	await expect(runCard(page, 'What-if 1').getByTestId('what-if-change')).toHaveText('Upper farm: "Orchard" area 20 ha → 40 ha');
@@ -48,6 +54,13 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	await expect(table.getByRole('rowheader', { name: /^Reserve met/ })).toBeVisible();
 	await expect(table.getByRole('rowheader', { name: /^Irrigation supplied/ })).toBeVisible();
 	await expect(table.getByRole('rowheader', { name: /^Mean outflow/ })).toBeVisible();
+	// Dam storage at the end of each run (issue #55's run-summary figures), as a share of each run's own capacity.
+	const dams = table.getByRole('row', { name: /^Dam storage, end of run/ });
+	await expect(dams.getByRole('rowheader')).toHaveText('Dam storage, end of run, % of capacity');
+	await expect(dams.getByRole('cell').first()).toHaveText(/^\d+\.\d%$/);
+	await expect(dams.getByRole('cell').nth(2)).toContainText(/^\d+\.\d%/);
+	const rowNames = await table.getByRole('rowheader').allTextContents();
+	expect(rowNames.findIndex((t) => t.startsWith('Dam storage'))).toBe(rowNames.findIndex((t) => t.startsWith('Mean outflow')) - 1);
 
 	// Takeaways in plain words, from the same numbers.
 	const takeaways = page.getByTestId('takeaways');
@@ -104,6 +117,9 @@ test('the standalone page opens ?project= on its default pair, takes a second wh
 
 	await page.getByRole('button', { name: '+ Add a second what-if' }).click();
 	await expect(page).toHaveURL(new RegExp(`/compare\\?a=${p.id}%3A${p.whatIf1}&b=${p.id}%3A${p.whatIf2}&c=${p.id}%3A${p.baseline}$`));
+	// The page has no section header: its actions sit beside its own title.
+	await expect(exportMenu(page)).toBeVisible();
+	await expect(page.getByRole('link', { name: '+ New what-if' })).toHaveAttribute('href', `/projects/${p.id}?tab=scenarios&new=1&base=${p.whatIf1}`);
 	await expect(outcomes(page).getByRole('columnheader')).toHaveText(['Outcome', 'Baseline', 'What-if 1', 'What-if 2']);
 
 	// Picking another run for what-if 2 stays on the page.
@@ -111,6 +127,106 @@ test('the standalone page opens ?project= on its default pair, takes a second wh
 	await expect(page).toHaveURL(new RegExp(`&c=${p.id}%3A${p.whatIf1}$`));
 	// The same run as the baseline: no material change, said so.
 	await expect(page.getByTestId('takeaways')).toContainText('What-if 2 makes no material change to these outcomes.');
+});
+
+test("Export impact report opens each what-if's report with its impact against the baseline, from the same numbers", async ({ page, owner }) => {
+	void owner;
+	const p = await seedWhatIfs(page.request, 'Impact report valley');
+	const ref = (run: string) => `${p.id}%3A${run}`;
+
+	// One what-if: a plain link in the section header.
+	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}`);
+	await expect(outcomes(page)).toBeVisible();
+	await expect(sectionHeader(page).getByRole('link', { name: 'Export impact report' })).toHaveAttribute(
+		'href',
+		`/projects/${p.id}/report?run=${p.whatIf1}&against=${ref(p.baseline)}`
+	);
+
+	// Two what-ifs: a menu naming each; Escape closes it with focus back on its button.
+	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}&c=${p.id}:${p.whatIf2}`);
+	const days = outcomes(page).getByRole('row', { name: /^Days below the reserve, average year/ });
+	await expect(days.getByRole('cell')).toHaveCount(3);
+	const onScreen = (await days.getByRole('cell').nth(2).locator('.val').textContent())!.trim();
+	await exportMenu(page).click();
+	const items = sectionHeader(page).getByRole('group', { name: 'Impact report of' }).getByRole('link');
+	await expect(items).toHaveText(['What-if 1: More orchard', 'What-if 2: More orchard and a bigger dam']);
+	await page.keyboard.press('Escape');
+	await expect(items.first()).toBeHidden();
+	await expect(exportMenu(page)).toBeFocused();
+	await exportMenu(page).click();
+	await items.nth(1).click();
+
+	// The what-if's report, an impact report: the impact first, from the comparison the page showed.
+	await expect(page).toHaveURL(new RegExp(`/projects/${p.id}/report\\?run=${p.whatIf2}&against=${ref(p.baseline)}$`));
+	await expect(page.locator('main[data-report-ready]')).toBeVisible();
+	await expect(page.locator('.cover .eyebrow')).toHaveText('Impact report');
+	const impact = page.getByRole('region', { name: '1. Impact against the baseline' });
+	const table = impact.getByRole('table', { name: 'Headline outcomes of the baseline and this run, with the change' });
+	await expect(table.getByRole('columnheader')).toHaveText(['Outcome', 'Baseline', 'This run', 'Change']);
+	await expect(table.getByRole('row', { name: /^Days below the reserve, average year/ }).getByRole('cell').nth(1)).toHaveText(onScreen);
+	await expect(table.getByRole('rowheader', { name: /^Dam storage, end of run/ })).toBeVisible();
+	await expect(impact.getByTestId('impact-takeaways')).toContainText(/“More orchard and a bigger dam” costs the reserve \d+ more days a year\./);
+	await expect(impact.getByText('Upper farm: dam capacity 150,000 m³ → 300,000 m³')).toBeVisible();
+	// The server PDF prints the plain report, so it is offered by name, not as a PDF without the impact.
+	await expect(page.getByRole('button', { name: 'Generate PDF' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: "The run's report without the impact (server PDF)" })).toHaveAttribute(
+		'href',
+		`/projects/${p.id}/report?run=${p.whatIf2}`
+	);
+	await expect(page.getByRole('link', { name: '← Back to the comparison' })).toHaveAttribute(
+		'href',
+		`/projects/${p.id}?tab=compare&a=${ref(p.baseline)}&b=${ref(p.whatIf2)}`
+	);
+
+	// Back returns to all three runs.
+	await page.goBack();
+	await expect(runSelect(page, 'What-if 2')).toHaveValue(p.whatIf2);
+
+	// A baseline that can't be read: the report still loads, and the section says why.
+	await page.goto(`/projects/${p.id}/report?run=${p.whatIf1}&against=${p.id}:${crypto.randomUUID()}`);
+	await expect(page.locator('main[data-report-ready]')).toBeVisible();
+	await expect(page.getByRole('region', { name: '1. Impact against the baseline' }).getByRole('status')).toHaveText(
+		"This run couldn't be compared with the baseline: The baseline doesn't exist any more, or its project isn't shared with you."
+	);
+});
+
+test('+ New what-if opens the Scenarios dialog on the baseline, and Back returns to the comparison; a viewer has no New what-if', async ({
+	page,
+	owner,
+	signIn
+}) => {
+	void owner;
+	const p = await seedWhatIfs(page.request, 'New what-if valley');
+	// The baseline is not the latest run, so the dialog's default (the latest) would be wrong.
+	const compareUrl = `/projects/${p.id}?tab=compare&a=${p.id}:${p.whatIf1}&b=${p.id}:${p.whatIf2}`;
+	await page.goto(compareUrl);
+	await expect(outcomes(page)).toBeVisible();
+	await sectionHeader(page).getByRole('link', { name: '+ New what-if' }).click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=scenarios&new=1&base=${p.whatIf1}$`));
+	const dialog = page.getByRole('dialog', { name: 'New scenario' });
+	await expect(dialog.getByLabel('Base run')).toHaveValue(p.whatIf1);
+	await expect(dialog.getByLabel('Name')).toBeFocused();
+
+	// Cancel drops both params in place; Back then leaves for the comparison.
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(page).toHaveURL(/\?tab=scenarios$/);
+	await page.goBack();
+	await expect(runSelect(page, 'Baseline')).toHaveValue(p.whatIf1);
+
+	// Creating one opens it, with neither param left behind.
+	await sectionHeader(page).getByRole('link', { name: '+ New what-if' }).click();
+	await dialog.getByLabel('Name').fill('Upper dam +20 %');
+	await dialog.getByRole('button', { name: 'Create scenario' }).click();
+	await expect(page).toHaveURL(/\?tab=scenarios&scenario=[0-9a-f-]+$/);
+	await expect(page.getByRole('heading', { level: 2, name: /Upper dam \+20 %/ })).toBeVisible();
+
+	// A viewer can export the impact report but not start a what-if.
+	const viewer = await signIn('New what-if viewer');
+	await addMember(page.request, p.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(compareUrl);
+	await expect(outcomes(viewer.page)).toBeVisible();
+	await expect(sectionHeader(viewer.page).getByRole('link', { name: 'Export impact report' })).toBeVisible();
+	await expect(sectionHeader(viewer.page).getByRole('link', { name: '+ New what-if' })).toHaveCount(0);
 });
 
 for (const [label, size] of [
@@ -125,6 +241,12 @@ for (const [label, size] of [
 		await expect(reserveChart(page)).toBeVisible();
 		await page.getByRole('region', { name: 'Days below the reserve, each year' }).getByText('Show as a table').click();
 		await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
+		await expectNoViolations(page);
+		// The export menu open, and the impact report it leads to.
+		await exportMenu(page).click();
+		await expectNoViolations(page);
+		await page.goto(`/projects/${p.id}/report?run=${p.whatIf2}&against=${p.id}:${p.baseline}`);
+		await expect(page.locator('main[data-report-ready]')).toBeVisible();
 		await expectNoViolations(page);
 	});
 }

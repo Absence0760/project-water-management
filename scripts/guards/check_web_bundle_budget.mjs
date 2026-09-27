@@ -956,6 +956,18 @@
 //             ~4, for four new #17 pages being built in parallel: each one
 //             measured against this ceiling, not against the others. No new
 //             dependency.
+// 2026-09-27  total 1004 → 1008 KB (measured 1 028 180 bytes, 1004.08 KB, so
+//             1005 by this guard's rounding); largest page and tab chunks
+//             unchanged (34 and 57 KB). Compare runs extras (issue #17 A4):
+//             the report's impact section (report/ImpactSection.svelte) is a
+//             chunk of its own, 1.33 KB, loaded only for `report?against=`;
+//             the outcomes and takeaways (compare/summary.ts, 2.07 KB) and
+//             ChangesList (0.81 KB) it shares with Compare runs left that
+//             tab's chunk for shared chunks, which adds their split
+//             overhead; the Export impact report menu and the dam storage
+//             row are a few hundred bytes. Trimming CSS moved nothing (hash
+//             and class-name noise is ±50 bytes). No new dependency.
+//             Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -966,7 +978,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1004,
+	totalCodeKb: 1008,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

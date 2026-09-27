@@ -3280,11 +3280,23 @@ Board A4 of issue #17: a baseline and up to two what-ifs on one page
 gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
-- **Header:** *Compare runs* and a context line ("Baseline “…” against 2
-  what-ifs · same period, 2021–2024 · engine 0.45.0"). In the workspace
-  the view draws no title of its own: its context line goes to the section
-  header (`fillHeader`, `level={2}`), so the page has one title; the
-  standalone page draws its own `h1` and context.
+- **Header:** in the workspace, the section header (the page's only title)
+  carries the view's context line ("Baseline “…” against 2 what-ifs · same
+  period, 2021–2024 · engine 0.45.0") and its actions, filled with
+  `fillHeader`; the view draws no title of its own there. The standalone
+  page has no section header, so the view draws its `h1`, the context line
+  and the same actions beside **Back to runs**. The actions:
+  - **Export impact report:** the what-if's printable report with an
+    *Impact against the baseline* section first
+    (`/projects/<what-if's project>/report?run=<what-if>&against=<baseline ref>`,
+    § Report). A plain link with one what-if; with two, a menu naming each
+    ("What-if 1: <label>", its colour key beside it), which Escape or a
+    click outside closes.
+  - **+ New what-if** (owner and editor of the baseline's project only):
+    the Scenarios tab's create dialog, `?tab=scenarios&new=1&base=<baseline
+    run>`, with the baseline as its base run (left to the dialog's default
+    when the baseline is itself a scenario run). Its run then compares here
+    like any other.
 - **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
@@ -3297,8 +3309,8 @@ gives it an `h1` and **Back to runs**). The full reference is
   select on add, and back to the add button on remove.
 - **What changes** (left, ~55 %): the outcomes table (reserve met, days
   below the reserve per average year, irrigation supplied, farms below 95 %,
-  up to two most-changed farms, mean outflow, calibration NSE when there is
-  one), each what-if cell its value over its `Delta`, the unit on its own
+  up to two most-changed farms, dam storage at the end of the run (when a
+  run has a dam), mean outflow, calibration NSE when there is one), each what-if cell its value over its `Delta`, the unit on its own
   line under the outcome; then the takeaways box (the first worse, else
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
@@ -3342,9 +3354,12 @@ them scenarios).
   `&scenario=<id>` in the URL.
 - **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
   it, dropping `new` in place): a name and a base run, the published run by
-  default, else the latest; scenario runs aren't offered (a scenario run
-  can't be a base). **Create scenario** picks the new one and replaces the
-  dialog's history entry. `new=1` opens nothing for a viewer or with no run.
+  default, else the latest, or the run named by `&base=<runId>` (Compare
+  runs' **+ New what-if** opens it on its baseline) when that run can be a
+  base; scenario runs aren't offered (a scenario run can't be a base).
+  Closing drops `base` with `new`. **Create scenario** picks the new one and
+  replaces the dialog's history entry. `new=1` opens nothing for a viewer or
+  with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
 - **Changes** (`OpList.svelte`): the ops in order, each in words against the
@@ -3709,6 +3724,23 @@ chunk. A non-member gets the workspace's "This project doesn't exist or you
 don't have access to it"; a project with no runs, or a run that no longer
 exists, says so with a link to Runs & results.
 
+- **Impact report** (`&against=<projectId>:<runId>`, Compare runs' **Export
+  impact report**, issue #17 A4): the same report with the cover's eyebrow
+  reading *Impact report* and a first section, **Impact against the
+  baseline** (`report/ImpactSection.svelte`, its own chunk, loaded before
+  `data-report-ready` only for an impact report), from `GET /compare/runs`
+  with the baseline as A and this run as B: a line naming the baseline
+  (label, project, period, when it ran), the outcomes table of Compare runs
+  for this run (Outcome, Baseline, This run, Change, from the same
+  `compare/summary.ts` rows, dam storage included), the takeaways ("In
+  short", naming the run by its label in quotes) and the input changes
+  (`ChangesList`). A baseline that can't be read (deleted, or its project
+  not shared) leaves the report loading, with the reason in that section.
+  The bar's back link reads **← Back to the comparison** (the Compare runs
+  tab on this pair). The server-side PDF renders the plain report
+  (`backend/src/reports/render.ts` takes a run only), so in its place the bar
+  links **The run's report without the impact (server PDF)**; **Download
+  PDF** (the browser's print) prints the impact report.
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a

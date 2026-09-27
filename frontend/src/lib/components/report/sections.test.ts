@@ -36,6 +36,17 @@ describe('reportSections', () => {
 		expect(reportSections(run()).slice(-3).map((s) => s.title)).toEqual(['Validation statement', 'Professional sign-off', 'Disclaimer']);
 	});
 
+	it('opened from Compare runs (against a baseline) is an impact report, the impact first after the cover', () => {
+		const s = reportSections(run({ nodes: 3 }), { impact: true });
+		expect(s.slice(0, 3).map((x) => [x.id, x.title])).toEqual([
+			['cover', 'Impact report'],
+			['impact', 'Impact against the baseline'],
+			['network', 'Network']
+		]);
+		expect(reportSections(run()).some((x) => x.id === 'impact')).toBe(false);
+		expect(reportSections(run())[0]!.title).toBe('Catchment report');
+	});
+
 	it('treats whitespace-only notes as no notes', () => {
 		expect(reportSections(run({ notes: '  \n ' })).some((s) => s.id === 'notes')).toBe(false);
 	});

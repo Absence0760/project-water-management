@@ -7,9 +7,12 @@
 // changes since the last publication for WP-2.4). Three sections close every
 // report (WP-3.13): the validation statement, the professional sign-off
 // (saying plainly when there is none) and the disclaimer (D10, draft).
+// Opened from Compare runs' Export impact report (`against`, issue #17 A4),
+// it is an impact report: an "Impact against the baseline" section right
+// after the cover.
 import type { Run } from '$lib/api/types';
 
-export type ReportSectionId = 'cover' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
+export type ReportSectionId = 'cover' | 'impact' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
 
 export interface ReportSection {
 	id: ReportSectionId;
@@ -22,8 +25,9 @@ export type ReportChartId = 'hydrograph' | 'ewr';
 
 type ReportRun = Pick<Run, 'summary' | 'model' | 'notes'>;
 
-export function reportSections(run: ReportRun): ReportSection[] {
-	const out: ReportSection[] = [{ id: 'cover', title: 'Catchment report' }];
+export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}): ReportSection[] {
+	const out: ReportSection[] = [{ id: 'cover', title: opts.impact ? 'Impact report' : 'Catchment report' }];
+	if (opts.impact) out.push({ id: 'impact', title: 'Impact against the baseline' });
 	if (run.model?.nodes?.length) out.push({ id: 'network', title: 'Network' });
 	out.push({ id: 'inputs', title: 'Inputs' });
 	out.push({ id: 'calibration', title: 'Calibration' });

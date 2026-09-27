@@ -50,7 +50,7 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
  */
 const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
-	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/scenarios/ApplicantView.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	historyHref: { why: 'BUILDER: "/projects/" + encoded project id + "?tab=history" (compare/attribution.ts)', in: ['lib/components/compare/CompareView.svelte'] },
 	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamLevels.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/LatestRun.svelte', 'lib/components/runs/RunsTab.svelte'] },
@@ -75,6 +75,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
 	href: { why: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too', in: ['lib/components/farm/DamCard.svelte', 'lib/components/farm/LookingBack.svelte', 'lib/components/notes/RecentNotes.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	newWhatIfHref: { why: 'CompareView: `${base}/projects/<project id>?` + URLSearchParams (tab, new, base)', in: ['lib/components/compare/CompareView.svelte'] },
+	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
+	'r.href': { why: 'CompareView: the `reports` list, reportHref() as above', in: ['lib/components/compare/CompareView.svelte'] },
+	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },

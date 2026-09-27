@@ -6,17 +6,24 @@
 	// window.print()). data-report-ready says every section has loaded and
 	// every chart has drawn: e2e waits on it, and so does the server-side render
 	// (backend/src/reports/render.ts), which prints this same page.
+	//
+	// `&against=<projectId>:<runId>` (Compare runs' Export impact report, issue
+	// #17 A4) makes it an impact report: an "Impact against the baseline"
+	// section after the cover (report/ImpactSection.svelte, its own chunk),
+	// from GET /compare/runs. The server-side PDF prints the plain report, so
+	// the impact report offers the browser's PDF and links to the plain one.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { fdcPercentileTable, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
-	import { api, ApiError, type Project, type Run, type SignoffList } from '$lib/api';
+	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
@@ -47,6 +54,12 @@
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
+	/** The baseline of an impact report ("<projectId>:<runId>", as Compare runs' refs); null for the plain report. */
+	const againstParam = $derived(page.url.searchParams.get('against') || null);
+	// The impact section: its own chunk, loaded (before "ready") only for an impact report.
+	const loadImpact = () => import('$lib/components/report/ImpactSection.svelte');
+	let impact = $state.raw<RunCompareResponse | null>(null);
+	let impactError = $state<string | null>(null);
 
 	let project = $state.raw<Project | null>(null);
 	let run = $state.raw<Run | null>(null);
@@ -62,8 +75,10 @@
 	let hydroDrawn = $state(false);
 	let ewrDrawn = $state(false);
 
-	async function load(id: string, want: string | null) {
+	async function load(id: string, want: string | null, against: string | null) {
 		status = 'loading';
+		impact = null;
+		impactError = null;
 		// A new run's charts start undrawn: a remounted chart takes its ready flag from these bindings.
 		hydroDrawn = false;
 		ewrDrawn = false;
@@ -92,19 +107,32 @@
 				throw e;
 			}
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
-			const [pairs, so] = await Promise.all([
+			const [pairs, so, cmp] = await Promise.all([
 				Promise.all(
 					CATCHMENT_FLOW_KEYS.filter(([, k]) => have(k)).map(
 						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
 					)
 				),
-				api.signoffs.list(id, runId)
+				api.signoffs.list(id, runId),
+				// The impact section: a baseline that can't be compared says why in its section; the report still loads.
+				against
+					? api.compare.runs(against, `${id}:${runId}`).catch((e: unknown) => {
+							impactError =
+								e instanceof ApiError && (e.status === 404 || e.status === 400)
+									? "The baseline doesn't exist any more, or its project isn't shared with you."
+									: e instanceof Error
+										? e.message
+										: String(e);
+							return null;
+						})
+					: null
 			]);
 			signoffs = so;
+			impact = cmp;
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			// If it fails to download, only a reload can fetch it (lazy.ts), so it gets its own message, not "Try again".
 			try {
-				await loadOnce(loadHumanImpacts);
+				await Promise.all([loadOnce(loadHumanImpacts), against ? loadOnce(loadImpact) : null]);
 			} catch {
 				status = 'chunk-failed';
 				return;
@@ -124,7 +152,8 @@
 	$effect(() => {
 		const id = projectId;
 		const want = runParam;
-		untrack(() => load(id, want));
+		const against = againstParam;
+		untrack(() => load(id, want, against));
 	});
 
 	/** After a sign-off: the new list, or (null, the statement changed) a fresh read of it. */
@@ -141,7 +170,7 @@
 		}
 	}
 
-	const sections = $derived(run ? reportSections(run) : []);
+	const sections = $derived(run ? reportSections(run, { impact: !!againstParam }) : []);
 	const ready = $derived(isReportReady(status === 'loaded', reportCharts(sections), { hydrograph: hydroDrawn, ewr: ewrDrawn }));
 
 	const model = $derived((run?.model ?? {}) as Partial<ProjectModel>);
@@ -193,7 +222,7 @@
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The report could not be loaded: {error}
-			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam)}>Try again</button>
+			<button type="button" class="btn btn-sm" onclick={() => load(projectId, runParam, againstParam)}>Try again</button>
 		</div>
 	{:else if status === 'chunk-failed'}
 		<ChunkFailed what="The report" />
@@ -206,9 +235,16 @@
 
 	{#if status === 'loading' || status === 'loaded'}
 		<div class="bar no-print">
-			<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
+			{#if againstParam && run}
+				<a href="{base}/projects/{projectId}?tab=compare&{new URLSearchParams({ a: againstParam, b: `${projectId}:${run.id}` })}">← Back to the comparison</a>
+			{:else}
+				<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
+			{/if}
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
-			{#if run}
+			{#if run && againstParam}
+				<!-- The server renders the plain report (reports/render.ts), not this one: offer it by name rather than a PDF without the impact. -->
+				<a href="{base}/projects/{projectId}/report?run={run.id}">The run's report without the impact (server PDF)</a>
+			{:else if run}
 				<ServerPdf {projectId} runId={run!.id} />
 			{/if}
 			<p class="muted small" role="status">
@@ -255,7 +291,15 @@
 			{:else}
 				<section class="panel rep" id="rep-{s.id}" aria-labelledby="rep-{s.id}-h">
 					<h2 id="rep-{s.id}-h">{i}. {s.title}</h2>
-					{#if s.id === 'network'}
+					{#if s.id === 'impact'}
+						{#if impact}
+							<Lazy load={loadImpact}>
+								{#snippet children(ImpactSection)}<ImpactSection data={impact!} />{/snippet}
+							</Lazy>
+						{:else}
+							<p class="alert alert-warning" role="status">This run couldn't be compared with the baseline: {impactError}</p>
+						{/if}
+					{:else if s.id === 'network'}
 						<NetworkSchematic
 							{nodes}
 							transfers={model.transfers ?? []}
