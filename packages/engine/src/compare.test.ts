@@ -1236,6 +1236,17 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(diffInputs(off, copyWithFreshIds(off))).toEqual([]);
 	});
 
+	it('lists the GN 538 property area and rate changing (engine ≥ 1.7.0); absent and null are the same', () => {
+		const a = snapshot();
+		const nulls = structuredClone(a);
+		for (const n of nulls.model.nodes) Object.assign(n, { gaPropertyAreaHa: null, gaRateM3HaYear: null });
+		expect(texts(a, nulls)).toEqual([]);
+		const set = structuredClone(a);
+		const f = set.model.nodes.find((n) => n.kind === 'farm')!;
+		Object.assign(f, { gaPropertyAreaHa: 60, gaRateM3HaYear: 45 });
+		expect(texts(a, set)).toEqual([`${f.name}: GN 538 property area not set → 60 ha`, `${f.name}: GN 538 rate not set → 45 m³/ha/a`]);
+	});
+
 	it('lists low-flow values and high-flow components changed in the inputs (engine ≥ 0.33.0)', () => {
 		const a = snapshot();
 		a.settings.ewrRules = [rule()];

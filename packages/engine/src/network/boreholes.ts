@@ -4,7 +4,7 @@
 // node's stream-depletion lag. runModel and the self-checks
 // (../verify/checks.ts) both read a node's boreholes through this, so they
 // agree on what a stored value means.
-import { GA538_GROUNDWATER_LIMIT_M3_YEAR, type Borehole, type GroundwaterAnnualUse, type NetworkNode, type ProjectModel } from '../project';
+import { GA538_ALLUVIAL_DEPLETION_FRAC, GA538_GROUNDWATER_LIMIT_M3_YEAR, ga538VolumeM3, type Borehole, type GroundwaterAnnualUse, type NetworkNode, type ProjectModel } from '../project';
 import { cmpStr } from '../order';
 import { waterYearOf } from '../calendar';
 import { surfaceSplit } from './supply';
@@ -204,11 +204,26 @@ export function groundwaterDay(
 }
 
 /**
+ * The first day of the 12 consecutive calendar months that end on epoch day
+ * `e`: the day after the same date a year earlier (29 February → the 28th, so
+ * the window is still 12 months). GN 538's "year" is any such period.
+ */
+export function twelveMonthsStart(e: number): number {
+	const d = new Date(e * 86_400_000);
+	const y = d.getUTCFullYear() - 1;
+	const m = d.getUTCMonth();
+	const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+	return Math.round(Date.UTC(y, m, Math.min(d.getUTCDate(), last)) / 86_400_000) + 1;
+}
+
+/**
  * RunSummary.groundwaterAnnualUse (WP-3.9): per node with boreholes, in node-id
  * order, and per water year the run touches, what was pumped (to the crop and
  * into the dam), the stream depletion taken, each unit's volume against its
- * annual cap, and the GN 538 ceiling for context. `start` is the run's first
- * epoch day.
+ * annual cap, and the GN 538 volume for context: the property's own (area ×
+ * Table 2 rate, capped at 40 000 m³/a) when the node carries both, else the
+ * ceiling (engine ≥ 1.7.0). Also the most pumped in any 12 consecutive months
+ * ending in the year, GN 538's "year". `start` is the run's first epoch day.
  */
 export function groundwaterAnnualUse(
 	nodes: readonly NetworkNode[],
@@ -224,6 +239,10 @@ export function groundwaterAnnualUse(
 		if (!b || n.kind === 'gauge') continue;
 		const r = sim.nodes[i]!;
 		const capped = b.units.every((u) => Number.isFinite(u.annualCapM3));
+		const ga = ga538VolumeM3(n);
+		// Running total of everything pumped, for the 12-month windows.
+		const cum = new Float64Array(plan.days + 1);
+		for (let t = 0; t < plan.days; t++) cum[t + 1] = cum[t]! + r.groundwater[t]! + r.groundwaterToDam[t]!;
 		let row: GroundwaterAnnualUse | null = null;
 		for (let t = 0; t < plan.days; t++) {
 			const wy = waterYearOf(start + t);
@@ -239,7 +258,9 @@ export function groundwaterAnnualUse(
 					toDamM3: 0,
 					streamDepletionM3: 0,
 					annualCapM3: capped ? b.units.reduce((s, u) => s + u.annualCapM3, 0) : null,
-					gaLimitM3: GA538_GROUNDWATER_LIMIT_M3_YEAR,
+					gaLimitM3: ga.limitM3,
+					gaBasis: ga.basis,
+					rolling12MaxM3: null,
 					boreholes: b.units.map((u) => ({ id: u.id, name: u.name, abstractionM3: 0, annualCapM3: Number.isFinite(u.annualCapM3) ? u.annualCapM3 : null, capReached: false }))
 				};
 				out.push(row);
@@ -248,10 +269,48 @@ export function groundwaterAnnualUse(
 			row.abstractionM3 += r.groundwater[t]! + r.groundwaterToDam[t]!;
 			row.toDamM3 += r.groundwaterToDam[t]!;
 			row.streamDepletionM3 += r.depletion[t]!;
+			const from = twelveMonthsStart(start + t) - start;
+			if (from >= 0) {
+				const v = cum[t + 1]! - cum[from]!;
+				if (row.rolling12MaxM3 == null || v > row.rolling12MaxM3) row.rolling12MaxM3 = v;
+			}
 			for (let k = 0; k < b.units.length; k++) row.boreholes[k]!.abstractionM3 += r.boreholePumped![k]![t]!;
 		}
 	}
 	// A cap counts as reached when the year's volume is within float noise of it.
 	for (const row of out) for (const u of row.boreholes) if (u.annualCapM3 !== null) u.capReached = u.abstractionM3 >= u.annualCapM3 * (1 - 1e-9);
+	return out;
+}
+
+/**
+ * Run warnings about the GN 538 context (engine ≥ 1.7.0, docs/model.md §2.7d)
+ * for the nodes that pump: those without a property area and Table 2 rate
+ * (their tables show the 40 000 m³/a ceiling only), and pumping units whose
+ * stream depletion share (≥ GA538_ALLUVIAL_DEPLETION_FRAC) suggests an
+ * alluvial aquifer connected to the stream, which GN 538 counts as surface
+ * water. The app has no borehole locations, so the GA's 100 m-from-a-
+ * watercourse exclusion can't be checked; docs only.
+ */
+export function ga538Warnings(nodes: readonly NetworkNode[], plan: { nodes: readonly { borehole?: PlanBorehole }[] }): string[] {
+	const out: string[] = [];
+	const unknown: string[] = [];
+	const alluvial: string[] = [];
+	// In node-id order, so the text doesn't depend on the order the nodes are listed in.
+	const idx = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	for (const i of idx) {
+		const b = plan.nodes[i]?.borehole;
+		if (!b) continue;
+		const n = nodes[i]!;
+		if (ga538VolumeM3(n).basis === 'ceiling') unknown.push(n.name);
+		for (const u of b.units) if (u.depletionFrac >= GA538_ALLUVIAL_DEPLETION_FRAC) alluvial.push(`${n.name}: ${u.name}`);
+	}
+	if (unknown.length)
+		out.push(
+			`GN 538 volume unknown for ${unknown.join('; ')}: no property area or Table 2 rate (or one not in the table), so the groundwater tables show the ${GA538_GROUNDWATER_LIMIT_M3_YEAR.toLocaleString('en-US').replace(/,/g, ' ')} m³/a ceiling only, not the property's own volume (area × rate)`
+		);
+	if (alluvial.length)
+		out.push(
+			`boreholes with a stream depletion share of ${Math.round(GA538_ALLUVIAL_DEPLETION_FRAC * 100)} % or more (${alluvial.join('; ')}): if they draw on an alluvial aquifer connected to the stream, GN 538 counts that as surface water, and the groundwater general authorisation doesn't cover it`
+		);
 	return out;
 }

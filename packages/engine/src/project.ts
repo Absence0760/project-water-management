@@ -804,6 +804,21 @@ export interface NetworkNode {
 	 * can be taken off the list (model rules).
 	 */
 	ewrSite?: boolean;
+	/**
+	 * Farms and other users with boreholes (engine ≥ 1.7.0, WP-3.9, issue #46
+	 * item 7, docs/model.md §2.7d): the size of the property the groundwater
+	 * is taken on, ha (land registered separately in a Deeds Office). With
+	 * `gaRateM3HaYear` it gives the GN 538 general authorisation's volume for
+	 * the property, context only. null / absent = unknown: the run shows the
+	 * 40 000 m³/a ceiling and warns.
+	 */
+	gaPropertyAreaHa?: number | null;
+	/**
+	 * The GN 538 Table 2 (Appendix B) abstraction rate for the property's
+	 * quaternary catchment, m³/ha/a: one of GA538_GROUNDWATER_RATES. null /
+	 * absent = not looked up yet (see `gaPropertyAreaHa`).
+	 */
+	gaRateM3HaYear?: number | null;
 }
 
 /**
@@ -972,6 +987,9 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
 				// EWR site flag (engine ≥ 1.5.0): every gauge was one.
 				n.ewrSite ??= true;
+				// GN 538 property area and rate (engine ≥ 1.7.0): unknown unless set.
+				if (n.gaPropertyAreaHa === undefined) n.gaPropertyAreaHa = null;
+				if (n.gaRateM3HaYear === undefined) n.gaRateM3HaYear = null;
 				return n;
 			})
 		: model.nodes;
@@ -1065,6 +1083,43 @@ export type BoreholeTarget = (typeof BOREHOLE_TARGETS)[number];
  * shown beside modelled use for context. The app never decides legality.
  */
 export const GA538_GROUNDWATER_LIMIT_M3_YEAR = 40_000;
+
+/**
+ * The abstraction rates of GN 538 (2016) Table 2 (Appendix B), m³ per ha of
+ * property per year. Each quaternary catchment is listed under one of them;
+ * the property's GA volume is its size × that rate, capped at
+ * GA538_GROUNDWATER_LIMIT_M3_YEAR (engine ≥ 1.7.0, docs/model.md §2.7d). The
+ * app doesn't carry the quaternary → rate schedule: the gazette's table is a
+ * scanned list of ranges, and a mis-read row would give a wrong legal
+ * number, so the modeller looks the rate up and enters it.
+ */
+export const GA538_GROUNDWATER_RATES = [0, 45, 75, 150, 275, 400] as const;
+export type Ga538Rate = (typeof GA538_GROUNDWATER_RATES)[number];
+
+/**
+ * A borehole whose stream depletion share is at least this (0–1) most likely
+ * draws on an alluvial aquifer connected to the stream, which GN 538 counts
+ * as a surface water resource, not groundwater: the run warns that the
+ * groundwater GA may not cover it (engine ≥ 1.7.0). A judgement, pending the
+ * hydrologist (issue #46 item 7).
+ */
+export const GA538_ALLUVIAL_DEPLETION_FRAC = 0.8;
+
+/** Whether `v` is one of the GN 538 Table 2 rates. */
+export const isGa538Rate = (v: unknown): v is Ga538Rate => typeof v === 'number' && (GA538_GROUNDWATER_RATES as readonly number[]).includes(v);
+
+/**
+ * A node's GN 538 groundwater volume, m³/a (engine ≥ 1.7.0): min(property
+ * area ha × Table 2 rate, 40 000). `basis` 'property' when both are known
+ * (a valid area ≥ 0 and one of the six rates); otherwise the 40 000 ceiling
+ * with `basis` 'ceiling'. Context only, never a decision on legality.
+ */
+export function ga538VolumeM3(n: Pick<NetworkNode, 'gaPropertyAreaHa' | 'gaRateM3HaYear'>): { limitM3: number; basis: 'property' | 'ceiling' } {
+	const a = n.gaPropertyAreaHa;
+	const r = n.gaRateM3HaYear;
+	if (typeof a === 'number' && Number.isFinite(a) && a >= 0 && isGa538Rate(r)) return { limitM3: Math.min(a * r, GA538_GROUNDWATER_LIMIT_M3_YEAR), basis: 'property' };
+	return { limitM3: GA538_GROUNDWATER_LIMIT_M3_YEAR, basis: 'ceiling' };
+}
 
 export interface Borehole {
 	id: string;
@@ -1668,8 +1723,24 @@ export interface GroundwaterAnnualUse {
 	streamDepletionM3: number;
 	/** Σ of the boreholes' annual caps, m³; null when any borehole that can pump has no cap. */
 	annualCapM3: number | null;
-	/** GA538_GROUNDWATER_LIMIT_M3_YEAR, for context: the GA's ceiling per property, not a decision on legality. */
+	/**
+	 * The GN 538 general authorisation's groundwater volume for the property,
+	 * m³/a, for context, not a decision on legality: min(area × Table 2 rate,
+	 * 40 000) from the node's `gaPropertyAreaHa` and `gaRateM3HaYear` (engine
+	 * ≥ 1.7.0, ga538VolumeM3), else the 40 000 ceiling. Every engine before
+	 * 1.7.0: the ceiling.
+	 */
 	gaLimitM3: number;
+	/** How gaLimitM3 was found (engine ≥ 1.7.0): 'property' = area × rate; 'ceiling' = area or rate unknown, the 40 000 ceiling only. Absent on older runs (the ceiling). */
+	gaBasis?: 'property' | 'ceiling';
+	/**
+	 * The most pumped (to the crop and into the dam) in any 12 consecutive
+	 * calendar months ending in this water year, m³ (engine ≥ 1.7.0). GN 538's
+	 * "year" is any 12 consecutive months, so a use split across 1 October can
+	 * pass both water years and still exceed the GA. null when the run has no
+	 * full 12 months ending in this year (its first months). Absent on older runs.
+	 */
+	rolling12MaxM3?: number | null;
 	/** Per borehole, in id order; `id` null = the node's combined borehole capacity (WP-1.34). */
 	boreholes: { id: string | null; name: string; abstractionM3: number; annualCapM3: number | null; capReached: boolean }[];
 }
