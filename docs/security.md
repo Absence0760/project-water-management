@@ -1122,7 +1122,17 @@ by the WUA; nobody is added to a project without an owner acting.
 classified (cascade, set null, or restrict) in `catalogue.db.test.ts`
 `APP_USER_ON_DELETE`, and every foreign key to `project` cascades (the same
 file), so a new column can't ship without a decision.
-`auth/account-deletion.db.test.ts` checks the outcome end to end.
+`auth/account-deletion.db.test.ts` checks the outcome end to end, and
+`auth/personal-data.security.db.test.ts` sweeps it: an account with a row
+behind every cascade and set-null key is deleted, then every text, json,
+uuid and array column of every table is scanned for its email, name and
+id, which may survive only where this table keeps them (the audit log's
+random id, the typed sign-off name, the sign-in lockout's address). It
+found three guards that fought the deletion, fixed in 065: a sweep's or
+outlook's guard refused the key's SET NULL (so the account couldn't be
+deleted), `alert_rule_check` put the creator back (a dangling id), and a
+PDF someone else asked for kept the person as a recipient
+(`report.email_to`, now emptied of them by `app_user_pseudonymise`).
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
@@ -1161,7 +1171,7 @@ file), so a new column can't ship without a decision.
   those records name (the actor who linked them, the people named in events
   they made). One export a minute per account. Every foreign key to
   `app_user` is classified as exported or left out, with why, in
-  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`): the
+  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`; `personal-data.security.db.test.ts` checks each exported key's section holds exactly the person's rows, and every exported `app_user` column its stored value): the
   project's own records that name the person only as their maker (runs,
   revisions, keys, publications…) are left out, because the act is in the
   audit events. The project exports (`export.json`, CSV, the farm CSV)
