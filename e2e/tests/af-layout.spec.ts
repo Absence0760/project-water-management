@@ -78,7 +78,7 @@ test('a share link fits a phone in Afrikaans', async ({ page, owner, browser }) 
 	const project = await seedRunnableProject(page.request, 'Lang taal share');
 	const runId = await createRun(page.request, project.id, 'Baseline');
 	const pub = await page.request.post(`${API_URL}/projects/${project.id}/publication`, {
-		data: { runId, restriction: { level: 'advisory', pct: 10, noticeEn: 'Water is short on the river.', noticeAf: null } }
+		data: { runId, restriction: { level: 'advisory', pct: 10, notice: { en: 'Water is short on the river.' } } }
 	});
 	expect(pub.status(), await pub.text()).toBe(201);
 	const made = await page.request.post(`${API_URL}/projects/${project.id}/share-links`, { data: { label: 'Neighbours', expiresInDays: 7 } });

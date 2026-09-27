@@ -264,7 +264,7 @@ test('many farms in one catchment fold the switcher; the notice stays on the fir
 	await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
 	const runId = await createRun(req, project.id, 'Baseline');
 	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, {
-		data: { runId, restriction: { level: 'restricted', pct: 20, noticeEn: 'Pump at night only.', noticeAf: null } }
+		data: { runId, restriction: { level: 'restricted', pct: 20, notice: { en: 'Pump at night only.' } } }
 	});
 	expect(pub.status(), await pub.text()).toBe(201);
 	const farmer = await signInAs('Many-farm farmer');

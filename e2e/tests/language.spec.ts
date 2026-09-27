@@ -61,7 +61,8 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	const project = await seedRunnableProject(wua.page.request, 'Taal catchment');
 	const runId = await createRun(wua.page.request, project.id, 'Baseline');
 	// The WUA writes both notices; these stand in for its words (the app never writes restriction text).
-	const restriction = { level: 'advisory', pct: null, noticeEn: 'English notice from the WUA, for the test.', noticeAf: '[af] Afrikaans notice from the WUA, for the test.' };
+	const notice = { en: 'English notice from the WUA, for the test.', af: '[af] Afrikaans notice from the WUA, for the test.' };
+	const restriction = { level: 'advisory', pct: null, notice };
 	const pub = await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction } });
 	expect(pub.status(), await pub.text()).toBe(201);
 	const farmer = await register(page.context().request, 'Taal Farmer');
@@ -78,8 +79,8 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	await expect.poll(async () => (await me(page.request)).volumeUnit).toBe('ML');
 
 	// English first.
-	const notice = page.locator('#notice');
-	await expect(notice.getByText(restriction.noticeEn)).toBeVisible();
+	const card = page.locator('#notice');
+	await expect(card.getByText(notice.en)).toBeVisible();
 
 	const numbers = page.getByRole('region', { name: either('Last 12 months, in ML') });
 	await numbers.getByText('Show the numbers', { exact: true }).click();
@@ -95,10 +96,11 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	await expect(page.getByRole('heading', { level: 2, name: words('Water you received this season') })).toBeVisible();
 	await expect(numbers.getByText(words('Show the numbers'), { exact: true })).toBeVisible();
 	// The WUA's Afrikaans follows the choice at once; on an Afrikaans page it needs no lang of its own.
-	await expect(notice.getByText(restriction.noticeAf)).toBeVisible();
-	await expect(notice.getByText(restriction.noticeAf)).not.toHaveAttribute('lang', /./);
-	await expect(notice).not.toContainText(restriction.noticeEn);
-	await expect(notice).not.toContainText(words('The WUA wrote this notice in English only.'));
+	await expect(card.getByText(notice.af)).toBeVisible();
+	await expect(card.getByText(notice.af)).not.toHaveAttribute('lang', /./);
+	await expect(card).not.toContainText(notice.en);
+	// No "written only in …" line: the notice is in the reader's language.
+	await expect(card).not.toContainText(words('The WUA wrote this notice in {language} only.').split('{language}')[0]!);
 	await expectNoViolations(page);
 
 	// From the account now, not just this device: a fresh browser signed in as the farmer starts in Afrikaans and ML.
