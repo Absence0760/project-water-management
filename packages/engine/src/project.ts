@@ -1037,6 +1037,113 @@ export interface ProjectModel {
 	 * They add to a node's combined borehole capacity (WP-1.34), if it has one.
 	 */
 	boreholes?: Borehole[];
+	/**
+	 * Demand objects on units (engine ≥ 1.7.0, issue #54 item 2b,
+	 * docs/model.md §2.7f): a town's, a household's, livestock's or any other
+	 * demand that isn't a crop, added to the unit's crop demand and supplied
+	 * from the same dam, river pump and boreholes. Absent on older documents = none.
+	 */
+	demandObjects?: DemandObject[];
+}
+
+/**
+ * What a demand object is for (issue #54 item 2b), the client's register
+ * categories. It sets the defaults a new one gets and how it reads; the
+ * engine treats every category alike.
+ */
+export const DEMAND_OBJECT_CATEGORIES = ['domestic', 'municipal', 'industrial', 'livestock', 'irrigation', 'external', 'other'] as const;
+export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
+
+/** Each category in plain words (the node form, run results). */
+export const DEMAND_OBJECT_CATEGORY_LABEL: Record<DemandObjectCategory, string> = {
+	domestic: 'Domestic',
+	municipal: 'Municipal (town)',
+	industrial: 'Industrial',
+	livestock: 'Livestock',
+	irrigation: 'Irrigation (not from crops)',
+	external: 'External (piped out)',
+	other: 'Other'
+};
+
+/**
+ * How a demand object's volume is given (docs/model.md §2.7f):
+ * 'monthly' — m³/day per water-year month (a meter record, a reconciliation
+ *   strategy's AADD, a workbook's typed-over demand);
+ * 'perUnit' — a count (people, head of livestock, stands) × litres per unit
+ *   per day, grossed up for distribution losses, × a monthly profile.
+ */
+export const DEMAND_OBJECT_SIZINGS = ['monthly', 'perUnit'] as const;
+export type DemandObjectSizing = (typeof DEMAND_OBJECT_SIZINGS)[number];
+
+/**
+ * When a demand object is supplied against the unit's crops on a short day
+ * (docs/model.md §2.7f): 'first' before them, 'shared' pro rata with them,
+ * 'last' after them. Within one class, objects share pro rata.
+ */
+export const DEMAND_OBJECT_PRIORITIES = ['first', 'shared', 'last'] as const;
+export type DemandObjectPriority = (typeof DEMAND_OBJECT_PRIORITIES)[number];
+
+/**
+ * Where a demand object's water ends up: 'internal' — used in the catchment,
+ * its return share goes back to the river below the unit the same day;
+ * 'external' — piped out of the catchment, so none of it comes back.
+ */
+export const DEMAND_OBJECT_DESTINATIONS = ['internal', 'external'] as const;
+export type DemandObjectDestination = (typeof DEMAND_OBJECT_DESTINATIONS)[number];
+
+export interface DemandObject {
+	id: string;
+	/** The unit (a farm node) whose water supplies it. */
+	nodeId: string;
+	name: string;
+	category: DemandObjectCategory;
+	sizing: DemandObjectSizing;
+	/** 'monthly': abstraction demand, m³/day per water-year month (Oct–Sep); null under 'perUnit'. */
+	monthlyM3Day: number[] | null;
+	/** 'perUnit': how many (people, head, stands); null under 'monthly'. */
+	count: number | null;
+	/** 'perUnit': litres per unit per day at the tap or trough; null under 'monthly'. */
+	litresPerUnitDay: number | null;
+	/** 'perUnit': distribution losses as a share (0 ≤ l < 1) of what is abstracted: abstraction = use ÷ (1 − l). */
+	lossPct: number;
+	/** 'perUnit': a factor per water-year month (Oct–Sep) on the daily use, e.g. holiday peaks; null = 1 every month. */
+	monthlyFactor: number[] | null;
+	/** Share (0–1) of what it is supplied that returns to the river below the unit the same day (treated wastewater). 0 when external. */
+	returnPct: number;
+	priority: DemandObjectPriority;
+	destination: DemandObjectDestination;
+	/** false = kept on record but not modelled (no demand, no results). */
+	enabled: boolean;
+	/** Where the number comes from (meter records, a reconciliation strategy, a norm, the workbook), for the report. */
+	note: string;
+}
+
+/**
+ * Sizing norms for a new per-unit demand object (issue #54, 2b research,
+ * docs/model.md §2.7f): the Red Book §J (CSIR 2005) house connection of
+ * 230 l per person per day, and KZN DARD livestock needs (cattle 40–50 l per
+ * head per day). Starting points for the modeller, never applied silently.
+ */
+export const DEMAND_NORMS = {
+	litresPerPersonDay: 230,
+	basicLitresPerPersonDay: 25,
+	litresPerCattleDay: 45
+} as const;
+
+/** A new demand object's fields by category (the node form's Add demand), from the 2b research table. */
+export function newDemandObjectDefaults(category: DemandObjectCategory): Pick<DemandObject, 'sizing' | 'litresPerUnitDay' | 'lossPct' | 'returnPct' | 'priority' | 'destination'> {
+	switch (category) {
+		case 'domestic':
+			return { sizing: 'perUnit', litresPerUnitDay: DEMAND_NORMS.litresPerPersonDay, lossPct: 0, returnPct: 0, priority: 'first', destination: 'internal' };
+		case 'municipal':
+			return { sizing: 'monthly', litresPerUnitDay: null, lossPct: 0, returnPct: 0.5, priority: 'first', destination: 'internal' };
+		case 'livestock':
+			return { sizing: 'perUnit', litresPerUnitDay: DEMAND_NORMS.litresPerCattleDay, lossPct: 0, returnPct: 0, priority: 'shared', destination: 'internal' };
+		case 'external':
+			return { sizing: 'monthly', litresPerUnitDay: null, lossPct: 0, returnPct: 0, priority: 'shared', destination: 'external' };
+		default:
+			return { sizing: 'monthly', litresPerUnitDay: null, lossPct: 0, returnPct: 0, priority: 'shared', destination: 'internal' };
+	}
 }
 
 /**
@@ -1241,6 +1348,32 @@ export interface FarmSummary {
 	damLowM3?: number;
 	damLowDate?: string;
 	damDaysAtMin?: number;
+	/**
+	 * The unit's enabled demand objects (engine ≥ 1.7.0, issue #54 item 2b,
+	 * docs/model.md §2.7f), in id order: each one's share of the unit's
+	 * demand, supply, deficit and return. Their demand is part of
+	 * avgDemandM3Day; the irrigation part is avgDemandM3Day − Σ theirs.
+	 * Absent for a unit without any, and on older runs.
+	 */
+	demandObjects?: DemandObjectSummary[];
+}
+
+/** One demand object over the whole run (engine ≥ 1.7.0), m³/day means like FarmSummary. */
+export interface DemandObjectSummary {
+	id: string;
+	name: string;
+	category: DemandObjectCategory;
+	priority: DemandObjectPriority;
+	destination: DemandObjectDestination;
+	avgDemandM3Day: number;
+	avgSuppliedM3Day: number;
+	avgDeficitM3Day: number;
+	/** avg supplied / avg demand, 0–1 (1 without demand). */
+	fractionSupplied: number;
+	/** Returned to the river below the unit (0 for an external object). */
+	avgReturnedM3Day: number;
+	/** Days it got less than its demand (beyond float noise). */
+	daysShort: number;
 }
 
 /**

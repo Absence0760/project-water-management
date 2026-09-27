@@ -170,8 +170,18 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
 	for (const n of base.model.nodes) n.lossReturnFraction = 0;
+	// Demand objects' returns (engine ≥ 1.7.0) likewise: a return from stored water helps the farms below today.
+	for (const o of base.model.demandObjects ?? []) o.returnPct = 0;
 	const x = cloneInput(base);
 	for (const a of x.model.cropAreas) a.areaM2 *= 2;
+	// Demand objects (engine ≥ 1.7.0) double with the crops: a fixed demand beside a growing one can raise a
+	// farm's whole-run supply fraction legitimately (more demand on days fully met, the same on days short), so
+	// the property is about doubling every demand the model holds. Priority classes and pro-rata splits are
+	// scale-free, so doubling them all changes no one's share.
+	for (const o of x.model.demandObjects ?? []) {
+		if (o.monthlyM3Day) o.monthlyM3Day = o.monthlyM3Day.map((v) => v * 2);
+		if (o.count !== null) o.count *= 2;
+	}
 	let o1: ModelOutput;
 	let o2: ModelOutput;
 	try {

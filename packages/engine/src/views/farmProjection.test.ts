@@ -22,6 +22,8 @@ function asRun(input: ModelInput, out: ModelOutput): ProjectionRun {
 		crops: input.model.crops,
 		cropAreas: input.model.cropAreas,
 		apanMm: input.settings?.apanMm,
+		// A unit with demand objects (engine 1.7.0) takes its consumptive share from its stored return flow.
+		...(input.model.demandObjects ? { demandObjects: input.model.demandObjects } : {}),
 		series: (nodeId, key) => byKey.get(`${nodeId ?? ''}|${key}`)
 	};
 }

@@ -108,6 +108,10 @@ class SyntheticWorkbook(unittest.TestCase):
             with self.subTest(note=fragment):
                 self.assertEqual(sum(fragment in n for n in notes), 1, fragment)
         self.assertTrue(any("imported as flow_reference_m3s" in n and "divided by 0.8" in n for n in ref_notes))
+        # Charlie Farm's typed-over demand (no crops) is imported as a municipal demand object (issue #54, 2b).
+        charlie = next(n for n in project["model"]["nodes"] if n["name"] == "Charlie Farm")
+        (town,) = project["model"]["demandObjects"]
+        self.assertEqual((town["nodeId"], town["category"], town["monthlyM3Day"]), (charlie["id"], "municipal", [150.0] * 12))
         self.assertTrue(any(n.startswith("WARNING: ") and "runs use the logger record" in n for n in ref_notes))
 
 

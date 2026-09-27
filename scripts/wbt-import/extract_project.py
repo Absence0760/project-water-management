@@ -241,6 +241,33 @@ def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: f
     )
 
 
+def as_run_of_river(node: dict[str, Any], source_of_transfer: bool) -> str:
+    """With --run-of-river: turn a flagged unit (run_of_river_note) into a run-of-river unit, in place, and say so.
+
+    b023 has no pump capacity, and nothing in it caps what a dummy dam or a
+    dam-less farm takes from the water routed to it, so the river pump is left
+    uncapped (null), which is what the workbook did; the modeller enters the
+    real capacity. A dummy dam's storage is dropped: run of river has no dam
+    (the model rules refuse one). A unit that is the source of an enabled
+    transfer keeps its dam, since a transfer draws on that storage, and the
+    note says why nothing changed."""
+    name = node["name"]
+    if source_of_transfer:
+        return (
+            f"WARNING: farm {name}: not imported as run of river (--run-of-river): an enabled transfer draws on its dam, "
+            "so it stays a farm dam; convert it by hand once the transfer is settled (issue #54, 2d)"
+        )
+    dropped = node["damCapacityM3"]
+    node.update({"damCapacityM3": 0, "damInitialPct": 0, "supplyRule": "runOfRiver", "pumpCapacityM3Day": None})
+    what = f"its {math.floor(dropped + 0.5)} m³ dummy dam is dropped" if dropped > 0 else "it has no dam"
+    return (
+        f"WARNING: farm {name}: imported as run of river (--run-of-river): {what}, and a river pump takes its demand "
+        "from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this "
+        "unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply "
+        "section (issue #54, 2c/2d)"
+    )
+
+
 def month_list(v: Any) -> list[int]:
     """The months a b023 month-list cell ("1,2,11,12") names.
 
@@ -382,28 +409,96 @@ GROSS_DEMAND_TOLERANCE_M3_DAY = 1.0
 GROSS_DEMAND_TOLERANCE_REL = 0.01
 
 
+def crop_formula(per_crop: dict[str, float], factors: dict[str, list[float]], apan: list[float], days: list[float]) -> list[float]:
+    """[Farm demand]'s crop formula per month: sum of area x factor x A-pan / 1000 / days (m3/day)."""
+    return [
+        sum(a * factors[crop][m] * apan[m] / 1000 / days[m] for crop, a in per_crop.items() if crop in factors) for m in range(12)
+    ]
+
+
+def gross_demand_off(gross: list[float], formula: list[float]) -> list[int]:
+    """The months whose gross demand differs from the crop formula by more than the sheet's rounding."""
+    return [
+        m
+        for m in range(12)
+        if abs(gross[m] - formula[m]) > max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * max(abs(gross[m]), abs(formula[m])))
+    ]
+
+
+def non_crop_demand(
+    per_crop: dict[str, float], gross: list[float], factors: dict[str, list[float]], apan: list[float], days: list[float]
+) -> list[float] | None:
+    """What a farm's [Farm demand] gross demand has above its crop formula, per month (m3/day), or None.
+
+    Only the months that are off by more than the sheet's rounding count, and
+    only where the workbook is higher: a town's potable demand typed over the
+    formula (issue #54, 2b). Where the workbook is lower (a formula that skips a
+    crop) the crop areas win, as before."""
+    formula = crop_formula(per_crop, factors, apan, days)
+    off = set(gross_demand_off(gross, formula))
+    surplus = [gross[m] - formula[m] if m in off and gross[m] > formula[m] else 0.0 for m in range(12)]
+    return surplus if any(v > 0 for v in surplus) else None
+
+
+NON_CROP_DEMAND_NAME = "Non-crop demand"
+
+
+def non_crop_demand_object(uid, farm: str, node_id: str, monthly: list[float], cropped: bool, return_pct: float) -> dict[str, Any]:
+    """The demand object for a farm's non-crop demand (engine 1.7.0, docs/model.md 2.7f).
+
+    It is supplied with the farm's crops ("shared"), as the workbook's one
+    demand is, and returns the farm's irrigation return flow %, so what it
+    takes and gives back is the workbook's: supplied x r back, (1 - r) consumed.
+    A farm with no crops at all is a town or scheme (municipal); otherwise the
+    category is left as other for the modeller to set."""
+    return {
+        "id": uid(f"demand-object:{farm}"),
+        "nodeId": node_id,
+        "name": NON_CROP_DEMAND_NAME,
+        "category": "other" if cropped else "municipal",
+        "sizing": "monthly",
+        "monthlyM3Day": monthly,
+        "count": None,
+        "litresPerUnitDay": None,
+        "lossPct": 0,
+        "monthlyFactor": None,
+        "returnPct": min(max(return_pct, 0.0), 1.0),
+        "priority": "shared",
+        "destination": "internal",
+        "enabled": True,
+        "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)",
+    }
+
+
 def gross_demand_note(
     farm: str, per_crop: dict[str, float], gross: list[float], factors: dict[str, list[float]], apan: list[float], days: list[float]
 ) -> str | None:
     """A WARNING when a farm's gross demand doesn't follow from its crop areas: a town's potable
     demand typed over the formula, or a formula whose crop index is blank so it skips that crop
-    (both seen in a client workbook, issue #54). The app computes demand from crop areas only."""
-    formula = [
-        sum(a * factors[crop][m] * apan[m] / 1000 / days[m] for crop, a in per_crop.items() if crop in factors) for m in range(12)
-    ]
-    off = [
-        m
-        for m in range(12)
-        if abs(gross[m] - formula[m]) > max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * max(abs(gross[m]), abs(formula[m])))
-    ]
+    (both seen in a client workbook, issue #54), saying what the import did about it: the part
+    above the crop areas becomes a demand object (non_crop_demand), the crop areas win below."""
+    formula = crop_formula(per_crop, factors, apan, days)
+    off = gross_demand_off(gross, formula)
     if not off:
         return None
-    return (
+    surplus = non_crop_demand(per_crop, gross, factors, apan, days)
+    below = sum(1 for m in off if gross[m] < formula[m])
+    head = (
         f"WARNING: [Farm demand] {farm}: the gross demand in {len(off)} of 12 months doesn't follow from its crop areas "
         f"(a value typed over the formula, or a formula that skips a crop): the workbook has {math.floor(sum(gross) / 12 + 0.5)} "
-        f"m³/day on average, the crop areas give {math.floor(sum(formula) / 12 + 0.5)}. The app computes demand from crop areas "
-        "only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)"
+        f"m³/day on average, the crop areas give {math.floor(sum(formula) / 12 + 0.5)}. "
     )
+    if surplus is None:
+        return head + "The app computes demand from the crop areas, so it models the second figure (issue #54, 2b)"
+    text = (
+        head
+        + f"The part above the crop areas, {math.floor(sum(surplus) / 12 + 0.5)} m³/day on average, is imported as the demand object "
+        f'"{NON_CROP_DEMAND_NAME}" (supplied with the crops, returning the farm\'s return flow %), so the modelled demand '
+        "follows the workbook's; confirm its category, priority and return share (issue #54, 2b)"
+    )
+    if below:
+        text += f". In {below} month(s) the crop areas give more than the workbook, and the app models the crop areas there"
+    return text
 
 
 # A draw formula that is the constant 0 ("=0", or "0" in the text copy): the
@@ -838,8 +933,10 @@ def extract(
     gauge_reference: bool = False,
     scaling_from: str | None = None,
     scale_factor: float | None = None,
+    run_of_river: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    """(project, expected, notes). gauge_reference and the scaling: see gauge_as_reference()."""
+    """(project, expected, notes). gauge_reference and the scaling: see gauge_as_reference().
+    run_of_river: import the units flagged as probable run-of-river as run of river (as_run_of_river)."""
     import openpyxl
 
     if not gauge_reference and (scaling_from is not None or scale_factor is not None):
@@ -895,11 +992,13 @@ def extract(
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}
+        flagged = []
         for n in nodes:
             if n["kind"] == "farm":
                 note = run_of_river_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"], n["pctRunoffToDam"])
                 if note:
                     wb.notes.append(note)
+                    flagged.append(n)
         dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
         if dams:
             wb.notes.append(
@@ -921,6 +1020,7 @@ def extract(
                     wb.notes.append(f"[Farm demand] crop {crop} is not in [Crop demand]; ignored")
                     continue
                 crop_areas.append({"nodeId": node_id[farm], "cropId": crop_id[crop], "areaM2": a})
+        demand_objects: list[dict[str, Any]] = []
         if gross_days is not None and len(gross_days) == 12 and all(d > 0 for d in gross_days):
             factors = {c["name"]: c["cropFactor"] for c in crops}
             for farm, per_crop in areas.items():
@@ -929,6 +1029,12 @@ def extract(
                 note = gross_demand_note(farm, per_crop, gross_sheet[farm], factors, apan, gross_days)
                 if note:
                     wb.notes.append(note)
+                # A demand above the crop areas (a town's, typed over the formula) becomes a demand object (issue #54, 2b).
+                extra = non_crop_demand(per_crop, gross_sheet[farm], factors, apan, gross_days)
+                if extra is not None:
+                    cropped = any(a > 0 and c in factors for c, a in per_crop.items())
+                    ret = num(spec.get(farm, {}).get("returnFlowPct"))
+                    demand_objects.append(non_crop_demand_object(uid, farm, node_id[farm], extra, cropped, ret))
 
         model_transfers = []
         for t in transfers:
@@ -949,6 +1055,12 @@ def extract(
                     "priority": len(model_transfers),
                 }
             )
+
+        # --run-of-river (issue #54, 2c/2d): the flagged units become run of river, after the transfers are known.
+        if run_of_river:
+            sources = {t["fromNodeId"] for t in model_transfers if t["enabled"]}
+            for n in flagged:
+                wb.notes.append(as_run_of_river(n, n["id"] in sources))
 
         if extract_calibration is not None:
             calibration = extract_calibration(wb.wb)
@@ -1004,7 +1116,13 @@ def extract(
             "name": name,
             "description": f"Imported from {path.name}",
             "settings": settings,
-            "model": {"nodes": nodes, "crops": crop_defs, "cropAreas": crop_areas, "transfers": model_transfers},
+            "model": {
+                "nodes": nodes,
+                "crops": crop_defs,
+                "cropAreas": crop_areas,
+                "transfers": model_transfers,
+                **({"demandObjects": demand_objects} if demand_objects else {}),
+            },
             "series": flow["series"],
         }
 
@@ -1056,6 +1174,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     p.add_argument("--gauge-scaling-from", metavar="YYYY-MM-DD", help="first day the workbook scaled the gauge column")
     p.add_argument("--gauge-scale-factor", metavar="F", type=float, help="divide gauge values from that day by F")
+    p.add_argument(
+        "--run-of-river",
+        action="store_true",
+        help="import the units flagged as probable run-of-river (dummy dam or no dam, 100 %% of the upstream inflow) "
+        "with the run-of-river supply rule and no dam (issue #54, 2c/2d)",
+    )
     a = p.parse_args(argv[1:])
     if (a.gauge_scaling_from is None) != (a.gauge_scale_factor is None):
         p.error("--gauge-scaling-from and --gauge-scale-factor go together")
@@ -1074,7 +1198,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str]) -> int:
     a = parse_args(argv)
     src, out = a.workbook, a.outdir
-    project, expected, notes = extract(src, a.gauge_as_reference, a.gauge_scaling_from, a.gauge_scale_factor)
+    project, expected, notes = extract(src, a.gauge_as_reference, a.gauge_scaling_from, a.gauge_scale_factor, a.run_of_river)
     out.mkdir(parents=True, exist_ok=True)
     (out / "project.json").write_text(json.dumps(project, separators=(",", ":")))
     (out / "expected.json").write_text(json.dumps(expected, separators=(",", ":")))

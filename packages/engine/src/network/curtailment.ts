@@ -52,6 +52,14 @@ export interface CurtailmentInput {
 	ewrChargeIrrigation?: ArrayLike<number>;
 	/** k = 1 − β(1 − e): consumptive use per m³ supplied (audit N1). Absent = 1. */
 	consumptivePerSupplied?: number;
+	/**
+	 * What the unit returned below it each day, m³/day [return_flow], for a
+	 * unit with demand objects (engine ≥ 1.7.0), whose k varies with how its
+	 * supply splits between crops and objects: k is then the window's
+	 * (Σ supplied − Σ returned) ÷ Σ supplied, or consumptivePerSupplied when
+	 * nothing was supplied. Absent = consumptivePerSupplied.
+	 */
+	returned?: ArrayLike<number>;
 	/** The EWR site that bound the charge over the window (./attribution.ts bindingSite); null = not charged. */
 	ewrBindingSiteId?: string | null;
 }
@@ -88,6 +96,26 @@ function windowMean(a: ArrayLike<number>, from: number, to: number): number {
 }
 
 /**
+ * A farm's consumptive use per m³ supplied over the window: its constant k,
+ * or with a daily `returned` (a unit with demand objects) the window's
+ * 1 − Σ returned ÷ Σ supplied, clamped to (0, 1]. Exported for the checks.
+ */
+export function windowConsumptiveShare(f: Pick<CurtailmentInput, 'consumptivePerSupplied' | 'returned' | 'supplied'>, from: number, to: number): number {
+	const k0 = f.consumptivePerSupplied ?? 1;
+	if (!f.returned) return k0;
+	let g = 0;
+	let r = 0;
+	for (let t = from; t <= to; t++) {
+		g += f.supplied[t]!;
+		r += f.returned[t]!;
+	}
+	if (!(g > 0)) return k0;
+	const k = 1 - r / g;
+	// Every return share is ≤ 1, so k ≥ 0; one that returns everything consumes nothing and can't be cut for the EWR.
+	return k > 0 ? Math.min(k, 1) : k0;
+}
+
+/**
  * The [Shortfalls] table over `window`. Farms come out in the order given
  * (the workbook lists them in [Network] order).
  */
@@ -116,7 +144,7 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 		const N = nz(Math.abs(M - I) <= 1e-12 * Math.max(Math.abs(M), Math.abs(I)) ? 0 : M - I);
 		// The supply cut that removes R_irr of consumptive use: consumptive = G·k,
 		// so ΔG = R_irr / k (k = 1 − β(1 − e) ≥ e > 0, audit N1). cut = −ΔG ≤ 0.
-		const k = f.consumptivePerSupplied ?? 1;
+		const k = windowConsumptiveShare(f, from, to);
 		const cut = nz(Rirr / k);
 		// Engine ≥ 0.17.0 (audit Q13): the total change and the volume left count
 		// only what irrigation can deliver, the supply cut; the storage part of the

@@ -324,6 +324,14 @@ WBT_GAUGE_SCALING_FROM=YYYY-MM-DD
 WBT_GAUGE_SCALE_FACTOR=F
 ```
 
+and, for a workbook whose dummy-dam or dam-less units pump from the river, to
+import the units the importer flags as probable run-of-river with the
+run-of-river supply rule (issue #54, 2c/2d; off unless set):
+
+```bash
+WBT_RUN_OF_RIVER=1
+```
+
 Details are in `scripts/wbt-import/README.md`.
 
 Then sign in at http://localhost:7777 as `demo@example.com` / `demo-password`.

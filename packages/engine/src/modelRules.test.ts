@@ -36,6 +36,46 @@ describe('modelRuleIssues', () => {
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['bhDam:d', 'bhEmergency:e', 'bhGauge:x', 'bhNode:y', 'dup:borehole id:ok']);
 	});
 
+	it('demand objects (engine 1.7.0): on a unit, sized the way they say, nothing back from water piped out', () => {
+		const n = (id: string, kind: string, downstreamNodeId: string | null) => ({ id, name: id, kind, damCapacityM3: 0, downstreamNodeId }) as ProjectModel['nodes'][number];
+		const o = (id: string, nodeId: string, over: object = {}) => ({
+			id,
+			nodeId,
+			name: id,
+			category: 'other',
+			sizing: 'monthly',
+			monthlyM3Day: new Array(12).fill(1),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0,
+			priority: 'shared',
+			destination: 'internal',
+			enabled: true,
+			note: '',
+			...over
+		});
+		const m = {
+			nodes: [n('g', 'gauge', null), n('f', 'farm', 'g'), n('u', 'user', 'g')],
+			crops: [],
+			cropAreas: [],
+			transfers: [],
+			demandObjects: [
+				o('ok', 'f'),
+				o('ok2', 'f', { sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
+				o('ok', 'f'),
+				o('onUser', 'u'),
+				o('onGauge', 'g'),
+				o('lost', 'zz'),
+				o('short', 'f', { monthlyM3Day: [1, 2] }),
+				o('noCount', 'f', { sizing: 'perUnit', monthlyM3Day: null }),
+				o('ext', 'f', { destination: 'external', returnPct: 0.3 })
+			]
+		} as unknown as ProjectModel;
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['doExternal:ext', 'doKind:onGauge', 'doKind:onUser', 'doMonthly:short', 'doNode:lost', 'doPerUnit:noCount', 'dup:demand object id:ok']);
+	});
+
 	it('supply rules (WP-3.8): a farm’s; trigger needs a dam; run of river has none; stop ≥ trigger', () => {
 		const n = (id: string, kind: string, damCapacityM3: number, over: object = {}) => ({ id, name: id, kind, damCapacityM3, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
 		const m = {
