@@ -88,7 +88,9 @@ function get(out: { series: RunSeries[] }, nodeId: string | null, key: string): 
 
 describe('demand objects in a run (engine 1.7.0)', () => {
 	it('is engine 1.7.0 or later', () => {
-		expect(ENGINE_VERSION >= '1.7.0').toBe(true);
+		// Numerically, part by part: as strings '1.10.0' < '1.7.0'.
+		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
+		expect(maj! > 1 || (maj === 1 && min! >= 7)).toBe(true);
 	});
 
 	const out = run(model([object()]));
