@@ -66,7 +66,7 @@ export const APPLICATION_RUNS_KEPT = 5;
 // through app_scenario_run_meta (046): an applicant reads no run row at all,
 // not even their own application's (its inputs hold every farm). An
 // application's own nodes, to a contributor, are those still its owner's farm
-// links (app_application_own_nodes, 077): what the base projection, the check
+// links (app_application_own_nodes, 071): what the base projection, the check
 // and a new run show them in full. Everyone else reads the stored list, the
 // record the assessors judge.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",

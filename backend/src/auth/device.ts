@@ -1,4 +1,4 @@
-// Trusted devices for the sign-in lockout (076_login_device_trust.sql;
+// Trusted devices for the sign-in lockout (070_login_device_trust.sql;
 // docs/security.md § Authentication).
 //
 // The lockout is keyed by the typed address, so anyone can lock it. A browser

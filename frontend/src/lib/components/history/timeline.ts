@@ -225,7 +225,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		// A team admin changed the portfolio's traffic lights (D11, 055): recorded on each team project.
 		case 'team_thresholds.changed':
 			return `Changed the portfolio traffic lights of the team “${str(s.team)}” from ${trafficLights(s.from)} to ${trafficLights(s.to)}`;
-		// Who reaches the project through its team (079): each is recorded on every team project, with the role it gives here.
+		// Who reaches the project through its team (072): each is recorded on every team project, with the role it gives here.
 		case 'team_member.added':
 			return s.via === 'invite'
 				? `${who} joined the team “${str(s.team)}” as ${str(s.teamRole)} (accepted an invite), so ${str(s.role)} here`

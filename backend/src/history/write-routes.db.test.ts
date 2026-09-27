@@ -527,7 +527,7 @@ describe('every write route records its change', () => {
 // The same guard over the write routes outside /projects/:id. A team role is a
 // project role on every project of the team (app_project_role), so a team
 // change that alters who reaches a project is recorded on each of the team's
-// projects (079_audit_trail); the rest act on an account, not a project.
+// projects (072_audit_trail); the rest act on an account, not a project.
 
 interface TeamCtx {
 	admin: User;
@@ -619,7 +619,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	// --- exempt: they change no project's inputs, results or access ---------------------
 	{ route: 'POST /projects', exempt: 'a new project has nothing to diff yet; its first change records a baseline revision (recordModelRevision)' },
 	{ route: 'POST /teams', exempt: 'a new team has no projects, so no project history; a project moved in records project.changed' },
-	{ route: `DELETE ${T}/invites/:inviteId`, exempt: 'a pending team invite grants nothing; accepting one records team_member.added (079_audit_trail)' },
+	{ route: `DELETE ${T}/invites/:inviteId`, exempt: 'a pending team invite grants nothing; accepting one records team_member.added (072_audit_trail)' },
 	{ route: 'PUT /me/alerts/:projectId', exempt: 'a member’s own alert subscription: their preference, not the project’s rules (alert_rules.changed covers those)' },
 	{ route: 'POST /me/alerts/resume', exempt: 'resumes the caller’s own paused alert emails; a personal delivery setting, not project data' },
 	{ route: 'POST /alerts/unsubscribe', exempt: 'a recipient’s one-click unsubscribe from alert emails: a personal delivery setting, not project data' },
@@ -735,7 +735,7 @@ describe('a team change in the history', () => {
 		expect((await teamEvents('team_member.role')).at(-1)).toMatchObject({ subject: { userId: mate.id, from: 'member', to: 'admin', role: 'owner' } });
 	});
 
-	it('records a team invite accepted as the person joining (app_accept_invites, 079)', async () => {
+	it('records a team invite accepted as the person joining (app_accept_invites, 072)', async () => {
 		const email = `tinvited-${crypto.randomUUID()}@example.com`;
 		const invited = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' });
 		expect(invited.body.invited).toBe(true);

@@ -459,7 +459,7 @@ the result change?", and put back any earlier version.
   `changes` (the engine's `diffInputs` lines against the previous revision),
   `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`
   (each must be the same project's revision or run when written:
-  `model_revision_same_project`, 071).
+  `model_revision_same_project`, 069).
   A save whose snapshot is unchanged writes nothing; a reorder is recorded,
   with a line saying it only changed the order. A **`baseline`** row stores
   the state before the first change to a project that predates history, so
@@ -511,7 +511,7 @@ the result change?", and put back any earlier version.
   traffic-light thresholds, `{ teamId, team, from, to }`, each side
   `{ green, amber, source }`; written on every project of the team, see
   [§ Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql)),
-  `team_member.added/role/removed` and `team.deleted` (079: who reaches the
+  `team_member.added/role/removed` and `team.deleted` (072: who reaches the
   project through its team; `{ teamId, team, userId, displayName, teamRole,
   role }` with `role` the project role the team role gives, `from`/`to`
   for a role change, `self` for a leaver, `via: 'invite'` for an accepted
@@ -1559,13 +1559,13 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | Table | Holds |
 | --- | --- |
 | `login_throttle` | One row per **typed email address** (not per account, so unknown addresses behave the same): `failures` since the last correct password, `locked_until`, `last_attempt_at` |
-| `login_device_throttle` (076) | The same, per **(address, trusted device)**: the attempts of a browser holding a valid `wm_device` cookie for that address, so a stranger's lock on the shared row can't shut it out. `device` is the cookie's random id (its MAC is never stored) |
+| `login_device_throttle` (070) | The same, per **(address, trusted device)**: the attempts of a browser holding a valid `wm_device` cookie for that address, so a stranger's lock on the shared row can't shut it out. `device` is the cookie's random id (its MAC is never stored) |
 
 - Only touched through `SECURITY DEFINER` functions, before sign-in:
   `app_login_attempt(email, free, base, max)` counts the attempt (row lock, so
   parallel guesses are counted one by one) and returns the seconds left on a
   lock, and `app_login_succeeded(email)` deletes the row (correct password or
-  password reset; since 076 it also deletes the address's device rows).
+  password reset; since 070 it also deletes the address's device rows).
   `app_login_device_attempt(email, device, …)` and
   `app_login_device_succeeded(email, device)` are the per-device pair. A
   deny-all policy (`USING (false)`) closes direct access to both tables.
@@ -2039,7 +2039,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     for editors (the `alert_eval` job's acting user). `water_app` may update
     only `state`, `cleared_at`, `value` and `detail` (a column grant; the
     catalogue test lists it), and `alert_event_guard` refuses reopening a
-    cleared event, moving one to another rule, or (071) citing another
+    cleared event, moving one to another rule, or (069) citing another
     project's run. No DELETE policy.
   - `alert_subscription`: one policy for everything: your own rows, for a
     project you can still open (not as an applicant), and a farmer's

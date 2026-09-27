@@ -108,7 +108,7 @@ const KNOWN_INSERTS: Record<string, string> = {
 
 /**
  * A copied row the database turned into the applicant's own (scenario_guard
- * sets owner and origin; 077 keeps its own nodes to their farm links): what
+ * sets owner and origin; 071 keeps its own nodes to their farm links): what
  * the insert sweep accepts, checked on the row as written.
  */
 const INSERT_OWN: Record<string, (row: Record<string, unknown>) => boolean> = {

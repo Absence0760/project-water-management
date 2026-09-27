@@ -243,7 +243,7 @@ describe('a signed-off run stays the run that was signed', () => {
 		const res = await owner.call('DELETE', `${at()}/scenarios/${scenarioId}`);
 		expect(res.status, JSON.stringify(res.body)).toBe(409);
 		expect(res.body.error).toMatch(/signed-off run/);
-		// And in SQL, past the route: the trigger (079), for the owner and for the editor who signed.
+		// And in SQL, past the route: the trigger (072), for the owner and for the editor who signed.
 		for (const u of [owner, editor]) {
 			await expect(withUser(u.id, (db) => db.query('DELETE FROM scenario WHERE id = $1', [scenarioId]))).rejects.toMatchObject({ code: '23001' });
 		}

@@ -1,4 +1,4 @@
--- 079_audit_trail — two gaps in the audit trail (docs/data-model.md § Change
+-- 072_audit_trail — two gaps in the audit trail (docs/data-model.md § Change
 -- history, docs/security.md § Change history):
 --   1. a team invite accepted is recorded on each of the team's projects;
 --   2. a scenario with a signed-off run can't be deleted (below).
@@ -59,7 +59,7 @@ CREATE OR REPLACE FUNCTION app_accept_invites(p_user uuid) RETURNS integer
 			SELECT l.project_id, p_user, left(coalesce(v_name, ''), 200), 'farmer.linked',
 				jsonb_build_object('userId', p_user, 'displayName', v_name, 'nodeId', l.node_id, 'nodeName', nd.name, 'cause', 'invite')
 			FROM linked l JOIN node nd ON nd.id = l.node_id;
-		-- 079: each team joined is recorded on each of its projects.
+		-- 072: each team joined is recorded on each of its projects.
 		WITH joined_team AS (
 			INSERT INTO team_member (team_id, user_id, role)
 				SELECT team_id, p_user, team_role FROM invite
@@ -121,4 +121,4 @@ CREATE TRIGGER scenario_signed_run_guard BEFORE DELETE ON scenario
 REVOKE ALL ON FUNCTION scenario_signed_run_guard() FROM PUBLIC, water_app;
 
 COMMENT ON FUNCTION scenario_signed_run_guard() IS
-	'Refuses to delete a scenario one of whose runs is signed off, so the run keeps its scenario (079_audit_trail, 036_signoff).';
+	'Refuses to delete a scenario one of whose runs is signed off, so the run keeps its scenario (072_audit_trail, 036_signoff).';

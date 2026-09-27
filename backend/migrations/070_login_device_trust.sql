@@ -1,4 +1,4 @@
--- 076_login_device_trust — a device that signed in to an address before keeps
+-- 070_login_device_trust — a device that signed in to an address before keeps
 -- its own sign-in lockout, so a stranger can't keep the owner out.
 --
 -- 005's lockout is keyed by the typed address alone. Anyone can lock it, and
@@ -26,7 +26,7 @@ CREATE TABLE login_device_throttle (
 	PRIMARY KEY (email, device)
 );
 COMMENT ON TABLE login_device_throttle IS
-	'Sign-in lockout per (address, trusted device) (076). SECURITY DEFINER access only; rows go after a day without attempts.';
+	'Sign-in lockout per (address, trusted device) (070). SECURITY DEFINER access only; rows go after a day without attempts.';
 -- Housekeeping deletes rows by age.
 CREATE INDEX login_device_throttle_last_attempt_idx ON login_device_throttle (last_attempt_at);
 

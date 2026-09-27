@@ -1,4 +1,4 @@
--- 071_cross_project_refs — the two references between project-scoped
+-- 069_cross_project_refs — the two references between project-scoped
 -- tables that had no same-project check, found by
 -- db/cross-project-refs.security.db.test.ts (a sweep of every foreign key
 -- onto a table with a project_id, from pg_constraint; docs/security.md §

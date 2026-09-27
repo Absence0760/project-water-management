@@ -82,7 +82,7 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 	throw err;
 };
 
-/** restrict_violation: scenario_signed_run_guard (079) refused the DELETE. */
+/** restrict_violation: scenario_signed_run_guard (072) refused the DELETE. */
 const PG_RESTRICT = '23001';
 const signedKept = () => new ApiError(409, 'this scenario has a signed-off run, so it is kept: the run stays the scenario run that was signed');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
@@ -277,7 +277,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			await lockProjectRuns(db, id);
 			// A signed-off run stays the run that was signed, its scenario included
 			// (model_run.scenario_id would go NULL). The scenario_signed_run_guard
-			// trigger (079) refuses the DELETE too, whoever runs it, and sees the
+			// trigger (072) refuses the DELETE too, whoever runs it, and sees the
 			// sign-offs a contributor can't read; its restrict_violation is the same 409.
 			const signed = await db.query('SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1 LIMIT 1', [sid]);
 			if (signed.rowCount) throw signedKept();

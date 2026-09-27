@@ -1,4 +1,4 @@
--- 077_application_own_nodes — an application's own farms are its owner's
+-- 071_application_own_nodes — an application's own farms are its owner's
 -- farm links, in the table and whenever an applicant reads them
 -- (docs/security.md § Applicants; scenarios/applicant.security.db.test.ts).
 --
@@ -95,7 +95,7 @@ CREATE OR REPLACE FUNCTION app_contributor_run_nodes() RETURNS TABLE (run_id uui
 			WHERE s.origin = 'applicant'
 			  AND (s.owner_user_id = uid OR EXISTS (SELECT 1 FROM scenario_member m WHERE m.scenario_id = s.id AND m.user_id = uid))
 			  AND app_is_contributor(s.project_id)
-			  -- Still the application's owner's farm (077).
+			  -- Still the application's owner's farm (071).
 			  AND EXISTS (SELECT 1 FROM farm_link f WHERE f.project_id = s.project_id AND f.user_id = s.owner_user_id AND f.node_id = o.node_id);
 	END
 	$$;

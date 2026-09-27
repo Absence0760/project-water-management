@@ -122,7 +122,7 @@ describe('what an item says', () => {
 		);
 	});
 
-	it('writes who reaches the project through its team (079), with the role it gives here', () => {
+	it('writes who reaches the project through its team (072), with the role it gives here', () => {
 		const who = { team: 'Upper WUA', userId: 'u1', displayName: 'Ben' };
 		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'member', role: 'editor' }))).toBe('Added Ben to the team “Upper WUA” as member, so editor here');
 		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'viewer', role: 'viewer', via: 'invite' }))).toBe(

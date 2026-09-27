@@ -3,7 +3,7 @@
 //   - the lockout is bounded: a stranger who keeps an address's shared
 //     record locked can't keep its owner out, because a device that signed
 //     in to the address (or reset its password) counts on its own record
-//     (076_login_device_trust.sql, auth/device.ts);
+//     (070_login_device_trust.sql, auth/device.ts);
 //   - that trust is bound to the address, the account's session watermark
 //     and the cookie's MAC, and a trusted device's own guesses still lock it;
 //   - hammering during a lock never extends it, and a day without attempts

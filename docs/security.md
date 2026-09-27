@@ -49,7 +49,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   which accounts exist. Attempts are counted *before* the bcrypt check under
   a row lock, so parallel guesses can't slip past. Attempts made during a
   lock never extend it.
-- **Trusted devices keep the lockout bounded** (076, `auth/device.ts`).
+- **Trusted devices keep the lockout bounded** (070, `auth/device.ts`).
   Anyone can lock an address, and one wrong guess each time a lock ends
   locks it again, so a script could otherwise keep its owner out
   indefinitely (a reset cleared the count, and five guesses re-locked it).
@@ -687,7 +687,7 @@ In short:
   (accepted) and B's (refused), then every write route whose body names a
   row (inventoried from the zod schemas' uuid fields), and finally checks no
   row of A or B references the other. A new foreign key or request field
-  fails until it is classified. 071_cross_project_refs closed the two it
+  fails until it is classified. 069_cross_project_refs closed the two it
   found: `model_revision.restored_from` (sequential ids, so any editor could
   plant a "restore" of another project's revision and, the key being NO
   ACTION, block that project's deletion; `restored_from_run` is held the
@@ -754,7 +754,7 @@ In short:
   are masked. A team role is a project role on every team project, so a
   team member added (directly or by an accepted invite), re-roled, removed
   or leaving, and a team deleted, is an event on each of the team's projects
-  (`team_member.*`, `team.deleted`; 079). Guards:
+  (`team_member.*`, `team.deleted`; 072). Guards:
   `history/write-routes.db.test.ts` sweeps every write route in `app.routes`
   (under `/projects/:id` and outside it) for the row it must write, with a
   reason for each exemption; `history/audit-trail.security.db.test.ts` tries
@@ -1062,7 +1062,7 @@ In short:
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
   - **An application's own farms are its owner's farm links, now**
-    (077_application_own_nodes). The `scenario_owned_nodes` trigger refuses
+    (071_application_own_nodes). The `scenario_owned_nodes` trigger refuses
     an application whose `owned_node_ids` name a farm its owner isn't linked
     to (`42501`), so a write past the route can't claim a neighbour's farm;
     and what a contributor sees in full (the base projection, the check, a
@@ -1456,7 +1456,7 @@ PDF someone else asked for kept the person as a recipient
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
-| Sign-in attempts, keyed by the typed address (and a trusted device's id, 076) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
+| Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
@@ -1670,7 +1670,7 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     policy allows either (catalogue guard); the signed run is cited, so it
     can't be deleted or trimmed, and `water_app` may change only its notes
     and pin. A scenario with a signed-off run can't be deleted either (409;
-    the `scenario_signed_run_guard` trigger, 079, refuses it in SQL too),
+    the `scenario_signed_run_guard` trigger, 072, refuses it in SQL too),
     since the run's `scenario_id` would go NULL and the signed scenario run
     would pass for a run of the project's own inputs. Deleting the whole
     project still takes its sign-offs with it (cascade), unless it has an

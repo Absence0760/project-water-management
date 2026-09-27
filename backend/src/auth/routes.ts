@@ -53,7 +53,7 @@ export const LOGIN_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: 
 /**
  * Counts one attempt against the lockout; the seconds left on a lock, or 0 to
  * go ahead. On a trusted device (auth/device.ts) it is that device's own
- * record for the address (076), otherwise the address's shared one (005).
+ * record for the address (070), otherwise the address's shared one (005).
  */
 async function countAttempt(db: Db, address: string, device: string | null): Promise<number> {
 	const { rows } = await db.query<{ locked: number }>(
@@ -144,7 +144,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		// the row lock and can't all get past it. Keyed by the typed address,
 		// so an unknown address is locked exactly like a real one; a device
 		// that signed in to the address before counts on its own record
-		// (076, auth/device.ts), so a stranger's lock doesn't shut it out.
+		// (070, auth/device.ts), so a stranger's lock doesn't shut it out.
 		const { lockedSeconds, row, device } = await withoutUser(async (db) => {
 			// app_user is under RLS (068) and nobody is signed in yet: the one-address lookups.
 			const { rows } = await db.query<{ id: string; email: string; password_hash: string }>(

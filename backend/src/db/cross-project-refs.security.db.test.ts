@@ -545,7 +545,7 @@ describe('through RLS as water_app, by an editor of both projects', () => {
 	}
 
 	it("can't plant a restore of another project's revision, whose id is a guessable integer, even from outside it", async () => {
-		// Before 071 a plain editor of their own project could name any
+		// Before 069 a plain editor of their own project could name any
 		// revision id, and the NO ACTION foreign key then blocked deleting the
 		// victim's project. The ids are sequential, so no access was needed.
 		const outsider = await signUp('RevisionOutsider');
