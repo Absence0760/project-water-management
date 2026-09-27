@@ -150,7 +150,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		dam_storage_set: 0,
 		depletion_store: 0,
 		baseflow_depletion: 0,
-		depletion_unmet: 0
+		depletion_deficit: 0
 	}).map(([key, value]) => ({ key, label: key, unit: 'm³/day', value })),
 	...over
 });

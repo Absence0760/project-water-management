@@ -14,6 +14,8 @@ import type { ModelInput } from '../project';
 import { buildNetworkPlan, type NaturalFlowInput, type RunContext } from '../run';
 import { NATURAL_FLOW } from '../runoff';
 import { simulateNetwork, type NetworkPlan, type PlanNode } from './simulate';
+import type { DamCurve } from './dam';
+import { resizeCurveRows, resizedFullArea } from './damResize';
 import { prepareRun } from '../prepare';
 
 /** A draft shape: flat, the node's own irrigation demand by month, or 12 factors (water year, Oct–Sep). */
@@ -189,13 +191,15 @@ function supplyNetwork(plan: NetworkPlan, i: number): { plan: NetworkPlan; at: n
 function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan; at: number; setDraft: (draft: number, pattern: Float64Array) => void } {
 	const base = p.plan.nodes[i]!;
 	const baseCap = base.damCapacityM3;
-	// A resized dam keeps its initial and dead storage as fractions of capacity,
-	// and its mean depth (surface area ∝ capacity): pending the hydrologist.
-	// A survey curve (WP-3.5) is scaled the same way, volumes and areas both
-	// × the ratio, so the dam keeps its shape (the same depth at the same
-	// fraction full) and a curve and the power law resize alike (model.md §2.13).
+	// A resized dam keeps its initial and dead storage as fractions of capacity
+	// (pending the hydrologist), and its surface follows the dam's own
+	// area–volume relation (engine ≥ 1.10.0, ./damResize.ts, model.md §2.13):
+	// the power law's A_full × ratio^b, a survey curve (WP-3.5) cut at the new
+	// top or carried beyond it by a power law through its top rows. The curve's
+	// new top is its own top × the ratio, so the dam's own capacity keeps its
+	// curve as it is.
 	const ratio = baseCap > 0 ? cap / baseCap : 0;
-	const curve = base.damCurve && ratio > 0 ? { volume: base.damCurve.volume.map((v) => v * ratio), area: base.damCurve.area.map((a) => a * ratio) } : undefined;
+	const curve = base.damCurve && ratio > 0 ? resizedPlanCurve(base.damCurve, ratio, base.damAreaExponent) : undefined;
 	const demand = new Float64Array(p.days);
 	// The dam's own yield: its boreholes (WP-1.34), including those that pump
 	// into the dam (WP-3.9), don't count towards it (pending the hydrologist).
@@ -206,7 +210,7 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 		damCapacityM3: cap,
 		initialStorageM3: base.initialStorageM3 * ratio,
 		deadStorageM3: base.deadStorageM3 * ratio,
-		damAreaFullM2: base.damAreaFullM2 * ratio,
+		damAreaFullM2: resizedFullArea(base.damAreaFullM2, baseCap, cap, base.damAreaExponent),
 		...(curve ? { damCurve: curve } : {}),
 		demand
 	};
@@ -222,6 +226,13 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 			for (let t = 0; t < p.days; t++) demand[t] = draft * pattern[t]! * e;
 		}
 	};
+}
+
+/** A plan's survey curve (anchored at an empty dam) resized to its top × `ratio` along its own relation (./damResize.ts). */
+function resizedPlanCurve(c: DamCurve, ratio: number, exponent: number): DamCurve {
+	if (ratio === 1) return c;
+	const r = resizeCurveRows(c.volume, c.area, null, c.volume[c.volume.length - 1]! * ratio, exponent, (v, a) => [v, a] as const);
+	return { volume: Float64Array.from(r.rows, (x) => x[0]), area: Float64Array.from(r.rows, (x) => x[1]) };
 }
 
 interface ProbeResult {

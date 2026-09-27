@@ -81,8 +81,8 @@ const RUN_KEYS = [
 	'dam_release', 'dam_seepage_lost',
 	// Other water users (engine 0.22.0, WP-1.33)
 	'senior_requirement', 'passed_for_senior',
-	// Boreholes (engine 0.23.0, WP-1.34)
-	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store',
+	// Boreholes (engine 0.23.0, WP-1.34); depletion_unmet on runs before engine 1.10.0, depletion_deficit from it
+	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_deficit', 'depletion_store',
 	// Boreholes that pump into the dam (engine 0.36.0, WP-3.9)
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)

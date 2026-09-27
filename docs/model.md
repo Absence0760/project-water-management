@@ -1762,8 +1762,15 @@ binds, the transfer brings enough that neither MIN bites.
   estimates `capacity ÷ 3 m`, about the median mean depth of South African
   minor dams (Mantel & Hughes 2023), and warns **W6** with the number of dams
   (and their names) that used the estimate.
-- `b` is `node.damAreaExponent`, default **0.7** (Liebe et al. 2005, small
-  reservoirs); allowed 0 < b ≤ 3.
+- `b` is `node.damAreaExponent`, default **0.7** (`DAM_AREA_EXPONENT`, Liebe
+  et al. 2005, small reservoirs; published small-reservoir fits give b ≈
+  0.65–0.85); allowed 0 < b ≤ 3. WR2012's Pitman theory manual (WRC TT
+  690/16 §2.2) gives 0.6 as "the average for all reservoirs in South
+  Africa" (calibration-research.md CR-32). **Pending the hydrologist:**
+  switching the default to 0.6, and the unknown-area fallback from
+  capacity ÷ 3 m to A = 7.2 · C^0.77 m² (Sawunyama 2013); either shifts
+  every such dam's evaporation, so neither is made without them. The
+  dam's own b resizes it along its own relation (§2.13, engine ≥ 1.10.0).
 - **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
   start-of-day surface to the whole day. When the surface grows faster than
   the volume (b > 1) and a day's evaporation is more than 1/b of the dam
@@ -2225,8 +2232,8 @@ drought:       as supplemental while Q[t−1] < trigger × dam capacity, else GW
 G  = Gs + GW                                 (supplied; the dam or river gives only Gs, so P = avail − Gs)
 T  = β(1 − e) × G                            (the losses of pumped water return too)
 Sd = Sd[t−1] + d × GW;   due = α × Sd;   Sd ← Sd − due,   α = 1 − e^(−1/k)  (α = 1 when k = 0)
-Dep = MIN(due, R + S + T + seepage)          taken from the flow leaving the node
-unmet = due − Dep                            reported (series depletion_unmet) and warned about
+Dep = MIN(Dd[t−1] + due, R + S + T + seepage)   taken from the flow leaving the node
+Dd  = Dd[t−1] + due − Dep                    the deficit still owed (series depletion_deficit, engine ≥ 1.10.0)
 U  = R + S + T + seepage − Dep
 ```
 
@@ -2266,14 +2273,28 @@ node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
   depletion from the river at the node worked identically for both runoff
   models, keeps natural flow
   natural, and puts the loss where the EWR is checked.
-- *Volume is conserved.* Over the run d × Σ GW = Σ Dep + Σ unmet + Sd at the
-  end: depletion keeps going for a while after pumping stops, and the store's
-  content at the end is depletion still to come. `checkGroundwater` asserts
-  this and every day's recursion.
-- *The river never goes negative.* Depletion due on a day with no flow left
-  at the node is unmet: in reality the aquifer's storage (or a losing reach)
-  supplies it. It is not carried over, which slightly understates depletion
-  in a dry spell; the run warns with the volume and the nodes.
+- *Volume is conserved.* Over the run Σ due (the depletion generated) = Σ Dep
+  (taken from the river) + Dd at the end (still owed), and d × Σ GW = Σ due +
+  Sd at the end: depletion keeps going for a while after pumping stops, and
+  the store's content at the end is depletion still to come.
+  `checkGroundwater` asserts both and every day's recursion.
+- *The river never goes negative, and the deficit is carried over (engine ≥
+  1.10.0, hydrologist persona review of issue #46, item 15; pending the
+  hydrologist).* Depletion due on a day with no flow left at the node is owed:
+  the deficit Dd, which comes off the first flow at the node, before any new
+  depletion, and persists until repaid. When a reach is dry the pumped
+  aquifer's drawdown doesn't vanish; it is repaid from the stream when flow
+  returns (a losing reach), which is the low-flow recovery the EWR depends
+  on, so carrying it over errs toward the EWR. **Bound:** the deficit is part
+  of the depletion generated, never more (Dd ≤ Σ due so far ≤ d × Σ GW), so it
+  can't grow beyond what was pumped; it is never written off. The outstanding
+  deficit is reported daily (`depletion_deficit`, m³) and the run warns with
+  the volume still owed at its end, per node. Before 1.10.0 the unmet part was
+  dropped (series `depletion_unmet`, m³/day, on older runs), which understated
+  depletion after a dry spell. The review's optional cap (d × the water
+  year's pumping) is not applied: a cap would drop volume again, and for an
+  ephemeral reach the capture share d < 1 already stands for the part of the
+  drawdown met from aquifer storage and evaporation capture.
 
 **Double counting and calibration.** A gauge or logger record measured while
 the boreholes pumped already carries their depletion. Because calibration
@@ -2293,7 +2314,8 @@ of the node's net impact (e = H + I + J − U, §2.7b) and of any EWR charge.
 share (§2.11) and the curtailment supply cut count it too.
 
 **Outputs** (only on nodes with boreholes): `groundwater_used`,
-`baseflow_depletion`, `depletion_unmet`, `depletion_store` (m³);
+`baseflow_depletion`, `depletion_deficit` (engine ≥ 1.10.0; `depletion_unmet`
+before), `depletion_store` (m³);
 `FarmSummary` / `UserSummary` `avgGroundwaterM3Day` and
 `avgBaseflowDepletionM3Day`; the water balance's `groundwaterM3` and
 `streamDepletionM3`.
@@ -2384,8 +2406,9 @@ partial year the whole cap). Once a unit reaches its cap it pumps nothing until
 warns, naming the boreholes that reached a cap.
 
 **Depletion.** Unchanged in method: Σ d × pumped enters the node's lag store
-and is taken from the flow leaving the node, capped at that flow, the unmet
-part reported (`depletion_unmet`) and warned about. Water pumped into the dam
+and is taken from the flow leaving the node, capped at that flow, the rest
+owed as the deficit (`depletion_deficit`, engine ≥ 1.10.0) and taken off the
+first flow back. Water pumped into the dam
 depletes the river like any other pumping.
 
 **Annual use, the caps and GN 538.** `RunSummary.groundwaterAnnualUse` holds,
@@ -4545,19 +4568,41 @@ yield takes under a second and an 11-point curve about 7 s
 of a job.
 
 **A resized dam** (the curve, and any `capacityM3`) keeps its initial and
-dead storage as the same fractions of capacity, and its mean depth: surface
-area when full scales with capacity, so evaporation and rain on it scale
-too. A transfer rule drawing from it keeps its reserve as the same fraction.
-A dam with a **survey curve** (WP-3.5, §2.7a; engine ≥ 0.35.0) is resized
-the same way: every row's volume and area × the capacity ratio, so the dam
-keeps its shape (the same depth at the same fraction full) and a curve dam
-and a power-law dam scale alike; at capacity 0 the curve is dropped. The
-mean-supply bound *B* takes rain on the curve's top-row area. Its release
-rule is kept as it is (a fixed release or an outlet cap doesn't grow with
-the dam), and the release comes before the draft, so a dam with a release
-yields less. Pending the hydrologist: a real enlargement (a higher wall, a
-wider basin) changes the curve differently from a uniform scale; a surveyed
-curve for the enlarged dam, entered on a scenario, is the durable answer.
+dead storage as the same fractions of capacity. A transfer rule drawing from
+it keeps its reserve as the same fraction. Its surface follows **the dam's
+own area–volume relation** (engine ≥ 1.10.0, `network/damResize.ts`; drafted
+from the hydrologist persona's review of issue #46, item 11, **pending the
+hydrologist**): a dam of another size at the same site is the same basin
+filled to another level, so its full-supply area is the dam's own area at
+that volume.
+
+- **Power-law dam** (A = A_full × (V / C)^b, i.e. A = k·V^b): A_full,new =
+  A_full × (C_new / C)^b, with the dam's own b (default 0.7, §2.7a). Mean
+  depth rises with capacity. Doubling a 100 000 m³ dam with 3 m mean depth
+  gives 33 333 × 2^0.7 = 54 150 m², not 66 667; halving it 20 520 m², not
+  16 667.
+- **Survey-curve dam** (WP-3.5, §2.7a; engine ≥ 0.35.0), resized to its top
+  volume × the capacity ratio (so its own capacity keeps the curve as it is):
+  smaller, the curve is cut at the new top, a top row interpolated linearly
+  in volume as the run interpolates it (exact); larger, one row is added at
+  the new top with area A_top × (V_new / V_top)^b, b fitted through the
+  curve's top two rows that have a surface (clamped to 0–3; the dam's own
+  exponent when it has only one), and level the top row's + ∫ dV / A along
+  that power law (an extrapolation beyond the survey).
+
+At capacity 0 the curve is dropped. The mean-supply bound *B* takes rain on
+the resized full-supply area (a curve's top row). Its release rule is kept as
+it is (a fixed release or an outlet cap doesn't grow with the dam), and the
+release comes before the draft, so a dam with a release yields less. Before
+1.10.0 a resized dam scaled its area with its capacity (constant mean depth),
+which describes widening the basin at the same depth, rarely what a raise
+does: it overstated an enlarged dam's evaporating surface (and understated a
+smaller one's), so it understated yield above the dam's own capacity and
+overstated it below. The larger side still depends on the valley shape above
+today's full-supply level: a surveyed curve for the enlarged dam, entered on
+a scenario (a `node.add` with its `damCurve`; there is no `node.set` for a
+curve yet), is the durable answer. A scenario's `node.set` of `damCapacityM3`
+resizes the dam the same way (scenarios.md § Dam capacity).
 
 **Monotonicity.** Yield is non-decreasing in capacity for a lossless dam
 that starts at or above its minimum operating level and is not a transfer
@@ -5049,7 +5094,9 @@ can store one per base run. The state holds:
   index, resultant flow and index);
 - per node, in model order: the dam storage the day before (before any
   storage reset on the day), the soil-water store in m³ over the cropped
-  area (§2.3 step 4), the stream-depletion lag store (§2.7d), whether the
+  area (§2.3 step 4), the stream-depletion lag store and, from engine
+  1.10.0, the depletion deficit still owed (`depletionDeficitM3`, left out
+  when 0; §2.7d), whether the
   river pump was on the day before (the trigger rule, §2.7e) and each
   pumping unit's volume so far this water year (the annual caps; a
   resumed run clears them on 1 October as an uninterrupted one does);

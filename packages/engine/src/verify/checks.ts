@@ -996,10 +996,12 @@ function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number,
  * - the lag store S[t] = S[t−1] + infeed − due, due = α × (S[t−1] + infeed),
  *   S ≥ 0, starting empty, with the day's infeed between the smallest and the
  *   largest depletion factor × what was pumped;
- * - taken + unmet = due, both ≥ 0, and unmet only when nothing flows out, so
- *   the river never goes negative;
- * - the lag conserves volume: Σ infeed = Σ taken + Σ unmet + S at the end,
- *   and Σ infeed = Σ over the boreholes of d × their volume
+ * - the deficit carries over (engine ≥ 1.10.0): taken + deficit[t] =
+ *   deficit[t−1] + due, both ≥ 0, starting at 0, and a deficit only when
+ *   nothing flows out, so the river never goes negative and is repaid first;
+ * - volume is conserved: Σ taken + the deficit at the end = Σ due (depletion
+ *   generated), Σ infeed = Σ due + S at the end, and Σ infeed = Σ over the
+ *   boreholes of d × their volume
  *   (RunSummary.groundwaterAnnualUse);
  * - groundwaterAnnualUse has one row per water year of the run, its volumes
  *   add up to the daily columns and over its boreholes, and no borehole
@@ -1020,15 +1022,17 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 			if (rows.length) return `${n.id}: groundwater annual use without boreholes`;
 			continue;
 		}
-		const [GW, DEP, UN, ST, G, U] = ['groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store', 'supplied', 'outflow'].map(g);
+		const [GW, DEP, UN, ST, G, U] = ['groundwater_used', 'baseflow_depletion', 'depletion_deficit', 'depletion_store', 'supplied', 'outflow'].map(g);
 		if (!GW || !DEP || !UN || !ST || !G || !U) return `${n.id}: groundwater series missing`;
 		const GD = g('groundwater_to_dam');
 		const capSum = b.units.reduce((s, u) => s + u.capacityM3Day, 0);
 		const dMin = Math.min(...b.units.map((u) => u.depletionFrac));
 		const dMax = Math.max(...b.units.map((u) => u.depletionFrac));
 		let prev = 0;
+		let owedBefore = 0;
 		let infeed = 0;
-		let gone = 0;
+		let generated = 0;
+		let taken = 0;
 		let row = -1;
 		let wy = NaN;
 		const sums = rows.map(() => ({ days: 0, all: 0, dam: 0, dep: 0 }));
@@ -1039,17 +1043,21 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 			if (gw < 0 || gw > G[t]! + tol(G[t]!) || gd < 0 || gw + gd > capSum + tol(capSum)) return `${where}: groundwater ${gw} outside [0, MIN(Σ capacity ${capSum}, supplied ${G[t]})]${gd ? ` (with ${gd} into the dam)` : ''}`;
 			const scale = Math.max(prev, U[t]! + DEP[t]!, gw + gd);
 			// One depletion factor: the infeed is d × pumped. Several: it lies between the smallest and largest share of it.
-			const inf = dMin === dMax ? dMin * (gw + gd) : ST[t]! + DEP[t]! + UN[t]! - prev;
+			const inf = dMin === dMax ? dMin * (gw + gd) : ST[t]! + DEP[t]! + UN[t]! - owedBefore - prev;
 			if (inf < dMin * (gw + gd) - tol(scale) || inf > dMax * (gw + gd) + tol(scale)) return `${where}: depletion infeed ${inf} outside [${dMin}, ${dMax}] × pumped ${gw + gd}`;
 			const inStore = prev + inf;
 			const due = b.depletionAlpha * inStore;
-			if (DEP[t]! < 0 || UN[t]! < -tol(0) || Math.abs(DEP[t]! + UN[t]! - due) > tol(Math.max(scale, inStore))) return `${where}: depletion ${DEP[t]} + unmet ${UN[t]} ≠ due ${due}`;
+			const owed = owedBefore + due;
+			if (DEP[t]! < 0 || UN[t]! < -tol(0) || Math.abs(DEP[t]! + UN[t]! - owed) > tol(Math.max(scale, inStore, owed)))
+				return `${where}: depletion ${DEP[t]} + deficit ${UN[t]} ≠ yesterday's deficit ${owedBefore} + due ${due}`;
 			if (Math.abs(ST[t]! - (inStore - due)) > tol(Math.max(scale, inStore)) || ST[t]! < -tol(scale)) return `${where}: depletion store ${ST[t]} ≠ ${inStore - due}`;
 			if (U[t]! < -tol(scale)) return `${where}: stream depletion took the river below 0 (outflow ${U[t]})`;
-			if (UN[t]! > tol(scale) && U[t]! > tol(scale)) return `${where}: depletion left unmet (${UN[t]}) while ${U[t]} still flowed`;
+			if (UN[t]! > tol(Math.max(scale, owed)) && U[t]! > tol(Math.max(scale, owed))) return `${where}: depletion deficit ${UN[t]} left owed while ${U[t]} still flowed`;
 			infeed += inf;
-			gone += DEP[t]! + UN[t]!;
+			generated += due;
+			taken += DEP[t]!;
 			prev = ST[t]!;
+			owedBefore = UN[t]!;
 			const y = waterYearOfDay(day0 + t);
 			if (y !== wy) {
 				wy = y;
@@ -1063,7 +1071,8 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 			s.dep += DEP[t]!;
 		}
 		if (rows.length !== row + 1) return `${n.id}: groundwater annual use has ${rows.length} rows for ${row + 1} water years`;
-		if (Math.abs(infeed - gone - prev) > 1e-9 * Math.max(1, infeed)) return `${n.id}: the depletion lag does not conserve volume: Σ infeed ${infeed} ≠ Σ due ${gone} + still to come ${prev}`;
+		if (Math.abs(infeed - generated - prev) > 1e-9 * Math.max(1, infeed)) return `${n.id}: the depletion lag does not conserve volume: Σ infeed ${infeed} ≠ Σ due ${generated} + still to come ${prev}`;
+		if (Math.abs(generated - taken - owedBefore) > 1e-9 * Math.max(1, generated)) return `${n.id}: the depletion deficit does not conserve volume: Σ due ${generated} ≠ Σ taken ${taken} + owed at the end ${owedBefore}`;
 		let byBorehole = 0;
 		for (const [k, r] of rows.entries()) {
 			const s = sums[k]!;

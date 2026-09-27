@@ -57,6 +57,8 @@ export interface PlanNode {
 	 * this water year. Absent = a fresh start (0, off, 0).
 	 */
 	initialDepletionStoreM3?: number;
+	/** The stream-depletion deficit still owed to the river the day before (engine ≥ 1.10.0); absent = 0. */
+	initialDepletionDeficitM3?: number;
 	initialOnRiver?: boolean;
 	initialBoreholeUsedM3?: readonly number[];
 	/**
@@ -245,8 +247,12 @@ export interface NodeResult {
 	storageSet?: Float64Array;
 	/** Stream depletion taken from the node's outflow (WP-1.34), after the clamp. */
 	depletion: Float64Array;
-	/** Depletion due that the river could not give (no flow left): drawn from aquifer storage instead, reported. */
-	depletionUnmet: Float64Array;
+	/**
+	 * The stream-depletion deficit at the end of the day (engine ≥ 1.10.0, m³):
+	 * depletion that fell due while the river had no flow left at the node,
+	 * carried over and taken off the first flow there. Never dropped.
+	 */
+	depletionDeficit: Float64Array;
 	/** Depletion still to come at the end of the day: the lag reservoir's content (m³). */
 	depletionStore: Float64Array;
 	/** Natural runoff land cover removed before the farm got it (WP-1.35); I = natural × share − this. */
@@ -255,19 +261,22 @@ export interface NodeResult {
 
 /**
  * Today's stream depletion at a node (WP-1.34): Σ d × pumping (`depleting`) enters the lag
- * reservoir, α of its content is due, and the river gives at most what flows
- * out of the node (`flow`); the rest is unmet. Writes the node's depletion
- * columns and returns the depletion taken.
+ * reservoir and α of its content falls due. What is owed is yesterday's
+ * deficit plus today's due; the river gives at most what flows out of the node
+ * (`flow`), and the rest stays owed as the deficit, taken off the first flow
+ * that returns (engine ≥ 1.10.0; before it, the rest was dropped). Writes the
+ * node's depletion columns and returns the depletion taken.
  */
 function deplete(node: PlanNode, r: NodeResult, t: number, depleting: number, flow: number): number {
 	const b = node.borehole;
 	if (!b) return 0;
 	const store = (t === 0 ? (node.initialDepletionStoreM3 ?? 0) : r.depletionStore[t - 1]!) + depleting;
 	const due = b.depletionAlpha * store;
-	const taken = Math.min(due, Math.max(flow, 0));
+	const owed = (t === 0 ? (node.initialDepletionDeficitM3 ?? 0) : r.depletionDeficit[t - 1]!) + due;
+	const taken = Math.min(owed, Math.max(flow, 0));
 	r.depletionStore[t] = store - due;
 	r.depletion[t] = taken;
-	r.depletionUnmet[t] = due - taken;
+	r.depletionDeficit[t] = owed - taken;
 	return taken;
 }
 
@@ -314,6 +323,8 @@ export interface NetworkState {
 	/** Dam storage the day before (before any storage reset that day). */
 	storageM3: Float64Array;
 	depletionStoreM3: Float64Array;
+	/** The stream-depletion deficit the day before (engine ≥ 1.10.0). */
+	depletionDeficitM3: Float64Array;
 	/** 1 = the river pump was on the day before. */
 	onRiver: Uint8Array;
 	/** Each pumping unit's volume so far this water year (before a 1 October clears it); null without boreholes. */
@@ -352,7 +363,7 @@ function allocNode(days: number): NodeResult {
 		groundwater: f(),
 		groundwaterToDam: f(),
 		depletion: f(),
-		depletionUnmet: f(),
+		depletionDeficit: f(),
 		depletionStore: f(),
 		landCoverReduction: f()
 	};
@@ -467,6 +478,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const capture = (t: number): NetworkState => ({
 		storageM3: Float64Array.from(nodes, (n, i) => (t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!)),
 		depletionStoreM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionStoreM3 ?? 0) : res[i]!.depletionStore[t - 1]!)),
+		depletionDeficitM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionDeficitM3 ?? 0) : res[i]!.depletionDeficit[t - 1]!)),
 		onRiver: onRiver.slice(),
 		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null))
 	});

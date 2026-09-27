@@ -43,6 +43,8 @@ export interface ModelNodeState {
 	soilStoreM3: number;
 	/** Stream depletion still to come (m³). */
 	depletionStoreM3: number;
+	/** Stream depletion owed to the river, carried over from days it had no flow (m³, engine ≥ 1.10.0); absent = 0. */
+	depletionDeficitM3?: number;
 	/** The river pump was on the day before (a trigger-rule farm). */
 	onRiver: boolean;
 	/** Each pumping unit's volume so far this water year (m³), in the plan's unit order; null without boreholes. */

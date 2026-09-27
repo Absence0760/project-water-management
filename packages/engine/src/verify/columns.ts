@@ -112,8 +112,8 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + Σ d × pumped), all of it when lag = 0; each borehole its own d', optional: true },
-	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
-	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },
+	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
+	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep: depletion owed to the river while it had no flow left, carried over and taken off the first flow back (engine ≥ 1.10.0)', optional: true },
 	{
 		key: 'senior_requirement',
 		letter: 'Zs',
@@ -142,8 +142,8 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'senior_requirement', letter: 'Zs', formula: 'senior: MAX(0, Σ upstream Zs − demand); junior: Σ upstream Zs; only with senior users', optional: true },
 	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, demand − river take), primary MIN(capacity, demand) first; part of G (WP-1.34)', optional: true },
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due', optional: true },
-	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, H − river take + T); U = H − river take + T − Dep', optional: true },
-	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep', optional: true }
+	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, H − river take + T); U = H − river take + T − Dep', optional: true },
+	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.10.0)', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */

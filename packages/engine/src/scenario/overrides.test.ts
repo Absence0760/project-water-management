@@ -89,6 +89,45 @@ describe('applyScenario: each op', () => {
 		expect(r.applied).toHaveLength(1);
 	});
 
+	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {
+		const set = (id: string, field: string, value: unknown) => ({ op: 'node.set', nodeId: id, field, value }) as ScenarioOp;
+		// Estimated area (capacity ÷ 3 m): doubling 100 000 m³ gives 33 333 × 2^0.7 = 54 150 m², not 66 667.
+		const b = base();
+		nodeOf(b, 'A')!.damCapacityM3 = 100_000;
+		const r = applyScenario(b, [set('A', 'damCapacityM3', 200_000)]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')!.damAreaFullM2).toBeCloseTo((100_000 / 3) * 2 ** 0.7, 6);
+		expect(r.applied[0]!.notes[0]).toMatch(/33333 → 54150 m² .*from the capacity ÷ 3 m estimate/);
+		// An entered area and exponent: A_full × ratio^b; the same capacity changes nothing.
+		const e = base();
+		Object.assign(nodeOf(e, 'A')!, { damAreaFullM2: 50_000, damAreaExponent: 0.8 });
+		expect(nodeOf(applyScenario(e, [set('A', 'damCapacityM3', 100_000)]).input, 'A')!.damAreaFullM2).toBeCloseTo(50_000 * 0.5 ** 0.8, 6);
+		const same = applyScenario(e, [set('A', 'damCapacityM3', 200_000)]);
+		expect(nodeOf(same.input, 'A')!.damAreaFullM2).toBe(50_000);
+		expect(same.applied[0]!.notes).toEqual([]);
+		// A later area op sets the new dam's own area; an earlier one is resized with the dam.
+		expect(nodeOf(applyScenario(e, [set('A', 'damCapacityM3', 400_000), set('A', 'damAreaFullM2', 70_000)]).input, 'A')!.damAreaFullM2).toBe(70_000);
+		expect(nodeOf(applyScenario(e, [set('A', 'damAreaFullM2', 70_000), set('A', 'damCapacityM3', 400_000)]).input, 'A')!.damAreaFullM2).toBeCloseTo(70_000 * 2 ** 0.8, 6);
+		// A new dam (from 0) keeps an unknown area unknown.
+		expect(nodeOf(applyScenario(base(), [set('B', 'damCapacityM3', 10_000)]).input, 'B')!.damAreaFullM2).toBeNull();
+		// A survey curve: cut when smaller, extrapolated (and said so) when larger.
+		const c = base();
+		nodeOf(c, 'A')!.damCurve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 4, areaM2: 40_000, volumeM3: 100_000 },
+			{ levelM: 7, areaM2: 60_000, volumeM3: 200_000 }
+		];
+		const cut = applyScenario(c, [set('A', 'damCapacityM3', 150_000)]);
+		expect(nodeOf(cut.input, 'A')!.damCurve!.at(-1)).toEqual({ levelM: 5.5, areaM2: 50_000, volumeM3: 150_000 });
+		expect(cut.applied[0]!.notes[0]).toMatch(/cut at 150000 m³/);
+		const up = applyScenario(c, [set('A', 'damCapacityM3', 400_000)]);
+		expect(nodeOf(up.input, 'A')!.damCurve).toHaveLength(4);
+		expect(nodeOf(up.input, 'A')!.damCurve!.at(-1)!.areaM2).toBeCloseTo(60_000 * 2 ** (Math.log(1.5) / Math.log(2)), 6);
+		expect(up.applied[0]!.notes[0]).toMatch(/extrapolated beyond the survey/);
+		// The base is never touched.
+		expect(nodeOf(c, 'A')!.damCurve).toHaveLength(3);
+	});
+
 	it('node.set rejects a missing node, a field the kind lacks and an out-of-range value', () => {
 		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
 		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);

@@ -291,6 +291,7 @@ function runNetwork(
 			const r = resume.nodes[i]!;
 			p.initialStorageM3 = r.storageM3;
 			p.initialDepletionStoreM3 = r.depletionStoreM3;
+			if (r.depletionDeficitM3) p.initialDepletionDeficitM3 = r.depletionDeficitM3;
 			p.initialOnRiver = r.onRiver;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 		});
@@ -486,7 +487,8 @@ function runNetwork(
 			// Dam-target boreholes (WP-3.9): pumped into the farm dam, not straight to the crop.
 			if (plan.nodes[i]!.borehole!.units.some((u) => u.toDam)) push(node.id, 'groundwater_to_dam', 'Groundwater pumped into the dam', 'm³/day', r.groundwaterToDam);
 			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
-			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
+			// Engine ≥ 1.10.0: depletion the river can't give is owed, not dropped (depletion_unmet before).
+			push(node.id, 'depletion_deficit', 'Stream depletion owed to the river (it had no flow left), taken off the first flow back', 'm³', r.depletionDeficit);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
@@ -802,6 +804,7 @@ function runNetwork(
 				storageM3: net.storageM3[i]!,
 				soilStoreM3: built.soilStoreAtM3?.[i] ?? 0,
 				depletionStoreM3: net.depletionStoreM3[i]!,
+				...(net.depletionDeficitM3[i]! > 0 ? { depletionDeficitM3: net.depletionDeficitM3[i]! } : {}),
 				onRiver: net.onRiver[i] === 1,
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null
 			})),
@@ -1268,30 +1271,29 @@ function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float
 const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_observed_m3s || series.flow_logger_m3s);
 
 /**
- * Run warnings for boreholes (WP-1.34): stream depletion the river could not
- * give (it had no flow left at the node), and, when the project has an
+ * Run warnings for boreholes (WP-1.34): stream depletion still owed to the
+ * river at the end of the run (it had no flow left at the node to give it,
+ * engine ≥ 1.10.0), and, when the project has an
  * observed record, the double-counting caution: flows measured while these
  * boreholes pumped already carry their depletion, so a calibration that
  * leaves them out would fit natural flow too low and then take it off again.
  */
 function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, observed: boolean, warnings: string[]) {
-	let unmet = 0;
+	let owed = 0;
 	let depleting = 0;
 	const names: string[] = [];
 	plan.nodes.forEach((p, i) => {
 		if (!p.borehole) return;
-		const r = sim.nodes[i]!;
-		let u = 0;
-		for (let t = 0; t < plan.days; t++) u += r.depletionUnmet[t]!;
+		const u = plan.days > 0 ? sim.nodes[i]!.depletionDeficit[plan.days - 1]! : 0;
 		if (u > 1e-9) {
-			unmet += u;
-			names.push(nodes[i]!.name);
+			owed += u;
+			names.push(`${nodes[i]!.name} ${u.toFixed(0)} m³`);
 		}
 		if (p.borehole.units.some((u) => u.depletionFrac > 0)) depleting++;
 	});
-	if (unmet > 1e-9) {
+	if (owed > 1e-9) {
 		warnings.push(
-			`stream depletion of ${unmet.toFixed(0)} m³ over the run could not be taken from the river, which had no flow left there; it is drawn from aquifer storage instead and not counted (${names.join('; ')})`
+			`stream depletion of ${owed.toFixed(0)} m³ is still owed to the river at the end of the run: it fell due while the river had no flow left there, and is taken off the first flow that returns (${names.join('; ')})`
 		);
 	}
 	// An annual cap that stopped a borehole (WP-3.9): the demand it would have met is left to the dam and river.

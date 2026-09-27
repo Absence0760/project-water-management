@@ -135,6 +135,21 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   raised levels are `supplyStopPct` and `supplyTriggerPct`. "What if this
   farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
   `riverFirst` and `pumpCapacityM3Day` → 1200.
+
+  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md), pending
+  the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
+  and to a capacity above 0) resizes its geometry along the dam's own
+  area–volume relation, as the storage–yield curve does: a power-law dam's
+  `damAreaFullM2` (as entered, or the capacity ÷ 3 m estimate) becomes
+  A_full × (new ÷ old)^b with its own `damAreaExponent`; a survey curve is
+  cut at its top × the ratio, or extrapolated beyond the survey to it
+  (a power law through its top two rows). The op's note says what changed
+  (`dam area when full 33333 → 54150 m² …`, or that the curve was
+  extrapolated); it is left out for a node the caller can't see. A later
+  `damAreaFullM2` op on the node sets the enlarged dam's own area; one before
+  the capacity op describes the dam at its old size and is resized with it.
+  A new dam (from 0) keeps an unknown area unknown. Before 1.10.0 the area
+  stayed as entered, or followed capacity ÷ 3 m (constant mean depth).
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
@@ -623,9 +638,16 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   holding the rest back until undone (the engine has no op for them yet;
   [§ Not yet supported](#not-yet-supported)): editing or removing an
   existing crop, changing a node's kind, moving a node (what it drains
-  into), a new node that drains nowhere, a dam survey curve, and a field the
+  into), a new node that drains nowhere, a dam survey curve, the capacity
+  of a dam with a survey curve (the op would resize the curve, which the
+  table can't show; add it as a change instead, engine ≥ 1.10.0), and a field the
   engine doesn't let a scenario set on that kind of node (a gauge's area).
   Row order is display only and isn't recorded.
+- **A dam's capacity in the table** records the area the table shows: the
+  capacity op (which resizes the area along the dam's own relation, § Dam
+  capacity) is followed by a `damAreaFullM2` op with the table's value
+  (blank = estimated). To enlarge a dam along its own relation, add the
+  capacity as a change instead.
 
 Tests: `scenarios/fields.test.ts` (every node field, transfer field and
 settings path the engine allows has a spec; values round-trip through the

@@ -85,8 +85,29 @@ describe('diffModel', () => {
 		expect(roundTrips(b, e.snapshot())).toEqual([
 			{ op: 'node.set', nodeId: G, field: 'name', value: 'Weir' },
 			{ op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 180_000 },
-			{ op: 'node.set', nodeId: UP, field: 'damMinPct', value: 0.1 }
+			{ op: 'node.set', nodeId: UP, field: 'damMinPct', value: 0.1 },
+			// The capacity op resizes the dam's area (engine 1.10.0); the table records the area it shows.
+			{ op: 'node.set', nodeId: UP, field: 'damAreaFullM2', value: null }
 		]);
+	});
+
+	it('a capacity edit in the table keeps the area it shows, and refuses a survey-curve dam (engine 1.10.0)', () => {
+		const b = base();
+		const e = editing(b);
+		node(e, UP).damCapacityM3 = 180_000;
+		node(e, UP).damAreaFullM2 = 40_000;
+		const ops = roundTrips(b, e.snapshot());
+		expect(ops.at(-1)).toEqual({ op: 'node.set', nodeId: UP, field: 'damAreaFullM2', value: 40_000 });
+		expect(applyScenario(b, ops).input.model.nodes.find((n) => n.id === UP)!.damAreaFullM2).toBe(40_000);
+		const curved = structuredClone(b);
+		const up = curved.model.nodes.find((n) => n.id === UP)!;
+		up.damCurve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 5, areaM2: 50_000, volumeM3: up.damCapacityM3 }
+		];
+		const e2 = editing(curved);
+		node(e2, UP).damCapacityM3 = up.damCapacityM3 * 1.2;
+		expect(diffModel(curved, e2.snapshot()).unsupported).toEqual([expect.stringMatching(/dam, which has a survey curve: .*Add it as a change instead/)]);
 	});
 
 	it('turns a supply rule and river pump edit into node.set (WP-3.8): river first at 1,200 m³/day', () => {
@@ -312,7 +333,10 @@ describe('diffModel', () => {
 		const scaled = applyScenario(base(), [{ op: 'demand.scale', factor: 0.85, nodeIds: [UP], months: [12, 1] }]).input;
 		const e = editing(scaled);
 		node(e, UP).damCapacityM3 = 180_000;
-		expect(roundTrips(scaled, e.snapshot())).toEqual([{ op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 180_000 }]);
+		expect(roundTrips(scaled, e.snapshot())).toEqual([
+			{ op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 180_000 },
+			{ op: 'node.set', nodeId: UP, field: 'damAreaFullM2', value: null }
+		]);
 		expect(node(e, UP).demandFactor).toEqual(scaled.model.nodes.find((n) => n.id === UP)!.demandFactor);
 	});
 
