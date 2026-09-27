@@ -1,11 +1,13 @@
 <script lang="ts">
-	// "Add data" from anywhere in the project: the upload form in a modal
-	// <dialog> (focus trapped, Escape closes, focus returns to the opener).
-	// While a file is read but not uploaded yet (or uploading), Escape and ✕
+	// "Add data" from anywhere in the project: the upload form in the app's
+	// modal Dialog (focus trapped, Escape closes, focus back on the opener),
+	// with the form's buttons in the dialog's action row. While a file is read
+	// but not uploaded yet (or uploading), Escape, the close button and Cancel
 	// ask before discarding it.
 	import type { SeriesMeta } from '@water-management/engine';
+	import Dialog from '$lib/components/common/Dialog.svelte';
 	import UploadForm from './UploadForm.svelte';
-	import type { UploadResult } from './upload';
+	import type { UploadResult, UploadSubmit } from './upload';
 
 	let {
 		open = $bindable(false),
@@ -21,94 +23,50 @@
 		onuploaded?: (r: UploadResult) => void | Promise<void>;
 	} = $props();
 
-	let el: HTMLDialogElement | undefined = $state();
-	let opener: Element | null = null;
 	let pending = $state(false);
+	let submit = $state<UploadSubmit | null>(null);
+	let form: { back: () => void } | undefined = $state();
 
 	const DISCARD = 'Discard the file you haven\'t uploaded yet?';
-
-	function requestClose() {
-		if (!pending || confirm(DISCARD)) open = false;
-	}
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key !== 'Escape' || e.defaultPrevented) return;
-		// Handle Escape ourselves so the native cancel can't skip the check.
-		e.preventDefault();
-		requestClose();
-	}
-
-	$effect(() => {
-		if (!el) return;
-		if (open && !el.open) {
-			opener = document.activeElement;
-			el.showModal();
-		} else if (!open && el.open) el.close();
-	});
-
-	function onClose() {
-		open = false;
-		(opener as HTMLElement | null)?.focus?.();
-	}
+	const mayClose = () => !pending || confirm(DISCARD);
 </script>
 
-<dialog bind:this={el} aria-labelledby="add-data-h" onclose={onClose} onkeydown={onKeydown}>
-	<div class="head">
-		<h2 id="add-data-h">Add data</h2>
-		<button type="button" class="btn btn-ghost close" aria-label="Close" onclick={requestClose}>✕</button>
-	</div>
+<Dialog bind:open title="Add data" wide beforeclose={mayClose}>
 	<p class="muted lead">
-		Upload a CSV of daily rainfall or flow. New days are appended to the matching series; days already stored are corrected
-		where the file differs.
+		Upload a CSV of daily rainfall or flow. New days are appended to the matching series; days already stored are corrected where the file
+		differs.
 	</p>
 	{#if open}
 		<UploadForm
+			bind:this={form}
 			{projectId}
 			{list}
 			{file}
 			idPrefix="dlg"
+			external
 			bind:pending
+			bind:submit
 			onuploaded={async (r) => {
 				await onuploaded?.(r);
 				open = false;
 			}}
 		/>
 	{/if}
-</dialog>
+	{#snippet actions()}
+		<!-- One button that turns into Back while the overwrite question shows, so focus stays on it when Back is pressed. -->
+		<button
+			type="button"
+			class="btn"
+			disabled={submit?.confirming && submit.disabled}
+			onclick={() => (submit?.confirming ? form?.back() : mayClose() && (open = false))}>{submit?.confirming ? 'Back' : 'Cancel'}</button
+		>
+		<button type="submit" form="dlg-form" class="btn btn-primary" disabled={!submit || submit.disabled}>{submit?.label ?? 'Upload'}</button>
+	{/snippet}
+</Dialog>
 
 <style>
-	dialog {
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-		color: var(--text);
-		padding: 1.1rem 1.25rem 1.25rem;
-		/* As Dialog.svelte: 100 % of the viewport, not 100vw (a classic scrollbar), and no browser cap. */
-		max-width: none;
-		width: min(560px, calc(100% - 2 * var(--gutter)));
-		max-height: calc(100vh - 2rem);
-		overflow-y: auto;
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
-	}
-	dialog::backdrop {
-		background: rgb(0 0 0 / 0.4);
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.head h2 {
-		margin: 0;
-	}
-	.close {
-		min-width: 40px;
-		min-height: 40px;
-		justify-content: center;
-	}
 	.lead {
 		font-size: 0.85rem;
-		margin: 0.4rem 0 0.75rem;
+		margin: 0 0 0.75rem;
 	}
 </style>

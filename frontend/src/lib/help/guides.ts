@@ -173,6 +173,10 @@ export const GUIDES: Guide[] = [
 						type: 'note',
 						tone: 'tip',
 						text: 'To change one unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the unit on the Network and follow **Irrigated** on its card beside the map, pick the unit’s name in the Summary’s **Supply by unit** (or **Its planted areas** on a unit in its **Needs attention**), its name beside its bar on Crops & demand, or **Planted areas** on its card on Units & supply or Dams. It opens beside the page and saves with the rest of the model.'
+					},
+					{
+						type: 'p',
+						text: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”) against what it is about. The speech-bubble button, with a count once there are notes, is on each node on the Network (its card beside the map and its row in the Node table), on a run’s record in Runs & results, beside each group’s heading on Settings & calibration and on **Recent notes** on the Project page. It opens the notes in a panel down the right: write a new one at the top, and the notes, newest first, scroll under it. Everyone on the project can add one; you edit your own. On a unit, **Also show to this unit’s farmers** lets its farmers read it too; every other note stays with the project team.'
 					}
 				]
 			},
@@ -414,7 +418,7 @@ export const GUIDES: Guide[] = [
 							'Press **Add data** in the section header, or drop the file anywhere on the page.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
-							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: in the **History** tab, pick that change and press **Restore the earlier values**.',
+							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: in the **History** tab, pick that change and press **Restore the earlier values**. **Cancel**, the close button or Esc asks before throwing away a file you have picked but not uploaded.',
 							'Press **Re-run model** in the notice under the header when you are ready.'
 						]
 					},
@@ -721,7 +725,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. The two tables with a column per unit, **Fragmented flow** and **Fragmented EWR**, have a **Preview** beside them that shows the file’s table first, searchable by date, with **Download CSV** to save it. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
 					}
 				]
 			},

@@ -114,7 +114,9 @@
 				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} unit{shown.headers.length === 1 ? '' : 's'}
 			</p>
 		</div>
-		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll}>
+		<!-- Focusable, so the table scrolls from the keyboard (arrows, Page Up/Down) with nothing to focus inside it. -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll} tabindex="0" role="region" aria-label="{title}: the table">
 			<table class="data compact" aria-rowcount={rows.length + 1}>
 				<caption class="visually-hidden">{title}: one row per day, one column per unit</caption>
 				<thead>
@@ -124,14 +126,14 @@
 					</tr>
 				</thead>
 				<tbody>
-					<tr aria-hidden="true" style="height: {topH}px"><td colspan={shown.headers.length + 1}></td></tr>
+					{#if topH > 0}<tr class="spacer" aria-hidden="true" style="height: {topH}px"><td colspan={shown.headers.length + 1}></td></tr>{/if}
 					{#each visibleRows as r, i (r)}
 						<tr aria-rowindex={startIdx + i + 2}>
 							<td class="datecol">{shown.dates[r]}</td>
 							{#each shown.columns as col, c (c)}<td class="num">{fmtReading(col[r])}</td>{/each}
 						</tr>
 					{/each}
-					<tr aria-hidden="true" style="height: {bottomH}px"><td colspan={shown.headers.length + 1}></td></tr>
+					{#if bottomH > 0}<tr class="spacer" aria-hidden="true" style="height: {bottomH}px"><td colspan={shown.headers.length + 1}></td></tr>{/if}
 				</tbody>
 			</table>
 			{#if rows.length === 0}<p class="muted none">No days match this date.</p>{/if}
@@ -172,8 +174,23 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 	}
+	.scroll:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	/* Exactly ROW_H tall, border included, so the spacers' sums line up with the
+	   rows they stand for: with the table's own padding a row was ~29 px, and the
+	   rows drifted from their spacers down a long record. */
 	table.data tbody tr {
 		height: 28px;
+	}
+	table.data tbody td {
+		padding-block: 0;
+		line-height: 27px;
+	}
+	/* A spacer is only its height, with no rule. */
+	table.data tbody tr.spacer td {
+		border: 0;
 	}
 	table.data th,
 	table.data td {
@@ -185,6 +202,10 @@
 		z-index: 1;
 		background: var(--surface);
 		box-shadow: 1px 0 0 var(--border);
+	}
+	/* The pinned date keeps the row's hover, which its own background would hide. */
+	table.data tbody tr:hover .datecol {
+		background: var(--row-hover);
 	}
 	thead th.datecol {
 		z-index: 3;

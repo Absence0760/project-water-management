@@ -11,6 +11,14 @@ export interface UploadResult {
 	message: string;
 }
 
+/** The form's submit button, for a dialog that draws it in its own action row (series/AddDataDialog.svelte). */
+export interface UploadSubmit {
+	label: string;
+	disabled: boolean;
+	/** Asking before an overwrite: the row shows Back beside the button. */
+	confirming: boolean;
+}
+
 /**
  * A file's values in the unit the series is stored in (engine units.ts), so
  * the merge preview compares them with stored days like for like: compared

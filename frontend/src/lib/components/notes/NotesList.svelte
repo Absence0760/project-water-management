@@ -8,6 +8,8 @@
 	sees what its farmers see (the API already limits a farmer to those).
 	`words`: what a farmer's copy says (./words.ts), English by default; the
 	farm card passes the catalogue's, so this list never imports it.
+	`formFirst` puts the add form above the notes (the notes drawer, where a
+	long list would push it a screen down).
 -->
 <script lang="ts">
 	import { api, NOTE_MAX, type Note } from '$lib/api';
@@ -23,6 +25,7 @@
 		farmOnly = false,
 		emptyText = 'No notes yet.',
 		words = NOTES_EN,
+		formFirst = false,
 		onChanged
 	}: {
 		projectId: string;
@@ -32,6 +35,7 @@
 		farmOnly?: boolean;
 		emptyText?: string;
 		words?: NotesWords;
+		formFirst?: boolean;
 		/** After a note is added, edited or deleted (the count badges refresh). */
 		onChanged?: () => void;
 	} = $props();
@@ -131,7 +135,30 @@
 	}
 </script>
 
-<div class="notes" data-notes-ready={notes !== null || loadError !== null ? 'true' : undefined}>
+{#snippet addForm()}
+	{#if canWrite}
+		<form class="add" onsubmit={add}>
+			<label for="{uid}-new">{words.add}</label>
+			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
+			<p id="{uid}-help" class="muted small">
+				{words.plainText}
+				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
+			</p>
+			{#if showShare}
+				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this unit’s farmers</label>
+			{/if}
+			<div class="row">
+				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>
+			</div>
+		</form>
+	{/if}
+	<!-- Under the form, wherever it is, so a failed add shows where it was typed. -->
+	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+{/snippet}
+
+<div class="notes" class:form-first={formFirst} data-notes-ready={notes !== null || loadError !== null ? 'true' : undefined}>
+	{#if formFirst}{@render addForm()}{/if}
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{words.loadFailed(loadError)}</div>
 	{:else if shown === null}
@@ -169,24 +196,7 @@
 		</ul>
 	{/if}
 
-	{#if canWrite}
-		<form class="add" onsubmit={add}>
-			<label for="{uid}-new">{words.add}</label>
-			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
-			<p id="{uid}-help" class="muted small">
-				{words.plainText}
-				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
-				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
-			</p>
-			{#if showShare}
-				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this unit’s farmers</label>
-			{/if}
-			<div class="row">
-				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>
-			</div>
-		</form>
-	{/if}
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if !formFirst}{@render addForm()}{/if}
 </div>
 
 <style>
@@ -231,6 +241,16 @@
 		align-items: center;
 		gap: 0.4rem;
 		margin: 0.25rem 0 0.5rem;
+	}
+	/* The form on top, the notes under it with a rule between. */
+	.form-first .add {
+		padding-top: 0.5rem;
+		padding-bottom: 1rem;
+		margin-bottom: 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.form-first .list {
+		margin-bottom: 0;
 	}
 	.row {
 		display: flex;

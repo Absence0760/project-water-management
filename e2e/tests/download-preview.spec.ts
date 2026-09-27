@@ -1,6 +1,8 @@
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { seedSupplyProject } from '../support/supply.ts';
 
 // Download menu → Preview beside an all-farms table (Fragmented flow /
 // Fragmented EWR): the table the file holds, in a dialog, before saving it.
@@ -62,3 +64,58 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 	const ewr = page.getByRole('dialog', { name: 'Fragmented EWR — all units' });
 	await expect(ewr.locator('thead th').nth(1)).toHaveText(/\[Y\] \(m³\/day\)$/);
 });
+
+// The big case: 30 units over two years. The table fills the dialog and
+// scrolls inside it, only the rows in view are drawn, and each drawn row is
+// exactly the height the spacers assume, so the rows line up from the first
+// day to the last.
+for (const size of [
+	{ name: 'desktop', width: 1440, height: 960 },
+	{ name: 'phone', width: 390, height: 844 }
+]) {
+	test(`30 units × 730 days: the table scrolls in the dialog, rows line up to the last day, no a11y violations (${size.name})`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: size.width, height: size.height });
+		const project = await seedSupplyProject(page.request, `Download preview big ${size.name}`, 28, 730);
+		await createRun(page.request, project.id, 'Baseline');
+		await page.goto(`/projects/${project.id}?tab=runs`);
+		await page.getByRole('button', { name: 'Download' }).click();
+		await page.getByRole('button', { name: 'Preview Fragmented flow — all units (CSV)' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all units' });
+		await expect(dialog).toContainText('2019-10-01 → 2021-09-29 · 730 of 730 days · 30 units');
+		await expect(dialog.locator('thead th')).toHaveCount(31);
+
+		// Inside the window, Download CSV in view; nothing scrolls sideways but the table.
+		const box = (await dialog.boundingBox())!;
+		expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+		await expect(dialog.getByRole('button', { name: 'Download CSV' })).toBeInViewport();
+		expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+		const scroll = dialog.locator('.scroll');
+		expect(await scroll.evaluate((d) => d.scrollWidth > d.clientWidth && d.scrollHeight > d.clientHeight)).toBe(true);
+
+		// The first row starts right under the header, and rows are exactly 28 px apart.
+		const rows = dialog.locator('tbody tr:not([aria-hidden])');
+		const head = (await dialog.locator('thead').boundingBox())!;
+		const first = (await rows.first().boundingBox())!;
+		expect(Math.abs(first.y - (head.y + head.height))).toBeLessThan(2);
+		expect((await rows.nth(20).boundingBox())!.y - first.y).toBeCloseTo(20 * 28, 0);
+
+		// Scrolled to the end, the last day is the last row, at the foot of the scroll box.
+		await scroll.evaluate((d) => (d.scrollTop = d.scrollHeight));
+		const last = rows.last();
+		await expect(last.getByRole('cell').first()).toHaveText('2021-09-29');
+		const end = (await scroll.boundingBox())!;
+		expect(Math.abs((await last.boundingBox())!.y + 28 - (end.y + end.height))).toBeLessThan(3);
+		// Halfway, the row at the top of the box is the day that far in.
+		await scroll.evaluate((d) => (d.scrollTop = 365 * 28));
+		await expect(dialog.getByRole('row', { name: /^2020-09-30 / })).toBeInViewport();
+
+		await scroll.evaluate((d) => (d.scrollTop = 0));
+		await expectNoViolations(page, { include: 'dialog[open]' });
+
+		// A date with no match says so.
+		await dialog.getByLabel('Find a date').fill('1999');
+		await expect(dialog).toContainText('0 of 730 days');
+		await expect(dialog.getByText('No days match this date.')).toBeVisible();
+	});
+}

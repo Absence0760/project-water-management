@@ -328,7 +328,7 @@ section it belongs to, with the example that taught it.
 | Page title, context, actions | `workspace/SectionHeader.svelte` via `fillHeader` |
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`) |
-| Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide`, body scrolls, actions pinned), `subhead` slot for what must not scroll |
+| Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide`, body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Grids inside a modal | the existing component unchanged (`CropsTab sections` → `CropGrids`, `NetworkTab only="table"`), never a fork |
 | Time-series charts | `charts/LineChart.svelte` (`windows` for 30 days / 1 year / All; Earlier/Later; units switch where the old chart had one) |
@@ -436,6 +436,18 @@ Interaction details that bit:
   at its measured top, then set the list's own `scrollTop` from the two
   bounding boxes; the spec asserts the row is in the viewport and
   `window.scrollY` is 0.
+- **A dialog's buttons go in its action row, even a form's.** Add data was
+  its own `<dialog>` with a font ✕ (a plain "X" in some fonts) and Upload at
+  the bottom left of the form, unlike every other dialog. On the shared
+  Dialog, the form draws no buttons (`UploadForm`'s `external`), reports its
+  submit label and state through a bound prop, and the row's button submits
+  it with `form="<form id>"`, so Enter still submits. When a state swaps a
+  row button (Cancel → Back while an overwrite is asked), keep one element and
+  change its label, so the focus stays on it.
+- **An add form above a long list, not under it.** The notes dialog put
+  "Add a note" under the notes: with thirty it was 2,300 px down, and Close
+  with it. It is now a side sheet with the form on top, the notes scrolling
+  under it and Close pinned (`notes/NotesDrawer.svelte`).
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.
@@ -499,6 +511,17 @@ Interaction details that bit:
   `golden-path`, `section-header`, `tabs-by-role`, `overview` and whatever
   links into the screen. `--repeat-each 5 --retries 0` on every new
   interaction catches races.
+- **A scroll box with nothing focusable inside fails axe**
+  (`scrollable-region-focusable`): the Download → Preview table has only
+  text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,
+  `role="region"` and a name, and a `:focus-visible` outline.
+- **Virtualised rows must be exactly the height the spacers assume.** The
+  preview table's rows were ~29 px (the table's padding) against a
+  `ROW_H` of 28, and its empty top spacer still had padding, so an 11 px gap
+  sat under the header. Pin the row height (`padding-block: 0`, a fixed
+  line height), render a spacer only when it has height, and test the row
+  pitch, the first row under the header and the last day at the foot with
+  a big case (30 units × 730 days, `download-preview.spec.ts`).
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle
