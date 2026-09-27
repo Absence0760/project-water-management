@@ -255,6 +255,54 @@ describe('a signed-off run stays the run that was signed', () => {
 		expect((await owner.call('DELETE', `${at()}/scenarios/${other}`)).status).toBe(204);
 	});
 
+	it('keeps an application whose run an assessor signed off, though its applicant can’t see the sign-off', async () => {
+		// Its own project, so the fingerprints above stay the main project's.
+		const pid = (await owner.call('POST', '/projects', { name: 'Trail application' })).body.project.id;
+		const farm = await runnable(owner, pid);
+		const P = `/projects/${pid}`;
+		for (const [u, role] of [
+			[editor, 'editor'],
+			[contributor, 'contributor']
+		] as const) {
+			expect((await owner.call('POST', `${P}/members`, { email: u.email, role })).status).toBe(201);
+		}
+		expect((await owner.call('PUT', `${P}/farmers/${contributor.id}`, { nodeIds: [farm.id] })).status).toBe(200);
+		const base = (await owner.call('POST', `${P}/runs`, { label: 'Published' })).body.run.id;
+		expect((await owner.call('POST', `${P}/publication`, { runId: base })).status).toBe(201);
+		const apply = async (name: string) => {
+			const res = await contributor.call('POST', `${P}/scenarios`, { name, baseRunId: base, ops: [{ op: 'node.set', nodeId: farm.id, field: 'damCapacityM3', value: 150_000 }] });
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+			expect(res.body.scenario.origin).toBe('applicant');
+			const run = await contributor.call('POST', `${P}/scenarios/${res.body.scenario.id}/runs`, {});
+			expect(run.status, JSON.stringify(run.body)).toBe(201);
+			return { sid: res.body.scenario.id as string, run: run.body.run.id as string };
+		};
+		const signed = await apply('Signed application');
+		expect((await contributor.call('POST', `${P}/scenarios/${signed.sid}/submit`)).status).toBe(200);
+		// The assessor signs the submitted application's run; the applicant reads no sign-off of it.
+		await signOff(editor, signed.run, pid);
+		expect(await withUser(contributor.id, async (db) => (await db.query('SELECT 1 FROM signoff WHERE run_id = $1', [signed.run])).rows)).toEqual([]);
+		const before = await runRow(signed.run);
+		// Withdrawn, then reopened: a delete is tried from each status the route allows.
+		expect((await contributor.call('POST', `${P}/scenarios/${signed.sid}/withdraw`)).body.scenario.status).toBe('withdrawn');
+		const whileWithdrawn = await contributor.call('DELETE', `${P}/scenarios/${signed.sid}`);
+		expect(whileWithdrawn.status, JSON.stringify(whileWithdrawn.body)).toBe(409);
+		expect(whileWithdrawn.body.error).toMatch(/signed-off run/);
+		expect((await contributor.call('POST', `${P}/scenarios/${signed.sid}/reopen`)).body.scenario.status).toBe('draft');
+		const whileDraft = await contributor.call('DELETE', `${P}/scenarios/${signed.sid}`);
+		expect(whileDraft.status, JSON.stringify(whileDraft.body)).toBe(409);
+		expect(whileDraft.body.error).toMatch(/signed-off run/);
+		// The scenario, its run and the run's link to it are all as they were.
+		expect(await asOwner('SELECT status FROM scenario WHERE id = $1', [signed.sid])).toEqual([{ status: 'draft' }]);
+		expect(await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [signed.run])).toEqual([{ scenario_id: signed.sid }]);
+		expect(await runRow(signed.run)).toEqual(before);
+		expect(await asOwner("SELECT 1 FROM audit_event WHERE project_id = $1 AND kind = 'scenario.deleted'", [pid])).toEqual([]);
+		// Positive control: an unsigned application is deleted by its applicant, its run with it.
+		const unsigned = await apply('Unsigned application');
+		expect((await contributor.call('DELETE', `${P}/scenarios/${unsigned.sid}`)).status).toBe(204);
+		expect(await asOwner('SELECT 1 FROM scenario WHERE id = $1 UNION ALL SELECT 1 FROM model_run WHERE id = $2', [unsigned.sid, unsigned.run])).toEqual([]);
+	});
+
 	it('still lets the owner delete a whole project with a signed scenario run (its sign-offs go with it, 036)', async () => {
 		const pid = (await owner.call('POST', '/projects', { name: 'Trail whole' })).body.project.id;
 		await runnable(owner, pid);
