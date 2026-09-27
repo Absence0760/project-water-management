@@ -73,6 +73,8 @@ interface RunRow {
 	summary: RunSummary;
 	/** settings.runoffModel === 'legacy' (absent → legacy, for runs saved before the setting existed). */
 	legacy: boolean;
+	/** settings.runoffModel as the run stored it ('legacy' when absent). */
+	runoffModel: string;
 	notes: string;
 	notesUpdatedAt: Date | null;
 	notesUpdatedBy: string | null;
@@ -84,6 +86,7 @@ async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: s
 		`SELECT label, engine_version AS "engineVersion", start_date AS "startDate", end_date AS "endDate",
 			created_at AS "createdAt", summary,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 			notes, notes_updated_at AS "notesUpdatedAt",
 			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy"
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
@@ -91,6 +94,17 @@ async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: s
 	);
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return rows[0];
+}
+
+/** Each node's dam capacity as the run's stored model had it (m³ by node id); a node without one is left out. */
+async function loadDamCapacities(db: import('../db/tx.js').Db, runId: string): Promise<Record<string, number>> {
+	const { rows } = await db.query<{ id: string; capacity: number }>(
+		`SELECT n->>'id' AS id, (n->>'damCapacityM3')::float8 AS capacity
+		 FROM model_run, jsonb_array_elements(COALESCE(inputs->'model'->'nodes', '[]'::jsonb)) n
+		 WHERE model_run.id = $1 AND jsonb_typeof(n->'damCapacityM3') = 'number'`,
+		[runId]
+	);
+	return Object.fromEntries(rows.map((r) => [r.id, r.capacity]));
 }
 
 export const exportRoutes = new Hono<AuthEnv>()
@@ -170,7 +184,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
 					notesUpdatedBy: run.notesUpdatedBy,
 					evidence: runEvidence(await listNominations(db, id), runId),
-					flowDuration: await loadFlowDuration(db, runId)
+					flowDuration: await loadFlowDuration(db, runId),
+					runoffModel: run.runoffModel,
+					damCapacityM3: await loadDamCapacities(db, runId)
 				},
 				run.summary
 			);

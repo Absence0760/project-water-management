@@ -120,6 +120,80 @@ describe('summary sheet', () => {
 		expect(lines.some((l) => l.includes('calibration not computed'))).toBe(true);
 		expect(lines).not.toContain('Warnings');
 	});
+
+	it('names the runoff model and gives each dam its capacity beside its storage figures (hydrologist review, #17)', () => {
+		const s = structuredClone(summary);
+		Object.assign(s.farms[0]!, { damEndM3: 400, damAgoM3: 500, damLowM3: 100, damLowDate: '2000-08-01', damDaysAtMin: 4 });
+		const lines = [...summaryCsvLines({ ...meta, runoffModel: 'gr4j', damCapacityM3: { n1: 1000 } }, s)];
+		expect(lines.slice(3, 5)).toEqual(['Engine version,0.2.0', 'Runoff model,gr4j']);
+		const header = lines.find((l) => l.startsWith('Farm,'))!;
+		expect(
+			header.endsWith(
+				',Days charged for the EWR,Dam capacity (m³),Dam storage on the last day (m³),Dam storage 30 days before the last day (m³),' +
+					'Lowest dam storage in the last 365 days (m³),Date of the lowest dam storage,Days at or below the minimum operating level in the last 365 days'
+			)
+		).toBe(true);
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))!.endsWith(',3,1000,400,500,100,2000-08-01,4')).toBe(true);
+		// Without capacities (an older caller), no column rather than an empty one.
+		expect([...summaryCsvLines(meta, summary)].find((l) => l.startsWith('Farm,'))).not.toContain('Dam capacity');
+	});
+
+	it('labels every calibration score with its unit and lists the exclusions and annual volumes (hydrologist review, #17)', () => {
+		const s = structuredClone(summary);
+		s.catchment.runoffCoefficient = 0.12;
+		Object.assign(s.calibration!, {
+			kge: 0.8,
+			kgeR: 0.9,
+			kgeAlpha: 1.05,
+			kgeBeta: 0.95,
+			r2: 0.81,
+			logNse: 0.7,
+			logEpsilonM3s: 0.01,
+			volumeErrorPct: 3,
+			windowStart: '2000-01-01',
+			windowEnd: '2000-12-31',
+			firstObservedDate: '2000-01-02',
+			lastObservedDate: '2000-12-30',
+			excludedDays: 10,
+			exclusions: [{ start: '2000-03-01', end: '2000-03-10', reason: 'weir drowned' }],
+			annualVolumes: [{ waterYear: 1999, days: 270, daysInWindow: 274, observedMm3: 2.5, simulatedMm3: 2.75, diffPct: 10 }]
+		});
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines).toContain('"Runoff coefficient (natural flow ÷ rain, as depths over the catchment)",0.12');
+		for (const l of [
+			'KGE (Kling–Gupta efficiency),0.8',
+			'KGE r (correlation),0.9',
+			'r²,0.81',
+			'log-NSE ε (m³/s),0.01',
+			'"Volume error (%, + = model too wet)",3',
+			'Calibration window start,2000-01-01',
+			'Observed days left out by the calibration exclusions,10'
+		])
+			expect(lines).toContain(l);
+		// No score is left under its raw engine key.
+		const cal = lines.indexOf('Calibration (outflow gauge vs observed)');
+		const next = lines.indexOf('', cal);
+		expect(lines.slice(cal, next).filter((l) => /^[a-z][A-Za-z0-9]*,/.test(l))).toEqual([]);
+		const ex = lines.indexOf('Calibration exclusions (days not scored)');
+		expect(lines.slice(ex + 1, ex + 3)).toEqual(['From,To,Reason', '2000-03-01,2000-03-10,weir drowned']);
+		const av = lines.findIndex((l) => l.startsWith('"Annual volumes on the observed days'));
+		expect(lines.slice(av + 1, av + 3)).toEqual([
+			'Water year,Days observed,Days in the window,Observed (Mm³),Simulated (Mm³),Simulated − observed (%)',
+			'1999/00,270,274,2.5,2.75,10'
+		]);
+	});
+
+	it('writes the outlet EWR test, observed vs simulated, with the catchment (issue #4)', () => {
+		const scores = { days: 100, bothBelow: 40, falseAlarm: 5, miss: 10, bothAbove: 45, hitRate: 0.8, falseAlarmRatio: 1 / 9, frequencyBias: 0.9, modelFractionBelow: 0.45, observedFractionBelow: 0.5 };
+		const s = structuredClone(summary);
+		s.catchment.ewrAgreement = { days: 100, excludedDays: 3, firstObservedDate: '2000-01-01', lastObservedDate: '2000-12-31', overall: scores, byMonth: [], byWaterYear: [{ ...scores, waterYear: 1999 }] };
+		const lines = [...summaryCsvLines(meta, s)];
+		const at = lines.findIndex((l) => l.startsWith('"Outlet EWR test'));
+		expect(at).toBeGreaterThan(lines.indexOf('Catchment'));
+		expect(lines[at + 2]).toMatch(/^Water year,Days counted,Both below the EWR,/);
+		expect(lines[at + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
+		expect(lines[at + 4]!.startsWith('1999/00,100,')).toBe(true);
+	});
 });
 
 describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
@@ -541,6 +615,18 @@ describe('water balance block', () => {
 		const withDams: WaterBalance = { ...wb, total: row(null, { damSeepageLostM3: 12, damReleaseM3: 3000 }) };
 		expect(header(withDams)).toContain('Dam seepage lost from the catchment (m³),Released below dams (part of outflow) (m³)');
 		expect([...waterBalanceLines(withDams)].at(-1)).toContain(',12,3000,');
+	});
+
+	it('names in its equation only the terms the run has, each of them a column (storage set included)', () => {
+		expect([...waterBalanceLines(wb)][1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage + residual; the residual should be 0'
+		);
+		const full: WaterBalance = { ...wb, total: row(null, { groundwaterM3: 7, storageSetM3: -2, otherUseM3: 3, streamDepletionM3: 1, damSeepageLostM3: 12 }) };
+		const lines = [...waterBalanceLines(full)];
+		expect(lines[1]).toBe(
+			'Start storage + farm runoff + transfers + rain on dams + groundwater pumped + storage set = consumptive use + dam evaporation + other users’ use + stream depletion + seepage lost + outflow + end storage + residual; the residual should be 0'
+		);
+		expect(lines.find((l) => l.startsWith('Water year,'))).toContain('Storage set into (+) / out of (−) the dams by a storage reset (m³)');
 	});
 
 	it('says an old run has none', () => {
