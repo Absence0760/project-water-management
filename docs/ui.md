@@ -3397,20 +3397,46 @@ farm view if they have links, and the Scenarios tab in applicant mode
   applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
-(`?tab=applications`): every submitted, withdrawn or decided application
-(drafts stay with the applicant), as a table of name (a link to it in the
-Scenarios tab), applicant (and how many they shared it with), status
-("Awaiting a decision", or the outcome), submitted date, changes and runs,
-sortable newest first or by status (awaiting a decision first, the
-longest-waiting on top; `applications.ts`), with loading, error ("Retry")
-and empty ("No applications submitted.") states. In the Scenarios tab an
+(`?tab=applications`, issue #17 option A): every submitted, withdrawn or
+decided application (drafts stay with the applicant). A viewer never sees it.
+
+- **Section header:** the count, how many await a decision and how long the
+  oldest has waited ("30 applications · 20 awaiting a decision, the longest
+  for 30 days"; "No applications submitted yet"), and **Decide the longest
+  waiting**, a link to that application in the Scenarios tab (only while
+  one awaits a decision). The counts and wording are `applications.ts`.
+- **Submitted applications** card: a one-line note (on the published
+  baseline; open one to see its changes and runs and decide it; drafts stay
+  with the applicant), a status filter (**All**, **Awaiting a decision**,
+  **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
+  in the URL, so Back steps through the filters and a link keeps one; an
+  unknown value shows all) and **Sort by** newest first or status (awaiting
+  a decision first, the longest-waiting on top).
+- **The table:** name (a link to it in the Scenarios tab), applicant ("shared
+  with N" under it), status as a pill in words (Awaiting a decision;
+  Approved, Approved with conditions or Refused in the band colours, with
+  "decided <date>" under it; Withdrawn), submitted (date and time, and
+  "waiting N days" while it awaits a decision), changes and runs.
+- **Fit:** from 1100 × 620 the card fills the window and the rows scroll
+  inside it under a sticky header; below a 640 px column each application is
+  a card (name, status, applicant, submitted, "1 change · 0 runs") and the
+  page scrolls.
+- **States:** loading, error ("Retry"), empty ("No applications submitted.",
+  with where they come from: applicants on the Project page, the baseline
+  published in Runs & results) and a filter with none ("Nothing is awaiting a
+  decision." and **Show all**).
+
+In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it, and an editor who isn't its owner gets the
 **Decide** form (outcome radios, reasons and conditions, **Record the
 decision**; final). Evidence packs (WP-3.14) will be linked from the list.
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
-the assessor's decision, the empty list, axe in light and dark).
+the assessor's decision, the empty list, axe in light and dark) and
+`e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
+fit and a 30-application queue, the status filter's URL and Back, empty
+states, a viewer, the phone cards, axe at desktop light and dark and phone).
 
 ## History (`?tab=history`)
 

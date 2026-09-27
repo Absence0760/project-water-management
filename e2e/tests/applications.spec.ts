@@ -5,24 +5,13 @@
 // only as "Farm 1", raises their dam, runs and submits it. The assessor (the
 // project's owner) finds it in the Applications tab and decides it. Axe on
 // both views, light and dark. Synthetic data only.
-import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, seedRunnableProject, type TestUser } from '../support/api.ts';
+import { addMember } from '../support/api.ts';
+import { seedApplicantProject } from '../support/applications.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const NAME = 'Raise the Upper farm dam';
-
-/** A published run, and an applicant linked to the Upper farm. */
-async function seedApplicantProject(page: Page, name: string, applicant: TestUser) {
-	const project = await seedRunnableProject(page.request, name);
-	const runId = await createRun(page.request, project.id, 'Baseline');
-	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
-	await addMember(page.request, project.id, applicant.email, 'contributor');
-	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
-	expect((await page.request.put(`${API_URL}/projects/${project.id}/farmers/${applicant.id}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
-	return { project, runId, upper };
-}
 
 test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
 	void owner;
