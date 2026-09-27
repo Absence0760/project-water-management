@@ -645,7 +645,7 @@
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
 					<Lazy load={LOAD.transfers}>
-						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} />{/snippet}
+						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} page />{/snippet}
 					</Lazy>
 				{:else if tab === 'settings'}
 					<Lazy load={LOAD.settings}>
@@ -790,9 +790,10 @@
 		   tab's own sticky actions (Settings). */
 		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
 	}
-	/* A page sized to the window (the Network's Map, issue #17) needs only a
+	/* A page sized to the window (the Network's Map, Transfers; issue #17) needs only a
 	   gutter below it, plus the save bar when it shows. */
-	.page:has(:global(.map-layout)) {
+	.page:has(:global(.map-layout)),
+	.page:has(:global(.transfers.fit)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add {

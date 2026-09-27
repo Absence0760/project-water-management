@@ -69,7 +69,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 
 	// --- a transfer from Hilltop to Valley in Dec + Jan ----------------------
 	await tab(page, 'Transfers').click();
-	await page.getByRole('button', { name: 'Add transfer' }).click();
+	// The section header's main action (issue #17).
+	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await page.getByLabel('Source of transfer 1').selectOption({ label: 'Hilltop farm' });
 	await page.getByLabel('Destination of transfer 1').selectOption({ label: 'Valley farm' });
 	const months = page.getByRole('group', { name: /^Months transfer 1 runs/ });
