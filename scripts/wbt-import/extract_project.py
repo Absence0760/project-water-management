@@ -382,28 +382,96 @@ GROSS_DEMAND_TOLERANCE_M3_DAY = 1.0
 GROSS_DEMAND_TOLERANCE_REL = 0.01
 
 
+def crop_formula(per_crop: dict[str, float], factors: dict[str, list[float]], apan: list[float], days: list[float]) -> list[float]:
+    """[Farm demand]'s crop formula per month: sum of area x factor x A-pan / 1000 / days (m3/day)."""
+    return [
+        sum(a * factors[crop][m] * apan[m] / 1000 / days[m] for crop, a in per_crop.items() if crop in factors) for m in range(12)
+    ]
+
+
+def gross_demand_off(gross: list[float], formula: list[float]) -> list[int]:
+    """The months whose gross demand differs from the crop formula by more than the sheet's rounding."""
+    return [
+        m
+        for m in range(12)
+        if abs(gross[m] - formula[m]) > max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * max(abs(gross[m]), abs(formula[m])))
+    ]
+
+
+def non_crop_demand(
+    per_crop: dict[str, float], gross: list[float], factors: dict[str, list[float]], apan: list[float], days: list[float]
+) -> list[float] | None:
+    """What a farm's [Farm demand] gross demand has above its crop formula, per month (m3/day), or None.
+
+    Only the months that are off by more than the sheet's rounding count, and
+    only where the workbook is higher: a town's potable demand typed over the
+    formula (issue #54, 2b). Where the workbook is lower (a formula that skips a
+    crop) the crop areas win, as before."""
+    formula = crop_formula(per_crop, factors, apan, days)
+    off = set(gross_demand_off(gross, formula))
+    surplus = [gross[m] - formula[m] if m in off and gross[m] > formula[m] else 0.0 for m in range(12)]
+    return surplus if any(v > 0 for v in surplus) else None
+
+
+NON_CROP_DEMAND_NAME = "Non-crop demand"
+
+
+def non_crop_demand_object(uid, farm: str, node_id: str, monthly: list[float], cropped: bool, return_pct: float) -> dict[str, Any]:
+    """The demand object for a farm's non-crop demand (engine 1.7.0, docs/model.md 2.7f).
+
+    It is supplied with the farm's crops ("shared"), as the workbook's one
+    demand is, and returns the farm's irrigation return flow %, so what it
+    takes and gives back is the workbook's: supplied x r back, (1 - r) consumed.
+    A farm with no crops at all is a town or scheme (municipal); otherwise the
+    category is left as other for the modeller to set."""
+    return {
+        "id": uid(f"demand-object:{farm}"),
+        "nodeId": node_id,
+        "name": NON_CROP_DEMAND_NAME,
+        "category": "other" if cropped else "municipal",
+        "sizing": "monthly",
+        "monthlyM3Day": monthly,
+        "count": None,
+        "litresPerUnitDay": None,
+        "lossPct": 0,
+        "monthlyFactor": None,
+        "returnPct": min(max(return_pct, 0.0), 1.0),
+        "priority": "shared",
+        "destination": "internal",
+        "enabled": True,
+        "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)",
+    }
+
+
 def gross_demand_note(
     farm: str, per_crop: dict[str, float], gross: list[float], factors: dict[str, list[float]], apan: list[float], days: list[float]
 ) -> str | None:
     """A WARNING when a farm's gross demand doesn't follow from its crop areas: a town's potable
     demand typed over the formula, or a formula whose crop index is blank so it skips that crop
-    (both seen in a client workbook, issue #54). The app computes demand from crop areas only."""
-    formula = [
-        sum(a * factors[crop][m] * apan[m] / 1000 / days[m] for crop, a in per_crop.items() if crop in factors) for m in range(12)
-    ]
-    off = [
-        m
-        for m in range(12)
-        if abs(gross[m] - formula[m]) > max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * max(abs(gross[m]), abs(formula[m])))
-    ]
+    (both seen in a client workbook, issue #54), saying what the import did about it: the part
+    above the crop areas becomes a demand object (non_crop_demand), the crop areas win below."""
+    formula = crop_formula(per_crop, factors, apan, days)
+    off = gross_demand_off(gross, formula)
     if not off:
         return None
-    return (
+    surplus = non_crop_demand(per_crop, gross, factors, apan, days)
+    below = sum(1 for m in off if gross[m] < formula[m])
+    head = (
         f"WARNING: [Farm demand] {farm}: the gross demand in {len(off)} of 12 months doesn't follow from its crop areas "
         f"(a value typed over the formula, or a formula that skips a crop): the workbook has {math.floor(sum(gross) / 12 + 0.5)} "
-        f"m³/day on average, the crop areas give {math.floor(sum(formula) / 12 + 0.5)}. The app computes demand from crop areas "
-        "only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)"
+        f"m³/day on average, the crop areas give {math.floor(sum(formula) / 12 + 0.5)}. "
     )
+    if surplus is None:
+        return head + "The app computes demand from the crop areas, so it models the second figure (issue #54, 2b)"
+    text = (
+        head
+        + f"The part above the crop areas, {math.floor(sum(surplus) / 12 + 0.5)} m³/day on average, is imported as the demand object "
+        f'"{NON_CROP_DEMAND_NAME}" (supplied with the crops, returning the farm\'s return flow %), so the modelled demand '
+        "follows the workbook's; confirm its category, priority and return share (issue #54, 2b)"
+    )
+    if below:
+        text += f". In {below} month(s) the crop areas give more than the workbook, and the app models the crop areas there"
+    return text
 
 
 # A draw formula that is the constant 0 ("=0", or "0" in the text copy): the
@@ -921,6 +989,7 @@ def extract(
                     wb.notes.append(f"[Farm demand] crop {crop} is not in [Crop demand]; ignored")
                     continue
                 crop_areas.append({"nodeId": node_id[farm], "cropId": crop_id[crop], "areaM2": a})
+        demand_objects: list[dict[str, Any]] = []
         if gross_days is not None and len(gross_days) == 12 and all(d > 0 for d in gross_days):
             factors = {c["name"]: c["cropFactor"] for c in crops}
             for farm, per_crop in areas.items():
@@ -929,6 +998,12 @@ def extract(
                 note = gross_demand_note(farm, per_crop, gross_sheet[farm], factors, apan, gross_days)
                 if note:
                     wb.notes.append(note)
+                # A demand above the crop areas (a town's, typed over the formula) becomes a demand object (issue #54, 2b).
+                extra = non_crop_demand(per_crop, gross_sheet[farm], factors, apan, gross_days)
+                if extra is not None:
+                    cropped = any(a > 0 and c in factors for c, a in per_crop.items())
+                    ret = num(spec.get(farm, {}).get("returnFlowPct"))
+                    demand_objects.append(non_crop_demand_object(uid, farm, node_id[farm], extra, cropped, ret))
 
         model_transfers = []
         for t in transfers:
@@ -1004,7 +1079,13 @@ def extract(
             "name": name,
             "description": f"Imported from {path.name}",
             "settings": settings,
-            "model": {"nodes": nodes, "crops": crop_defs, "cropAreas": crop_areas, "transfers": model_transfers},
+            "model": {
+                "nodes": nodes,
+                "crops": crop_defs,
+                "cropAreas": crop_areas,
+                "transfers": model_transfers,
+                **({"demandObjects": demand_objects} if demand_objects else {}),
+            },
             "series": flow["series"],
         }
 

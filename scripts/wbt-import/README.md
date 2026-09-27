@@ -86,8 +86,24 @@ rows and columns don't break it.
   1 % in any month gets a `WARNING:`. That catches a demand typed over the
   formula, such as a town's potable demand drawn from a dam, and a formula
   that skips a crop because its crop index cell is blank (both found in a client
-  workbook, issue #54). The app models the crop-area figure. A demand that isn't
-  a crop waits for demand objects (#54, 2b).
+  workbook, issue #54). Where the workbook is **higher** than its crop areas
+  (the typed-over case), the part above them, month by month, is imported as a
+  **demand object** (engine ≥ 1.7.0, docs/model.md §2.7f, issue #54 2b):
+  `model.demandObjects` gets one "Non-crop demand" object on that farm, sized
+  `monthly` with that part in m³/day (months within the sheet's rounding are
+  0), supplied with the crops (`shared`), used in the catchment, and returning
+  the farm's irrigation return flow % r, so it takes and gives back what the
+  workbook's single demand did (supplied × r back, the rest consumed). A farm
+  with no crop areas at all is taken as a town or scheme (`municipal`);
+  otherwise the category is `other`. The warning then says what was done and
+  asks the modeller to confirm the category, priority and return share. Where
+  the workbook is **lower** (a formula that skips a crop), the app keeps the
+  crop-area figure, as before, and the warning says so. One difference stays:
+  b023 takes effective rain off a farm's whole gross demand, typed part
+  included, over its cropped area; the object isn't reduced by rain (on a farm
+  with no crops the two agree, the offset being 0). `model.demandObjects` is
+  present only when there is one, so a workbook without typed-over demand
+  imports exactly as before.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
@@ -260,7 +276,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | CHIRPS column with a blank header; forecast column empty | a series named after its kind; an empty column skipped |
 | Two dated rows after `zFlowData_DateE_DateSeries` | reading stops at the last date |
 | No Element sheet for Hotel Farm | note "no Element sheet for Hotel Farm" |
-| Charlie Farm: no crop areas, gross demand typed as 150 m³/day | `WARNING:` "the gross demand in 12 of 12 months doesn't follow from its crop areas" (the other farms' rounded sums don't trip it) |
+| Charlie Farm: no crop areas, gross demand typed as 150 m³/day | `WARNING:` "the gross demand in 12 of 12 months doesn't follow from its crop areas" (the other farms' rounded sums don't trip it), and a municipal "Non-crop demand" object of 150 m³/day every month |
 | [Shortfalls] and [EWR shortfalls Pivot Data] (a "-" where demand is 0) | `expected.json` only |
 
 Branches the committed workbook can't reach, because they exclude a case above

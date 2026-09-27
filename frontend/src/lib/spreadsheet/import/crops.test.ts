@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
+import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidWorkbookError } from './errors';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
@@ -121,5 +121,41 @@ describe('grossDemandNote (gross_demand_note)', () => {
 			['Hops', 50000]
 		]);
 		expect(grossDemandNote('E', hops, formula(new Map([['Orchard', 100000]])), FACTORS, APAN, DAYS)).toBeNull();
+	});
+});
+
+describe('nonCropDemand (non_crop_demand): the part above the crop areas becomes a demand object (issue #54, 2b)', () => {
+	it('takes all of a typed demand on a farm with no crops, and says so', () => {
+		const none = new Map([['Orchard', 0]]);
+		expect(nonCropDemand(none, new Array(12).fill(800), FACTORS, APAN, DAYS)).toEqual(new Array(12).fill(800));
+		expect(grossDemandNote('Town dam', none, new Array(12).fill(800), FACTORS, APAN, DAYS)).toContain('is imported as the demand object "Non-crop demand"');
+	});
+
+	it('adds only the months typed over on top of crops, so crops + object give the workbook', () => {
+		const areas = new Map([['Orchard', 100000]]);
+		const crops = formula(areas);
+		const gross = crops.map((v, m) => Math.round(v * 10) / 10 + (m < 6 ? 300 : 0));
+		const extra = nonCropDemand(areas, gross, FACTORS, APAN, DAYS)!;
+		for (let m = 0; m < 12; m++) {
+			expect(extra[m]).toBeCloseTo(m < 6 ? 300 : 0, 1);
+			expect(crops[m]! + extra[m]!).toBeCloseTo(gross[m]!, 1);
+		}
+	});
+
+	it('gives nothing for a formula that skips a crop, and names both directions when both happen', () => {
+		const areas = new Map([
+			['Orchard', 100000],
+			['Vegetables', 200000]
+		]);
+		expect(nonCropDemand(areas, formula(new Map([['Orchard', 100000]])), FACTORS, APAN, DAYS)).toBeNull();
+		const one = new Map([['Orchard', 100000]]);
+		const mixed = formula(one).map((v, m) => v + (m === 0 ? 500 : m === 1 ? -200 : 0));
+		expect(grossDemandNote('M', one, mixed, FACTORS, APAN, DAYS)).toContain('In 1 month(s) the crop areas give more than the workbook');
+	});
+
+	it('makes a municipal object without crops, returning the farm’s return flow', () => {
+		const o = nonCropDemandObject((k) => `id:${k}`, 'Town dam', 'n1', new Array(12).fill(800), false, 0.2);
+		expect(o).toMatchObject({ id: 'id:demand-object:Town dam', category: 'municipal', returnPct: 0.2, sizing: 'monthly', priority: 'shared', destination: 'internal', enabled: true });
+		expect(nonCropDemandObject((k) => k, 'F', 'n2', new Array(12).fill(1), true, 0).category).toBe('other');
 	});
 });
