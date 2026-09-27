@@ -1,11 +1,12 @@
 <script lang="ts">
-	// "Hidden (n)": the person chooses which workspace sections their sidebar
+	// "Hidden (n)", a dialog: the person chooses which workspace sections their sidebar
 	// lists (followups.md, "Members choose their own tabs"; docs/ui.md §
 	// Sections by role). Within what their role sees (`roleTabs`); the Summary
 	// always stays. A hidden section still opens from a link. The choice is
 	// the account's (user.preferences.hiddenTabs, PATCH /auth/me), so it
 	// follows them to every catchment and device.
 	import { api } from '$lib/api';
+	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { session } from '$lib/auth/session.svelte';
 	import { ALWAYS_SHOWN, hiddenTabs, navSections, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
 
@@ -49,12 +50,11 @@
 		});
 	}
 
+	// The dialog handles Escape itself; keep it from reaching the phone's
+	// Sections menu around it, which would close too and hide the button
+	// focus goes back to.
 	function keydown(e: KeyboardEvent) {
-		if (e.key !== 'Escape' || !open) return;
-		e.preventDefault();
-		e.stopPropagation();
-		open = false;
-		button?.focus();
+		if (e.key === 'Escape' && open) e.stopPropagation();
 	}
 </script>
 
@@ -64,11 +64,10 @@
 		type="button"
 		class="trigger"
 		class:some={hidden.length > 0}
-		aria-expanded={open}
-		aria-controls="sections-menu-panel"
+		aria-haspopup="dialog"
 		title="Choose the sections in your sidebar"
 		bind:this={button}
-		onclick={() => (open = !open)}
+		onclick={() => (open = true)}
 	>
 		<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
 			><path d="M2 4h7M13 4h1M2 12h1M7 12h7M11 2.5v3M5 10.5v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg
@@ -76,9 +75,9 @@
 		<span class:visually-hidden={!showLabel}>Choose sections{hidden.length ? ':' : ''}</span>
 		{#if hidden.length}Hidden ({hidden.length}){/if}
 	</button>
-	{#if open}
-		<div class="panel" id="sections-menu-panel" role="group" aria-labelledby="sections-menu-title">
-			<p class="title" id="sections-menu-title">Sections in your sidebar</p>
+	<Dialog bind:open title="Sections in your sidebar" wide anchor={button}>
+		<p class="muted hint">Untick a section to hide it from your sidebar. A hidden section still opens from a link. Your choice applies to every catchment.</p>
+		<div class="groups">
 			{#each groups as g (g.id)}
 				<fieldset>
 					<legend>{g.label}</legend>
@@ -96,11 +95,13 @@
 					{/each}
 				</fieldset>
 			{/each}
-			<p class="muted hint">A hidden section still opens from a link. Your choice applies to every catchment.</p>
-			<button type="button" class="btn btn-sm" disabled={stored.length === 0} onclick={() => save([])}>Reset to default</button>
-			<p class="error" role="status">{error ?? ''}</p>
 		</div>
-	{/if}
+		<p class="error" role="status">{error ?? ''}</p>
+		{#snippet actions()}
+			<button type="button" class="btn" disabled={stored.length === 0} onclick={() => save([])}>Reset to default</button>
+			<button type="button" class="btn btn-primary" onclick={() => (open = false)}>Done</button>
+		{/snippet}
+	</Dialog>
 </div>
 
 <style>
@@ -124,8 +125,7 @@
 		font-size: 0.8rem;
 		cursor: pointer;
 	}
-	.trigger:hover,
-	.trigger[aria-expanded='true'] {
+	.trigger:hover {
 		border-color: var(--border);
 		background: var(--surface-2);
 		color: var(--text);
@@ -133,21 +133,11 @@
 	.trigger.some {
 		color: var(--text-2);
 	}
-	.panel {
-		flex-basis: 100%;
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		margin: 0.35rem 0 0.5rem;
-		padding: 0.6rem 0.75rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-		font-size: 0.875rem;
-	}
-	.title {
-		margin: 0;
-		font-weight: 600;
+	.groups {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+		gap: 1rem 1.5rem;
+		margin-top: 1rem;
 	}
 	fieldset {
 		display: flex;
@@ -157,6 +147,7 @@
 		border: 0;
 	}
 	legend {
+		margin-bottom: 0.25rem;
 		padding: 0;
 		color: var(--text-muted);
 		font-size: 0.72rem;
@@ -168,19 +159,19 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		min-height: 26px;
+		min-height: 32px;
 		color: var(--text-2);
 		cursor: pointer;
 	}
 	label.fixed {
 		cursor: default;
 	}
-	.hint,
-	.error {
+	.hint {
 		margin: 0;
-		font-size: 0.8rem;
 	}
 	.error {
+		margin: 0.75rem 0 0;
+		font-size: 0.875rem;
 		color: var(--danger);
 	}
 	.error:empty {

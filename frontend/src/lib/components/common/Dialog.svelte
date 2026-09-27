@@ -17,6 +17,9 @@
 		keepInputs = false,
 		// Fixed under the title, above the scrolling body (a side sheet's picker), so nothing scrolls under it.
 		subhead,
+		// Open beside this element (the button that opened it) instead of centred, so the
+		// pointer barely moves (workspace/SectionsMenu.svelte). Centred on a phone.
+		anchor,
 		// Asked before Escape or the close button closes it; false keeps it open (Add data's "discard the file?").
 		beforeclose,
 		children,
@@ -29,19 +32,35 @@
 		side?: boolean;
 		keepInputs?: boolean;
 		subhead?: Snippet;
+		anchor?: HTMLElement;
 		beforeclose?: () => boolean;
 		children: Snippet;
 		actions: Snippet;
 	} = $props();
 
 	let el: HTMLDialogElement | undefined = $state();
+	let anchored = $state(false);
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
 
 	$effect(() => {
 		if (!el) return;
-		if (open && !el.open) el.showModal();
-		else if (!open && el.open) el.close();
+		if (open && !el.open) {
+			el.showModal();
+			place(el);
+		} else if (!open && el.open) el.close();
 	});
+
+	/** Beside `anchor` (to its right, top-aligned), kept 8 px inside the viewport. */
+	function place(d: HTMLDialogElement) {
+		anchored = !!anchor && window.innerWidth > 640;
+		if (!anchor || !anchored) return;
+		const a = anchor.getBoundingClientRect();
+		const r = d.getBoundingClientRect();
+		const left = Math.max(8, Math.min(a.right + 8, window.innerWidth - r.width - 8));
+		const top = Math.max(8, Math.min(a.top, window.innerHeight - r.height - 8));
+		d.style.left = `${left}px`;
+		d.style.top = `${top}px`;
+	}
 
 	// Escape closes the dialog at once, but the browser fires `close` from a
 	// queued task, so `open` would stay true until it runs, and a trigger
@@ -73,6 +92,7 @@
 	class:wide
 	class:full
 	class:side
+	class:anchored
 	class:keep-inputs={keepInputs}
 	aria-labelledby={titleId}
 	{oncancel}
@@ -107,6 +127,12 @@
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+	}
+	/* Beside its anchor (see place()): the inline left/top do the positioning. */
+	dialog.anchored {
+		margin: 0;
+		right: auto;
+		bottom: auto;
 	}
 	dialog.wide {
 		width: min(720px, calc(100% - 2 * var(--gutter)));

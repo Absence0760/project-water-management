@@ -12,7 +12,7 @@ import { expect, test } from '../support/fixtures.ts';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const menuButton = (page: Page) => page.getByRole('button', { name: /^Choose sections/ });
-const panel = (page: Page) => page.getByRole('group', { name: 'Sections in your sidebar' });
+const panel = (page: Page) => page.getByRole('dialog', { name: 'Sections in your sidebar' });
 
 /** The sidebar's section names, in order (Data's link may carry its "behind" badge). */
 async function sectionNames(page: Page) {
@@ -34,7 +34,12 @@ test.describe('1440×960', () => {
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections');
 
 		await menuButton(page).click();
-		await expect(menuButton(page)).toHaveAttribute('aria-expanded', 'true');
+		await expect(panel(page)).toBeVisible();
+		// It opens right beside its button, not across the screen.
+		const b = (await menuButton(page).boundingBox())!;
+		const d = (await panel(page).boundingBox())!;
+		expect(d.x - (b.x + b.width)).toBeCloseTo(8, 0);
+		expect(d.y).toBeCloseTo(b.y, 0);
 		// The Summary can't be hidden.
 		const summary = panel(page).getByRole('checkbox', { name: /^Summary/ });
 		await expect(summary).toBeChecked();
@@ -52,9 +57,9 @@ test.describe('1440×960', () => {
 		const shorter = EVERY.filter((t) => t !== 'Crops & demand' && t !== 'History');
 		await expect.poll(() => sectionNames(page)).toEqual(shorter);
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
-		// Escape closes the menu, back on its button.
+		// Escape closes the dialog, back on its button.
 		await page.keyboard.press('Escape');
-		await expect(panel(page)).toHaveCount(0);
+		await expect(panel(page)).toBeHidden();
 		await expect(menuButton(page)).toBeFocused();
 
 		// The account keeps it: after a reload, and in another catchment.
@@ -79,6 +84,8 @@ test.describe('1440×960', () => {
 		const reset = page.waitForResponse((r) => r.url().endsWith('/auth/me') && r.request().method() === 'PATCH');
 		await panel(page).getByRole('button', { name: 'Reset to default' }).click();
 		await reset;
+		await panel(page).getByRole('button', { name: 'Done' }).click();
+		await expect(panel(page)).toBeHidden();
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections');
 		await page.reload();
 		await expect.poll(() => sectionNames(page)).toEqual(EVERY);
@@ -104,13 +111,16 @@ test.describe('1440×960', () => {
 		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
 
 		// With the inputs shown, they join the menu, and one hidden stays hidden.
+		await v.keyboard.press('Escape');
 		await v.getByLabel('Show model inputs').check();
+		await menuButton(v).click();
 		await expect(panel(v).getByRole('checkbox', { name: 'Network' })).toBeChecked();
 		await panel(v).getByRole('checkbox', { name: 'Transfers' }).uncheck();
 		await expect(nav(v).getByRole('link', { name: 'Network' })).toBeVisible();
 		await expect(nav(v).getByRole('link', { name: 'Transfers' })).toHaveCount(0);
 		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		// Turned off again, Transfers is out of what the role shows, so it isn't counted.
+		await panel(v).getByRole('button', { name: 'Done' }).click();
 		await v.getByLabel('Show model inputs').uncheck();
 		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
 		await expectNoViolations(v);
@@ -131,5 +141,9 @@ test.describe('390×844', () => {
 		await expect(menuButton(page)).toHaveText('Choose sections: Hidden (1)');
 		await expect(nav(page).getByRole('link', { name: 'Dams' })).toHaveCount(0);
 		await expectNoViolations(page);
+		// Escape closes only the dialog; the Sections menu it opened from stays open.
+		await page.keyboard.press('Escape');
+		await expect(panel(page)).toBeHidden();
+		await expect(menuButton(page)).toBeFocused();
 	});
 });

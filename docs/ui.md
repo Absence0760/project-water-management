@@ -260,9 +260,11 @@ Project page's headline facts still link to their tabs (a deep link, as above).
 `e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
 hides the sections they don't use. The **Choose sections** button (icon only
 on the sidebar's "Catchment" line, in words at the foot of the phone's
-Sections menu; "Hidden (n)" once some are hidden) opens a checkbox per
-section the role shows here, grouped as the sidebar is, with **Reset to
-default**. Summary is always shown (its box is ticked and disabled). The
+Sections menu; "Hidden (n)" once some are hidden) opens a dialog with a
+checkbox per section the role shows here, opening right beside the button
+(centred on a phone), grouped as the sidebar is (the groups side by side,
+one column on a phone), with **Reset to default** and
+**Done**. Summary is always shown (its box is ticked and disabled). The
 choice is the account's (`user.preferences.hiddenTabs`, `PATCH /auth/me`,
 [api.md § Auth](./api.md)), so it applies in every catchment and on every
 device; each change saves at once, in order, with the boxes kept live (a
