@@ -106,6 +106,16 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Transport:** SES via the Lambda's IAM role in production (no SMTP password
   to hold). The `log` transport refuses to print message bodies inside Lambda,
   so a misconfigured deploy can't write live links into CloudWatch.
+- **Guard:** `backend/src/auth/account-tokens.security.db.test.ts` sweeps the
+  catalogue (every credential-like column must be a CHECK-constrained 32-byte
+  `bytea` digest, allowlist with reasons) and every text/json/bytea column for
+  the raw tokens just mailed; pins the 1 h / 48 h / 7 day lifetimes (a re-sent
+  invite included); races `app_consume_email_token` across two open
+  transactions; refuses forged session JWTs (unsigned, other key, HS512, other
+  issuer, expired, non-uuid subject, tampered) and pins the 7-day cookie; and
+  checks that adding a member, team member or farmer (single and bulk) and
+  signing in answer the same for an unknown address and an unverified or
+  wrong-password one.
 
 ## Render tokens
 
