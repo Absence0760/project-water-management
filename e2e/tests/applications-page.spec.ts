@@ -132,6 +132,11 @@ test('a viewer has no Applications section', async ({ page, owner, signIn }) => 
 	await viewer.page.goto(`/projects/${project.id}`);
 	await expect(viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true })).toBeVisible();
 	await expect(viewer.page.getByRole('link', { name: 'Applications', exact: true })).toHaveCount(0);
+
+	// An old or shared Applications link lands on the Summary, not the tab's error.
+	await viewer.page.goto(`/projects/${project.id}?tab=applications`);
+	await expect(viewer.page.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
+	await expect(viewer.page.getByRole('alert')).toHaveCount(0);
 });
 
 test('on a phone each application is a card, with no sideways scroll', async ({ page, owner, signIn }) => {

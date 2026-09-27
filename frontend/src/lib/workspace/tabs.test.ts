@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Role } from '$lib/api/types';
 import {
 	ALL_TABS,
+	canOpenTab,
 	NAV_SECTIONS,
 	navSections,
 	hasModelInputsToggle,
@@ -165,5 +166,22 @@ describe('navSections', () => {
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] }
 		]);
+	});
+});
+
+describe('canOpenTab', () => {
+	it('lets owners and editors open the assessors’ Applications tab', () => {
+		expect(canOpenTab('owner', 'applications')).toBe(true);
+		expect(canOpenTab('editor', 'applications')).toBe(true);
+	});
+	it('refuses it to everyone else, so an old link lands on the Summary', () => {
+		for (const role of ['viewer', 'farmer', 'contributor', null, undefined] as (Role | null | undefined)[]) {
+			expect(canOpenTab(role, 'applications')).toBe(false);
+		}
+	});
+	it('still opens a viewer’s hidden model-input tabs from a link (hiding is presentation)', () => {
+		expect(visibleTabs('viewer')).not.toContain('network');
+		expect(canOpenTab('viewer', 'network')).toBe(true);
+		expect(canOpenTab('viewer', 'overview')).toBe(true);
 	});
 });

@@ -127,6 +127,17 @@ export function visibleTabs<T extends string = TabId>(
 }
 
 /**
+ * Whether `role` may open tab `id` at all, from a link as well as the
+ * sidebar. Hiding is presentation (a viewer's hidden model inputs still open
+ * from a deep link), except for the assessors' tabs, which the API refuses a
+ * viewer: an old or shared `?tab=applications` link lands on the Summary
+ * instead of an error.
+ */
+export function canOpenTab(role: Role | null | undefined, id: string): boolean {
+	return groupOf(id) !== 'assess' || role === 'owner' || role === 'editor';
+}
+
+/**
  * The strip's tabs: `visible`, plus the open tab when a deep link opened one
  * that is hidden, in its `rendered` place, so the strip always shows where you
  * are (and the tab body's aria-labelledby has its tab).

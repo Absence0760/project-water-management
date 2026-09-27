@@ -203,7 +203,9 @@ checkbox isn't saved: it resets when the project is opened again.
 This is **presentation, not access control**: RLS still lets a viewer read
 every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
 opens it, and the sections list then shows that tab in its place while it is
-open (`stripTabs`), so you can see where you are. The Summary's checklist keeps a
+open (`stripTabs`), so you can see where you are. The one exception is
+Applications, which the API refuses a viewer: a viewer's `?tab=applications`
+link opens the Summary instead of an error (`canOpenTab`). The Summary's checklist keeps a
 hidden tab's step and its status, but as plain text rather than a link; the
 Project page's headline facts still link to their tabs (a deep link, as above). The
 per-member "choose your own tabs" preference is not built yet

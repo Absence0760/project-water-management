@@ -63,6 +63,7 @@
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
+		canOpenTab,
 		hasModelInputsToggle,
 		navSections,
 		stripTabs,
@@ -94,13 +95,16 @@
 	};
 
 	const projectId = $derived(page.params.id ?? '');
+	let project = $state<Project | null>(null);
 	const tab = $derived.by<TabId>(() => {
 		const raw = page.url.searchParams.get('tab') ?? '';
 		const t = TAB_ALIASES[raw] ?? raw;
-		return (TAB_IDS as string[]).includes(t) ? (t as TabId) : 'overview';
+		if (!(TAB_IDS as string[]).includes(t)) return 'overview';
+		// A tab the role may not open (a viewer's old Applications link) is the Summary.
+		if (project && !canOpenTab(project.role, t)) return 'overview';
+		return t as TabId;
 	});
 
-	let project = $state<Project | null>(null);
 	/** Set when the caller is an applicant here (the contributor role): the page is the Applicant view. */
 	let applicantProject = $state<ProjectSummary | null>(null);
 	// Which tabs each role is shown (presentation only; a hidden tab still
