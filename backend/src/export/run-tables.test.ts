@@ -921,6 +921,18 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});
 
+	it("compares the run's natural MAR with the determination's only when the table records one (engine ≥ 1.7.0)", () => {
+		expect([...ewrAssuranceLines([report])].some((l) => l.startsWith('Natural MAR'))).toBe(false);
+		const r = assessSite(start, days, { table: { ...table, naturalMarMcm: 10 }, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
+		const row = [...ewrAssuranceLines([r])].find((l) => l.startsWith('Natural MAR'))!.split(',');
+		// Two complete water years of 365 days (the 731st day is a part month, left out) at 1.5 Mm³ / 31 days.
+		const run = (365 * 1.5) / 31;
+		expect(row.slice(0, 2)).toEqual(['Natural MAR (Mm³/a): run', expect.any(String)]);
+		expect(Number(row[1])).toBeCloseTo(run, 9);
+		expect(row.slice(2, 4)).toEqual(['determination', '10']);
+		expect(Number(row[5])).toBeCloseTo((100 * (run - 10)) / 10, 9);
+	});
+
 	it('says when nothing was assessed, and is part of the summary sheet', () => {
 		expect([...ewrAssuranceLines(undefined)]).toEqual([
 			'Reserve compliance by month (EWR rule tables)',

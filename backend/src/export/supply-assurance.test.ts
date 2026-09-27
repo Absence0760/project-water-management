@@ -40,8 +40,10 @@ describe('assurance of supply CSV blocks (engine ≥ 0.32.0)', () => {
 	it('reliability: one row per farm, fractions as percentages', () => {
 		expect(lines[0]).toBe(RELIABILITY_TITLE);
 		expect(lines).toContain('Window,2001-09-29,2001-10-04,6 days');
-		// time 2/5, volumetric 29/50, annual 1 of 2 years; 2 failure runs, mean 1.5 days, deficits 10.5 mean, 16 max.
-		expect(lines).toContain('"Farm, upper",farm,50,29,5,2,40,58,2,1,50,2,1.5,2,10.5,16');
+		// time 2/5, volumetric 29/50; no complete water year, two part years left out (engine ≥ 1.7.0), so no annual figure;
+		// 2 failure runs, mean 1.5 days, deficits 10.5 mean, 16 max.
+		expect(lines).toContain('Farm or user,Kind,Demand (m³),Supplied (m³),Demand days,Days fully met,Time-based (% of demand days met),Volumetric (% of demand supplied),Complete water years,Part water years left out,Water years met,Annual (% of complete water years met),Failure runs,Mean failure length (days),Longest failure (days),Mean deficit per failure (m³),Largest deficit of a failure (m³)');
+		expect(lines).toContain('"Farm, upper",farm,50,29,5,2,40,58,0,2,0,,2,1.5,2,10.5,16');
 	});
 
 	it('stress: a class and a percentage per water-year month, the system first', () => {
