@@ -1,4 +1,4 @@
--- 065_deletion-export_account_fk_clears — deleting an account (the operator,
+-- 066_account_fk_clears — deleting an account (the operator,
 -- on a POPIA request: docs/security.md § Personal information, deployment.md
 -- § Runbooks item 7) does what catalogue.db.test.ts APP_USER_ON_DELETE says,
 -- found by auth/personal-data.security.db.test.ts, which deletes an account
@@ -124,7 +124,7 @@ CREATE OR REPLACE FUNCTION app_user_pseudonymise() RETURNS trigger
 				e.subject->>'authorId' = OLD.id::text
 				OR EXISTS (SELECT 1 FROM note n WHERE n.id::text = e.subject->>'noteId' AND n.author_id = OLD.id)
 			);
-		-- 065: a PDF someone else asked for no longer names them as a recipient
+		-- 066: a PDF someone else asked for no longer names them as a recipient
 		-- (their own reports go with requested_by's cascade).
 		UPDATE report SET email_to = array_remove(email_to, OLD.id)
 			WHERE OLD.id = ANY (email_to) AND requested_by <> OLD.id;

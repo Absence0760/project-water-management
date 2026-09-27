@@ -1795,11 +1795,11 @@ never re-run, and a scenario op is hashed (`ops_sha256`), so an op on a
 retired settings path stays stored and the engine refuses it with a reason
 ([scenarios.md](./scenarios.md)). No table, column, policy or grant changes.
 
-### Account deletion reaches every key (065_deletion-export_account_fk_clears.sql)
+### Account deletion reaches every key (066_account_fk_clears.sql)
 
 Deleting an account ([security.md § Personal information](./security.md#personal-information-popia))
 does what `catalogue.db.test.ts` `APP_USER_ON_DELETE` says for every key
-(`auth/personal-data.security.db.test.ts` sweeps it). 065 redefines four
+(`auth/personal-data.security.db.test.ts` sweeps it). 066 redefines four
 functions and changes no table, policy or grant:
 
 - `scenario_sweep_complete` and `seasonal_outlook_complete` pass an update

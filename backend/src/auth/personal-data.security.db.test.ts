@@ -249,8 +249,8 @@ describe('the data-subject export carries every row USER_FK_COVERAGE files under
 	});
 });
 
-// 065 lets the foreign key's SET NULL through three guards; nobody else gets to clear who made a row.
-describe('while the account exists, only its deletion clears who made a row (065)', () => {
+// 066 lets the foreign key's SET NULL through three guards; nobody else gets to clear who made a row.
+describe('while the account exists, only its deletion clears who made a row (066)', () => {
 	it('keeps an alert rule’s creator when an editor tries to clear it', async () => {
 		await withUser(owner.id, (tx) => tx.query('UPDATE alert_rule SET created_by = NULL WHERE project_id = $1', [projectId]));
 		expect(await asOwner('SELECT created_by FROM alert_rule WHERE project_id = $1', [projectId])).toEqual([{ created_by: subject.id }]);

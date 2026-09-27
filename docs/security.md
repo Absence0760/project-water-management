@@ -1233,7 +1233,7 @@ behind every cascade and set-null key is deleted, then every text, json,
 uuid and array column of every table is scanned for its email, name and
 id, which may survive only where this table keeps them (the audit log's
 random id, the typed sign-off name, the sign-in lockout's address). It
-found three guards that fought the deletion, fixed in 065: a sweep's or
+found three guards that fought the deletion, fixed in 066: a sweep's or
 outlook's guard refused the key's SET NULL (so the account couldn't be
 deleted), `alert_rule_check` put the creator back (a dangling id), and a
 PDF someone else asked for kept the person as a recipient
