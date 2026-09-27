@@ -28,6 +28,7 @@ import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './n
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
+import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { supplyOf } from './network/supply';
@@ -407,6 +408,13 @@ function runNetwork(
 		push(id, 'ewr_natural', 'EWR shortfall not caused by use: natural (negative)', 'm³/day', site.natural);
 		if (chargeSites[si]!.ruleTable) push(id, 'ewr_charge_shortfall', EWR_CHARGE_SHORTFALL_LABEL, 'm³/day', chargeSites[si]!.shortfall);
 	}
+	// Each transfer rule's daily volume (engine ≥ 1.6.0), on its source farm, for
+	// every rule that can move water (./network/transferSeries.ts canMove): the
+	// attribution counts a rule only at the sites with both its ends upstream,
+	// which the farms' net `transfer` series can't tell apart.
+	plan.transfers.forEach((tr, k) => {
+		if (tr.seriesKey) push(nodes[tr.from]!.id, tr.seriesKey, TRANSFER_RULE_SERIES.label(nodes[tr.to]!.name), TRANSFER_RULE_SERIES.unit, sim.transfers[k]!);
+	});
 	for (const a of ewrAssurance) push(a.report.nodeId, 'ewr_rule', 'EWR from the Reserve rule table (the month’s requirement, per day)', 'm³/day', a.requiredM3Day);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
 	// No value from any source = NaN.
@@ -1040,6 +1048,7 @@ export function buildNetworkPlan(
 		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
 		transfers.push({
+			...(canMove(tr) ? { seriesKey: transferRuleKey(tr.id) } : {}),
 			from,
 			to,
 			activeMonth,

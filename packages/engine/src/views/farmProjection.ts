@@ -17,8 +17,10 @@
 // saved before 1.5.0 has no such series, and there it is recomputed with the
 // engine's own attributeEwrShortfall on the run's stored flows (reattribute
 // below): exact, except that a transfer network with a loop is cut to a tree
-// first (documented there). The charges themselves always come from the
-// stored series, never from the recompute.
+// first (documented there) unless the run stores each rule's volume
+// (`transfer_rule@<rule id>`, engine ≥ 1.6.0, network/transferSeries.ts). The
+// charges themselves always come from the stored series, never from the
+// recompute.
 //
 // The same recompute over any window, other water users included, is
 // curtailmentOverWindow (below): the Runs tab's reporting-window picker
@@ -26,6 +28,7 @@
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
 import { bindingFromCharge, EWR_BINDING_SERIES } from '../network/bindingSeries';
+import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import {
 	computeCurtailment,
 	DEMAND_PCT_FLOOR_M3_DAY,
@@ -202,20 +205,24 @@ function chargeShortfall(run: ProjectionRun, nodeId: string | null, days: number
 }
 
 /**
- * Per-rule transfer volumes from the stored per-farm net transfer series
- * (in + / out −). Rules between the same two farms are merged (attribution
- * only ever sums them). When the rules form a forest the volumes are exact:
- * peel a leaf farm, its one rule carries exactly the leaf's net. A loop
- * (A → B → C → A) can't be solved from the nets, so its closing rule is
- * dropped and its volume carried round the rest of the loop; that is exact
- * for every EWR site except one whose catchment cuts the loop. Such networks
- * are rare; `approximate` says when it happened.
+ * Per-rule transfer volumes: the run's own per-rule series where it stores
+ * them (engine ≥ 1.6.0, network/transferSeries.ts), always exact. Else, for
+ * an older run, from the stored per-farm net transfer series (in + / out −).
+ * Rules between the same two farms are merged (attribution only ever sums
+ * them). When the rules form a forest the volumes are exact: peel a leaf
+ * farm, its one rule carries exactly the leaf's net. A loop (A → B → C → A)
+ * can't be solved from the nets, so its closing rule is dropped and its
+ * volume carried round the rest of the loop; that is exact for every EWR site
+ * except one whose catchment cuts the loop. Such networks are rare;
+ * `approximate` says when it happened.
  */
 function transferVolumes(
 	run: ProjectionRun,
 	index: Map<string, number>,
 	days: number
 ): { rules: { from: number; to: number; volume: Float64Array }[]; approximate: boolean } {
+	const perRule = storedRules(run, days);
+	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId)!, volume: perRule.volumes[k]! })), approximate: false };
 	const pairs = new Map<string, [number, number]>();
 	for (const tr of run.transfers) {
 		if (!tr.enabled) continue;
@@ -273,6 +280,19 @@ function transferVolumes(
 		if (un.size === 1) leaves.push(u);
 	}
 	return { rules, approximate };
+}
+
+/** The run's farm-to-farm rules and their stored daily volumes (engine ≥ 1.6.0); null for an older run, read from the nets. */
+function storedRules(run: CurtailmentRun, days: number): { rules: CurtailmentRun['transfers'][number][]; volumes: Float64Array[] } | null {
+	const kind = new Map(run.nodes.map((n) => [n.id, n.kind]));
+	const rules = farmRules(run.transfers, (id) => kind.get(id));
+	if (!rules.length) return null;
+	for (const r of rules.filter(canMove)) {
+		const v = run.series(r.fromNodeId, transferRuleKey(r.id));
+		if (v && v.length !== days) throw new ProjectionInputError(`the run's ${transferRuleKey(r.id)} series has ${v.length} days, expected ${days}`);
+	}
+	const volumes = readRuleVolumes(rules, days, (id, key) => run.series(id, key));
+	return volumes ? { rules, volumes } : null;
 }
 
 /**
@@ -439,7 +459,9 @@ function ambiguousFarms(nodes: readonly NetworkNode[], farms: readonly Int32Arra
  * stores the binding site of every farm upstream of two or more EWR sites
  * (engine ≥ 1.5.0), those series are listed and the flows the binding-site
  * recompute needs are not. Without it, or for a run saved before 1.5.0, the
- * flows are listed: the recompute is the fallback.
+ * flows are listed: the recompute is the fallback. Given `has`, a run that
+ * stores per-rule transfer volumes (engine ≥ 1.6.0) and needs the recompute
+ * has those listed in place of the farms' net transfers.
  */
 export function curtailmentSeriesKeys(
 	nodes: readonly NetworkNode[],
@@ -457,20 +479,25 @@ export function curtailmentSeriesKeys(
 	// A site whose charge followed its rule table is read by its own shortfall, instead of the pragmatic one.
 	// (Or, given `has`, where the run stored one: what chargeShortfall reads.)
 	const siteShortfallKey = (id: string | null) => (options.ruleTableSites?.includes(id) || has?.(id, 'ewr_charge_shortfall') ? 'ewr_charge_shortfall' : 'ewr_shortfall');
-	// The farms whose net transfer series transferVolumes reads.
+	// The farms whose net transfer series transferVolumes reads, or (given `has`, for a run
+	// that stores them, engine ≥ 1.6.0) the per-rule volumes it reads in their place.
 	const inRule = new Set<string>();
 	for (const tr of transfers) {
 		const a = byId.get(tr.fromNodeId);
 		const b = byId.get(tr.toNodeId);
 		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);
 	}
+	const rules = farmRules(transfers, (id) => byId.get(id)?.kind);
+	const ruleKeys = rules.filter(canMove).map((r) => ({ nodeId: r.fromNodeId, key: transferRuleKey(r.id) }));
+	// (A network whose rules can never move water needs neither: every rule is 0.)
+	const perRule = !stored && rules.length > 0 && (ruleKeys.length === 0 || (!!has && ruleKeys.every((k) => has(k.nodeId, k.key))));
 	const sites = new Set(siteNodes);
 	nodes.forEach((n, i) => {
 		if (!stored) add(n.id, 'inflow_upstream', 'outflow');
 		if (n.kind === 'farm') {
 			add(n.id, 'supplied', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
 			if (!stored) add(n.id, 'runoff', 'dam_storage');
-			if (!stored && inRule.has(n.id)) add(n.id, 'transfer');
+			if (!stored && !perRule && inRule.has(n.id)) add(n.id, 'transfer');
 		} else if (n.kind === 'user') {
 			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
@@ -479,6 +506,7 @@ export function curtailmentSeriesKeys(
 		}
 	});
 	if (stored) for (const f of ambiguous) add(nodes[f]!.id, EWR_BINDING_SERIES.key);
+	if (perRule) out.push(...ruleKeys);
 	if (topo.outflow >= 0) add(null, siteShortfallKey(null), 'ewr_charged', 'ewr_natural');
 	return out;
 }

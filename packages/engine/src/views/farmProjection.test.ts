@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import { DEMAND_PCT_FLOOR_M3_DAY } from '../network/curtailment';
+import { EWR_BINDING_SERIES } from '../network/bindingSeries';
+import { parseTransferRuleKey } from '../network/transferSeries';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { runModel, runModelWith } from '../run';
 import { randomInput } from '../testing/fuzz';
@@ -329,6 +331,7 @@ describe('the season curtailment agrees with runModel over the same window', () 
 		// How many cases exercise the hard paths: a gauge binding a farm's charge, and transfer rules.
 		let gaugeBinds = 0;
 		let withTransfers = 0;
+		let loops = 0;
 		for (let seed = 1; seed <= 300; seed++) {
 			const base = randomInput(seed, { maxDays: 800 });
 			let probe: ModelOutput;
@@ -340,15 +343,26 @@ describe('the season curtailment agrees with runModel over the same window', () 
 			const input = { ...base, settings: { ...base.settings, reportStart: seasonStart(probe.endDate), reportEnd: probe.endDate } };
 			const out = runModel(input);
 			const expected = out.summary.curtailment!;
-			const got = analyseSeason(asRun(input, out));
+			const run = asRun(input, out);
+			const got = analyseSeason(run);
 			expect(got.curtailment.reportStart, `seed ${seed}`).toBe(expected.reportStart);
 			expect(got.curtailment.equitableFraction, `seed ${seed}`).toBe(expected.equitableFraction);
 			expect(got.curtailment.ewrSites, `seed ${seed}`).toEqual(expected.ewrSites);
-			if (got.bindingApproximate) {
-				const strip = (f: { ewrBindingSiteId?: string | null }) => ({ ...f, ewrBindingSiteId: undefined });
-				expect(got.curtailment.farms.map(strip), `seed ${seed}`).toEqual(expected.farms.map(strip));
+			// A run of today's engine is exact, transfer loops included: it stores the binding sites (1.5.0) and each rule's volume (1.6.0).
+			expect(got.bindingApproximate, `seed ${seed}`).toBe(false);
+			expect(got.curtailment.farms, `seed ${seed}`).toEqual(expected.farms);
+			// With the binding sites recomputed, from the per-rule volumes: still exact.
+			const recomputed = analyseSeason({ ...run, series: (n, k) => (k === EWR_BINDING_SERIES.key ? undefined : run.series(n, k)) });
+			expect(recomputed.bindingApproximate, `seed ${seed}`).toBe(false);
+			expect(recomputed.curtailment.farms, `seed ${seed}`).toEqual(expected.farms);
+			// A run saved before 1.5.0 (neither series): the fallback cuts a loop, and says so.
+			const old = analyseSeason({ ...run, series: (n, k) => (k === EWR_BINDING_SERIES.key || parseTransferRuleKey(k) ? undefined : run.series(n, k)) });
+			const strip = (f: { ewrBindingSiteId?: string | null }) => ({ ...f, ewrBindingSiteId: undefined });
+			if (old.bindingApproximate) {
+				loops++;
+				expect(old.curtailment.farms.map(strip), `seed ${seed}`).toEqual(expected.farms.map(strip));
 			} else {
-				expect(got.curtailment.farms, `seed ${seed}`).toEqual(expected.farms);
+				expect(old.curtailment.farms, `seed ${seed}`).toEqual(expected.farms);
 			}
 			checked++;
 			if (got.curtailment.farms.some((f) => f.ewrBindingSiteId && f.ewrBindingSiteId !== got.sites[0]!.nodeId)) gaugeBinds++;
@@ -357,5 +371,6 @@ describe('the season curtailment agrees with runModel over the same window', () 
 		expect(checked).toBeGreaterThan(200);
 		expect(gaugeBinds).toBeGreaterThanOrEqual(3);
 		expect(withTransfers).toBeGreaterThan(50);
+		expect(loops).toBeGreaterThan(0);
 	});
 });

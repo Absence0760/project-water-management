@@ -135,6 +135,8 @@ export interface PlanNode {
 }
 
 export interface PlanTransfer {
+	/** The run series key its volume is stored under (`transfer_rule@<rule id>`, engine ≥ 1.6.0, ./transferSeries.ts); absent for a rule that can never move water. */
+	seriesKey?: string;
 	from: number;
 	to: number;
 	/** activeMonth[m] for calendar month m (1–12). */
