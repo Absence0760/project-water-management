@@ -2781,7 +2781,11 @@ read it before.
      sign-off, after the results.
   4. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
-  The menu names the same groups. The river's panels (Reserve compliance,
+  Everything after the flow-duration curve (the rest of Model quality,
+  Record, Dig deeper) renders once the hydrograph has drawn and been painted,
+  so the first chart isn't held behind a second of rendering on a busy
+  machine (`runs/RunCharts.svelte`); a link to a panel down there
+  (`#res-notes`, `#res-calibration`) renders them at once. The menu names the same groups. The river's panels (Reserve compliance,
   EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
   the seasonal outlook, the water account) are on River & reserve and the
   units' (curtailment, assurance of supply, unit detail, the per-unit table)

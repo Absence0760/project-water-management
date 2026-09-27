@@ -9,7 +9,8 @@
 	// group: the parent slots its own panels into each group, since the flow
 	// charts share one unit switch. The river and unit groups have their own
 	// pages; the run header links there (RunsTab.svelte).
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
+	import { page } from '$app/state';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import { FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
@@ -116,6 +117,37 @@
 	});
 
 	const RECENT = 3 * 365;
+
+	// The groups below the flow charts (the rest of Model quality, Record, Dig
+	// deeper) render after the hydrograph has drawn and been painted: rendered
+	// with it, they held the main thread for about a second on a busy machine
+	// before any chart showed. Once shown they stay (a switch of run keeps
+	// them). A link to a panel down there (#res-notes from the run header, a
+	// bookmark) needs it on the page at once, so it shows them straight away.
+	// A hydrograph that failed or has nothing to draw lets them follow too, and
+	// so does one whose data is in but that hasn't drawn two frames on (a chart
+	// with no width yet never draws).
+	let hydroReady = $state(false);
+	const lowerLink = $derived(page.url.hash.startsWith('#res-') && !['#res-hydrograph', '#res-fdc'].includes(page.url.hash));
+	let lower = $state(untrack(() => lowerLink));
+	$effect(() => {
+		if (lower) return;
+		if (lowerLink) {
+			lower = true;
+			return;
+		}
+		const settled = hydroReady || !!catchError || (!catchLoading && !hydroSeries.length);
+		if (!settled && catchLoading) return;
+		// requestAnimationFrame runs before the frame's paint, a timeout queued there after it.
+		let frame = 0;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const afterPaint = () => (timer = setTimeout(() => (lower = true)));
+		frame = requestAnimationFrame(settled ? afterPaint : () => (frame = requestAnimationFrame(afterPaint)));
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+	});
 </script>
 
 {#snippet unitToggle()}
@@ -144,6 +176,7 @@
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
 				{band}
+				bind:ready={hydroReady}
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
@@ -204,20 +237,22 @@
 		{/if}
 	</section>
 
-	{#if modelTail}<div class="wide slot">{@render modelTail()}</div>{/if}
+	{#if lower}
+		{#if modelTail}<div class="wide slot">{@render modelTail()}</div>{/if}
 
-	{#if record}
-		<h2 class="group-h wide">Record</h2>
-		<div class="wide slot">{@render record()}</div>
+		{#if record}
+			<h2 class="group-h wide">Record</h2>
+			<div class="wide slot">{@render record()}</div>
+		{/if}
+
+		<h2 class="group-h wide">Dig deeper</h2>
+		{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}
+
+		<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
+			<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
+			<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} {band} />
+		</section>
 	{/if}
-
-	<h2 class="group-h wide">Dig deeper</h2>
-	{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}
-
-	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
-		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
-		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} {band} />
-	</section>
 </div>
 
 <style>

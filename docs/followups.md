@@ -2119,17 +2119,26 @@ role and not before it.
       - Every authenticated request read the session watermark in its own
         transaction (3 round trips); now one statement
         (`queryWithoutUser`, `auth/session.db.test.ts`).
-- [ ] **The Runs tab's first chart still misses a 5 s wait on an
+- [x] **The Runs tab's first chart still missed a 5 s wait on an
       oversubscribed machine** (2 of 96 `runs.spec.ts` tests at 16 workers,
       load average ~37 on 16 cores; none at the configured 6 workers,
-      120/120 in a 10× repeat). What is left: `/auth/me` gates the page's
-      own requests (one hop on every page load), and the browser spends
-      about a second rendering the whole results page before any chart
-      draws. The API thread was 29 % idle in a profile of such a run; each
-      round trip and render just stretched. Durable fix, if it recurs:
-      render the results page's lower groups after the first paint, and
-      start the project's requests alongside `/auth/me`. Trigger: a chart
-      wait failing at 6 workers, locally or in CI.
+      120/120 in a 10× repeat): `/auth/me` gated the page's own requests (one
+      hop on every page load), and the browser spent about a second
+      rendering the whole results page before any chart drew. Fixed
+      2026-09-27 (#17): the root layout starts the catchment page's requests
+      beside `/auth/me` (`lib/workspace/firstLoad.ts`; the page still mounts
+      only once auth answers, and a failed `/auth/me` drops them), and Runs &
+      results renders the groups below the flow charts only after the
+      hydrograph is painted (`runs/RunCharts.svelte`; a `#res-…` link to one
+      of them renders them at once). Time to the hydrograph's first paint,
+      production build, median of 9 loads of an 8-year run, A/B on the same
+      loaded laptop: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU
+      throttling ([architecture.md § First load](./architecture.md#first-load-frontend)).
+      Pinned by `auth.spec.ts` (request order) and `runs-page.spec.ts` (paint
+      order). What is left in the chain is the Runs tab's own: its chunk, then
+      the run's details, then its flows, each after the last; a chart wait
+      failing at 6 workers again is the trigger to start the shown run's
+      details beside the page's requests too.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
