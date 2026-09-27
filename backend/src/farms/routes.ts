@@ -178,7 +178,8 @@ async function inviteFarmer(
 		 ON CONFLICT DO NOTHING`,
 		[invite.id, projectId, farms]
 	);
-	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role: 'farmer', farms: farms.length, mailed: !!mail });
+	// No `mailed` flag (see POST /members): it would tell the owner whether the address has an account.
+	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role: 'farmer', farms: farms.length });
 	return { invite: (await invitedFarmers(db, projectId, invite.id))[0]!, mail };
 }
 

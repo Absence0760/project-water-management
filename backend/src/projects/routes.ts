@@ -382,7 +382,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// a colleague's address can't get you added in their place.
 			if (!user?.verified) {
 				const invited = await inviteByEmail(db, 'project', id, body.email, body.role, user?.id);
-				await recordAudit(db, id, 'invite.sent', { inviteId: invited.invite.id, email: maskEmail(body.email), role: body.role, mailed: !!invited.mail });
+				// No `mailed` flag: whether an email went out depends on the address's
+				// account (an unverified one inside its verification cooldown gets none),
+				// so the owner's History would tell them the address is registered.
+				await recordAudit(db, id, 'invite.sent', { inviteId: invited.invite.id, email: maskEmail(body.email), role: body.role });
 				return { invited };
 			}
 			const { rowCount } = await db.query(
