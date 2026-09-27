@@ -1091,15 +1091,13 @@ In short:
     (`KNOWN_INSERTS` is empty): 045's `series_blob_insert_contributor`
     admitted any blob, its hash unchecked, until 074_series_blob_digest
     moved blob writes into `app_store_series_blob`, which computes the key
-    itself. One second-layer gap stays open: `model_run_insert_contributor`
-    (045) lets an applicant insert their own application's run rows, so a
-    direct insert past the API could store a summary the engine never
-    produced. The database can't tell that insert from the backend's (same
-    role, same user), so the fix belongs where the run is judged: before an
-    assessor decides or signs off, re-derive the run from its base run's
-    stored input and its ops and compare (the `…/reproduce` comparison), or
-    have the backend stamp each run with a MAC under a key the database
-    doesn't hold.
+    itself. `model_run_insert_contributor` (045) still lets an applicant
+    insert their own application's run rows (the database can't tell that
+    insert from the backend's: same role, same user), but such a row can't
+    be judged: every run the backend stores carries a server stamp
+    ([§ Run stamps](#run-stamps)), and a sign-off and an
+    application's decision refuse a run without a matching one, so a
+    summary the engine never produced is never signed or decided on.
   - **No existence oracles** (049_applicant_oracles,
     `scenarios/oracles.db.test.ts`: each probe answered identically for the
     hidden and the free case, each with a positive control).
@@ -1138,6 +1136,39 @@ In short:
   only; the health update re-checks that the caller is an editor of the
   feed's project, and a direct write can never set the health columns (the
   `data_feed_stamp` trigger), so an owner can't make a dead feed look fresh.
+- <a id="run-stamps"></a>**Run stamps** (077_run_stamp,
+  `backend/src/runs/stamp.ts`). RLS decides who may write a run's rows, not
+  whether the engine produced them: an applicant may insert their own
+  application's runs (045) and an editor any run of the project (001, and
+  `UPDATE` on `run_series`), so someone with SQL as `water_app` could store
+  results the engine never computed. So the backend signs every run it
+  stores (`storeRun`, the one save path: `POST …/runs`, a scenario or
+  application run, an import's run, the re-run job): `model_run.stamp` is an
+  HMAC-SHA256 under a key derived by HKDF (its own label) from
+  `AUTH_JWT_SECRET`, which the database never holds, over
+  `app_run_digest(run)`, a SHA-256 of the run's evidence in a canonical,
+  session-independent encoding (id, project, engine version, dates, trigger,
+  the inputs snapshot, the summary, the stored input series' kinds, starts
+  and blob hashes, every output series' node, key, meta and values). The
+  stamp binds the run's id, so one copied onto another row doesn't verify.
+  `app_set_run_stamp` is the only writer (the run's maker, in the storing
+  transaction, once; `water_app` has no `UPDATE` on the column), and
+  `app_run_digest` answers only for a run the caller reads or has just
+  stored. Where a run is judged, it must verify: a sign-off refuses one that
+  doesn't (`409`, code `run_unverified`), and so does an application's
+  decision while any of its runs doesn't. `GET …/runs/:runId` says
+  `verified`, and the assessors see an application's unverified runs
+  (`unverifiedRunIds`, a warning in its panel). Editor-made runs are stamped
+  too (the same path, and an editor can write run rows directly just as
+  well), so every sign-off needs one. Runs stored before 077 have no stamp
+  and read as unverified: re-run them to sign one (there was no production
+  deployment then). Verifying re-hashes the run's rows (~0.2 s for a
+  400-series, 44-year run), which is why the run list doesn't carry it.
+  *Rotation:* a new `AUTH_JWT_SECRET` leaves every stored run unverified
+  (existing sign-offs and decisions stand; new ones need a fresh run), which
+  after a leak is what you want, since the old key could have signed
+  anything. The worker Lambda holds the secret too (its re-run job stores
+  runs); it never signs or reads a session.
 - The schema owner (`water`) is used only for migrations, never by the running
   API or the job worker.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
@@ -1694,7 +1725,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
     ticked; a legacy run (a stored run from before engine 1.0.0, which
-    removed that model) can't be signed (audit H1).
+    removed that model) can't be signed (audit H1), nor can a run whose
+    server stamp is missing or no longer matches its rows
+    ([§ Run stamps](#run-stamps)).
   - *Immutable:* `water_app` has no `UPDATE` or `DELETE` on `signoff` and no
     policy allows either (catalogue guard); the signed run is cited, so it
     can't be deleted or trimmed, and `water_app` may change only its notes
@@ -1738,7 +1771,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 ## Incident playbook
 
 1. **Suspected secret leak:** rotate the secret at its source.
-   `AUTH_JWT_SECRET` rotation logs every user out. DB passwords: `ALTER ROLE`
+   `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored
+   run unverified until re-run ([§ Run stamps](#run-stamps)). DB passwords: `ALTER ROLE`
    and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml` and
    `terraform apply`. The operator runs these steps by hand.
 2. **Suspected cross-project data exposure:** check the RLS policies and the

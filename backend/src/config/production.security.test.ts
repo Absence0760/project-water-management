@@ -54,6 +54,7 @@ const PROD: Record<Role, Record<string, string>> = {
 	worker: {
 		DATABASE_URL: `${DB_URL}&application_name=worker`,
 		DB_POOL_MAX: '2',
+		AUTH_JWT_SECRET: 'f'.repeat(64),
 		NODE_EXTRA_CA_CERTS: CA,
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),

@@ -26,6 +26,7 @@ import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
+import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
 import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
@@ -56,11 +57,15 @@ function checkView(c: ScenarioCheck, role: Role) {
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
 	const scenario = applicantOpNames(s, role);
+	// An application's runs whose server stamp is missing or wrong (077,
+	// runs/stamp.ts), for the assessors: its decision waits until none remain.
+	// null for a team scenario and for anyone below editor.
+	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null };
+		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null, unverifiedRunIds };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
 	}
 }
@@ -399,6 +404,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'editor');
 			const s = await loadScenario(db, id, scenarioId(sid));
 			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant can’t decide their own application');
+			// Decided on runs the model run stored, never on one written past it (077, runs/stamp.ts).
+			const unverified = await unverifiedScenarioRuns(db, id, s.id);
+			if (unverified.length)
+				throw runUnverified(
+					`this scenario can't be decided: ${unverified.length} of its runs (unverifiedRunIds) weren't stored by the model run itself (a server stamp missing or no longer matching its results); delete them and run it again`
+				);
 			await move(db, id, s, 'decided', { outcome: body.outcome, note: body.note });
 			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome }, true));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));

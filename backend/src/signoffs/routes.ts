@@ -14,6 +14,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import { lockProjectRuns } from '../runs/execute.js';
+import { RUN_UNVERIFIED, runUnverified, runVerified } from '../runs/stamp.js';
 
 const text = (max: number) =>
 	z
@@ -64,7 +65,7 @@ async function statementFor(
 	db: Db,
 	projectId: string,
 	runId: string
-): Promise<{ statement: SignoffStatement; sha256: string; legacy: boolean; forecast: boolean }> {
+): Promise<{ statement: SignoffStatement; sha256: string; legacy: boolean; forecast: boolean; verified: boolean }> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 	const { rows } = await db.query<{ engine_version: string; scenario: boolean; legacy: boolean; forecast: boolean }>(
 		`SELECT engine_version, scenario_id IS NOT NULL AS scenario,
@@ -76,7 +77,9 @@ async function statementFor(
 	const r = rows[0];
 	if (!r) throw new ApiError(404, 'not found');
 	const statement = signoffStatement({ id: runId, engineVersion: r.engine_version, scenario: r.scenario });
-	return { statement, sha256: sha256(signoffStatementText(statement)), legacy: r.legacy, forecast: r.forecast };
+	// Its server stamp (077, runs/stamp.ts): a run written past the model run is never signed.
+	const verified = await runVerified(db, runId);
+	return { statement, sha256: sha256(signoffStatementText(statement)), legacy: r.legacy, forecast: r.forecast, verified };
 }
 
 /** Why a forecast run (WP-2.12) can't be signed off. */
@@ -88,14 +91,14 @@ export const signoffRoutes = new Hono<AuthEnv>()
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
-			const { statement, sha256: statementSha256, legacy, forecast } = await statementFor(db, id, runId);
+			const { statement, sha256: statementSha256, legacy, forecast, verified } = await statementFor(db, id, runId);
 			const { rows } = await db.query<SignoffRow>(`${SELECT} WHERE project_id = $1 AND run_id = $2 ORDER BY signed_at, id`, [id, runId]);
 			return c.json({
 				statement,
 				statementSha256,
 				disclaimer: { version: DISCLAIMER.version, status: DISCLAIMER.status },
 				// Why the caller can't sign, or null when they can.
-				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : forecast ? FORECAST_NOT_SIGNABLE : null,
+				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : forecast ? FORECAST_NOT_SIGNABLE : !verified ? RUN_UNVERIFIED : null,
 				signoffs: rows
 			});
 		});
@@ -107,10 +110,12 @@ export const signoffRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
-			const { statement, sha256: expected, legacy, forecast } = await statementFor(db, id, runId);
+			const { statement, sha256: expected, legacy, forecast, verified } = await statementFor(db, id, runId);
 			if (legacy) throw new ApiError(409, LEGACY);
 			// A sign-off is judged on history; a forecast run's tail is modelled on forecast rain (WP-2.12).
 			if (forecast) throw new ApiError(409, FORECAST_NOT_SIGNABLE);
+			// Only a run the backend stored and signed, whose rows still match (077).
+			if (!verified) throw runUnverified();
 			if (body.statementSha256 !== expected)
 				throw new ApiError(409, 'the sign-off statement has changed since it was shown (a new limitation or wording); read it again and sign the new one');
 			const missing = statement.confirmations.filter((k) => !body.confirmed.includes(k.id));

@@ -414,7 +414,7 @@
 		{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
 	{/if}
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 	{#if error}
 		<div class="alert alert-error" role="alert">

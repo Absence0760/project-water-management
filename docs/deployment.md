@@ -170,7 +170,7 @@ Keys this app needs:
 
 | Key | Used for |
 | --- | --- |
-| `auth_jwt_secret` | Lambda env `AUTH_JWT_SECRET`: signs session cookies (≥ 32 random bytes) |
+| `auth_jwt_secret` | Lambda env `AUTH_JWT_SECRET` (API and worker): signs session cookies, and keys the run stamps (security.md § Run stamps; rotating it leaves stored runs unverified) (≥ 32 random bytes) |
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`

@@ -9,6 +9,7 @@ import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
+import { runVerified } from './stamp.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, runFailure, runLiveModel, trimRuns } from './execute.js';
 
@@ -117,6 +118,9 @@ export const runRoutes = new Hono<AuthEnv>()
 				]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
+			// Its server stamp still matches its rows (077, runs/stamp.ts): false for a
+			// run written past the model run, or changed since, which can't be signed off.
+			rows[0].verified = await runVerified(db, runId);
 			const { rows: series } = await db.query(
 				`SELECT node_id AS "nodeId", key, meta->>'label' AS label, meta->>'unit' AS unit
 				 FROM run_series WHERE run_id = $1 ORDER BY node_id NULLS FIRST, key`,

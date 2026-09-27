@@ -302,6 +302,16 @@ editor-on-both-sides rule) limits even that to editors and owners; a viewer's
 ([api.md](./api.md#runs)); the catalogue test pins `model_run`'s updatable
 columns to exactly `notes` and `pinned` (below).
 
+**Run stamps (077_run_stamp.sql).** `model_run.stamp` (`bytea`, 32 bytes, or
+NULL) is the backend's HMAC over `app_run_digest(id)`, the canonical digest
+of the run's inputs snapshot, summary, stored input series and output
+series, written once by `app_set_run_stamp` in the storing transaction
+(`storeRun`); `water_app` has no `UPDATE` on it. NULL (a run from before
+077, or one inserted past the API) and a stamp that no longer matches the
+rows both read as unverified: such a run can't be signed off, and an
+application with one can't be decided
+([security.md § Run stamps](./security.md#run-stamps)).
+
 **Pinned runs (015_run_pinned.sql).** `model_run.pinned` (boolean, default
 `false`) keeps a run, typically a baseline, past the storage cap: `trimRuns`
 skips it and it doesn't count against `RUNS_KEPT_PER_PROJECT`, and
