@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
-import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
+import { LEGACY_RUN_CSV_COMMENT, runProvenanceComment } from './csv.js';
 import { flowDurationTable } from './fdc.js';
 import { localDate } from '../projects/timeZone.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
@@ -18,6 +18,12 @@ async function download(u: User, path: string) {
 }
 
 const lines = (csv: string) => csv.replace(BOM, '').replace(/\r\n$/, '').split('\r\n');
+/** A daily CSV's table (header row first): its lines after the leading `#` lines (the run's provenance, and a legacy run's warning). */
+const table = (csv: string) => {
+	const rows = lines(csv);
+	while (rows[0]?.startsWith('#')) rows.shift();
+	return rows;
+};
 
 let owner: User;
 let viewer: User;
@@ -92,7 +98,7 @@ describe('run daily export', () => {
 			/^attachment; filename="catchment-a-export_baseline_catchment_daily_\d{4}-\d{2}-\d{2}\.csv"$/
 		);
 		expect(res.text.startsWith(BOM)).toBe(true);
-		const rows = lines(res.text);
+		const rows = table(res.text);
 		expect(rows[0]).toMatch(/^date,Natural flow \(m³\/day\),Simulated outflow \(m³\/day\),Observed flow \(m³\/day\),Pragmatic EWR/);
 		expect(rows).toHaveLength(DAYS + 1);
 		expect(rows[1]!.startsWith('2024-02-15,')).toBe(true);
@@ -107,7 +113,7 @@ describe('run daily export', () => {
 		const res = await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv?nodeId=${farm.id}`);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-disposition')).toContain('_baseline_farm-upper_daily_');
-		const header = lines(res.text)[0]!;
+		const header = table(res.text)[0]!;
 		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.12.0).
 		// The soil-water store (engine 0.14.0) sits with the demand columns. The crop
 		// requirement is the workbook's F; the abstraction demand (N1) has no workbook letter.
@@ -127,13 +133,50 @@ describe('run daily export', () => {
 		const v = cols.indexOf('Balance check (should be 0) [V] (m³/day)');
 		expect(v).toBe(cols.indexOf('Outflow [U] (m³/day)') + 1);
 		// Every day's balance check is float noise.
-		for (const r of lines(res.text).slice(1)) expect(Math.abs(Number(r.split(',')[v]))).toBeLessThan(1e-6);
+		for (const r of table(res.text).slice(1)) expect(Math.abs(Number(r.split(',')[v]))).toBeLessThan(1e-6);
+	});
+
+	it('says which run made it on a leading # line (the catchment and all-farms files without a dam, a farm file with its dam)', async () => {
+		const r = (await viewer.call('GET', `/projects/${projectId}/runs/${runId}`)).body.run;
+		const run = {
+			label: 'Baseline',
+			engineVersion: r.engineVersion as string,
+			runoffModel: 'gr4j',
+			createdAt: new Date(r.createdAt).toISOString(),
+			startDate: r.startDate as string,
+			endDate: r.endDate as string
+		};
+		const base = `/projects/${projectId}/runs/${runId}/export`;
+		const first = async (path: string) => lines((await download(viewer, path)).text).slice(0, 2);
+		expect(await first(`${base}/daily.csv`)).toEqual([
+			`# run=Baseline; engine=${run.engineVersion}; runoff_model=gr4j; created=${run.createdAt}; period=2024-02-15..2024-03-15`,
+			expect.stringMatching(/^date,/)
+		]);
+		expect(await first(`${base}/daily.csv?nodeId=${farm.id}`)).toEqual([runProvenanceComment({ ...run, damCapacityM3: 200_000 }), expect.stringMatching(/^date,/)]);
+		expect(await first(`${base}/daily.csv?nodeId=${farm2.id}`)).toEqual([runProvenanceComment({ ...run, damCapacityM3: 50_000 }), expect.stringMatching(/^date,/)]);
+		// A gauge is not a farm: no dam key.
+		expect(await first(`${base}/daily.csv?nodeId=${outlet.id}`)).toEqual([runProvenanceComment(run), expect.stringMatching(/^date,/)]);
+		expect(await first(`${base}/farms.csv?key=runoff`)).toEqual([runProvenanceComment(run), expect.stringMatching(/^date,/)]);
+		// The same line on a narrowed window: the period is the run's, not the window's.
+		expect((await first(`${base}/daily.csv?from=2024-02-28&to=2024-03-01`))[0]).toBe(runProvenanceComment(run));
+	});
+
+	it('keeps a hostile run label inert and one line in the provenance line', async () => {
+		const label = '=HYPERLINK("http://x","y"); engine=0.0.0\r\n2024-01-01,999';
+		const made = await owner.call('POST', `/projects/${projectId}/runs`, { label });
+		expect(made.status).toBe(201);
+		const rows = lines((await download(viewer, `/projects/${projectId}/runs/${made.body.run.id}/export/daily.csv`)).text);
+		expect(rows[0]).toMatch(/^# run=%3DHYPERLINK\(%22http:\/\/x%22%2C%22y%22\)%3B engine%3D0\.0\.0%0D%0A2024-01-01%2C999; engine=/);
+		expect(rows[0]).not.toMatch(/[,"]/);
+		expect(rows[1]).toMatch(/^date,/);
+		expect(decodeURIComponent(/^# run=([^;]*);/.exec(rows[0]!)![1]!)).toBe(label);
+		expect((await owner.call('DELETE', `/projects/${projectId}/runs/${made.body.run.id}`)).status).toBeLessThan(300);
 	});
 
 	it('honours a from/to window and rejects bad ones', async () => {
 		const base = `/projects/${projectId}/runs/${runId}/export/daily.csv`;
 		const res = await download(owner, `${base}?from=2024-02-28&to=2024-03-01`);
-		expect(lines(res.text).map((r) => r.slice(0, 10))).toEqual(['date,Natur', '2024-02-28', '2024-02-29', '2024-03-01']);
+		expect(table(res.text).map((r) => r.slice(0, 10))).toEqual(['date,Natur', '2024-02-28', '2024-02-29', '2024-03-01']);
 		expect((await download(owner, `${base}?from=2024-03-02&to=2024-03-01`)).status).toBe(400);
 		expect((await download(owner, `${base}?from=2030-01-01`)).status).toBe(400);
 		expect((await download(owner, `${base}?from=2024-02-31`)).status).toBe(400);
@@ -146,7 +189,7 @@ describe('all-farms daily export', () => {
 	const base = () => `/projects/${projectId}/runs/${runId}/export/farms.csv`;
 	/** One column of a farm's own daily CSV, by header. */
 	async function farmColumn(nodeId: string, header: string) {
-		const rows = lines((await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv?nodeId=${nodeId}`)).text);
+		const rows = table((await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv?nodeId=${nodeId}`)).text);
 		const i = rows[0]!.split(',').indexOf(header);
 		expect(i, header).toBeGreaterThan(0);
 		return rows.slice(1).map((r) => r.split(',')[i]);
@@ -160,7 +203,7 @@ describe('all-farms daily export', () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-disposition')).toMatch(/_baseline_all-farms_runoff_daily_\d{4}-\d{2}-\d{2}\.csv"$/);
 		expect(res.text.startsWith(BOM)).toBe(true);
-		const rows = lines(res.text);
+		const rows = table(res.text);
 		expect(rows[0]).toBe('date,Farm 2 [I] (m³/day),"Farm, ""upper"" [I] (m³/day)"');
 		expect(rows).toHaveLength(DAYS + 1);
 		expect(rows[1]!.startsWith('2024-02-15,')).toBe(true);
@@ -172,7 +215,7 @@ describe('all-farms daily export', () => {
 	});
 
 	it('exports the fragmented EWR (Y) the same way', async () => {
-		const rows = lines((await download(owner, `${base()}?key=ewr`)).text);
+		const rows = table((await download(owner, `${base()}?key=ewr`)).text);
 		expect(rows[0]).toBe('date,Farm 2 [Y] (m³/day),"Farm, ""upper"" [Y] (m³/day)"');
 		const upper = await farmColumn(farm.id, 'EWR share [Y] (m³/day)');
 		const lower = await farmColumn(farm2.id, 'EWR share [Y] (m³/day)');
@@ -182,7 +225,7 @@ describe('all-farms daily export', () => {
 	});
 
 	it('honours a from/to window and rejects a bad key or window', async () => {
-		const rows = lines((await download(owner, `${base()}?key=runoff&from=2024-02-28&to=2024-03-01`)).text);
+		const rows = table((await download(owner, `${base()}?key=runoff&from=2024-02-28&to=2024-03-01`)).text);
 		expect(rows.slice(1).map((r) => r.slice(0, 10))).toEqual(['2024-02-28', '2024-02-29', '2024-03-01']);
 		expect((await download(owner, base())).status).toBe(400); // key is required
 		expect((await download(owner, `${base()}?key=natural_flow`)).status).toBe(400); // a catchment series, not a farm one
@@ -233,7 +276,7 @@ describe('run summary export', () => {
 		expect(rows).toContain('Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days');
 		const fdc = rows.filter((r) => r.startsWith('Whole run,Natural,') || r.startsWith('Whole run,Simulated outflow,') || r.startsWith('Whole run,Observed,'));
 		expect(fdc).toHaveLength(3);
-		const daily = lines((await download(viewer, `/projects/${projectId}/runs/${runId}/export/daily.csv`)).text);
+		const daily = table((await download(viewer, `/projects/${projectId}/runs/${runId}/export/daily.csv`)).text);
 		const naturalM3Day = daily.slice(1).map((r) => (r.split(',')[1] === '' ? null : Number(r.split(',')[1])));
 		const expected = flowDurationTable([{ key: 'natural_flow', values: naturalM3Day }]).wholeRun[0]!;
 		expect(fdc[0]!.split(',').slice(2).map(Number)).toEqual([expected.q10, expected.q50, expected.q90, expected.q95, expected.n]);
@@ -285,11 +328,13 @@ describe('legacy run CSV comment (audit H1)', () => {
 		await makeStoredLegacyRun(legacyRunId);
 	});
 
-	it('starts daily.csv and summary.csv with the legacy comment, header still row 1 after it', async () => {
+	it('starts daily.csv and summary.csv with the legacy comment, the provenance line and the header after it', async () => {
 		const daily = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/daily.csv`);
 		const dailyRows = lines(daily.text);
+		// Both lines: the warning first (row 1 says so, as on summary.csv), then the run's provenance, then the header.
 		expect(dailyRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
-		expect(dailyRows[1]).toMatch(/^date,/);
+		expect(dailyRows[1]).toMatch(/^# run=Legacy; engine=[^;]+; runoff_model=legacy; created=[^;]+; period=2024-01-01\.\.\d{4}-\d{2}-\d{2}$/);
+		expect(dailyRows[2]).toMatch(/^date,/);
 		expect(daily.text.startsWith(BOM)).toBe(true);
 
 		const summary = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/summary.csv`);
@@ -300,7 +345,8 @@ describe('legacy run CSV comment (audit H1)', () => {
 
 	it('does not prefix a GR4J run’s exports (positive control, the Baseline run from the outer suite)', async () => {
 		const daily = await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv`);
-		expect(lines(daily.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(lines(daily.text)[0]).toMatch(/^# run=Baseline; /);
+		expect(lines(daily.text)).not.toContain(LEGACY_RUN_CSV_COMMENT);
 		const summary = await download(owner, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
 		expect(lines(summary.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
 	});
@@ -320,10 +366,10 @@ describe('all-farms export after the network changed', () => {
 		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Before' });
 		expect(run.status).toBe(201);
 		const path = `/projects/${pid}/runs/${run.body.run.id}/export/farms.csv?key=runoff`;
-		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A [I] (m³/day),Farm B [I] (m³/day)'); // positive control
+		expect(table((await download(owner, path)).text)[0]).toBe('date,Farm A [I] (m³/day),Farm B [I] (m³/day)'); // positive control
 
 		expect((await put([out, { ...a, name: 'Farm A (renamed)' }])).status).toBe(200);
-		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A (renamed) [I] (m³/day),Farm B [I] (m³/day)');
+		expect(table((await download(owner, path)).text)[0]).toBe('date,Farm A (renamed) [I] (m³/day),Farm B [I] (m³/day)');
 	});
 });
 
@@ -344,12 +390,12 @@ describe('land cover in the farm exports (WP-1.35)', () => {
 		const base = `/projects/${pid}/runs/${run.body.run.id}/export`;
 
 		// The daily CSV: the reduction right after I.
-		const rows = lines((await download(owner, `${base}/daily.csv?nodeId=${invaded.id}`)).text);
+		const rows = table((await download(owner, `${base}/daily.csv?nodeId=${invaded.id}`)).text);
 		// Header cells, RFC 4180: the land-cover label has a comma, so it is quoted. Data rows are plain numbers.
 		const cols = [...rows[0]!.matchAll(/("(?:[^"]|"")*"|[^,]*)(,|$)/g)].map((m) => m[1]!.replace(/^"|"$/g, '').replace(/""/g, '"')).slice(0, -1);
 		const i = cols.indexOf('Farm runoff [I] (m³/day)');
 		expect(cols[i + 1]).toBe('Runoff removed by land cover (invasive plants, forestry) (m³/day)');
-		const all = lines((await download(owner, `${base}/farms.csv?key=runoff`)).text);
+		const all = table((await download(owner, `${base}/farms.csv?key=runoff`)).text);
 		const clearCol = all[0]!.split(',').indexOf('Clear farm [I] (m³/day)');
 		expect(clearCol).toBeGreaterThan(0);
 		const clearRunoff = all.slice(1).map((r) => Number(r.split(',')[clearCol]));
@@ -364,8 +410,8 @@ describe('land cover in the farm exports (WP-1.35)', () => {
 		// The all-farms table takes the reduction too; only the farm with land cover has the series.
 		const cover = await download(owner, `${base}/farms.csv?key=landcover_reduction`);
 		expect(cover.status).toBe(200);
-		expect(lines(cover.text)[0]).toBe('date,Invaded farm (m³/day)');
-		expect(lines(cover.text)).toHaveLength(rain.length + 1);
+		expect(table(cover.text)[0]).toBe('date,Invaded farm (m³/day)');
+		expect(table(cover.text)).toHaveLength(rain.length + 1);
 	});
 });
 

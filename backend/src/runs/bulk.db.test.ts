@@ -33,14 +33,19 @@ beforeAll(async () => {
 
 const bulk = (u: User, query = '') => u.call('GET', `/projects/${projectId}/runs/${runId}/series/bulk${query}`);
 
-/** The daily CSV's lines (the header row may quote a header with a comma; value rows never do). */
+/**
+ * The daily CSV's table lines (the header row may quote a header with a comma; value rows never do), after its
+ * leading `#` provenance line, which the workbook carries on its Summary sheet instead.
+ */
 async function dailyCsv(u: User, nodeId?: string) {
 	const res = await app.request(`/projects/${projectId}/runs/${runId}/export/daily.csv${nodeId ? `?nodeId=${nodeId}` : ''}`, {
 		headers: { cookie: u.cookie, origin: 'http://localhost:7777' }
 	});
 	expect(res.status).toBe(200);
 	const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(await res.arrayBuffer());
-	return text.replace('﻿', '').replace(/\r\n$/, '').split('\r\n');
+	const lines = text.replace('﻿', '').replace(/\r\n$/, '').split('\r\n');
+	expect(lines[0]).toMatch(/^# run=bulk; /);
+	return lines.slice(1);
 }
 
 describe('GET …/runs/:runId/series/bulk', () => {

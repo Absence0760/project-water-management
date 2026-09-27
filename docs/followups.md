@@ -1355,7 +1355,18 @@ the suggested order (the IDs carry the detail):
       (it starts at gross demand), so the file can't be recomputed alone
       today. Trigger unchanged (above), plus the first run nominated as
       licence evidence.
-- [ ] **Say which run and engine made a daily CSV, inside the file.** The
+- [x] **Say which run and engine made a daily CSV, inside the file**
+      (2026-09-27, operator go-ahead the same day for a `#` line on every
+      daily CSV): `daily.csv` and `farms.csv` lead with
+      `# run=…; engine=…; runoff_model=…; created=…; period=…` (a farm's
+      `daily.csv` also `dam_capacity_m3=`), after the legacy warning on a
+      legacy run; values percent-encoded so a label can't break the line or
+      start a formula (`backend/src/export/csv.ts` `runProvenanceComment`);
+      `lib/export/dailyTable.ts` reads every leading `#` line; api.md § Export
+      (`pandas.read_csv(…, comment='#')`). The farmer's own
+      `…/farm/:nodeId/export.csv` is left as it was: it serves the published
+      figures, and the farm view carries no run label, only the publication
+      and its engine version. Original entry: The
       farm and catchment daily CSVs (`daily.csv`, `farms.csv`) carry the run
       only in the file name, which is lost the moment the file is renamed or
       pasted into a workbook; the summary CSV has the full provenance. The

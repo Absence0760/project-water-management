@@ -37,6 +37,66 @@ export function* withLegacyComment(legacy: boolean, lines: Iterable<string>): Ge
 	yield* lines;
 }
 
+/**
+ * A value in a `#` provenance line (runProvenanceComment), percent-encoded so
+ * the line stays one harmless comment whatever a user typed: `%` itself, the
+ * line's own separators (`;` `=`), the CSV metacharacters (`,` `"`) and every
+ * control character (tab, CR, LF, NEL, the Unicode line separators) become
+ * their UTF-8 `%XX` (decodeURIComponent reads it back). With no comma, quote or line break left, a CSV reader that doesn't
+ * skip comments sees the whole line as one cell starting with `#`, which no
+ * spreadsheet evaluates, so a label like `=HYPERLINK(…)` or `+1` stays text
+ * (OWASP "CSV injection"); a reader splitting on `;` (Excel in a comma-decimal
+ * locale) gets cells that start with a space and a key, never with `= + - @`.
+ */
+export function provenanceValue(v: string): string {
+	return v.replace(/[%;=,"\x00-\x1f\x7f-\x9f\u2028\u2029]/g, encodeURIComponent);
+}
+
+/** What made a daily CSV: the run it came from, for its leading `#` line. */
+export interface RunProvenance {
+	label: string;
+	engineVersion: string;
+	runoffModel: string;
+	/** ISO timestamp. */
+	createdAt: string;
+	startDate: string;
+	endDate: string;
+	/**
+	 * A farm's file only: the farm's dam capacity (m³) as the run's stored model had it; null when the
+	 * run didn't store one. Undefined leaves the key out (catchment, gauge and all-farms files).
+	 */
+	damCapacityM3?: number | null;
+}
+
+/**
+ * The leading provenance line of every daily CSV (farm, node, catchment and
+ * all-farms files): which run, engine and runoff model made it, when, and over
+ * what period, so the file still says where it came from once it is renamed or
+ * pasted into a workbook (the file name alone carries the run). Same shape as
+ * LEGACY_RUN_CSV_COMMENT; values go through provenanceValue.
+ */
+export function runProvenanceComment(p: RunProvenance): string {
+	const pairs: [string, string][] = [
+		['run', p.label],
+		['engine', p.engineVersion],
+		['runoff_model', p.runoffModel],
+		['created', p.createdAt],
+		['period', `${p.startDate}..${p.endDate}`]
+	];
+	if (p.damCapacityM3 !== undefined) pairs.push(['dam_capacity_m3', numCell(p.damCapacityM3)]);
+	return `# ${pairs.map(([k, v]) => `${k}=${provenanceValue(v)}`).join('; ')}`;
+}
+
+/**
+ * A daily CSV's leading `#` lines: the legacy-run warning first when the run is
+ * legacy (so row 1 still says so, as on summary.csv), then the provenance line,
+ * then `lines` (the header row and the days).
+ */
+export function* withRunComments(legacy: boolean, provenance: RunProvenance, lines: Iterable<string>): Generator<string> {
+	yield* withLegacyComment(legacy, [runProvenanceComment(provenance)]);
+	yield* lines;
+}
+
 /** A number cell: empty for null / NaN / ±Infinity (missing days). */
 export function numCell(v: number | null | undefined): string {
 	return typeof v === 'number' && Number.isFinite(v) ? String(v) : '';

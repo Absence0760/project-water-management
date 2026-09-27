@@ -21,7 +21,9 @@ import {
 	MAX_EXPORT_BYTES,
 	seriesHeader,
 	withLegacyComment,
-	type DailyColumn
+	withRunComments,
+	type DailyColumn,
+	type RunProvenance
 } from './csv.js';
 import { loadDailyScope } from './daily-columns.js';
 import { loadFlowDuration } from './fdc.js';
@@ -107,6 +109,19 @@ async function loadDamCapacities(db: import('../db/tx.js').Db, runId: string): P
 	return Object.fromEntries(rows.map((r) => [r.id, r.capacity]));
 }
 
+/** The daily CSVs' `#` provenance line (csv.ts runProvenanceComment); `damCapacityM3` only on a farm's file. */
+function provenance(run: RunRow, damCapacityM3?: number | null): RunProvenance {
+	return {
+		label: run.label,
+		engineVersion: run.engineVersion,
+		runoffModel: run.runoffModel,
+		createdAt: new Date(run.createdAt).toISOString(),
+		startDate: run.startDate,
+		endDate: run.endDate,
+		...(damCapacityM3 === undefined ? {} : { damCapacityM3 })
+	};
+}
+
 export const exportRoutes = new Hono<AuthEnv>()
 	// Every daily series of one node (or the catchment when nodeId is omitted).
 	.get('/:id/runs/:runId/export/daily.csv', async (c) => {
@@ -125,7 +140,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
-			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
+			// A farm's file also says how big its dam was in the run's model (it bounds the storage columns).
+			const dam = daily.kind === 'farm' && q.nodeId ? ((await loadDamCapacities(db, runId))[q.nodeId] ?? null) : undefined;
+			const body = collectCsv(withRunComments(run.legacy, provenance(run, dam), dailyCsvLines(run.startDate, columns, range)));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvResponse(c, body, exportFilename(name, parts, 'csv', timeZone));
@@ -160,7 +177,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
-			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
+			const body = collectCsv(withRunComments(run.legacy, provenance(run), dailyCsvLines(run.startDate, columns, range)));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv', timeZone));
 		});

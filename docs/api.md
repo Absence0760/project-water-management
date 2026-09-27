@@ -2395,6 +2395,25 @@ stored run from before engine 1.0.0, audit H1) start with a leading comment line
 `# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
 ahead of the usual header row.
 
+**Provenance line.** Every `daily.csv` and `farms.csv` (not the input
+series' `export.csv`) starts with a `#` line saying which run made it, so the
+file still says so once it is renamed or pasted into a workbook (operator
+go-ahead 2026-09-27):
+`# run=<label>; engine=<version>; runoff_model=<model>; created=<ISO time>; period=<start>..<end>`,
+plus `; dam_capacity_m3=<m³>` on a farm's own `daily.csv` (the capacity in
+the run's stored model, `0` for a farm without a dam, empty when the run
+stored none). `period` is the run's, not a `from`/`to` window's. For a legacy
+run both lines are there, the legacy warning first. Values are
+percent-encoded (`%XX`, UTF-8; `decodeURIComponent` or Python's
+`urllib.parse.unquote` reads them back): `%`, `;`, `=`, `,`, `"` and every
+control character (tab, CR, LF, the Unicode line separators), so a run label
+can never end the line, add a key or a CSV cell, and the whole line is one
+cell starting with `#`, which no spreadsheet runs as a formula (split on `;`,
+each part starts with a space and a key). The header row is therefore row 2
+(row 3 on a legacy run): read the file with
+`pandas.read_csv(path, comment='#')` (or `skiprows` the `#` lines); a plain
+`pandas.read_csv(path)` takes the `#` line as the header.
+
 | Path | Query | Body |
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain). A **forecast run** (WP-2.12) leads with `forecast (F = modelled on forecast rain)` after `date`: `F` on each day from `summary.forecast.from`, empty before; its catchment file also has the `Rain source` column. So does `farms.csv`, and the `.xlsx` workbook's daily sheets lead with `forecast (1 = modelled on forecast rain)`, 1 or 0 |
@@ -2421,7 +2440,7 @@ order:
 | Sheet | From | Content |
 | --- | --- | --- |
 | Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, the flow-duration percentiles (Q10–Q95; a small flow in m³/s, l/s or Mm³ that three decimals would show as 0.000 gets the decimals for two significant figures, issue #45), WR2012, the column guide (a legacy run's `# runoff_model=legacy …` line first) |
-| Catchment, then one per node | bulk route | `date` + the daily CSV's columns and headers for the catchment, then each node with series in the run's network order (b023's element sheets) |
+| Catchment, then one per node | bulk route | `date` + the daily CSV's columns and headers for the catchment, then each node with series in the run's network order (b023's element sheets); the daily CSV's `#` provenance line isn't repeated here, the Summary sheet names the run |
 | Curtailment | summary CSV | Curtailment targets, land cover, other users, EWR sites |
 | EWR grid | `summary.ewrCompliance` | Days simulated, then per site (the outlet, each farm) days not met and volume short (m³), water year × month (Oct … Sep) with a year total |
 | Reserve compliance | summary CSV | Reserve compliance by month (EWR rule tables) |

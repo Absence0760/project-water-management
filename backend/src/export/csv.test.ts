@@ -10,10 +10,14 @@ import {
 	exportFilename,
 	LEGACY_RUN_CSV_COMMENT,
 	numCell,
+	provenanceValue,
+	runProvenanceComment,
 	seriesHeader,
 	slugify,
 	textCell,
-	withLegacyComment
+	withLegacyComment,
+	withRunComments,
+	type RunProvenance
 } from './csv.js';
 
 describe('csv cells', () => {
@@ -88,6 +92,71 @@ describe('legacy-run CSV comment (audit H1)', () => {
 	it('lands as the first line of the collected CSV body, ahead of the BOM-prefixed header', () => {
 		const body = collectCsv(withLegacyComment(true, ['date,x', '2020-01-01,1']));
 		expect(body).toBe(`${BOM}${LEGACY_RUN_CSV_COMMENT}\r\ndate,x\r\n2020-01-01,1\r\n`);
+	});
+});
+
+describe('run provenance line on the daily CSVs', () => {
+	const run: RunProvenance = {
+		label: 'Baseline v2',
+		engineVersion: '1.4.0',
+		runoffModel: 'gr4j',
+		createdAt: '2026-09-27T08:15:00.000Z',
+		startDate: '2021-10-01',
+		endDate: '2022-01-28'
+	};
+	/** The line's key/value pairs, decoded the way a reader would. */
+	const pairs = (line: string) =>
+		Object.fromEntries(
+			line
+				.replace(/^# /, '')
+				.split('; ')
+				.map((p) => {
+					const [k, v] = p.split('=');
+					return [k!, decodeURIComponent(v!)];
+				})
+		);
+
+	it('names the run, engine, runoff model, creation time and period, in that order', () => {
+		expect(runProvenanceComment(run)).toBe(
+			'# run=Baseline v2; engine=1.4.0; runoff_model=gr4j; created=2026-09-27T08:15:00.000Z; period=2021-10-01..2022-01-28'
+		);
+	});
+
+	it('adds the dam capacity on a farm file only, empty when the run stored none', () => {
+		expect(runProvenanceComment({ ...run, damCapacityM3: 50000 })).toMatch(/; dam_capacity_m3=50000$/);
+		expect(runProvenanceComment({ ...run, damCapacityM3: 0 })).toMatch(/; dam_capacity_m3=0$/);
+		expect(runProvenanceComment({ ...run, damCapacityM3: null })).toMatch(/; dam_capacity_m3=$/);
+		expect(runProvenanceComment(run)).not.toContain('dam_capacity_m3');
+	});
+
+	it('percent-encodes the separators, CSV metacharacters and line breaks, and nothing else', () => {
+		expect(provenanceValue('Plain – label (m³)')).toBe('Plain – label (m³)');
+		expect(provenanceValue('a;b=c,d"e%f')).toBe('a%3Bb%3Dc%2Cd%22e%25f');
+		expect(provenanceValue('one\r\ntwo\tthree\u0085four\u2028five')).toBe('one%0D%0Atwo%09three%C2%85four%E2%80%A8five');
+	});
+
+	it('keeps a hostile label to one inert line that decodes back exactly', () => {
+		for (const label of ['=HYPERLINK("http://x","y")', '+1', '-2', '@SUM(A1)', 'a; engine=0.0.0', 'line\r\n2021-01-01,999', '"quoted", comma', '100%25']) {
+			const line = runProvenanceComment({ ...run, label });
+			expect(line.startsWith('# run=')).toBe(true);
+			expect(line).not.toMatch(/[,"\r\n\t]/); // one cell to any CSV reader, one line to a comment-skipping one
+			// Split on `;` (Excel's delimiter in a comma-decimal locale): no cell starts like a formula.
+			for (const cell of line.split(';')) expect(cell).not.toMatch(/^[=+\-@]/);
+			expect(pairs(line)).toEqual({
+				run: label,
+				engine: '1.4.0',
+				runoff_model: 'gr4j',
+				created: '2026-09-27T08:15:00.000Z',
+				period: '2021-10-01..2022-01-28'
+			});
+		}
+	});
+
+	it('puts the legacy warning first when the run is legacy, then the provenance line, then the table', () => {
+		const table = ['date,x', '2020-01-01,1'];
+		const legacy = { ...run, runoffModel: 'legacy' };
+		expect([...withRunComments(true, legacy, table)]).toEqual([LEGACY_RUN_CSV_COMMENT, runProvenanceComment(legacy), ...table]);
+		expect([...withRunComments(false, run, table)]).toEqual([runProvenanceComment(run), ...table]);
 	});
 });
 

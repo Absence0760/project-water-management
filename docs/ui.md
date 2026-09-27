@@ -1989,11 +1989,18 @@ workbook's FarmTemplate order, the letter in each header
 balance check `[V]` next to outflow. **Fragmented flow — all units** and
 **Fragmented EWR — all units** (only when the run has farms) put one series
 of every farm side by side, a date column then a column per farm, like
-the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. Each
+the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets.
+Every daily CSV starts with a `# run=…; engine=…; runoff_model=…; created=…;
+period=…` line (a farm's also `dam_capacity_m3=…`), so a renamed file still
+says which run made it; the header is the next row, so read it with
+`pandas.read_csv(…, comment='#')` ([api.md § Export](./api.md)). Each
 of the two has a **Preview** button beside it in the menu, which opens the
 table in a near full-screen dialog (`export/DailyTableDialog.svelte`, its own
 chunk): the dialog fetches the export and parses it (`lib/export/dailyTable.ts`),
 so it shows exactly the file, then **Download CSV** saves that same response.
+The parser takes every leading `#` line: the provenance line is kept apart from
+the table, and a legacy run's (its warning line, or `runoff_model=legacy`)
+shows the legacy-model warning above it.
 The header row and the date column stay in view, numbers are right-aligned
 under right-aligned headers (to the precision the charts use, `fmtReading`), a
 date prefix (2015, 2015-03) narrows the rows, and closing it returns focus to

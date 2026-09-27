@@ -50,6 +50,17 @@ async function csv(request: APIRequestContext, path: string) {
 	return parseCsv(new TextDecoder().decode(await res.body()));
 }
 
+/**
+ * A daily CSV's table: the rows after its leading `# run=…` provenance line, which the workbook
+ * carries once, on its Summary sheet, rather than atop every daily sheet.
+ */
+async function dailyCsv(request: APIRequestContext, path: string) {
+	const [provenance, ...rows] = await csv(request, path);
+	expect(provenance![0]).toMatch(/^# run=Baseline; engine=/);
+	expect(provenance).toHaveLength(1); // one cell: the line holds no comma or quote
+	return rows;
+}
+
 /** A sheet as rows of text, the way the CSV prints each cell: numbers by String(), dates as shown. */
 function sheetText(ws: XLSX.WorkSheet): string[][] {
 	const range = XLSX.utils.decode_range(ws['!ref']!);
@@ -129,11 +140,11 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 
 	// Daily sheets: row for row, cell for cell, the daily CSV.
 	const base = `/projects/${id}/runs/${runId}/export`;
-	expect(sheetText(wb.Sheets['Catchment']!)).toEqual(await csv(page.request, `${base}/daily.csv`));
+	expect(sheetText(wb.Sheets['Catchment']!)).toEqual(await dailyCsv(page.request, `${base}/daily.csv`));
 	for (const n of nodes) {
 		const sheet = sheetText(wb.Sheets[n.name]!);
 		expect(sheet.length).toBe(121);
-		expect(sheet).toEqual(await csv(page.request, `${base}/daily.csv?nodeId=${n.id}`));
+		expect(sheet).toEqual(await dailyCsv(page.request, `${base}/daily.csv?nodeId=${n.id}`));
 	}
 	// Numbers are numbers, with a display format, not text.
 	const upper = wb.Sheets['=Upper farm']!;
