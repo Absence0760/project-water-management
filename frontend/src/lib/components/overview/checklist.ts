@@ -74,7 +74,8 @@ function seriesStep(series: SeriesMeta[] | null): ChecklistStep {
 	const base = { id: 'series', tab: 'series', title: 'Rainfall & flow data' } as const;
 	if (series === null) return { ...base, status: 'unknown', detail: 'Checking time series…' };
 	const rain = series.filter((x) => RAIN.includes(x.kind));
-	const observed = series.some((x) => OBSERVED.includes(x.kind));
+	// The outlet's record: one attached to a gauge inside the network (084_gauge_records) is only checked, never calibrated against.
+	const observed = series.some((x) => OBSERVED.includes(x.kind) && !x.siteNodeId);
 	if (!rain.length)
 		return { ...base, status: 'todo', detail: 'Upload daily catchment rainfall (mm). Add observed flow (m³/s) to calibrate against.' };
 	const years = Math.max(0, ...rain.map((x) => x.length)) / 365.25;

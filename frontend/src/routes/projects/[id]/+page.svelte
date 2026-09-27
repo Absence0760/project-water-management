@@ -671,7 +671,7 @@
 							<SettingsTab
 								project={project!}
 								{editor}
-								seriesKinds={series?.map((x) => x.kind) ?? null}
+								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
 								readonly={!canEdit}
@@ -682,7 +682,15 @@
 				{:else if tab === 'series'}
 					<Lazy load={LOAD.series}>
 						{#snippet children(SeriesTab)}
-							<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} settings={project!.settings} onSeriesChange={(l) => (series = l)} />
+							<SeriesTab
+								{projectId}
+								readonly={!canEdit}
+								initial={series}
+								{runs}
+								settings={project!.settings}
+								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
+								onSeriesChange={(l) => (series = l)}
+							/>
 						{/snippet}
 					</Lazy>
 				{:else if tab === 'runs'}

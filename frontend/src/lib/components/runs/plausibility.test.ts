@@ -1,7 +1,7 @@
 import type { LowFlowCurves, PlausibilityChecks } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
-import { breakHint, curveLabel, findings, lowFlowChart, otherModelRuns, seasonText, signedPct } from './plausibility';
+import { breakHint, curveLabel, findings, gaugeRow, lowFlowChart, otherModelRuns, seasonText, signedPct } from './plausibility';
 
 const meta = (id: string, runoffModel?: string): RunMeta =>
 	({ id, label: id, engineVersion: '0.25.0', startDate: '2000-10-01', endDate: '2020-09-30', createdAt: '2026-09-25T00:00:00Z', createdBy: null, legacy: runoffModel !== 'gr4j', runoffModel }) as RunMeta;
@@ -93,5 +93,32 @@ describe('breakHint, signedPct and findings', () => {
 			lowFlow: { comparison: { withinFactor: false } }
 		} as unknown as PlausibilityChecks;
 		expect(findings(p).map((f) => f.ok)).toEqual([false, true, true, false]);
+	});
+
+	it('adds a gauges line only when a gauge has its own record (engine ≥ 1.3.0), failing when one gauge fails', () => {
+		const none: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
+		const g = (failed: number[], within: boolean | null) =>
+			({
+				nodeId: `g${failed.length}`,
+				name: 'Upper weir',
+				flowKind: 'flow_logger_m3s',
+				naturalShare: 0.4,
+				naturalised: { judgedYears: 3, failedYears: failed },
+				lowFlow: within === null ? null : { comparison: { ratio: within ? 1.2 : 0.3, withinFactor: within } }
+			}) as unknown as NonNullable<PlausibilityChecks['gauges']>[number];
+		expect(findings({ ...none, gauges: [g([], true)] }).map((f) => [f.label, f.ok]).at(-1)).toEqual(['At gauges in the network', true]);
+		expect(findings({ ...none, gauges: [g([], true), g([2002], null)] }).at(-1)!.ok).toBe(false);
+		expect(findings({ ...none, gauges: [g([], false)] }).at(-1)!.ok).toBe(false);
+		expect(gaugeRow(g([2002], false))).toEqual({
+			nodeId: 'g1',
+			name: 'Upper weir',
+			record: 'Logger',
+			naturalShare: 0.4,
+			judgedYears: 3,
+			failedYears: [2002],
+			q90Ratio: 0.3,
+			withinFactor: false,
+			ok: [false, false]
+		});
 	});
 });

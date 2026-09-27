@@ -92,6 +92,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('series.labelled', { kind: 'rain_chirps_mm', name: '', provenance: { from: 'an unrecorded version', to: 'CHIRPS v2.0' } }))).toBe(
 			'Marked the Rainfall — CHIRPS series as CHIRPS v2.0 (was an unrecorded version)'
 		);
+		// 084: a flow record moved to a gauge inside the network, and back.
+		expect(eventLine(ev('series.site_changed', { kind: 'flow_observed_m3s', name: 'Weir', site: { from: 'the outlet', to: 'Upper weir' } }))).toMatch(
+			/^Moved the .* “Weir” series to gauge Upper weir \(was the outlet\)$/
+		);
+		expect(eventLine(ev('series.site_changed', { kind: 'flow_observed_m3s', name: 'Weir', site: { from: 'Upper weir', to: 'the outlet' } }))).toMatch(
+			/to the outlet \(was gauge Upper weir\)$/
+		);
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
 			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
 		);

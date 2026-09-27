@@ -109,6 +109,11 @@ describe('checklist', () => {
 		const step = checklist({ model: full, settings: settled(), series: [series('rain_chirps_mm', 400)], runs: [] })[2]!;
 		expect(step.status).toBe('partial');
 		expect(step.detail).toMatch(/^Rainfall \(1 year\) loaded\. No observed flow/);
+		// A record attached to a gauge inside the network (084) is checked there, not calibrated against: still partial.
+		const sited = checklist({ model: full, settings: settled(), series: [series('rain_chirps_mm', 400), { ...series('flow_observed_m3s'), siteNodeId: 'g1' }], runs: [] })[2]!;
+		expect(sited.status).toBe('partial');
+		// Positive control: the same record at the outlet completes the step.
+		expect(checklist({ model: full, settings: settled(), series: [series('rain_chirps_mm', 400), series('flow_observed_m3s')], runs: [] })[2]!.status).toBe('done');
 		// A Pitman series (engine ≤ 0.9.0) no longer counts as run input.
 		expect(checklist({ model: full, settings: settled(), series: [series('flow_pitman_m3s')], runs: [] })[2]!.status).toBe('todo');
 		const onlyObserved = checklist({ model: full, settings: settled(), series: [series('flow_observed_m3s')], runs: [] })[2]!;

@@ -175,6 +175,17 @@ describe('createApi', () => {
 		expect((del.mock.calls[0] as unknown as [string, RequestInit])[1].method).toBe('DELETE');
 	});
 
+	it('moves a flow record to a gauge, or back to the outlet, with a PATCH of its site only', async () => {
+		const meta = { id: 's1', kind: 'flow_observed_m3s', siteNodeId: 'g1' };
+		const patch = mockFetch(200, meta);
+		await expect(createApi('', patch).series.site('p1', 's/1', 'g1')).resolves.toEqual(meta);
+		const [url, init] = patch.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/series/s%2F1', 'PATCH', { siteNodeId: 'g1' }]);
+		const back = mockFetch(200, { ...meta, siteNodeId: null });
+		await createApi('', back).series.site('p1', 's1', null);
+		expect(JSON.parse((back.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ siteNodeId: null });
+	});
+
 	it('lists, makes and withdraws share links, and reads a share by token in the body, never the URL', async () => {
 		const link = { id: 'l1', label: 'Forum', url: 'http://x/share#t=abc' };
 		const list = mockFetch(200, { links: [link] });

@@ -43,7 +43,7 @@ export const KIND_ROLES: Record<string, KindRole> = {
 	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
-		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS).',
+		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS). A record attached to a gauge inside the network is checked against the simulated flow there (Plausibility checks), never calibrated against.',
 		driver: false
 	},
 	flow_logger_m3s: {
@@ -82,14 +82,36 @@ export function rainSourceKinds(periods: readonly { series: string; fitReference
  * only when there is no observed-gauge series. A reference gauge is never in
  * use: the engine ignores it. The alternative catchment gauge and the
  * reanalysis are in use only when a rain-source period names them
- * (`periodKinds`, rainSourceKinds).
+ * (`periodKinds`, rainSourceKinds). A flow record attached to a gauge node
+ * (`siteNodeId`, 084_gauge_records) is never the outlet's; see gaugeRecordsInUse.
  */
 export function seriesInUse(list: SeriesMeta[], periodKinds: ReadonlySet<string> = new Set()): Set<string> {
 	const first = new Map<string, SeriesMeta>();
 	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
+		if (s.siteNodeId) continue;
 		if (PERIOD_ONLY.has(s.kind) && !periodKinds.has(s.kind)) continue;
 		if (!first.has(s.kind) && !NEVER_READ.has(s.kind)) first.set(s.kind, s);
 	}
 	if (first.has('flow_observed_m3s')) first.delete('flow_logger_m3s');
+	return new Set([...first.values()].map((s) => s.id));
+}
+
+/** The kinds that can be attached to a gauge node inside the network (engine CALIBRATION_FLOW_KINDS). */
+export const SITED_KINDS = new Set(['flow_observed_m3s', 'flow_logger_m3s']);
+
+/**
+ * Ids of the gauge records a run checks (engine ≥ 1.3.0): per gauge in
+ * `gauges` (the model's gauges above the outlet), the first series of each
+ * flow kind by name attached to it, as the backend's loadLiveInput reads them.
+ * A record on a node that is no longer such a gauge is not read.
+ */
+export function gaugeRecordsInUse(list: SeriesMeta[], gauges: readonly { id: string }[]): Set<string> {
+	const ids = new Set(gauges.map((g) => g.id));
+	const first = new Map<string, SeriesMeta>();
+	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
+		if (!s.siteNodeId || !ids.has(s.siteNodeId) || !SITED_KINDS.has(s.kind)) continue;
+		const k = `${s.siteNodeId}|${s.kind}`;
+		if (!first.has(k)) first.set(k, s);
+	}
 	return new Set([...first.values()].map((s) => s.id));
 }
