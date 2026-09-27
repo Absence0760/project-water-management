@@ -2187,12 +2187,15 @@ role and not before it.
 
 ## Change history (WP-2.4, issue #28)
 
-- [ ] **Field-level history affordance.** A small "changed 3× · last by Ann,
-      12 Aug: 40 % → 60 %" on individual inputs (roadmap WP-2.4 UI). Not
-      built: the History tab's farm and parameter filters answer the same
-      question in two clicks. Trigger: a hydrologist or WUA user asks for it
-      on the field itself, or the History tab's parameter filter is the
-      most-used one.
+- [x] **Field-level history affordance** (roadmap WP-2.4 UI, issue #17):
+      "Changed 3× · last by Ann, 12 Aug 2026: 40% → 60%" under the node
+      sheet's fields, the farm drawer's planted areas and Settings &
+      calibration's parameters, linking to History filtered to the field
+      (`kind=revision&unit=&q=`). One `GET …/history/fields` per project,
+      fetched lazily ([api.md § Field history](./api.md#field-history),
+      [ui.md § Field history](./ui.md#field-history)); History's parameter
+      filter is now in the URL (`q=`) and applied by the server to
+      revisions on every page.
 - [x] **`api_key.*` audit kinds are recorded** now that per-project API
       keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
       and a key's ingest merges carry `actor_api_key_id` (now a foreign key).

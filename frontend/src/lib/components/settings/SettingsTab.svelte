@@ -34,6 +34,7 @@
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { annualMm3 } from '$lib/components/crops/demand';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -399,16 +400,19 @@
 				<span class="lbl"><label for="st-erf">Effective rainfall <span class="u">(%)</span></label><HelpTip key="settings.effectiveRainFraction" /></span>
 				<NumberInput id="st-erf" min={0} max={100} scale={100} disabled={readonly} bind:value={s.effectiveRainFraction} aria-describedby="st-erf-h" />
 				<span class="hint" id="st-erf-h">Share of each day's rain on the cropped area that the crop can use, reducing irrigation demand. The workbook default is 65 %.</span>
+				<FieldHistoryLine field="settings:effectiveRainFraction" />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="st-ers">Soil-water store <span class="u">(mm)</span></label><HelpTip key="settings.effectiveRainStoreMm" /></span>
 				<NumberInput id="st-ers" min={0} max={500} step={1} disabled={readonly} bind:value={s.effectiveRainStoreMm} aria-describedby="st-ers-h" />
 				<span class="hint" id="st-ers-h">Effective rain the crop can't use on the day is kept for the next days, up to this depth. 25 mm (FAO-56) by default; 0 carries nothing over, as the workbook does.</span>
+				<FieldHistoryLine field="settings:effectiveRainStoreMm" />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
 				<span class="hint" id="st-lef-h">Open-water evaporation from the units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
+				<FieldHistoryLine field="settings:lakeEvapFactor" />
 				<label class="check">
 					<input
 						type="checkbox"
@@ -423,6 +427,7 @@
 				<span class="lbl"><label for="st-feb">Days in February</label><HelpTip key="settings.februaryDays" /></span>
 				<NumberInput id="st-feb" min={28} max={29} step={0.01} disabled={readonly} bind:value={s.februaryDays} aria-describedby="st-feb-h" />
 				<span class="hint" id="st-feb-h">Converts monthly volumes to per-day figures. 28.25 averages leap years, as the workbook does.</span>
+				<FieldHistoryLine field="settings:februaryDays" />
 			</div>
 		</div>
 	</section>
@@ -456,6 +461,7 @@
 					<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
 						Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
 				</span>
+				<FieldHistoryLine field="settings:calibration.catchmentAreaKm2" />
 			</div>
 		</div>
 		{#if petMissing}
@@ -476,17 +482,20 @@
 					<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
 					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
 					<span class="hint" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
+					<FieldHistoryLine field="settings:gr4j.{p.key}" />
 				</div>
 			{/each}
 			<div class="field">
 				<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label></span>
 				<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
 				<span class="hint" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
+				<FieldHistoryLine field="settings:gr4j.warmupDays" />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="cal-rainThresholdMm">Rain threshold for demand <span class="u">(mm)</span></label><HelpTip key="calibration.rainThresholdMm" /></span>
 				<NumberInput id="cal-rainThresholdMm" min={0} step={0.1} disabled={readonly} value={cal.rainThresholdMm} aria-describedby="cal-thr-h" onchange={(v) => { if (v !== null) s.calibration.rainThresholdMm = v; }} />
 				<span class="hint" id="cal-thr-h">Under GR4J this only decides which rain days reduce irrigation demand; the runoff model uses all rain.</span>
+				<FieldHistoryLine field="settings:calibration.rainThresholdMm" />
 			</div>
 		</div>
 		<fieldset class="plain x2">
@@ -502,6 +511,7 @@
 				</div>
 			{/if}
 			<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
+			<FieldHistoryLine field="settings:gr4j.x2" />
 		</fieldset>
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->
@@ -724,6 +734,7 @@
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
 				<span class="hint" id="st-method-h">{method?.help} The resulting share per unit is shown on the Network tab.</span>
+				<FieldHistoryLine field="settings:flowShareMethod" />
 			</div>
 			<fieldset class="plain hilo">
 				<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
@@ -819,6 +830,7 @@
 					aria-describedby="st-aat-h"
 				/>
 				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
 			</div>
 		</fieldset>
 	</section>
@@ -876,16 +888,19 @@
 				<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
 				<NumberInput id="dq-min" decimals={1} min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
 				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 66.7 % (two thirds).</span>
+				<FieldHistoryLine field="settings:dataQuality.agreementMinRatio" />
 			</div>
 			<div class="field">
 				<label for="dq-max">Highest gauge/logger ratio <span class="u">(%)</span></label>
 				<NumberInput id="dq-max" decimals={1} min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
 				<span class="hint" id="dq-max-h">… or more than this share. Default 150 %.</span>
+				<FieldHistoryLine field="settings:dataQuality.agreementMaxRatio" />
 			</div>
 			<div class="field">
 				<label for="dq-days">Minimum shared days <span class="u">(days)</span></label>
 				<NumberInput id="dq-days" min={1} max={366} step={1} disabled={readonly} bind:value={s.dataQuality.agreementMinDays} aria-describedby="dq-days-h" />
 				<span class="hint" id="dq-days-h">Water years with fewer days on which both records have a reading are not judged. Default 90.</span>
+				<FieldHistoryLine field="settings:dataQuality.agreementMinDays" />
 			</div>
 		</div>
 		<p class="hint muted">These thresholds only decide which years are flagged; they never change the model results.</p>

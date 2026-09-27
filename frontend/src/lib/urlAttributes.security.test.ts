@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 import { compareTabHref } from './components/compare/picker';
 import { farmDrawerHref } from './components/crops/farmDrawer';
 import { farmHref } from './components/farm/load';
+import { fieldHistoryHref } from './components/history/fieldLine';
 import { noteHref } from './components/notes/notes';
 import { runHref } from './components/overview/attention';
 import { curtailmentHref } from './components/portfolio/portfolio';
@@ -78,6 +79,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	newWhatIfHref: { why: 'CompareView: `${base}/projects/<project id>?` + URLSearchParams (tab, new, base)', in: ['lib/components/compare/CompareView.svelte'] },
 	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
 	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
+	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
@@ -397,6 +399,7 @@ describe('URL attributes', () => {
 				farmDrawerHref(null, id),
 				compareTabHref({ projectId: id, runId: id }, { projectId: id, runId: id }),
 				curtailmentHref({ id, sourceRunId: id }),
+				fieldHistoryHref({ filter: id }, id),
 				noteHref({ target: 'node', nodeId: id, runId: null, settingKey: null }) ?? '',
 				noteHref({ target: 'run', nodeId: null, runId: id, settingKey: null }) ?? ''
 			];

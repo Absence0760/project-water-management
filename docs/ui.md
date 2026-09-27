@@ -3838,11 +3838,15 @@ the viewer's day, with a request's change set folded into one entry.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
   erased"), then the filters: **Unit** ("All units"), **Kind of change** and
-  **Parameter** (typed words, narrowing what's loaded). Unit and kind are
-  the server's filters and live in the URL (`&unit=<nodeId>`,
-  `&kind=revision|series|run|…`), pushed, so Back steps back through them and
-  a link keeps them; an unknown kind, or a unit not in the model, is no
-  filter.
+  **Parameter** (typed words). Unit and kind are the server's filters and
+  live in the URL (`&unit=<nodeId>`, `&kind=revision|series|run|…`), pushed,
+  so Back steps back through them and a link keeps them; an unknown kind, or
+  a unit not in the model, is no filter. The parameter words narrow what's
+  loaded as you type, then go into the URL after a pause (`&q=`, replaced,
+  not pushed), where the server keeps only revisions with a matching line on
+  every page, so an old match isn't lost behind 50 newer changes (events are
+  still filtered in the page). A field's history line links here with all
+  three ([§ Field history](#field-history)).
 - **Wide (the card's column from 840 px):** a list of compact rows beside the
   picked change. A row is a link: time and author, what it was (a revision's
   title, or an event's sentence), its first line with "+N more", and its
@@ -3888,11 +3892,33 @@ the viewer's day, with a request's change set folded into one entry.
   keeps its newest 5 earlier versions for up to 180 days; an older one
   answers "Those values are no longer kept". Afterwards the page reloads the
   series list. e2e: `e2e/tests/history.spec.ts`.
-- A small "history" affordance on individual fields is not built
-  (followups.md).
+- **Field history** on the inputs themselves: [§ Field history](#field-history).
 
-e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer) and
-`e2e/tests/history-page.spec.ts` (the page: header line, window fit and a
+### Field history
+
+WP-2.4 UI (`history/FieldHistoryLine.svelte`, `fieldLine.ts`,
+`fieldHistory.svelte.ts`). A quiet line under a model input, "Changed 3× ·
+last by Ann, 12 Aug 2026: 40% → 60%", that links to History filtered to that
+field (`?tab=history&kind=revision&unit=<unit>&q=<words>`, the unit only for a
+unit's own fields). A field never changed since it was set shows nothing.
+
+- **Where:** the node sheet's numeric fields and **Drains into**, the farm
+  drawer's planted area per crop (under the crop's name), and Settings &
+  calibration's scalar parameters (effective rainfall, soil-water store, dam
+  evaporation factor, days in February, catchment area, GR4J X1–X4 and
+  warm-up, the rain threshold, the flow-share method, the annual assurance
+  threshold, the data-quality thresholds). Monthly tables and rule editors
+  have none.
+- **Data:** one `GET …/history/fields` for the whole project
+  ([api.md § Field history](./api.md#field-history)), fetched only when the
+  first line renders (opening a node sheet, the drawer or Settings), never at
+  first paint, and again after a model save, a settings save or a restore.
+  The page shares it through context and sets it only for members whose tabs
+  include History (not farmers or applicants), so no one else fetches or sees
+  it. A failed fetch leaves the lines hidden; the fields work as before.
+
+e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer, a field's line
+after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: header line, window fit and a
 44-entry history over eleven days from `e2e/support/history.ts` and
 `spreadHistoryOverDays`, the pick's URL, Back, reload, Newer/Older and a
 deep link, the filters' URL and Back, pagination, a restore picking itself,

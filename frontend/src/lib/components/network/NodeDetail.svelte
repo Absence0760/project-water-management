@@ -11,6 +11,7 @@
 	import LandCoverFields from './LandCoverFields.svelte';
 	import BoreholeFields from './BoreholeFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { hasSupplySettings } from './supply';
 
 	let {
@@ -75,6 +76,8 @@
 		drought: 'Drought: supplemental while the dam is below the trigger'
 	};
 	const hints = $derived(damHints(node));
+	// History's unit filter takes units (farms); another node's link filters by its name alone.
+	const unit = $derived(node.kind === 'farm' ? node.id : null);
 </script>
 
 <div class="detail">
@@ -109,6 +112,7 @@
 					? 'This is the outflow gauge: the catchment outlet where simulated outflow is compared with observed flow and the EWR.'
 					: 'The node directly downstream. Its outflow joins that node’s upstream inflow.'}
 			</span>
+			<FieldHistoryLine field="node:{node.id}:downstreamNodeId" {unit} />
 		</div>
 	</div>
 
@@ -149,6 +153,7 @@
 							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
 						<span class="hint" id="{id(f.key)}-h">{f.help}</span>
+						<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
 					</div>
 				{/each}
 				{#if g === 'irrigation'}

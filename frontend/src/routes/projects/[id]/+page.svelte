@@ -55,6 +55,7 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
+	import { FieldHistoryStore, setFieldHistory } from '$lib/components/history/fieldHistory.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
@@ -112,6 +113,11 @@
 	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
 	const shownIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
+	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those who see History,
+	// fetched once a line asks for it, and again after a save or a restore.
+	const canSeeHistory = $derived(shownIds.includes('history'));
+	const fieldHistory = $derived(canSeeHistory && projectId ? new FieldHistoryStore(projectId) : null);
+	setFieldHistory(() => fieldHistory);
 	const LABEL = TAB_LABELS;
 	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
 	// flattened in the order shown, for the arrow keys.
@@ -323,6 +329,7 @@
 		try {
 			editor.load(await api.model.save(projectId, editor.snapshot(), saveReason.trim() || undefined));
 			saveReason = '';
+			fieldHistory?.refresh();
 		} catch (e) {
 			editor.saveError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -375,6 +382,7 @@
 
 	function onProjectChange(p: Project) {
 		project = p;
+		fieldHistory?.refresh();
 	}
 
 	/** A restore (History tab, or a run's "Restore these inputs") changed the saved settings and model. */
@@ -382,6 +390,7 @@
 		const [p, m] = await Promise.all([api.projects.get(projectId), api.model.get(projectId)]);
 		project = p;
 		editor.load(m);
+		fieldHistory?.refresh();
 	}
 
 	async function onLeftProject() {
@@ -729,7 +738,7 @@
 								{runs}
 								{canEdit}
 								{isOwner}
-								canSeeHistory={shownIds.includes('history')}
+								{canSeeHistory}
 								currentUserId={session.user?.id ?? ''}
 								{onProjectChange}
 								{onLeftProject}

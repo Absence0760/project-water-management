@@ -638,7 +638,8 @@ history module, hooks in every write route with a table-driven guard,
 restore, the History tab, the save-bar reason and the Runs additions.
 Differences from the plan below are in [data-model.md § Change history and
 audit log](../data-model.md#change-history-and-audit-log-030_historysql).
-Deferred: the per-field "history" affordance (followups.md).
+The per-field "history" line followed on 2026-09-27 (issue #17; `GET
+…/history/fields`, [ui.md § Field history](../ui.md#field-history)).
 
 **Goal.** Answer "who changed which parameter, when, and why did the result
 change?" and put back any earlier version. This is required by the Step 2 → 3
