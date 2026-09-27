@@ -112,6 +112,8 @@ describe('formatting', () => {
 		expect(pctText(0.284)).toBe('28 %');
 		expect(pctText(1.2)).toBe('100 %');
 		expect(dateText('2026-09-20', 'en')).toBe('20 Sept 2026');
+		// en-ZA from the language table, written the way en-GB was: no leading zero on the day.
+		expect(dateText('2026-10-03', 'en')).toBe('3 Oct 2026');
 		expect(dateText('not a date', 'en')).toBe('not a date');
 	});
 });

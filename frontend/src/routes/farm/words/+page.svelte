@@ -3,22 +3,47 @@
 	// "What do these words mean?" for farmers (docs/design/farmer-view.md §5.1):
 	// the glossary's farmer entries ($lib/help/farmer, category 'farmer') in the
 	// farm pages' frame, each with an anchor the pages link to. The same entries
-	// appear in the workspace's /help glossary. In Afrikaans an entry shows its
-	// reviewed translation ($lib/help/content.af) when it has one, else the
-	// English, marked with its own `lang` (WP-2.5).
+	// appear in the workspace's /help glossary. In another language an entry
+	// shows its reviewed translation (that language's $lib/help/content.<code>,
+	// loaded on first use) when it has one, else the English, marked with its
+	// own `lang` (WP-2.5).
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 	import { FARMER_HELP } from '$lib/help/farmer';
-	import { HELP_AF } from '$lib/help/content.af';
-	import { i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
+	import { helpTranslations, type HelpTranslation } from '$lib/help/translations';
+	import { DEFAULT_LOCALE, i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
 
+	/**
+	 * The chosen language's glossary, once loaded ({} for English). If its
+	 * chunk can't load, the entries show in English, each marked lang="en".
+	 */
+	let translated = $state.raw<{ lang: string; entries: Record<string, HelpTranslation> }>({ lang: DEFAULT_LOCALE, entries: {} });
+	$effect(() => {
+		const lang = i18n.locale;
+		let live = true;
+		if (lang === DEFAULT_LOCALE) translated = { lang, entries: {} };
+		else
+			void helpTranslations(lang)
+				.catch(() => ({}))
+				.then((entries) => {
+					if (live) translated = { lang, entries };
+				});
+		return () => {
+			live = false;
+		};
+	});
+
+	/** The entries wait for the chosen language's glossary, so they never show in English first. */
+	const ready = $derived(translated.lang === i18n.locale);
 	const entries = $derived(
 		FARMER_HELP.map((e) => {
-			const af = i18n.locale === 'af' ? HELP_AF[e.id] : undefined;
-			return af ? { id: e.id, term: af.term, short: af.short, long: af.long, lang: 'af' } : { id: e.id, term: e.term, short: e.short, long: e.long, lang: 'en' };
+			const own = ready ? translated.entries[e.id] : undefined;
+			return own
+				? { id: e.id, term: own.term, short: own.short, long: own.long, lang: translated.lang }
+				: { id: e.id, term: e.term, short: e.short, long: e.long, lang: DEFAULT_LOCALE };
 		})
 	);
 	const paragraphs = (s: string) => s.split(/\n{2,}/);
@@ -27,7 +52,7 @@
 	// and hold the entry there while the page settles (lib/help/anchor.ts).
 	$effect(() => {
 		const id = decodeURIComponent(page.url.hash.slice(1));
-		if (!id) return;
+		if (!id || !ready) return;
 		let live = true;
 		let release: (() => void) | undefined;
 		tick().then(() => {
@@ -43,9 +68,9 @@
 
 <svelte:head><title>{t('{page} · My farm', { page: t('What do these words mean?') })}</title></svelte:head>
 
-<FarmShell back={{ href: `${base}/farm`, label: t('My farm') }}>
+<FarmShell back={{ href: `${base}/farm`, label: t('My farm') }} busy={!ready}>
 	<h1>{t('What do these words mean?')}</h1>
-	{#each entries as e (e.id)}
+	{#each ready ? entries : [] as e (e.id)}
 		<section class="card" id={e.id} aria-labelledby="{e.id}-h" lang={e.lang !== wordsLang() ? e.lang : undefined}>
 			<h2 id="{e.id}-h">{e.term}</h2>
 			<p><strong>{e.short}</strong></p>

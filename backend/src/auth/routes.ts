@@ -13,14 +13,14 @@ import { clearSession, issueSession } from './session.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
-import { LOCALES } from '../mail/i18n/index.js';
+import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
 const displayName = z.string().trim().min(1).max(100);
-/** app_user.locale (050): the farmer-facing pages' and emails' language; null = not chosen (follow the browser). */
+/** app_user.locale (050, 080): the farmer-facing pages' and emails' language, any in the engine's language table; null = not chosen (follow the browser). */
 const locale = z.enum(LOCALES).nullable();
 /** app_user.volume_unit (050): how the farm view shows volumes. */
 const volumeUnit = z.enum(['m3', 'ML']);
@@ -83,7 +83,7 @@ type UserRow = {
 	email: string;
 	display_name: string;
 	email_verified_at: Date | null;
-	locale: 'en' | 'af' | null;
+	locale: Locale | null;
 	volume_unit: 'm3' | 'ML';
 	mail_suppressed_at: Date | null;
 	mail_suppressed_reason: 'bounce' | 'complaint' | null;
