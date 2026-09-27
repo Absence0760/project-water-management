@@ -53,6 +53,20 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   stolen session can't guess it faster than the sign-in form; the flip side
   is that a locked address can't change its password until the lock ends
   (a reset still works).
+- **Credentials never stand in for each other.** Most of the app's
+  credentials share one shape (43 base64url characters, stored as SHA-256:
+  verify, reset, invite, share, render and unsubscribe tokens), so each is
+  looked up only in its own table and, for email tokens, for its own purpose.
+  The backend reads a credential in exactly three places: the `wm_session`
+  cookie (`auth/session.ts`), `Authorization: Bearer` on `/ingest/*` only
+  (`ingest/auth.ts`), and `?token=` on the one-click unsubscribe; every other
+  token travels in its public route's JSON body. No route takes a token from a
+  path parameter. An unsubscribe token turns off only its own subscription,
+  whose person, project, kind and farm can never change (trigger
+  `alert_subscription_stamp`). `auth/token-confusion.security.db.test.ts`
+  presents every credential in every other kind's slot and sweeps the live
+  route inventory, with each credential's own slot as the positive control;
+  its source sweep fails when a new place starts reading a credential.
 
 ## Password reset, email verification and invites
 
