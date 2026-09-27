@@ -332,13 +332,14 @@
 	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if s.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
 {/snippet}
 
+<!-- In-page menu: sticks under the app header down this long form and marks the group being read.
+     Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
+     the header's context says where the parameters came from. Outside the form, so it stays stuck
+     down the panels after it too (inside, it scrolled away at Data feeds). -->
+<SectionNav groups={navGroups} label="Settings sections" />
+
 <form onsubmit={save} novalidate>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-
-	<!-- In-page menu: sticks under the app header down this long form and marks the group being read.
-	     Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
-	     the header's context says where the parameters came from. -->
-	<SectionNav groups={navGroups} label="Settings sections" />
 
 	<!-- Demand ------------------------------------------------------------------>
 	<section class="panel" id="set-demand" aria-labelledby="dem-h">

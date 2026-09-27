@@ -4,7 +4,7 @@ import type { RunMeta } from '$lib/api/types';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
-import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, supplySummary, supplyTotals, unitCards, weekWindow, type UnitCard } from './supply';
+import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekWindow, type UnitCard } from './supply';
 
 const farm = (nodeId: string, fraction: number, demand = 100): FarmSummary => ({
 	nodeId,
@@ -30,6 +30,11 @@ describe('links', () => {
 	it('knows the anchors that moved from Runs & results, and no others', () => {
 		for (const a of SUPPLY_ANCHORS) expect(supplyAnchor(a)).toBe(true);
 		for (const a of ['res-summary', 'res-notes', 'res-ewr', 'res-units', '']) expect(supplyAnchor(a)).toBe(false);
+	});
+
+	it('the On this page menu links every panel, in page order, and nothing else', () => {
+		expect(SUPPLY_NAV.flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
+		expect(SUPPLY_NAV.map((g) => g.label)).toEqual(['Each unit', 'Tables for this run']);
 	});
 });
 

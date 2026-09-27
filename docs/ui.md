@@ -1678,6 +1678,48 @@ The Network's **Transfers** grid (`grid=transfers`) and scenario override mode
 show the same table alone, with **+ Add transfer** under it and no months
 card.
 
+## On this page menu
+
+The long workspace pages share one in-page menu, `common/SectionNav.svelte`
+(its rules in `common/sectionNav.ts`): **Settings & calibration**, **Runs &
+results**, **River & reserve**, **Units & supply** and **Data**. Each page
+gives it its sections in groups (a `nav` labelled "Settings sections",
+"Result sections", "River sections", "Units & supply sections", "Data
+sections"); each group is a list named for screen readers, set apart by a
+wider gap. The dashboards that fit the window (Summary, Network, Crops,
+Dams, Transfers, Scenarios) and the pages with at most two panels past their
+first screen at 1440×960 (Allocations, Project, Compare runs, Applications)
+have none (surveyed 2026-09-27 with the example catchments); History is left
+to its own redesign.
+
+- **Two rows at most** from 641 px. The links flow like words, so a group
+  may break across rows; laid out as whole blocks, a long group pushed the
+  next onto a row of its own, and Runs & results took three rows at 1280 px
+  with Summary alone on the first. What still doesn't fit goes, in page
+  order, into **More** at the end of the bar (`navFitCount`, from a hidden
+  copy of every link measured in its widest, marked state, refitted when the
+  bar's width, the labels or the fonts change). At 1440 and 1280 px every
+  page's links fit without More; at 1024 px Settings and Runs use it.
+- **More** is a disclosure button ("More sections", `aria-expanded`) with a
+  menu under the bar's right end that lists its links under their group
+  names. Enter or a click opens it; Tab moves into its links; Escape closes
+  it with focus back on the button; a click outside, focus leaving it, or
+  following one of its links closes it. When the section being read is in
+  it, More is marked like a link and its name adds "including the one being
+  read".
+- **Sticks and marks.** It sticks at the top (under the phone bar on a
+  phone), marks the section being read with `aria-current="location"`
+  (`activeSectionId`: the last section whose top has passed under the menu,
+  or the last at the bottom of the page), and raises the page's
+  `scroll-padding-top` by its height, so a jumped-to section or a focused
+  control clears it. It sits at the page's top level (Settings: above the
+  form), so it stays stuck to the last panel.
+- **Phones** (up to 640 px): one strip that scrolls sideways inside itself
+  with every link (no More), the marked link kept in view, never the page.
+- `e2e/tests/section-nav.spec.ts` pins the rows at 1440 and 1280, More's
+  keyboard use and axe scan at 1024, the phone strip, and each new page's
+  menu, jumps and loaded links.
+
 ## Data
 
 `?tab=series` (`?tab=data` and `?tab=timeseries` also work;
@@ -1724,6 +1766,18 @@ with the table the data needs).
   or narrower, the page scrolls as before, and below 640 px each row is a
   card. The gauge-vs-logger table, the double mass panel, Data checks, the
   Upload CSV form and *What the model uses* follow below.
+- **On this page.** Once there is a series, a **Data sections** menu
+  ([§ On this page menu](#on-this-page-menu)) sits under the header, above the
+  table (the fitted table and chart take the height left below it), and sticks
+  down the panels under the chart: **Series** (`#data-series`), **Chart**
+  (`#data-chart`, with a series picked), **Gauge vs logger**
+  (`#data-agreement`), **Double mass** (`#data-double-mass`), **Data checks**
+  (`#data-checks`), **Upload CSV** (`#upload-csv`, editors) and **What the
+  model uses** (`#data-uses`), each only when the page draws it
+  (`series/sections.ts`, `dataNavGroups`), in three groups named for screen
+  readers (Series, Checks, Adding data). A loaded `?tab=series#data-…` link
+  lands on its panel once it is drawn, held there (`holdAnchor`) with focus on
+  its heading.
 - **Add data from the header** refreshes the table at once: the tab takes
   the page's new series list when it changes (before 2026-09-26 the table
   kept its own copy until the page was reloaded).
@@ -1936,7 +1990,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   (Demand … Simulation period), **How results are read** (Data quality,
   Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
   and reports**. It is the shared in-page menu
-  (`common/SectionNav.svelte`, also on Runs & results): a bar of pill links
+  (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
+  above the form rather than in it, so it stays stuck down the panels after
+  the form too (inside it, it scrolled away at Data feeds): a bar of pill links
   that sticks at the top (under the phone bar on a phone) down the long form and marks the group
   being read with `aria-current="location"` (scroll spy: `activeSectionId`
   in `common/sectionNav.ts`, the last section whose top has passed under the
@@ -2514,6 +2570,14 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)) and the
   **Water account** (`#res-water-account`). Each is described under
   [§ Runs & results](#runs--results), where it used to be.
+- **On this page.** A **River sections** menu ([§ On this page
+  menu](#on-this-page-menu)) sits under the header, above the tiles (the first
+  screen fits the window below it; one row from 1280 px), and sticks down the
+  panels: **Flow vs reserve**, **Days below, by year**, **Reserve
+  compliance** (with a rule table), **EWR by month**, **Uncertainty**,
+  **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
+  above (`river/river.ts`, `riverNavGroups`), in three groups named for
+  screen readers (The reserve; How sure, and what if; Water balance).
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on
@@ -2591,6 +2655,13 @@ read it before.
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`) and **Assurance of supply**
   (`#res-assurance`). Each is described under [§ Runs & results](#runs--results).
+- **On this page.** A **Units & supply sections** menu ([§ On this page
+  menu](#on-this-page-menu)) sits under the header, above the tiles (one
+  row; the cards and the chart fit the window below it), and sticks down the
+  tables: **Unit detail** (`#res-farm`), **Unit results**, **Curtailment**
+  and **Assurance of supply** (`supply/supply.ts`, `SUPPLY_NAV`). Until it,
+  the three tables ran four screens under the cards with no way to them but
+  scrolling. Not shown with no run or no units.
 - **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment` or
   `#res-assurance` fragment scrolls to its panel once the run is in and holds
   it there (`holdAnchor`), focus on its heading. An old link to one of them on
@@ -2663,8 +2734,9 @@ read it before.
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
   `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper). Each group's name leads its pills, and each
   group is a list labelled by that name. It sticks at the top (under the
-  phone bar on a phone) down the long results page, marks the section being read, wraps to about two
-  rows on a laptop, and on phones is one sideways strip.
+  phone bar on a phone) down the long results page, marks the section being read, takes at most two
+  rows on a laptop (three at 1280 px until its groups could break across rows; [§ On this page
+  menu](#on-this-page-menu)), and on phones is one sideways strip.
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to

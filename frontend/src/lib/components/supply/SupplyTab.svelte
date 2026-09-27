@@ -35,7 +35,8 @@
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
-	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, supplySummary, supplyTotals, unitCards, weekWindow } from './supply';
+	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekWindow } from './supply';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	let {
 		projectId,
@@ -296,6 +297,9 @@
 						</div>
 					</section>
 				{:else}
+					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
+					     several screens under the cards and the unit detail. -->
+					<SectionNav groups={SUPPLY_NAV} label="Units & supply sections" />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">

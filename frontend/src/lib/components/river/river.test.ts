@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { riverAnchor, riverHref } from './links';
-import { ewrRuleText, perYear, pickRiverRun, riverKpis, worstMonth, type RiverKpi } from './river';
+import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
+import { ewrRuleText, perYear, pickRiverRun, riverKpis, riverNavGroups, worstMonth, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -52,6 +52,17 @@ describe('riverHref and riverAnchor', () => {
 	it('knows the panels that moved from Runs & results, and no others', () => {
 		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-outcomes', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
 		for (const id of ['res-curtailment', 'res-ewr-agreement', 'res-summary', '']) expect(riverAnchor(id)).toBe(false);
+	});
+});
+
+describe('riverNavGroups', () => {
+	const ids = (hasReserve: boolean) => riverNavGroups(hasReserve).flatMap((g) => g.sections.map((s) => s.id));
+	it('links every panel in page order, and only panels the page anchors', () => {
+		expect(ids(true)).toEqual([...RIVER_ANCHORS]);
+		for (const id of ids(true)) expect(riverAnchor(id)).toBe(true);
+	});
+	it('leaves out Reserve compliance when the run has none (the page has no such panel then)', () => {
+		expect(ids(false)).toEqual(RIVER_ANCHORS.filter((id) => id !== 'res-reserve'));
 	});
 });
 

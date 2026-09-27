@@ -323,6 +323,7 @@ section it belongs to, with the example that taught it.
 | Dam levels | `overview/damLevels.ts` (level, bands, capacity-weighted total, which dams are in a run) |
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
+| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More (ui.md § On this page menu) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
@@ -382,8 +383,22 @@ Interaction details that bit:
   (`?tab=settings#set-…`) had silently done that until its page spec
   followed one; the tab now finds the element on mount and holds it with
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
-  Units & supply, Runs and Project do. Test a fragment link by *loading* it,
-  not only by clicking the in-page menu.
+  Units & supply, Runs, Data and Project do. Test a fragment link by *loading* it,
+  not only by clicking the in-page menu. And a `page.goto` that changes only
+  the fragment is a same-page jump, not a load: the River menu's first
+  "loaded link" test passed on such a jump without loading anything, and the
+  Data one failed on it (no mount, so no focus). Go to another tab first.
+- **A sticky element sticks only inside its parent.** Settings' "On this
+  page" menu sat inside the form, so it scrolled away at Data feeds, the
+  first panel after the form; the Data page's `.data-page` wrapper ends
+  under the chart. Put a page's sticky menu at the tab's top level and check
+  it is still in view on the last section.
+- **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
+  flex row of groups, each a wrapping flex row of links: a long group took
+  full rows of its own, so Runs & results' menu was three rows at 1280 px
+  with Summary alone on the first. Flow the links like words (inline blocks)
+  so a group breaks where it must, and move what doesn't fit into More
+  rather than growing a third row (`common/SectionNav.svelte`).
 - **A reading page's header says what the page decides.** A long form has
   no count to show; Settings & calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the

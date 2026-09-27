@@ -7,6 +7,7 @@
 // Pure, so the page stays markup and the numbers are unit-tested.
 import { fromEpochDay, toEpochDay, type RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
+import type { NavGroup } from '$lib/components/common/sectionNav';
 import { farmSupply, LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
 import { m3DayToMm3a, SUPPLY_TARGET } from '$lib/components/runs/results';
 import { resolveWindow } from '$lib/components/runs/reportWindow';
@@ -190,3 +191,20 @@ export function cardFacts(c: UnitCard, weekDays: number): string[] {
 	if (c.cutM3Day) out.push(`Curtailment: cut ${fmtNum(c.cutM3Day)} m³/day`);
 	return out;
 }
+
+/**
+ * The page's "On this page" menu (common/SectionNav): the unit detail beside
+ * the cards, then the tables for the run, each by its `#res-…` id
+ * (links.ts SUPPLY_ANCHORS), in page order.
+ */
+export const SUPPLY_NAV: NavGroup[] = [
+	{ label: 'Each unit', sections: [{ id: 'res-farm', label: 'Unit detail' }] },
+	{
+		label: 'Tables for this run',
+		sections: [
+			{ id: 'res-farms', label: 'Unit results' },
+			{ id: 'res-curtailment', label: 'Curtailment' },
+			{ id: 'res-assurance', label: 'Assurance of supply' }
+		]
+	}
+];
