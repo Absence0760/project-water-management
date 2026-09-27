@@ -26,6 +26,7 @@ const CODES: Record<string, Msg> = {
 	link_invalid: msg('This link is invalid or has expired. Ask for a new one.'),
 	already_verified: msg('Your email address is already confirmed.'),
 	verification_sent_recently: msg('A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.'),
+	verification_limit: msg('Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.'),
 	invite_invalid: msg('This invitation is invalid or has expired.'),
 	note_farmer_own_farm: msg('You can add notes only to your own farm.'),
 	note_farm_visibility: msg('Only a note on a farm can be shown to its farmers.'),

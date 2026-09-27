@@ -51,6 +51,7 @@ export const APP_USER_EXCLUDED: Record<string, string> = {
  * its maker, and the act itself is in auditEvents.
  */
 export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: string }> = {
+	'account_mail_quota.user_id': { excluded: 'a count of reset / verification emails for the daily cap, a day at most' },
 	'alert_delivery.user_id': { section: 'alertDeliveries' },
 	'alert_rule.created_by': { excluded: 'the project’s alert rule; its maker only' },
 	'alert_subscription.user_id': { section: 'alertSubscriptions' },

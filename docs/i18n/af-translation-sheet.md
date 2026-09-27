@@ -17,7 +17,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-1 strings: 1 on the site, 0 in emails, 0 in the glossary.
+2 strings: 2 on the site, 0 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -27,4 +27,5 @@ A message from the server when something couldn’t be done, shown in a red box 
 
 | Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
+| `e35608b7` | Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow. |  |  |
 | `04f58c9d` | This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again. |  |  |

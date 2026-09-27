@@ -2,7 +2,7 @@
 // public invite lookup for the sign-up page. Mounted under /auth next to
 // routes.ts. Security notes: docs/security.md § "Password reset and email
 // verification".
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { actAsUser, withoutUser, withUser } from '../db/tx.js';
@@ -12,8 +12,8 @@ import { trySendMail, type Mail } from '../mail/transport.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { hashPassword } from './password.js';
 import { clearSession } from './session.js';
-import { issueDevice } from './device.js';
-import { newToken, parseToken, RESEND_COOLDOWN, TOKEN_TTL } from './tokens.js';
+import { issueDevice, trustedDevice } from './device.js';
+import { ACCOUNT_MAIL_CAP, ACCOUNT_MAIL_WINDOW, newToken, parseToken, RESEND_COOLDOWN, TOKEN_TTL } from './tokens.js';
 import { readJson } from '../http/body.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
@@ -22,17 +22,41 @@ const password = z.string().min(8).max(200);
 
 const INVALID_LINK = 'this link is invalid or has expired — request a new one';
 
+/** Why no token was issued: inside the cooldown, or the address's daily cap (078) is used up. */
+export type EmailTokenRefusal = 'cooldown' | 'capped';
+
 /**
  * Issue a verify/reset token for a user, unless one went out within the
- * cooldown. Returns the raw token to mail, or null when throttled.
+ * cooldown or the daily cap is used up (078). `device` is the id of a valid
+ * `wm_device` cookie for the address (trustedDevice), whose own allowance the
+ * email then counts on, or null for the address's shared count. Returns the
+ * raw token to mail, or why none was issued.
  */
-export async function issueEmailToken(db: Db, userId: string, purpose: 'verify' | 'reset'): Promise<string | null> {
+export async function issueEmailToken(
+	db: Db,
+	userId: string,
+	purpose: 'verify' | 'reset',
+	device: string | null = null
+): Promise<{ token: string } | { refused: EmailTokenRefusal }> {
 	const { token: raw, hash } = newToken();
-	const { rows } = await db.query<{ issued: boolean }>(
-		'SELECT app_issue_email_token($1, $2, $3, $4::interval, $5::interval) AS issued',
-		[userId, purpose, hash, TOKEN_TTL[purpose], RESEND_COOLDOWN[purpose]]
+	const { rows } = await db.query<{ status: 'issued' | EmailTokenRefusal }>(
+		'SELECT app_issue_email_token($1, $2, $3, $4::interval, $5::interval, $6, $7, $8::interval) AS status',
+		[userId, purpose, hash, TOKEN_TTL[purpose], RESEND_COOLDOWN[purpose], device, ACCOUNT_MAIL_CAP, ACCOUNT_MAIL_WINDOW]
 	);
-	return rows[0]?.issued ? raw : null;
+	const status = rows[0]!.status;
+	return status === 'issued' ? { token: raw } : { refused: status };
+}
+
+/**
+ * The trusted device of this request for the account (a valid `wm_device`
+ * cookie for its address under its current watermark), or null.
+ */
+async function requestDevice(c: Context, db: Db, userId: string, email: string): Promise<string | null> {
+	const { rows } = await db.query<{ sessions_revoked_at: Date | null }>(
+		'SELECT sessions_revoked_at FROM app_session_revoked_at($1)',
+		[userId]
+	);
+	return trustedDevice(c, email, rows[0]?.sessions_revoked_at ?? null);
 }
 
 /** Mark the address verified and turn its pending invites into memberships. */
@@ -42,22 +66,29 @@ export async function markVerified(db: Db, userId: string): Promise<void> {
 }
 
 /**
- * Issue a verification token and build its email (null when throttled). The
- * caller sends it after the transaction commits, so a mailed link always
- * refers to a stored token.
+ * Issue a verification token and build its email, or say why none was
+ * issued. The caller sends it after the transaction commits, so a mailed
+ * link always refers to a stored token.
  */
-export async function verificationMail(db: Db, userId: string, to: string): Promise<Mail | null> {
-	const raw = await issueEmailToken(db, userId, 'verify');
-	if (!raw) return null;
+export async function verificationMail(
+	db: Db,
+	userId: string,
+	to: string,
+	device: string | null = null
+): Promise<{ mail: Mail } | { refused: EmailTokenRefusal }> {
+	const issued = await issueEmailToken(db, userId, 'verify', device);
+	if ('refused' in issued) return issued;
 	// In the person's language (app_user.locale, 050); English when unset.
 	const { rows } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = $1', [userId]);
-	return verifyEmailMail(to, siteLink('/verify-email', raw), rows[0]?.locale);
+	return { mail: verifyEmailMail(to, siteLink('/verify-email', issued.token), rows[0]?.locale) };
 }
 
 export const emailAuthRoutes = new Hono<AuthEnv>()
 	// Always 202 with the same body, whether or not the address has an account,
-	// so the endpoint can't be used to discover accounts. Throttled per address
-	// through the token table (one mail per cooldown window).
+	// so the endpoint can't be used to discover accounts, and whether or not a
+	// limit held the email back. Throttled per address through the token table
+	// (one mail per cooldown window) and the daily cap (078), on which a
+	// browser trusted for the address counts on its own allowance.
 	.post('/forgot-password', async (c) => {
 		const body = z.object({ email }).parse(await readJson(c));
 		const mail = await withoutUser(async (db) => {
@@ -68,8 +99,8 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			);
 			const user = rows[0];
 			if (!user) return null;
-			const raw = await issueEmailToken(db, user.id, 'reset');
-			return raw ? resetPasswordMail(user.email, siteLink('/reset-password', raw), user.locale) : null;
+			const issued = await issueEmailToken(db, user.id, 'reset', await requestDevice(c, db, user.id, user.email));
+			return 'token' in issued ? resetPasswordMail(user.email, siteLink('/reset-password', issued.token), user.locale) : null;
 		});
 		if (mail) await trySendMail(mail);
 		return c.json({ ok: true }, 202);
@@ -139,10 +170,14 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			const user = rows[0];
 			if (!user) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 			if (user.verified) throw ApiError.coded(409, 'already_verified', 'your email address is already verified');
-			return verificationMail(db, c.get('userId'), user.email);
+			return verificationMail(db, c.get('userId'), user.email, await requestDevice(c, db, c.get('userId'), user.email));
 		});
-		if (!mail) throw ApiError.coded(429, 'verification_sent_recently', 'a confirmation email was sent a moment ago — check your inbox, or try again in a minute');
-		await trySendMail(mail);
+		if ('refused' in mail) {
+			if (mail.refused === 'capped')
+				throw ApiError.coded(429, 'verification_limit', 'too many confirmation emails were sent to this address today — check your inbox, or try again tomorrow');
+			throw ApiError.coded(429, 'verification_sent_recently', 'a confirmation email was sent a moment ago — check your inbox, or try again in a minute');
+		}
+		await trySendMail(mail.mail);
 		return c.json({ sent: true }, 202);
 	})
 	// What an invite link is for, so the sign-up page can say "Ann invited you

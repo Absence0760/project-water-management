@@ -160,6 +160,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'audit_event.actor_user_id': 'set null',
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
+	'account_mail_quota.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
 	'farm_link.added_by': 'set null',
 	'invite.invited_by': 'cascade',

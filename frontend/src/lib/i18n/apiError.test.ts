@@ -25,6 +25,7 @@ describe('errorText', () => {
 		link_invalid: 'This link is invalid or has expired. Ask for a new one.',
 		already_verified: 'Your email address is already confirmed.',
 		verification_sent_recently: 'A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.',
+		verification_limit: 'Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.',
 		invite_invalid: 'This invitation is invalid or has expired.',
 		note_farmer_own_farm: 'You can add notes only to your own farm.',
 		note_farm_visibility: 'Only a note on a farm can be shown to its farmers.',
