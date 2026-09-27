@@ -129,6 +129,12 @@ section it belongs to, with the example that taught it.
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
   Units & supply show a default without writing it).
+- **A short form starts on a fixed line; don't centre it in the height.**
+  The sign-in pages centred their form, so the title sat anywhere from 230
+  to 433 px down at 1440×960 depending on the page, and a wrong password's
+  message moved the whole form (and the button under the cursor) by half its
+  height. Starting the form on the brand copy's top line put the title in
+  one place on every page and state (`auth-pages.spec.ts` checks it).
 - **Fit a wide table by stacking, not by scrolling sideways.** Transfers at
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
@@ -266,6 +272,11 @@ Interaction details that bit:
   the param in the same `goto` that picks the new item (with
   `replaceState`), rather than setting its `open` to false first, which
   starts a second `goto` that races the first.
+- **When a state replaces the focused control, move focus to the title.**
+  Forgot password's *Send reset link* button disappears into *Check your
+  email*, and focus fell back to the start of the page. The sign-in pages'
+  `h1` takes `tabindex="-1"` and `focusAuthTitle()` (`layout/AuthCard.svelte`)
+  focuses it after the swap; test it with `toBeFocused()`.
 - **Svelte drops the space at the edge of an element.** A narrow-layout
   label `<span class="cell-label"> change</span>` after a number read "1change"
   (and so did its accessible text) on the Applications phone cards. Write
@@ -326,6 +337,16 @@ Interaction details that bit:
   (1 series behind)", two specs waiting for `{ name: 'Data', exact: true }`
   timed out. Match the badge (`/^Data \(\d+ series behind\)$/`) or use
   `/^Data/`.
+- **`getByLabel` matches substrings, `aria-label`s included.** Naming the
+  password field's toggle with `aria-label="Show password"` would have
+  made every `getByLabel('Password')` match two elements. Name a control
+  inside a field from its content (a visually hidden phrase, the visible
+  word `aria-hidden`), so the field keeps the only matching label.
+- **Settle on the page's own message, not any alert.** The root layout's
+  "Could not reach the API" is a `role="alert"` too, so a scan that waited
+  for any alert could run on the boot error, which had no `<title>` (axe
+  `document-title`). Wait for the text (`toHaveText(/This link is invalid/)`);
+  `app.html` now carries a default title for the states before a page mounts.
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.

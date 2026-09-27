@@ -92,7 +92,9 @@ test('an alert email’s unsubscribe link works signed out, asks first, and a de
 
 		await p.getByRole('button', { name: 'Stop these emails' }).click();
 		await expect(p.getByRole('status')).toHaveText('You won’t get dam level emails for Unsubscribe catchment any more.');
-		await expect(p.getByRole('link', { name: 'Manage alerts' }).first()).toBeVisible();
+		// One Manage alerts: the answer's button (the footer doesn't repeat it), and focus on the page title.
+		await expect(p.getByRole('link', { name: 'Manage alerts' })).toHaveCount(1);
+		await expect(p.getByRole('heading', { level: 1 })).toBeFocused();
 		await expectNoViolations(p);
 
 		// The owner's preferences now show it off.

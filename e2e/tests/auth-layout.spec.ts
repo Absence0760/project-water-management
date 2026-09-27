@@ -58,7 +58,7 @@ for (const size of SIZES) {
 						expect(m.brand.width).toBeGreaterThan(m.clientWidth / 2);
 					} else {
 						// Phone: a short band above the form.
-						expect(m.brand.height).toBe(180);
+						expect(m.brand.height).toBe(112);
 						await expect(page.getByLabel('Email')).toBeInViewport();
 					}
 					const shot = testInfo.outputPath(`${size.name}-${colorScheme}${path.replace('/', '-')}.png`);

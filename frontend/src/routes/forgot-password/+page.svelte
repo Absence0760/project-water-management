@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -24,6 +24,7 @@
 		try {
 			await emailAuth.forgotPassword(email.trim());
 			sentTo = email.trim();
+			void focusAuthTitle();
 		} catch (err) {
 			error = errorText(err);
 		} finally {
@@ -41,7 +42,10 @@
 			<p><Rich text={tRich('If there is an account for **{email}**, we’ve emailed it a link to choose a new password.', { email: sentTo })} /></p>
 			<p>{t('The link works once and expires in 1 hour. Check your spam folder if it doesn’t arrive in a few minutes.')}</p>
 		</div>
-		<button type="button" class="btn" onclick={() => (sentTo = null)}>{t('Use a different address')}</button>
+		<button type="button" class="btn" onclick={() => {
+			sentTo = null;
+			void focusAuthTitle();
+		}}>{t('Use a different address')}</button>
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>

@@ -91,6 +91,43 @@ also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
 
+## Sign-in pages
+
+`/login`, `/register`, `/forgot-password`, `/reset-password`,
+`/verify-email` and `/alerts/unsubscribe` share one frame,
+`lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
+brand panel with the catchment drawing on the left (55 %), the form on the
+right, 380 px wide. They are forms, not dashboards: each fits a 1280 × 800
+window with no page scroll, in every state (the longest is the sign-up form
+under a dead-invitation warning).
+
+- **One place for the title.** The form starts on the brand copy's top line
+  rather than centred in the height, so the brand lockup, the language
+  switch and the page title (the only `h1`) sit in the same place on every
+  page and don't move when a message appears above the form (a wrong
+  password, a sent link).
+- **Actions** are full-width buttons under the form (44 px, wrapping a long
+  address rather than overflowing); the footer, under a rule, holds the one
+  way elsewhere ("No account? Create one"). A page whose answer already
+  offers that link leaves the footer out: the unsubscribe page's done and
+  dead-link states show **Manage alerts** once, as their button.
+- **Focus.** When a page swaps its content for another state (forgot
+  password → *Check your email* and back, reset → done or a dead link,
+  unsubscribe → done or a dead link, *Sign out and accept* on an invitation
+  for someone else), focus moves to the title (`focusAuthTitle`), since the
+  button that had it is gone.
+- **Phones (below 900 px):** one column, the drawing a 112 px band above
+  the form, so the title and first field sit in the top quarter of the
+  screen, above the keyboard.
+- **Password fields** (`common/PasswordInput.svelte`, also on the account
+  page) have a **Show / Hide** button inside, named *Show password* /
+  *Hide password* from its content, so the field stays the only control
+  labelled "Password".
+
+`auth-pages.spec.ts` pins the fit, the title's place and focus at all three
+sizes in both themes, with axe scans at desktop and phone size;
+`auth-layout.spec.ts` checks the frame beside a space-taking scrollbar.
+
 ## Project workspace
 
 **Terminology: Unit (issue #54 item 2a, client question Q6).** The modeller

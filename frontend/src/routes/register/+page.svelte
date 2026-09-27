@@ -9,7 +9,7 @@
 	import { safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
 	import { i18n, readStoredLocale, t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -46,6 +46,8 @@
 		}
 		session.user = null;
 		signingOut = false;
+		// The sign-up form replaces this view, and the button that was focused with it.
+		void focusAuthTitle();
 	}
 
 	async function resendConfirmation() {
