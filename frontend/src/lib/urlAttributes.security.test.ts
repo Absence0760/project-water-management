@@ -41,51 +41,55 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 /**
  * Expressions allowed at the head of a URL attribute, by their leading name
  * (`runHref(meta.id)` → `runHref`, `api.farm.exportUrl(…)` →
- * `api.farm.exportUrl`). The builders marked BUILDER are called with hostile
- * ids in the last test.
+ * `api.farm.exportUrl`) and the components (`in`, paths under src/) where
+ * that name was reviewed. A name means what its component makes it mean (a
+ * local `href`, an imported `runHref`), so the same name in another
+ * component is unreviewed until it is added here; a listed component that no
+ * longer uses the name fails as stale. The builders marked BUILDER are
+ * called with hostile ids in the last test.
  */
-const REVIEWED: Record<string, string> = {
+const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
-	withParam: 'BUILDER: "?" + URLSearchParams of the current page',
-	runHref: 'BUILDER: "?tab=runs&run=" + encoded id',
-	riverHref: 'BUILDER: "?tab=river…"',
-	supplyHref: 'BUILDER: "?" + URLSearchParams',
-	farmHref: 'BUILDER: "{base}/farm/" + encoded project id',
-	farmDrawerHref: 'BUILDER: "?…farm=" overlay link',
-	compareTabHref: 'BUILDER: "?" + URLSearchParams',
-	curtailmentHref: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)',
+	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/crops/CropsTab.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamLevels.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/LatestRun.svelte', 'lib/components/runs/RunsTab.svelte'] },
+	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
+	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
+	curtailmentHref: { why: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'routes/teams/[id]/portfolio/+page.svelte'] },
 	// Local builders and constants in the component itself: a literal "?", "#" or "{base}/" head.
-	tabHref: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname',
-	addDataHref: 'ProjectTable: `${base}/projects/${id}?add=data`',
-	projectHref: 'portfolio page: `${base}/projects/${id}`',
-	loginHref: 'register page: `${base}/login?next=` + encoded next',
-	forgotHref: 'login page: `${base}/forgot-password…`',
-	settingsHref: 'team page: withParam(page.url, …)',
-	panelHref: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"',
-	compareHref: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"',
-	reserveHref: 'RunSummaryView: riverHref(…)',
-	previewHref: 'NodeDetail: farmHref(…)',
-	main: 'farm why/dam pages: farmHref(…)',
-	href: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too',
-	DAMS_HREF: 'latestRun.ts constant "?tab=dams"',
-	ARC4_URL: 'crops/library.ts constant https:// link to the SABI manual',
-	pictureSrc: 'help pictures: "/help/<static file name>" from the SHOTS table',
-	pictureSrcset: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)',
+	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
+	addDataHref: { why: 'ProjectTable: `${base}/projects/${id}?add=data`', in: ['lib/components/projects/ProjectTable.svelte'] },
+	projectHref: { why: 'portfolio page: `${base}/projects/${id}`; OverviewTab: project/links.ts "?tab=project" + an anchor', in: ['lib/components/overview/OverviewTab.svelte', 'routes/teams/[id]/portfolio/+page.svelte'] },
+	loginHref: { why: 'register page: `${base}/login?next=` + encoded next', in: ['routes/register/+page.svelte'] },
+	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
+	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
+	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
+	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },
+	reserveHref: { why: 'RunSummaryView: riverHref(…)', in: ['lib/components/runs/RunSummaryView.svelte'] },
+	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
+	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
+	href: { why: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too', in: ['lib/components/farm/DamCard.svelte', 'lib/components/farm/LookingBack.svelte', 'lib/components/notes/RecentNotes.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
+	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
+	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },
+	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },
 	// Objects built in code from the builders above.
-	'back.href': 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)',
-	'preview.href': 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`',
-	'more.href': 'SupplyByFarm / FlowVsReserve prop: OverviewTab passes riverHref / supplyHref',
-	'h.href': 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders',
-	'it.href': 'NeedsAttention: attention.ts items built from runHref / supplyHref / farmDrawerHref or "?tab=…" literals',
-	'it.also.href': 'NeedsAttention: attention.ts, farmDrawerHref',
-	'c.href': 'RunSummaryView: credibility.ts "#res-…" anchors',
+	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)', in: ['lib/components/farm/FarmShell.svelte'] },
+	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
+	'more.href': { why: 'SupplyByFarm / FlowVsReserve prop: OverviewTab passes riverHref / supplyHref', in: ['lib/components/overview/FlowVsReserve.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
+	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
+	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / supplyHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
+	'it.also.href': { why: 'NeedsAttention: attention.ts, farmDrawerHref', in: ['lib/components/overview/NeedsAttention.svelte'] },
+	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	// Values that come from outside the component, each checked where it enters.
-	'current.url': 'the report PDF link from the API: serverPdf.ts reportsApi.get drops anything but http(s) (serverPdf.test.ts)',
-	'api.farm.exportUrl': 'api client: PUBLIC_API_URL (build config) + an encoded path',
-	'api.allocations.exportUrl': 'api client: PUBLIC_API_URL (build config) + an encoded path',
+	'current.url': { why: 'the report PDF link from the API: serverPdf.ts reportsApi.get drops anything but http(s) (serverPdf.test.ts)', in: ['lib/components/report/ServerPdf.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
+	'api.farm.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/farm/[projectId]/+page.svelte'] },
+	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
-	exampleHref: 'EWR editors: `data:text/csv;charset=utf-8,` + encodeURIComponent(synthetic CSV)',
-	templateHref: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)'
+	exampleHref: { why: 'EWR editors: `data:text/csv;charset=utf-8,` + encodeURIComponent(synthetic CSV)', in: ['lib/components/settings/EwrHighFlowsEditor.svelte', 'lib/components/settings/EwrRuleTablesEditor.svelte'] },
+	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
 
 /** TypeScript that points the page, or an element, at a URL. Only a blob download link is allowed. */
@@ -295,14 +299,18 @@ describe('URL attributes', () => {
 		const offenders = urls.flatMap(({ file, attr }) => {
 			const v = classify(attr.value!);
 			if ('dynamic' in v) {
-				used.add(v.dynamic);
-				return v.dynamic in REVIEWED ? [] : [`${file}: ${attr.name}=${attr.value} (unreviewed expression "${v.dynamic}": add it to REVIEWED with where its value comes from)`];
+				used.add(`${file}: ${v.dynamic}`);
+				return REVIEWED[v.dynamic]?.in.includes(file)
+					? []
+					: [`${file}: ${attr.name}=${attr.value} (unreviewed expression "${v.dynamic}" here: add this file to its REVIEWED entry, with where its value comes from)`];
 			}
 			return v.ok ? [] : [`${file}: ${attr.name}="${attr.value}" (${v.why})`];
 		});
 		expect(offenders).toEqual([]);
-		// No stale entries: every reviewed head is still in use.
-		expect(Object.keys(REVIEWED).filter((k) => !used.has(k))).toEqual([]);
+		// No stale entries: every reviewed name is still used in every component it lists.
+		const listed = Object.entries(REVIEWED).flatMap(([head, r]) => r.in.map((f) => `${f}: ${head}`));
+		expect(listed.length).toBeGreaterThan(Object.keys(REVIEWED).length);
+		expect(listed.filter((k) => !used.has(k))).toEqual([]);
 	});
 
 	it('no srcdoc, and no frame, object or embed element', () => {
@@ -345,11 +353,15 @@ describe('URL attributes', () => {
 		expect(`const u = 'javascript:void 0'`.match(TS_URL_SINKS)).toHaveLength(1);
 		expect('if (a.href === b) {}'.match(TS_URL_SINKS)).toBeNull();
 		expect('const href = runHref(id)'.match(TS_URL_SINKS)).toBeNull();
+		// A component's markup holds code too: a Svelte 5 inline handler
+		// (onclick={() => (location.href = next)}) sits outside <script>, so the
+		// whole file is read, as rawHtml.test.ts reads it.
+		expect('<button onclick={() => (location.href = next)}>go</button>'.match(TS_URL_SINKS)).toHaveLength(1);
+		expect('<a href={runHref(id)} onclick={() => window.open(u)}>x</a>'.match(TS_URL_SINKS)).toHaveLength(1);
 		const files = sourceFiles(SRC, /\.(svelte|ts|js)$/);
 		const hits = files.flatMap((f) => {
 			const rel = f.slice(SRC.length);
-			const text = f.endsWith('.svelte') ? [...readFileSync(f, 'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join('\n') : readFileSync(f, 'utf8');
-			return (text.match(TS_URL_SINKS) ?? []).map((m) => ({ rel, m }));
+			return (readFileSync(f, 'utf8').match(TS_URL_SINKS) ?? []).map((m) => ({ rel, m }));
 		});
 		// Positive control: the download helper's blob link is found (and allowed).
 		expect(hits.some((h) => h.rel === 'lib/export/download.ts')).toBe(true);

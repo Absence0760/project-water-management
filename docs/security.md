@@ -1330,12 +1330,14 @@ In short:
   `#…`, `{base}/…`) sets its own scheme, and that scheme must be http(s),
   mailto or tel, never protocol-relative. A value that starts with an
   expression must be a *reviewed* head, listed with where its value comes
-  from. A new one fails until someone reviews it, and a listed head nothing
-  uses any more also fails. The app's URL builders (`runHref`,
+  from and the components it was reviewed in (the same name in another
+  component is a new one). A new one fails until someone reviews it, and a
+  listed head a listed component no longer uses also fails. The app's URL builders (`runHref`,
   `withParam`, `farmHref`, …) are called with hostile ids and must stay on
   the app's origin. The same test bans `srcdoc`, frame, object and embed
   elements, and URL writes from TypeScript (`location =`, `window.open`,
-  `.href =`, except the blob download link in `lib/export/download.ts`). It
+  `.href =`, except the blob download link in `lib/export/download.ts`),
+  read from the whole file, since an inline handler in markup is code too. It
   also requires `rel="noopener"` on every `target="_blank"` link. The
   one link that comes from the API, the report PDF's pre-signed URL, is
   dropped unless it is http(s) (`serverPdf.ts` `reportsApi.get`). `?next=`
@@ -1697,7 +1699,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     policy allows either (catalogue guard); the signed run is cited, so it
     can't be deleted or trimmed, and `water_app` may change only its notes
     and pin. A scenario with a signed-off run can't be deleted either (409;
-    the `scenario_signed_run_guard` trigger, 072, refuses it in SQL too),
+    the `scenario_signed_run_guard` trigger, 072, refuses it in SQL too,
+    which is what stops an applicant, who can't read the assessor's
+    sign-off of their withdrawn application's run),
     since the run's `scenario_id` would go NULL and the signed scenario run
     would pass for a run of the project's own inputs. Deleting the whole
     project still takes its sign-offs with it (cascade), unless it has an
