@@ -873,6 +873,11 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues({ siteNodeId: null }).length).toBeGreaterThan(0);
 	});
 
+	it('accepts a source kind, absent or null, and refuses an unknown one (engine ≥ 1.3.0)', () => {
+		for (const sourceKind of ['gazetted', 'desktop', 'other', null]) expect(issues([table({ sourceKind })])).toEqual([]);
+		expect(issues([table({ sourceKind: 'guess' })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.sourceKind');
+	});
+
 	it('accepts a low-flow grid and high-flow components, and runs the engine checks on them (engine ≥ 0.33.0)', () => {
 		const lowFlow = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
 		const fresh = { label: 'Class II freshet', months: [11, 12], peakM3s: 8, durationDays: 3, perYear: 2 };

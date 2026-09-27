@@ -2600,7 +2600,12 @@ the outlet, `siteNodeId: null`, or a gauge), at most 20
 in (0, 100], default the ten DRM points), a 12 × points EWR grid (water-year
 rows Oct … Sep), the unit (`mcm` Mm³ per month or `m3s` the month's mean
 flow), what it covers (`total` or `lowFlow`, a label only), a required
-`source`, a `scale` (default 1; multiplies every value, for a table given for
+`source`, an optional `sourceKind` (engine ≥ 1.3.0, WP-3.7: `gazetted`,
+`desktop` or `other`, a label only, which the Reserve panel and the printed
+report turn into a confidence line: "Gazetted Reserve", "Desktop estimate,
+low confidence", "Other source, confidence not stated"; absent = not stated,
+and a table stored before it resolves and reports as it did; the site's
+report carries it only when set), a `scale` (default 1; multiplies every value, for a table given for
 a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 

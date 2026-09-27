@@ -22,6 +22,7 @@ import {
 	EWR_RULE_UNITS,
 	EWR_RULE_VALUE_MAX,
 	ewrRuleListIssues,
+	EWR_RULE_SOURCE_KINDS,
 	ewrRuleTableIssues,
 	GR4J_PARAMS,
 	MAX_STARTS,
@@ -201,6 +202,8 @@ const EwrRuleTable = z
 	.object({
 		siteNodeId: z.string().min(1).max(100).nullable(),
 		source: z.string().trim().min(1).max(EWR_RULE_SOURCE_MAX),
+		// Engine ≥ 1.3.0 (WP-3.7), optional so a table saved before stays valid: gazetted, desktop or other.
+		sourceKind: z.enum(EWR_RULE_SOURCE_KINDS).nullable().optional(),
 		component: z.enum(EWR_RULE_COMPONENTS),
 		unit: z.enum(EWR_RULE_UNITS),
 		points: z.array(z.number().finite()).max(EWR_RULE_POINTS_MAX),

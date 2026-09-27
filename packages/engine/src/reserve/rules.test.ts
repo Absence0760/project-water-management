@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	blankEwrRuleTable,
 	DEFAULT_ASSURANCE_POINTS,
+	EWR_RULE_SOURCE_KINDS,
+	ewrSourceConfidence,
 	ewrRuleListIssues,
 	ewrRuleTableIssues,
 	ewrRuleTableNotes,
@@ -181,5 +183,34 @@ describe('low flows and high-flow components (engine ≥ 0.33.0)', () => {
 		const notes = ewrRuleTableNotes(t);
 		expect(notes).toContain('the low flows rise with the % point in Oct (a drought flow above a maintenance one); check the table');
 		expect(notes).toContain('the low flows are above the total flow at 1 point (Nov 10 %), so the high flows there count as 0');
+	});
+});
+
+describe('source kind (engine ≥ 1.3.0, WP-3.7)', () => {
+	it('accepts each kind, absent and null, and refuses anything else on its own field', () => {
+		for (const k of EWR_RULE_SOURCE_KINDS) expect(ewrRuleTableIssues(table({ sourceKind: k }))).toEqual([]);
+		expect(ewrRuleTableIssues(table({ sourceKind: null }))).toEqual([]);
+		expect(fields(table({ sourceKind: 'guess' as never }))).toEqual(['sourceKind']);
+	});
+
+	it('is carried through resolve only when set, so an older table resolves unchanged', () => {
+		const [set] = resolveEwrRules([table({ sourceKind: 'desktop' })], []);
+		expect(set!.sourceKind).toBe('desktop');
+		const [plain] = resolveEwrRules([table()], []);
+		expect(plain).not.toHaveProperty('sourceKind');
+		const [nulled] = resolveEwrRules([table({ sourceKind: null })], []);
+		expect(nulled).not.toHaveProperty('sourceKind');
+		const w: string[] = [];
+		expect(resolveEwrRules([table({ sourceKind: 'guess' as never })], w)).toEqual([]);
+		expect(w).toEqual([expect.stringMatching(/^EWR rule table for the outlet skipped: it isn't usable \(Pick what kind of source/)]);
+	});
+
+	it('gives the confidence line for each kind, and none when unstated', () => {
+		expect(ewrSourceConfidence('gazetted')).toBe('Gazetted Reserve');
+		expect(ewrSourceConfidence('desktop')).toBe('Desktop estimate, low confidence');
+		expect(ewrSourceConfidence('other')).toBe('Other source, confidence not stated');
+		expect(ewrSourceConfidence(undefined)).toBeNull();
+		expect(ewrSourceConfidence(null)).toBeNull();
+		expect(ewrSourceConfidence('toString' as never)).toBeNull();
 	});
 });

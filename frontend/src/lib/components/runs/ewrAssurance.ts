@@ -1,6 +1,6 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
-import type { EwrAssuranceMonth, EwrAssuranceSite, EwrHighFlowReport, RunSummary } from '@water-management/engine';
+import { ewrSourceConfidence, type EwrAssuranceMonth, type EwrAssuranceSite, type EwrHighFlowReport, type RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import { monthName } from '$lib/format/months';
 
@@ -29,6 +29,17 @@ export function verdict(s: EwrAssuranceSite): string {
 	if (o.met === o.months) return `Met in every one of the ${fmtNum(o.months)} complete months.`;
 	if (o.met === 0) return `Not met in any of the ${fmtNum(o.months)} complete months.`;
 	return `Met in ${fmtNum(o.met)} of ${fmtNum(o.months)} months (${fmtPct(o.rate)}); not met in ${fmtNum(o.months - o.met)}.`;
+}
+
+/**
+ * The table's source with its confidence (engine ≥ 1.3.0, WP-3.7): "Gazetted
+ * Reserve: GN 123 of 2010", "Desktop estimate, low confidence: DRM run …", or
+ * the bare source when the table doesn't say what kind it is. `low` marks a
+ * desktop estimate, which the panel sets apart.
+ */
+export function sourceLine(s: Pick<EwrAssuranceSite, 'source' | 'sourceKind'>): { text: string; low: boolean } {
+	const confidence = ewrSourceConfidence(s.sourceKind);
+	return { text: confidence ? `${confidence}: ${s.source}` : `Source: ${s.source}`, low: s.sourceKind === 'desktop' };
 }
 
 /** The method in one sentence: where the percentile comes from, the unit, what the table covers, its scale. */

@@ -2385,7 +2385,9 @@ which checks every catchment tab).
   each gauge in network order; a farm can't be a site); it is disabled once
   every site has one, with a hint to add a gauge on the Network tab. Each
   table (a group headed "Rule table at …") has the **EWR site**, the
-  required **Source**, what **the table covers** (total flow, or low flows
+  required **Source**, the **Kind of source** (not stated, gazetted Reserve,
+  desktop estimate, other; engine ≥ 1.3.0, the Reserve panel's confidence
+  line), what **the table covers** (total flow, or low flows
   only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
@@ -3294,6 +3296,10 @@ read it before.
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
   when there are several, the method in one sentence and the table's source,
+  led by its confidence when the table states its kind (engine ≥ 1.3.0:
+  "Gazetted Reserve: …", "Desktop estimate, low confidence: …" set apart in
+  the caution colour, "Other source, confidence not stated: …"; the printed
+  report shows the same line, since it reuses the panel),
   a verdict line ("Met in 18 of 24 months (75.0%); not met in 6.", with a
   coloured edge and the words, never colour alone), a caution when a calendar
   month has fewer than 10 years, four figures (months met, longest run not

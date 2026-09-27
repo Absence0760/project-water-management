@@ -365,7 +365,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `ewrRules` (engine ≥ 0.21.0; model.md §2.9c) is a list, default `[]`, of at
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
   outlet, else a gauge's node id; checked by the run, not here), `source`
-  1–500 chars, `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
+  1–500 chars, optional `sourceKind` (engine ≥ 1.3.0: `gazetted` | `desktop`
+  | `other` | `null`, absent = not stated), `component` (`total` | `lowFlow`), `unit` (`mcm` Mm³ per month
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
@@ -1314,6 +1315,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   per EWR site with a table, outlet first then gauges by node id
   (`EwrAssuranceSite` in `packages/engine/src/reserve/assurance.ts`):
   `nodeId` (`null` = outlet), `name`, `isOutlet`, the table's `source`,
+  its `sourceKind` (engine ≥ 1.3.0, only when the table states one),
   `component`, `unit`, `naturalSource`, `scale` and `points`; `months` (each
   complete calendar month: `{ year, month, waterYear, days, natural,
   percentile, beyond: 'wetter' | 'drier' | null, required, actual, met,

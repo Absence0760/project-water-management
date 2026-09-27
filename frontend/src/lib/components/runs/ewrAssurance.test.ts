@@ -13,6 +13,7 @@ import {
 	reserveCellText,
 	reserveGrid,
 	shareOfRequired,
+	sourceLine,
 	verdict
 } from './ewrAssurance';
 import { resultSections } from './sections';
@@ -63,6 +64,21 @@ describe('verdict and method', () => {
 		expect(describeMethod(site(() => 1, { naturalSource: 'run', unit: 'm3s', component: 'lowFlow', scale: 0.25 }))).toBe(
 			'Each month’s requirement is the EWR at the % point its natural flow sits at (percentile from the run’s own natural flow at the site); table in m³/s, the month’s mean, low flows only, scaled × 0.25.'
 		);
+	});
+});
+
+describe('sourceLine (engine ≥ 1.3.0)', () => {
+	it('puts the confidence before the source, and marks a desktop estimate', () => {
+		expect(sourceLine(site(() => 1))).toEqual({ text: 'Source: Synthetic table', low: false });
+		expect(sourceLine({ source: 'GN 1 of 2000', sourceKind: 'gazetted' })).toEqual({ text: 'Gazetted Reserve: GN 1 of 2000', low: false });
+		expect(sourceLine({ source: 'DRM run', sourceKind: 'desktop' })).toEqual({ text: 'Desktop estimate, low confidence: DRM run', low: true });
+		expect(sourceLine({ source: 'Study', sourceKind: 'other' })).toEqual({ text: 'Other source, confidence not stated: Study', low: false });
+	});
+	it('carries the table’s kind from the run', () => {
+		const days = 366 + 365;
+		const natural = new Float64Array(days).fill(1.5e6 / 31);
+		const r = assessSite('2000-10-01', days, { table: { ...table, sourceKind: 'desktop' }, nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural }).report;
+		expect(sourceLine(r).text).toBe('Desktop estimate, low confidence: Synthetic table');
 	});
 });
 

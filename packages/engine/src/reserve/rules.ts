@@ -36,6 +36,26 @@ export type EwrNaturalSource = (typeof EWR_NATURAL_SOURCES)[number];
 export const EWR_RULE_COMPONENTS = ['total', 'lowFlow'] as const;
 export type EwrRuleComponent = (typeof EWR_RULE_COMPONENTS)[number];
 
+/**
+ * What kind of source a table is (engine ≥ 1.3.0, WP-3.7): a gazetted
+ * Reserve, a desktop estimate (the Desktop Reserve Model or similar, low
+ * confidence), or something else. Optional: a table without it is shown
+ * unlabelled, as before. A label for the reader; the method is the same.
+ */
+export const EWR_RULE_SOURCE_KINDS = ['gazetted', 'desktop', 'other'] as const;
+export type EwrRuleSourceKind = (typeof EWR_RULE_SOURCE_KINDS)[number];
+
+const SOURCE_KIND_LINE: Record<EwrRuleSourceKind, string> = {
+	gazetted: 'Gazetted Reserve',
+	desktop: 'Desktop estimate, low confidence',
+	other: 'Other source, confidence not stated'
+};
+
+/** The confidence line for a table's source kind; null when the kind isn't set (or isn't one). */
+export function ewrSourceConfidence(kind: EwrRuleSourceKind | null | undefined): string | null {
+	return kind && Object.hasOwn(SOURCE_KIND_LINE, kind) ? SOURCE_KIND_LINE[kind] : null;
+}
+
 /** The % points DRM and gazetted rule tables use. */
 export const DEFAULT_ASSURANCE_POINTS: readonly number[] = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 
@@ -82,6 +102,8 @@ export interface EwrRuleTable {
 	siteNodeId: string | null;
 	/** Where the table comes from (study, gazette notice, table number). Required. */
 	source: string;
+	/** What kind of source it is (engine ≥ 1.3.0): gazetted, desktop or other. Absent / null = not stated. */
+	sourceKind?: EwrRuleSourceKind | null;
 	component: EwrRuleComponent;
 	unit: EwrRuleUnit;
 	/** Exceedance % points, rising: 0 < p ≤ 100. */
@@ -160,6 +182,9 @@ export function ewrRuleTableIssues(t: EwrRuleTable): EwrRuleIssue[] {
 	const out: EwrRuleIssue[] = [];
 	if (typeof t.source !== 'string' || !t.source.trim()) out.push({ field: 'source', message: 'Say where the table comes from (Reserve determination, gazette notice, table).' });
 	else if (t.source.length > EWR_RULE_SOURCE_MAX) out.push({ field: 'source', message: `Keep the source under ${EWR_RULE_SOURCE_MAX} characters.` });
+	if (t.sourceKind !== undefined && t.sourceKind !== null && !(EWR_RULE_SOURCE_KINDS as readonly unknown[]).includes(t.sourceKind)) {
+		out.push({ field: 'sourceKind', message: 'Pick what kind of source it is: gazetted Reserve, desktop estimate or other.' });
+	}
 	if (!(EWR_RULE_UNITS as readonly unknown[]).includes(t.unit)) out.push({ field: 'unit', message: 'Pick the unit the table is in.' });
 	if (!(EWR_RULE_COMPONENTS as readonly unknown[]).includes(t.component)) out.push({ field: 'component', message: 'Pick what the table covers.' });
 	if (!(EWR_NATURAL_SOURCES as readonly unknown[]).includes(t.naturalSource)) out.push({ field: 'naturalSource', message: 'Pick how the natural-flow percentile is found.' });
@@ -302,6 +327,8 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 		const t: EwrRuleTable = {
 			siteNodeId: typeof r.siteNodeId === 'string' ? r.siteNodeId : null,
 			source: typeof r.source === 'string' ? r.source : '',
+			// Only when set, so a table from before engine 1.3.0 resolves as it did.
+			...(r.sourceKind !== undefined && r.sourceKind !== null ? { sourceKind: r.sourceKind as EwrRuleSourceKind } : {}),
 			component: r.component as EwrRuleComponent,
 			unit: r.unit as EwrRuleUnit,
 			points: r.points as number[],
