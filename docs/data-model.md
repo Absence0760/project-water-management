@@ -1214,7 +1214,7 @@ Read-only links to the current publication for people outside the project
   never removed, and goes with its project. The `share_link_revoke_final`
   trigger (065) makes a revocation permanent: once `revoked_at` is set,
   neither it nor `revoked_by` changes, except `revoked_by` going `NULL` when
-  that account is deleted.
+  that account is deleted (067: only then, never for a live account).
 - `app_share_view(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live link
   of a project with a current publication, one row of `project_name,
   published_at, published_by (display name), catchment_view (allowlisted
@@ -1316,7 +1316,11 @@ merges daily readings without a session (WP-2.9;
 - **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
   `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
   catalogue test's column-only and keep-forever lists): a key is revoked,
-  never removed, so the audit events that name it keep their link.
+  never removed, so the audit events that name it keep their link. The
+  `api_key_revoke_final` trigger (067) makes a revocation permanent, as
+  065 does for share links: once `revoked_at` is set, neither it nor
+  `revoked_by` changes, except `revoked_by` going `NULL` when that account
+  is deleted.
 - `api_key_throttle (key_id PK → api_key CASCADE, tokens, refilled_at)`: a
   token bucket per key, the `login_throttle` pattern (deny-all policy,
   reached only through `app_api_key_take`).
