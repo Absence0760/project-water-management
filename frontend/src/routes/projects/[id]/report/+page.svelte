@@ -300,11 +300,10 @@
 							<p class="alert alert-warning" role="status">This run couldn't be compared with the baseline: {impactError}</p>
 						{/if}
 					{:else if s.id === 'network'}
-						<NetworkSchematic
-							{nodes}
-							transfers={model.transfers ?? []}
-							colouring={supplyColouring(nodes, summary, { name: runName, ago: ranAgo(run.createdAt) }, false)}
-						/>
+						{@const colouring = supplyColouring(nodes, summary, { name: runName, ago: ranAgo(run.createdAt) }, false)}
+						<!-- The screen scrolls the usual drawing; paper gets one wrapped to the A4 width (NetworkSchematic's `paper`). -->
+						<div class="sch-screen"><NetworkSchematic {nodes} transfers={model.transfers ?? []} {colouring} /></div>
+						<div class="sch-paper"><NetworkSchematic {nodes} transfers={model.transfers ?? []} {colouring} paper /></div>
 					{:else if s.id === 'inputs'}
 						<p class="muted small">As this run used them: its own copy of the settings and the model, not today’s.</p>
 						<h3>Settings</h3>
@@ -499,6 +498,9 @@
 	   until each verdict wrapped a word to a line; give the names room and let
 	   the table scroll inside its box. Paper keeps its own fit (below). */
 	@media screen {
+		.sch-paper {
+			display: none;
+		}
 		.report :global(table.data tbody th[scope='row']) {
 			min-width: 11rem;
 		}
@@ -564,6 +566,9 @@
 		}
 		.report :global(.scroller) {
 			overflow: visible;
+		}
+		.sch-screen {
+			display: none;
 		}
 		.report :global(svg.schematic) {
 			max-width: 100%;

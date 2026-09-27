@@ -218,6 +218,11 @@ section it belongs to, with the example that taught it.
   on its cover printed every word at ~80 % of the stylesheet's size. The frame now hides itself in print (`AppShell.svelte`). Check a
   print change by comparing the PDF (`page.pdf()`, `pdftotext -bbox` for type
   size, `pdfinfo` for pages), and keep screen-only fixes in `@media screen`.
+  A drawing that scrolls on screen can't just be scaled to the page: the
+  30-unit schematic printed its names at ~1.4 pt. Give paper its own layout
+  (the report draws `NetworkSchematic paper`, wrapped to five columns, and
+  hides the screen copy in print) and measure the type in the PDF
+  (`report-schematic-print.spec.ts`).
 - **An absolutely positioned bit inside a scrolling table escapes it**
   unless the box is its containing block: the visually-hidden words in
   `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of

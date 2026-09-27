@@ -19,6 +19,12 @@ export interface SchematicEdge {
 	/** Upstream node → the node it drains into. */
 	from: string;
 	to: string;
+	/**
+	 * The paper layout only (wrappedSchematicLayout): the column of the gutter
+	 * this edge runs down, for a branch wrapped onto a higher row than the
+	 * others draining into the same node.
+	 */
+	via?: number;
 }
 
 export interface SchematicLayout {
@@ -135,7 +141,8 @@ export const arcPath = (a: Arc) =>
 
 const order = (a: NetworkNode, b: NetworkNode) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
 
-export function schematicLayout(nodes: NetworkNode[]): SchematicLayout {
+/** What drains into each node (in drawing order), and the nodes that drain into nothing drawn. */
+function drainage(nodes: NetworkNode[]) {
 	const ids = new Set(nodes.map((n) => n.id));
 	const children = new Map<string, NetworkNode[]>();
 	const roots: NetworkNode[] = [];
@@ -149,6 +156,11 @@ export function schematicLayout(nodes: NetworkNode[]): SchematicLayout {
 	}
 	for (const list of children.values()) list.sort(order);
 	roots.sort(order);
+	return { children, roots };
+}
+
+export function schematicLayout(nodes: NetworkNode[]): SchematicLayout {
+	const { children, roots } = drainage(nodes);
 
 	const placed = new Map<string, { col: number; depth: number; area: number }>();
 	const edges: SchematicEdge[] = [];
@@ -186,5 +198,129 @@ export function schematicLayout(nodes: NetworkNode[]): SchematicLayout {
 		cols: Math.max(nextLeafCol, 1),
 		rows: out.length ? maxDepth + 1 : 0,
 		orphans: nodes.filter((n) => !placed.has(n.id))
+	};
+}
+
+// --- the paper layout ------------------------------------------------------
+// The report prints the schematic on A4. The layout above lays every
+// headwater side by side, so a catchment of 30 units drawn to the page's
+// width printed its names at about 1.5 pt. On paper the drawing is at most
+// `maxCols` columns wide instead: where the branches draining into one node
+// don't fit side by side they wrap onto several rows, stacked upwards, the
+// shortest branches on the row nearest the node. A wrapped row's rivers run
+// down a gutter left of the rows below it and join the node's own confluence
+// line, so no river crosses a symbol or a name.
+
+/** Columns a wrapped group keeps on its left for the gutter its higher rows drain down. */
+export const WRAP_GUTTER = 0.4;
+
+interface Branch {
+	node: NetworkNode;
+	depth: number;
+	area: number;
+	/** Width in columns and height in rows of the branch's box. */
+	w: number;
+	h: number;
+	shelves: Branch[][];
+}
+
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const shelfW = (s: Branch[]) => sum(s.map((b) => b.w));
+const shelfH = (s: Branch[]) => Math.max(...s.map((b) => b.h));
+
+/**
+ * Branches in rows of at most `cap` columns. Kept in order on one row when
+ * they fit in `maxCols`; otherwise the shortest go on the first row, so the
+ * rivers wrapped above have the fewest rows to run past (separate outlets,
+ * with no river between them, keep their order: `byHeight` false).
+ */
+function shelve(items: Branch[], maxCols: number, cap: number, byHeight = true): Branch[][] {
+	if (items.length === 0) return [];
+	if (shelfW(items) <= maxCols) return [items];
+	const ordered = byHeight ? items.map((b, i) => ({ b, i })).sort((x, y) => x.b.h - y.b.h || x.i - y.i).map((x) => x.b) : items;
+	const shelves: Branch[][] = [];
+	let cur: Branch[] = [];
+	for (const b of ordered) {
+		if (cur.length && shelfW(cur) + b.w > cap) {
+			shelves.push(cur);
+			cur = [];
+		}
+		cur.push(b);
+	}
+	shelves.push(cur);
+	return shelves;
+}
+
+/**
+ * The schematic for paper: as schematicLayout, but never wider than
+ * `maxCols` columns (a branch that is itself wider than that aside, which
+ * only a single node with a wider branch could make, and wrapping makes none).
+ * Edges from a wrapped row carry `via`, the column of the gutter they run
+ * down. Rows and columns are in the same grid units as schematicLayout's.
+ */
+export function wrappedSchematicLayout(nodes: NetworkNode[], maxCols: number): SchematicLayout {
+	const { children, roots } = drainage(nodes);
+	const cap = Math.max(1, maxCols - WRAP_GUTTER);
+	const seen = new Set<string>();
+
+	const measure = (n: NetworkNode, depth: number): Branch => {
+		seen.add(n.id);
+		const kids = (children.get(n.id) ?? []).filter((c) => !seen.has(c.id)).map((c) => measure(c, depth + 1));
+		const shelves = shelve(kids, maxCols, cap);
+		const gutter = shelves.length > 1 ? WRAP_GUTTER : 0;
+		// Every row but the top one sits right of the gutter; the top row's rivers
+		// reach the gutter along the line below them, so it may start at the left edge.
+		const w = Math.max(1, ...shelves.map((s, i) => (i < shelves.length - 1 ? gutter : 0) + shelfW(s)));
+		return { node: n, depth, area: (n.areaKm2 || 0) + sum(kids.map((k) => k.area)), w, h: 1 + sum(shelves.map(shelfH)), shelves };
+	};
+	const top = roots.map((r) => measure(r, 0));
+	const rootShelves = shelve(top, maxCols, maxCols, false);
+
+	const placed: { b: Branch; col: number; up: number }[] = [];
+	const edges: SchematicEdge[] = [];
+	// `up`: rows above the drawing's bottom row. Returns the branch's own column.
+	const place = (b: Branch, left: number, up: number): number => {
+		const gutter = b.shelves.length > 1 ? WRAP_GUTTER : 0;
+		let y = up + 1;
+		let first = left;
+		let last = left;
+		b.shelves.forEach((s, i) => {
+			let x = left + (i < b.shelves.length - 1 ? gutter : 0);
+			s.forEach((k, j) => {
+				const c = place(k, x, y);
+				edges.push(i === 0 ? { from: k.node.id, to: b.node.id } : { from: k.node.id, to: b.node.id, via: left + gutter / 2 });
+				if (i === 0 && j === 0) first = c;
+				if (i === 0) last = c;
+				x += k.w;
+			});
+			y += shelfH(s);
+		});
+		const col = b.shelves.length ? (first + last) / 2 : left;
+		placed.push({ b, col, up });
+		return col;
+	};
+	let up = 0;
+	for (const s of rootShelves) {
+		let x = 0;
+		for (const b of s) {
+			place(b, x, up);
+			x += b.w;
+		}
+		up += shelfH(s);
+	}
+
+	const rows = up;
+	const at = new Map(placed.map((p) => [p.b.node.id, p]));
+	const out: SchematicNode[] = [];
+	for (const n of nodes) {
+		const p = at.get(n.id);
+		if (p) out.push({ node: n, col: p.col, row: rows - 1 - p.up, depth: p.b.depth, cumulativeAreaKm2: p.b.area });
+	}
+	return {
+		nodes: out,
+		edges,
+		cols: Math.max(1, ...rootShelves.map(shelfW)),
+		rows,
+		orphans: nodes.filter((n) => !seen.has(n.id))
 	};
 }

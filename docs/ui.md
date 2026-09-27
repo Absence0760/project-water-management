@@ -1195,7 +1195,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
-  tree") is the text equivalent of the drawing.
+  tree") is the text equivalent of the drawing. On paper (the report, below)
+  the drawing is wrapped to the A4 width instead (`paper`,
+  `wrappedSchematicLayout`): at most five columns, and where the branches
+  draining into one node don't fit side by side they wrap onto more rows
+  stacked upwards, the shortest nearest the node, the higher rows' rivers
+  running down a gutter on their left into the node's confluence line. Names
+  print at their full size (a 30-unit catchment on one page, names at
+  9.4 pt; unwrapped it printed at ~15 %, names ~1.4 pt).
 - **Colour units by** (the Catchment map card's header, offered once there is
   a farm; component state, not kept in the URL). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
@@ -3991,7 +3998,9 @@ exists, says so with a link to Runs & results.
   legacy-model warning for a stored run from before engine 1.0.0, the run's
   summary sentence, contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
-  coloured by supply), **Inputs** (the run's settings, monthly A-pan, pan
+  coloured by supply; the screen scrolls the usual drawing, paper prints the
+  wrapped one, `report-schematic-print.spec.ts` measuring its names in the
+  PDF with `pdftotext -bbox`), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
   The **Runoff model** row reads "GR4J", or for a run whose settings don't
