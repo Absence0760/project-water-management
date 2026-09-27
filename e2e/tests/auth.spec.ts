@@ -110,7 +110,7 @@ test('an unauthenticated deep link goes to login and back after signing in', asy
 	await signInThroughForm(page, user.email, user.password);
 
 	await expect(page).toHaveURL(`/projects/${project.id}?tab=settings`);
-	await expect(page.getByRole('heading', { level: 1, name: 'Deep-linked catchment' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Deep-linked catchment' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
 });
 

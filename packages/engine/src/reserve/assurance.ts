@@ -265,6 +265,47 @@ export function completeMonths(startDate: string, days: number): MonthBlock[] {
 	return out;
 }
 
+/** The natural and impacted flow (m³) of a calendar month's days before a resumed run (assessSite's `carried`). */
+export interface MonthCarry {
+	/** Days of the month before the run's first day. */
+	days: number;
+	natural: number;
+	impacted: number;
+}
+
+/** The calendar month a run starts inside, `before` of its days before the run: a block with from = −before, or null when the run ends before the month does. */
+function carriedMonth(d0: number, days: number, before: number): MonthBlock | null {
+	const date = new Date(d0 * SEC_PER_DAY * 1000);
+	const year = date.getUTCFullYear();
+	const month = date.getUTCMonth() + 1;
+	if (date.getUTCDate() !== before + 1) throw new Error(`a carried month of ${before} days does not end the day before ${date.toISOString().slice(0, 10)}`);
+	const len = daysInMonth(year, month);
+	if (len - before > days) return null;
+	return { year, month, from: -before, days: len };
+}
+
+/**
+ * The sums a resumed run carries into assessSite (engine ≥ 1.1.0): the
+ * natural and impacted flow of the month holding day `at` (an index into
+ * the series), from its first day to the day before `at`, summed as
+ * assessSite sums a month. null when `at` is a month's first day, or the
+ * month began before the series (it isn't a complete month either way).
+ */
+export function monthCarryAt(startDate: string, at: number, natural: ArrayLike<number>, impacted: ArrayLike<number>): MonthCarry | null {
+	const date = new Date((toEpochDay(startDate) + at) * SEC_PER_DAY * 1000);
+	const before = date.getUTCDate() - 1;
+	if (before === 0 || at - before < 0) return null;
+	let nat = 0;
+	let imp = 0;
+	for (let t = at - before; t < at; t++) {
+		const n = natural[t]!;
+		const a = impacted[t]!;
+		nat += Number.isFinite(n) ? n : 0;
+		imp += Number.isFinite(a) ? a : 0;
+	}
+	return { days: before, natural: nat, impacted: imp };
+}
+
 /** m³ over a month of `days` days → the table's unit, and back. */
 const toUnit = (m3: number, days: number, unit: EwrRuleUnit) => (unit === 'mcm' ? m3 / 1e6 : m3 / (days * SEC_PER_DAY));
 const toM3 = (v: number, days: number, unit: EwrRuleUnit) => (unit === 'mcm' ? v * 1e6 : v * days * SEC_PER_DAY);
@@ -274,19 +315,38 @@ const toM3 = (v: number, days: number, unit: EwrRuleUnit) => (unit === 'mcm' ? v
  * R's volume ÷ the month's days; NaN outside complete months), for charts and
  * the daily CSV.
  */
-export function assessSite(startDate: string, days: number, site: EwrAssuranceInput): { report: EwrAssuranceSite; requiredM3Day: Float64Array } {
+export function assessSite(
+	startDate: string,
+	days: number,
+	site: EwrAssuranceInput,
+	/**
+	 * The natural curves to use per water-year month (Oct … Sep) in 'run'
+	 * mode, pinned from the run a model-state snapshot came from (engine ≥
+	 * 1.1.0, ../warmstart); a month's null, or none given, is this run's own.
+	 */
+	pinnedNatural?: readonly (readonly number[] | null)[],
+	/**
+	 * A run resumed part-way through a calendar month (engine ≥ 1.1.0): that
+	 * month's first `days` days before the run, as the natural and impacted
+	 * sums (m³) so far, so the month is still assessed whole.
+	 */
+	carried?: MonthCarry | null
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array } {
 	const { table } = site;
 	const unit = table.unit;
 	const P = table.points;
-	const blocks = completeMonths(startDate, days);
+	const inRun = completeMonths(startDate, days);
 	const requiredM3Day = new Float64Array(days).fill(NaN);
 	const d0 = toEpochDay(startDate);
+	// The month the run starts inside, whole with the days carried from before it (from < 0).
+	const head = carried && carried.days > 0 ? carriedMonth(d0, days, carried.days) : null;
+	const blocks = head ? [head, ...inRun] : inRun;
 
 	// Per complete month, natural and impacted in the table's unit.
 	const rows = blocks.map((b) => {
-		let nat = 0;
-		let imp = 0;
-		for (let t = b.from; t < b.from + b.days; t++) {
+		let nat = b === head ? carried!.natural : 0;
+		let imp = b === head ? carried!.impacted : 0;
+		for (let t = Math.max(b.from, 0); t < b.from + b.days; t++) {
 			const n = site.natural[t]!;
 			const a = site.impacted[t]!;
 			nat += Number.isFinite(n) ? n : 0;
@@ -299,12 +359,15 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 	const curves = byW.map((list, w) => {
 		const ewr = table.ewr[w]!.map((v) => v * table.scale);
 		const low = table.lowFlow ? table.lowFlow[w]!.map((v) => v * table.scale) : null;
+		const pinned = pinnedNatural?.[w];
 		const natural =
 			table.naturalSource === 'table'
 				? runningMin(table.natural![w]!.map((v) => v * table.scale))
-				: list.length
-					? runningMin(P.map((p) => durationQuantile(list.map((r) => r.natural), p)!))
-					: null;
+				: pinned
+					? [...pinned]
+					: list.length
+						? runningMin(P.map((p) => durationQuantile(list.map((r) => r.natural), p)!))
+						: null;
 		return { ewr, natural, low };
 	});
 
@@ -314,7 +377,7 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 		const met = isMet(r.actual, look.required);
 		const deficitM3 = met ? 0 : toM3(look.required - r.actual, r.days, unit);
 		const reqM3Day = toM3(look.required, r.days, unit) / r.days;
-		for (let t = r.from; t < r.from + r.days; t++) requiredM3Day[t] = reqM3Day;
+		for (let t = Math.max(r.from, 0); t < r.from + r.days; t++) requiredM3Day[t] = reqM3Day;
 		const month: EwrAssuranceMonth = {
 			year: r.year,
 			month: r.month,
@@ -404,7 +467,7 @@ export function assessSite(startDate: string, days: number, site: EwrAssuranceIn
 		};
 	}
 	if (table.highFlows?.length) {
-		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, blocks, site.natural, site.impacted));
+		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
 	}
 	return { requiredM3Day, report };
 }

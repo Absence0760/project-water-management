@@ -36,7 +36,7 @@ test('the header, crop cards, demand chart and farm bars; Edit opens a crop’s 
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await page.goto(`/projects/${project.id}?tab=crops`);
 
-	await expect(page.getByRole('heading', { level: 2, name: 'Crops & demand' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 	await expect(page.getByTestId('crops-summary')).toHaveText('2 crops · 40 ha irrigated on 2 farms · water year October to September');
 
 	// A card per crop: area, peak need (A-pan × factor), a sparkline with a name; the high-factor hint on Vines only.

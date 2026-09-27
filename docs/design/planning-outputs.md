@@ -183,7 +183,10 @@ level (anything else would change the history the season starts from).
   them). Each member is stored once and never updated; `summariseOutlook`
   is the result. Up to 6 levels and the newest 40 analogue years (240
   member runs), 2 pending per user, the newest 20 per project. A member
-  the engine refuses is stored as failed and the outlook carries on.
+  the engine refuses is stored as failed and the outlook carries on. The
+  job runs the history once and each member over the season only, from a
+  snapshot of the decision date (engine 1.1.0, model.md §2.16,
+  `runOutlookMember`).
 - **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
   season as a month and day each end (default 1 October – 30 April,
   pending the client's O3) and the planning share (default 80 %, pending
@@ -258,21 +261,25 @@ analogue years." Choices, each marked in model.md:
   the cautious reading of finding 4; a midpoint option exists
   **(judgement, pending the hydrologist)**; the total is shared over the
   dams pro rata to capacity (every dam at the same fill);
-- **starting from a storage** needed an engine setting,
-  `damStorageReset` (the engine can't start from a saved state): the dams
-  start the review date at the set volume, the rest of the state is the
-  history's, and the step is counted in every balance; runs without it are
-  unchanged to the bit.
+- **starting from a storage**: since engine 1.1.0 the base run's state at
+  the review date is captured once (a model-state snapshot, model.md
+  §2.16) and each band sets its storage in the snapshot's dams
+  (`withDamStorage`); the older path, `damStorageReset` (engine 0.46.0),
+  re-runs the history per member and sets the dams on the review date.
+  Either way the rest of the state is the history's; runs without them
+  are unchanged to the bit.
 
-Cost: bands × years × levels full runs (3 × 12 × 4 in about 1.3 s on the
-test catchment); sharing the history across bands needs the engine to
-start from a stored state, the durable fix if a record makes it slow.
+Cost: one run of the history, then bands × years × levels runs of the
+season alone (3 × 12 × 4 in 53 ms on the test catchment, against 1.1 s
+re-running the history per member, engine 1.1.0).
 WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:
 - **the backend half**: a job like R5's outlook job, bands × years ×
-  levels members (`outlookMemberInput(…, { storageM3 })` per band, then
-  `reviewTriggerTable`), with its own member limits; the project settings
+  levels members (from the review date's snapshot with each band's
+  storage, `withDamStorage`, then `outlookSeasonInput` + `runModelFrom`
+  per member; or `outlookMemberInput(…, { storageM3 })` re-running the
+  history), then `reviewTriggerTable`, with its own member limits; the project settings
   for the review date (O3) and, if the WUA sets them, the band edges;
 - **the WUA screen**: the table beside the outlook, each row in
   `describeTriggerRow`'s words, the pending defaults marked, the notes and

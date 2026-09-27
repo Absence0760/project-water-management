@@ -1458,7 +1458,13 @@ The forecast days carry on from the run with the tail, so the join between
 the two is continuous only up to that noise: the water balance of each run
 closes (both are self-checked), the spliced series across the join to within
 it. Making those statistics causal (fitting them on a fixed window) would let
-one run do; that is an engine decision, not forecast mode's.
+one run do; that is an engine decision, not forecast mode's. Model-state
+snapshots (§2.16, engine 1.1.0) are that mechanism: the run without the
+tail could capture its state at `forecastFrom` and the tail run from it,
+reading the history's pinned statistics, so the join would be exact and the
+second run would cover the tail's days only. Forecast mode doesn't use them
+yet (its output would change on a record with land cover, a rule table or a
+short GR4J warm-up, which is a decision of its own).
 
 **The invariant.** `checkForecastPrefix` (`testing/forecastInvariants.ts`)
 asserts, on random networks with a synthetic tail (after the record, overlapping
@@ -2463,10 +2469,10 @@ the regression suite's deviation list.
 | (none: the node-based model's stress classes, §4) | Reliability per farm, stress class per month, the water account | `RunSummary.supplyAssurance` + the Runs tab's Assurance of supply and Water account panels and three CSV blocks (§2.11a–b, engine ≥ 0.32.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
-**Dam figures in the farm summary (engine ≥ 1.1.0, issue #55).** Each farm
+**Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
-(`network/damLevel.ts` `damFigures`), so the Summary's Dam levels and Dams
-today and the Network's colour by dam level need no daily series:
+(`network/damLevel.ts` `damFigures`), so the Summary's Dams today card
+and the Network's colour by dam level need no daily series:
 `damEndM3` (storage on the run's last day), `damAgoM3` (30 days before it,
 null on a shorter run), `damLowM3` and `damLowDate` (the lowest storage in the
 run's last 365 days and its first day) and `damDaysAtMin` (days in that
@@ -2474,7 +2480,7 @@ window at or below the minimum operating level, `damMinPct`, with a 10⁻⁶
 percentage-point tolerance for a dam held at its minimum as a float; 0 without
 a minimum). They are read off the `dam_storage` series the run already has, so
 no other output moves. A farm without a dam has none of them, nor has a run
-from before 1.1.0; the frontend reduces that run's series by the same rules
+from before 1.2.0; the frontend reduces that run's series by the same rules
 (`overview/damLevels.ts` `damLevel()`, a unit test holds the two equal).
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -4221,10 +4227,13 @@ weather, at each demand level
 findings 3–6: its skill comes from the initial state, and one "expected"
 number is the wrong answer). Pure, in `packages/engine/src/outlook/`
 (`runSeasonalOutlook`, and its parts `outlookAnalogues`,
-`outlookMemberInput`, `outlookMember`, `summariseOutlook` for a job that
-runs the members one by one). A derived view: its only engine change is
-`settings.demandFactorFrom` (§2.3 step 4a), which moved the version to
-0.44.0. The backend job (`outlook`, migration 064,
+`outlookSeasonInput` / `runOutlookMember` (from a snapshot, §2.16) or
+`outlookMemberInput` (re-running the history), `outlookMember`,
+`summariseOutlook` for a job that runs the members one by one). A derived
+view: its engine changes are `settings.demandFactorFrom` (§2.3 step 4a),
+which moved the version to 0.44.0, and model-state snapshots (§2.16,
+1.1.0), which take the history out of every member. The backend job
+(`outlook`, migration 063,
 [api.md § Seasonal outlooks](./api.md#seasonal-outlooks)) runs the members
 one at a time, and the Runs tab shows the result
 ([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)); the season and the
@@ -4279,21 +4288,34 @@ checks the method reproduces the base run).
   the state the season starts from. A base that already carries a demand
   factor (a scenario run) is refused.
 
-**State continuation.** The engine can't start a run from a saved state,
-so each member re-runs the history and then the season, as forecast mode
-does (§2.4f): the season is a forecast tail. Every level's history is
-therefore the same run, and the state on the decision date is the base
-run's (dam storage, soil-water stores, GR4J's stores, stream-depletion lag
-stores). As in forecast mode the few record-wide statistics are refitted on
-each member's record (the land-cover low-flow threshold §2.5a, the
-Reserve's natural duration curve §2.9c, CHIRPS factors fitted on the whole
-record §2.4b), so a member's history equals the base run's to float noise
-rather than to the bit, and a hindcast's history doesn't see the years
-after it. Cost: every member is a full run (`runModelWithoutChecks`), so an
-outlook is years × levels runs, linear in both: 12 years × 4 levels on the
-13-year test catchment take about 0.5 s (Node, warm; 2026-09-26). A run
-that could start from a stored state would take the history out of every
-member; it is an engine change of its own, not needed at this size.
+`outlookSeasonInput` builds the same member without the history, for a run
+from a snapshot: its only series are the season's forecast rain and daily
+A-pan, from the decision date, and its window is the season; settings, ops
+and the storage start are `outlookMemberInput`'s.
+
+**State continuation (engine ≥ 1.1.0).** The base input runs once, to its
+end, and its state at the start of the decision date is captured
+(`runModelCapturing` / `captureModelState`, §2.16): dam storage, soil-water
+stores, GR4J's stores and unit-hydrograph queues (or the legacy recession
+state), stream-depletion lag stores, the supply rule's switch, the
+boreholes' annual volumes. Each member then runs only the season from that
+snapshot (`runModelFrom(snapshot, outlookSeasonInput(…).input)`), so every
+level and year starts from the base run's state **to the bit**, and the
+record-wide statistics (the land-cover low-flow threshold §2.5a, the
+Reserve's natural duration curves §2.9c, the CHIRPS and rain-source factors
+§2.4b, §2.4e) are the base run's, pinned in the snapshot, never refitted on
+a member's record. The older path, kept as `warmStart: false` and
+`outlookMemberInput`, re-ran the history in every member as forecast mode
+does (§2.4f) and refitted those statistics on each member's record
+(history + analogue season), so a member's history was the base run's only
+to float noise; §2.16 records what moving to the pinned statistics changes
+(nothing on the invented test catchment, which has neither land cover nor a
+rule table; up to 3 of 12 years met on a variant with both). Cost: one run
+of the history plus years × levels runs of the season: 12 years × 4 levels
+on the 13-year test catchment take 35 ms with the capture, against 388 ms
+re-running the history (11×; Node, median, 2026-09-26;
+`outlook.perf.test.ts` holds it under 150 ms and at least 5× the older
+path).
 
 **Measured per member** (`outlookMember`, over the season's days):
 season-end storage (Σ farm dams, and per dam), the farms' demand and supply
@@ -4346,7 +4368,13 @@ that tops up a dam (§2.7d) or a supply rule's switch to the river pump
 takes the highest level that meets the share, so it doesn't assume the
 levels are monotone.
 
-**Tests** (`outlook/season.test.ts`, `outlook.test.ts`, synthetic): the
+**Tests** (`outlook/season.test.ts`, `outlook.test.ts`,
+`outlook.warmstart.test.ts`, synthetic): the snapshot path is the re-run
+path's outlook to the bit on the invented catchment (the default season,
+one across 1 October, one from 29 February), a member from the snapshot is
+the re-run member's season on every series, `runOutlookMember`, a snapshot
+of another day or input refused, and with land cover and a rule table the
+pinned statistics and their measured effect; the
 default season, the day mapping over 29 February and across 1 October,
 a skewed `TZ`; factor 1 with the actual year as the analogue reproduces the
 base run's season (the default season, one across 1 October, one from
@@ -4369,12 +4397,22 @@ dams at a storage in the band, and the band's row is that outlook's
 planning figure. Pure, in `packages/engine/src/outlook/triggers.ts`
 (`runReviewTriggers`, and its parts `reviewStorageHistory`,
 `tercileEdges`, `storageBands`, `bandStartStorage`, `reviewTriggerTable`
-for a job that runs the members one by one, `describeTriggerRow`). The
+for a job that runs the members one by one, `describeTriggerRow`; per band
+`withDamStorage` on the review date's snapshot, §2.16). The
 backend job and the screen are not built yet (design §3.6).
 
-**Starting from a storage: `settings.damStorageReset` (engine ≥ 0.46.0).**
-The engine can't start a run from a saved state (§2.15), so the band's
-storage is set inside the member run: `{ date, storageM3: { nodeId: m³ } }`
+**Starting from a storage.** By default (engine ≥ 1.1.0) the base run's
+snapshot at the review date (§2.16) is copied per band with the band's
+storage in its farm dams (`withDamStorage`, clamped to 0 … capacity), and
+every member runs the season from it: the rest of the state is the
+history's, shared by every band, level and year. That is exactly what the
+storage reset below does on the snapshot's day, every series to the bit
+except the reset's `dam_storage_set` step, which a snapshot's dams don't
+need (`warmstart.invariants.test.ts`). With `warmStart: false` each member
+re-runs the history and sets the storage inside the run:
+
+**`settings.damStorageReset` (engine ≥ 0.46.0).**
+`{ date, storageM3: { nodeId: m³ } }`
 makes each listed farm dam start `date` holding that volume (clamped to
 0 … its capacity, with a warning when it had to be) instead of what the
 day before left. Everything else carries on from the history: soil water,
@@ -4477,14 +4515,13 @@ band reads "Below 200 000 m³ on … (run from empty dams): …"; a band run
 from its middle names that storage; a band where no level meets the rule
 gives the most any level met.
 
-**Cost.** Bands × analogue years × levels member runs, each a full run of
-the history and the season: 3 bands × 12 years × 4 levels (144 runs) on
-the 13-year test catchment take about 1.3 s (Node, 2026-09-26). The
-history can't be shared between bands (or levels, or years) because the
-engine can't start from a saved state; that engine change (store the
-state at the review date, run only the season) would take the history out
-of every member of both the outlook and the triggers, and is the durable
-fix if a catchment's record makes the table slow.
+**Cost.** One run of the history (the capture at the review date), then
+bands × analogue years × levels member runs of the season alone: 3 bands
+× 12 years × 4 levels (144 members) on the 13-year test catchment take
+53 ms, against 1 149 ms re-running the history in every member (22×; Node,
+median, 2026-09-26; `outlook.perf.test.ts` holds it under 250 ms and at
+least 8× the older path). The history is shared by every band, level and
+year, since a band changes only the dams' storage on the review date.
 
 **WP-3.8's drought restriction rule.** The roadmap's rule ("cut demand by
 x % when storage < y %", `NetworkNode.restriction`) isn't in the engine
@@ -4509,7 +4546,159 @@ short history and one too short for bands, a level that isn't
 demand.scale, no farm dam, determinism under a skewed `TZ`; with the review
 date on the decision date the band holding the base run's storage (full
 dams) reproduces the plain outlook; a member reset to the history's own
-storage is the plain member; hand-made members for the monotonicity notes.
+storage is the plain member; hand-made members for the monotonicity notes;
+`outlook.warmstart.test.ts`: the snapshot path is the re-run path's table
+to the bit on the invented catchment, a snapshot given is used, one of
+another day refused.
+
+### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
+
+A run can stop at the start of any day and a later run carry on from
+there, so the seasonal outlook (§2.15) and the review triggers (§2.15a)
+run the history once instead of in every member. Pure, in
+`packages/engine/src/warmstart/` and `run.ts`:
+
+- `runModelCapturing(input, at)` runs `runModelWithoutChecks(input)` and
+  returns its output (unchanged to the bit) with a **snapshot**: the
+  model's complete state at the start of `at` (the run's first day … the
+  day after its last); `captureModelState(input, at)` is the snapshot
+  alone;
+- `runModelFrom(snapshot, input)` runs from the snapshot's day to the
+  input's `simulationEnd` (else its last day of rain), as
+  `runModelWithoutChecks` does (no plausibility checks, no assurance of
+  supply);
+- `withDamStorage(snapshot, input, { nodeId: m³ })` sets the farm dams'
+  storage at the start of the snapshot's day (the triggers' bands);
+- `ModelStateMismatchError` (`code`: `format`, `engineVersion`, `input`,
+  `history`, `window`) refuses a snapshot that isn't this input's.
+
+**The snapshot** (`ModelStateSnapshot`, format 1) is plain, versioned data:
+`kind` (`water-management/model-state`), `format`, the capturing
+`engineVersion`, `date` (the first day a resumed run simulates: the state
+is the end of the day before), `runStart` (the capture run's first day),
+two fingerprints (below) and `state`, every number JSON-safe (NaN, ±∞ and
+−0, which JSON drops or folds, are written as `{ "$n": "NaN" }` and so on),
+so `JSON.parse(JSON.stringify(snapshot))` resumes the same and a backend
+can store one per base run. The state holds:
+- the runoff model's stores: GR4J's production and routing stores and both
+  unit-hydrograph queues (2 + ⌈X4⌉ + ⌈2·X4⌉ numbers; no warm-up on resume,
+  the state is it), or the legacy recession model's eight day-before
+  values (season flag, rain used, base flow and index, response flow and
+  index, resultant flow and index);
+- per node, in model order: the dam storage the day before (before any
+  storage reset on the day), the soil-water store in m³ over the cropped
+  area (§2.3 step 4), the stream-depletion lag store (§2.7d), whether the
+  river pump was on the day before (the trigger rule, §2.7e) and each
+  pumping unit's volume so far this water year (the annual caps; a
+  resumed run clears them on 1 October as an uninterrupted one does);
+- per Reserve rule table, the natural and impacted flow of the calendar
+  month the day falls in, from its first day to the day before, so a month
+  split by the snapshot is still assessed whole (§2.9c);
+- the columns the capture run carried because some day of it needed them
+  (a zero-run or accumulation mask, a storage reset's step, the senior
+  users' requirement), so a resumed run has the same columns, 0 on days
+  that don't need them;
+- the **pinned record-wide statistics** (the decision below).
+
+**What a resumed run is.** Every daily series equals, **to the bit**, the
+same days of the uninterrupted run of the capture input, in the same order
+with the same labels (`warmstart.test.ts` on the invented catchment:
+GR4J with and without the soil-water store, the legacy model, land cover
+and a rule table, resumed on the first day, a 29 February and the day
+after one, 1 October, mid-month, the last day;
+`warmstart.invariants.test.ts` on random networks with transfers, dam
+curves and releases, boreholes with caps and lags, supply rules, other
+water users, land cover, rule tables, CHIRPS, zero runs and accumulations,
+demand factors from a date and storage resets: 0 differences in a
+550-seed soak, 3 300 networks and 21 878 resumes, 2026-09-26). The
+summary covers the resumed days only (farm means, the curtailment window,
+calibration, compliance): it is a run of those days. Runs that don't
+capture or resume are unchanged to the bit (the engine version moved for
+the outlook's output, below).
+
+**The resumed input.** It carries the new days' driving series, with or
+without the history before the snapshot's day; the same model and the same
+settings but the window. Checked by two fingerprints:
+- `inputFingerprint` (`modelStateFingerprint`): the model with demand
+  factors apart, the settings but the simulation and reporting windows and
+  provenance, the rain-source periods clipped to the days before the
+  snapshot, the demand factors when they apply before its day
+  (`demandFactorFrom` unset or earlier), and a storage reset dated before
+  it. A demand factor from the snapshot's day on, or a reset on or after
+  it, only changes what follows, so it may differ (the outlook's levels
+  and the triggers' bands);
+- `historyFingerprint`: every series' values before the day. An input
+  with none there (the outlook's season-only members) passes; one with a
+  history must have the capture input's.
+`settings.simulationStart` is the snapshot's day whatever the input says;
+an end before it is refused. A snapshot from another engine version is
+refused rather than migrated: its state may mean something else, and a
+capture costs one run.
+
+**Record-wide statistics: pinned (decision, 2026-09-26).** A few figures
+are fitted on a run's whole record, so a run of the new days alone would
+fit them on those days, and an uninterrupted run of history + new days
+would let the new days refit the past (§2.4f's "the model is not
+causal"). The snapshot **pins** each one from the run it was captured
+from, and a resumed run uses it:
+- the land-cover low-flow threshold, the natural flow's Q75 (§2.5a);
+- each Reserve rule table's natural duration curves in `run` mode, per
+  calendar month (§2.9c);
+- the CHIRPS bias factors (§2.4b) and each rain-source period's factors
+  (§2.4e), fitted on the stored record; a period the capture run didn't
+  have is fitted as usual.
+The rain handling's detections (zero runs §2.4c, accumulations §2.4d) are
+per day from the whole stored series, not the window, so they follow the
+resumed input, as any run's do. *Why pinned:* the future shouldn't refit
+the past. An outlook member that re-ran the history refitted these on its
+own record, history + the analogue season, which counts the analogue
+year's months twice (once in the history, once as the season) and gives
+every member a slightly different requirement curve and low-flow
+threshold; with the base run's pinned, every member is judged against the
+same curves, the base run's, and its history is the base run's to the
+bit. In a hindcast (a record running past the decision date) the pinned
+figures include the later years, as the base run's own do.
+
+**Effect on the outlook** (`outlook.warmstart.test.ts`, 12 analogue years
+× 4 levels, 1 October 2012 – 30 April 2013). On the invented test
+catchment, which has neither land cover nor a rule table, the outlook and
+the trigger table are the older path's **to the bit**. On a variant with
+invasive trees on one farm and a Reserve rule table at the outlet
+(`testCatchment({ recordWide: true })`, invented values): season-end
+storage moves by less than 0.06 % and the share of demand met by less
+than 2e-5 (the low-flow threshold), and 9 of the 336 level × year ×
+month Reserve assessments change (the natural curves), which moves the
+years met in full from 7, 7, 7, 6 to 4, 5, 5, 4 of 12 (100, 85, 70, 55 %);
+with the record ending the day before the decision date, 10 of 336 and
+7, 8, 7, 6 → 9, 8, 8, 7. A single month decides a Reserve year, so a
+catchment read against a rule table should expect its outlook to move by
+a few years met on this version, and not otherwise.
+
+**Other details, each so the resumed days are the uninterrupted run's.**
+The EWR attribution sizes its float noise with the dam storage the day
+before (§2.7b), which a resumed run takes from the snapshot (`withDamStorage`
+keeps the storage before it set another, as a reset's day does). A
+snapshot on the run's first day starts the resumed run as the capture run
+started (a water year's first day for the borehole caps, no storage the
+day before for the attribution). A storage reset before the snapshot's
+day is already in its state and is dropped from the resumed run.
+
+**How a job uses it** (the outlook job, `backend/src/outlooks/store.ts`
+`computeOutlook`, switched in the same release): its base run is
+`outlookBaseAndSnapshot(base, season.decisionDate)` (one run gives both the
+base output and the snapshot; the snapshot is null when the base run
+doesn't reach the decision date, and `outlookMemberInput`'s check then
+says why), and each member is `runOutlookMember(snapshot, base, baseRun,
+season, analogue, level.ops)` (or its parts `outlookSeasonInput`,
+`runModelFrom`, `outlookMember`); the level probe and `summariseOutlook`
+are unchanged. It captures **once per job**, in the run the job already
+makes: nothing to store, migrate or invalidate on an engine bump. The
+triggers' job takes a snapshot at the review date and, per band,
+`withDamStorage(snapshot, base, bandStartStorage(…).storageM3ByDam)`. A
+snapshot is small (815 bytes of JSON on the invented catchment, 3.3 kB with
+its rule table's curves), so storing one per base run stays possible if a
+job ever runs without the base run's input, but it would save only that one
+run.
 
 ---
 

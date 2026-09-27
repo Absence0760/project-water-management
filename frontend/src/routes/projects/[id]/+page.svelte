@@ -11,6 +11,7 @@
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		dams: () => import('$lib/components/dams/DamsTab.svelte'),
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
 		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
@@ -53,6 +54,9 @@
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
+	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
+	import { headerSlot } from '$lib/components/workspace/sectionHeader.svelte';
+	import { sectionContext } from '$lib/components/workspace/context';
 	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
@@ -196,11 +200,15 @@
 		};
 	}
 
-	async function rerun() {
+	// The header's Run model and the new-data line's Re-run model both start a
+	// run here and open it in Runs.
+	/** The new-data re-run (labelled with the data's end), or the header's Run model (no label). */
+	const rerun = () => startRun(`Data to ${fresh?.latest ?? today}`);
+	async function startRun(label?: string) {
 		rerunning = true;
 		rerunError = null;
 		try {
-			const { run: r, removedRunIds } = await api.runs.create(projectId, `Data to ${fresh?.latest ?? today}`);
+			const { run: r, removedRunIds } = await api.runs.create(projectId, label);
 			const { summary: _s, ...meta } = r;
 			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
 			banner = null;
@@ -214,6 +222,24 @@
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
+
+	// --- the section header (SectionHeader, issue #17) -------------------------
+	// Run model on the Summary and the Build-the-model pages; the Runs tab has
+	// its own form (with a label), and Data's main action is Add data.
+	const RUN_TABS: TabId[] = ['overview', 'network', 'crops', 'transfers', 'settings'];
+	const showRun = $derived(canEdit && RUN_TABS.includes(tab));
+	// What a run still needs (the Runs tab's check: the engine refuses without these).
+	const runNeeds = $derived.by(() => {
+		const out: string[] = [];
+		if (!editor.model.nodes.length) out.push('a network');
+		if (series && !series.some((x) => x.kind.startsWith('rain_'))) out.push('a rainfall series');
+		return out;
+	});
+	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
+	const behindCount = $derived(fresh?.behind.length ?? 0);
+	const contextText = $derived(
+		sectionContext(tab, { runs, seriesCount: series?.length ?? null, behind: behindCount, transfers: editor.model.transfers })
+	);
 
 	async function load() {
 		loading = true;
@@ -409,6 +435,11 @@
 						onfocus={() => warmTab(id)}
 					>
 						{LABEL[id]}
+						{#if id === 'series' && behindCount}
+							<span class="count-badge" title="{behindCount} series behind (older than {STALE_DAYS} days)"
+								><span aria-hidden="true">{behindCount}</span><span class="visually-hidden">({behindCount} series behind)</span></span
+							>
+						{/if}
 						{#if MODEL_TABS.includes(id) && editor.issues.some((x) => x.area === id)}
 							<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
 						{/if}
@@ -429,11 +460,114 @@
 {#snippet projectSidebar()}
 	<div class="project-side">
 		<span class="side-kicker">Catchment</span>
-		<a class="side-project" href={tabHref('overview')}>{project?.name}</a>
+		<a class="side-project" href={tabHref('overview')} data-testid="project-name">{project?.name}</a>
+		<span class="side-role">{@render roleBadge()}</span>
 		{@render sectionsNav()}
 	</div>
 {/snippet}
 
+{#snippet roleBadge()}
+	<span class="badge" class:badge-owner={isOwner} data-testid="project-role">{project?.role}</span>
+{/snippet}
+
+<!-- The section header's parts (SectionHeader): the page's own around the tab's (headerSlot). -->
+{#snippet unsavedBadge()}
+	{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
+{/snippet}
+{#snippet pageContext()}{contextText}{/snippet}
+{#snippet headerActions()}
+	{#if fresh}
+		<!-- Escape closes it (freshKeydown), as the other disclosures. -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
+			<summary>
+				<span class="dot" aria-hidden="true"></span>
+				{#if fresh.latest !== null && fresh.age !== null}
+					Rain up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+				{:else}
+					No recorded rain yet
+				{/if}
+			</summary>
+			<div class="fresh-pop">
+				<table class="data compact">
+					<thead><tr><th scope="col">Series</th><th scope="col" class="num">Up to</th><th scope="col" class="num">Age</th></tr></thead>
+					<tbody>
+						{#each fresh.perSeries as p (p.id)}
+							<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{p.end}</td><td class="num">{describeAge(p.age)}</td></tr>
+						{/each}
+					</tbody>
+				</table>
+				<p class="muted">
+					Flagged when the newest recorded rain (catchment or CHIRPS) is more than {STALE_DAYS} days old. A forecast
+					and flow series don't count: runs are driven by the recorded rain.
+				</p>
+			</div>
+		</details>
+	{:else if series}
+		<span class="fresh-none muted">No data yet</span>
+	{/if}
+	{@render headerSlot.actions?.()}
+	{#if canEdit}
+		<button
+			type="button"
+			class="btn add"
+			class:btn-primary={!showRun}
+			onclick={() => openAddData()}
+			onpointerenter={() => prefetch(loadAddData)}
+			onfocus={() => prefetch(loadAddData)}
+		>
+			<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2 11v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+			Add data
+		</button>
+	{/if}
+	{#if showRun}
+		<button
+			type="button"
+			class="btn btn-primary"
+			disabled={rerunning || runNeeds.length > 0}
+			aria-describedby={runNeeds.length ? 'run-needs' : undefined}
+			onclick={() => startRun()}>{rerunning ? 'Running model…' : 'Run model'}</button
+		>
+		{#if runNeeds.length}<span class="visually-hidden" id="run-needs">A run needs {runNeeds.join(' and ')} first.</span>{/if}
+	{/if}
+{/snippet}
+<!-- The notices: one slim line under the header, not full-width banners. -->
+{#snippet headerNotices()}
+	{@const behind = !banner && behindRun.length > 0 && tab !== 'runs' && tab !== 'series'}
+	{#if !canEdit || banner || behind || rerunError}
+		<div class="notice-line" data-testid="notice-line">
+			{#if !canEdit}
+				<span class="note readonly-note" role="note">
+					<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+						<path d="M1.5 10s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" fill="none" stroke="currentColor" stroke-width="1.6" />
+						<circle cx="10" cy="10" r="2.6" fill="currentColor" />
+					</svg>
+					<span>
+						<strong>View only.</strong> You have view-only access to this project. You can explore every input and
+						result; ask the project owner for editor access to change anything or run the model.
+					</span>
+				</span>
+			{/if}
+			{#if banner}
+				<span class="note note-done" role="status">
+					<span class="note-text">{banner.text}</span>
+					{#if banner.added > 0 && rerunQueued}
+						<span data-testid="rerun-queued">{queuedSentence}</span>
+					{:else if canEdit && banner.added > 0}
+						<button type="button" class="btn btn-primary btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>
+					{/if}
+					<button type="button" class="btn btn-ghost btn-sm" onclick={() => (banner = null)}>Dismiss</button>
+				</span>
+			{:else if behind}
+				<span class="note note-info behind" role="status">
+					<span class="note-text">New data since the last run ({behindRun.map((s) => s.name || kindLabel(s.kind)).join(', ')}).</span>
+					{#if rerunQueued}<span data-testid="rerun-queued">{queuedSentence}</span>{:else if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
+				</span>
+			{/if}
+			{#if rerunError}<span class="note err" role="alert">The run didn’t start: {rerunError}</span>{/if}
+		</div>
+	{/if}
+{/snippet}
 <svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -455,75 +589,10 @@
 				This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
 			</div>
 		{:else}
-			<div class="head">
-				<h1>{project.name}</h1>
-				<span class="badge" class:badge-owner={isOwner}>{project.role}</span>
-				{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
-				<div class="head-actions">
-					{#if fresh}
-						<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
-							<summary>
-								<span class="dot" aria-hidden="true"></span>
-								{#if fresh.latest !== null && fresh.age !== null}
-									Rain up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
-								{:else}
-									No recorded rain yet
-								{/if}
-							</summary>
-							<div class="fresh-pop">
-								<table class="data compact">
-									<thead><tr><th scope="col">Series</th><th scope="col" class="num">Up to</th><th scope="col" class="num">Age</th></tr></thead>
-									<tbody>
-										{#each fresh.perSeries as p (p.id)}
-											<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{p.end}</td><td class="num">{describeAge(p.age)}</td></tr>
-										{/each}
-									</tbody>
-								</table>
-								<p class="muted">
-									Flagged when the newest recorded rain (catchment or CHIRPS) is more than {STALE_DAYS} days old. A forecast
-									and flow series don't count: runs are driven by the recorded rain.
-								</p>
-							</div>
-						</details>
-					{:else if series}
-						<span class="fresh-none muted">No data yet</span>
-					{/if}
-					{#if canEdit}
-						<button
-							type="button"
-							class="btn btn-primary add"
-							onclick={() => openAddData()}
-							onpointerenter={() => prefetch(loadAddData)}
-							onfocus={() => prefetch(loadAddData)}
-						>
-							<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2 11v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
-							Add data
-						</button>
-					{/if}
-				</div>
-			</div>
-
-			{#if banner}
-				<div class="alert alert-success-ish" role="status">
-					<span>{banner.text}</span>
-					{#if banner.added > 0 && rerunQueued}
-						<span data-testid="rerun-queued">{queuedSentence}</span>
-					{:else if canEdit && banner.added > 0}
-						<button type="button" class="btn btn-primary btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>
-					{/if}
-					<button type="button" class="btn btn-ghost btn-sm" onclick={() => (banner = null)}>Dismiss</button>
-					{#if rerunError}<span class="err">{rerunError}</span>{/if}
-				</div>
-			{:else if behindRun.length && tab !== 'runs' && tab !== 'series'}
-				<div class="alert alert-info behind" role="status">
-					<span>New data since the last run ({behindRun.map((s) => s.name || kindLabel(s.kind)).join(', ')}).</span>
-					{#if rerunQueued}<span data-testid="rerun-queued">{queuedSentence}</span>{:else if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
-				</div>
-			{/if}
-
 			<div class="workspace">
 			{#if !wide.current}
 			<div class="tab-row">
+				<p class="phone-project"><span class="phone-name" data-testid="project-name">{project.name}</span>{@render roleBadge()}</p>
 				<button type="button" class="nav-toggle" aria-expanded={navOpen} aria-controls="project-nav" bind:this={navToggle} onclick={() => (navOpen = !navOpen)}>
 					<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
 					<span class="nav-toggle-label"><span class="visually-hidden">Project sections: </span>{LABEL[tab]}</span>
@@ -536,18 +605,13 @@
 			{/if}
 
 			<div class="main-col">
-			{#if !canEdit && tab !== 'overview'}
-				<div class="readonly-note" role="note">
-					<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
-						<path d="M1.5 10s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" fill="none" stroke="currentColor" stroke-width="1.6" />
-						<circle cx="10" cy="10" r="2.6" fill="currentColor" />
-					</svg>
-					<span>
-						<strong>View only.</strong> You have view-only access to this project. You can explore every input and
-						result; ask the project owner for editor access to change anything or run the model.
-					</span>
-				</div>
-			{/if}
+			<SectionHeader
+				title={LABEL[tab]}
+				badge={unsavedBadge}
+				context={headerSlot.context ?? (contextText ? pageContext : null)}
+				actions={headerActions}
+				notices={headerNotices}
+			/>
 
 			<section class="tab-body" class:readonly={!canEdit} aria-labelledby="tab-{tab}">
 				{#if tab === 'overview'}
@@ -614,6 +678,10 @@
 								{onProjectChange}
 							/>
 						{/snippet}
+					</Lazy>
+				{:else if tab === 'dams'}
+					<Lazy load={LOAD.dams}>
+						{#snippet children(DamsTab)}<DamsTab {projectId} {editor} {runs} readonly={!canEdit} />{/snippet}
 					</Lazy>
 				{:else if tab === 'compare'}
 					<Lazy load={LOAD.compare}>
@@ -715,27 +783,10 @@
 	.page:has(:global(.map-layout)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-		margin-bottom: 0.75rem;
-	}
-	.head h1 {
-		margin: 0;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.head-actions {
-		margin-left: auto;
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-	}
 	.add {
-		min-height: 36px;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 	.fresh {
 		position: relative;
@@ -752,7 +803,7 @@
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		background: var(--surface);
-		min-height: 36px;
+		min-height: 38px;
 	}
 	.fresh summary::-webkit-details-marker {
 		display: none;
@@ -790,24 +841,54 @@
 	.fresh-none {
 		font-size: 0.85rem;
 	}
-	.alert-success-ish,
-	.behind {
+	/* The header's notices (view only, new data, a run that didn't start):
+	   one slim line of compact items, wrapping only when they must. */
+	.notice-line {
 		display: flex;
-		align-items: center;
-		gap: 0.6rem;
 		flex-wrap: wrap;
+		gap: 0.4rem 0.75rem;
+		font-size: 0.85rem;
 	}
-	.alert-success-ish {
-		background: var(--success-soft);
-		border-color: color-mix(in srgb, var(--success) 40%, transparent);
+	.note {
+		display: inline-flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.6rem;
+		padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text-2);
+	}
+	.note svg {
+		flex: none;
+		color: var(--accent);
+	}
+	/* The eye stays beside its text when the note wraps (phones). */
+	.readonly-note {
+		flex-wrap: nowrap;
+		align-items: flex-start;
+	}
+	.readonly-note svg {
+		margin-top: 0.15rem;
+	}
+	.note strong {
 		color: var(--text);
 	}
-	.alert-success-ish > span:first-child,
-	.behind > span:first-child {
-		flex: 1;
-		min-width: 12rem;
+	.note-done {
+		border-left-color: var(--success);
+		background: var(--success-soft);
+		color: var(--text);
+	}
+	.note-info {
+		background: var(--accent-soft);
+		color: var(--text);
+	}
+	.note .btn-sm {
+		min-height: 30px;
 	}
 	.err {
+		border-left-color: var(--danger);
 		color: var(--danger);
 	}
 	.drop {
@@ -831,13 +912,11 @@
 		color: var(--accent);
 		text-align: center;
 	}
-	@media (max-width: 640px) {
-		.head-actions {
-			margin-left: 0;
-			width: 100%;
-		}
-		.add,
+@media (max-width: 640px) {
 		.fresh summary {
+			min-height: 44px;
+		}
+		.note .btn-sm {
 			min-height: 44px;
 		}
 	}
@@ -857,9 +936,25 @@
 		text-transform: uppercase;
 	}
 	.side-project {
-		padding: 0 0.75rem 0.5rem;
+		padding: 0 0.75rem;
 		color: var(--text);
 		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.side-role {
+		padding: 0.15rem 0.75rem 0.5rem;
+	}
+	/* Phones: the catchment's name and your role, above the Sections button. */
+	.phone-project {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.5rem;
+		margin: 0;
+		font-weight: 600;
+	}
+	.phone-name {
+		min-width: 0;
 		overflow-wrap: anywhere;
 	}
 	.tabs {
@@ -973,28 +1068,21 @@
 		background: var(--warning);
 		margin-left: 0.3rem;
 	}
-	.readonly-note {
-		display: flex;
-		gap: 0.6rem;
-		align-items: flex-start;
-		margin: -0.25rem 0 1rem;
-		padding: 0.55rem 0.8rem;
-		border: 1px solid var(--border);
-		border-left: 3px solid var(--accent);
-		border-radius: var(--radius);
-		background: var(--surface);
-		color: var(--text-2);
-		font-size: 0.875rem;
+	/* Data's "series behind" count (freshness.ts), as the boards' sidebar badge. */
+	.count-badge {
+		margin-left: auto;
+		min-width: 1.4rem;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		background: var(--warning-soft);
+		color: var(--warning);
+		border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.35;
+		text-align: center;
 	}
-	.readonly-note svg {
-		flex: none;
-		color: var(--accent);
-		margin-top: 0.05rem;
-	}
-	.readonly-note strong {
-		color: var(--text);
-	}
-	/* Absolutely positioned bits inside wide tables (visually-hidden labels)
+/* Absolutely positioned bits inside wide tables (visually-hidden labels)
 	   must be clipped by their scroll container, not widen the page. */
 	.tab-body :global(.table-wrap) {
 		position: relative;

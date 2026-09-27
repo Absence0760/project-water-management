@@ -6,15 +6,17 @@ import { randomUUID } from 'node:crypto';
 import {
 	ENGINE_VERSION,
 	outlookAnalogues,
+	outlookBaseAndSnapshot,
 	outlookLevelProblems,
 	outlookMember,
 	outlookMemberInput,
 	runModelWithoutChecks,
+	runOutlookMember,
 	summariseOutlook,
 	toEpochDay,
 	type ModelInput,
-	type ModelOutput,
 	type OutlookAnalogue,
+	type OutlookBaseRun,
 	type OutlookExcluded,
 	type OutlookMember,
 	type OutlookSeason,
@@ -171,7 +173,7 @@ export async function pendingOutlookJobs(db: Db): Promise<number> {
 }
 
 /** Σ farm dam storage at the end of the day before the decision date in the base run; null without a dam. */
-function startStorage(input: ModelInput, baseRun: ModelOutput, decisionDate: string): number | null {
+function startStorage(input: ModelInput, baseRun: OutlookBaseRun, decisionDate: string): number | null {
 	const t = toEpochDay(decisionDate) - 1 - toEpochDay(baseRun.startDate);
 	let sum = 0;
 	let dams = 0;
@@ -190,8 +192,12 @@ function startStorage(input: ModelInput, baseRun: ModelOutput, decisionDate: str
  * state and rain, on this engine), pick the analogue years (the engine's
  * outlookAnalogues; beyond OUTLOOK_YEARS_MAX the newest, the rest listed as
  * `overLimit`), then for every level whose ops apply, every analogue year as
- * one member (outlookMemberInput → runModelWithoutChecks → outlookMember),
- * each stored as it finishes. A member the engine refuses is stored as
+ * one member, each stored as it finishes. The history runs once: the base
+ * run also captures the model's state on the decision date
+ * (outlookBaseAndSnapshot, engine ≥ 1.1.0, docs/model.md §2.16), and each
+ * member runs only the season from it (runOutlookMember). A base run that
+ * ends before the decision date has no snapshot; the level probe below then
+ * fails the job with the engine's words, as before. A member the engine refuses is stored as
  * failed with the engine's words and the outlook carries on: a level refused
  * in every year is reported as not run, and a year some other level was
  * refused in is left out of every level (`memberFailed`), so the levels are
@@ -220,7 +226,7 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry), the outlook stays pending.
 	const base = await loadBaseInput(db, projectId, o.baseRunId);
 	const season: OutlookSeason = { decisionDate: o.decisionDate, seasonEnd: o.seasonEnd };
-	const baseRun = runModelWithoutChecks(base);
+	const { baseRun, snapshot } = outlookBaseAndSnapshot(base, season.decisionDate);
 	let picked: { analogues: OutlookAnalogue[]; excluded: OutlookExcluded[] };
 	try {
 		picked = outlookAnalogues(baseRun, season, o.analogueYears ?? undefined);
@@ -261,8 +267,15 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 			let member: OutlookMember | null = null;
 			let failure = '';
 			try {
-				const { input } = outlookMemberInput(base, baseRun, season, a, level.ops);
-				member = outlookMember(runModelWithoutChecks(input), input.model, season, a);
+				if (snapshot) {
+					const r = runOutlookMember(snapshot, base, baseRun, season, a, level.ops);
+					if (r.problems.length) failure = `model run failed: ${r.problems.join('; ')}`;
+					member = r.member;
+				} else {
+					// Unreachable after the probe (it refuses a season the base run can't start from); kept so a member never silently skips.
+					const { input } = outlookMemberInput(base, baseRun, season, a, level.ops);
+					member = outlookMember(runModelWithoutChecks(input), input.model, season, a);
+				}
 			} catch (err) {
 				// The engine's own words (plain text, never DB text).
 				failure = `model run failed: ${(err as Error).message}`;

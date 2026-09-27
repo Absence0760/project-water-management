@@ -176,7 +176,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((150 + 50 + 1051) / 3, 10);
 	});
 
-	it('puts the dam storage figures in the summary of a farm with a dam only (engine 1.1.0, issue #55)', () => {
+	it('puts the dam storage figures in the summary of a farm with a dam only (engine 1.2.0, issue #55)', () => {
 		// dam_storage [800, 600, 1000]: the end 1000, the low 600 on day 1, no minimum level.
 		const a = out.summary.farms.find((f) => f.nodeId === 'A')!;
 		expect(a).toMatchObject({ damEndM3: 1000, damAgoM3: null, damLowM3: 600, damLowDate: '2020-10-02', damDaysAtMin: 0 });

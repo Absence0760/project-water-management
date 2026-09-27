@@ -1170,7 +1170,7 @@ export interface FarmSummary {
 	/** Mean pumped from the river, part of supplied (engine ≥ 0.42.0, WP-3.8); only for a farm whose supply rule can pump from the river. */
 	avgRiverAbstractionM3Day?: number;
 	/**
-	 * The farm dam's storage figures (engine ≥ 1.1.0, issue #55,
+	 * The farm dam's storage figures (engine ≥ 1.2.0, issue #55,
 	 * network/damLevel.ts): storage on the run's last day, m³, and
 	 * DAM_AGO_DAYS (30) before it (null when the run is shorter); the lowest
 	 * storage in the run's last 365 days and its first day; and the days in

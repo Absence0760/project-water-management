@@ -19,6 +19,22 @@ describe('freshness', () => {
 
 	it('is null without series', () => expect(freshness([], '2025-01-01')).toBeNull());
 
+	it('lists the driver series behind: recorded rain and A-pan older than the limit, never a forecast or a flow', () => {
+		const all = [
+			meta('r1', 'rain_catchment_mm', 'Gauge R1', '2025-01-01', 100), // ends 10 Apr: 2 days old
+			meta('r2', 'rain_catchment_mm', 'Gauge R2', '2025-01-01', 90), // ends 31 Mar: 12 days old
+			meta('c', 'rain_chirps_mm', '', '2025-01-01', 60),
+			meta('e', 'evap_apan_mm', '', '2025-01-01', 30),
+			meta('fc', 'rain_forecast_mm', '', '2024-01-01', 10),
+			meta('q', 'flow_observed_m3s', '', '2024-01-01', 10)
+		];
+		const f = freshness(all, '2025-04-12')!;
+		expect(f.behind.map((s) => s.id)).toEqual(['r2', 'c', 'e']);
+		expect(freshness(all, '2025-04-12', 400)!.behind).toEqual([]);
+		// With no recorded rain at all, an old A-pan series is still behind.
+		expect(freshness([meta('e', 'evap_apan_mm', '', '2025-01-01', 30)], '2025-04-12')!.behind.map((s) => s.id)).toEqual(['e']);
+	});
+
 	it('measures recorded rain only: a forecast or a gauge reaching later does not make the data fresh', () => {
 		const later = [...list, meta('fc', 'rain_forecast_mm', 'GFS', '2025-03-25', 30), meta('g', 'flow_observed_m3s', 'Gauge 2', '2025-01-01', 110)];
 		const f = freshness(later, '2025-04-12')!;

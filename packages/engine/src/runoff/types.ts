@@ -75,6 +75,15 @@ export interface RunoffModel<P, S> {
 	capacities(p: P): (number | null)[];
 	/** Each store's content (mm), in `stores` order, into `out`. */
 	readStores(s: S, out: Float64Array): void;
+	/**
+	 * The whole state as plain numbers (unit-hydrograph queues included), for a
+	 * model-state snapshot (engine ≥ 1.1.0, ../warmstart); loadState(p, it)
+	 * gives back a state that steps on to the bit. Optional: a model without
+	 * them can't be captured or resumed.
+	 */
+	saveState?(s: S): number[];
+	/** A state from saveState's numbers under the same parameters; throws when they don't fit. */
+	loadState?(p: P, data: readonly number[]): S;
 }
 
 /** Natural flow for the run window, plus any extra catchment series to report. */
@@ -85,6 +94,8 @@ export interface NaturalFlowInput {
 	warnings?: string[];
 	/** The runoff model's water balance (conceptual models), reported as summary.runoff. */
 	balance?: RunoffBalance;
+	/** The model's state at the start of run day `ctx.warm.captureAt`, when asked (engine ≥ 1.1.0, ../warmstart). */
+	state?: number[];
 }
 
 export interface RunContext {
@@ -93,6 +104,13 @@ export interface RunContext {
 	days: number;
 	/** A project series cut/padded to the run window (null where missing). */
 	aligned(kind: SeriesKind): (number | null)[];
+	/**
+	 * Capture and resume (engine ≥ 1.1.0, ../warmstart): return the model's
+	 * state at the start of run day `captureAt` (0 … days) as
+	 * NaturalFlowInput.state; or start the run from `resume`, a state captured
+	 * that way, instead of the initial fill and the warm-up.
+	 */
+	warm?: { captureAt?: number; resume?: readonly number[] };
 }
 
 /** Produces a run's natural flow. */

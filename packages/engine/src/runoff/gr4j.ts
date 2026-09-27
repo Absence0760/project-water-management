@@ -163,5 +163,22 @@ export const gr4j: RunoffModel<Gr4jParams, Gr4jState> = {
 		out[0] = st.s;
 		out[1] = st.r;
 		out[2] = sum(st.q1) + sum(st.q2);
+	},
+
+	// [S, R, …UH1 queue, …UH2 queue]; the ordinates follow from X4.
+	saveState(st) {
+		return [st.s, st.r, ...st.q1, ...st.q2];
+	},
+
+	loadState(p, data) {
+		const st = gr4j.init(p, 0);
+		const n1 = st.q1.length;
+		const n2 = st.q2.length;
+		if (data.length !== 2 + n1 + n2) throw new Error(`GR4J state has ${data.length} numbers; X4 = ${p.x4} needs ${2 + n1 + n2}`);
+		st.s = data[0]!;
+		st.r = data[1]!;
+		for (let k = 0; k < n1; k++) st.q1[k] = data[2 + k]!;
+		for (let k = 0; k < n2; k++) st.q2[k] = data[2 + n1 + k]!;
+		return st;
 	}
 };

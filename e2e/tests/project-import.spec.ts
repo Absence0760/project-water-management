@@ -75,7 +75,7 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 
 	// Open it (the name opens the project; the Open button hides when the table is narrow beside the sidebar): the workspace shows the imported catchment and its run.
 	await row(page, 'Droëvlei — imported').getByRole('link', { name: 'Droëvlei — imported', exact: true }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'Droëvlei — imported' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Droëvlei — imported' })).toBeVisible();
 	// The Overview's import record names the project file; a file has no unmapped report, and this one no notes.
 	const record = page.getByRole('region', { name: 'Import record' });
 	await expect(record.getByRole('paragraph').first()).toHaveText(
@@ -96,7 +96,7 @@ test('an imported project exports back to the same file', async ({ page, owner }
 	const done = page.getByRole('dialog', { name: 'Project imported' });
 	await expect(done.getByRole('status')).toContainText(`Imported ${example.name}.`);
 	await done.getByRole('link', { name: 'Open project' }).click();
-	await expect(page.getByRole('heading', { level: 1, name: example.name })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: example.name })).toBeVisible();
 
 	// The export of what was imported is the same catchment (fresh ids aside).
 	const id = new URL(page.url()).pathname.split('/').pop()!;

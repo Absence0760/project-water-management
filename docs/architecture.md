@@ -114,7 +114,10 @@ Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and the Runs & results compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). The compare page loads its daily overlay and, only when a side
+water users). Inside the Overview, the flow chart, the Dam levels table,
+Supply by farm and the owner's Share links panel are their own chunks too, so
+the route's chunk stays under its 42 KB budget (the Share links split made
+room for the section header, issue #17). The compare page loads its daily overlay and, only when a side
 is a scenario run, its Scenario overrides section the same way. uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
@@ -218,6 +221,33 @@ runtime names from several of them. As one chunk (21.5 KB gzip, importing
 nothing) the total dropped 12 KB and every page's first load 3–6 KB, although
 a page now also loads the few runtime pieces it doesn't use.
 `src/lib/svelteRuntimeChunk.test.ts` keeps the rule in place.
+
+Each dynamic import carries a preload list (Vite's `__vite__mapDeps`): the
+chunks and CSS the loaded chunk needs, fetched in parallel with it. Vite lists
+the loaded chunk's whole static import tree, most of which (the Svelte
+runtime, the API client, shared UI) the importing chunk already imports
+statically and so has loaded before its code runs. `preloadDedupe`
+(`build.modulePreload.resolveDependencies` in `frontend/vite.config.ts`)
+drops those entries; every CSS file and every chunk not yet loaded stays, so
+nothing loads later or in a different order. −2.3 KB gzip across the bundle;
+`src/lib/preloadDedupe.test.ts` pins the rule.
+
+Svelte scopes each component's styles with a class on its elements. The
+default is `svelte-<hash>`; `frontend/svelte.config.js` sets `cssHash` to
+`s<hash>` (the same hash of the file name), which appears thousands of times
+in the compiled templates and CSS: −2.6 KB gzip across the bundle and a little
+off every first load. `src/lib/cssHash.test.ts` computes every component's
+class the way the build does and fails if one equals a class the app writes
+itself (`small`, `steps`…), or two components share one.
+
+Output file names are short (`shortFileNames` in `frontend/vite.config.ts`):
+7-character hashes instead of Rollup's 8 (the least it accepts below 4 096
+chunks), and CSS files named by their hash alone, like SvelteKit's JS chunks
+(`DaDhZLr.css`, not `LoadState.DaDhZLrP.css`). The names are repeated in
+import statements, preload lists and the route manifest, where random
+characters compress badly: −2.7 KB gzip. Everything under `_app/immutable/`
+is still content-hashed, so the deploy's year-long caching is unchanged;
+`src/lib/shortFileNames.test.ts` pins the patterns.
 
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
@@ -587,13 +617,15 @@ alerts plug in as a further kind.
   a base run × a season × up to 6 demand levels over the record's analogue
   years (at most the newest 40), as the editor who asked. The base run's
   stored input is rebuilt and run once (its state and rain on this engine),
-  then every level × year is one member run (`outlookMemberInput` →
-  `runModelWithoutChecks` → `outlookMember`), each stored as it finishes;
+  capturing the model's state on the decision date
+  (`outlookBaseAndSnapshot`, [model.md §2.16](./model.md)); then every
+  level × year is one member run over the season only, from that snapshot
+  (`runOutlookMember`), each stored as it finishes;
   the engine's `summariseOutlook` is the result. A member the engine
   refuses is stored as failed and the outlook carries on. At most 240
-  member runs, each a full run of the record, in one transaction: on the
-  synthetic 13-year test catchment 39 members take well under a second; the
-  cap keeps a long record inside the worker Lambda's 300 s. `progress`
+  member runs, each a season-long run, in one transaction: on the
+  synthetic test catchment 12 years × 4 levels take about 35 ms of engine
+  time (388 ms before snapshots); the cap keeps a long record inside the worker Lambda's 300 s. `progress`
   after each member, no cancel, at most 2 pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one

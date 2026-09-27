@@ -114,7 +114,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, Runs & results, Compare runs, Scenarios, Allocations),
+first): **Outcomes** (Summary, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -124,14 +124,21 @@ the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **900 px and wider:** in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)),
-  under a "Catchment" label and the project's name (a link to its Summary),
-  the section labels shown, with a viewer's **Show model inputs** at the end.
+  under a "Catchment" label, the project's name (a link to its Summary) and
+  your role badge (owner, editor, viewer), the section labels shown, with a
+  viewer's **Show model inputs** at the end. **Data** carries an amber badge
+  counting the series behind: the series a run is driven by (recorded rain,
+  A-pan evaporation; never a forecast or a flow) ending more than
+  `STALE_DAYS` ago (`freshness().behind` in `series/freshness.ts`, the same
+  measure as the "Rain up to" pill and Needs attention's stale item). Its
+  accessible name says it: "Data (2 series behind)".
   The sidebar's **Projects** link replaces the old "Projects / *name*"
   breadcrumb row. The content column keeps its usual 1480 px maximum beside
   the sidebar; narrower, the widest grids scroll inside their own box: the
   network's node table fits from about 1700 px and scrolls below that, its
   name and remove columns kept in view (`model.spec.ts`).
-- **Below 900 px (phones):** a full-width **Sections** button naming the open
+- **Below 900 px (phones):** a compact line with the project's name and your
+  role, then a full-width **Sections** button naming the open
   tab (its accessible name is "Project sections: *Tab*", with the problems dot
   when a model tab has one) opens the same grouped list in the page, the
   section labels shown and the open tab marked, with a viewer's **Show model
@@ -232,6 +239,46 @@ nodes, the curtailment table). The whole header sticks, not each cell, so a
 two-row header (group labels over the column names) stays stacked. A table
 shorter than the cap looks as before.
 
+## Section header
+
+Every section has **one header** (issue #17, option A; `workspace/SectionHeader.svelte`),
+drawn by the page above the open tab, in place of the old project row (name,
+role, freshness, Add data) and each tab's own header:
+
+- **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
+  **Unsaved changes** shows beside it while the model has edits (editors).
+- **A one-line context** under it. A tab gives its own through
+  `fillHeader({ context, actions })` (`workspace/sectionHeader.svelte.ts`,
+  called from an `$effect`, like the sidebar's slot): the Summary names the
+  run it shows (label, workbook-comparison and evidence badges, period,
+  engine, "ran N days ago", **Open in Runs**); the Network its summary
+  ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
+  line ("3 crops · 675 ha irrigated on 8 farms · …"); History what it holds.
+  The others count what they hold (`workspace/context.ts`): "2 runs",
+  "4 input series · 1 behind", "3 transfer rules · 2 active", "No runs yet"
+  on a Summary before the first run.
+- **The actions on the right**, in this order: the **Rain up to** pill
+  (below), the section's own (the Network's **Grids** and **+ Add node**,
+  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  model** (editors; on the Summary, Network, Crops, Transfers and Settings).
+  Run model starts a run with no label and opens it in Runs, through the
+  same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
+  own form (with a label and Run forecast), so the header doesn't repeat it
+  there, and on Data **Add data** is the main (primary) action. Run model is
+  disabled until there is a network and a rainfall series, and its
+  accessible description says which is missing. A tab shown inside the grid
+  modal or scenario override mode fills nothing.
+- **Notices, one slim line** under the title row, instead of full-width
+  banners: the viewer's **View only** note (every section), the upload
+  result with **Re-run model** / **Dismiss**, **New data since the last
+  run** with **Re-run model** (not on Runs or Data, which say it in their
+  own way), and a run that didn't start. Every message and action of the
+  old banners is kept. The model save bar stays the dock at the bottom
+  (Save changes, Discard, the reason), and the grid modal and sheets keep
+  their own `ModelSaveRow`.
+- **Phones:** the same header after the Sections button; the actions wrap
+  under the title at full width, with 44 px targets.
+
 ## Header: data freshness and "Add data"
 
 - **Rain up to 14 Jun 2026 · 12 days ago**: the latest end of the
@@ -282,12 +329,13 @@ shorter than the cap looks as before.
   (`series/valuesCache.ts`), used only while the series' start, length and
   `updatedAt` still match, so a same-length change (a restore, a feed
   correction) is fetched again.
-- After an upload a banner offers **Re-run model**. Every tab notes new data
-  since the last run: a rainfall series that reaches past the
-  latest run's end, or was updated after it (`newDataSinceRun`).
+- After an upload the header's notice line offers **Re-run model**. Every tab
+  but Runs and Data notes new data since the last run there: a rainfall series
+  that reaches past the latest run's end, or was updated after it
+  (`newDataSinceRun`).
 - **Automatic runs** (WP-2.11): when the project has them on and a re-run is
   queued (`project.rerunQueuedFor`, and the upload's own answer), both
-  banners say "An automatic re-run is queued for 14:05." (the viewer's local
+  notices say "An automatic re-run is queued for 14:05." (the viewer's local
   time; "… for 27 Sep 00:05" on another day; "… is due now." once its time
   has passed) instead of offering **Re-run model**
   (`autorun/autoRun.ts` `rerunQueuedText`). The page doesn't poll: the run
@@ -314,9 +362,10 @@ put the results first; its first screen follows board A1 of the redesign
    side column's cards scroll inside themselves, and the page doesn't need
    scrolling to see any of it. Narrower, the columns stack and the chart is
    240 px tall; on a phone the KPIs are 2 × 2.
-3. **Below the first screen**, until the planned Dams and Project pages
-   exist: the active alerts ([§ Alerts](#alerts)), the published baseline,
-   **Dam levels**, the setup checklist (usually the one-line "Setup
+3. **Below the first screen**, until the planned Project page exists: the
+   active alerts ([§ Alerts](#alerts)), the published baseline, a one-line
+   link **Dam levels for each dam → Dams** (once the latest run has dams; the
+   table moved to the [Dams](#dams) page), the setup checklist (usually the one-line "Setup
    complete"), then **The model**: eight headline facts, project details,
    the import record (an imported project only), recent notes
    ([§ Notes](#notes)), team, members, farmers and share links.
@@ -346,26 +395,12 @@ put the results first; its first screen follows board A1 of the redesign
   and goes last). A farm's name opens its [farm drawer](#farm-drawer)
   (`farmDrawerHref`), unless it has left the model since the run. Its own
   chunk (it waits for the run's record anyway).
-- **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
-  below the first screen once the latest run's record is in: every dam in the
-  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series,
-  `damsInRun`), emptiest first. Each row has the dam's capacity, its storage at the end of the run as
-  a bar and a % of capacity (a tick marks its minimum operating level, and
-  "below 30%" or "at its minimum level" is written beside the %, so colour is
-  never the only cue), the lowest it reached in the run's last 365 days with
-  the first day of that low, and the days in that year at or below the
-  minimum. Capacity and minimum come from the run's own model
-  (`run.model`, the live model for an older run), so a later edit doesn't skew
-  them (the model's `damMinPct` is a fraction; the table shows it as a %).
-  The figures come from the run summary (`FarmSummary.dam*`, engine ≥ 1.1.0,
-  issue #55, [model.md §2.8](./model.md#28-outputs); `damLevelsFromSummary`),
-  so a new run fetches no series for this table or the **Dams today** card.
-  For a run from before 1.1.0, `OverviewTab` fetches each dam's daily series
-  through the Runs tab's `cachedSeries`, four at a time (`loadDamLevels`,
-  reduced by `damLevel()`, the same rules as the engine), with "Loading dam
-  levels (N of M)…" meanwhile. The Network's colour by dam level and the map
-  card's *Dam now* read the summary the same way. The first 8 rows show, with
-  **Show all N dams**. Its own chunk.
+- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
+  the Summary keeps only the **Dams today** card (which links there) and the
+  one-line link below the first screen. `OverviewTab` reads the card's
+  levels from the run summary (`FarmSummary.dam*`, engine ≥ 1.2.0, issue
+  #55, [model.md §2.8](./model.md#28-outputs); `damLevelsFromSummary`), and
+  fetches each dam's series (`loadDamLevels`) only for an older run.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -392,8 +427,11 @@ put the results first; its first screen follows board A1 of the redesign
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
   days"; none when the run is shorter), flagged below 30 %; it reads the
-  same levels as Dam levels, so for an older run it says "loading dam levels"
-  until their series are in, and "no dams in the run" without any. *Mean simulated outflow*
+  run summary's dam figures (engine ≥ 1.2.0, issue #55), or for an older run
+  each dam's `dam_storage` series through the Runs cache, when it says
+  "loading dam levels" until they are in; "no dams in the run" without any. The card links to the [Dams](#dams) page: its term is a link
+  (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
+  facts' tiles are. *Mean simulated outflow*
   (m³/s, % of natural, its change) is the line under the cards, with the
   run the changes are against. Each
   card shows its change from the previous run (the one before it by
@@ -478,7 +516,7 @@ put the results first; its first screen follows board A1 of the redesign
   consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
-  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
+  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
   the email's language) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
@@ -516,6 +554,78 @@ Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
+
+## Dams
+
+`?tab=dams` (`dams/DamsTab.svelte`, rules in `dams/dams.ts` and
+`overview/damLevels.ts`), under **Outcomes** after Runs & results (issue #17,
+option A · Outcomes; no board of its own, so it takes A1's cards and the
+Summary's window-fitting layout). Every member who sees the Summary sees it
+(`TAB_GROUP.dams = 'core'`); an applicant sees the Applicant view instead, as
+for every workspace tab. Its own chunk.
+
+- **Header**: the section header titled "Dams", with the context line
+  "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
+  (`damsSummary`, `fmtVolume`) and **Open in Runs** once there is a run, both
+  filled through `fillHeader` like Crops & demand.
+- **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
+  a farm has a dam in the engine; a capacity on a gauge or another water user
+  is inert (no storage, no `dam_storage` series), so it is not listed, and
+  the Summary's *Dam capacity* fact counts farms' dams only too. The levels are
+  those of the latest run (`pickRuns`, the Summary's newest-by-date rule):
+  the dams the run stored storage for (`damsInRun`, capacity and minimum
+  level from the run's own model), each dam's daily series fetched through
+  the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
+  and the chart.
+- **Cards** (`damCards`), emptiest first (the levels' order), then any dam
+  without a level in node order: the name, capacity, % full at the end of the
+  run, "below 30%" / "at its minimum level" in words, the change over the
+  run's last 30 days in words with ▲/▼ ("down 11 pp in 30 days",
+  `changeWords`), a sparkline of the last 365 days as % of capacity
+  (`storageSpark`: at most 60 points, each the mean of its days), and links
+  **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
+  and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
+  this page). A coloured edge repeats the band (accent, amber below 30 %, red
+  at the minimum; grey without a level). Above them, **All dams together**
+  (`damsToday`, capacity-weighted: the Summary's Dams today figure).
+- **Picking a dam**: the name is a link (`dam=<nodeId>`, `withParam`) stretched
+  over the card, so a click anywhere on it picks the dam, the URL can be
+  shared, and Back returns to the one before. Without `dam=` (or with one
+  that has no card) the first, emptiest, card is charted. When the layout is
+  stacked the chart scrolls into view after a pick.
+- **Storage chart** of the picked dam: its storage, a dashed capacity line
+  and (a farm with one) its dashed minimum operating level
+  (`storageChartSeries`), as **% full** (default) or **m³**, with the
+  Summary's **30 days / 1 year / All** switch (`FLOW_WINDOWS`, opens on a
+  year). A line above it: % full and the volume on the last day, the lowest
+  in the last year and the days at the minimum level.
+- **Layout**: the cards column sits beside the chart once the page is 56rem
+  wide (a container query on the page, not the viewport). When it is also at
+  least 620 px tall, the block is the height left in the window below its top
+  (measured with a `ResizeObserver` on `body`, less the save bar; at least
+  480 px): the chart fills its panel (the plot takes what the chart's head,
+  legend and caption leave) and the cards scroll inside their column.
+  Narrower, the cards are two to a row on a phone, then the chart.
+- **Dam levels** (`dams/DamLevels.svelte`, moved here unchanged from the
+  Summary) below: every dam in the run, emptiest first, with its capacity,
+  its storage at the end of the run as a bar and a % (a tick marks its
+  minimum operating level, and "below 30%" or "at its minimum level" is
+  written beside the %, so colour is never the only cue), the lowest it
+  reached in the run's last 365 days with the first day of that low, and the
+  days in that year at or below the minimum. The model keeps the minimum as a
+  fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
+  one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
+  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
+  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The page
+  keeps fetching every dam's series even though the run summary carries the
+  table's figures (engine ≥ 1.2.0, issue #55), because each card's sparkline
+  and the storage chart draw them.
+- **Empty states**: no dams in the model says how to add one, with **Open the
+  Network** and **Node table** (the grid modal over this page, where a node's
+  dam capacity is set or a node added; a new dam shows as a card at once).
+  No run yet: the cards show each dam's capacity only, under a note linking
+  to Runs & results to run the model (a viewer is told an editor has to run
+  it), with no chart or table.
 
 ## Project list
 
@@ -889,15 +999,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
   - **Dam level, end of latest run** (offered with a run and a dam): each
-    dam's storage on the run's last day, from its `dam_storage` series,
-    fetched only while this mode is picked, four at a time
-    (`overview/damLevels.ts` `loadDamLevels`, shared with the Summary's Dam
-    levels; "Loading dam levels (N of M)…", Retry on failure). Bands on the
+    dam's storage on the run's last day, from the run summary's dam figures
+    (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
+    from its `dam_storage` series, fetched only while this mode is picked,
+    four at a time (`overview/damLevels.ts` `loadDamLevels`, shared with the
+    Dams page and the Summary's Dams today; "Loading dam levels (N of M)…",
+    Retry on failure). Bands on the
     same three colours: **60 % full or more** (`DAM_FULL_PCT`), **30–60 %**,
     **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
     the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and
-    minimum come from the run's own model. (Issue #55 would make this one
-    request.)
+    minimum come from the run's own model.
   - **Irrigated area** (no run needed; follows unsaved edits at once): each
     farm's planted hectares, in one hue over three steps (thirds of the
     largest farm's area, since more area is neither good nor bad) and
@@ -2116,7 +2227,7 @@ run's report to chosen members every week or month.
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
   option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
-  its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
+  in the Runs chunk, helpers in `runs/publication.ts`; `#res-publication`,
   menu entry **Publication**). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
@@ -2463,8 +2574,8 @@ run's report to chosen members every week or month.
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
   only a stored legacy run made after the nomination can raise it.
-  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, its own
-  chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
+  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, in the
+  Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
   inputs, **Check reproduction** (viewers too) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
@@ -2548,7 +2659,7 @@ run's report to chosen members every week or month.
   monthly factors.
 - **Assurance of supply** (`#res-assurance`, under *Units & users* after the
   curtailment table; `reliability/AssurancePanel.svelte`, helpers in
-  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  `reliability/reliability.ts`, in the Runs chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, water years met against the annual threshold (Settings), the
@@ -2568,7 +2679,7 @@ run's report to chosen members every week or month.
   state at a few demand levels over the record's past years, described in
   [§ Seasonal outlook](#seasonal-outlook) below.
 - **Water account** (`#res-water-account`, last under *River & Reserve*;
-  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  `reliability/WaterAccountPanel.svelte`, in the Runs chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
@@ -3147,7 +3258,7 @@ exists, says so with a link to Runs & results.
   the charts redraw synchronously, so the canvas is light before the page is
   laid out; `afterprint` puts the previous theme back.
 - **Generate PDF / Email me the PDF** (WP-2.15 Phase B, issue #26;
-  `lib/components/report/ServerPdf.svelte`, a lazy chunk loaded with the bar)
+  `lib/components/report/ServerPdf.svelte`, in the report's chunk)
   sit beside Download PDF for any viewer. They queue a server-side render of
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
@@ -3578,9 +3689,10 @@ signed in or out, for someone outside the project, on a phone first.
 
 ## Viewers
 
-Viewers see a "View only" note. Inputs render as plain values instead of
-greyed-out fields. There are no move handles, drag targets, Add data button
-or Run button.
+Viewers see a "View only" note in the section header's notice line, on every
+section, and their role badge in the sidebar. Inputs render as plain values
+instead of greyed-out fields. There are no move handles, drag targets, Add
+data button or Run button.
 
 ## Accessibility
 

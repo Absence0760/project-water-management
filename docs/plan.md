@@ -242,6 +242,10 @@ rows exist for this.
 - ⬜ **Partial recompute** from the first changed day, reusing stored state
   (the workbook's "New data from" logic) — only needed if full runs get slow
   (currently a fraction of a second of engine time for the full record).
+  The engine half exists since 1.1.0 (model-state snapshots, model.md
+  §2.16: capture a run's state on a day, resume from it to the bit); a
+  saved run would still need its snapshot stored and the pinned
+  record-wide statistics refitted now and then.
 - ✅ Forecast days flagged (workbook marks them "F") and shown distinctly in charts
   (roadmap WP-2.12): forecast mode keeps them out of every other figure
   (model.md §2.4f), a forecast run has its own panel, a labelled band on

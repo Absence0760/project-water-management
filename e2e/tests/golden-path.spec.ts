@@ -23,7 +23,7 @@ async function createProjectThroughUi(page: Page, name: string) {
 	const dialog = page.getByRole('dialog', { name: 'New project' });
 	await dialog.getByLabel('Name').fill(name);
 	await dialog.getByRole('button', { name: 'Create' }).click();
-	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: name })).toBeVisible();
 }
 
 test('a new user builds a catchment, runs it, and adds more catchments', async ({ page }) => {

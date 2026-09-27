@@ -42,6 +42,13 @@ export interface TestCatchmentOptions {
 	ewrM3Day?: number;
 	/** A daily A-pan series as well as the monthly means. */
 	dailyApan?: boolean;
+	/**
+	 * Record-wide statistics in play (engine ≥ 1.1.0, the snapshot's pinned
+	 * ones): invasive trees on Farm A (the land-cover low-flow threshold) and
+	 * a Reserve rule table at the outlet read against the run's own natural
+	 * duration curves. Invented values.
+	 */
+	recordWide?: boolean;
 }
 
 /** Winter-rainfall daily rain: a year's wetness × a seasonal chance of rain × a lognormal-ish depth. */
@@ -93,6 +100,13 @@ export function testCatchment(options: TestCatchmentOptions = {}): ModelInput {
 		},
 		series: { rain_catchment_mm: { startDate: options.start ?? '2000-10-01', values } }
 	};
+	if (options.recordWide) {
+		input.model.landCover = [{ id: 'lc1', nodeId: 'a', coverClass: 'invasive', areaKm2: 3, densityPct: 0.6, factors: null }];
+		const points = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+		// m³/s at the outlet, falling with the % point; wetter months (May–Sep, water-year index 7–11) ask for more.
+		const row = (w: number) => points.map((p) => (w >= 7 ? 0.024 : 0.009) * (1 - p / 110));
+		input.settings.ewrRules = [{ siteNodeId: null, source: 'invented', component: 'total', unit: 'm3s', points, ewr: Array.from({ length: 12 }, (_, w) => row(w)), naturalSource: 'run', natural: null, scale: 1 }];
+	}
 	if (options.dailyApan) {
 		const monthLen = [31, 30, 31, 31, 28, 31, 30, 31, 30, 31, 31, 30];
 		const ev: (number | null)[] = new Array(days);

@@ -1,8 +1,8 @@
-// A farm dam's storage figures for the run summary (engine ≥ 1.1.0, issue
+// A farm dam's storage figures for the run summary (engine ≥ 1.2.0, issue
 // #55): storage at the end of the run and DAM_AGO_DAYS before it, the lowest
 // in the run's last DAM_YEAR_DAYS days and its first day, and the days in that
-// window at or below the minimum operating level. The Summary's Dam levels
-// panel and the Network's colour by dam level read these instead of fetching
+// window at or below the minimum operating level. The Summary's Dams today
+// card and the Network's colour by dam level read these instead of fetching
 // every dam's daily series. Same rules as the frontend's damLevel()
 // (overview/damLevels.ts), which still reduces the series of an older run.
 import { fromEpochDay, toEpochDay } from '../calendar';

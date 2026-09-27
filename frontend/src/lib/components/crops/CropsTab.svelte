@@ -23,6 +23,7 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 
 	let {
 		editor,
@@ -139,28 +140,25 @@
 		document.addEventListener('pointerdown', onDoc);
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
+	// The page's section header shows the summary line, Grids and Add crop (not in a modal or override mode).
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, !sections));
 </script>
+
+{#snippet headerContext()}<span data-testid="crops-summary">{summary}</span>{/snippet}
+{#snippet headerActions()}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
+		<summary class="btn">Grids <span aria-hidden="true">▾</span></summary>
+		<div class="grids-pop" role="group" aria-label="Open as a grid">
+			{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+		</div>
+	</details>
+	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add crop</button>{/if}
+{/snippet}
 
 {#if sections}
 	<CropGrids {editor} {settings} {readonly} {sections} />
 {:else}
-	<div class="crops-head">
-		<div>
-			<h2>Crops &amp; demand</h2>
-			<p class="muted" data-testid="crops-summary">{summary}</p>
-		</div>
-		<div class="head-actions">
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
-				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
-				<div class="grids-pop" role="group" aria-label="Open as a grid">
-					{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
-				</div>
-			</details>
-			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add crop</button>{/if}
-		</div>
-	</div>
-
 	{#if crops.length === 0}
 		<section class="panel" aria-label="No crops yet">
 			<div class="empty">
@@ -267,28 +265,6 @@
 {/if}
 
 <style>
-	.crops-head {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.75rem 1.5rem;
-		margin: 0 0 1rem;
-	}
-	.crops-head h2 {
-		margin: 0;
-		font-size: 1.6rem;
-	}
-	.crops-head p {
-		margin: 0.2rem 0 0;
-		font-size: 0.9rem;
-	}
-	.head-actions {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
 	.grids-menu {
 		position: relative;
 	}
