@@ -191,7 +191,7 @@ the same file, which the help pages share. It is layout only: the URLs stay
   The sidebar's **Projects** link replaces the old "Projects / *name*"
   breadcrumb row. The content column keeps its usual 1480 px maximum beside
   the sidebar; narrower, the widest grids scroll inside their own box: the
-  network's node table fits from about 1700 px and scrolls below that, its
+  network's node table fits from about 1700 px and scrolls below that (cards on a phone), its
   name and remove columns kept in view (`model.spec.ts`).
 - **Below 900 px (phones):** a compact line with the project's name and your
   role, then a full-width **Sections** button naming the open
@@ -1257,6 +1257,19 @@ note's link on the Summary, `notes.ts` `noteHref`).
   lines up with the digits above it. Narrower screens scroll the table sideways inside its own
   box, with the **Name** column pinned on the left and the **✕** remove
   column pinned on the right, so every row stays named and removable.
+  On a phone (≤ 640 px) each row is a card instead, the same markup
+  restyled like the crop grids: a first line with the row's controls
+  (drag handle, ↑/↓, notes, and ✕ at the top right), the name across the
+  card, then Kind and Drains into and every field two to a row, each with a
+  visible label that names its group ("Dam capacity m³", "High-MAP area
+  km²"; `cardLabel` in `network/fields.ts`), and the flow share in use last.
+  Fields a node doesn't use (a gauge's dam, routing and irrigation) are left
+  out rather than shown as "–". The totals are a card of their own lines
+  ("Area 144.00 km²"). The inputs, their accessible names, validation and the
+  save row are the table's, and the cards scroll with the modal rather than
+  in a box of their own, so **+ Add node** and the field guide follow the
+  last card. The ⓘ tips sat in the column headers, so the intro sends a
+  phone to the field guide instead (`node-table.spec.ts`).
 - **The one-node form** (the node sheet): the picker (‹ select ›) stays in
   reach above the scrolling form in the sheet's fixed sub-header.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
@@ -1642,7 +1655,8 @@ top, the twelve factors four to a row and the mean below; each farm's crops two
 to a row with its total, and a totals card last. Every field is on screen
 without scrolling the table sideways. The read-only demand preview stays a
 table that scrolls. With no farm or crop yet, the Planted areas note links to
-the Network tab.
+the Network tab. The node table does the same, one card per node (§ The
+node table above).
 
 ## Transfers
 

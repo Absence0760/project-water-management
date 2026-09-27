@@ -179,6 +179,12 @@ section it belongs to, with the example that taught it.
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
   every column fit; side by side only where the container is wide enough.
+  On a phone a wide edit grid becomes one card per row (the crop grids, the
+  node table): restyle the same markup, so the inputs, names and tests stay
+  one set, and give each field a visible label that names its group, since
+  the group header row is gone ("Dam capacity", not "Capacity"). Let the
+  cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
+  a scroll box inside a scroll box, with Add node out of reach below it.
 - **Lay drawings out to their box; don't zoom text.** Scaling the Network
   drawing made labels huge; spacing columns and rows to the box, with a cap,
   looked right.

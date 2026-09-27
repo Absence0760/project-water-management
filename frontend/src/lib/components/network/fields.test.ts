@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damHints, fmtVolume, hasDam, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
+import { cardLabel, damHints, fmtVolume, hasDam, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -14,6 +14,28 @@ describe('node fields', () => {
 			expect(f.help.length).toBeGreaterThan(20);
 			expect(f.unit).toBeTruthy();
 		}
+	});
+});
+
+describe('cardLabel', () => {
+	it('names each table field on its own, without the group header over it', () => {
+		const label = Object.fromEntries(TABLE_FIELDS.map((f) => [f.key, cardLabel(f)]));
+		expect(label).toEqual({
+			areaKm2: 'Area',
+			areaHiKm2: 'High-MAP area',
+			areaLoKm2: 'Low-MAP area',
+			damCapacityM3: 'Dam capacity',
+			damInitialPct: 'Dam initial storage',
+			damMinPct: 'Dam minimum level',
+			pctUpstreamToDam: 'Upstream inflow to dam',
+			pctRunoffToDam: 'Runoff to dam',
+			divertCapacityM3Day: 'Divert capacity',
+			irrigationEfficiency: 'Efficiency',
+			lossReturnFraction: 'Losses returning',
+			flowShareManual: 'Manual flow share'
+		});
+		// Distinct, so no two cells of a card read the same.
+		expect(new Set(Object.values(label)).size).toBe(TABLE_FIELDS.length);
 	});
 });
 
