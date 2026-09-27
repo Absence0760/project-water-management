@@ -2488,7 +2488,7 @@ which checks every catchment tab).
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
   months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, event
-  days from rise to recession, events per year; engine ≥ 1.7.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
+  days from rise to recession, events per year; engine ≥ 1.8.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow
   paste result*.

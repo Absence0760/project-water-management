@@ -3025,7 +3025,7 @@ required  = MIN(perYear, n_nat)
 met       = n_sim ≥ required
 ```
 
-*What "duration" means (engine ≥ 1.7.0).* A Reserve high flow is an event
+*What "duration" means (engine ≥ 1.8.0).* A Reserve high flow is an event
 hydrograph, not a plateau: DWS's gazetted Reserves define high flows as "a
 set of flood events defined by a peak discharge in cubic meters per second,
 an event duration in hours and the frequency of the event", with the event
@@ -3043,7 +3043,7 @@ storm on a 1 m³/s base flow rising to 20 m³/s and receding with a 2-day time
 constant (daily 1, 6, 20, 12.5, 8.0, 5.2, 3.6 … m³/s) plainly carries a
 10 m³/s, 3-day freshet, yet the old rule counted **0** events for any
 duration of 3 days or more, and 0 for a 3-day freshet of any peak of
-8 m³/s or more. From 1.7.0 it counts one for every duration up to 10 days, none for
+8 m³/s or more. From 1.8.0 it counts one for every duration up to 10 days, none for
 11 or more or for a peak above 20 m³/s, and none once a dam cuts the storm's
 rise to 40 % (peak 8.6 m³/s).
 
@@ -3061,7 +3061,7 @@ events: two peaks count as two only if the flow falls below half the peak
 between them, in the spirit of the peaks-over-threshold independence rule
 that the flow must drop well below the smaller peak between two floods. The
 event counts in the month of its first day at the peak (a freshet "in
-November" peaks in November); before 1.7.0 it was the month its run
+November" peaks in November); before 1.8.0 it was the month its run
 started. Limits: on a base flow above half the peak (a small freshet on a
 high winter flow) a whole spell above the level is one event however many
 peaks it has, which undercounts natural and simulated flow alike; and a
@@ -3091,7 +3091,7 @@ each site (§2.7b) unless `settings.ewrChargeSource` is `'ruleTable'`
   the natural curve, and its own high flows always (n_sim = n_nat ≥ required).
 - A storm hydrograph that reaches the peak and lasts the duration counts as
   one event; a triangle of the peak and half the duration, or a storm cut
-  below the peak, counts none (engine ≥ 1.7.0).
+  below the peak, counts none (engine ≥ 1.8.0).
 - With low flows ≤ the total at every point, a month that meets the total
   meets its low flows.
 - Less flow never meets more low-flow months (R_low depends only on natural
@@ -3115,7 +3115,7 @@ flow rather than the month's volume (`settings.lowFlowMeasure`, built, off by
 default) and, if so, with which filter parameter; whether a freshet's "per year" should be
 capped by natural events (as here) or required outright in maintenance years
 only; whether events should be counted per month rather than per water year;
-how an event is found in daily flow (engine 1.7.0: at least half the
+how an event is found in daily flow (engine 1.8.0: at least half the
 duration at or above half the peak, above) and whether the level should
 sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of

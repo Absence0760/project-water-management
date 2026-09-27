@@ -140,7 +140,7 @@ describe('countHighFlowEvents', () => {
 	});
 
 	it('counts a natural storm hydrograph that reaches the peak and lasts the duration', () => {
-		// The reproduction (engine < 1.7.0 counted none of the 3-day or longer
+		// The reproduction (engine < 1.8.0 counted none of the 3-day or longer
 		// freshets here): a storm on a 1 m³/s base flow rising to 20 m³/s and
 		// receding with a 2-day time constant. Its daily flows are 1, 6, 20,
 		// 12.5, 8.0, 5.2, 3.6, 2.6 … m³/s: a flood that plainly carries a
