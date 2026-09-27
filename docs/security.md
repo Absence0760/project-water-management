@@ -200,6 +200,11 @@ result without signing in, until it expires or its owner revokes it.
   may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
   catalogue test pins both): a revoked link stays as the record of who made
   and withdrew it. An insert trigger stamps `created_by` and `created_at`.
+  Revocation is final in the schema, not just in the API: the
+  `share_link_revoke_final` trigger (065) refuses an update that clears or
+  moves `revoked_at` or names someone else in `revoked_by`, so not even an
+  owner's own transaction can bring a withdrawn link back (only the
+  foreign key's `SET NULL` on the revoker's account deletion passes).
   Lifetime 1–365 days (API and `CHECK`).
 - **What it reveals.** Only through `SECURITY DEFINER app_share_view` (search
   path pinned): for a live, unrevoked, unexpired token of a project with a
@@ -231,8 +236,14 @@ result without signing in, until it expires or its owner revokes it.
 - **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
   control, the dead-link cases against a live one, the response scan for the
   note and every farm name and id, the `last_used_at` throttle, farm keys,
-  and the k boundary at 4 and 5 holders) and `routes.test.ts` (the two reads
-  on the public allowlist, answering `400` rather than `401`).
+  and the k boundary at 4 and 5 holders), `share/share.security.db.test.ts`
+  (a link made under one publication reads only the current one, view and
+  series; a sweep over every key the published run stores, catchment and
+  node level, answers exactly the allowlisted catchment series, one row
+  each, with no farm name, id or note; the TypeScript and SQL allowlists
+  pinned to one list; revocation final even in SQL, with the account-deletion
+  control) and `routes.test.ts` (the two reads on the public allowlist,
+  answering `400` rather than `401`).
 
 ## API keys
 
