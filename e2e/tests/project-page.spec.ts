@@ -4,7 +4,7 @@
 // Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, createRun, PASSWORD, register, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, LEGAL_VERSION, PASSWORD, register, seedRunnableProject } from '../support/api.ts';
 import { plantEmailToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -246,7 +246,7 @@ test.describe('on a phone', () => {
 		// Realistic parts (a short unique tag): one part longer than the column may still break anywhere.
 		const tag = `${process.pid}${Date.now()}`.slice(-7);
 		const email = `catchment.hydrology-consultant.${tag}@very-long-subdomain.example.com`;
-		const res = await page.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Long Address' } });
+		const res = await page.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Long Address', acceptTerms: LEGAL_VERSION } });
 		expect(res.status()).toBe(202);
 		// Confirmed, then signed in (issue #57): this page is Long Address's.
 		expect((await page.request.post(`${API_URL}/auth/verify-email`, { data: { token: await plantEmailToken(email, 'verify') } })).status()).toBe(200);

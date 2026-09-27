@@ -47,6 +47,7 @@ export const ERROR_CODES = [
 	'email_unconfirmed',
 	'signin_locked',
 	'signup_throttled',
+	'terms_not_accepted',
 	'wrong_current_password',
 	'password_changed_elsewhere',
 	'link_invalid',

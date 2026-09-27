@@ -77,6 +77,15 @@ export async function userIdByEmail(email: string): Promise<string> {
 	});
 }
 
+/** The terms an account accepted at sign-up (app_user.terms_version / terms_accepted_at, 087). */
+export async function termsAccepted(email: string): Promise<{ version: string | null; at: Date | null }> {
+	return withDb(async (db) => {
+		const r = await db.query<{ version: string | null; at: Date | null }>('SELECT terms_version AS version, terms_accepted_at AS at FROM app_user WHERE email = $1', [email]);
+		if (!r.rows[0]) throw new Error(`no user ${email}`);
+		return r.rows[0];
+	});
+}
+
 /** Re-key the pending invite(s) for `email` so the test knows the link token. */
 export async function plantInviteToken(email: string): Promise<string> {
 	const { token, hash } = newToken();

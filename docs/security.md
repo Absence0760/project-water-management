@@ -1563,8 +1563,12 @@ by the WUA; nobody is added to a project without an owner acting.
   *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
   `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
   the sign-up form, invitations included, says that signing up accepts
-  both. Which version a person accepted isn't recorded yet (open in
-  legal-status.md).
+  both, and sends the version it showed: the account records it and when
+  (`app_user.terms_version` / `terms_accepted_at`, 087; a missing or stale
+  version is refused, `terms_not_accepted`). The time is the database's,
+  and an account can't backdate or clear its own record
+  (`app_user_terms_stamp`). Asking again after a change is open in
+  legal-status.md.
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
@@ -1598,7 +1602,7 @@ PDF someone else asked for kept the person as a recipient
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |

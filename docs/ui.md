@@ -148,6 +148,10 @@ from the landing footer, under every sign-in form (a **Legal** nav in
 accept the Terms of use and Privacy notice", in its footer, where the
 **Legal** nav is left off). Drafts before counsel review: what they assume
 and what is open is in [legal-status.md](./legal-status.md).
+The **Effective** line under each title is `legalEffective()` of the
+engine's `LEGAL_VERSION` (`packages/engine/src/legal.ts`), the same
+version the sign-up form sends as `acceptTerms` and the account records
+(087); change the pages and that date together.
 `e2e/tests/legal.spec.ts`.
 
 ## Sign-in pages

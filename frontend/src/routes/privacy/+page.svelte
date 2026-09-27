@@ -4,6 +4,7 @@
 	// § Personal information (POPIA): change the two together. Draft before
 	// counsel review: docs/legal-status.md tracks what is open.
 	import { base } from '$app/paths';
+	import { legalEffective } from '@water-management/engine/legal';
 	import LegalPage from '$lib/components/legal/LegalPage.svelte';
 
 	const sections = [
@@ -26,7 +27,7 @@
 <LegalPage
 	title="Privacy notice"
 	description="How Water Management collects, uses and protects personal information, and your rights under POPIA."
-	effective="Effective 27 September 2026."
+	effective={legalEffective()}
 	{sections}
 >
 	<p>

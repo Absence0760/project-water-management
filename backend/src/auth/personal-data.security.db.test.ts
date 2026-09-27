@@ -20,6 +20,7 @@
 //
 // Positive controls: the same scan finds the person everywhere before the
 // deletion, and still finds the owner (who stays) afterwards.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
@@ -246,8 +247,8 @@ describe('the data-subject export carries every row USER_FK_COVERAGE files under
 		const expected = Object.fromEntries(APP_USER_EXPORTED.map((c) => [c === 'display_name' ? 'displayName' : camel(c), asJson(stored[c])]));
 		// data_exported_at is stamped by the download itself.
 		expect({ ...doc.account, dataExportedAt: expected.dataExportedAt }).toEqual(expected);
-		// Positive control on the fixture: the columns 057 and 050 added carry real values here.
-		expect(doc.account).toMatchObject({ locale: 'af', mailSuppressedReason: 'bounce' });
+		// Positive control on the fixture: the columns 057, 050 and 087 added carry real values here.
+		expect(doc.account).toMatchObject({ locale: 'af', mailSuppressedReason: 'bounce', termsVersion: LEGAL_VERSION, termsAcceptedAt: expect.any(String) });
 	});
 });
 
