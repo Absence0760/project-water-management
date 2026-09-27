@@ -19,7 +19,10 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 
 	// An old two-run link opens the same pair, with room for a second what-if.
 	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}`);
-	await expect(page.getByRole('heading', { level: 2, name: 'Compare runs' })).toBeVisible();
+	// One title: the section header's; the view gives it its context line and draws no heading of its own.
+	await expect(page.getByTestId('section-header').getByRole('heading', { level: 1, name: 'Compare runs' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Compare runs' })).toHaveCount(1);
+	await expect(page.getByTestId('section-header').getByTestId('compare-context')).toBeVisible();
 	await expect(runSelect(page, 'Baseline')).toHaveValue(p.baseline);
 	await expect(runSelect(page, 'What-if 1')).toHaveValue(p.whatIf1);
 	await expect(runCard(page, 'What-if 1').getByTestId('what-if-change')).toHaveText('Upper farm: "Orchard" area 20 ha → 40 ha');

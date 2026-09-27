@@ -36,6 +36,7 @@
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { runYears } from '$lib/components/runs/runList';
 	import { fmtDate } from '$lib/format/number';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
 	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
@@ -75,7 +76,7 @@
 		project: string | null;
 		/** The URL for a choice of runs (any may be null). */
 		hrefFor: (a: RunRef | null, b: RunRef | null, c: RunRef | null) => string;
-		/** Heading level of the view's title: 1 on the standalone page, 2 inside the workspace. */
+		/** 1 on the standalone page, which draws the view's own title; 2 inside the workspace, whose section header is the title. */
 		level?: 1 | 2;
 		/** Links beside the title (the standalone page's Back to runs). */
 		actions?: Snippet;
@@ -329,16 +330,23 @@
 				]
 			: []
 	);
-	const H = $derived(`h${level}`);
+	// In the workspace the section header (workspace/SectionHeader) is the page's one title:
+	// the view gives it its context line and draws no title of its own (issue #17).
+	const inWorkspace = $derived(level === 2);
+	$effect(() => fillHeader({ context: headerContext }, inWorkspace));
 </script>
 
-<header class="cmp-head">
-	<div class="cmp-title">
-		<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
-		<p class="muted" data-testid="compare-context">{context}</p>
-	</div>
-	{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
-</header>
+{#snippet headerContext()}<span data-testid="compare-context">{context}</span>{/snippet}
+
+{#if !inWorkspace}
+	<header class="cmp-head">
+		<div class="cmp-title">
+			<h1 id="compare-title">Compare runs</h1>
+			<p class="muted">{@render headerContext()}</p>
+		</div>
+		{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
+	</header>
+{/if}
 
 {#snippet card(side: Side)}
 	{@const pid = side === 'a' ? projectA : side === 'b' ? projectB : projectC}
@@ -645,8 +653,7 @@
 		gap: 0.5rem 1.5rem;
 		margin: 0 0 1rem;
 	}
-	.cmp-title :global(h1),
-	.cmp-title :global(h2) {
+	.cmp-title h1 {
 		margin: 0;
 		font-size: 1.6rem;
 	}
