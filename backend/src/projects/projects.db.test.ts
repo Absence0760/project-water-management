@@ -79,13 +79,15 @@ describe('projects', () => {
 		const { body } = await u.call('POST', '/projects', { name: 'S' });
 		const id = body.project.id;
 		const res = await u.call('PATCH', `/projects/${id}`, {
-			settings: { effectiveRainFraction: 0.5, calibration: { a: 0.12, recessionTable: [1, 2] } }
+			settings: { effectiveRainFraction: 0.5, calibration: { rainThresholdMm: 3, a: 0.12 }, futureEngineKey: [1, 2] }
 		});
 		expect(res.status).toBe(200);
 		expect(res.body.project.settings.effectiveRainFraction).toBe(0.5);
-		expect(res.body.project.settings.calibration.a).toBe(0.12);
-		expect(res.body.project.settings.calibration.b).toBe(1.2); // default kept
-		expect(res.body.project.settings.calibration.recessionTable).toEqual([1, 2]);
+		expect(res.body.project.settings.calibration.rainThresholdMm).toBe(3);
+		expect(res.body.project.settings.calibration.catchmentAreaKm2).toBeNull(); // default kept
+		// The legacy runoff model's key is dropped (issue #16), an unknown top-level one kept.
+		expect(res.body.project.settings.calibration).not.toHaveProperty('a');
+		expect(res.body.project.settings.futureEngineKey).toEqual([1, 2]);
 		expect((await u.call('PATCH', `/projects/${id}`, { settings: { apanMm: [1, 2] } })).status).toBe(400);
 	});
 
