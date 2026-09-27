@@ -19,6 +19,7 @@
 		fmtMm3,
 		highFlowVerdict,
 		monthLabel,
+		naturalMarLine,
 		reserveCellText,
 		reserveGrid,
 		shareOfRequired,
@@ -45,6 +46,7 @@
 	const grid = $derived(reserveGrid(site));
 	const split = $derived(!!site.lowFlow);
 	const src = $derived(sourceLine(site));
+	const mar = $derived(naturalMarLine(site));
 
 	// The chart: share of months met per month of the year, on a fixed 0–100 % axis.
 	const W = 480;
@@ -66,6 +68,7 @@
 	{/if}
 	<p class="muted small">{describeMethod(site)}</p>
 	<p class="small" class:muted={!src.low} class:caution={src.low}>{src.text}</p>
+	{#if mar}<p class="small" class:muted={!mar.caution} class:caution={mar.caution}>{mar.text}</p>{/if}
 
 	<p class="flag {rateClass(site.overall.rate)}" role="status">
 		<strong>{site.isOutlet ? `Outlet (${site.name})` : site.name}:</strong>

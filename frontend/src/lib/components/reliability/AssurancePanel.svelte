@@ -11,7 +11,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
 	import { fmtVolume } from '$lib/components/ewr/heatmap';
-	import { classCounts, notComputedText, pctText, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
+	import { classCounts, notComputedText, partWaterYears, pctText, STRESS_BIN, STRESS_ORDER, STRESS_SHORT, stressLegend } from './reliability';
 
 	let {
 		assurance,
@@ -30,6 +30,7 @@
 	const grid = $derived(grids.find((g) => (g.nodeId ?? 'system') === gridId) ?? grids[0]);
 	const legend = $derived(assurance ? stressLegend(assurance.stress) : []);
 	const counts = $derived(grid ? classCounts(grid) : null);
+	const partYears = $derived(assurance ? partWaterYears(assurance) : null);
 
 	/** Calendar year of a water-year row + month column (Oct–Dec belong to the start year). */
 	const calYear = (r: number, m: number) => (assurance?.stress.waterYears[r] ?? 0) + (m < 3 ? 0 : 1);
@@ -109,6 +110,11 @@
 			<p class="note muted">
 				Resilience is shown as the mean length of a failure (consecutive demand days not fully met) and vulnerability as the deficit per failure,
 				after Hashimoto et al. (1982). Volume supplied equals the curtailment table's supplied ÷ demand.
+				{#if partYears !== null}
+					Water years met counts complete water years only (1 October to 30 September inside the reporting window){partYears > 0
+						? `; ${partYears === 1 ? 'the part year' : `the ${partYears} part years`} at the window's ends ${partYears === 1 ? 'is' : 'are'} left out`
+						: ''}.
+				{/if}
 			</p>
 		{/if}
 

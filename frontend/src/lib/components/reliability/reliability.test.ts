@@ -1,6 +1,6 @@
 import { STRESS_THRESHOLDS, supplyAssurance, type WaterAccountRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { accountBars, accountLines, classCounts, ewrMetShare, notComputedText, pctText, stressLegend } from './reliability';
+import { accountBars, accountLines, classCounts, ewrMetShare, notComputedText, partWaterYears, pctText, stressLegend } from './reliability';
 
 const zeros = (n: number) => new Array<number>(n).fill(0);
 
@@ -51,6 +51,15 @@ describe('assurance helpers', () => {
 	it('counts the months in each class', () => {
 		// September 2001: 15/20 = 75 % High; October: 14/30 Critical.
 		expect(classCounts(a.stress.nodes[0]!)).toEqual({ low: 0, moderate: 0, high: 1, severe: 0, critical: 1 });
+	});
+
+	it('the part water years the annual measure left out (engine ≥ 1.7.0), null on an older run', () => {
+		// Both water years of the six days are part years.
+		expect(partWaterYears(a)).toBe(2);
+		const r = a.reliability[0]!;
+		expect(partWaterYears({ reliability: [{ ...r, partWaterYears: 0 }, { ...r, partWaterYears: 1 }] })).toBe(1);
+		const { partWaterYears: _, ...old } = r;
+		expect(partWaterYears({ reliability: [old] })).toBeNull();
 	});
 
 	it('formats percentages and EWR shares', () => {
