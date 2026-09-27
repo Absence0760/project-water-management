@@ -17,7 +17,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
+	import { cardLabel, GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
@@ -479,9 +479,9 @@
 		{:else}
 		<p class="muted small intro">
 				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; units total {fmtPct(shares.sum, 2)}{/if}.
-				The ⓘ buttons and the field guide below explain each value.
+				<span class="wide-only">The ⓘ buttons and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
-			<div class="table-wrap">
+			<div class="table-wrap net-wrap">
 				<table class="data compact net">
 					<thead>
 						<tr class="groups">
@@ -541,6 +541,7 @@
 									</div>
 								</th>
 								<td>
+									<span class="cell-label" aria-hidden="true">Kind</span>
 									<select aria-label="Kind of {label}" disabled={readonly} bind:value={node.kind}>
 										<option value={'farm' satisfies NodeKind}>Unit</option>
 										<option value={'gauge' satisfies NodeKind}>Gauge</option>
@@ -548,6 +549,7 @@
 									</select>
 								</td>
 								<td>
+									<span class="cell-label" aria-hidden="true">Drains into</span>
 									<select
 										aria-label="{label} drains into"
 										disabled={readonly}
@@ -566,6 +568,7 @@
 										<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
 									{:else}
 									<td class:pct={isPct(f)} class:vol={isVolume(f)}>
+										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 										<NumberInput
 											label={f.aria(label)}
 											min={0}
@@ -581,7 +584,7 @@
 									</td>
 									{/if}
 								{/each}
-								<td class="num share">{share === null ? '–' : fmtPct(share, 2)}</td>
+								<td class="num share" class:none={share === null}><span class="cell-label">Flow share in use{' '}</span>{share === null ? '–' : fmtPct(share, 2)}</td>
 								{#if !readonly}
 									<td class="rm">
 										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove node" onclick={() => remove(node.id, label)}>✕</button>
@@ -593,15 +596,17 @@
 					<tfoot>
 						<tr>
 							<th scope="row" class="sticky">Total</th>
-							<td></td>
-							<td></td>
+							<td class="none"></td>
+							<td class="none"></td>
 							{#each TABLE_FIELDS as f (f.key)}
-								<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)}>
-									{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
+								{@const total = f.key === 'areaKm2' ? fmtNum(totalArea, 2) : f.key === 'damCapacityM3' ? fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0)) : null}
+								<!-- On a phone card each total names itself (the column header is gone). -->
+								<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)} class:none={total === null}>
+									{#if total !== null}<span class="cell-label">{cardLabel(f)}{' '}</span>{total}<span class="cell-label">{' '}{f.unit}</span>{/if}
 								</td>
 							{/each}
-							<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002}>{farms.length ? fmtPct(shares.sum, 2) : ''}</td>
-							{#if !readonly}<td class="rm"></td>{/if}
+							<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002} class:none={!farms.length}>{#if farms.length}<span class="cell-label">Flow share in use{' '}</span>{fmtPct(shares.sum, 2)}{/if}</td>
+							{#if !readonly}<td class="rm none"></td>{/if}
 						</tr>
 					</tfoot>
 				</table>
@@ -1246,6 +1251,122 @@
 			min-height: 0;
 			max-height: none;
 			align-content: start;
+		}
+	}
+	/* Phones: each node's row becomes a card with visible field labels, the
+	   same inputs two to a row, instead of a table that scrolls sideways under
+	   its pinned name and remove columns (as the crop grids, CropGrids.svelte).
+	   Fields a node doesn't use are left out rather than shown as "–". The
+	   repeated .net raises these over the table's own column rules. */
+	.cell-label,
+	.phone-only {
+		display: none;
+	}
+	@media (max-width: 640px) {
+		.wide-only {
+			display: none;
+		}
+		.phone-only {
+			display: inline;
+		}
+		/* The cards scroll with the modal's body, not in a 70vh box of their
+		   own inside it, so Add node and the field guide follow the last card. */
+		.net-wrap {
+			max-height: none;
+		}
+		.net thead {
+			display: none;
+		}
+		.net,
+		.net tbody,
+		.net tfoot {
+			display: block;
+		}
+		.net tr {
+			position: relative;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.5rem 0.75rem;
+			align-items: end;
+			padding: 0.75rem;
+			border-bottom: 1px solid var(--border);
+		}
+		.net tbody tr:last-child {
+			border-bottom: none;
+		}
+		.net.net.net tr > * {
+			position: static;
+			min-width: 0;
+			padding: 0;
+			border: 0;
+			text-align: left;
+			background: none;
+			box-shadow: none;
+		}
+		.net.net.net tr > .na,
+		.net.net.net tr > .none {
+			display: none;
+		}
+		.net th[scope='row'] {
+			grid-column: 1 / -1;
+		}
+		/* The card's first line holds the row's controls (move, notes, and
+		   Remove at the top right); the name takes the whole next line, so a
+		   long one stays readable. */
+		.net.net.net tr > .rm {
+			position: absolute;
+			top: 0.75rem;
+			right: 0.75rem;
+		}
+		.namecell {
+			flex-wrap: wrap;
+			row-gap: 0.4rem;
+		}
+		/* As tall as Remove (a 44 px phone button), so the line and ✕ line up. */
+		.namecell :global(.mc) {
+			min-height: 44px;
+		}
+		.net.net.net .namecell input {
+			order: 2;
+			flex: 1 1 100%;
+			width: auto;
+			min-width: 0;
+		}
+		.net select {
+			width: 100%;
+			min-width: 0;
+		}
+		.net td :global(input) {
+			text-align: left;
+		}
+		.cell-label {
+			display: block;
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--text-2);
+			margin-bottom: 0.15rem;
+		}
+		/* A share or a total reads as one line: "Flow share in use 55.81%". */
+		.net .share .cell-label,
+		.net tfoot .cell-label {
+			display: inline;
+			margin: 0;
+		}
+		.net .share {
+			grid-column: 1 / -1;
+		}
+		.net tfoot tr {
+			grid-template-columns: 1fr;
+			gap: 0.25rem;
+			background: var(--surface-2);
+			border-top: 2px solid var(--border-strong);
+			font-variant-numeric: tabular-nums;
+		}
+		.net tr.drop-before {
+			box-shadow: inset 0 2px 0 var(--accent);
+		}
+		.net tr.drop-after {
+			box-shadow: inset 0 -2px 0 var(--accent);
 		}
 	}
 </style>

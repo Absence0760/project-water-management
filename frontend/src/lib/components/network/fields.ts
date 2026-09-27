@@ -266,6 +266,17 @@ export function setNodeField(node: NetworkNode, key: NodeNumberKey, v: number | 
 	(node as unknown as Record<NodeNumberKey, number | null>)[key] = v;
 }
 
+/**
+ * A field's label on the node table's phone cards (≤ 640 px), where the group
+ * header row ("Dam", "Flow share") is gone: "Dam capacity", "High-MAP area".
+ */
+export function cardLabel(f: NodeField): string {
+	if (f.group === 'area') return f.key === 'areaKm2' ? f.label : `${f.label} area`;
+	if (f.group === 'dam') return f.key === 'damInitialPct' ? 'Dam initial storage' : `Dam ${f.label.toLowerCase()}`;
+	if (f.group === 'share') return `${f.label} flow share`;
+	return f.label;
+}
+
 export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
 /** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */
 export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/day';
