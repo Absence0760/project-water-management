@@ -223,6 +223,13 @@ export default defineConfig({
 		// Firefox 125). Applies to the calibration worker too, which is part of
 		// the page build.
 		target: 'es2022',
+		// Terser instead of Vite's default esbuild minifier: ~5% less JS gzip
+		// (−55 KB on 2026-09-27, the bundle guard's change log). Most of it is
+		// the mangler: Terser reuses the same short names (e, t, a…) in every
+		// scope, which gzip then finds over and over, where esbuild gives each
+		// scope different names. Default options (compress + mangle, no unsafe
+		// transforms); the build takes longer.
+		minify: 'terser',
 		modulePreload: { resolveDependencies: preload.resolveDependencies },
 		rollupOptions: {
 			output: { manualChunks: svelteRuntimeChunk },
