@@ -4,6 +4,7 @@
 // without seeing other applicants' drafts, other farms' inputs or anything
 // unpublished; the assessors (editors) see what has been submitted. Every
 // "cannot see" has its positive control.
+import { blankEwrRuleTable } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -273,6 +274,19 @@ describe('an application', () => {
 		const text = JSON.stringify(seen);
 		for (const name of OTHER_FARMS) expect(text, name).not.toContain(name);
 		expect(text).toContain('Rooikloof');
+	});
+
+	it('may change the Reserve’s rule table (engine ≥ 1.6.0), which is always a baseline assumption, never refused', async () => {
+		// Like every baseline op (settings, another party's node, an EWR site's flag): an
+		// application can't hide an assumption change, but may show one to the assessor.
+		const table = { ...blankEwrRuleTable(null), source: 'Invented desktop estimate', sourceKind: 'desktop', ewr: Array.from({ length: 12 }, () => [9, 8, 7, 6, 5, 4, 3, 2, 1, 0.5]) };
+		const res = await asA('POST', `${P()}/scenarios`, { name: 'Raise Rooikloof, desktop Reserve', baseRunId: published, ops: [damRaise(rooikloof.id, 120_000), { op: 'ewrRule.set', table }] });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.check.problems).toEqual([]);
+		// Positive control: the dam raise on their own farm is still the proposal.
+		expect(res.body.check.classified).toEqual(['proposal', 'baseline']);
+		expect(res.body.check.applied.map((a: { index: number }) => a.index)).toEqual([0, 1]);
+		expect((await asA('DELETE', `${P()}/scenarios/${res.body.scenario.id}`)).status).toBe(204);
 	});
 
 	it('is submitted by its owner, frozen, then seen by the assessors (not viewers) with its runs', async () => {

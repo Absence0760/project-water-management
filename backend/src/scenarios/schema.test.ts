@@ -1,6 +1,6 @@
 // The scenario request bodies (schema.ts): the engine's validateScenarioOps
 // wrapped in zod, with every id tightened to a UUID, and the ops hash.
-import { canonicalJson, type ScenarioOp } from '@water-management/engine';
+import { blankEwrRuleTable, canonicalJson, type ScenarioOp } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { checkOps, CreateScenarioBody, opsSha256, PatchScenarioBody, STATUS_MOVES } from './schema.js';
@@ -38,12 +38,20 @@ describe('checkOps', () => {
 		// demand.scale (issue #53 R1): each node it names, by its place in the list; none named is every farm.
 		expect(checkOps([{ op: 'demand.scale', factor: 0.85, nodeIds: [a, 'farm-b'] }]).errors).toEqual(['ops[0].nodeIds[1]: must be a UUID']);
 		expect(checkOps([{ op: 'demand.scale', factor: 0.85, nodeIds: [a, b], months: [12, 1], category: 'farm' }, { op: 'demand.scale', factor: 0.7 }]).errors).toEqual([]);
+		// ewrRule.set (engine ≥ 1.6.0): the site's gauge; null (the outlet) has no id.
+		const table = { ...blankEwrRuleTable(null), source: 'Invented study' };
+		expect(checkOps([{ op: 'ewrRule.set', table: { ...table, siteNodeId: 'weir' } }]).errors).toEqual(['ops[0].table.siteNodeId: must be a UUID']);
+		expect(checkOps([{ op: 'ewrRule.set', table }, { op: 'ewrRule.set', table: { ...table, siteNodeId: a } }]).errors).toEqual([]);
 	});
 
 	it("reports the engine validator's errors first, unchanged", () => {
 		expect(checkOps('nope').errors).toEqual(['ops: must be a list']);
 		expect(checkOps([{ op: 'node.set', nodeId: a, field: 'damMinPct', value: 2 }]).errors).toEqual(['ops[0].value: must be at most 1']);
 		expect(checkOps([{ op: 'demand.scale', factor: 2.5, nodeIds: ['x'] }]).errors).toEqual(['ops[0].factor: must be at most 2']);
+		// A rule table Settings wouldn't save, in the Settings form's words.
+		expect(checkOps([{ op: 'ewrRule.set', table: { ...blankEwrRuleTable('x'), source: '' } }]).errors).toEqual([
+			'ops[0].table.source: Say where the table comes from (Reserve determination, gazette notice, table).'
+		]);
 	});
 });
 

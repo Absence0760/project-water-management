@@ -53,6 +53,9 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			return [['boreholeId', op.boreholeId]];
 		case 'demand.scale':
 			return (op.nodeIds ?? []).map((id, i) => [`nodeIds[${i}]`, id] as [string, unknown]);
+		case 'ewrRule.set':
+			// null = the outlet: no id to check.
+			return op.table.siteNodeId === null ? [] : [['table.siteNodeId', op.table.siteNodeId]];
 		case 'settings.set':
 		case 'series.scale':
 			return [];
