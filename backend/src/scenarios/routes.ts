@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
@@ -272,7 +272,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (s.status === 'submitted' || s.status === 'decided') throw new ApiError(409, `a ${s.status} scenario can't be deleted`);
 			// Its base run stops being cited and may be trimmed: under the project's run lock, as a trim is.
 			await lockProjectRuns(db, id);
-			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]);
+			mustChange(await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]));
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
 		});

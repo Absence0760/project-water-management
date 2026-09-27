@@ -521,6 +521,13 @@ In short:
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at
   the route, and RLS alone must hold if a route forgets it.
+- **RLS refusing a write is never a silent success** (issue #56). A write
+  on a row the route has already authorised goes through `mustChange`
+  (`backend/src/http/errors.ts`): zero rows changed means RLS refused it,
+  and the route answers 404, what a non-member gets, instead of 2xx.
+  `backend/src/rlsSecondLayer.db.test.ts` switches the role check off and
+  proves a viewer's project, series and team writes each get that 404 and
+  change nothing.
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of

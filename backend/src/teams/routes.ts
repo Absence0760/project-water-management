@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
@@ -57,7 +57,7 @@ async function patchSettings(db: Db, id: string, patch: TeamSettingsPatch) {
 	const before = teamThresholds(rows[0].settings);
 	const after = teamThresholds(next);
 	if (JSON.stringify(before) === JSON.stringify(after)) return;
-	await db.query('UPDATE team SET settings = $2 WHERE id = $1', [id, JSON.stringify(next)]);
+	mustChange(await db.query('UPDATE team SET settings = $2 WHERE id = $1', [id, JSON.stringify(next)]));
 	// null = the defaults: the log says which numbers applied before and after.
 	await recordTeamAudit(db, id, 'team_thresholds.changed', {
 		teamId: id,
@@ -102,7 +102,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
-			if (body.name !== undefined) await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]);
+			if (body.name !== undefined) mustChange(await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]));
 			if (body.settings) await patchSettings(db, id, body.settings);
 			return c.json({ team: await getTeam(db, id) });
 		});
@@ -112,7 +112,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
 			// Projects stay, owned by their direct members (team_id → NULL).
-			await db.query('DELETE FROM team WHERE id = $1', [id]);
+			mustChange(await db.query('DELETE FROM team WHERE id = $1', [id]));
 			return c.body(null, 204);
 		})
 	)

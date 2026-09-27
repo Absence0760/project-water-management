@@ -63,6 +63,15 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');
 
+/**
+ * A write on the row a route already authorised must change it. Zero rows
+ * means RLS, the second layer behind the route's role check, refused it:
+ * answer what a non-member gets rather than a silent success (issue #56).
+ */
+export function mustChange(r: { rowCount: number | null }): void {
+	if (!r.rowCount) throw notFound();
+}
+
 /** Postgres SQLSTATE codes we translate into client errors. */
 const PG_UNIQUE = '23505';
 const PG_FK = '23503';
