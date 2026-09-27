@@ -57,6 +57,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/jobs': () => ({ body: { kind: 'rerun', label: 'Ladder' } }),
 	'POST /projects/:id/yield': (c) => ({ body: { nodeId: c.farmId, runId: c.runId, kind: 'firm' } }),
 	'GET /projects/:id/yield': (c) => ({ query: { runId: c.runId } }),
+	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
