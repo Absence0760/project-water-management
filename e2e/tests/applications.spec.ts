@@ -28,11 +28,16 @@ test('an applicant submits an application on the published baseline, and the ass
 	await a.goto(`/projects/${project.id}`);
 	await expect(a.getByTestId('applicant-view')).toHaveText('Applicant view');
 	await expect(a.getByRole('navigation', { name: 'Project sections' })).toHaveCount(0);
-	await expect(a.getByRole('link', { name: 'Upper farm' })).toBeVisible();
+	// One section header, like every workspace section: the title, and the catchment, the baseline and their farm on its context line.
+	const header = a.getByTestId('section-header');
+	await expect(a.getByRole('heading', { level: 1 })).toHaveText(['Applications']);
+	await expect(header.getByTestId('applicant-project')).toHaveText('Applications golden path');
+	await expect(header.getByTestId('applicant-baseline')).toContainText('Baseline published');
+	await expect(header.getByRole('link', { name: 'Upper farm' })).toBeVisible();
 	await expect(a.getByTestId('scenarios-empty')).toContainText('No applications yet.');
 
-	// A new application starts on the published baseline: New application, at the top of their list, opens the dialog.
-	await a.getByRole('region', { name: 'Your applications' }).getByRole('link', { name: 'New application', exact: true }).click();
+	// A new application starts on the published baseline: New application, the header's action, opens the dialog.
+	await header.getByRole('link', { name: 'New application', exact: true }).click();
 	const create = a.getByRole('dialog', { name: 'New application' });
 	await expect(create.getByLabel('Base run')).toHaveCount(0);
 	await create.getByLabel('Name', { exact: true }).fill(NAME);

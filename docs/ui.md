@@ -3225,7 +3225,10 @@ gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
 - **Header:** *Compare runs* and a context line ("Baseline “…” against 2
-  what-ifs · same period, 2021–2024 · engine 0.45.0").
+  what-ifs · same period, 2021–2024 · engine 0.45.0"). In the workspace
+  the view draws no title of its own: its context line goes to the section
+  header (`fillHeader`, `level={2}`), so the page has one title; the
+  standalone page draws its own `h1` and context.
 - **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
@@ -3488,17 +3491,19 @@ panel calls the role "Applicant") never sees the workspace's tabs, which the
 API refuses them. `/projects/:id` shows them the **Applicant view**
 (`lib/components/scenarios/ApplicantView.svelte`, a lazy chunk; the page
 detects the role from the project list after the `403`, as it does for a
-farmer): an "Applicant view" badge, the published baseline (its date, and
-that other farms show only by an anonymous name), links to their own farms'
-farm view if they have links, and the Scenarios tab in applicant mode
-("Your applications"; `?scenario=<id>` selects one):
+farmer). It has the same frame as every workspace section (issue #17): a
+section header titled **Applications** with an "Applicant view" badge, a
+context line (the catchment's name, "Baseline published <date> by <who>",
+and links to their own farms' farm view if they have links) and one slim
+notice (their applications start on the published baseline; other farms
+show only by an anonymous name). Under it, the Scenarios tab in applicant
+mode ("Your applications"; `?scenario=<id>` selects one):
 
-- **New application**: a button at the top of the list (the Applicant view
-  has no section header), opening the same dialog at `new=1` with a name
-  only; it starts on the current publication's run. With nothing
-  published, a note says so and there is no button. The list scrolls inside
-  its card, so the button stays on the first screen with thirty
-  applications.
+- **New application**: the section header's action, opening the same
+  dialog at `new=1` with a name only; it starts on the current
+  publication's run. With nothing published, the list says so and there is
+  no button. The list scrolls inside its card, so the header and its
+  button stay on the first screen with thirty applications.
 - **The editor** is the Scenarios editor, with the base from
   `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
   values blank, so an op on one isn't described "from" a value). Their own

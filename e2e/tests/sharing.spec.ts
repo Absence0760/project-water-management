@@ -82,6 +82,8 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	// A project that was never shared is indistinguishable from one that doesn't exist.
 	await v.goto(`/projects/${secret.id}`);
 	await expect(v.getByRole('alert')).toContainText("This project doesn't exist or you don't have access to it.");
+	// It keeps the page frame: one title, the section header's.
+	await expect(v.getByRole('heading', { level: 1 })).toHaveText(['Project not found']);
 	await expect(v.getByTestId('project-name').filter({ hasText: 'Private catchment' })).toHaveCount(0);
 	await v.getByRole('alert').getByRole('link', { name: 'Back to projects' }).click();
 	await expect(v.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
