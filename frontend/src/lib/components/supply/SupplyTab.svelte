@@ -268,12 +268,12 @@
 		<section class="panel" aria-label="No run yet">
 			<div class="empty">
 				{#if modelUnits === 0}
-					<p>No units in this catchment's model yet. Add units on the Network; after a run, each one's supply against its demand shows here.</p>
+					<p>No units in this catchment’s model yet. Add units on the Network; after a run, each one's supply against its demand shows here.</p>
 					<p class="empty-links"><a class="btn btn-sm" href="?tab=network">Open the Network</a></p>
 				{:else if readonly}
-					<p>No run yet. Once an editor runs the model, how much of each unit's demand was supplied shows here.</p>
+					<p>No run yet. Once an editor runs the model, how much of each unit’s demand was supplied shows here.</p>
 				{:else}
-					<p>No run yet. Run the model to see how much of each of the {fmtNum(modelUnits)} units' demand is supplied.</p>
+					<p>No run yet. Run the model to see how much of each of the {fmtNum(modelUnits)} units’ demand is supplied.</p>
 					<p class="empty-links"><a class="btn btn-sm btn-primary" href="?tab=runs">Run the model (Runs &amp; results)</a></p>
 				{/if}
 			</div>
@@ -323,7 +323,7 @@
 					</dl>
 					{#if weekError}
 						<p class="alert alert-error" role="alert">
-							The days short this week couldn't be worked out: {weekError}
+							The days short this week couldn’t be worked out: {weekError}
 							<button type="button" class="btn btn-sm" onclick={() => weekAttempt++}>Try again</button>
 						</p>
 					{/if}

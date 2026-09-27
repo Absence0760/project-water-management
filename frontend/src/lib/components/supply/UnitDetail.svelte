@@ -118,7 +118,7 @@
 
 <section class="panel detail" class:fit id="res-farm" aria-labelledby="farm-h" aria-busy={loading}>
 	<div class="panel-head">
-		<h2 id="farm-h"><span class="visually-hidden">Unit detail: </span>{name}</h2>
+		<h2 id="farm-h"><span class="visually-hidden">Unit detail:</span> {name}</h2>
 		{#if hasDam}
 			<span class="seg" role="group" aria-label="Chart">
 				<button type="button" class="btn btn-sm" aria-pressed={shown === 'supply'} onclick={() => (view = 'supply')}>Supply vs demand</button>

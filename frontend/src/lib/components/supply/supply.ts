@@ -177,7 +177,7 @@ export const BAND_WORDS: Record<SupplyBand, string> = {
 
 /**
  * A card's lines under the %: the shortfall over the whole record, the demand
- * days short in the reporting window, the run's last 7 days and the cut the
+ * days short in the reporting window, the days short in the run's last 7 days and the cut the
  * curtailment table asks for. Lines a run can't give are left out.
  */
 export function cardFacts(c: UnitCard, weekDays: number): string[] {
@@ -185,7 +185,8 @@ export function cardFacts(c: UnitCard, weekDays: number): string[] {
 	if (c.fraction === null) return out;
 	out.push(c.deficitM3Day > 0.5 ? `Short ${fmtNum(c.deficitM3Day)} m³/day on average (${fmtQty(m3DayToMm3a(c.deficitM3Day), 3)} Mm³/a)` : 'No shortfall on average');
 	if (c.daysShort !== null && c.demandDays) out.push(`${fmtNum(c.daysShort)} of ${fmtNum(c.demandDays)} demand days short in the reporting window`);
-	if (c.weekShort !== null) out.push(c.weekShort ? `Short on ${c.weekShort} of the last ${weekDays} days` : `Not short in the last ${weekDays} days`);
+	// Only when it was: the Short this week tile already says how many weren't.
+	if (c.weekShort) out.push(`Short on ${c.weekShort} of the last ${weekDays} days`);
 	if (c.cutM3Day) out.push(`Curtailment: cut ${fmtNum(c.cutM3Day)} m³/day`);
 	return out;
 }

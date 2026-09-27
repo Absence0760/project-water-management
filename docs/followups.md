@@ -2302,6 +2302,9 @@ from the WP:
       "“farms short this week” opens the Runs tab at the curtailment table"
       (the link, then a reload); it failed before the fix (landed at the
       top) and passed 30/30 at `--repeat-each=30`, 12 workers.
+      Since issue #17 the panel is on Units & supply: the link is
+      `?tab=supply&run=…&window=last7#res-curtailment`, that page holds the
+      fragment the same way, and the old Runs link is sent there.
 - [x] **No perf guard on the portfolio query** (done 2026-09-26). The
       backend's `perf-db` vitest project (the db project's global setup) runs
       `portfolio/portfolio.db.perf.test.ts`: 10 published catchments × 60

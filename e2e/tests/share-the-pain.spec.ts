@@ -66,7 +66,8 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 	await updateSettings(page.request, project.id, { reportStart: '2021-11-01', reportEnd: '2021-12-31', ewrPragmaticM3PerDay: new Array(12).fill(1_000_000) });
 	const run = await createRun(page.request, project.id, 'Baseline');
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${run}`);
+	// On Units & supply since issue #17, with the rest of the curtailment panel.
+	await page.goto(`/projects/${project.id}?tab=supply&run=${run}`);
 	const panel = page.locator('#res-curtailment');
 	const board = panel.getByRole('region', { name: 'Share the pain' });
 	const table = board.getByRole('table', { name: /^Share the pain, Project window, 2021-11-01 to 2021-12-31:/ });

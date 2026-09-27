@@ -36,8 +36,8 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 		{
 			// The unit results, curtailment, assurance of supply and unit detail moved to their own page
 			// (Units & supply, `?tab=supply`, issue #17): a link row keeps the group's place.
-			label: 'Units & supply',
-			sections: [{ id: 'res-units', label: 'Units & supply' }]
+			label: 'Units & users',
+			sections: [{ id: 'res-units', label: 'On Units & supply' }]
 		},
 		{
 			label: 'Model quality',
