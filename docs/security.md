@@ -91,7 +91,11 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Adding an existing but unverified account** doesn't make it a member:
   `POST …/members` adds only **verified** accounts directly. An unverified one
   gets a pending invite (the same response as an address with no account, so
-  the owner learns nothing about whether it's registered) and an email to the
+  the owner learns nothing about whether it's registered; the `invite.sent`
+  audit row, and so History and the data export, are the same too, with no
+  "was mailed" flag, since an unverified account inside its verification
+  cooldown gets no new email; `account-tokens.security.db.test.ts` compares
+  all of them, and a failed send is logged server-side only) and an email to the
   address asking to confirm it; confirming accepts the invite. This stops
   someone who pre-registers a colleague's address from being added in their
   place. Residual risk: if the real inbox owner clicks "confirm" on an account

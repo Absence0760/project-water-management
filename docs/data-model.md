@@ -481,7 +481,8 @@ the result change?", and put back any earlier version.
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
   in `app_accept_invites`), `invite.sent/revoked` (email masked
-  `j•••@domain`; a farmer invite adds its number of `farms`),
+  `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
+  flag, which would say whether the address has an account),
   `publication.published/notice_changed`, `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds

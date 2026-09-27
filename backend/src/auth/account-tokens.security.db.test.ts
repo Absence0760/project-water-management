@@ -9,13 +9,15 @@
 //   - a reset or verify link is single use even when opened in parallel;
 //   - the session JWT refuses every forgery shape and lives 7 days;
 //   - adding someone by email answers the same whether or not an unverified
-//     account holds the address, and login the same for an unknown address
+//     account holds the address (response, invite list, audit row and
+//     History item), and login the same for an unknown address
 //     and a wrong password.
 // Every "cannot" has a positive control. Needs Postgres (pnpm dev:db:up).
 import { SignJWT } from 'jose';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
+import { maskEmail } from '../history/record.js';
 import { hashToken } from './tokens.js';
 
 const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
@@ -322,6 +324,60 @@ describe('adding someone by email doesn’t reveal whether the address has an ac
 		const [a, b] = bulk.body.results as { email: string; row: number }[];
 		expect(a).toMatchObject({ status: 'invited' });
 		expect(shape({ ...b, row: 0 }, held)).toEqual(shape(a, unknown));
+	});
+
+	// The audit trail too: an owner reads it in History (and their data
+	// export carries it). The telling case is an account that signed up
+	// moments ago: its verification link is inside the resend cooldown, so the
+	// invite sends no new email, which an audit field like `mailed` would show.
+	describe('the same audit row and History item', () => {
+		type Add = (email: string) => Promise<{ status: number }>;
+		/** What adding `email` wrote to the audit log and History, with the address, ids and clock blanked. */
+		async function trail(owner: Awaited<ReturnType<typeof signUp>>, projectId: string, email: string, add: Add) {
+			const [{ last }] = await asOwner('SELECT coalesce(max(id), 0) AS last FROM audit_event WHERE project_id = $1', [projectId]);
+			expect((await add(email)).status).toBeLessThan(300);
+			const rows = await asOwner(
+				'SELECT kind, actor_user_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND id > $2 ORDER BY id',
+				[projectId, last]
+			);
+			const history = (await owner.call('GET', `/projects/${projectId}/history`)).body.items as { type: string; id: string }[];
+			const items = history.filter((i) => i.type === 'event' && BigInt(i.id) > BigInt(last)).map(({ id: _id, ...i }) => i);
+			const blank = (v: unknown) =>
+				JSON.parse(JSON.stringify(shape(v, email)).replaceAll(JSON.stringify(maskEmail(email)), '"<masked>"')) as unknown;
+			return { rows: blank(rows), items: blank(items) };
+		}
+
+		async function compareTrails(add: (owner: Awaited<ReturnType<typeof signUp>>, projectId: string, farmId: string) => Add) {
+			const owner = await signUp('TrailOwner');
+			const projectId = (await owner.call('POST', '/projects', { name: 'Trail' })).body.project.id as string;
+			const outlet = node('Outlet', null);
+			const farm = node('Trail Farm', outlet.id);
+			const model = { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [], landCover: [] };
+			expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+			const go = add(owner, projectId, farm.id);
+			const none = await trail(owner, projectId, newEmail('nobody'), go);
+			const justSignedUp = await trail(owner, projectId, (await signUp('Fresh', { verified: false })).email, go);
+			const older = await trail(owner, projectId, await squatted(), go);
+			expect((none.rows as { kind: string }[]).map((r) => r.kind)).toContain('invite.sent');
+			expect(justSignedUp).toEqual(none);
+			expect(older).toEqual(none);
+			// Positive control: a verified account is added, not invited, and the comparison sees it.
+			const verified = await trail(owner, projectId, (await signUp('Verified')).email, go);
+			expect(verified.rows).not.toEqual(none.rows);
+			expect(verified.items).not.toEqual(none.items);
+		}
+
+		it('project members', async () => {
+			await compareTrails((owner, projectId) => (email) => owner.call('POST', `/projects/${projectId}/members`, { email, role: 'viewer' }));
+		});
+
+		it('farmers, one at a time and in bulk', async () => {
+			await compareTrails((owner, projectId, farmId) => (email) => owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmId] }));
+			await compareTrails((owner, projectId) => async (email) => {
+				const r = await owner.call('POST', `/projects/${projectId}/farmers/bulk`, { rows: [{ email, farm: 'Trail Farm' }] });
+				return { status: r.body.results[0].status === 'error' ? 400 : r.status };
+			});
+		});
 	});
 });
 
