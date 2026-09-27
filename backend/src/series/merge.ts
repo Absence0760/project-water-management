@@ -13,12 +13,17 @@ export { MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate };
 
 /**
  * Before a write creates a series: 409 when the project already holds
- * SERIES_PER_PROJECT_MAX. A soft cap (two creates racing at the limit can
- * both pass), which is all a guard against runaway growth needs.
+ * SERIES_PER_PROJECT_MAX. A hard cap (075_series_cap.sql):
+ * app_project_series_count counts every series of the project, not just the
+ * ones an API key limited to some series can see, and holds a per-project
+ * advisory lock to the end of the transaction, so concurrent creates count
+ * one after another. NULL: the caller may not write the project's series.
  */
 export async function assertRoomForSeries(db: Db, projectId: string): Promise<void> {
-	const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM time_series WHERE project_id = $1', [projectId]);
-	if (rows[0]!.n >= SERIES_PER_PROJECT_MAX) throw new ApiError(409, `a project holds at most ${SERIES_PER_PROJECT_MAX} series; delete one it no longer needs first`);
+	const { rows } = await db.query<{ n: number | null }>('SELECT app_project_series_count($1) AS n', [projectId]);
+	const n = rows[0]!.n;
+	if (n === null) throw new ApiError(404, 'not found');
+	if (n >= SERIES_PER_PROJECT_MAX) throw new ApiError(409, `a project holds at most ${SERIES_PER_PROJECT_MAX} series; delete one it no longer needs first`);
 }
 
 /**
