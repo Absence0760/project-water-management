@@ -14,6 +14,8 @@ import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
 import { LOCALES } from '../mail/i18n/index.js';
+import { clientKey } from '../http/clientAddress.js';
+import { countSignup } from './signupThrottle.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -101,6 +103,15 @@ const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_un
 export const authRoutes = new Hono<AuthEnv>()
 	.post('/register', async (c) => {
 		const body = RegisterBody.parse(await readJson(c));
+		// Sign-up throttle (079_signup_throttle.sql, auth/signupThrottle.ts):
+		// counted per client address and in all, in its own transaction before
+		// the address is looked at, so a taken and a free address get the same
+		// 429 once throttled, and the 409 below can't enumerate accounts quickly.
+		const wait = await withoutUser((db) => countSignup(db, clientKey(c)));
+		if (wait > 0) {
+			c.header('Retry-After', String(wait));
+			throw ApiError.coded(429, 'signup_throttled', 'too many sign-ups from your network — try again later', { seconds: wait });
+		}
 		const hash = await hashPassword(body.password);
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
 		const result = await withoutUser(async (db) => {

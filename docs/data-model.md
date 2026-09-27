@@ -1600,6 +1600,21 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   Rows untouched for a day are deleted on the next attempt. Numbers:
   [security.md § Authentication](./security.md#authentication).
 
+### Sign-up throttle (079_signup_throttle.sql)
+
+| Table | Holds |
+| --- | --- |
+| `signup_throttle` | One row per `bucket`: `global` (every sign-up) or `client:` + the SHA-256 of a client address key (`http/clientAddress.ts`; the address itself is never stored), with its `window_start` and `attempts` in that window |
+
+- Only touched through `app_signup_attempt(client, per_client, global, window)`
+  (`SECURITY DEFINER`, row locks global first then the client's), which
+  `POST /auth/register` calls before it looks at the address: it counts the
+  attempt in both buckets and returns 0, or, when either is full, counts
+  nothing and returns the seconds until that window ends. A client's row is
+  deleted once its window is over (at the next sign-up); the global row is
+  reset. Deny-all policy, as `login_throttle`. Numbers:
+  [security.md § Password reset, email verification and invites](./security.md#password-reset-email-verification-and-invites).
+
 ### Jobs (016_jobs.sql)
 
 The background job queue's source of truth ([architecture.md § Background work](./architecture.md#background-work)).

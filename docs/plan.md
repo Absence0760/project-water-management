@@ -452,11 +452,11 @@ rehearsed once.
   on sign-up), and pending invites with re-send / revoke on the project Members
   panel and the team page. Farmers are invited with their farms, one by one
   or from a CSV of up to 200 rows with a preview (WP-2.2, issue #27).
-- 🚧 **Abuse limits:** **per-account login lockout** (back off after N failed
+- ✅ **Abuse limits:** **per-account login lockout** (back off after N failed
   attempts per email, stored in the DB so it holds across Lambda instances),
   plus a per-IP limit on register. This adds to the WAF rate rule at the edge.
-  The lockout is done (`005_login_throttle.sql`); the per-IP register limit
-  is not.
+  The lockout is `005_login_throttle.sql`; the register limit (per client
+  address and global) is `079_signup_throttle.sql`.
 - ✅ **Session revocation watermark:** `app_user.sessions_revoked_at`. A JWT
   whose `iat` is older than the watermark is rejected. "Sign out everywhere",
   a password change and an admin lock all set it. That gives revocation

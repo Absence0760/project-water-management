@@ -132,6 +132,10 @@ resource "aws_acm_certificate_validation" "frontend" {
 # api_strip_prefix — /api/* behaviour. The browser calls same-origin
 #   /api/auth/login; the Hono app routes /auth/login (dev hits it directly on
 #   :3001 with no prefix). Stripping here keeps the app prefix-agnostic.
+#   It also sets X-Viewer-Address to the viewer's IP as CloudFront saw the
+#   connection (event.viewer.ip), overwriting any value the viewer sent: the
+#   one client address the API trusts, and only on a request that carries the
+#   shared secret (backend/src/http/clientAddress.ts; the sign-up throttle).
 #
 # Cost: $0.10 per million invocations.
 # ----------------------------------------------------------------------------
@@ -157,12 +161,13 @@ resource "aws_cloudfront_function" "spa_rewrite" {
 resource "aws_cloudfront_function" "api_strip_prefix" {
   name    = "${local.project}-api-strip-prefix"
   runtime = "cloudfront-js-2.0"
-  comment = "Strip the /api prefix before forwarding to the Lambda Function URL"
+  comment = "Strip the /api prefix and stamp the viewer address before forwarding to the Lambda Function URL"
   publish = true
   code    = <<-EOT
     function handler(event) {
       var request = event.request;
       request.uri = request.uri.substring(4) || '/';
+      request.headers['x-viewer-address'] = { value: event.viewer.ip };
       return request;
     }
   EOT

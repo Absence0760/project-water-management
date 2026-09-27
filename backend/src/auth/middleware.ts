@@ -3,7 +3,8 @@ import { ApiError } from '../http/errors.js';
 import { scopeAllows } from '../reports/scope.js';
 import { readSessionClaims } from './session.js';
 
-export type AuthEnv = { Variables: { userId: string } };
+/** `edgeVerified`: the request passed the CloudFront shared-secret check (app.ts), so the edge's headers can be trusted (http/clientAddress.ts). */
+export type AuthEnv = { Variables: { userId: string; edgeVerified: boolean } };
 
 /**
  * Rejects with 401 unless the request carries a valid session. A render

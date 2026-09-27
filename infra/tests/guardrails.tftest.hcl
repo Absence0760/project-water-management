@@ -592,6 +592,10 @@ run "edge_security" {
     error_message = "HTTP must redirect (site) or be refused (API)."
   }
   assert {
+    condition     = strcontains(aws_cloudfront_function.api_strip_prefix.code, "request.headers['x-viewer-address'] = { value: event.viewer.ip }")
+    error_message = "The /api viewer-request function must overwrite X-Viewer-Address with the viewer's IP (the sign-up throttle's client address, backend/src/http/clientAddress.ts)."
+  }
+  assert {
     condition     = aws_cloudfront_distribution.frontend.price_class == "PriceClass_All"
     error_message = "Default price class must include the South African edges (only PriceClass_All does)."
   }

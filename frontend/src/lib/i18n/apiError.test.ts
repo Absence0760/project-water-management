@@ -20,6 +20,7 @@ describe('errorText', () => {
 		account_exists: 'An account with that email address already exists. Sign in, or reset your password.',
 		wrong_credentials: 'Wrong email or password.',
 		signin_locked: 'Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.',
+		signup_throttled: 'Too many accounts were made from your network. Try again in 1 minute.',
 		wrong_current_password: 'Your current password is wrong.',
 		password_changed_elsewhere: 'Your password was changed somewhere else a moment ago. Sign in again.',
 		link_invalid: 'This link is invalid or has expired. Ask for a new one.',
@@ -59,6 +60,12 @@ describe('errorText', () => {
 		expect(locked(45)).toBe('Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.');
 		expect(locked(61)).toBe('Too many sign-in attempts for this address. Try again in 2 minutes, or reset your password.');
 		expect(locked(undefined)).toMatch(/Try again in 1 minute,/);
+	});
+
+	it('says how long the sign-up throttle lasts, in whole minutes (up to its hour window)', () => {
+		const throttled = (seconds: number) => errorText(new ApiError(429, 'x', undefined, 'signup_throttled', { seconds }));
+		expect(throttled(3599)).toBe('Too many accounts were made from your network. Try again in 60 minutes.');
+		expect(throttled(90)).toBe('Too many accounts were made from your network. Try again in 2 minutes.');
 	});
 
 	it('words a failed download (the account page’s “Download my data”) the same way', () => {

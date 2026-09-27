@@ -105,10 +105,39 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **No account enumeration:** `POST /auth/forgot-password` answers `202` with
   the same body for known and unknown addresses. Accepted residual risk:
   response *timing* differs slightly (a known address does a DB write and an
-  SES call), and `POST /auth/register` already answers `409` for a taken
-  address, so enumeration is not fully closed — the WAF's per-IP rate limit is
-  the backstop. Don't "fix" this by making register lie without also making
-  sign-up email-first.
+  SES call), and `POST /auth/register` answers `409` for a taken address
+  (sign-up is not email-first), so enumeration is not closed, only slow: see
+  the sign-up throttle below. Don't "fix" this by making register lie without
+  also making sign-up email-first.
+- **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
+  at most **10 sign-ups per client address an hour** and **500 in all an
+  hour**, in Postgres so it holds across Lambda instances; past either,
+  `429 signup_throttled` with `Retry-After`. Each attempt is counted before
+  the address is looked at, so once throttled a taken and a free address get
+  the same answer, and a refused attempt isn't counted, so hammering never
+  extends the wait. The WAF's per-IP `/api/auth/*` rule (100 per 5 minutes)
+  stays in front of it.
+  - *The client address* (`http/clientAddress.ts`) is the `X-Viewer-Address`
+    header, which the `/api` CloudFront Function (`api_strip_prefix`,
+    `infra/s3_cloudfront.tf`) sets from the connection's IP, overwriting any
+    value the viewer sent, and it is read only on a request that passed the
+    shared-secret check (`edgeVerified`, `app.ts`). X-Forwarded-For is never
+    read. An edge-verified request without a usable address shares one key
+    (fails closed). IPv6 is keyed by its /64. Locally (no shared secret) the
+    header is ignored and the key is the socket peer, or one fixed key under
+    `app.request`. Only a SHA-256 of the key is stored, deleted when its
+    window ends.
+  - *Tests:* `SIGNUP_THROTTLE=off` turns it off for the backend test setup and
+    the e2e API server, which sign up hundreds of accounts from one address.
+    It is test-only: the API Lambda refuses to start with it
+    (`config/production.ts`), and the code ignores it in Lambda anyway.
+    `signupThrottle.security.db.test.ts` tests the throttle with it on. A
+    developer who trips it locally can set it in `backend/.env.development.local`.
+  - *Accepted residual risk:* a `409` still reveals a taken address, at 10
+    guesses per address an hour (more for someone with many addresses, up to
+    the global 500). The global ceiling also means a distributed sign-up flood
+    can hold up real sign-ups for up to an hour; invites still work for
+    existing accounts, and the ceiling is far above real use.
 - **Mail-bombing throttle:** at most one reset, verification or invite email
   per address per minute, enforced in Postgres (`app_issue_email_token` with an
   advisory lock; `invite.last_sent_at`) so it holds across Lambda instances.
@@ -1769,8 +1798,6 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
-- No app-level rate limit on `/auth/register` beyond the WAF's per-IP
-  `/api/auth/*` rule. (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build

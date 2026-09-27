@@ -70,6 +70,8 @@ export function createApp() {
 			if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
 				return c.json({ error: 'forbidden' }, 403);
 			}
+			// Only now may a route trust what CloudFront stamps (the viewer address, http/clientAddress.ts).
+			c.set('edgeVerified', true);
 			await next();
 		});
 	}
