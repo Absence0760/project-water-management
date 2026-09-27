@@ -1251,7 +1251,7 @@ the suggested order (the IDs carry the detail):
       now allows each fraction (and volumetric reliability) 4ε × the farm's
       largest volume ÷ its mean demand (floor 1e-12), the catchment's
       likewise; a named seed-1774 test pins it, and the real rises in
-      `boreholes.test.ts` still fail the law. A 2 000-case soak
+      `boreholes.test.ts` still fail the law. A 2 000-case soak on 1.5.0
       (`FUZZ_MAX_FAILURES=100`, seeds 1–2000) then passed. The
       20 000-case soak is still owed.
       **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
