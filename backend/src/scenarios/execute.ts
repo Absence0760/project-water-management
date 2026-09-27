@@ -64,10 +64,15 @@ export const APPLICATION_RUNS_KEPT = 5;
 // The base run through app_run_brief (045): an applicant can't read the
 // published run's row, only its label and date. The scenario's own runs
 // through app_scenario_run_meta (046): an applicant reads no run row at all,
-// not even their own application's (its inputs hold every farm).
+// not even their own application's (its inputs hold every farm). An
+// application's own nodes, to a contributor, are those still its owner's farm
+// links (app_application_own_nodes, 077): what the base projection, the check
+// and a new run show them in full. Everyone else reads the stored list, the
+// record the assessors judge.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
-	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
+	s.ops, s.ops_sha256 AS "opsSha256",
+	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
 	u.display_name AS owner, s.status, s.origin, s.submitted_at AS "submittedAt", s.decided_at AS "decidedAt",
 	du.display_name AS "decidedBy", s.outcome, s.decision_note AS "decisionNote",
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
