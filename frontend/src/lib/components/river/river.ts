@@ -6,6 +6,7 @@
 // `?tab=runs&run=…#res-reserve` link is sent here (links.ts riverAnchor).
 import { metricDelta, type MetricDelta, type RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
+import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { monthProfile } from '$lib/components/ewr/heatmap';
 import { headlines } from '$lib/components/overview/latestRun';
@@ -167,4 +168,33 @@ export function ewrRuleText(s: Pick<RunSummary, 'ewrAssurance'>): string {
 	if (!sites.length) return base;
 	const list = sites.length < 3 ? sites.join(' and ') : `${sites.slice(0, -1).join(', ')} and ${sites.at(-1)}`;
 	return `${base} · Reserve rules at ${list}`;
+}
+
+/**
+ * The page's "On this page" menu (common/SectionNav): every panel in page
+ * order, by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
+ * it answers. Reserve compliance only when the run has it, as the page shows
+ * the panel only then.
+ */
+export function riverNavGroups(hasReserveCompliance: boolean): NavGroup[] {
+	return [
+		{
+			label: 'The reserve',
+			sections: [
+				{ id: 'res-ewr', label: 'Flow vs reserve' },
+				{ id: 'res-reserve-years', label: 'Days below, by year' },
+				...(hasReserveCompliance ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
+				{ id: 'res-ewr-grid', label: 'EWR by month' }
+			]
+		},
+		{
+			label: 'How sure, and what if',
+			sections: [
+				{ id: 'res-uncertainty', label: 'Uncertainty' },
+				{ id: 'res-outcomes', label: 'Outcome matrix' },
+				{ id: 'res-outlook', label: 'Seasonal outlook' }
+			]
+		},
+		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] }
+	];
 }

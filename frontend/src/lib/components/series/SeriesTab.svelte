@@ -59,6 +59,9 @@
 	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
+	import { dataAnchor, dataNavGroups } from './sections';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import { holdAnchor } from '$lib/help/anchor';
 
 	let {
 		projectId,
@@ -371,6 +374,38 @@
 
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
 	$effect(() => fillHeader({ actions: headerActions }));
+
+	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
+	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
+	const navGroups = $derived(
+		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks, upload: !readonly })
+	);
+	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
+	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
+	// settles (as Settings, Runs and River & reserve do), with focus on its heading.
+	onMount(() => {
+		const hash = page.url.hash.slice(1);
+		if (!dataAnchor(hash)) return;
+		let release = () => {};
+		const land = () => {
+			const el = document.getElementById(hash);
+			if (!el) return false;
+			release = holdAnchor(el);
+			const heading = el.querySelector<HTMLElement>('h2, h3');
+			if (heading) {
+				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+				heading.focus({ preventScroll: true });
+			}
+			return true;
+		};
+		if (land()) return () => release();
+		const mo = new MutationObserver(() => land() && mo.disconnect());
+		mo.observe(document.body, { childList: true, subtree: true });
+		return () => {
+			mo.disconnect();
+			release();
+		};
+	});
 </script>
 
 <svelte:window bind:innerHeight={innerH} />
@@ -398,9 +433,12 @@
 	</div>
 {/if}
 
+<!-- In-page menu: at the tab's top level, not in .data-page, so it sticks down the panels below the chart. -->
+{#if list.length}<SectionNav groups={navGroups} label="Data sections" />{/if}
+
 <div class="data-page" bind:clientWidth={pageW}>
 <div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
-<section class="panel list-panel" aria-labelledby="ser-h">
+<section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
@@ -530,7 +568,7 @@
 </section>
 
 {#if viewing}
-	<section class="panel chart-panel" aria-labelledby="chart-h" bind:this={chartEl}>
+	<section class="panel chart-panel" id="data-chart" aria-labelledby="chart-h" bind:this={chartEl}>
 		<h2 id="chart-h" class="visually-hidden">Series chart</h2>
 		{#if values[viewing.id]}
 			<div class="slot" bind:this={slot}>
@@ -558,17 +596,17 @@
 </div>
 
 {#if agreement}
-	<section class="panel" aria-label="Gauge vs logger agreement">
+	<section class="panel" id="data-agreement" aria-label="Gauge vs logger agreement">
 		<AgreementTable {agreement} headingLevel={2} />
 	</section>
 {/if}
 
 {#if dm?.result}
-	<DoubleMassPanel dm={dm.result} />
+	<div id="data-double-mass"><DoubleMassPanel dm={dm.result} /></div>
 {/if}
 
-{#if list.length && Object.keys(values).length}
-	<section class="panel" aria-labelledby="chk-h" data-testid="series-checks">
+{#if hasChecks}
+	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
 			<h2 id="chk-h">Data checks</h2>
 			<span class="muted small">Negative values, outliers, flat stretches, catchment rain that looks missing but reads 0, and changes in its ratio to CHIRPS. Runs list the same checks as warnings.</span>
@@ -600,7 +638,7 @@
 			<UploadForm {projectId} {list} onuploaded={uploaded} />
 		</section>
 	{/if}
-	<section class="panel uses" aria-labelledby="use-h">
+	<section class="panel uses" id="data-uses" aria-labelledby="use-h">
 		<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
 		<dl class="roles">
 			{#each KIND_OPTIONS as o (o.value)}

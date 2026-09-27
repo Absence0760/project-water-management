@@ -1,5 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId } from './sectionNav';
+import { activeSectionId, navFitCount } from './sectionNav';
+
+describe('navFitCount', () => {
+	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
+	const links = (...w: number[]) => w.map((width) => ({ width, groupStart: false }));
+	const nine = links(90, 90, 90, 90, 90, 90, 90, 90, 90);
+
+	it('keeps every link when they fit in two rows', () => {
+		// Row 1: 100 + 3 × 95 = 385; row 2: 3 × 95.
+		expect(navFitCount(links(90, 90, 90, 90, 90, 90), fit)).toBe(6);
+	});
+
+	it('packs a group across rows rather than moving it whole onto a row of its own', () => {
+		// A one-link group, then a long one (Runs & results' Summary, then Model quality).
+		const items = [{ width: 60, groupStart: false }, ...links(90, 90, 90, 90, 90).map((l, i) => ({ ...l, groupStart: i === 0 }))];
+		expect(navFitCount(items, fit)).toBe(6);
+	});
+
+	it('moves the last links into More, keeping the More button on the second row', () => {
+		// Row 1 holds three links, row 2 four; the More box (60 + 10) needs one link's room on row 2.
+		expect(navFitCount(nine, fit)).toBe(6);
+	});
+
+	it('counts the wider gap before a group', () => {
+		const tight = { ...fit, avail: 385 };
+		expect(navFitCount(links(90, 90, 90, 90, 90, 90, 90), tight)).toBe(7);
+		// The group's extra 10 px pushes row 2 to 390: the last link and More swap places.
+		const grouped = links(90, 90, 90, 90, 90, 90, 90).map((l, i) => ({ ...l, groupStart: i === 4 }));
+		expect(navFitCount(grouped, tight)).toBe(6);
+	});
+
+	it('allows more rows when asked, and gives up to an empty bar when nothing fits', () => {
+		expect(navFitCount(nine, { ...fit, rows: 3 })).toBe(9);
+		expect(navFitCount(links(500, 500, 500), { ...fit, avail: 50, rows: 1 })).toBe(0);
+	});
+});
 
 describe('activeSectionId', () => {
 	const tops = (...t: number[]) => t.map((top, i) => ({ id: `s${i}`, top }));

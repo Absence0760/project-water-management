@@ -32,7 +32,8 @@
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
 	import { riverAnchor } from './links';
-	import { deltaLabel, ewrRuleText, pickRiverRun, riverKpis } from './river';
+	import { deltaLabel, ewrRuleText, pickRiverRun, riverKpis, riverNavGroups } from './river';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
 	// water account) are in this tab's chunk: only this tab uses them, and as chunks of their own they
@@ -239,6 +240,9 @@
 		{#if canEdit}<a class="btn btn-primary" href="?tab=runs">Run the model</a>{:else}<p class="muted small">An editor can run the model.</p>{/if}
 	</section>
 {:else}
+	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
+	     under its first screen. Above the first screen, which fits the window below it. -->
+	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" />{/if}
 	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>

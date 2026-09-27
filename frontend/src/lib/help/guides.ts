@@ -689,6 +689,11 @@ export const GUIDES: Guide[] = [
 						]
 					},
 					{
+						type: 'note',
+						tone: 'tip',
+						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Units & supply**, **Data** and **Settings & calibration** have the same menu.'
+					},
+					{
 						type: 'p',
 						text: '**River & reserve**, under *Outcomes* in the sections, is the river’s page for one run (the newest, or pick another from its **Run** menu; the Summary’s flow chart links there too). Four tiles: how often the reserve was met (days at the outflow gauge, and the Reserve rule months with a rule table), the days below it and how many in an average year, the mean simulated outflow and its share of natural flow, and the worst month, each with its change from the run before. Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the reserve shaded, beside the days below the reserve each water year. Below them: Reserve compliance by month (with a rule table), EWR by month, the uncertainty bands on those findings, the outcome matrix, the seasonal outlook and the water account.'
 					},
