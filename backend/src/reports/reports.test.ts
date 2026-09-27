@@ -1,7 +1,7 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, renderOptionsFromEnv } from './render.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, renderOptionsFromEnv } from './render.js';
 import { reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
@@ -78,5 +78,24 @@ describe('renderOptionsFromEnv', () => {
 		).toEqual({ siteUrl: 'https://water.example.com', apiUrl: 'https://water.example.com/api', timeoutMs: 60_000, executablePath: '/opt/chromium' });
 		expect(renderOptionsFromEnv({ RENDER_SITE_URL: 'http://127.0.0.1:7801', SITE_URL: 'http://x' }).siteUrl).toBe('http://127.0.0.1:7801');
 		for (const bad of ['0', '100', '9999999', 'soon']) expect(renderOptionsFromEnv({ REPORT_RENDER_TIMEOUT_MS: bad }).timeoutMs).toBe(DEFAULT_RENDER_TIMEOUT_MS);
+	});
+});
+
+// The browser-level half of the renderer's confinement (render.origin.db.test.ts
+// checks it with real Chromium; the resolver rule is pinned here, since the
+// dead proxy alone already stops every HTTP request that test can count).
+describe('confinementArgs', () => {
+	it('production: one host resolves, one origin goes direct, the rest to a proxy that cannot exist, no WebRTC UDP', () => {
+		expect(confinementArgs({ siteUrl: 'https://water.example.com', apiUrl: 'https://water.example.com/api' })).toEqual([
+			'--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE water.example.com',
+			'--proxy-server=http://egress-refused.invalid:9',
+			'--proxy-bypass-list=<-loopback>;https://water.example.com',
+			'--force-webrtc-ip-handling-policy=disable_non_proxied_udp'
+		]);
+	});
+	it('local: the site and API origins, ports included', () => {
+		const args = confinementArgs({ siteUrl: 'http://localhost:7777', apiUrl: 'http://127.0.0.1:3001' });
+		expect(args[0]).toBe('--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1');
+		expect(args[2]).toBe('--proxy-bypass-list=<-loopback>;http://localhost:7777;http://127.0.0.1:3001');
 	});
 });

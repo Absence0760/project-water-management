@@ -92,6 +92,19 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   under `reports/` in the reports bucket. It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
+  Its egress is open: its Chromium is confined to the site's origin by the
+  app (Playwright routing plus Chromium's own resolver, proxy and WebRTC
+  flags; [docs/security.md § Render tokens](../docs/security.md#render-tokens)),
+  not by the network. An egress allowlist would make that hold even against
+  a browser bug, at a price, so it is a tradeoff, not a change: put the
+  renderer in the VPC (SQS already has an endpoint; an S3 gateway endpoint
+  is free) and send its traffic through either AWS Network Firewall with a
+  domain allowlist (about $0.40/hour per AZ endpoint, ~$290/month for one
+  AZ at us-east-1 list price and more in af-south-1, plus a NAT at
+  ~$33/month and per-GB processing), or a Squid allowlist proxy on a
+  t4g.nano with an Elastic IP (~$7–10/month, but a public subnet, an
+  internet gateway and an instance to patch, which the VPC deliberately
+  has none of).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
