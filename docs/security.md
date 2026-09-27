@@ -590,6 +590,24 @@ In short:
   `backend/src/rlsSecondLayer.db.test.ts` switches the role check off and
   proves a viewer's project, series and team writes each get that 404 and
   change nothing.
+- **Same-project references are swept from `pg_constraint`**
+  (`backend/src/db/cross-project-refs.security.db.test.ts`). RLS can't stop
+  an editor of *both* A and B pointing a row of A at a row of B, and a
+  foreign key is checked without RLS (so an id, even another project's, is
+  enough). Every foreign key onto a table with a `project_id` is therefore
+  either composite on `(project_id, …)` or held by a same-project trigger
+  (`assert_same_project` or the table's own guard), except three with a
+  checked reason (`api_key_throttle` and `report_schedule_recipient` have
+  no `project_id`; `alert_delivery` has no write policy). The test tries each
+  as `water_app`, INSERT and (where `water_app` may) UPDATE, with A's row
+  (accepted) and B's (refused), then every write route whose body names a
+  row (inventoried from the zod schemas' uuid fields), and finally checks no
+  row of A or B references the other. A new foreign key or request field
+  fails until it is classified. 071_cross_project_refs closed the two it
+  found: `model_revision.restored_from` (sequential ids, so any editor could
+  plant a "restore" of another project's revision and, the key being NO
+  ACTION, block that project's deletion; `restored_from_run` is held the
+  same way) and `alert_event.run_id`.
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of

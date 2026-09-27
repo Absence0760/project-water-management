@@ -457,7 +457,9 @@ the result change?", and put back any earlier version.
   `baseline`), the optional `reason` (≤ 500, from the save bar), `snapshot`
   `{ settings, model }` (the shape of `model_run.inputs` without series),
   `changes` (the engine's `diffInputs` lines against the previous revision),
-  `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`.
+  `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`
+  (each must be the same project's revision or run when written:
+  `model_revision_same_project`, 071).
   A save whose snapshot is unchanged writes nothing; a reorder is recorded,
   with a line saying it only changed the order. A **`baseline`** row stores
   the state before the first change to a project that predates history, so
@@ -2016,7 +2018,8 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     for editors (the `alert_eval` job's acting user). `water_app` may update
     only `state`, `cleared_at`, `value` and `detail` (a column grant; the
     catalogue test lists it), and `alert_event_guard` refuses reopening a
-    cleared event or moving one to another rule. No DELETE policy.
+    cleared event, moving one to another rule, or (071) citing another
+    project's run. No DELETE policy.
   - `alert_subscription`: one policy for everything: your own rows, for a
     project you can still open (not as an applicant), and a farmer's
     `node_id` must be one of their farms (`app_farm_nodes`).
