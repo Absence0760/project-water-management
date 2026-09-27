@@ -85,8 +85,13 @@ export const VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT = false;
 export interface TabPrefs {
 	/** A viewer's "Show model inputs" toggle. Undefined → the default above. */
 	showModelInputs?: boolean;
-	// "Members choose their own tabs" (app_user.preferences) will add its
-	// hidden-tab list here; it is out of scope for now.
+	/**
+	 * The sections this person hid from their sidebar (their own choice, kept
+	 * in their account's preferences: `user.preferences.hiddenTabs`). Within
+	 * what the role sees; the Summary is never hidden. Ids the role doesn't
+	 * see, or no tab has, are ignored.
+	 */
+	hidden?: readonly string[];
 }
 
 /** True when this role gets the "Show model inputs" toggle at all. */
@@ -106,7 +111,8 @@ function groupOf(id: string): TabGroup {
  * the core tabs, plus the model inputs when `prefs.showModelInputs` is on.
  * Anyone else (a farmer, whom the workspace redirects to the farm view, an
  * applicant, whom it shows the Applicant view, or no role yet) sees Overview
- * only. Overview is always included when rendered.
+ * only. Then the sections the person hid themselves (`prefs.hidden`) go.
+ * Overview is always included when rendered.
  */
 export function visibleTabs<T extends string = TabId>(
 	role: Role | null | undefined,
@@ -119,11 +125,32 @@ export function visibleTabs<T extends string = TabId>(
 		(role === 'viewer' && (prefs.showModelInputs ?? VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT));
 	const seesCore = role === 'owner' || role === 'editor' || role === 'viewer';
 	const assesses = role === 'owner' || role === 'editor';
+	const hidden = prefs.hidden ?? [];
 	return rendered.filter((id) => {
 		if (id === ALWAYS_SHOWN) return true;
+		if (hidden.includes(id)) return false;
 		const g = groupOf(id);
 		return g === 'inputs' ? seesInputs : g === 'assess' ? assesses : seesCore;
 	});
+}
+
+/**
+ * The sections a person hid that their role would show here (`roleTabs`,
+ * `visibleTabs` without `hidden`), in that order: the "Hidden (n)" menu's
+ * count. A hidden id the role doesn't see here isn't counted (it is kept for
+ * the catchments where it does).
+ */
+export function hiddenTabs<T extends string>(roleTabs: readonly T[], hidden: readonly string[] | undefined): T[] {
+	return roleTabs.filter((id) => id !== ALWAYS_SHOWN && (hidden ?? []).includes(id));
+}
+
+/**
+ * `hidden` with `id` hidden or shown again, as the account stores it: each id
+ * once, never the Summary.
+ */
+export function withTabHidden(hidden: readonly string[] | undefined, id: string, hide: boolean): string[] {
+	const rest = (hidden ?? []).filter((x) => x !== id && x !== ALWAYS_SHOWN);
+	return hide && id !== ALWAYS_SHOWN ? [...rest, id] : rest;
 }
 
 /**

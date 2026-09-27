@@ -61,6 +61,13 @@ export interface User {
 	 * the banner on the account and alert pages). null while mail flows.
 	 */
 	mailSuppressed?: { reason: 'bounce' | 'complaint'; at: string } | null;
+	/** The person's own display preferences (user_preferences, 082). */
+	preferences?: UserPreferences;
+}
+
+export interface UserPreferences {
+	/** The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`). */
+	hiddenTabs: string[];
 }
 
 /**

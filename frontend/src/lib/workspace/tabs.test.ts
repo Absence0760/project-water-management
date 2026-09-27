@@ -6,10 +6,12 @@ import {
 	NAV_SECTIONS,
 	navSections,
 	hasModelInputsToggle,
+	hiddenTabs,
 	stripTabs,
 	TAB_GROUP,
 	VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT,
 	visibleTabs,
+	withTabHidden,
 	type TabId
 } from './tabs';
 
@@ -89,6 +91,59 @@ describe('visibleTabs', () => {
 	it('groups every tab', () => {
 		expect(ALL_TABS).toEqual(Object.keys(TAB_GROUP));
 		for (const id of PAGE) expect(Object.hasOwn(TAB_GROUP, id)).toBe(true);
+	});
+});
+
+// Members choose their own sections (followups.md): each person hides what
+// they don't use, within what their role sees; the Summary stays.
+describe('visibleTabs with the person’s own hidden sections', () => {
+	const hidden = ['crops', 'history', 'dams', 'applications'];
+
+	it('drops the hidden sections for every role that sees them, and nothing else', () => {
+		expect(visibleTabs('owner', { hidden }, PAGE)).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+		expect(visibleTabs('editor', { hidden }, [...PAGE, 'applications'])).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+		// A viewer: the core set, less what they hid; the inputs they hid stay hidden once shown.
+		expect(visibleTabs('viewer', { hidden: ['allocations'] }, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
+		expect(visibleTabs('viewer', { hidden, showModelInputs: true }, PAGE)).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+	});
+
+	it('never shows a section the role doesn’t see, hidden or not (hiding only takes away)', () => {
+		expect(visibleTabs('viewer', { hidden: [] }, [...PAGE, 'applications'])).not.toContain('applications');
+		expect(visibleTabs('viewer', { hidden: ['series'] }, PAGE)).not.toContain('network');
+		for (const role of ['farmer', 'contributor', null] as const) expect(visibleTabs(role, { hidden }, PAGE)).toEqual(['overview']);
+	});
+
+	it('never hides the Summary, even when an owner (or anyone) asks to hide every section', () => {
+		for (const role of EVERY_ROLE)
+			for (const showModelInputs of [undefined, true, false]) {
+				const shown = visibleTabs(role, { showModelInputs, hidden: [...ALL_TABS] }, PAGE);
+				expect(shown).toEqual(['overview']);
+			}
+	});
+
+	it('ignores ids no section has', () => {
+		expect(visibleTabs('owner', { hidden: ['nope', 'brand-new-ish'] }, PAGE)).toEqual(PAGE);
+	});
+});
+
+describe('hiddenTabs (the "Hidden (n)" count)', () => {
+	it('counts only the hidden sections the role would show here, in the sidebar’s order, never the Summary', () => {
+		const ownerTabs = visibleTabs('owner', {}, PAGE);
+		expect(hiddenTabs(ownerTabs, ['history', 'overview', 'crops', 'nope'])).toEqual(['crops', 'history']);
+		// A viewer doesn't see Crops & demand without the inputs, so it isn't counted here, but stays stored.
+		const viewerTabs = visibleTabs('viewer', {}, PAGE);
+		expect(hiddenTabs(viewerTabs, ['history', 'crops', 'runs'])).toEqual(['runs']);
+		expect(hiddenTabs(viewerTabs, undefined)).toEqual([]);
+	});
+});
+
+describe('withTabHidden', () => {
+	it('hides a section once, shows it again, and never stores the Summary', () => {
+		expect(withTabHidden(undefined, 'crops', true)).toEqual(['crops']);
+		expect(withTabHidden(['crops'], 'crops', true)).toEqual(['crops']);
+		expect(withTabHidden(['crops', 'dams'], 'crops', false)).toEqual(['dams']);
+		expect(withTabHidden([], 'overview', true)).toEqual([]);
+		expect(withTabHidden(['overview', 'dams'], 'history', true)).toEqual(['dams', 'history']);
 	});
 });
 

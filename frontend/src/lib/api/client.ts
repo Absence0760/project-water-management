@@ -93,6 +93,7 @@ import type {
 	TeamMember,
 	TeamRole,
 	User,
+	UserPreferences,
 	JobMeta,
 	Sweep,
 	SweepRequest,
@@ -226,8 +227,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
 			/** Renames the account (1–100 characters, trimmed by the server). */
-			/** Changes only the fields sent. `locale: null` goes back to following the browser. */
-			updateMe: (patch: { displayName?: string; locale?: Locale | null; volumeUnit?: 'm3' | 'ML' }) =>
+			/**
+			 * Changes only the fields sent. `locale: null` goes back to following the browser.
+			 * `preferences`: the keys sent replace the account's (`hiddenTabs: []` shows every section again).
+			 */
+			updateMe: (patch: { displayName?: string; locale?: Locale | null; volumeUnit?: 'm3' | 'ML'; preferences?: Partial<UserPreferences> }) =>
 				request<{ user: User }>('PATCH', '/auth/me', patch).then((r) => r.user),
 			/**
 			 * Changes the password: every other session is signed out and this

@@ -1546,16 +1546,21 @@ Open gaps:
       read every input, so a deep link (`?tab=settings`) keeps working, and
       nothing gets hidden "for privacy" this way. Data a role must not see
       needs RLS, as the farmer role has.
-- [ ] **Members choose their own tabs.** Let each user hide tabs they don't
+- [x] **Members choose their own tabs.** Let each user hide tabs they don't
       use (within what their role can see), with a "Reset to default" option.
-      Store the choice in `app_user.preferences`, the jsonb column that
-      WP-1.26 (unit preferences) introduces and that isn't built yet. Build
-      that column first, or with this. Overview can't be hidden. A hidden tab
-      still opens from a deep link, and a "Hidden tabs (2)" menu brings it
-      back.
+      Overview can't be hidden. A hidden tab still opens from a deep link, and
+      a "Hidden tabs (2)" menu brings it back. *Built (issue #17, 2026-09-27):*
+      the **Choose sections** / "Hidden (n)" menu in the sidebar
+      (`workspace/SectionsMenu.svelte`, ui.md § Tabs by role), stored per
+      account in `user_preferences` (082), not an `app_user.preferences`
+      column: `app_user`'s SELECT policy lets co-members read each other's
+      rows, and this table is own-row only. WP-1.26's unit preferences join
+      that document as a key.
 
 Tests (tabs by role, built: `lib/workspace/tabs.test.ts`,
-`e2e/tests/tabs-by-role.spec.ts`; members' own tabs, to come): unit tests for `visibleTabs` across role ×
+`e2e/tests/tabs-by-role.spec.ts`; members' own tabs, built:
+`tabs.test.ts`, `backend/src/auth/preferences.db.test.ts`,
+`e2e/tests/own-sections.spec.ts`): unit tests for `visibleTabs` across role ×
 preference, including an owner who can't lose Overview. An e2e test that a
 viewer sees the short tab set, turns on "Show model inputs", and opens a
 deep link to a hidden tab. Route-auth is unchanged. Docs: ui.md (the tabs
