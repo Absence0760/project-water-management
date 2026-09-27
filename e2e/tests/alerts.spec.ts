@@ -10,7 +10,8 @@
 // the account and alert pages, which turns them back on. An editor sets a
 // staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { afWords } from '../support/af.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -18,6 +19,7 @@ import { simulateBounce } from '../support/jobs.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
+const af = await afWords();
 
 test('a farmer chooses how often they get their dam alerts, and the choice is kept', async ({ page, owner, signIn }) => {
 	void owner;
@@ -71,6 +73,68 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await p.reload();
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 	await expect(p.getByRole('region', { name: 'Alerting catchment' }).getByRole('group', { name: 'Dam running low: Lower farm' }).getByRole('radio', { name: 'Once a day (06:00)' })).toBeChecked();
+});
+
+// A farmer-only user has no workspace: their account pages sit in the farmer
+// view's frame (FarmShell), translated, with the way back to their farms,
+// not in the workspace's English sidebar. Once they are also a member of a
+// catchment, the workspace frame comes back.
+test('a farmer-only user’s account pages sit in the farm frame, in their language', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Farm frame catchment');
+	const farm = project.model.nodes.find((n) => n.name === 'Lower farm')!;
+	const farmer = await signIn('Frame farmer');
+	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+
+	const p = farmer.page;
+	for (const viewport of [PHONE, { width: 1440, height: 960 }]) {
+		await p.setViewportSize(viewport);
+		await p.goto('/account/alerts');
+		await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+		await expect(p.locator('.farm-header')).toBeVisible();
+		await expect(p.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+		await expect(p.getByRole('link', { name: 'Projects' })).toHaveCount(0);
+		await expect(p.locator('.farm-header').getByRole('link', { name: 'Your farms' })).toHaveAttribute('href', /\/farm$/);
+		await expect(p.getByRole('main')).toHaveCount(1);
+		await expect(p.locator('.farm-header').getByRole('group', { name: 'Language' })).toBeVisible();
+		await expectNoSidewaysScroll(p);
+		for (const colorScheme of ['light', 'dark'] as const) {
+			await p.emulateMedia({ colorScheme });
+			await expectNoViolations(p);
+		}
+		await p.emulateMedia({ colorScheme: 'light' });
+	}
+
+	// The farm menu reaches the account page, in the same frame.
+	await p.setViewportSize(PHONE);
+	await p.getByRole('button', { name: 'Menu' }).click();
+	await p.getByRole('link', { name: 'Account', exact: true }).click();
+	await expect(p).toHaveURL(/\/account$/);
+	await expect(p.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
+	await expect(p.locator('.farm-header')).toBeVisible();
+	await expect(p.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+	await expectNoViolations(p);
+
+	// The farm pages' 16 px base and card styles stay off the account page.
+	expect(await p.getByText('Changing your password signs you out').evaluate((el) => getComputedStyle(el).fontSize)).toBe('14px');
+	// One language switch on the account page: its own, not the header's too.
+	await expect(p.getByRole('group', { name: 'Language' })).toHaveCount(1);
+	await expect(p.locator('.farm-header').getByRole('group', { name: 'Language' })).toHaveCount(0);
+	// Afrikaans: the frame's words turn with the page's.
+	// (<html lang="af"> in this frame is af-layout.spec.ts's check, on the seeded farmer.)
+	await p.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' }).click();
+	await expect(p.locator('.farm-header').getByRole('link', { name: af('Your farms') })).toBeVisible();
+	await expect(p.getByRole('heading', { level: 1, name: af('Account') })).toBeVisible();
+	await p.getByRole('group', { name: af('Language') }).getByRole('button', { name: 'English' }).click();
+
+	// A member of a catchment as well: the workspace frame.
+	const other = await createProject(page.request, 'Frame viewer catchment');
+	await addMember(page.request, other.id, farmer.user.email, 'viewer');
+	await p.reload();
+	await expect(p.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
+	await expect(p.locator('.farm-header')).toHaveCount(0);
+	await expect(p.getByRole('button', { name: 'Account menu for Frame farmer' })).toBeVisible();
 });
 
 // Screen use (issue #17): the section header is the page's one title; one

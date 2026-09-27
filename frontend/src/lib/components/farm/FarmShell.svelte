@@ -22,6 +22,8 @@
 	let {
 		title = null,
 		back = null,
+		accountPage = false,
+		languageSwitch = true,
 		preview = null,
 		strip = null,
 		onretry,
@@ -32,6 +34,14 @@
 		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
 		back?: { href: string; label: string } | null;
+		/**
+		 * A farmer-only user's account pages (/account/**, the root layout): the
+		 * way back to their farms in place of the title, and the page brings its
+		 * own <main> and styles, so the farm pages' card styles stay off it.
+		 */
+		accountPage?: boolean;
+		/** The header's EN | AF switch; off where the page has its own (the account page's Language card). */
+		languageSwitch?: boolean;
 		/** Viewer+ previewing a farm: the banner text and the way back to the workspace. */
 		preview?: { text: string; href: string } | null;
 		/** The status strip over a saved copy. */
@@ -88,9 +98,14 @@
 	});
 </script>
 
-<div class="farm">
+<div class="farm" class:account-page={accountPage}>
 	<header class="farm-header">
-		{#if back}
+		{#if accountPage && !back}
+			<a class="back" href="{base}/farm">
+				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
+				{t('Your farms')}
+			</a>
+		{:else if back}
 			<a class="back" href={back.href}>
 				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
 				{back.label}
@@ -99,7 +114,7 @@
 			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('My farm')}</span></span>
 		{/if}
 		<span class="spacer"></span>
-		<LanguageSwitch compact />
+		{#if languageSwitch}<LanguageSwitch compact />{/if}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="menu-root" bind:this={menuRoot} onkeydown={onKeydown} onfocusout={onFocusOut}>
 			<button type="button" class="menu-btn" bind:this={trigger} aria-expanded={menuOpen} aria-controls="farm-menu" onclick={() => (menuOpen = !menuOpen)}>
@@ -108,6 +123,7 @@
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
 				<li><a href="{base}/farm">{t('Your farms')}</a></li>
 				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
+				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
 				</li>
@@ -138,9 +154,13 @@
 		</div>
 	{/if}
 
-	<main class="farm-main" aria-busy={busy ? 'true' : undefined}>
+	{#if accountPage}
 		{@render children()}
-	</main>
+	{:else}
+		<main class="farm-main" aria-busy={busy ? 'true' : undefined}>
+			{@render children()}
+		</main>
+	{/if}
 </div>
 
 <style>
@@ -158,7 +178,14 @@
 		line-height: 1.45;
 		background: var(--bg);
 	}
+	/* An account page keeps the app's own 14 px base; the header sets its own sizes. */
+	.farm.account-page {
+		font-size: inherit;
+		line-height: inherit;
+	}
 	.farm-header {
+		font-size: 16px;
+		line-height: 1.45;
 		position: sticky;
 		top: 0;
 		z-index: 10;
@@ -297,7 +324,7 @@
 	}
 
 	/* ---- Shared by every farm page ---- */
-	.farm :global(h1) {
+	.farm-main :global(h1) {
 		margin: 0;
 		font-family: var(--font-display);
 		font-weight: 600;
@@ -305,15 +332,15 @@
 		line-height: 1.2;
 		overflow-wrap: anywhere;
 	}
-	.farm :global(h2) {
+	.farm-main :global(h2) {
 		margin: 0;
 		font-size: 17px;
 		line-height: 1.3;
 	}
-	.farm :global(p) {
+	.farm-main :global(p) {
 		margin: 0;
 	}
-	.farm :global(.card) {
+	.farm-main :global(.card) {
 		padding: 16px;
 		border-radius: 8px;
 		background: var(--surface);
@@ -324,29 +351,29 @@
 		min-width: 0;
 	}
 	/* The model's cards: neutral, dashed (official and modelled never look alike, §1). */
-	.farm :global(.card.model) {
+	.farm-main :global(.card.model) {
 		border: 1px dashed var(--border-strong);
 	}
-	.farm :global(.big) {
+	.farm-main :global(.big) {
 		display: flex;
 		align-items: baseline;
 		flex-wrap: wrap;
 		gap: 8px;
 	}
-	.farm :global(.big > :first-child) {
+	.farm-main :global(.big > :first-child) {
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 40px;
 		line-height: 1;
 	}
-	.farm :global(.sub) {
+	.farm-main :global(.sub) {
 		color: var(--text-2);
 	}
-	.farm :global(.fine) {
+	.farm-main :global(.fine) {
 		font-size: 14px;
 		color: var(--text-muted);
 	}
-	.farm :global(.link) {
+	.farm-main :global(.link) {
 		min-height: var(--tap);
 		display: inline-flex;
 		align-items: center;
@@ -355,33 +382,33 @@
 		font-weight: 600;
 		color: var(--accent);
 	}
-	.farm :global(.meter) {
+	.farm-main :global(.meter) {
 		height: 12px;
 		border-radius: 6px;
 		background: var(--surface-sunken);
 		overflow: hidden;
 	}
-	.farm :global(.meter > span) {
+	.farm-main :global(.meter > span) {
 		display: block;
 		height: 100%;
 		background: var(--series-1);
 	}
-	.farm :global(.dates) {
+	.farm-main :global(.dates) {
 		margin-top: 8px;
 		font-size: 14px;
 		color: var(--text-muted);
 	}
-	.farm :global(.dates.stale) {
+	.farm-main :global(.dates.stale) {
 		display: flex;
 		gap: 6px;
 		align-items: flex-start;
 		color: var(--warning);
 	}
-	.farm :global(.dates.stale svg) {
+	.farm-main :global(.dates.stale svg) {
 		flex-shrink: 0;
 		margin-top: 2px;
 	}
-	.farm :global(details > summary) {
+	.farm-main :global(details > summary) {
 		min-height: var(--tap);
 		display: flex;
 		align-items: center;
@@ -389,23 +416,23 @@
 		font-weight: 600;
 		cursor: pointer;
 	}
-	.farm :global(table.numbers) {
+	.farm-main :global(table.numbers) {
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 14px;
 		font-variant-numeric: tabular-nums;
 	}
-	.farm :global(table.numbers th),
-	.farm :global(table.numbers td) {
+	.farm-main :global(table.numbers th),
+	.farm-main :global(table.numbers td) {
 		padding: 4px 0;
 		text-align: right;
 		border-bottom: 1px solid var(--border);
 	}
-	.farm :global(table.numbers th:first-child) {
+	.farm-main :global(table.numbers th:first-child) {
 		text-align: left;
 		font-weight: 400;
 	}
-	.farm :global(table.numbers thead th) {
+	.farm-main :global(table.numbers thead th) {
 		font-weight: 600;
 	}
 </style>

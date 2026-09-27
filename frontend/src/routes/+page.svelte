@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
+	import { isFarmerOnly } from '$lib/auth/frame';
 	import { api, hasTeamRole, type PortfolioProject, type ProjectSummary, type Team } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -132,7 +133,7 @@
 			if (p.status === 'rejected') throw p.reason;
 			// A user who is only ever a farmer has no workspace: their farms are
 			// the farmer view (WP-2.6, docs/design/farmer-view.md).
-			if (p.value.length && p.value.every((x) => x.role === 'farmer')) {
+			if (isFarmerOnly(p.value.map((x) => x.role))) {
 				await goto(`${base}/farm`, { replaceState: true });
 				return;
 			}
