@@ -4512,7 +4512,7 @@ published.
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My farm", the EN | AF
-  language switch, Menu: your farms, the words, Account, "Don't keep a copy
+  language switch, Menu: your farms, the words, Account, the privacy notice, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert

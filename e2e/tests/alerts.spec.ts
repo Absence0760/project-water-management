@@ -109,6 +109,8 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 	// The farm menu reaches the account page, in the same frame.
 	await p.setViewportSize(PHONE);
 	await p.getByRole('button', { name: 'Menu' }).click();
+	// …and the privacy notice (issue #48: linked from the farm view too).
+	await expect(p.getByRole('link', { name: 'Privacy notice' })).toHaveAttribute('href', '/privacy');
 	await p.getByRole('link', { name: 'Account', exact: true }).click();
 	await expect(p).toHaveURL(/\/account$/);
 	await expect(p.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();

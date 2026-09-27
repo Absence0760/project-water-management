@@ -124,6 +124,8 @@
 				<li><a href="{base}/farm">{t('Your farms')}</a></li>
 				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
+				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
+				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
 				</li>
