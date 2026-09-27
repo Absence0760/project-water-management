@@ -23,13 +23,14 @@ export type NodeNumberKey =
 	| 'boreholeCapacityM3Day'
 	| 'boreholeTriggerPct'
 	| 'streamDepletionFrac'
-	| 'streamDepletionLagDays';
+	| 'streamDepletionLagDays'
+	| 'gaPropertyAreaHa';
 
 export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×' | 'days';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×' | 'days' | 'ha';
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
@@ -251,6 +252,17 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'groundwater',
 		aria: (n) => `Stream depletion lag of ${n}, days`,
 		help: 'How slowly the river feels the pumping: the time constant of the delay (0 = the same day). The depletion carries on after pumping stops. A stream depletion factor (distance² × storativity ÷ transmissivity) is a first estimate.'
+	},
+	{
+		key: 'gaPropertyAreaHa',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Property area (GN 538)',
+		unit: 'ha',
+		group: 'groundwater',
+		nullable: true,
+		aria: (n) => `GN 538 property area of ${n}, ha`,
+		help: 'Size of the property the groundwater is taken on (land registered separately in a Deeds Office). With the Table 2 rate below it gives the general authorisation’s volume for the property, for context only.'
 	}
 ];
 

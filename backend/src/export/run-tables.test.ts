@@ -271,7 +271,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
 	});
 
-	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 ceiling, then per borehole', () => {
+	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 volume, then per borehole', () => {
 		const lines = [
 			...groundwaterAnnualLines([
 				{
@@ -290,11 +290,33 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 						{ id: null, name: 'Combined boreholes', abstractionM3: 30_000, annualCapM3: null, capReached: false },
 						{ id: 'b1', name: 'BH1', abstractionM3: 12_000, annualCapM3: 12_000, capReached: true }
 					]
+				},
+				// Engine ≥ 1.12.0: the property's own volume and the most pumped in any 12 months.
+				{
+					nodeId: 'a',
+					name: 'Farm A',
+					kind: 'farm',
+					waterYear: 2004,
+					label: '2004/05',
+					days: 365,
+					abstractionM3: 2000,
+					toDamM3: 0,
+					streamDepletionM3: 0,
+					annualCapM3: null,
+					gaLimitM3: 2700,
+					gaBasis: 'property',
+					rolling12MaxM3: 30_500,
+					boreholes: []
 				}
 			])
 		];
 		expect(lines[0]).toMatch(/^"Groundwater abstraction by water year/);
-		expect(lines).toContain('Farm A,2003/04,366,42000,2000,8000,,40000');
+		expect(lines[1]).toBe(
+			'Farm or user,Water year,Days,Pumped (m³),Into the dam (m³),Stream depletion (m³),Annual caps (m³),GN 538 volume (m³/a),GN 538 volume from,Most pumped in any 12 months (m³)'
+		);
+		// An older run: the ceiling, no 12-month figure.
+		expect(lines).toContain('Farm A,2003/04,366,42000,2000,8000,,40000,ceiling only,');
+		expect(lines).toContain('Farm A,2004/05,365,2000,0,0,,2700,property area × rate,30500');
 		expect(lines).toContain('Farm A,2003/04,Combined boreholes,30000,,');
 		expect(lines.at(-1)).toBe('Farm A,2003/04,BH1,12000,12000,yes');
 	});

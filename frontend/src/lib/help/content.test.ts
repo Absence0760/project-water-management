@@ -30,7 +30,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
 	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true,
-	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true
+	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
+	gaPropertyAreaHa: true, gaRateM3HaYear: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationEfficiency: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };

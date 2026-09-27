@@ -31,7 +31,7 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		// Three weeks read in one go (B4); the gauge's own dry days before them join the window.
 		/^Catchment rain accumulations spread over the days they cover: 1 window, \d+ run days: 2017-0[56]-\d\d to 2017-06-26 /,
 		// The drowned weir's flat top in the excluded water year.
-		/^Observed flow: 1 flat stretch of 14 or more days with the same value \(2014-/
+		/^Observed flow: 1 flat stretch of more days than a slow recession holds one value at the record.s resolution .*\(2014-/
 	],
 	'Example · Droëvlei (water-stressed)': [
 		/^Observed flow records disagree .*2020\/21/,

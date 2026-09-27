@@ -253,6 +253,17 @@ describe('applyScenario: each op', () => {
 		expect(add({ supplyStopPct: 1.5 }).problems[0]).toMatch(/supplyStopPct/);
 	});
 
+	it('node.add takes the GN 538 property area and rate, and checks them (engine 1.12.0)', () => {
+		const add = (over: Record<string, unknown>) =>
+			one({ op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, ...over }) });
+		const r = add({ gaPropertyAreaHa: 60, gaRateM3HaYear: 45 });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'N')).toMatchObject({ gaPropertyAreaHa: 60, gaRateM3HaYear: 45 });
+		expect(add({ gaPropertyAreaHa: null, gaRateM3HaYear: null }).problems).toEqual([]);
+		expect(add({ gaRateM3HaYear: 100 }).problems[0]).toMatch(/gaRateM3HaYear.*must be one of the GN 538 Table 2 rates: 0, 45, 75, 150, 275, 400/);
+		expect(add({ gaPropertyAreaHa: -1 }).problems[0]).toMatch(/gaPropertyAreaHa/);
+	});
+
 	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
 		expect(one({ op: 'node.add', node: node('A', { name: 'X', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown node nowhere/);

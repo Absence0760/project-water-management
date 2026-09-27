@@ -68,6 +68,13 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await group.getByLabel('Mode').selectOption('primary');
 	await group.getByLabel('Stream depletion (% of pumping)').fill('25');
 	await expect(group.getByTestId('bh-cap-note')).toContainText('Annual caps total 20,000 m³/a');
+	// Without a property area and rate the note gives GN 538's rule, not a volume.
+	await expect(group.getByTestId('bh-cap-note')).toContainText('enter the property area and rate above');
+	// The property's GN 538 volume (engine 1.12.0): 10 ha × 150 m³/ha/a = 1 500 m³/a.
+	const gw = page.getByRole('group', { name: 'Groundwater (boreholes)' });
+	await gw.getByLabel('Property area (GN 538) (ha)').fill('10');
+	await gw.getByLabel('GN 538 rate (m³/ha/a)').selectOption('150');
+	await expect(group.getByTestId('bh-cap-note')).toContainText('allows this property 1,500 m³/a of groundwater');
 	await expectNoViolations(page, { include: '.detail' });
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
@@ -79,6 +86,9 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await expect(again.getByLabel('Name')).toHaveValue('BH-01');
 	await expect(again.getByLabel('Annual cap (m³/a)')).toHaveValue('20,000');
 	await expect(again.getByLabel('Mode')).toHaveValue('primary');
+	const gwAgain = page.getByRole('group', { name: 'Groundwater (boreholes)' });
+	await expect(gwAgain.getByLabel('Property area (GN 538) (ha)')).toHaveValue('10');
+	await expect(gwAgain.getByLabel('GN 538 rate (m³/ha/a)')).toHaveValue('150');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Capped');
@@ -93,4 +103,7 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	const most = Number((await row.getByRole('cell').nth(1).innerText()).split(' ')[0]!.replace(/,/g, ''));
 	expect(most).toBeGreaterThan(0);
 	expect(most).toBeLessThanOrEqual(20_000);
+	// The property's GN 538 volume, not the 40 000 ceiling, and the most in any 12 months beside it.
+	await expect(row.getByRole('cell').nth(3)).toHaveText('1,500');
+	await expect(row.getByRole('cell').nth(4)).not.toHaveText('');
 });

@@ -1,7 +1,9 @@
 // Boreholes and stream depletion (WP-1.34, docs/model.md §2.7d): hand-worked
 // cases on a fixed natural flow.
 import { describe, expect, it } from 'vitest';
-import type { Borehole, ModelInput, NetworkNode } from '../project';
+import { GA538_ALLUVIAL_DEPLETION_FRAC, GA538_GROUNDWATER_LIMIT_M3_YEAR, GA538_GROUNDWATER_RATES, ga538VolumeM3, type Borehole, type ModelInput, type NetworkNode } from '../project';
+import { fromEpochDay, toEpochDay } from '../calendar';
+import { ga538Warnings, groundwaterAnnualUse, twelveMonthsStart, type PlanBorehole } from './boreholes';
 import { runModelWith, withVerification } from '../run';
 import { checkGroundwater, checkInvariants } from '../verify/checks';
 import { randomInput } from '../testing/fuzz';
@@ -416,3 +418,75 @@ describe('individual boreholes (WP-3.9)', () => {
 		expect(col(o, 'A', 'groundwater_used')).toEqual([1000, 1000]);
 	});
 });
+
+describe('GN 538 context (engine 1.12.0, issue #46 item 7)', () => {
+	it('the property volume is area × Table 2 rate, capped at 40 000 m³/a; without both, the ceiling', () => {
+		expect(GA538_GROUNDWATER_RATES).toEqual([0, 45, 75, 150, 275, 400]);
+		expect(GA538_GROUNDWATER_LIMIT_M3_YEAR).toBe(40_000);
+		expect(ga538VolumeM3({ gaPropertyAreaHa: 60, gaRateM3HaYear: 45 })).toEqual({ limitM3: 2700, basis: 'property' });
+		// A zero-rate quaternary: no groundwater under the GA at all.
+		expect(ga538VolumeM3({ gaPropertyAreaHa: 500, gaRateM3HaYear: 0 })).toEqual({ limitM3: 0, basis: 'property' });
+		// A large property meets the 40 000 m³/a cap.
+		expect(ga538VolumeM3({ gaPropertyAreaHa: 250, gaRateM3HaYear: 400 })).toEqual({ limitM3: 40_000, basis: 'property' });
+		// Unknown or invalid: the ceiling only.
+		for (const n of [{}, { gaPropertyAreaHa: 60 }, { gaRateM3HaYear: 75 }, { gaPropertyAreaHa: 60, gaRateM3HaYear: 100 }, { gaPropertyAreaHa: -1, gaRateM3HaYear: 75 }, { gaPropertyAreaHa: Number.NaN, gaRateM3HaYear: 75 }, { gaPropertyAreaHa: null, gaRateM3HaYear: null }])
+			expect(ga538VolumeM3(n)).toEqual({ limitM3: 40_000, basis: 'ceiling' });
+	});
+
+	it('twelve consecutive months end on the day before the same date next year, 29 February included', () => {
+		const start = (iso: string) => fromEpochDay(twelveMonthsStart(toEpochDay(iso)));
+		expect(start('2022-03-31')).toBe('2021-04-01');
+		expect(start('2021-09-30')).toBe('2020-10-01');
+		expect(start('2024-02-29')).toBe('2023-03-01');
+		expect(start('2024-03-01')).toBe('2023-03-02');
+		expect(start('2025-02-28')).toBe('2024-02-29');
+		expect(start('2021-01-01')).toBe('2020-01-02');
+	});
+
+	it('reports the most pumped in any 12 months ending in each water year, which a water-year total can hide', () => {
+		// Two water years from 1 Oct 2020; 100 m³/day pumped from 1 Apr 2021 to 31 Mar 2022, straddling 1 October.
+		const t0 = toEpochDay('2020-10-01');
+		const days = 730;
+		const pumped = Float64Array.from({ length: days }, (_, t) => (t0 + t >= toEpochDay('2021-04-01') && t0 + t <= toEpochDay('2022-03-31') ? 100 : 0));
+		const zero = new Float64Array(days);
+		const unit = { id: 'b', name: 'BH', capacityM3Day: 100, annualCapM3: Infinity, mode: 1 as const, triggerM3: 0, toDam: false, depletionFrac: 0 };
+		const plan = { days, nodes: [{ borehole: { units: [unit], depletionAlpha: 1 } satisfies PlanBorehole }] };
+		const sim = { nodes: [{ groundwater: pumped, groundwaterToDam: zero, depletion: zero, boreholePumped: [pumped] }] };
+		const a = node('A', 'farm', null, { gaPropertyAreaHa: 50, gaRateM3HaYear: 400 });
+		const rows = groundwaterAnnualUse([a], plan, sim, t0);
+		expect(rows.map((r) => [r.label, r.abstractionM3, r.rolling12MaxM3, r.gaLimitM3, r.gaBasis])).toEqual([
+			['2020/21', 18_300, 18_300, 20_000, 'property'],
+			['2021/22', 18_200, 36_500, 20_000, 'property']
+		]);
+		// Neither water year passes the property's 20 000 m³/a; the 12 months to 31 March 2022 do.
+		// A run that starts mid-year has no full 12 months in its first year.
+		const late = groundwaterAnnualUse([node('A', 'farm', null)], { ...plan, days: 400 }, { nodes: [{ ...sim.nodes[0]!, groundwater: pumped.slice(1), groundwaterToDam: zero.slice(1) }] }, t0 + 1);
+		expect(late[0]).toMatchObject({ rolling12MaxM3: null, gaLimitM3: 40_000, gaBasis: 'ceiling' });
+	});
+
+	it('warns when the property volume is unknown, and on a depletion share that suggests an alluvial aquifer', () => {
+		const unit = (name: string, depletionFrac: number) => ({ id: name, name, capacityM3Day: 1, annualCapM3: Infinity, mode: 0 as const, triggerM3: 0, toDam: false, depletionFrac });
+		const nodes = [node('A', 'farm', null), node('B', 'farm', null, { gaPropertyAreaHa: 10, gaRateM3HaYear: 75 }), node('C', 'farm', null)];
+		const plan = { nodes: [{ borehole: { units: [unit('BH-A', 0.2)], depletionAlpha: 1 } }, { borehole: { units: [unit('BH-B', GA538_ALLUVIAL_DEPLETION_FRAC)], depletionAlpha: 1 } }, {}] };
+		const [unknown, alluvial, ...rest] = ga538Warnings(nodes, plan);
+		expect(rest).toEqual([]);
+		// C pumps nothing, so it isn't named.
+		expect(unknown).toBe("GN 538 volume unknown for A: no property area or Table 2 rate (or one not in the table), so the groundwater tables show the 40 000 m³/a ceiling only, not the property's own volume (area × rate)");
+		expect(alluvial).toMatch(/^boreholes with a stream depletion share of 80 % or more \(B: BH-B\): if they draw on an alluvial aquifer connected to the stream, GN 538 counts that as surface water/);
+		expect(ga538Warnings([nodes[1]!], { nodes: [{ borehole: { units: [unit('BH-B', 0.5)], depletionAlpha: 1 } }] })).toEqual([]);
+	});
+
+	it('a run carries the property volume and warns through runModel', () => {
+		const i = input({ boreholeCapacityM3Day: 800, boreholeRule: 'primary', gaPropertyAreaHa: 60, gaRateM3HaYear: 45 }, 2000, 3);
+		const o = run(i, [0, 0, 0]);
+		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+		expect(o.summary.groundwaterAnnualUse![0]).toMatchObject({ gaLimitM3: 2700, gaBasis: 'property' });
+		expect(o.summary.warnings.some((w) => w.startsWith('GN 538 volume unknown'))).toBe(false);
+		const bare = run(input({ boreholeCapacityM3Day: 800, boreholeRule: 'primary' }, 2000, 3), [0, 0, 0]);
+		expect(bare.summary.groundwaterAnnualUse![0]).toMatchObject({ gaLimitM3: 40_000, gaBasis: 'ceiling' });
+		expect(bare.summary.warnings).toContain(
+			"GN 538 volume unknown for A: no property area or Table 2 rate (or one not in the table), so the groundwater tables show the 40 000 m³/a ceiling only, not the property's own volume (area × rate)"
+		);
+	});
+});
+

@@ -29,7 +29,7 @@ import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
-import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
+import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { supplyOf } from './network/supply';
 import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
@@ -1299,6 +1299,7 @@ function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim:
 	// An annual cap that stopped a borehole (WP-3.9): the demand it would have met is left to the dam and river.
 	const capped = [...new Set(plan.nodes.flatMap((p, i) => (p.borehole?.units.some((u) => Number.isFinite(u.annualCapM3)) ? capHits(p.borehole, sim.nodes[i]!.boreholePumped!, plan) : []).map((u) => `${nodes[i]!.name}: ${u}`)))];
 	if (capped.length) warnings.push(`borehole annual cap reached in a water year, after which the borehole pumps nothing until 1 October (${capped.join('; ')})`);
+	warnings.push(...ga538Warnings(nodes, plan));
 	if (depleting && observed) {
 		warnings.push(
 			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`

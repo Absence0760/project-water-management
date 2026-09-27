@@ -215,7 +215,9 @@ export const OUTLIER_FACTOR = { rain: 5, flow: 10 } as const;
 export const OUTLIER_MIN_POSITIVE = 100;
 /**
  * Flat-line rule: at least this many consecutive days with the same non-zero
- * value. Zero stretches are normal (dry spells, a river that stops flowing).
+ * value. Zero stretches of rain and evaporation are normal (dry spells). For
+ * flow this is the floor of a resolution-aware limit, zero flow included
+ * (flowFlatlineMinDays, engine ≥ 1.12.0).
  */
 export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_catchment_mm: 5,
@@ -229,6 +231,55 @@ export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	// A week of one value is how a monthly mean pasted into a daily pan record shows (issue #45).
 	evap_apan_mm: 7
 };
+/**
+ * Flow flat-lines by the record's resolution (engine ≥ 1.12.0, issue #46
+ * item 17, pending the hydrologist). A record stored at a fixed resolution
+ * r (DWS: m³/s to three decimals, r = 0.001) holds a slow recession on one
+ * value for days: falling FLATLINE_FLOW_RECESSION_PER_DAY (1 %) a day, a
+ * flow Q moves one step of r in r / (0.01·Q) days. A run of one value is a
+ * flat-line only when it lasts FLATLINE_FLOW_RESOLUTION_STEPS (3) such
+ * steps, and never fewer than FLATLINE_MIN_DAYS (14) nor more than
+ * FLATLINE_FLOW_MAX_DAYS (90) days: max(14, ⌈3·r / (0.01·Q)⌉), capped at 90.
+ * Zero flow (a river that stops) gets the cap. So 0.004 m³/s at r = 0.001
+ * needs 75 days, 1 m³/s the floor of 14. GSIM Part 2 (Gudmundsson et al.
+ * 2018, ESSD 10, 787–804, https://essd.copernicus.org/articles/10/787/2018/)
+ * uses a 10-day rule for the same reason: slow recessions genuinely repeat
+ * for 10–40 days at fixed resolution. Every number here is judgement.
+ */
+export const FLATLINE_FLOW_RECESSION_PER_DAY = 0.01;
+export const FLATLINE_FLOW_RESOLUTION_STEPS = 3;
+export const FLATLINE_FLOW_MAX_DAYS = 90;
+/** Differences at or below this (m³/s) are float noise, not the record's resolution. */
+const RESOLUTION_NOISE = 1e-9;
+
+/**
+ * A record's resolution: the smallest difference between two of its distinct
+ * valid values (above float noise); null with fewer than two distinct values.
+ */
+export function seriesResolution(values: readonly (number | null)[]): number | null {
+	const xs = [...new Set(values.filter(valid))].sort((a, b) => a - b);
+	let r: number | null = null;
+	for (let i = 1; i < xs.length; i++) {
+		const d = xs[i]! - xs[i - 1]!;
+		if (d > RESOLUTION_NOISE && (r === null || d < r)) r = d;
+	}
+	return r;
+}
+
+/**
+ * The days a flow must hold `q` to be a flat-line, at resolution `r`:
+ * max(14, ⌈3·r / (0.01·|q|)⌉), capped at 90; the cap for zero flow; the
+ * floor when the resolution is unknown (null) and the flow isn't zero.
+ */
+export function flowFlatlineMinDays(q: number, r: number | null): number {
+	const floor = FLATLINE_MIN_DAYS.flow_observed_m3s!;
+	const a = Math.abs(q);
+	if (a === 0) return FLATLINE_FLOW_MAX_DAYS;
+	if (r === null) return floor;
+	// Rounded to 1e-9 first, so float noise in r / q (0.0010000000000000002) doesn't add a day.
+	const days = Math.ceil(+((FLATLINE_FLOW_RESOLUTION_STEPS * r) / (FLATLINE_FLOW_RECESSION_PER_DAY * a)).toFixed(9));
+	return Math.min(FLATLINE_FLOW_MAX_DAYS, Math.max(floor, days));
+}
 const MAX_EXAMPLES = 5;
 
 const SERIES_NAME: Record<SeriesKind, string> = {
@@ -257,6 +308,37 @@ function quantileSorted(xs: Float64Array, q: number): number {
 	const lo = Math.floor(pos);
 	const hi = Math.ceil(pos);
 	return xs[lo]! + (xs[hi]! - xs[lo]!) * (pos - lo);
+}
+
+/**
+ * The flat-line rule for a series: the minimum run of one value, and for flow
+ * the record's resolution it depends on (null for rain and evaporation, or
+ * a flow with fewer than two distinct values). Rain and evaporation skip
+ * zero runs; flow counts them (at the cap).
+ */
+function flatlineRule(kind: SeriesKind, values: readonly (number | null)[]): { minDays: (v: number) => number; zeros: boolean; resolution: number | null } | null {
+	const days = FLATLINE_MIN_DAYS[kind];
+	if (!days) return null;
+	if (!kind.startsWith('flow_')) return { minDays: () => days, zeros: false, resolution: null };
+	const r = seriesResolution(values);
+	return { minDays: (v) => flowFlatlineMinDays(v, r), zeros: true, resolution: r };
+}
+
+/** The flat stretches of a series under flatlineRule: [first index, end index (exclusive), value]. */
+function flatRuns(kind: SeriesKind, values: readonly (number | null)[]): { runs: [number, number, number][]; resolution: number | null } | null {
+	const rule = flatlineRule(kind, values);
+	if (!rule) return null;
+	const runs: [number, number, number][] = [];
+	for (let i = 0; i < values.length; ) {
+		const v = values[i];
+		let j = i + 1;
+		if (valid(v) && (v !== 0 || rule.zeros)) {
+			while (j < values.length && values[j] === v) j++;
+			if (j - i >= rule.minDays(v)) runs.push([i, j, v]);
+		}
+		i = j;
+	}
+	return { runs, resolution: rule.resolution };
 }
 
 export interface SeriesRowFlags {
@@ -295,18 +377,7 @@ export function seriesRowFlags(kind: SeriesKind, s: DailySeries): SeriesRowFlags
 		});
 	}
 
-	const minRun = FLATLINE_MIN_DAYS[kind];
-	if (minRun) {
-		for (let i = 0; i < n; ) {
-			const v = s.values[i];
-			let j = i + 1;
-			if (valid(v) && v !== 0) {
-				while (j < n && s.values[j] === v) j++;
-				if (j - i >= minRun) for (let k = i; k < j; k++) flatline[k] = true;
-			}
-			i = j;
-		}
-	}
+	for (const [i, j] of flatRuns(kind, s.values)?.runs ?? []) for (let k = i; k < j; k++) flatline[k] = true;
 
 	return { negative, outlier, flatline };
 }
@@ -365,34 +436,25 @@ export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
 		}
 	}
 
-	// Flat-lines: the same non-zero value on many consecutive days.
-	const minRun = FLATLINE_MIN_DAYS[kind];
-	if (minRun) {
-		const runs: SeriesCheck['examples'] = [];
-		let flatDays = 0;
-		let nRuns = 0;
-		for (let i = 0; i < s.values.length; ) {
-			const v = s.values[i];
-			let j = i + 1;
-			if (valid(v) && v !== 0) {
-				while (j < s.values.length && s.values[j] === v) j++;
-				if (j - i >= minRun) {
-					nRuns++;
-					flatDays += j - i;
-					if (runs.length < MAX_EXAMPLES) runs.push({ date: date(i), value: v, runDays: j - i });
-				}
-			}
-			i = j;
-		}
-		if (nRuns) {
-			out.push({
-				seriesKind: kind,
-				check: 'flatline',
-				days: flatDays,
-				examples: runs,
-				text: `${name}: ${plural(nRuns, 'flat stretch', 'flat stretches')} of ${minRun} or more days with the same value (${eg(runs)}). A stuck logger or a filled-in gap?`
-			});
-		}
+	// Flat-lines: the same value on many consecutive days (rain and evaporation: non-zero; flow: by the record's resolution).
+	const flat = flatRuns(kind, s.values);
+	if (flat?.runs.length) {
+		const minRun = FLATLINE_MIN_DAYS[kind]!;
+		const runs: SeriesCheck['examples'] = flat.runs.slice(0, MAX_EXAMPLES).map(([i, j, v]) => ({ date: date(i), value: v, runDays: j - i }));
+		const flatDays = flat.runs.reduce((a, [i, j]) => a + j - i, 0);
+		const nRuns = flat.runs.length;
+		const limit = !kind.startsWith('flow_')
+			? `${minRun} or more days`
+			: flat.resolution === null
+				? `${minRun} or more days (${FLATLINE_FLOW_MAX_DAYS} at zero flow)`
+				: `more days than a slow recession holds one value at the record's resolution of ${fmt(flat.resolution)} ${unit} (${minRun} to ${FLATLINE_FLOW_MAX_DAYS} days by flow)`;
+		out.push({
+			seriesKind: kind,
+			check: 'flatline',
+			days: flatDays,
+			examples: runs,
+			text: `${name}: ${plural(nRuns, 'flat stretch', 'flat stretches')} of ${limit} with the same value (${eg(runs)}). A stuck logger or a filled-in gap?`
+		});
 	}
 
 	// Long zero runs in the catchment rain: missing data recorded as 0?

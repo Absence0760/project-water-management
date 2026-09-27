@@ -8,6 +8,8 @@ import {
 	BOREHOLE_MODES,
 	BOREHOLE_RULES,
 	BOREHOLE_TARGETS,
+	GA538_GROUNDWATER_RATES,
+	isGa538Rate,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_CURVE_MAX_ROWS,
@@ -595,6 +597,9 @@ const NODE_FIELDS: Record<string, Check> = {
 			? null
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
 	),
+	// A new farm or user may bring its GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for its groundwater.
+	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
+	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`))
 };
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -613,7 +618,10 @@ const NODE_OPTIONAL = new Set<string>([
 	...USER,
 	...BOREHOLES,
 	// A new gauge is an EWR site unless it says otherwise (engine ≥ 1.5.0).
-	'ewrSite'
+	'ewrSite',
+	// GN 538 context (engine ≥ 1.12.0): unknown unless given.
+	'gaPropertyAreaHa',
+	'gaRateM3HaYear'
 ]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,

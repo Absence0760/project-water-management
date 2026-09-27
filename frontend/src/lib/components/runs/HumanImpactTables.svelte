@@ -7,14 +7,15 @@
 	import { DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
-	import { groundwaterByNode } from './groundwater';
+	import { aboveGa, groundwaterByNode } from './groundwater';
 
 	let { summary }: { summary: RunSummary } = $props();
 
 	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
 	const pumping = $derived([...(summary.farms ?? []), ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
-	// Their use per water year against the caps and the GN 538 ceiling (engine ≥ 0.36.0, WP-3.9).
+	// Their use per water year against the caps and the GN 538 volume (engine ≥ 0.36.0, WP-3.9; the property's own from 1.12.0).
 	const annual = $derived(groundwaterByNode(summary.groundwaterAnnualUse));
+	const anyCeiling = $derived(annual.some((g) => g.gaBasis === 'ceiling'));
 	const m3 = (v: number | null) => (v === null ? '–' : fmtNum(v, 0));
 	// Each unit's demand objects (engine ≥ 1.7.0), unit by unit.
 	const objects = $derived((summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o }))));
@@ -121,8 +122,10 @@
 		<h4>Groundwater by water year</h4>
 		<p class="muted small" data-testid="gw-annual-note">
 			Modelled use per water year (October to September) against the boreholes' annual caps. For context, the GN 538 general
-			authorisation allows a property up to {fmtNum(annual[0]!.years[0]!.gaLimitM3, 0)} m³/a of groundwater, depending on its size:
-			the app shows modelled use against that ceiling and never decides whether a use is lawful.
+			authorisation allows a property its size × the Table 2 rate of its quaternary catchment, at most 40 000 m³/a, in any 12
+			consecutive months: the app shows modelled use against that volume and never decides whether a use is lawful.
+			{#if anyCeiling}Where the property's area or rate isn't entered, the table shows the 40 000 m³/a ceiling only.{/if}
+			The GA doesn't cover an alluvial aquifer connected to the stream, or groundwater taken within 100 m of a watercourse.
 		</p>
 		<p class="muted small low-confidence" role="note">
 			<span class="badge badge-warn">Low confidence</span> Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology report.
@@ -135,7 +138,9 @@
 						<th scope="col" class="num">Mean pumped<br /><span class="u">m³/a</span></th>
 						<th scope="col" class="num">Most in a year<br /><span class="u">m³</span></th>
 						<th scope="col" class="num">Annual caps<br /><span class="u">m³/a</span></th>
-						<th scope="col" class="num">Years above the GN 538 ceiling</th>
+						<th scope="col" class="num">GN 538 volume<br /><span class="u">m³/a</span></th>
+						<th scope="col" class="num">Most in any 12 months<br /><span class="u">m³</span></th>
+						<th scope="col" class="num">Years above the GN 538 volume</th>
 						<th scope="col" class="num">Years a cap was reached</th>
 					</tr>
 				</thead>
@@ -146,6 +151,8 @@
 							<td class="num">{fmtNum(g.meanM3Year, 0)}</td>
 							<td class="num">{fmtNum(g.maxYear.abstractionM3, 0)} <span class="muted">({g.maxYear.label})</span></td>
 							<td class="num">{m3(g.years[0]!.annualCapM3)}</td>
+							<td class="num">{fmtNum(g.gaLimitM3, 0)}{#if g.gaBasis === 'ceiling'} <span class="muted">(ceiling only)</span>{/if}</td>
+							<td class="num">{m3(g.max12M3)}</td>
 							<td class="num" class:neg={g.yearsAboveGa > 0}>{g.yearsAboveGa} of {g.years.length}</td>
 							<td class="num">{g.yearsCapReached} of {g.years.length}</td>
 						</tr>
@@ -165,6 +172,7 @@
 								<th scope="col" class="num">Pumped<br /><span class="u">m³</span></th>
 								<th scope="col" class="num">Into the dam<br /><span class="u">m³</span></th>
 								<th scope="col" class="num">Stream depletion<br /><span class="u">m³</span></th>
+								<th scope="col" class="num">Most in 12 months to then<br /><span class="u">m³</span></th>
 								{#each g.years[0]!.boreholes as b, k (k)}
 									<th scope="col" class="num">{b.name}<br /><span class="u">m³{b.annualCapM3 !== null ? ` of ${fmtNum(b.annualCapM3, 0)}` : ''}</span></th>
 								{/each}
@@ -178,6 +186,7 @@
 									<td class="num" class:neg={y.abstractionM3 > y.gaLimitM3}>{fmtNum(y.abstractionM3, 0)}</td>
 									<td class="num">{fmtNum(y.toDamM3, 0)}</td>
 									<td class="num">{fmtNum(y.streamDepletionM3, 0)}</td>
+									<td class="num" class:neg={aboveGa(y)}>{m3(y.rolling12MaxM3 ?? null)}</td>
 									{#each y.boreholes as b, k (k)}
 										<td class="num">{fmtNum(b.abstractionM3, 0)}{#if b.capReached}<span class="badge badge-warn">cap</span>{/if}</td>
 									{/each}

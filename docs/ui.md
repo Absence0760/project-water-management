@@ -1486,8 +1486,12 @@ note's link on the Summary, `notes.ts` `noteHref`).
   none; emergency only with a dam), **Runs below** (% of dam, emergency only),
   **Pumps into** (the crop or the farm dam; farms only, the dam only with one)
   and **Stream depletion** (% of pumping). Below them: the caps' total and the
-  GN 538 context (up to 40 000 m³/a per property, depending on its size; the
-  app never decides legality). Read-only for viewers; fields stack on a phone.
+  GN 538 context: this property's volume (area × Table 2 rate, at most 40 000
+  m³/a, in any 12 months) once the groundwater group's **Property area (GN
+  538)** (ha) and **GN 538 rate** (a select of the six Table 2 rates, or "Not
+  looked up") are set, else GN 538's rule and a prompt to enter them (engine ≥
+  1.12.0); and the GA's exclusions (an alluvial aquifer connected to the
+  stream, within 100 m of a watercourse). The app never decides legality. Read-only for viewers; fields stack on a phone.
   Removing the node asks about its boreholes too.
 - **Demand objects** (engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md),
   `DemandObjectFields.svelte`), one-node form, units only (and on a node turned
@@ -3210,13 +3214,18 @@ read it before.
   a table of each one's mean pumping, its share of what was supplied, and the
   stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
   (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
-  by water year**: the GN 538 context note (up to 40 000 m³/a per property;
-  modelled use only, the app never decides legality), the low-confidence note,
-  then per farm or user the mean pumped per year (partial years weighted by
-  their days), the most in one year, the annual caps, how many years pumped
-  above the GN 538 ceiling (flagged) and how many reached a cap; and per node
-  a collapsed table of every water year: days, pumped, into the dam, stream
-  depletion and each borehole's volume (of its cap, marked when reached).
+  by water year**: the GN 538 context note (area × Table 2 rate, at most
+  40 000 m³/a, in any 12 months; the ceiling only where a property's area or
+  rate isn't entered; the GA's exclusions; modelled use only, the app never
+  decides legality), the low-confidence note, then per farm or user the mean
+  pumped per year (partial years weighted by their days), the most in one
+  year, the annual caps, the **GN 538 volume** ("(ceiling only)" when
+  unknown), the **most in any 12 months**, how many years were above the GN
+  538 volume over the water year or any 12 months ending in it (flagged; engine
+  ≥ 1.12.0, `aboveGa`) and how many reached a cap; and per node a collapsed
+  table of every water year: days, pumped, into the dam, stream depletion, the
+  most in the 12 months to then, and each borehole's volume (of its cap,
+  marked when reached).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run

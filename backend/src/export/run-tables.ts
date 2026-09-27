@@ -1240,14 +1240,40 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 /**
  * Groundwater abstraction per farm or user and water year (engine ≥ 0.36.0,
  * WP-3.9): pumped, into the dam, stream depletion, the boreholes' annual caps
- * and the GN 538 ceiling for context, then one row per borehole. Only in runs
- * with boreholes. The app shows modelled use against the caps; it never
- * decides legality.
+ * and, for context, the GN 538 volume (the property's own, area × Table 2
+ * rate capped at 40 000 m³/a, or the ceiling when unknown; engine ≥ 1.12.0)
+ * with the most pumped in any 12 months (GN 538's year), then one row per
+ * borehole. Only in runs with boreholes. The app shows modelled use against
+ * the caps; it never decides legality. Older runs leave the last two blank
+ * and read "ceiling".
  */
 export function* groundwaterAnnualLines(rows: NonNullable<RunSummary['groundwaterAnnualUse']>): Generator<string> {
-	yield csvRow(['Groundwater abstraction by water year (modelled use against the caps; GN 538 ceiling for context, not a decision on legality)']);
-	yield csvRow(['Farm or user', 'Water year', 'Days', 'Pumped (m³)', 'Into the dam (m³)', 'Stream depletion (m³)', 'Annual caps (m³)', 'GN 538 ceiling (m³/a)']);
-	for (const r of rows) yield csvRow([r.name, r.label, r.days, r.abstractionM3, r.toDamM3, r.streamDepletionM3, r.annualCapM3, r.gaLimitM3]);
+	yield csvRow(['Groundwater abstraction by water year (modelled use against the caps; GN 538 volume for context, not a decision on legality)']);
+	yield csvRow([
+		'Farm or user',
+		'Water year',
+		'Days',
+		'Pumped (m³)',
+		'Into the dam (m³)',
+		'Stream depletion (m³)',
+		'Annual caps (m³)',
+		'GN 538 volume (m³/a)',
+		'GN 538 volume from',
+		'Most pumped in any 12 months (m³)'
+	]);
+	for (const r of rows)
+		yield csvRow([
+			r.name,
+			r.label,
+			r.days,
+			r.abstractionM3,
+			r.toDamM3,
+			r.streamDepletionM3,
+			r.annualCapM3,
+			r.gaLimitM3,
+			r.gaBasis === 'property' ? 'property area × rate' : 'ceiling only',
+			r.rolling12MaxM3 ?? null
+		]);
 	yield csvRow(['Farm or user', 'Water year', 'Borehole', 'Pumped (m³)', 'Annual cap (m³)', 'Cap reached']);
 	for (const r of rows) for (const b of r.boreholes) yield csvRow([r.name, r.label, b.name, b.abstractionM3, b.annualCapM3, b.annualCapM3 === null ? null : b.capReached ? 'yes' : 'no']);
 }

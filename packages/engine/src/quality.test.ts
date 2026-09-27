@@ -5,7 +5,12 @@ import {
 	areaMismatches,
 	areaMismatchWarning,
 	checkSeries,
+	FLATLINE_FLOW_MAX_DAYS,
+	FLATLINE_FLOW_RECESSION_PER_DAY,
+	FLATLINE_FLOW_RESOLUTION_STEPS,
 	FLATLINE_MIN_DAYS,
+	flowFlatlineMinDays,
+	seriesResolution,
 	LOW_VS_CHIRPS_MIN_DAYS,
 	MAX_LISTED,
 	observedAgreement,
@@ -183,17 +188,56 @@ describe('checkSeries', () => {
 		expect(checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: [...flow, 40] })[0]).toMatchObject({ check: 'outlier', days: 1 });
 	});
 
-	it('flags long stretches of one non-zero value, and ignores zeros and missing days', () => {
+	it('flags long stretches of one value, and ignores short ones, zero flow under the cap and missing days', () => {
 		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
-		const v: (number | null)[] = [1, 2, ...new Array(n).fill(0.35), 3, ...new Array(n - 1).fill(0.5), ...new Array(200).fill(0), null, null];
+		// Resolution 0.15 (5.35 vs 5.5): at these flows the 14-day floor applies.
+		const v: (number | null)[] = [1, 2, ...new Array(n).fill(5.35), 3, ...new Array(n - 1).fill(5.5), ...new Array(FLATLINE_FLOW_MAX_DAYS - 1).fill(0), null, null];
 		const [c] = checkSeries('flow_logger_m3s', { startDate: '2021-01-01', values: v });
-		expect(c).toMatchObject({ check: 'flatline', days: n, examples: [{ date: '2021-01-03', value: 0.35, runDays: n }] });
-		expect(c!.text).toMatch(/1 flat stretch of 14 or more days/);
+		expect(c).toMatchObject({ check: 'flatline', days: n, examples: [{ date: '2021-01-03', value: 5.35, runDays: n }] });
+		expect(c!.text).toBe(
+			"Logger flow: 1 flat stretch of more days than a slow recession holds one value at the record's resolution of 0.15 m³/s (14 to 90 days by flow) with the same value (2021-01-03: 5.35 m³/s for 14 days). A stuck logger or a filled-in gap?"
+		);
 		// Rain: five identical wet days in a row.
 		expect(checkSeries('rain_chirps_mm', { startDate: '2021-01-01', values: [0, 4.2, 4.2, 4.2, 4.2, 4.2, 0] })[0]).toMatchObject({
 			check: 'flatline',
 			days: 5
 		});
+	});
+
+	it('flow: the days a value must hold depend on the record’s resolution and the flow (issue #46 item 17, GSIM Part 2)', () => {
+		expect([FLATLINE_MIN_DAYS.flow_observed_m3s, FLATLINE_FLOW_MAX_DAYS, FLATLINE_FLOW_RECESSION_PER_DAY, FLATLINE_FLOW_RESOLUTION_STEPS]).toEqual([14, 90, 0.01, 3]);
+		// max(14, ⌈3·r / (0.01·Q)⌉), capped at 90.
+		expect(flowFlatlineMinDays(1, 0.001)).toBe(14);
+		expect(flowFlatlineMinDays(0.01, 0.001)).toBe(30);
+		expect(flowFlatlineMinDays(0.004, 0.001)).toBe(75);
+		expect(flowFlatlineMinDays(0.002, 0.001)).toBe(90);
+		expect(flowFlatlineMinDays(0, 0.001)).toBe(90);
+		expect(flowFlatlineMinDays(0, null)).toBe(90);
+		expect(flowFlatlineMinDays(0.5, null)).toBe(14);
+		expect(flowFlatlineMinDays(-0.5, null)).toBe(14);
+		// The resolution: the smallest difference between distinct values, float noise aside.
+		expect(seriesResolution([0.004, 0.005, null, 0.007, 0.004])).toBeCloseTo(0.001, 12);
+		expect(seriesResolution([0.1 + 0.2, 0.3, 0.5])).toBeCloseTo(0.2, 12);
+		expect(seriesResolution([1, 1, null])).toBeNull();
+
+		// 300 days varying 1–1.3 m³/s at three decimals (resolution 0.001), then one value repeated.
+		const varied = Array.from({ length: 300 }, (_, i) => 1 + ((i * 7) % 300) / 1000);
+		const flat = (v: number, n: number) => [...varied, ...new Array(n).fill(v), 2.5];
+		const flags = (v: number, n: number) => checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: flat(v, n) }).filter((c) => c.check === 'flatline');
+		// A steady dry-season low flow of 0.004 m³/s: 75 days.
+		expect(flags(0.004, 74)).toEqual([]);
+		expect(seriesRowFlags('flow_observed_m3s', { startDate: '2020-01-01', values: flat(0.004, 74) }).flatline.some(Boolean)).toBe(false);
+		expect(flags(0.004, 75)[0]).toMatchObject({ days: 75, examples: [{ value: 0.004, runDays: 75 }] });
+		expect(flags(0.004, 75)[0]!.text).toMatch(/at the record's resolution of 0\.001 m³\/s \(14 to 90 days by flow\)/);
+		// A logger stuck at a high flow: 14 days.
+		expect(flags(9.5, 13)).toEqual([]);
+		expect(flags(9.5, 14)[0]).toMatchObject({ days: 14 });
+		expect(seriesRowFlags('flow_observed_m3s', { startDate: '2020-01-01', values: flat(9.5, 14) }).flatline.filter(Boolean)).toHaveLength(14);
+		// Zero flow is treated like any low flow: the cap.
+		expect(flags(0, 89)).toEqual([]);
+		expect(flags(0, 90)[0]).toMatchObject({ days: 90, examples: [{ value: 0, runDays: 90 }] });
+		// Rain keeps its single 5-day limit, and never counts zeros.
+		expect(checkSeries('rain_chirps_mm', { startDate: '2021-01-01', values: [...rain(400), 0.2, 0.2, 0.2, 0.2, 0.2, ...new Array(200).fill(0)] }).find((c) => c.check === 'flatline')).toMatchObject({ days: 5 });
 	});
 
 	it('seriesChecks runs every present series in kind order', () => {
@@ -241,7 +285,8 @@ describe('seriesRowFlags', () => {
 
 	it('flags every day inside a qualifying flat stretch, and keeps adjacent different-value runs distinct', () => {
 		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
-		const v: (number | null)[] = [1, 2, ...new Array(n).fill(0.35), ...new Array(n).fill(0.5), ...new Array(200).fill(0), null, null];
+		// Resolution 0.15: the 14-day floor at these flows; the zero run stays under the 90-day cap.
+		const v: (number | null)[] = [1, 2, ...new Array(n).fill(5.35), ...new Array(n).fill(5.5), ...new Array(FLATLINE_FLOW_MAX_DAYS - 1).fill(0), null, null];
 		const flags = seriesRowFlags('flow_logger_m3s', { startDate: '2021-01-01', values: v });
 		// Both runs qualify (each >= n days of one value), even though they sit back to back.
 		expect(flags.flatline.slice(2, 2 + n).every(Boolean)).toBe(true);
