@@ -3321,41 +3321,96 @@ them scenarios).
 ## Allocations (`?tab=allocations`)
 
 WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
-[allocations.md](./allocations.md)). A core tab: owners, editors and viewers
-see it; farmers never reach the workspace.
+[allocations.md](./allocations.md)); laid out as an option A page (issue
+#17). A core tab: owners, editors and viewers see it; farmers never reach the
+workspace.
 
-- **Modelled use vs registered volume** (`AllocationCompare.svelte`), on top:
-  a run picker (the published run by default, else the latest), a sentence
-  saying modelled use is *modelled, not metered* and a difference is
-  something to look into, not a finding; a warning listing the farms and
-  sources whose modelled use was above the registered volume, with how many
-  whole water years; notes for allocations not matched to a farm, or matched
-  to a farm the run doesn't have. The table has one row per farm, source and
-  water year: registered m³, modelled use m³ ("modelled, not metered" under
-  the heading), modelled ÷ registered, and a status badge (*Above
-  registered*, *Within band*, *Below registered*, *No registered volume*, *No
-  use, none registered*; the full sentence in its title). A part year is
-  marked "part (N d)". A source with neither use nor a volume is left out.
-  On a phone each row is a card of label–value lines.
-- **Registered volumes**: the list (farm, registration, the registered user
-  for editors only, authorisation, purpose, source, volume, storage, validity,
-  and where it came from: the file name and the first 12 hex digits of its
-  SHA-256, or "Entered by hand"). Unmatched rows are highlighted. **Download
-  CSV** (the export, names for editors only). Editors: **Add a volume**, and
-  **Change** / **Delete** per row (the form's farm picker is how a row is
-  matched by hand). Viewers see "Names of registered users are shown to
-  editors only." Below the list, **Imported files**: each with its full hash,
-  reference, row count, who and when, and **Remove this import**.
-- **Import registered volumes** (`AllocationImport.svelte`, editors): what
-  the file is (WARMS extract or CSV template), a reference, the file, and a
-  **Download the CSV template** link. The preview says how many rows matched,
-  didn't, or have problems; the table lists rows with problems first (the
-  problem in red), then unmatched rows, each with a farm picker ("by farm
-  name", "chosen by you"). **Import N rows** stores the valid ones; the
-  message says how many were imported, left out and still unmatched. Errors
-  (a refused file, a file already imported) show in an alert.
+**Section header.** The context counts the registered volumes, the ones not
+matched to a unit, and the units above registered in the run shown ("40
+registered volumes · 4 not matched · 13 units above registered";
+`allocationsContext` in `allocations.ts`; "No registered volumes yet" when
+there are none). The actions: the **run picker** (with more than one run;
+`run=`, else the published run, else the latest; a `run=` that no longer
+exists shows the default with a note), **Download CSV** (the export, names
+for editors only), and for editors **Import** (`import=1`) and **+ Add
+volume** (`volume=new`), each a side sheet that closes in place, so Back goes
+to where it was opened from. A viewer opening a sheet link gets the page.
+
+**Under the header**, a sentence naming the run and saying modelled use is
+*modelled, not metered* and a difference is something to look into, not a
+finding; slim notes for volumes not matched to a unit (editors: "Change a
+volume to match it"), or matched to a unit the run doesn't have.
+
+**Modelled use vs registered volume** is a list of each unit and water
+source with use or a volume, the ones to look into first (`unitRows`): above
+registered (most whole years over, then the largest ratio), use with no
+registered volume (the most use), below registered (the smallest ratio),
+within the band, then neither. Each row: the unit (a link, `unit=`), the
+source, a status in words ("Above registered in 3 of 3 whole years", *No
+registered volume*, *Below registered*, *Within band*), modelled ÷
+registered, and the mean water year's registered volume and modelled use
+("Nothing registered" when there is none; the part year's own figures when
+the run covers no whole water year). The left edge is amber for above
+registered or unregistered use, green within the band, grey otherwise; the
+words say the same.
+
+**The picked unit** (`unit=`, else the first row) sits beside the list: its
+name with links to it **On the Network** and in **Units & supply**; a bar per
+water year and source (modelled use, amber above registered, green within
+the band, with the registered volume as a line across it; decorative, the
+table under it carries the numbers); the same years as a table (registered
+m³, modelled use m³ "modelled, not metered", modelled ÷ registered, the
+status badge with its full sentence in the title, "part (N d)" for a part
+year); its registered storage beside the dam capacity in the run; and its
+registered volumes (volume, source, authorisation, registration number, the
+holder for editors only, validity), each with **Change** and **Delete** for
+editors. From 1100 × 620 the list and the picked unit are the height left in
+the window, each scrolling inside its card; a link to a unit further down the
+list scrolls the list (not the page) to its row.
+
+**Registered volumes** (below the first screen): the list, stacked so it
+fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
+with the registration number under it, the registered user for editors only,
+authorisation with purpose, volume with source, storage, validity with where
+it came from (the file name and the first 12 hex digits of its SHA-256, or
+"Entered by hand"), and **Change** / **Delete** for editors (the form's unit
+picker is how a row is matched by hand). Viewers see "Names of registered
+users are shown to editors only." Under it, **Imported files**: each with its
+full hash, reference, row count, who and when, and **Remove this import**.
+
+**Every unit and water year**: the whole comparison as one table (one row
+per unit, source and water year, the run's order; a source with neither use
+nor a volume is left out) with the band note under it, scrolling inside its
+box.
+
+**Import registered volumes** (the Import sheet, `AllocationImport.svelte`):
+what the file is (WARMS extract or CSV template), a reference, the file, and
+**Download the CSV template**. The preview says how many rows matched,
+didn't, or have problems; the table lists rows with problems first (the
+problem in red), then unmatched rows, each with a unit picker ("by farm
+name", "chosen by you"); type and source share a column. **Import N rows**
+(pinned at the sheet's foot, with Cancel) stores the valid ones, closes the
+sheet and says how many were imported, left out and still unmatched. Errors
+(a refused file, a file already imported) show in an alert in the sheet;
+closing the sheet drops a preview.
+
+**Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
+`volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
+source, purpose, volume, storage, valid from/to, registration number,
+property, the registered user (editors), reference; Save and Cancel pinned.
+
+**Phone and narrow windows**: one column (list, picked unit, volumes, every
+year); the list shows six rows until **Show all N units and sources** and the
+volumes eight until **Show all N registered volumes**; each volume and each
+year row is a card with its values two to a line under their labels
+(container queries); picking a unit scrolls its detail into view.
+
 - e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
-  viewer without names, phone cards, axe).
+  viewer without names, phone cards, axe) and
+  `e2e/tests/allocations-page.spec.ts` (the header, the order, window fit,
+  `unit=` and Back, a shared unit link, the sheets, `run=` and a deleted run,
+  empty states, 1280 and phone layouts, a viewer, axe in both themes; a
+  30-unit catchment with 40 volumes from `e2e/support/allocations.ts`).
 
 ## Applications (WP-3.3)
 

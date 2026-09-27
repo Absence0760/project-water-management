@@ -228,6 +228,15 @@ Interaction details that bit:
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
   closes the overlay rather than leaving the page.
+- **Bring a linked item into view inside its list, after the fit is measured.**
+  Allocations' `unit=` link names a row far down a list that scrolls in its
+  card. `scrollIntoView({ block: 'nearest' })` on mount did nothing: the
+  block's height still used top 0 (the whole window), so the row was already
+  "in view" and the list shrank under it once the top was measured; with
+  `block: 'center'` it scrolled the page as well. Wait until the block fits
+  at its measured top, then set the list's own `scrollTop` from the two
+  bounding boxes; the spec asserts the row is in the viewport and
+  `window.scrollY` is 0.
 - **A tab that copies a list from the page must take the page's updates.**
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from
@@ -237,7 +246,8 @@ Interaction details that bit:
 
 - Every new page gets its own spec with a11y scans at desktop and phone
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
-  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`).
+  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
+  `allocations.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card (see `network-map.spec.ts`,
