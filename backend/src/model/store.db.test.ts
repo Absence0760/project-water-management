@@ -90,6 +90,8 @@ describe('model store', () => {
 			supplyTriggerPct: 0.35,
 			supplyStopPct: 0.65
 		});
+		// A gauge taken off the EWR sites (engine 1.3.0, 084_ewr_site).
+		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior' });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
 		const maize = { id: crypto.randomUUID(), name: 'Maize', sortOrder: 1, cropFactor: monthly(0.8) };
@@ -106,7 +108,7 @@ describe('model store', () => {
 		});
 		const model = {
 			// Out of order on purpose: the store orders by sortOrder, then name.
-			nodes: [outlet, town, farm],
+			nodes: [outlet, weir, town, farm],
 			crops: [beans, maize],
 			cropAreas: [
 				{ nodeId: farm.id, cropId: beans.id, areaM2: 1234.5 },
@@ -145,10 +147,11 @@ describe('model store', () => {
 			pumpCapacityM3Day: null,
 			supplyTriggerPct: 0.4,
 			supplyStopPct: 0.6,
+			ewrSite: true,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
-		expect(got.nodes).toEqual([full(town), full(farm), full(outlet)]);
+		expect(got.nodes).toEqual([full(town), full(farm), full(weir), full(outlet)]);
 		expect(got.crops).toEqual([maize, beans]);
 		expect([...got.cropAreas].sort((a, b) => a.areaM2 - b.areaM2)).toEqual([model.cropAreas[1], model.cropAreas[0]]);
 		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0]]);
