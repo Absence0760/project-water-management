@@ -12,16 +12,23 @@
 //     the reason and the status a viewer gets;
 //   - the owner-only routes are exactly OWNER_ONLY, and the reads above viewer
 //     exactly EDITOR_READS, each with its reason;
+//   - the routes below viewer (the farmer's and the contributor's) are
+//     exactly BELOW_VIEWER, each with the lowest role it admits and its
+//     reason;
 //   - viewer, contributor and farmer get 403 from every route above them, and
-//     none of the owner's data changes; an editor gets 403 from every
-//     owner-only route.
+//     none of the owner's data changes; a farmer gets 403 from every
+//     contributor route; an editor gets 403 from every owner-only route;
+//   - a farmer or contributor asking an allowed route for an id that isn't
+//     there gets 404, never data.
 //
-// Positive controls (CLAUDE.md rule 5): the editor passes the role check of
-// every route that needs editor or less, and the owner of every owner-only
-// route. A new route is swept the day it lands; one whose body fails
-// validation fails the "reaches its role check" test until it gets a SAMPLE.
-// farms.db.test.ts and scenarios/applications.db.test.ts keep the farmer's and
-// the contributor's allowed routes; isolation.db.test.ts covers non-members.
+// Positive controls (CLAUDE.md rule 5): the farmer passes the role check of
+// every farmer route, the contributor of every farmer and contributor route,
+// the editor of every route that needs editor or less, and the owner of every
+// owner-only route. A new route is swept the day it lands; one whose body
+// fails validation fails the "reaches its role check" test until it gets a
+// SAMPLE. What RLS lets a farmer read through the allowed routes is
+// farms/farmer-privacy.security.db.test.ts, a contributor
+// scenarios/applications.db.test.ts; isolation.db.test.ts covers non-members.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Check = { min: string; ok: boolean };
@@ -97,6 +104,48 @@ const OWNER_ONLY = new Map<string, string>([
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in']
+]);
+
+/**
+ * The routes a farmer or contributor may call (both rank below viewer, so
+ * every other route refuses them: fail closed), the lowest role each admits,
+ * and why. RLS and the route's own rules decide what they reach there: the
+ * farm view publish/publication.db.test.ts, notes notes/notes.db.test.ts,
+ * alert events alerts/alerts.db.test.ts, applications
+ * scenarios/applications.db.test.ts and contributor-tables.db.test.ts.
+ */
+const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: string }>([
+	// Farmer and above (WP-2.1, WP-2.3, WP-2.6).
+	['GET /projects/:id/publication', { min: 'farmer', why: 'the published baseline; a farmer gets the counts-only catchment view, never the note' }],
+	['GET /projects/:id/farm', { min: 'farmer', why: 'the farm index: a farmer lists only their linked farms (RLS on node)' }],
+	['GET /projects/:id/farm/:nodeId', { min: 'farmer', why: 'the farm view of a linked farm; any other node 404s alike' }],
+	['GET /projects/:id/farm/:nodeId/export.csv', { min: 'farmer', why: "the farm view's CSV, the same figures and the same 404s" }],
+	['GET /projects/:id/farm/:nodeId/access', { min: 'farmer', why: 'who can see this farm, so a farmer knows who reads their figures' }],
+	// Notes (WP-2.7): RLS limits a farmer or contributor to farm notes on their own farms.
+	['GET /projects/:id/notes', { min: 'farmer', why: 'notes RLS lets the caller read (a farmer: farm notes on their farms)' }],
+	['GET /projects/:id/notes/counts', { min: 'farmer', why: 'per-target counts of the same RLS-limited notes' }],
+	['POST /projects/:id/notes', { min: 'farmer', why: 'a farmer writes a farm note on their own farm only (note_insert, the route)' }],
+	['PATCH /projects/:id/notes/:noteId', { min: 'farmer', why: "only the author edits a note's body (note_guard)" }],
+	['DELETE /projects/:id/notes/:noteId', { min: 'farmer', why: 'the author, or an editor, deletes a note' }],
+	// Alerts (WP-2.13): RLS limits a farmer to their farms' events and the notices; a contributor gets none.
+	['GET /projects/:id/alert-events', { min: 'farmer', why: "alert events RLS lets the caller read: their farms' and the notices" }],
+	['PUT /me/alerts/:projectId', { min: 'farmer', why: "the caller's own alert preferences, limited to the kinds their role gets" }],
+	['DELETE /projects/:id/members/:userId', { min: 'farmer', why: 'anyone may leave; only an owner removes someone else (inline check)' }],
+	// Contributor and above (WP-3.3): an applicant works on their application.
+	['GET /projects/:id/scenarios', { min: 'contributor', why: 'a contributor lists their own applications and those shared with them (RLS)' }],
+	['POST /projects/:id/scenarios', { min: 'contributor', why: 'a contributor makes an application on the published run' }],
+	['GET /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application its applicant or a sharer reads; any other 404s' }],
+	['GET /projects/:id/scenarios/:sid/base', { min: 'contributor', why: "the published base run's inputs, through app_published_run_input" }],
+	['PATCH /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['DELETE /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['POST /projects/:id/scenarios/:sid/runs', { min: 'contributor', why: 'an application by its readers, a team scenario by an editor' }],
+	['POST /projects/:id/scenarios/:sid/rebase', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['POST /projects/:id/scenarios/:sid/submit', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['POST /projects/:id/scenarios/:sid/withdraw', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['POST /projects/:id/scenarios/:sid/reopen', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
+	['GET /projects/:id/scenarios/:sid/share-candidates', { min: 'contributor', why: 'who an applicant may share their own application with' }],
+	['POST /projects/:id/scenarios/:sid/members', { min: 'contributor', why: 'an applicant shares their own application' }],
+	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }]
 ]);
 
 /** Reads that need editor, and why. */
@@ -184,10 +233,10 @@ const routes = [
 const isWrite = (route: string) => !route.startsWith('GET ');
 
 /** One request as `u`, with the route's sample, and the role checks it made. */
-async function probe(u: User, route: string) {
+async function probe(u: User, route: string, override: Record<string, string> = {}) {
 	const [method, pattern] = route.split(' ') as [string, string];
 	const s = SAMPLE[route]?.(ctx) ?? {};
-	const ids = { ...ctx.ids, ...s.params };
+	const ids = { ...ctx.ids, ...s.params, ...override };
 	let path = pattern.replace(/:([A-Za-z]+)/g, (_, name: string) => ids[name] ?? ZERO);
 	if (s.query) path += `?${new URLSearchParams(s.query)}`;
 	const body = method === 'GET' || method === 'DELETE' ? undefined : (s.body ?? {});
@@ -336,7 +385,7 @@ describe('the role ladder inventory', () => {
 	});
 
 	it('lists no route that no longer exists', () => {
-		for (const r of [...LOWER_ROLE_WRITES.keys(), ...OWNER_ONLY.keys(), ...EDITOR_READS.keys(), ...Object.keys(SAMPLE)]) expect(routes, r).toContain(r);
+		for (const r of [...LOWER_ROLE_WRITES.keys(), ...OWNER_ONLY.keys(), ...EDITOR_READS.keys(), ...BELOW_VIEWER.keys(), ...Object.keys(SAMPLE)]) expect(routes, r).toContain(r);
 	});
 
 	it('needs editor for every write but the listed lower-role ones', () => {
@@ -352,8 +401,13 @@ describe('the role ladder inventory', () => {
 		expect(routes.filter((r) => !isWrite(r) && minRole.get(r) === 'editor').sort()).toEqual([...EDITOR_READS.keys()].sort());
 	});
 
+	it('admits a farmer or contributor on exactly the listed routes, at the listed role', () => {
+		const below = routes.filter((r) => minRole.has(r) && rank[minRole.get(r)!] < rank.viewer).map((r) => [r, minRole.get(r)]);
+		expect(below.sort()).toEqual([...BELOW_VIEWER].map(([r, e]) => [r, e.min]).sort());
+	});
+
 	it('gives every allowlist entry a reason', () => {
-		for (const [r, e] of LOWER_ROLE_WRITES) expect(e.why.length, r).toBeGreaterThan(20);
+		for (const [r, e] of [...LOWER_ROLE_WRITES, ...BELOW_VIEWER]) expect(e.why.length, r).toBeGreaterThan(20);
 		for (const [r, why] of [...OWNER_ONLY, ...EDITOR_READS]) expect(why.length, r).toBeGreaterThan(20);
 	});
 });
@@ -432,6 +486,51 @@ describe('an editor is refused the owner-only routes', () => {
 			if (!r.checks.length || r.checks.some((c) => !c.ok)) refused.push(`${route} → ${r.status}`);
 		}
 		expect(refused).toEqual([]);
+	});
+});
+
+// After the snapshot tests: the positive controls below run the farmer's and
+// the contributor's writes for real (a note, an application, their alert
+// preferences), which the viewer's sweep must not see.
+describe('the farmer and the contributor, on the routes below viewer', () => {
+	const at = (min: Role) => [...BELOW_VIEWER].filter(([, e]) => rank[e.min] <= rank[min]).map(([r]) => r);
+
+	it.each([
+		['farmer', 'farmer'],
+		['contributor', 'contributor']
+	] as const)('positive control: the %s passes the role check of every route admitting %s', async (who, min) => {
+		expect(at(min).length).toBeGreaterThan(min === 'farmer' ? 10 : 25);
+		const refused: string[] = [];
+		for (const route of at(min)) {
+			const r = await probe(ctx[who], route);
+			if (!r.checks.length || r.checks.some((c) => !c.ok)) refused.push(`${route} → ${r.status}`);
+		}
+		expect(refused).toEqual([]);
+	});
+
+	it('answers a farmer 403 on every contributor route, at the contributor check', async () => {
+		const wrong: string[] = [];
+		const contributorOnly = [...BELOW_VIEWER].filter(([, e]) => e.min === 'contributor').map(([r]) => r);
+		expect(contributorOnly.length).toBeGreaterThan(10);
+		for (const route of contributorOnly) {
+			const r = await probe(ctx.farmer, route);
+			if (r.status !== 403 || r.checks.find((c) => !c.ok)?.min !== 'contributor') wrong.push(`${route} → ${r.status}`);
+		}
+		expect(wrong).toEqual([]);
+	});
+
+	// A row that isn't there (or isn't theirs) answers 404, which says nothing
+	// about whether it exists; the positive control above shows the same
+	// request with a real id gets past the role check.
+	it.each(['farmer', 'contributor'] as const)('answers a %s 404 for an id that isn’t there on every allowed route that takes one', async (who) => {
+		const wrong: string[] = [];
+		const withId = at(who).filter((r) => /:(sid|nodeId|noteId)/.test(r));
+		expect(withId.length).toBeGreaterThanOrEqual(who === 'farmer' ? 5 : 15);
+		for (const route of withId) {
+			const r = await probe(ctx[who], route, { sid: ZERO, nodeId: ZERO, noteId: ZERO });
+			if (r.status !== 404) wrong.push(`${route} → ${r.status} ${r.text.slice(0, 80)}`);
+		}
+		expect(wrong).toEqual([]);
 	});
 });
 

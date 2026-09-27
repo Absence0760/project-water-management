@@ -95,7 +95,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, projects/role-ladder.db.test.ts).
 	it('inventories the scenario routes as auth-gated', () => {
 		const scenarios = [
 			'GET /projects/:id/scenarios',
@@ -137,7 +137,7 @@ describe('route auth inventory', () => {
 	});
 
 	// Applications (WP-3.3, 045_contributor_scope): auth-gated like every project
-	// route; which a contributor may call is scenarios/applications.db.test.ts.
+	// route; which a contributor may call is projects/role-ladder.db.test.ts (BELOW_VIEWER).
 	it('inventories the application routes as auth-gated', () => {
 		const applications = [
 			'GET /projects/:id/applications',
@@ -189,7 +189,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Farmers and farmer invites (WP-2.1, WP-2.2): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	// Farmers and farmer invites (WP-2.1, WP-2.2): auth-gated like every project route (and farmer-403, projects/role-ladder.db.test.ts).
 	it('inventories the farmer routes as auth-gated', () => {
 		for (const r of ['GET /projects/:id/farmers', 'POST /projects/:id/farmers', 'POST /projects/:id/farmers/bulk', 'PUT /projects/:id/farmers/:userId']) {
 			expect(routes).toContain(r);

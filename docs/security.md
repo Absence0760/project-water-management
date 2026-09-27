@@ -615,10 +615,17 @@ In short:
   the project, copy it, a report to yourself, your own alert preferences,
   notes, scenario routes whose own rules decide), with the reason and the
   status a viewer gets; the owner-only routes are exactly `OWNER_ONLY` and
-  the editor-only reads exactly `EDITOR_READS`. Viewer, contributor and
-  farmer get `403` from everything above them and nothing changes; an editor
-  gets `403` from every owner-only route; the editor and the owner pass
-  their own checks (positive controls).
+  the editor-only reads exactly `EDITOR_READS`, and the routes below viewer
+  (the farmer's and the contributor's) exactly `BELOW_VIEWER`, each with the
+  lowest role it admits and why. Viewer, contributor and farmer get `403`
+  from everything above them and nothing changes; a farmer gets `403` from
+  every contributor route; a farmer or contributor asking an allowed route
+  for an id that isn't there gets `404`; an editor gets `403` from every
+  owner-only route; the farmer, the contributor, the editor and the owner
+  pass their own checks (positive controls). This replaced the older
+  per-role sweeps in `farms.db.test.ts` and `applications.db.test.ts`,
+  which sent empty bodies and accepted `400`, so a route that validates
+  before its role check never reached it.
   The role functions every policy
   calls (`app_current_user_id`, `app_team_role`, `app_project_role`,
   `app_has_role`) are PL/pgSQL since 026_rls_role_plpgsql: a SQL function with
@@ -654,8 +661,9 @@ In short:
   function is executable by a role other than the owner and `water_app`.
 - **Farm scope (WP-2.1, 019/020).** A `farmer` ranks below viewer, so every
   existing policy and every `requireRole(…, 'viewer')` refuses them (fail
-  closed; `farms.db.test.ts` calls every `/projects/:id` route as a farmer and
-  expects `400`/`403`). Extra `SELECT` policies let them read their linked
+  closed; `projects/role-ladder.db.test.ts` calls every `/projects/:id` route
+  as a farmer with a request its validation accepts and expects `403` at the
+  role check, except the reasoned `BELOW_VIEWER` routes). Extra `SELECT` policies let them read their linked
   farms, the gauges and their own membership row, and nothing else: no other
   farm's name or figures, no member list, no series, runs or run series. A
   farmer-facing aggregate of farm quantities needs at least `k − 1` other
@@ -677,7 +685,7 @@ In short:
   null the even share below `k − 1` other holders per viewer. Tests:
   `publish/publication.db.test.ts` scans a farmer's farm view and
   publication list for every other farm's id and name, with positive
-  controls; `farms.db.test.ts` keeps every other `/projects/:id` route
+  controls; `role-ladder.db.test.ts` keeps every other `/projects/:id` route
   refusing a farmer. `farms/farmer-privacy.security.db.test.ts` sweeps the
   inventories so a new table or route is covered the day it lands: every
   `project_id` table read as each farmer (and a co-farmer on the same farm)
@@ -704,8 +712,8 @@ In short:
   exporter can read and never a deleted body, even to an editor; the import
   ignores them and a copy takes none, so a note is never re-authored under
   someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
-  `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
-  the note routes among the farmer-allowed ones.
+  `notes/notes.db.test.ts`, with positive controls; `role-ladder.db.test.ts`
+  lists the note routes among the farmer-allowed ones (`BELOW_VIEWER`).
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
@@ -887,10 +895,10 @@ In short:
   inputs or anything unpublished.
   - **Fail closed.** `contributor` ranks below `viewer`, so every existing
     policy and every `requireRole(…, 'viewer')` route refuses it untouched;
-    `scenarios/applications.db.test.ts` calls every `/projects/:id` route as
-    a contributor and requires `400`/`403` except the listed ones (the
-    farmer's, and the scenario routes, where RLS and the route's own rules
-    decide), and the route inventory (`routes.test.ts`) lists every new
+    `projects/role-ladder.db.test.ts` calls every `/projects/:id` route as
+    a contributor with a request its validation accepts and requires `403`
+    at the role check except the `BELOW_VIEWER` ones (the farmer's, and the
+    scenario routes, where RLS and the route's own rules decide), and the route inventory (`routes.test.ts`) lists every new
     route as auth-gated.
   - **The published run stays on the server.** A contributor can't read any
     run's row (its `inputs` and `summary` hold every farm), `/runs/*` and

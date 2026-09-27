@@ -982,8 +982,9 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   only when it is at least `k − 1` (`k = 5`, pending the client). One owner
   holding three of five farms therefore can't read the other two's combined
   figures.
-- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
-  and every `/projects/:id` route answering a farmer `400`/`403`), and a
+- Guards: `src/farms/farms.db.test.ts` (every table, with positive controls),
+  `src/projects/role-ladder.db.test.ts` (every `/projects/:id` route but the
+  `BELOW_VIEWER` ones answering a farmer `403` at the role check), and a
   catalogue test that every table with a node column has a farmer-aware
   `SELECT` policy or is listed as never read by farmers (none since 022 gave
   `run_series` its publication-scoped farmer policy).
@@ -1120,8 +1121,9 @@ application has a name.
   above, for `loadPublishedRunInput`; the API never returns them to a
   contributor. `app_run_brief` gives the base banner its label and date.
 - Guards: `src/scenarios/applications.db.test.ts` (every "cannot see" with
-  its positive control, and every `/projects/:id` route answering a
-  contributor `400`/`403` except the listed ones), the catalogue tests.
+  its positive control), `src/projects/role-ladder.db.test.ts` (every
+  `/projects/:id` route answering a contributor `403` at the role check
+  except the `BELOW_VIEWER` ones), the catalogue tests.
 
 ### Publications (022_publication.sql)
 
