@@ -12,6 +12,7 @@
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
 		river: () => import('$lib/components/river/RiverTab.svelte'),
+		supply: () => import('$lib/components/supply/SupplyTab.svelte'),
 		dams: () => import('$lib/components/dams/DamsTab.svelte'),
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
@@ -83,6 +84,8 @@
 		calibration: 'settings',
 		results: 'runs',
 		reserve: 'river',
+		units: 'supply',
+		farms: 'supply',
 		changes: 'history'
 	};
 
@@ -683,6 +686,10 @@
 				{:else if tab === 'river'}
 					<Lazy load={LOAD.river}>
 						{#snippet children(RiverTab)}<RiverTab {projectId} project={project!} {editor} {runs} {canEdit} {onProjectChange} />{/snippet}
+					</Lazy>
+				{:else if tab === 'supply'}
+					<Lazy load={LOAD.supply}>
+						{#snippet children(SupplyTab)}<SupplyTab {projectId} {editor} {runs} readonly={!canEdit} />{/snippet}
 					</Lazy>
 				{:else if tab === 'dams'}
 					<Lazy load={LOAD.dams}>

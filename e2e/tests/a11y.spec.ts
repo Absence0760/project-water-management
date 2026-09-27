@@ -34,6 +34,15 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 		}
 	},
+	// The unit cards, the picked unit's chart drawn, and the three tables below (issue #17).
+	{
+		id: 'supply',
+		ready: async (p) => {
+			await expect(p.getByRole('region', { name: /^Unit detail: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Unit results' }).getByRole('rowheader', { name: 'All units' })).toBeVisible();
+			await expect(p.locator('#res-curtailment').getByTestId('curtailment-period')).toBeVisible();
+		}
+	},
 	// The two farm dams' cards, the picked one's storage chart drawn, and the Dam levels table.
 	{
 		id: 'dams',

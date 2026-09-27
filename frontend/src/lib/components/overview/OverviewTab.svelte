@@ -12,6 +12,7 @@
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention, runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
+	import { supplyHref } from '$lib/components/supply/links';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
@@ -371,7 +372,7 @@
 					<NeedsAttention items={attentionItems} />
 					{#if runFarms.length}
 						<Lazy load={loadSupply}>
-							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} />{/snippet}
+							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Units & supply' }} />{/snippet}
 						</Lazy>
 					{/if}
 				</div>

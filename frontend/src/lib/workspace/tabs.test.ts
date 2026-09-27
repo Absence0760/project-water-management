@@ -29,7 +29,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'dams', 'compare', 'scenarios', 'allocations']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -123,7 +123,7 @@ describe('navSections', () => {
 
 	it('puts outcomes first, then the model, then review', () => {
 		expect(navSections(ALL_TABS)).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
 			{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
 		]);

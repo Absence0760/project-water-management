@@ -1,7 +1,8 @@
 // The Runs & results page's in-page menu: the results panels in page order,
-// grouped by the question they answer (the river, the farms, the model's
-// quality, then digging deeper). Each id is set on its panel (RunsTab.svelte,
-// RunCharts.svelte); each group's heading is on the page too.
+// grouped by the question they answer (the river, the units, whose panels
+// have their own page now, the model's quality, then digging deeper). Each id
+// is set on its panel (RunsTab.svelte, RunCharts.svelte); each group's
+// heading is on the page too.
 import type { RunSummary } from '@water-management/engine';
 
 export interface ResultSection {
@@ -33,14 +34,10 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			sections: [{ id: 'res-river', label: 'On River & reserve' }]
 		},
 		{
+			// The unit results, curtailment, assurance of supply and unit detail moved to their own page
+			// (Units & supply, `?tab=supply`, issue #17): a link row keeps the group's place.
 			label: 'Units & users',
-			sections: [
-				{ id: 'res-curtailment', label: 'Curtailment' },
-				// Reliability and stress classes (engine ≥ 0.32.0, WP-3.4); older runs say they weren't computed.
-				{ id: 'res-assurance', label: 'Assurance of supply' },
-				// Farm detail is only drawn when the run has farms.
-				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Unit detail' }] : [])
-			]
+			sections: [{ id: 'res-units', label: 'On Units & supply' }]
 		},
 		{
 			label: 'Model quality',

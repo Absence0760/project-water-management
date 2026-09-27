@@ -191,12 +191,12 @@ export function statusCounts(rows: readonly PortfolioProject[]): Record<Portfoli
 }
 
 /**
- * Where "N farms short this week" links: the run's curtailment on the Runs
- * tab over the last 7 days (the reporting-window picker, #44). `base` is the
- * app's base path.
+ * Where "N units short this week" links: the run's curtailment on Units &
+ * supply over the last 7 days (the reporting-window picker, #44; the page
+ * since issue #17). `base` is the app's base path.
  */
 export function curtailmentHref(p: Pick<PortfolioProject, 'id' | 'sourceRunId'>, base = ''): string {
-	return `${base}/projects/${p.id}?tab=runs&run=${p.sourceRunId}&window=last7#res-curtailment`;
+	return `${base}/projects/${p.id}?tab=supply&run=${p.sourceRunId}&window=last7#res-curtailment`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,32 +1,30 @@
 <script lang="ts">
 	// The standard result views of one run: hydrograph, flow-duration curve,
-	// a farm's dam storage and supply, and an explorer for any stored series
-	// (EWR vs outflow moved to River & reserve with the rest of its group,
-	// issue #17: river/RiverTab.svelte). Each series is fetched once, on demand (see cache.ts).
+	// and an explorer for any stored series (EWR vs outflow moved to River &
+	// reserve with the rest of its group, river/RiverTab.svelte, and a unit's
+	// supply and dam storage to Units & supply, supply/UnitDetail.svelte, issue
+	// #17). Each series is fetched once, on demand (see cache.ts).
 	// It also lays out the results below the summary in the groups of
 	// sections.ts, with a heading per group: the parent slots its own panels
 	// into each group, since the flow charts share one unit switch.
 	import type { Snippet } from 'svelte';
-	import type { DailySeries, FarmSummary } from '@water-management/engine';
+	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import { FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import type { ChartSeries } from '$lib/components/charts/series';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
-	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
+	import { toDisplayUnit } from './results';
 
 	let {
 		projectId,
 		runId,
 		refs,
-		farms,
 		nodeNames,
 		nodeOrder,
-		damCapacity,
 		river,
 		farmsLead,
 		modelTail,
@@ -37,14 +35,11 @@
 		projectId: string;
 		runId: string;
 		refs: RunSeriesRef[];
-		farms: FarmSummary[];
 		nodeNames: Map<string, string>;
 		nodeOrder: ReadonlyMap<string, number>;
-		/** nodeId → dam capacity (m³) from the current model. */
-		damCapacity: ReadonlyMap<string, number>;
 		/** Under River & Reserve: the link to the River & reserve page, where that group's panels now are. */
 		river?: Snippet;
-		/** Opening Farms & users, before farm detail (curtailment). */
+		/** Under Units & users: the link to the Units & supply page, where that group's panels now are. */
 		farmsLead?: Snippet;
 		/** Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
 		modelTail?: Snippet;
@@ -124,58 +119,6 @@
 		};
 	});
 
-	// --- one farm ------------------------------------------------------------------
-	const farmOptions = $derived(
-		[...farms].sort((a, b) => (nodeOrder.get(a.nodeId) ?? 1e9) - (nodeOrder.get(b.nodeId) ?? 1e9))
-	);
-	let farmId = $state('');
-	$effect(() => {
-		void runId;
-		if (!farmOptions.some((f) => f.nodeId === farmId)) {
-			// Open on the farm with the worst supply, if any fall short; else the first.
-			const worst = [...farmOptions].sort((a, b) => a.fractionSupplied - b.fractionSupplied)[0];
-			farmId = (worst && worst.fractionSupplied < SUPPLY_TARGET ? worst : farmOptions[0])?.nodeId ?? '';
-		}
-	});
-	const farm = $derived(farmOptions.find((f) => f.nodeId === farmId) ?? null);
-	const capacity = $derived(damCapacity.get(farmId) ?? 0);
-	let farmData = $state.raw<{ storage?: DailySeries; demand?: DailySeries; supplied?: DailySeries }>({});
-	let farmLoading = $state(false);
-	let farmError = $state<string | null>(null);
-	$effect(() => {
-		const id = farmId;
-		const run = runId;
-		if (!id) return;
-		farmLoading = true;
-		farmError = null;
-		Promise.all([
-			has('dam_storage', id) ? get('dam_storage', id) : Promise.resolve(undefined),
-			has('demand', id) ? get('demand', id) : Promise.resolve(undefined),
-			has('supplied', id) ? get('supplied', id) : Promise.resolve(undefined)
-		])
-			.then(([storage, demand, supplied]) => {
-				if (id === farmId && run === runId) farmData = { storage, demand, supplied };
-			})
-			.catch((e) => {
-				if (id === farmId) farmError = e instanceof Error ? e.message : String(e);
-			})
-			.finally(() => {
-				if (id === farmId) farmLoading = false;
-			});
-	});
-	const storageSeries = $derived.by<ChartSeries[]>(() => {
-		const s = farmData.storage;
-		const pct = s ? storagePct(s.values, capacity) : null;
-		return s && pct ? [{ label: 'Dam storage', startDate: s.startDate, values: pct, color: '--series-1' }] : [];
-	});
-	const supplySeries = $derived.by<ChartSeries[]>(() => {
-		const out: ChartSeries[] = [];
-		const { demand, supplied } = farmData;
-		if (demand) out.push({ label: 'Abstraction demand', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
-		if (supplied) out.push({ label: 'Supplied', startDate: supplied.startDate, values: supplied.values, color: '--series-1', width: 1.25 });
-		return out;
-	});
-
 	const RECENT = 3 * 365;
 </script>
 
@@ -193,49 +136,6 @@
 	<h2 class="group-h wide">Units &amp; users</h2>
 	{#if farmsLead}<div class="wide slot">{@render farmsLead()}</div>{/if}
 
-	{#if farmOptions.length}
-		<section class="panel wide" id="res-farm" aria-labelledby="farm-h">
-			<div class="panel-head">
-				<h3 id="farm-h">Unit detail</h3>
-				<div class="field inline">
-					<label for="farm-pick">Unit</label>
-					<select id="farm-pick" bind:value={farmId}>
-						{#each farmOptions as f (f.nodeId)}
-							<option value={f.nodeId}>{f.name} · {fmtPct(f.fractionSupplied, 0)} supplied</option>
-						{/each}
-					</select>
-				</div>
-			</div>
-			{#if farm}
-				<p class="muted small">
-					Abstraction demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
-					({fmtPct(farm.fractionSupplied)}){capacity >= 1 ? ` · dam ${fmtNum(capacity)} m³` : ' · no dam'}.
-				</p>
-			{/if}
-			{#if farmError}
-				<div class="alert alert-error" role="alert">{farmError}</div>
-			{:else}
-				<div class="pair">
-					<div>
-						{#if storageSeries.length}
-							<LineChart title="Dam storage, % of capacity" unit="%" height={240} series={storageSeries} recentDays={RECENT} recentLabel="Last 3 years" {band} />
-						{:else if farmLoading}
-							<div class="chart-ph" style:height="310px" role="status">Loading…</div>
-						{:else}
-							<p class="muted nodam">This unit has no dam, so there is no storage to chart.</p>
-						{/if}
-					</div>
-					<div>
-						{#if supplySeries.length}
-							<LineChart title="Supply vs demand" unit="m³/day" height={240} series={supplySeries} recentDays={RECENT} recentLabel="Last 3 years" {band} />
-						{:else}
-							<div class="chart-ph" style:height="310px" role="status">{farmLoading ? 'Loading…' : 'No demand series.'}</div>
-						{/if}
-					</div>
-				</div>
-			{/if}
-		</section>
-	{/if}
 
 	<h2 class="group-h wide">Model quality</h2>
 	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
@@ -374,38 +274,5 @@
 	.q {
 		margin-top: 0.5rem;
 		font-size: 0.8rem;
-	}
-	.inline {
-		flex-direction: row;
-		align-items: center;
-		gap: 0.5rem;
-		margin: 0;
-	}
-	.inline select {
-		max-width: 100%;
-	}
-	.pair {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 1rem;
-	}
-	@media (max-width: 900px) {
-		.pair {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-	.nodam {
-		padding: 2rem 0;
-		text-align: center;
-	}
-	@media (max-width: 640px) {
-		.inline {
-			flex-wrap: wrap;
-			width: 100%;
-		}
-		.inline select {
-			width: 100%;
-			min-height: 44px;
-		}
 	}
 </style>

@@ -148,17 +148,20 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' }).locator('xpath=following-sibling::dd[1]')).toContainText('730 days');
 
-	const farms = summary.getByRole('table');
-	for (const f of ['Ridge farm', 'Middle farm', 'River farm']) {
-		await expect(farms.getByRole('rowheader', { name: new RegExp(`^${f}`) })).toBeVisible();
-	}
-	await expect(farms.getByRole('rowheader', { name: 'D outlet weir' })).toHaveCount(0);
 	await expect(page.getByRole('img', { name: /^Catchment · .*: line chart/ }).locator('canvas')).toBeVisible();
 
 	// --- reload: the run is stored ---------------------------------------------------
 	await page.reload();
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toHaveAttribute('aria-current', 'true');
-	await expect(summary.getByRole('rowheader', { name: /^Ridge farm/ })).toBeVisible();
+	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
+
+	// --- each unit's results, on Units & supply for the same run (issue #17) ----------
+	await page.getByRole('link', { name: 'Units & supply for this run' }).click();
+	const farms = page.getByRole('region', { name: 'Unit results' }).getByRole('table');
+	for (const f of ['Ridge farm', 'Middle farm', 'River farm']) {
+		await expect(farms.getByRole('rowheader', { name: new RegExp(`^${f}`) })).toBeVisible();
+	}
+	await expect(farms.getByRole('rowheader', { name: 'D outlet weir' })).toHaveCount(0);
 
 	// --- more catchments for the same user ----------------------------------
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();

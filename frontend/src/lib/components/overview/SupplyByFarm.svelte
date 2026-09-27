@@ -3,14 +3,24 @@
 	// irrigation demand supplied in the latest run, fullest first and emptiest
 	// last (supplyBars.ts), amber below the target and red below the low band,
 	// as the Network's supply colours. The % is always written, so colour is
-	// never the only cue. A farm's name opens its farm drawer.
+	// never the only cue. A farm's name opens its farm drawer; `more` links to
+	// Units & supply for the whole picture (issue #17).
 	import type { FarmSummary } from '@water-management/engine';
 	import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
 	import { BAND_LABEL } from '$lib/components/network/supplyColour';
 	import { fmtPct } from '$lib/format/number';
 	import { supplyBars } from './supplyBars';
 
-	let { farms, modelFarmIds }: { farms: readonly FarmSummary[]; modelFarmIds: ReadonlySet<string> } = $props();
+	let {
+		farms,
+		modelFarmIds,
+		more = null
+	}: {
+		farms: readonly FarmSummary[];
+		modelFarmIds: ReadonlySet<string>;
+		/** A link after the heading to the page with the whole picture (Units & supply). */
+		more?: { href: string; label: string } | null;
+	} = $props();
 
 	const rows = $derived(supplyBars(farms, modelFarmIds));
 	const bands = $derived(new Set(rows.map((r) => r.band)));
@@ -18,7 +28,10 @@
 
 {#if rows.length}
 	<section class="panel supply" aria-labelledby="supply-h">
-		<h2 id="supply-h">Supply by unit</h2>
+		<div class="head">
+			<h2 id="supply-h">Supply by unit</h2>
+			{#if more}<a class="small" href={more.href}>{more.label}</a>{/if}
+		</div>
 		<ul class="rows">
 			{#each rows as r (r.nodeId)}
 				<li data-farm={r.nodeId} data-band={r.band}>
@@ -45,9 +58,22 @@
 	.supply {
 		margin-bottom: 0;
 	}
-	h2 {
+	.head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0 0.75rem;
 		margin: 0 0 0.6rem;
+	}
+	h2 {
+		margin: 0;
 		font-size: 1.05rem;
+	}
+	.head a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.rows {
 		list-style: none;

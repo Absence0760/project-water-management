@@ -119,10 +119,11 @@ test('the page states which thresholds apply, and judges by the team’s once an
 	await expect(tableRow(page, 'Pf published T')).toContainText(statusText(now)!);
 });
 
-// The link lands on the table, not the top of the Runs tab (docs/followups.md):
-// the panels render after the run's details load, past the browser's own
-// jump, so the tab scrolls there itself and moves focus to the table's heading.
-test('“farms short this week” opens the Runs tab at the curtailment table, over the last 7 days', async ({ page, owner }) => {
+// The link lands on the table, not the top of Units & supply (docs/followups.md;
+// the Runs tab before issue #17): the panels render after the run's details
+// load, past the browser's own jump, so the page scrolls there itself and moves
+// focus to the table's heading.
+test('“units short this week” opens Units & supply at the curtailment table, over the last 7 days; an old Runs link lands there too', async ({ page, owner }) => {
 	void owner;
 	// A published team catchment whose orchards are far too big for the water: its farms go short.
 	const request = page.request;
@@ -137,23 +138,29 @@ test('“farms short this week” opens the Runs tab at the curtailment table, o
 
 	const panel = page.locator('#res-curtailment');
 	const heading = panel.getByRole('heading', { name: 'Curtailment targets' });
-	/** The panel's top sits in the upper half of the screen, clear of the sticky header and section menu. */
+	/** The panel's top sits in the upper half of the screen, below the cards and the chart that fill the first screen. */
 	const landed = async () => {
 		await expect(panel.getByTestId('curtailment-period')).toHaveText(/^Last 7 days: daily averages over /);
 		await expect(heading).toBeFocused();
 		await expect(panel).toBeInViewport();
-		const menu = await page.getByRole('navigation', { name: 'Result sections' }).boundingBox();
-		await expect.poll(async () => (await panel.boundingBox())!.y).toBeGreaterThanOrEqual(menu!.y + menu!.height);
+		await expect.poll(async () => (await panel.boundingBox())!.y).toBeGreaterThanOrEqual(-1);
 		expect((await panel.boundingBox())!.y).toBeLessThan(page.viewportSize()!.height / 2);
+		expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
 	};
 
 	await page.goto(`/teams/${team.id}/portfolio`);
 	await tableRow(page, 'Pf short D').getByRole('link', { name: /units? short this week$/ }).click();
-	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=runs&run=${runId}&window=last7#res-curtailment$`));
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=supply&run=${runId}&window=last7#res-curtailment$`));
+	await expect(page.getByRole('heading', { level: 1, name: 'Units & supply' })).toBeVisible();
 	await landed();
 
 	// Opened afresh (a bookmark, a new tab): the same.
 	await page.reload();
+	await landed();
+
+	// A bookmark of the old link, to the Runs tab: sent on to the same panel, window kept, the old address replaced.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}&window=last7#res-curtailment`);
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=supply&run=${runId}&window=last7#res-curtailment$`));
 	await landed();
 });
 

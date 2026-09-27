@@ -73,7 +73,7 @@ describe('attention', () => {
 				tone: 'danger',
 				text: `Lower got 60% of its demand in the latest run, below the ${target} target.`,
 				action: 'See the unit results',
-				href: '?tab=runs&run=r%2F1'
+				href: '?tab=supply&run=r%2F1&unit=Lower'
 			}
 		]);
 		const two = attention(base({ summary: summary([farm('Upper', 0.9), farm('Lower', 0.5), farm('Mid', 1)]) }));
@@ -89,7 +89,7 @@ describe('attention', () => {
 	it("adds the short farm's planted areas when it is still a farm in the model", () => {
 		const f = (nodeId: string, fraction: number) => ({ ...farm(nodeId, fraction), name: nodeId === 'f2' ? 'Lower' : 'Upper' });
 		const [item] = attention(base({ summary: summary([f('f1', 1), f('f2', 0.6)]) }));
-		expect(item).toMatchObject({ id: 'short-farms', href: '?tab=runs&run=r%2F1', also: { action: 'Its planted areas', href: '?farm=f2' } });
+		expect(item).toMatchObject({ id: 'short-farms', href: '?tab=supply&run=r%2F1&unit=f2', also: { action: 'Its planted areas', href: '?farm=f2' } });
 		// Removed from the model since the run: no link to a farm that isn't there.
 		const gone = attention(base({ model: model({ nodes: [node('f1', 'farm', 'Upper'), node('g', 'gauge')] }), summary: summary([f('f1', 1), f('f2', 0.6)]) }));
 		expect(gone[0]!.also).toBeUndefined();

@@ -8,7 +8,7 @@ describe('resultGroups', () => {
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary']],
 			['River & Reserve', ['res-river']],
-			['Units & users', ['res-curtailment', 'res-assurance', 'res-farm']],
+			['Units & users', ['res-units']],
 			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
 			['Record', ['res-notes', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
@@ -20,8 +20,12 @@ describe('resultGroups', () => {
 		expect(resultSections(summary)).toEqual(resultGroups(summary).flatMap((g) => g.sections));
 	});
 
-	it('shows farm detail only when there are farms', () => {
-		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-farm');
+	it('keeps one link row for the unit panels, which moved to Units & supply, with or without units (issue #17)', () => {
+		for (const farms of [[], [{ nodeId: 'f' } as FarmSummary]]) {
+			const ids = resultSections({ farms }).map((s) => s.id);
+			expect(ids).toContain('res-units');
+			for (const moved of ['res-curtailment', 'res-assurance', 'res-farm', 'res-farms']) expect(ids).not.toContain(moved);
+		}
 	});
 
 	it('adds the optional model-quality panels in order: runoff model (GR4J), WR2012, then plausibility after EWR vs observed', () => {
