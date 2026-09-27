@@ -30,9 +30,8 @@ const roleIn = (page: Page, name: string) =>
 	page
 		.getByRole('row')
 		.filter({ has: page.getByRole('rowheader', { name, exact: true }) })
-		// The "Your role" cell (column positions vary: the Team column only shows in some groups).
-		.getByRole('cell')
-		.filter({ hasText: /^(owner|editor|viewer|farmer)$/ });
+		// The role sits under the name in the row header since the Projects list redesign (#17).
+		.getByTestId('project-role');
 
 test('each demo user sees their own and shared example catchments with the right role', async ({ page, browser }) => {
 	await signInAs(page, DEMO);
@@ -51,7 +50,7 @@ test('each demo user sees their own and shared example catchments with the right
 
 test('a shared example opens read-only with its seeded run', async ({ page }) => {
 	await signInAs(page, DEMO);
-	await page.getByRole('link', { name: SANDSPRUIT }).click();
+	await page.locator('table.projects').getByRole('link', { name: SANDSPRUIT, exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
 
 	// A viewer's model inputs sit behind "Show model inputs" (issue #6).
@@ -75,7 +74,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 // WP-2.1: the seeded farmers, as the owner manages them and as a farmer's own list shows them.
 test('the owner sees the seeded farmers with their farms, and a farmer sees only their own catchment', async ({ page, browser }) => {
 	await signInAs(page, ANALYST);
-	await page.getByRole('link', { name: SANDSPRUIT, exact: true }).click();
+	await page.locator('table.projects').getByRole('link', { name: SANDSPRUIT, exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
 	// Who has access is on the Project page (issue #17).
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();

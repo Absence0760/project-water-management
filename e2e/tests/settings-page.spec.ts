@@ -144,7 +144,7 @@ test.describe('with a fitted example catchment', () => {
 		await page.getByLabel('Email').fill(DEMO.email);
 		await page.getByLabel('Password').fill(DEMO.password);
 		await page.getByRole('button', { name: 'Sign in' }).click();
-		await page.getByRole('link', { name: KLEINBERG, exact: true }).click();
+		await page.locator('table.projects').getByRole('link', { name: KLEINBERG, exact: true }).click();
 		await expect(page.getByTestId('section-header')).toBeVisible();
 		await page.goto(`${page.url().split('?')[0]}?tab=settings`);
 		await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
