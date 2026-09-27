@@ -17,7 +17,7 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { mergePreview, type Daily } from './coverage';
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
-	import { inStoredUnit, type UploadResult } from './upload';
+	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 
@@ -27,6 +27,8 @@
 		file = null,
 		idPrefix = 'up',
 		pending = $bindable(false),
+		external = false,
+		submit = $bindable(null),
 		onuploaded
 	}: {
 		projectId: string;
@@ -36,6 +38,10 @@
 		idPrefix?: string;
 		/** Out: a file is read but not uploaded yet, or an upload is running. */
 		pending?: boolean;
+		/** The buttons are drawn outside the form (a dialog's action row, through `submit`, `back()` and the form id `${idPrefix}-form`). */
+		external?: boolean;
+		/** Out, with `external`: the submit button's label and state. */
+		submit?: UploadSubmit | null;
 		onuploaded?: (r: UploadResult) => void | Promise<void>;
 	} = $props();
 
@@ -124,6 +130,20 @@
 	});
 	const overwriteSig = $derived(overwrite ? [target?.id, mode, unit, parseSeq, overwrite.days, overwrite.from, overwrite.to].join('|') : null);
 	const confirming = $derived(confirmSig !== null && confirmSig === overwriteSig);
+	const asking = $derived(confirming && !!overwrite && !!target);
+	const submitLabel = $derived.by(() => {
+		if (uploading) return 'Uploading…';
+		if (asking && overwrite) return overwrite.changes ? `Overwrite ${plural(overwrite.days, 'day')}` : `Replace ${plural(overwrite.days, 'day')}`;
+		return target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload';
+	});
+	const submitDisabled = $derived(asking ? uploading : !parsed || uploading || !unit.trim() || (!!target && mode === 'merge' && !preview));
+	$effect(() => {
+		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking };
+	});
+	/** Back out of the overwrite question (the dialog's Back). */
+	export function back() {
+		confirmSig = null;
+	}
 	// Anything that changes the overwrite (another file, mode, series or unit) takes the question back
 	// for good: switching back doesn't bring it back already answered.
 	$effect(() => {
@@ -276,7 +296,7 @@
 	}
 </script>
 
-<form onsubmit={upload}>
+<form id={id('form')} onsubmit={upload}>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<details class="fmt">
 		<summary>File formats</summary>
@@ -438,7 +458,7 @@
 		<LineChart title="File preview" height={140} {unit} series={[{ label: fileName || 'file', startDate: parsed.startDate, values: parsed.values }]} />
 	{/if}
 	{#if uploadDone}<p class="ok" role="status">{uploadDone}</p>{/if}
-	{#if confirming && overwrite && target}
+	{#if asking && overwrite && target}
 		{@const n = plural(overwrite.days, 'day')}
 		<div class="confirm" role="group" aria-labelledby={id('confirm-h')} data-testid="overwrite-confirm">
 			<p class="confirm-h" id={id('confirm-h')} tabindex="-1" bind:this={confirmEl}>
@@ -465,17 +485,15 @@
 				</details>
 			{/if}
 			<p class="hint muted">The values it replaces are kept: you can put them back from the History tab (“Restore the earlier values”).</p>
-			<div class="confirm-actions">
-				<button type="button" class="btn" onclick={() => (confirmSig = null)} disabled={uploading}>Back</button>
-				<button type="submit" class="btn btn-primary" disabled={uploading}>
-					{uploading ? 'Uploading…' : overwrite.changes ? `Overwrite ${n}` : `Replace ${n}`}
-				</button>
-			</div>
+			{#if !external}
+				<div class="confirm-actions">
+					<button type="button" class="btn" onclick={back} disabled={uploading}>Back</button>
+					<button type="submit" class="btn btn-primary" disabled={submitDisabled}>{submitLabel}</button>
+				</div>
+			{/if}
 		</div>
-	{:else}
-		<button type="submit" class="btn btn-primary" disabled={!parsed || uploading || !unit.trim() || (!!target && mode === 'merge' && !preview)}>
-			{uploading ? 'Uploading…' : target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload'}
-		</button>
+	{:else if !external}
+		<button type="submit" class="btn btn-primary" disabled={submitDisabled}>{submitLabel}</button>
 	{/if}
 </form>
 
@@ -489,6 +507,8 @@
 		font-weight: 600;
 		color: var(--accent);
 		min-height: 32px;
+		/* As wide as its words, so its focus ring (it takes focus first in the Add data dialog) hugs them. */
+		width: fit-content;
 		display: flex;
 		align-items: center;
 	}

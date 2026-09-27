@@ -383,8 +383,17 @@ role, freshness, Add data) and each tab's own header:
   own `daysSince`, so the two never differ by a day around midnight. Series
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
-- **Add data** (editors) opens the upload form in a dialog on any tab.
-  Dropping a CSV anywhere on the page opens it with that file. It reads a
+- **Add data** (editors) opens the upload form in a dialog on any tab
+  (`series/AddDataDialog.svelte`, the shared `common/Dialog.svelte`, wide).
+  Dropping a CSV anywhere on the page opens it with that file. The form's
+  buttons sit in the dialog's action row, on the right: **Cancel** and the
+  upload button (**Upload**, **Upload and merge** or **Upload and replace**;
+  `UploadForm`'s `external` mode, the button submitting the form through its
+  `form` attribute). With a file read but not uploaded, **Cancel**, the close
+  button and Esc ask "Discard the file you haven't uploaded yet?" first
+  (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
+  question). Closing gives focus back to what opened it
+  (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
   decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
   quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
@@ -401,7 +410,9 @@ role, freshness, Add data) and each tab's own header:
   between which dates, and has a **Show the changes** table (date, stored,
   from the file, in the stored unit, the first 100). It notes that the
   replaced values can be restored from History, and its button says
-  **Overwrite N days** / **Replace N days**, next to **Back**. A merge that
+  **Overwrite N days** / **Replace N days**, next to **Back** (in the Add
+  data dialog these take the action row's place: Cancel turns into Back and
+  keeps the focus). A merge that
   only adds days uploads straight away. Changing the file, the mode, the
   series or the unit takes the question back. There is no confirm on the
   machine `/ingest` API: loggers re-send days on purpose.
@@ -1942,7 +1953,12 @@ The header row and the date column stay in view, numbers are right-aligned
 under right-aligned headers (to the precision the charts use, `fmtReading`), a
 date prefix (2015, 2015-03) narrows the rows, and closing it returns focus to
 the Download button. Only the rows in view are rendered, as in the Data tab's
-preview. The **summary CSV** adds the self-checks,
+preview: each body row is exactly 28 px, border included, and the spacer rows
+exist only when they have height, so the first day starts right under the
+header and the last day sits at the foot of the box on a 30-unit, two-year
+table. The table's scroll box is a focusable, named region, so it scrolls from
+the keyboard (`download-preview.spec.ts`, with a11y scans at desktop and
+phone). The **summary CSV** adds the self-checks,
 the water balance per water year and a column guide giving each letter's
 formula ([api.md § Export](./api.md)).
 
@@ -3889,8 +3905,15 @@ WP-2.7 (`lib/components/notes/`; [api.md § Notes](./api.md#notes)). Knowledge
 that lives in people's heads ("dam raised in 2019 per owner", "logger moved in
 March") is kept against what it is about.
 
-- **Where.** A notes button with a count badge opens a dialog of the notes on
-  one target (`NotesDrawer.svelte` around `NotesList.svelte`):
+- **Where.** A notes button with a count badge opens the notes on one target
+  in a side sheet down the right, full width on a phone (`NotesDrawer.svelte`
+  around `NotesList.svelte` with `formFirst`): the add form on top, the notes
+  newest first under it, scrolling inside the sheet, and **Close** pinned at
+  the foot, so thirty notes push neither the form nor Close off the screen
+  (`notes.spec.ts` checks 30). It is not in the URL: it opens from inside
+  other overlays (the Node table's grid modal) and from several places that
+  can show the same target at once (a node's card and its grid row), so a
+  param would open two. Opened from:
   - on each **Network** node row, beside its name (icon and number; only on a
     node the server has, not one added since the last save:
     `ModelEditor.savedNodeIds`);
