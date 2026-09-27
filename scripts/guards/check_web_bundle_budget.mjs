@@ -1087,6 +1087,9 @@
 //             human-impact tables), the engine's demand-object module (shared
 //             by the run worker and the pages), the help entry and the client
 //             validation (~7 KB). No new dependency. Headroom ~3 KB.
+// 2026-09-27  total 1042 → 1045 KB (measured 1042 on main with both of the
+//             landing review fixes (+1 KB) and the demand objects (above),
+//             each measured without the other). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1097,7 +1100,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1042,
+	totalCodeKb: 1045,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
