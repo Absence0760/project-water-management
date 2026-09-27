@@ -2350,9 +2350,9 @@ Because GWd never exceeds the room in the dam, pumped water never makes the
 dam spill. A supplemental dam-target borehole lifts a dam below its dead
 storage up to it first, since the water can't be drawn otherwise.
 
-*Only on a day the dam is drawn for demand (engine ≥ 1.7.0).* A primary or
+*Only on a day the dam is drawn for demand (engine ≥ 1.8.0).* A primary or
 emergency dam-target borehole pumps only while Dr > 0 (to within 10⁻¹² × D,
-the float noise of several primary units adding up to D). Before 1.7.0 they
+the float noise of several primary units adding up to D). Before 1.8.0 they
 pumped whenever the dam had room, demand or not: in a winter-rainfall
 catchment a primary 200 m³/day borehole filled an empty dam from groundwater
 over a dry winter with nothing to irrigate, and the rain that came later
@@ -2525,10 +2525,112 @@ its dam); `droughtBoreholesAsSupplemental` also runs `trigger` as
 sooner and switches to the river earlier. The run comparison's input diff
 lists the four fields. Hand examples: `network/supply.test.ts`.
 
-**Not changed:** no imported project is switched to run of river. Unit 9 of
-the client catchment and v004's other run-of-river units move once the
-hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md and
-the regression suite's deviation list.
+**Not changed by default:** no imported project is switched to run of river.
+The importer's `--run-of-river` option (scripts/wbt-import/README.md; the seed
+sets it per workbook with `WBT_RUN_OF_RIVER=1`) imports the units it flags as
+probable run-of-river with `runOfRiver`, no dam and an uncapped pump (b023
+gives no capacity). It is on for the second configuration, whose dummy-dam and
+dam-less units pump from the river; on the workbook's own natural flow its
+town unit is supplied as the workbook supplies it, and the dam-less units,
+which b023 supplies nothing, now take what the river gives up to their demand.
+Unit 9 of the client catchment and v004's other run-of-river units move once
+the hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md
+and the regression suite's deviation list; the regression suite reads a
+default (workbook-faithful) extraction, so it is unchanged.
+
+### 2.7f Demand objects: town, domestic, livestock and other non-crop demand (engine ≥ 1.7.0, issue #54 item 2b)
+
+**Why.** b023 has one demand per farm, from its crops. A town or a resort is
+entered as a "farm" whose [Farm demand] gross demand is a flat m³/day typed
+over the crop formula (the second configuration does this; the importer
+flags it). An other water user (§2.7c) holds one monthly demand on the
+river, but it has no dam, no crops and no supply rule of its own, and a unit
+can carry only one. The client's newer workbook keeps a register of **demand
+objects** per unit (ID, unit, name, category, source, destination, priority,
+consumptive and return %). This ports that register as far as its visible
+columns go (the workbook itself hasn't arrived, issue #54 Q1). **Off by
+default**: a model without objects (every stored project), with an empty list
+or with only disabled ones runs to the bit as before; a test asserts it on the
+example catchments and on random networks, and the client catchment
+regression suite is unchanged.
+
+**Fields** (`demandObjects` on the model, one row per object; migration 088):
+
+| Field | Meaning |
+| --- | --- |
+| `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
+| `name`, `note` | a label, and where the number comes from (meter records, a reconciliation strategy's AADD, a norm, the workbook), so reports can say how solid it is (Q11) |
+| `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
+| `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
+| `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
+| `monthlyFactor` | `perUnit` only: a factor per month on the daily use (holiday peaks, dry-season stock watering); null = 1 |
+| `returnPct` | share (0–1) of what it is supplied that returns to the river below the unit the same day (treated wastewater). The register's consumptive % is 1 − this |
+| `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
+| `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
+| `enabled` | false keeps it on record without modelling it |
+
+**Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
+today, its month's value × the node's demand factor from the day it applies,
+as for the crop requirement, issue #53 R1):
+
+```
+D   = F / e + Σ o_k                         (the unit's abstraction demand)
+G   = as §2.7 / §2.7d / §2.7e, up to D      (dam, river pump, boreholes supply the total)
+split G, class by class:  first objects → the crops (F / e) with the shared objects → last objects;
+       a class that can be met gets its demand, else what is left pro rata to its members' demand
+T   = β(1 − e) × G_crops + Σ r_k × G_k      (r_k = returnPct, 0 when external)
+```
+
+Everything else in §2.7 is unchanged: the balance keeps its form, since G and
+T carry the objects in and out. A transfer's room into a unit counts the whole
+D (§2.6). The EWR attribution's consumptive use is G − T day by day on such a
+unit (it no longer follows from G alone), and the curtailment report's supply
+cut divides the irrigation part of the charge by the window's
+(Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
+objects included, with the draft; its `demand` shape includes them.
+
+**Decisions, pending the hydrologist** (the visible register columns and the
+issue #54 research; the conservative reading where they didn't settle it):
+
+- *Objects share the unit's sources.* An object is supplied from the same
+  dam, river pump and boreholes as the unit's crops, never from the river
+  past them. A demand that draws on the river by itself, at its own place,
+  is an other water user (§2.7c), which also carries the senior claim on the
+  farms upstream. Objects have no senior claim on other units.
+- *Priority is within the unit.* `first` is the basic-needs order the NWA
+  gives domestic supply; across units, the existing senior/junior user
+  priority applies. Splitting one demand into senior and junior slices is two
+  objects (Q14).
+- *The monthly demand is what is abstracted.* A meter record or a
+  reconciliation strategy's AADD usually includes losses, so only a demand
+  sized per unit is grossed up. Where distribution losses go (to the river or
+  out of the catchment) is not modelled: they are consumed.
+- *No daily on/off yet.* The schedule (date windows with a factor, an
+  uploaded factor series, and the reason a day is off) is a follow-up
+  ([followups.md](./followups.md) "Demand objects: the daily schedule"); a
+  monthly profile covers the seasonal part.
+- *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
+  crops and its objects alike; a per-category restriction is #53 R3, and a
+  scenario op to add or scale one object is a follow-up.
+
+**Outputs** (only on a unit with an enabled object): per object the series
+`object_demand@<id>` and `object_supplied@<id>`, and
+`FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
+supplied, return and days short). The unit's `demand`, `supplied`, `deficit`
+and `return_flow` are its crops' and objects' together, labelled so.
+
+**Checks.** `checkWorkings` recomputes each object's demand from the model,
+checks D = F / e + Σ o_k, 0 ≤ G_k ≤ o_k, Σ G_k ≤ G, the class order (no later
+class gets water while an earlier one is short) and equal shares within a
+class, and T from the parts; `checkBalance` closes the unit with that T; the
+EWR attribution check uses G − T as the unit's consumptive use. The fuzz
+generator gives 25 % of networks up to three objects on half their units
+(monthly or per unit, any class, any return share, some piped out, some
+switched off, now and then one on a gauge or user, which the run skips with a
+warning); the doubled-crop-area law doubles the objects' demand too, since a
+fixed demand beside a growing one can legitimately raise a unit's whole-run
+supply fraction. Hand examples: `run.demandObjects.test.ts`,
+`network/demandObjects.test.ts`.
 
 ### 2.8 Outputs
 
@@ -3025,7 +3127,7 @@ required  = MIN(perYear, n_nat)
 met       = n_sim ≥ required
 ```
 
-*What "duration" means (engine ≥ 1.8.0).* A Reserve high flow is an event
+*What "duration" means (engine ≥ 1.9.0).* A Reserve high flow is an event
 hydrograph, not a plateau: DWS's gazetted Reserves define high flows as "a
 set of flood events defined by a peak discharge in cubic meters per second,
 an event duration in hours and the frequency of the event", with the event
@@ -3043,7 +3145,7 @@ storm on a 1 m³/s base flow rising to 20 m³/s and receding with a 2-day time
 constant (daily 1, 6, 20, 12.5, 8.0, 5.2, 3.6 … m³/s) plainly carries a
 10 m³/s, 3-day freshet, yet the old rule counted **0** events for any
 duration of 3 days or more, and 0 for a 3-day freshet of any peak of
-8 m³/s or more. From 1.8.0 it counts one for every duration up to 10 days, none for
+8 m³/s or more. From 1.9.0 it counts one for every duration up to 10 days, none for
 11 or more or for a peak above 20 m³/s, and none once a dam cuts the storm's
 rise to 40 % (peak 8.6 m³/s).
 
@@ -3061,7 +3163,7 @@ events: two peaks count as two only if the flow falls below half the peak
 between them, in the spirit of the peaks-over-threshold independence rule
 that the flow must drop well below the smaller peak between two floods. The
 event counts in the month of its first day at the peak (a freshet "in
-November" peaks in November); before 1.8.0 it was the month its run
+November" peaks in November); before 1.9.0 it was the month its run
 started. Limits: on a base flow above half the peak (a small freshet on a
 high winter flow) a whole spell above the level is one event however many
 peaks it has, which undercounts natural and simulated flow alike; and a
@@ -3091,7 +3193,7 @@ each site (§2.7b) unless `settings.ewrChargeSource` is `'ruleTable'`
   the natural curve, and its own high flows always (n_sim = n_nat ≥ required).
 - A storm hydrograph that reaches the peak and lasts the duration counts as
   one event; a triangle of the peak and half the duration, or a storm cut
-  below the peak, counts none (engine ≥ 1.8.0).
+  below the peak, counts none (engine ≥ 1.9.0).
 - With low flows ≤ the total at every point, a month that meets the total
   meets its low flows.
 - Less flow never meets more low-flow months (R_low depends only on natural
@@ -3115,7 +3217,7 @@ flow rather than the month's volume (`settings.lowFlowMeasure`, built, off by
 default) and, if so, with which filter parameter; whether a freshet's "per year" should be
 capped by natural events (as here) or required outright in maintenance years
 only; whether events should be counted per month rather than per water year;
-how an event is found in daily flow (engine 1.8.0: at least half the
+how an event is found in daily flow (engine 1.9.0: at least half the
 duration at or above half the peak, above) and whether the level should
 sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of

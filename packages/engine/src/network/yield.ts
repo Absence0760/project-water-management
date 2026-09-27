@@ -125,12 +125,12 @@ export function yieldPatternDaily(p: YieldProblem, nodeId: string, pattern: Yiel
 	const factors = new Float64Array(12);
 	if (pattern === 'constant') factors.fill(1);
 	else if (pattern === 'demand') {
-		// The node's own abstraction demand D = F / e, its mean by water-year month.
+		// The node's own abstraction demand D = F / e, plus its demand objects' (engine ≥ 1.7.0), its mean by water-year month.
 		const node = p.plan.nodes[i]!;
 		const sum = new Float64Array(12);
 		const n = new Float64Array(12);
 		for (let t = 0; t < p.days; t++) {
-			sum[p.wyMonth[t]!]! += node.demand[t]! / node.irrigationEfficiency;
+			sum[p.wyMonth[t]!]! += node.objects ? node.demand[t]! / node.irrigationEfficiency + node.objects.total[t]! : node.demand[t]! / node.irrigationEfficiency;
 			n[p.wyMonth[t]!]!++;
 		}
 		for (let m = 0; m < 12; m++) factors[m] = n[m] ? sum[m]! / n[m]! : 0;
@@ -199,7 +199,8 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	const demand = new Float64Array(p.days);
 	// The dam's own yield: its boreholes (WP-1.34), including those that pump
 	// into the dam (WP-3.9), don't count towards it (pending the hydrologist).
-	const { borehole: _borehole, damCurve: _curve, ...rest } = base;
+	// The draft is the node's whole demand, so its demand objects (engine ≥ 1.7.0) go too.
+	const { borehole: _borehole, damCurve: _curve, objects: _objects, ...rest } = base;
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,

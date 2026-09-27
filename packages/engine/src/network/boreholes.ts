@@ -125,7 +125,7 @@ export function boreholeOf(n: NetworkNode, own: readonly Borehole[], warnings: s
 export const unitRoom = (u: PlanBoreholeUnit, usedThisYear: number): number => Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - usedThisYear));
 
 /**
- * Does the dam serve any demand today (WP-3.9, engine ≥ 1.7.0)? `rem` is the
+ * Does the dam serve any demand today (WP-3.9, engine ≥ 1.8.0)? `rem` is the
  * demand left after the primary direct units and a river-first pump, `D` the
  * day's demand. A primary or emergency unit that pumps into the dam pumps only
  * then: on a day with nothing to irrigate from the dam, groundwater pumped in
@@ -145,7 +145,7 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  *    so a dam below it is first brought up to it), emergency ones fill it
  *    while it started the day below their trigger; primary and emergency ones
  *    only on a day the dam is drawn for demand (`damDrawnFor`, engine ≥
- *    1.7.0); never above capacity, so pumped water never spills;
+ *    1.8.0); never above capacity, so pumped water never spills;
  * 3. the dam and river (`surface`, with what was pumped into the dam);
  * 4. supplemental units, then emergency units while triggered, for what is left.
  * Each unit pumps at most `unitRoom`. Writes each unit's volume to `pumped`
@@ -189,7 +189,7 @@ export function groundwaterDay(
 	let gd = 0;
 	// The demand a dam-target unit pumps for: what the primary units and the river pump (river first) leave.
 	const rem = river > 0 && rule !== 3 ? D - g - Math.min(river, D - g) : D - g;
-	// Primary and emergency dam-target units top the dam up only on a day it is drawn for demand (engine ≥ 1.7.0).
+	// Primary and emergency dam-target units top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
 	const drawn = damDrawnFor(rem, D);
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;

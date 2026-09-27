@@ -585,7 +585,7 @@ export function completeWaterYears(startDate: string, blocks: readonly MonthBloc
 
 /**
  * The level, as a fraction of a high-flow component's peak, that bounds an
- * event (engine ≥ 1.8.0, docs/model.md §2.9d). A Reserve's freshet or flood
+ * event (engine ≥ 1.9.0, docs/model.md §2.9d). A Reserve's freshet or flood
  * is a hydrograph: a peak (daily mean, m³/s) and an event duration from the
  * rise to the end of the recession, not days held at the peak. Taken as a
  * triangle of base `duration`, it spends `duration × (1 − level)` days at or
@@ -601,14 +601,14 @@ export function highFlowEventMinDays(durationDays: number): number {
 
 /**
  * Events of a high-flow component in days [from, from + days) of a daily
- * series (m³/day), engine ≥ 1.8.0: maximal runs of days with the daily mean
+ * series (m³/day), engine ≥ 1.9.0: maximal runs of days with the daily mean
  * flow at or above `EWR_HIGH_FLOW_EVENT_LEVEL × peak` (m³/s; relative
  * tolerance 1e-9) that reach the peak on at least one day and last at least
  * `highFlowEventMinDays(durationDays)` days, counted in the month of their
  * first day at the peak, which must be one of `months`. Two peaks count as
  * two events only if the flow falls below the level between them. A run is
  * cut at the window's ends, so each water year counts its own events, and a
- * missing day breaks it. (Engines before 1.8.0 asked for `durationDays`
+ * missing day breaks it. (Engines before 1.9.0 asked for `durationDays`
  * consecutive days all at the peak, which a natural storm hydrograph almost
  * never has.)
  */

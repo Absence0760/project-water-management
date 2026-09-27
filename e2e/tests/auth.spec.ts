@@ -1,5 +1,5 @@
-import { createProject, PASSWORD, register, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
-import { plantEmailToken } from '../support/db.ts';
+import { createProject, LEGAL_VERSION, PASSWORD, register, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken, termsAccepted } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { fillNewPassword } from '../support/signup.ts';
@@ -36,6 +36,8 @@ test('sign-up asks for the password twice, emails a link and goes to sign-in; th
 	await expect(notice).toContainText('You can’t sign in until your address is confirmed.');
 	await expect(page.getByLabel('Email')).toHaveValue(email);
 	await expectNoViolations(page);
+	// "By creating an account, you agree to the Terms of use and Privacy notice": the account records which (087).
+	expect(await termsAccepted(email)).toEqual({ version: LEGAL_VERSION, at: expect.any(Date) });
 
 	// Signing in before confirming says so, and offers the link again.
 	await page.getByLabel('Password').fill(PASSWORD);

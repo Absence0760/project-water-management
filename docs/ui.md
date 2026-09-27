@@ -132,8 +132,33 @@ other signed-out route still goes to `/login?next=`.
   rendered) and a large Twitter card, with absolute URLs from the build's
   `SITE_ORIGIN` ([deployment.md](./deployment.md)).
 - **Figures** come from the invented Kleinberg example (the engine at build
-  time, `data.generated.ts`), named as the example catchment's where shown. The art, the motion rules and the
+  time, `data.generated.ts`), named as the example catchment's where shown:
+  the hero's reserve tag, the story's charts (the river's on a square-root
+  scale, which its unit says), the what-if (each bar labelled **Today** or
+  **This plan**; the plan's supply in the app's supply bands), and *Why trust
+  it*'s three figures under "In the example catchment", the last the run's
+  calibration NSE. The art, the motion rules and the
   pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
+
+## Legal pages
+
+`/privacy` (the privacy notice) and `/terms` (terms of use),
+`routes/privacy`, `routes/terms`, framed by `lib/components/legal/LegalPage.svelte`:
+a slim header with the way home and **Open the app** (to `/login`, which sends
+a signed-in reader on to their projects: a static page can't know the session,
+so it doesn't claim "Sign in"), a contents list (folded behind a
+**Contents (13 sections)** disclosure on a phone, where the list alone filled
+the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
+anyone signed in or out, rendered before the session is known). English
+only: the English text binds; the link labels to them are translated. Linked
+from the landing footer, under every sign-in form (a **Legal** nav in
+`AuthCard`), and in the sign-up form's own sentence, directly above its button ("By creating an account, you agree to the Terms of use and Privacy notice"). Drafts before counsel review: what they assume
+and what is open is in [legal-status.md](./legal-status.md).
+The **Effective** line under each title is `legalEffective()` of the
+engine's `LEGAL_VERSION` (`packages/engine/src/legal.ts`), the same
+version the sign-up form sends as `acceptTerms` and the account records
+(087); change the pages and that date together.
+`e2e/tests/legal.spec.ts`.
 
 ## Sign-in pages
 
@@ -1464,6 +1489,28 @@ note's link on the Summary, `notes.ts` `noteHref`).
   GN 538 context (up to 40 000 m³/a per property, depending on its size; the
   app never decides legality). Read-only for viewers; fields stack on a phone.
   Removing the node asks about its boreholes too.
+- **Demand objects** (engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md),
+  `DemandObjectFields.svelte`), one-node form, units only (and on a node turned
+  into a gauge or user that still has some, so they can be removed; the save
+  refuses them there): demands that aren't crops. A **category** picker
+  beside **+ Add demand** adds one with that category's defaults from the
+  issue's research table (municipal: m³/day by month, first, 50 % returned;
+  domestic: people × 230 l a day, first; livestock: head × 45 l a day, with
+  the crops; external: piped out, nothing returned; the rest: m³/day by month,
+  with the crops). Each has a **Name**, **Category**, **Demand given as**
+  (m³/day by month, or a count × litres a day), **Priority** (first / with the
+  crops / last), **Destination** (used in the catchment, or piped out, which
+  sets and locks the share returned at 0 %), **Share returned** (%),
+  **Modelled** (off keeps it on record only), a 12-month row (the demand in
+  m³/day, or the per-unit profile, blank = 1), and **Where the number comes
+  from**. Per unit: **Number of** people / head / units, **Litres per** person
+  / head / unit **a day** and **Distribution losses** (%). The line below gives
+  its mean m³/day as the engine sizes it; **Use October's demand for every
+  month** fills a monthly row. Read-only for viewers; removing the unit asks
+  about its objects too. Scenario override mode can't record an object edit
+  yet and says so. After a run, the human-impact tables show **Demand
+  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  days short and returned (or "piped out").
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -2488,7 +2535,7 @@ which checks every catchment tab).
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
   months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, event
-  days from rise to recession, events per year; engine ≥ 1.8.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
+  days from rise to recession, events per year; engine ≥ 1.9.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow
   paste result*.

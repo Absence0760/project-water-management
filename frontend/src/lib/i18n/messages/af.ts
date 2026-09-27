@@ -618,7 +618,7 @@ export const af: Catalogue = {
 	// Licence applicants and assessors
 	'0414bada': 'Lisensie-aansoekers en -beoordelaars',
 	// Model a new dam or more hectares against the catchment as it is, with evidence an assessor can open and reproduce.
-	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar teen die opvanggebied soos dit is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
+	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar in die opvanggebied soos dit nou is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
 	// Farmers
 	'858cd593': 'Boere',
 	// Your farm’s supply, your dam and any restriction, on your phone, in English or Afrikaans.
@@ -663,10 +663,14 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Terms of use
+	'953dc886': 'Gebruiksvoorwaardes',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
-	'f48a005d': 'Skerms uit die toepassing self.',
+	'f48a005d': 'Skerms uit die app self.',
 	// A catchment’s Summary: the ecological reserve, supply to each farm and the dams today.
 	'dc9eb4cd': '’n Opvanggebied se opsommingsblad (Summary): die ekologiese reserwe, die lewering aan elke plaas en die damme vandag.',
 	// A farmer’s view of their own farm on a phone: their dam, their supply and any restriction.
@@ -688,7 +692,7 @@ export const af: Catalogue = {
 	// From rainfall to river
 	'2c4de2ff': 'Van reën tot rivier',
 	// What the model works out for every day of the record, one step at a time. The charts are the {year} water year of an example catchment, by week.
-	'6fde5c37': 'Wat die model vir elke dag van die rekordtydperk bereken, een stap op ’n slag. Die grafieke wys die waterjaar {year} van ’n voorbeeld-opvanggebied, per week.',
+	'6fde5c37': 'Wat die model vir elke dag van die waarnemingstydperk bereken, een stap op ’n slag. Die grafieke wys die waterjaar {year} van ’n voorbeeld-opvanggebied, per week.',
 	// Rain on the mountains
 	'791b781b': 'Reën op die berge',
 	// Daily rainfall from the catchment’s own gauges, with CHIRPS satellite estimates to fill the gaps and check them.
@@ -731,6 +735,8 @@ export const af: Catalogue = {
 	'6aa266af': 'Die rivier stroomaf',
 	// What is left reaches the outlet. Every day, the model checks it against the ecological reserve the river needs.
 	'643c2d08': 'Wat oorbly, bereik die uitloop. Elke dag toets die model dit teen die ekologiese reserwe wat die rivier nodig het.',
+	// m³/s, on a square-root scale
+	'f161fe05': 'm³/s, op ’n vierkantswortelskaal',
 	// Flow at the outlet
 	'916671c6': 'Vloei by die uitloop',
 	// Reserve
@@ -741,8 +747,8 @@ export const af: Catalogue = {
 	'f8c0f358': 'jaar se daaglikse waterbalans',
 	// days in one run
 	'e4291d84': 'dae in een lopie',
-	// runs behind the what-if above
-	'9842bf51': 'lopies agter die wat-as hierbo',
+	// fit to the weir’s measured flow (NSE, where 1 is perfect)
+	'32f438d7': 'ooreenstemming met die meetstuwal se gemete vloei (NSE, waar 1 perfek is)',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
@@ -753,12 +759,14 @@ export const af: Catalogue = {
 	'49027b5c': 'Elke projek is privaat vir sy lede, afgedwing deur die databasis self (row-level security).',
 	// Daily data from CHIRPS rainfall and the DWS gauges.
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
+	// In the example catchment
+	'fb86138c': 'In die voorbeeld-opvanggebied',
 	// This is the farm as it is today. Move a slider to change it.
-	'8b81fde5': 'Dit is die plaas soos dit vandag is. Skuif ’n skuifbalk om dit te verander.',
+	'8b81fde5': 'Dit is die plaas soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve
-	'b7fe266e': 'Dit kos die rivier {days} dae meer per jaar onder die reserwe',
+	'b7fe266e': 'Dit kos die rivier {days} meer dae per jaar onder die reserwe',
 	// It gives the river {days} fewer days a year below the reserve
-	'2ad50462': 'Die rivier is {days} dae per jaar minder onder die reserwe',
+	'2ad50462': 'Die rivier is {days} minder dae per jaar onder die reserwe',
 	// The river is below the reserve about as often as today
 	'7f951aa0': 'Die rivier is omtrent net so dikwels soos vandag onder die reserwe',
 	// and the farm gets about as much of what it needs.
@@ -787,16 +795,18 @@ export const af: Catalogue = {
 	'37645529': 'Besproeiingswater gelewer',
 	// {pct} % of what the farm needs
 	'b57d6692': '{pct} % van wat die plaas nodig het',
-	// River below the reserve
-	'c8adc657': 'Rivier onder die reserwe',
-	// {days} days a year
-	'aa84b70d': '{days} dae per jaar',
 	// Today
 	'e7c0775e': 'Vandag',
 	// This plan
 	'ec26a6ec': 'Hierdie plan',
+	// River below the reserve
+	'c8adc657': 'Rivier onder die reserwe',
+	// {days} days a year
+	'aa84b70d': '{days} dae per jaar',
 	// Change from today: supply {supply} points, river {days} days a year.
 	'a3a08f59': 'Verandering teenoor vandag: lewering {supply} punte, rivier {days} dae per jaar.',
+	// Legal
+	'de7530aa': 'Regsinligting',
 	// About Water Management
 	'a156f424': 'Oor Water Management',
 	// Catchment water balance, from rainfall to river.
@@ -861,6 +871,8 @@ export const af: Catalogue = {
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
+	// The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.
+	'c3395d0e': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy, lees hulle en registreer weer.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
@@ -1121,6 +1133,8 @@ export const af: Catalogue = {
 	'4b568eda': 'die projek {name}',
 	// the team {name}
 	'bbe4f51e': 'die span {name}',
+	// By creating an account, you agree to the {terms} and {privacy}.
+	'db2110ec': 'Deur ’n rekening te skep, aanvaar jy die {terms} en die {privacy}.',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
 	// The two passwords don’t match. Type the same password in both.
@@ -1169,8 +1183,8 @@ export const af: Catalogue = {
 	'dae1dc58': '**{inviter}** het jou na **{target}** uitgenooi.',
 	// Create your account to join. You’ll have access straight away.
 	'4747998e': 'Skep jou rekening om aan te sluit. Jy kry dadelik toegang.',
-	// This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an account — then ask whoever invited you to add you again.
-	'd2b77b57': 'Hierdie uitnodigingskakel is ongeldig, is teruggetrek of het verval (hulle is 7 dae geldig). Jy kan steeds ’n rekening skep — vra dan die persoon wat jou uitgenooi het om jou weer by te voeg.',
+	// This invitation link has expired or was withdrawn. You can still create an account, then ask to be invited again.
+	'd52caaa3': 'Hierdie uitnodigingskakel het verval of is teruggetrek. Jy kan steeds ’n rekening skep en dan vra om weer uitgenooi te word.',
 	// We couldn’t check your invitation right now. You can still create an account; you’ll join once your email address is confirmed.
 	'bb9d18b6': 'Ons kon nie jou uitnodiging nou kontroleer nie. Jy kan steeds ’n rekening skep; jy sluit aan sodra jou e-posadres bevestig is.',
 	// The invitation was sent to this address. To use another, ask {inviter} to invite that one instead.
@@ -1180,7 +1194,7 @@ export const af: Catalogue = {
 	// At least 8 characters. A short passphrase works well.
 	'73c4cd8e': 'Ten minste 8 karakters. ’n Kort wagfrase werk goed.',
 	// Confirm password
-	'5ad9dc20': 'Herhaal wagwoord',
+	'5ad9dc20': 'Bevestig wagwoord',
 	// Creating…
 	'1aa1a030': 'Skep tans…',
 	// Create account and join
@@ -1239,6 +1253,8 @@ export const af: Catalogue = {
 	'60cadb22': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen plaas se syfers nie.',
 	// A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.
 	'e4b3fdc4': '’n Model van die opvanggebied, nie metings nie; dit kan verkeerd wees. Hierdie skakel werk totdat dit verval of teruggetrek word.',
+	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
+	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// We’ve sent a new link to {email}.
 	'c77d6547': 'Ons het ’n nuwe skakel na {email} gestuur.',
 	// your address

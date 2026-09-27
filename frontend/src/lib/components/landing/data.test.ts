@@ -45,4 +45,13 @@ describe('landing data', () => {
 		expect(DATA.hero.reserveMetPct).toBeLessThanOrEqual(100);
 		expect(DATA.hero.days).toBeGreaterThanOrEqual(365 * DATA.hero.years - 5);
 	});
+
+	it('the trust figure is a calibration score the page can stand behind', () => {
+		// Nash–Sutcliffe: at most 1 (perfect); the page calls it a fit worth trusting, so a
+		// regeneration whose example no longer fits its weir (under 0.5, "unsatisfactory"
+		// in Moriasi et al. 2007) must not ship silently.
+		expect(DATA.hero.calibrationNse).toBeLessThanOrEqual(1);
+		expect(DATA.hero.calibrationNse).toBeGreaterThanOrEqual(0.5);
+		expect(DATA.hero.calibrationNse).toBe(Math.round(DATA.hero.calibrationNse * 100) / 100);
+	});
 });

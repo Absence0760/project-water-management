@@ -12,7 +12,7 @@
 //    new dam can be placed below it, under an anonymous name ("Farm 3",
 //    "Water user 1"); every number zeroed and every list emptied, so no other
 //    farm's area, dam, crops, demand or boreholes leave the server;
-//  - crops, crop areas, transfers, land cover and boreholes: only those on
+//  - crops, crop areas, transfers, land cover, boreholes and demand objects: only those on
 //    their own nodes (a transfer's other end is an anonymised node).
 import type { CropDef, ModelInput, NetworkNode, NodeKind, ProjectModel, ScenarioMask } from '@water-management/engine';
 
@@ -73,7 +73,9 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || own.has(t.toNodeId)),
 			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId)),
 			// Their own farm's boreholes are theirs to see (as the table's RLS lets them, 045).
-			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId))
+			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId)),
+			// Their own units' demand objects likewise (the table's farmer policy, 088); another unit's town or stock leaves nothing.
+			demandObjects: (m.demandObjects ?? []).filter((o) => own.has(o.nodeId))
 		},
 		anonymisedNodeIds
 	};

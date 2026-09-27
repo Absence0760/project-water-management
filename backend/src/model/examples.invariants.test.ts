@@ -5,7 +5,7 @@
 // so they must balance as exactly as the random fuzz networks do. Built
 // without the stored fit (several seconds; it only changes GR4J's
 // parameters): examples.test.ts covers the examples as seeded.
-import { defaultProjectSettings, fromEpochDay, runModel, SUPPLY_DEFAULTS, toEpochDay } from '@water-management/engine';
+import { defaultProjectSettings, fromEpochDay, runModel, SUPPLY_DEFAULTS, toEpochDay, type DemandObject } from '@water-management/engine';
 import { checkAll, sameOutput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
@@ -44,6 +44,44 @@ describe('engine invariants on the example catchments', () => {
 		expect(sameOutput(out, runModel(explicit))).toBe(true);
 		expect(out.series.some((s) => s.key === 'river_abstraction')).toBe(false);
 	}, 60_000);
+
+	// Demand objects (engine 1.7.0, issue #54 item 2b) are off unless added: an
+	// empty list and only disabled objects give the examples' output to the bit,
+	// and a town, a village and stock on their units keep every invariant.
+	it('demand objects: none changes nothing, and some keep every invariant (engine 1.7.0)', () => {
+		const ex = examples[0]!;
+		const bare = inputOf(ex);
+		const out = runModel(bare);
+		const units = bare.model.nodes.filter((n) => n.kind === 'farm');
+		const town = (nodeId: string, over: Partial<DemandObject> = {}): DemandObject => ({
+			id: crypto.randomUUID(),
+			nodeId,
+			name: 'Town',
+			category: 'municipal',
+			sizing: 'monthly',
+			monthlyM3Day: [300, 320, 400, 420, 400, 320, 300, 280, 260, 260, 270, 280],
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first',
+			destination: 'internal',
+			enabled: true,
+			note: '',
+			...over
+		});
+		for (const demandObjects of [[], [town(units[0]!.id, { enabled: false })]]) expect(sameOutput(out, runModel({ ...bare, model: { ...bare.model, demandObjects } }))).toBe(true);
+		const withObjects = structuredClone(bare);
+		withObjects.model.demandObjects = [
+			town(units[0]!.id),
+			town(units[1]!.id, { name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 800, litresPerUnitDay: 90, lossPct: 0.2, priority: 'shared', returnPct: 0.3 }),
+			town(units.at(-1)!.id, { name: 'Stock', category: 'livestock', sizing: 'perUnit', monthlyM3Day: null, count: 400, litresPerUnitDay: 45, priority: 'last', returnPct: 0 })
+		];
+		const run = runModel(withObjects);
+		expect(run.summary.farms.filter((f) => f.demandObjects?.length)).toHaveLength(3);
+		for (const seed of [1, 2]) expect(checkAll(withObjects, seed)).toBeNull();
+	}, 120_000);
 
 	// The default run window follows the rain (engine 0.45.0, issue #54): the
 	// examples' rain fills their record, so the default window is the one the

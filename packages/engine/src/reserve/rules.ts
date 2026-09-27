@@ -105,7 +105,7 @@ export const EWR_HIGH_FLOW_PER_YEAR_MAX = 12;
  * §2.9d): a freshet or flood the river should carry, `perYear` times a water
  * year, each a hydrograph that reaches `peakM3s` (× the table's scale) in
  * one of `months` and lasts `durationDays` from rise to recession (engine
- * ≥ 1.8.0: counted as a run at or above half the peak for at least half the
+ * ≥ 1.9.0: counted as a run at or above half the peak for at least half the
  * duration, `countHighFlowEvents` in assurance.ts). The requirement in a
  * water year is capped by what the site's natural flow did that year: a flood
  * that would not have happened naturally is not asked of the river.

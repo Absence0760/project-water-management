@@ -2,18 +2,23 @@
 <script lang="ts">
 	// Why trust it (issue #57): plain statements, no borrowed logos (no CHIRPS or
 	// DWS marks: trademarks, and no implied endorsement), and three figures from
-	// the example catchment that count up once in view (still under reduced
-	// motion, and the final figure before the script runs).
+	// the example catchment, named as its, that count up once in view (still
+	// under reduced motion, and the final figure before the script runs). The
+	// last is the one that earns trust: how closely the example's fitted model
+	// follows its weir's measured flow (the run's calibration NSE, from the
+	// engine: backend/scripts/landing-data.ts). No link to the engine audit:
+	// docs/design/landing-art.md says why.
 	import { onMount } from 'svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
 
 	const FIGURES = [
-		{ value: DATA.hero.years, label: () => t('years of daily water balance') },
-		{ value: DATA.hero.days, label: () => t('days in one run') },
-		{ value: DATA.whatIf.grid.length * DATA.whatIf.grid[0]!.length, label: () => t('runs behind the what-if above') }
+		{ value: DATA.hero.years, digits: 0, label: () => t('years of daily water balance') },
+		{ value: DATA.hero.days, digits: 0, label: () => t('days in one run') },
+		{ value: DATA.hero.calibrationNse, digits: 2, label: () => t('fit to the weir’s measured flow (NSE, where 1 is perfect)') }
 	];
+	const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 ** digits;
 	let shown = $state(FIGURES.map((f) => f.value));
 	let el: HTMLElement | undefined = $state();
 
@@ -27,7 +32,7 @@
 			const tick = (now: number) => {
 				const k = Math.min(1, (now - start) / 900);
 				const ease = 1 - (1 - k) ** 3;
-				shown = FIGURES.map((f) => Math.round(f.value * ease));
+				shown = FIGURES.map((f) => round(f.value * ease, f.digits));
 				if (k < 1) frame = requestAnimationFrame(tick);
 			};
 			frame = requestAnimationFrame(tick);
@@ -49,12 +54,13 @@
 		<li>{t('Each project is private to its members, enforced by the database itself (row-level security).')}</li>
 		<li>{t('Daily data from CHIRPS rainfall and the DWS gauges.')}</li>
 	</ul>
+	<p class="figures-head">{t('In the example catchment')}</p>
 	<dl class="figures" bind:this={el}>
 		{#each FIGURES as f, i (i)}
 			<div>
 				<dt>{f.label()}</dt>
 				<!-- The count-up is for the eye; assistive tech gets the figure itself. -->
-				<dd><span aria-hidden="true">{fmt(shown[i]!)}</span><span class="visually-hidden">{fmt(f.value)}</span></dd>
+				<dd><span aria-hidden="true">{fmt(shown[i]!, f.digits)}</span><span class="visually-hidden">{fmt(f.value, f.digits)}</span></dd>
 			</div>
 		{/each}
 	</dl>
@@ -91,6 +97,15 @@
 		border: 2px solid var(--brand-outlet);
 		border-radius: 50% 50% 50% 0;
 		rotate: -45deg;
+	}
+	.figures-head {
+		margin: 0 0 0.75rem;
+		font-family: var(--font-display);
+		font-weight: 600;
+		font-size: 0.85rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--accent);
 	}
 	.figures {
 		display: grid;

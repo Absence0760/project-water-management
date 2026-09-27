@@ -7,6 +7,7 @@
 // (single, and a CSV row naming it by its own name) carries it to the new
 // account, and the emails are written in it. Nothing here ships: the rows are
 // removed afterwards.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { anon, asOwner, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
@@ -51,7 +52,7 @@ afterAll(async () => {
 describe('a stand-in language added to the table (and its email catalogue) only', () => {
 	it('is accepted at sign-up, stored, and the confirmation email is in it', async () => {
 		const email = newEmail('xx-signup');
-		const res = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'X', locale: 'xx' });
+		const res = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'X', acceptTerms: LEGAL_VERSION, locale: 'xx' });
 		// Waits for its confirmation link (issue #57): the account is read as the schema owner.
 		expect(res.status).toBe(202);
 		expect(await asOwner('SELECT locale FROM app_user WHERE email = $1', [email])).toEqual([{ locale: 'xx' }]);
@@ -74,7 +75,7 @@ describe('a stand-in language added to the table (and its email catalogue) only'
 		expect(res.status).toBe(201);
 		expect(res.body.invite.locale).toBe('xx');
 		expect(lastMailTo(email)!.subject).toMatch(/^\[xx\] /);
-		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'X', inviteToken: tokenIn(lastMailTo(email)) });
+		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'X', acceptTerms: LEGAL_VERSION, inviteToken: tokenIn(lastMailTo(email)) });
 		expect(reg.status).toBe(201);
 		expect(reg.body.user.locale).toBe('xx');
 	});

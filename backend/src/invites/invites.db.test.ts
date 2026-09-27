@@ -1,4 +1,5 @@
 // Inviting people who don't have an account yet (004_email.sql, invites.ts).
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -11,7 +12,7 @@ async function register(email: string, inviteToken?: string) {
 	const res = await anon('POST', '/auth/register', {
 		email,
 		password: 'correct horse',
-		displayName: 'Invitee',
+		displayName: 'Invitee', acceptTerms: LEGAL_VERSION,
 		...(inviteToken ? { inviteToken } : {})
 	});
 	// A sign-up through a matching invite is signed in (201). Any other waits

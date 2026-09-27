@@ -19,6 +19,7 @@ import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -37,7 +38,11 @@ const RegisterBody = z.object({
 	 *  and joins the invited projects/teams straight away. */
 	inviteToken: z.string().max(200).optional(),
 	/** The language the sign-up page was in, when the person picked one there. */
-	locale: z.enum(LOCALES).optional()
+	locale: z.enum(LOCALES).optional(),
+	/** The version of the terms and privacy notice the form showed ("By signing
+	 *  up, you accept …"): the engine's LEGAL_VERSION. Checked in the route,
+	 *  so a missing or stale one gets its own code (terms_not_accepted). */
+	acceptTerms: z.string().max(20).optional()
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
 const MeBody = z
@@ -97,6 +102,7 @@ type UserRow = {
 	mail_suppressed_at: Date | null;
 	mail_suppressed_reason: 'bounce' | 'complaint' | null;
 	preferences: unknown;
+	terms_version: string | null;
 };
 const toUser = (r: UserRow) => ({
 	id: r.id,
@@ -108,9 +114,12 @@ const toUser = (r: UserRow) => ({
 	// SES reported a bounce or complaint for the address (057): alert emails are paused (the banner, POST /me/alerts/resume).
 	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null,
 	// The person's own display preferences (083): the sections they hid from the workspace sidebar.
-	preferences: toPreferences(r.preferences)
+	preferences: toPreferences(r.preferences),
+	// Accepted the terms and privacy notice now in force (087): false for an
+	// account from before a new version, or made by a script (accepted none).
+	termsCurrent: r.terms_version === LEGAL_VERSION
 });
-const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, ${PREFERENCES_COL}`;
+const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, ${PREFERENCES_COL}`;
 
 /**
  * The email for a sign-up with an address that already has an account: a
@@ -146,6 +155,12 @@ export const authRoutes = new Hono<AuthEnv>()
 	// that account starts confirmed, joins straight away and is signed in (201).
 	.post('/register', async (c) => {
 		const body = RegisterBody.parse(await readJson(c));
+		// The form's "By signing up, you accept …" (087, docs/legal-status.md):
+		// the version it showed must be the one in force. A page loaded before
+		// the terms changed sends the old one: reload and read them again.
+		if (body.acceptTerms !== LEGAL_VERSION) {
+			throw ApiError.coded(400, 'terms_not_accepted', 'accept the current terms of use and privacy notice to sign up', { version: LEGAL_VERSION });
+		}
 		// Sign-up throttle (079_signup_throttle.sql, auth/signupThrottle.ts):
 		// counted per client address and in all, in its own transaction before
 		// the address is looked at, so a taken and a free address get the same
@@ -161,11 +176,12 @@ export const authRoutes = new Hono<AuthEnv>()
 		const result = await withoutUser(async (db): Promise<Outcome> => {
 			// app_user is under RLS (068): the insert goes through app_register,
 			// and from then on this transaction is the new account's.
-			const { rows: created } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, $4) AS id', [
+			const { rows: created } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, $4, $5) AS id', [
 				body.email,
 				body.displayName,
 				hash,
-				body.locale ?? null
+				body.locale ?? null,
+				LEGAL_VERSION
 			]);
 			const id = created[0]?.id;
 			if (!id) return { kind: 'taken', mail: await takenAddressMail(db, body.email) };

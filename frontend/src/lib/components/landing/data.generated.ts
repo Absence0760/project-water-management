@@ -3,7 +3,7 @@
 /* eslint-disable */
 export const DATA = {
 	"source": "Invented example catchment (Kleinberg); every figure is synthetic.",
-	"engineVersion": "1.2.0",
+	"engineVersion": "1.6.0",
 	"period": {
 		"start": "2010-01-01",
 		"end": "2024-12-31"
@@ -13,7 +13,8 @@ export const DATA = {
 		"farms": 4,
 		"dams": 4,
 		"years": 15,
-		"days": 5479
+		"days": 5479,
+		"calibrationNse": 0.87
 	},
 	"story": {
 		"waterYear": "2012/13",

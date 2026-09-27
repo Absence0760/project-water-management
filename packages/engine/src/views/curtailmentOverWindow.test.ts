@@ -25,6 +25,8 @@ function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): Curtail
 		crops: input.model.crops,
 		cropAreas: input.model.cropAreas,
 		apanMm: input.settings?.apanMm,
+		// A unit with demand objects (engine 1.7.0) takes its consumptive share from its stored return flow.
+		...(input.model.demandObjects ? { demandObjects: input.model.demandObjects } : {}),
 		series: (nodeId, key) => {
 			read?.add(`${nodeId ?? ''}|${key}`);
 			return byKey.get(`${nodeId ?? ''}|${key}`);
@@ -142,7 +144,7 @@ describe('curtailmentOverWindow', () => {
 				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
 				// ewr_charge_shortfall is looked for at every site, and read only where the run stored it.
 				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
-				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 				expect(new Set(keys)).toEqual(used);
 				expect(keys).toHaveLength(used.size);
 				if (![...read].some((k) => k.endsWith('|outflow'))) flowsSkipped++;
@@ -159,10 +161,10 @@ describe('curtailmentOverWindow', () => {
 			const read = new Set<string>();
 			curtailmentOverWindow(asOldRun(input, run, read), win(run, 0, run.days - 1));
 			for (const k of [...read]) if (k.endsWith('|ewr_charge_shortfall') && !stored.has(k)) read.delete(k);
-			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, {}, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 			// Without `has` too (and the rule-table sites as the Runs tab passes them): the flows are listed.
 			const ruleTableSites = run.summary.curtailment!.ewrSites!.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
-			const blind = new Set(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { ruleTableSites }).map((k) => `${k.nodeId ?? ''}|${k.key}`));
+			const blind = new Set(curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { ruleTableSites, demandObjects: input.model.demandObjects }).map((k) => `${k.nodeId ?? ''}|${k.key}`));
 			const needsRecompute = run.series.some((s) => s.key === EWR_BINDING_SERIES.key);
 			if (needsRecompute) {
 				recomputed++;
@@ -223,7 +225,7 @@ describe('curtailmentOverWindow', () => {
 			const read = new Set<string>();
 			curtailmentOverWindow(asRuleRun(input, run, read), win(run, 0, run.days - 1));
 			const used = new Set([...read].filter((k) => stored.has(k)));
-			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, {}, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+			const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 			if (run.series.some((s) => s.key === EWR_BINDING_SERIES.key)) {
 				expect(new Set(keys)).toEqual(used);
 				expect(keys.some((k) => k.endsWith('|transfer'))).toBe(false);
@@ -247,7 +249,7 @@ describe('curtailmentOverWindow', () => {
 				const used = new Set([...read].filter((k) => !k.endsWith('|ewr_charge_shortfall') || stored.has(k)));
 				// With the run's stored series too, as the Runs tab passes them: its binding sites (engine ≥ 1.5.0) replace the flows.
 				const has = (nodeId: string | null, key: string) => stored.has(`${nodeId ?? ''}|${key}`);
-				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers, ruleTableSites, demandObjects: input.model.demandObjects }, has).map((k) => `${k.nodeId ?? ''}|${k.key}`);
 				expect(new Set(keys)).toEqual(used);
 				expect(keys).toHaveLength(used.size);
 			}

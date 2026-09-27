@@ -304,7 +304,7 @@ describe('individual boreholes (WP-3.9)', () => {
 			const o = run(withBores(input(dam, 0, days), [bh({ capacityM3Day: 200, target: 'dam', mode })]), natural);
 			ok(o);
 			expect(sum(col(o, 'A', 'demand')), mode).toBe(0);
-			// Until engine 1.7.0 a primary one pumped 94 × 200 = 18 800 m³ into the dam
+			// Until engine 1.8.0 a primary one pumped 94 × 200 = 18 800 m³ into the dam
 			// (the dry spell and the first wet days) and an emergency one 9000 m³ (up
 			// to its 30 % level), and all of it spilled again once the rain came:
 			// 38 800 and 29 000 m³ of spill instead of 20 000.
