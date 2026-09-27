@@ -5,6 +5,7 @@
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
+	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 	import { CATEGORY_TITLES, HELP, helpFor, type HelpCategory } from '$lib/help/content';
 	import { glossaryPosition } from '$lib/help/nav.svelte';
@@ -80,8 +81,8 @@
 
 <svelte:head><title>Glossary · Help · Water Management</title></svelte:head>
 
+<HelpCrumbs trail={[{ label: 'Help', href: `${base}/help` }, { label: 'Reference' }, { label: 'Glossary' }]} />
 <header class="head">
-	<p class="eyebrow">Reference</p>
 	<h1>Glossary</h1>
 	<p class="lede">
 		Every input and result, in hydrologists’ terms. Concepts follow the WBT b023 workbook (its Help, Models and
@@ -128,16 +129,10 @@
 	.head {
 		margin-bottom: 0.5rem;
 	}
-	.eyebrow {
-		margin: 0;
-		color: var(--accent);
-		font-size: 0.8rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-	}
+	/* The size of every help page's title (guides, search). */
 	h1 {
-		margin: 0.2rem 0 0.5rem;
+		margin: 0 0 0.4rem;
+		font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
 	}
 	.lede {
 		max-width: 44rem;

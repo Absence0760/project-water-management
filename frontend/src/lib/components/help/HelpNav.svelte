@@ -28,8 +28,11 @@
 		void glossaryPosition.entry;
 		void path;
 		const box = navEl?.parentElement; // the sidebar's scrolling box (help layout)
+		// The deepest marked link: the term, else its topic, else the page.
 		const link =
-			navEl?.querySelector<HTMLElement>('.terms [aria-current]') ?? navEl?.querySelector<HTMLElement>('[aria-current]');
+			navEl?.querySelector<HTMLElement>('.terms [aria-current]') ??
+			navEl?.querySelector<HTMLElement>('.topics [aria-current]') ??
+			navEl?.querySelector<HTMLElement>('[aria-current]');
 		if (!box || !link || box.scrollHeight <= box.clientHeight) return;
 		const top = link.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
 		if (top < box.scrollTop) box.scrollTop = top - 8;

@@ -3767,10 +3767,18 @@ box heads the page, above the text, and a contents list
 *How it works*, *How to*, and the glossary) marks the page you're on
 (`aria-current`). From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window, or the glossary's term list). They
+taller than the window (a short window, or the glossary's term list). The column fits the window exactly
+(the page's top gutter above it and below it), and the reading space at the end of a long page belongs
+to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
+guide) doesn't scroll. They
 don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
 under the search box, and close again when you pick a page.
+
+Each subpage (a guide, the glossary, search) heads its text the same way: a
+breadcrumb (`help/HelpCrumbs.svelte`: *Help › How to › Add a transfer*,
+*Help › Reference › Glossary*, *Help › Search*) over one `h1` of the
+overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts`).
 
 - **Pictures.** One Blender scene of an invented catchment, rendered as several
   shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
@@ -3807,7 +3815,12 @@ under the search box, and close again when you pick a page.
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail right of the 42rem article instead, so the
-  article keeps its reading width and the right-hand space is used), numbered steps, tip and
+  article keeps its reading width and the right-hand space is used). The list
+  marks the section being read (`aria-current="location"`, in bold; the last
+  heading past a line near the top, `lib/help/spy.ts`, or the last section at
+  the end of the page; nothing while the intro shows), and a link to one
+  section (`/help/guides/<id>#<section>`) lands on it and focuses its heading
+  (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
   stores under the ground, the outlet gauge, the transfer, the EWR reach), the
   glossary terms it uses, related guides and previous / next. Guide text is
@@ -3843,7 +3856,11 @@ under the search box, and close again when you pick a page.
   **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
   removed the model; it still explains a stored legacy run's daily columns.
 - **Search** (`/help/search?q=`): results update as you type in the box at
-  the head of the page, which keeps focus; guides first, then glossary terms.
+  the head of the page, which keeps focus; guides first, then glossary terms,
+  each a list in columns (the overview's guide list: three across at 1440, so
+  a common word's ~50 terms start on the first screen), one column on a phone.
+  When both kinds match, **Guides (n)** and **Glossary terms (n)** under the
+  count jump to each list.
 
 ## Farmer view (`/farm`)
 

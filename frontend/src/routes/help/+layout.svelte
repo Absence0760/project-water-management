@@ -81,6 +81,7 @@
 	   (the text keeps its own reading width). */
 	.help-shell {
 		max-width: 1480px;
+		padding-bottom: 1.25rem;
 	}
 	.search input {
 		width: 100%;
@@ -99,9 +100,13 @@
 	.contents.open {
 		display: block;
 	}
+	/* The reading space at the end of a long page is the text column's, not
+	   the page's: the contents column beside it fits the window exactly, so a
+	   page that fits doesn't scroll by the page's usual bottom padding. */
 	.help-main {
 		min-width: 0;
 		margin-top: 1.25rem;
+		padding-bottom: 3.75rem;
 	}
 	/* The search heads the page, across the text column. */
 	.search {
@@ -122,11 +127,13 @@
 			align-items: start;
 		}
 		/* In view while reading; it scrolls on its own only when it is taller
-		   than the window (a short window, or the glossary's term list). */
+		   than the window (a short window, or the glossary's term list). It
+		   starts and sticks at the page's top gutter and ends as far from the
+		   bottom, so at the top of a short page it doesn't make the page scroll. */
 		.side {
 			position: sticky;
-			top: 1rem;
-			max-height: calc(100vh - 2rem);
+			top: 1.25rem;
+			max-height: calc(100vh - 2.5rem);
 			overflow-y: auto;
 			overscroll-behavior: contain;
 			scrollbar-width: thin;
