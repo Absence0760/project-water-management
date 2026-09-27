@@ -97,7 +97,13 @@ section it belongs to, with the example that taught it.
   (`layout/sidebar.svelte.ts`, `fillSidebar`) and only one copy of a nav is
   rendered at a time. Below 900 px a slim bar with a Menu; every layout
   stacks to one column with no sideways scroll, sheets go full screen. Keep
-  the sidebar short enough to fit a 960 px-high window.
+  the sidebar short enough to fit a 960 px-high window: with the 15 sections
+  an owner sees it measured 1033 px until the rows went to 34 px, the section
+  gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare
+  now, room for one more row). Below that height the slot scrolls on its own
+  (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
+  never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
+  entry re-runs that spec.
 
 ## 3. Colour, wording, content
 
@@ -221,8 +227,12 @@ Interaction details that bit:
 
 - Make each new view a lazy chunk. The guard
   (`scripts/guards/check_web_bundle_budget.mjs`) counts lazy chunks in the
-  total, so splitting code moves weight but also adds overhead; folding
-  always-rendered lazy panels back into their tab saves it.
+  total, so splitting code moves weight but also adds overhead.
+- Inside a tab, split only what some visits never render (a panel behind a
+  condition, a dialog, a chart shared with another tab). A panel the tab
+  always renders belongs in the tab's chunk: workspace tabs (the page's
+  `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
+  pages, routes and shared chunks.
 - Every ceiling change gets a dated change-log entry with the measured
-  numbers and what grew. Never raise the largest-chunk ceiling to fit a
-  page; move code out of the workspace page chunk instead.
+  numbers and what grew. Never raise the page ceiling to fit a page; move
+  code out of the workspace page chunk instead.

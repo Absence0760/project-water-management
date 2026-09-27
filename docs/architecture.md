@@ -359,7 +359,14 @@ total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
 catchment downloading about 85 KB (gzip) instead of about 300 KB. The bundle
 guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
 holds the largest single chunk down, which is what catches a tab's code
-sliding back into the page chunk.
+sliding back into the page chunk. Tab chunks have a higher ceiling of their
+own (60 KB against 42 for pages, routes and shared chunks): a tab loads on
+top of the page, only when opened, so the panels it always renders stay in
+its chunk rather than paying split overhead as chunks of their own. The
+guard finds the tabs from the page's `LOAD` map and the chunk map
+`vite.config.ts`'s `chunkModuleMap` writes beside Vite's manifest
+(`.svelte-kit/output/client/.vite/chunk-modules.json`, never shipped),
+since chunk file names are bare hashes.
 
 ## Shared CSS (frontend)
 

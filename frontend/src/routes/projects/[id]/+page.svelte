@@ -464,9 +464,8 @@
      catchment's name. Phones: behind a "Sections" button here. One copy only. -->
 {#snippet projectSidebar()}
 	<div class="project-side">
-		<span class="side-kicker">Catchment</span>
-		<a class="side-project" href={tabHref('overview')} data-testid="project-name">{project?.name}</a>
-		<span class="side-role">{@render roleBadge()}</span>
+		<span class="side-head"><span class="side-kicker">Catchment</span>{@render roleBadge()}</span>
+		<a class="side-project" href={tabHref('overview')} title={project?.name} data-testid="project-name">{project?.name}</a>
 		{@render sectionsNav()}
 	</div>
 {/snippet}
@@ -933,28 +932,50 @@
 		}
 	}
 	/* The sections, one vertical list: in the app sidebar (wide) or in the
-	   phone's Sections menu. Each section is labelled; the open one is marked. */
+	   phone's Sections menu. Each section is labelled; the open one is marked.
+	   In the sidebar the rows are tighter than in the phone menu, so every
+	   section an owner sees fits a 960 px-high window (AppShell). */
 	.project-side {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.15rem;
+	}
+	.side-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0 0.75rem;
 	}
 	.side-kicker {
-		padding: 0 0.75rem;
 		color: var(--text-muted);
 		font-size: 0.72rem;
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
 	}
+	/* A long name wraps to two lines at most; the full name is its tooltip,
+	   and still its accessible name (the clamp is visual only). */
 	.side-project {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+		margin-bottom: 0.6rem;
 		padding: 0 0.75rem;
 		color: var(--text);
 		font-weight: 600;
+		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
-	.side-role {
-		padding: 0.15rem 0.75rem 0.5rem;
+	.project-side .tabs {
+		gap: 0.75rem;
+	}
+	.project-side .section-label {
+		padding-bottom: 0.1rem;
+	}
+	.project-side .tabs a {
+		min-height: 34px;
 	}
 	/* Phones: the catchment's name and your role, above the Sections button. */
 	.phone-project {

@@ -125,15 +125,18 @@
 		margin-left: 0;
 		padding-left: 1.5rem;
 	}
-	/* The sidebar: full height from the top edge, in view while the page scrolls. */
+	/* The sidebar: full height from the top edge, in view while the page scrolls.
+	   Spaced to fit a 960 px-high window with a project open (every section an
+	   owner sees, plus room for one more); on a shorter window the page's slot
+	   scrolls on its own, so the account at the foot never leaves the screen. */
 	.app-sidebar {
 		position: sticky;
 		top: 0;
 		height: 100vh;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
-		padding: 1rem 0.75rem;
+		gap: 0.5rem;
+		padding: 0.75rem 0.75rem;
 		overflow-y: auto;
 		background: var(--surface);
 		border-right: 1px solid var(--border);
@@ -162,11 +165,14 @@
 	.main-nav a {
 		display: flex;
 		align-items: center;
-		min-height: 38px;
+		min-height: 34px;
 		padding: 0 0.75rem;
 		border-radius: var(--radius);
 		color: var(--text-2);
 		font-weight: 500;
+	}
+	.main-nav a:focus-visible {
+		outline-offset: -2px;
 	}
 	.main-nav a:hover {
 		color: var(--text);
@@ -178,13 +184,21 @@
 		background: var(--accent-soft);
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
+	/* Shrinks and scrolls before the foot would be pushed off (min-height keeps
+	   a few rows on a very short window, where the whole sidebar scrolls). */
 	.slot {
-		padding-top: 1rem;
+		flex: 0 1 auto;
+		min-height: 8rem;
+		overflow-y: auto;
+		/* The open section scrolled into view (or focused) clears the edges. */
+		scroll-padding-block: 1.5rem;
+		padding-top: 0.5rem;
 		border-top: 1px solid var(--border);
 	}
 	.foot {
+		flex: none;
 		margin-top: auto;
-		padding-top: 0.75rem;
+		padding-top: 0.5rem;
 		border-top: 1px solid var(--border);
 	}
 	/* Phones: a slim bar; the Menu opens the main sections under it. */

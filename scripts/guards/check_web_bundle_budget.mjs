@@ -12,13 +12,33 @@
 // below and append a dated entry to the change log saying what was measured
 // and why the growth is warranted.
 //
-// Three populations, gzip-measured with node:zlib:
+// The populations, gzip-measured with node:zlib:
 //   totalCodeKb     every emitted JS + CSS file, summed in bytes and rounded
 //                   once. Lazy chunks count too: code-splitting a dependency
 //                   must not lower this number, only removing weight does.
-//   largestChunkKb  the largest single JS/CSS file a page loads. Catches one
-//                   heavyweight dependency landing in one chunk (a second
-//                   chart library, a spreadsheet parser, a date library).
+//   largestChunkKb  the largest single JS/CSS file a page loads, other than a
+//                   workspace tab's (below): the pages and routes, their shared
+//                   chunks, the lazy panels. Catches one heavyweight dependency
+//                   landing in one chunk (a second chart library, a spreadsheet
+//                   parser, a date library), and a tab's code sliding back into
+//                   the workspace page chunk.
+//   largestTabChunkKb
+//                   the largest chunk of a workspace tab: the modules the
+//                   catchment page's LOAD map imports lazily
+//                   (frontend/src/routes/projects/[id]/+page.svelte), each
+//                   chunk holding one plus its own CSS file(s). A tab loads on
+//                   top of the page when it is opened, never on a cold visit,
+//                   and a panel it always renders is cheaper in its chunk than
+//                   as a chunk of its own (split overhead, a second request):
+//                   so tabs get a higher ceiling of their own rather than
+//                   splitting panels to fit the page ceiling. Which file holds
+//                   which tab comes from frontend/vite.config.ts's
+//                   chunkModuleMap (.svelte-kit/output/client/.vite/
+//                   chunk-modules.json; file names are bare hashes). The guard
+//                   fails if it finds no tabs, if a tab module isn't in exactly
+//                   one chunk, or if a tab shares the workspace page's chunk
+//                   (that would take it out of the page ceiling). Tab chunks
+//                   still count in totalCodeKb.
 //   largestWorkerKb the largest Web Worker entry under `/workers/` other than
 //                   the spreadsheet workers: the calibration worker
 //                   (lib/calibration/autocal.worker.ts). Since issue #9 it is
@@ -911,6 +931,31 @@
 //             (help/content.af.ts) adds ~3 KB to the /farm/words page. Words,
 //             not code: nothing to trim without dropping a translation.
 //             No new dependency. Headroom ~4 KB.
+// 2026-09-26  new largestTabChunkKb 60 KB; total 991 → 1004 KB (measured
+//             979, down 8); the page ceiling stays 42 KB (issue #17's bundle
+//             item, docs/followups.md). Workspace tab chunks are measured
+//             against a ceiling of their own (above), so the panels a tab
+//             renders on every visit fold back into its chunk instead of
+//             paying split overhead to fit the 42 KB page ceiling. Measured
+//             on main @ b2cacb7 → this change: 1 010 466 → 1 002 148 bytes
+//             gzip (987 → 979 KB by this guard's rounding, 312 → 296 JS/CSS
+//             files). The Settings tab takes in data feeds, scheduled
+//             reports, API keys, outcome and outlook settings and the
+//             pan-coefficient helper: 37.7 + 2.3 CSS → 56.3 + 3.3 CSS KB, the
+//             six chunks it replaces were 26.0 KB, ~−6.5 KB. The Runs tab
+//             takes in the plausibility checks (every run since engine
+//             0.25.0 has them): 23.0 → 27.2 KB, the chunk was 5.6, ~−1.3 KB
+//             (the uncertainty and outcome panels the follow-up counted had
+//             already moved to River & reserve, whose tab chunk has them).
+//             The rest is shorter preload lists. Still lazy: the WR2012 panel
+//             and the forecast (only runs with one), the rule-table editor,
+//             the download preview. Largest tab chunk: Settings, 57 KB, so
+//             the next Settings feature must lazy-load something only some
+//             visits render; the largest page chunk is still the workspace
+//             page, 39 KB. The total gets ~25 KB of headroom, not the usual
+//             ~4, for four new #17 pages being built in parallel: each one
+//             measured against this ceiling, not against the others. No new
+//             dependency.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -921,8 +966,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 991,
+	totalCodeKb: 1004,
 	largestChunkKb: 42,
+	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
@@ -939,16 +985,74 @@ const SPREADSHEET_WORKER = /(^|\/)workers\/(export|import)\.worker-[^/]*$/;
 
 const CODE = /\.(m?js|css)$/;
 
+/** The catchment workspace page, whose LOAD map lists the lazy tabs. */
+export const WORKSPACE_PAGE = 'src/routes/projects/[id]/+page.svelte';
+/** frontend/vite.config.ts's chunkModuleMap output (CHUNK_MODULES_FILE), under the client build. */
+const CHUNK_MODULES = 'frontend/.svelte-kit/output/client/.vite/chunk-modules.json';
+
 /** @param {number} bytes */
 export const kb = (bytes) => Math.ceil(bytes / 1024);
 
 /**
- * @param {{ path: string, gzipBytes: number }[]} files
+ * The workspace tab modules: the `import('…')` specifiers in the page's
+ * `const LOAD = { … };` map, as paths relative to frontend/.
+ * @param {string} pageSource the workspace page's source
+ * @returns {string[]}
  */
-export function measure(files) {
+export function tabModules(pageSource) {
+	const block = /\bconst LOAD\s*=\s*\{([\s\S]*?)\n\s*\};/.exec(pageSource);
+	if (!block) return [];
+	return [...block[1].matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1].replace(/^\$lib\//, 'src/lib/'));
+}
+
+/**
+ * The output files of the workspace tabs: each tab module's chunk plus that
+ * chunk's own CSS, from chunkModuleMap's `{ file: { modules, css } }`.
+ * Paths are relative to the client output, as in the build directory.
+ * @param {string[]} modules tabModules()
+ * @param {Record<string, { modules: string[], css?: string[] }>} chunks
+ * @returns {{ files: Set<string>, errors: string[] }}
+ */
+export function tabChunks(modules, chunks) {
+	const errors = [];
+	const files = new Set();
+	if (modules.length === 0) {
+		errors.push(
+			`Found no lazy-loaded workspace tabs: no import('…') in the LOAD map of frontend/${WORKSPACE_PAGE}. The tab chunk ceiling measured nothing; if the tabs moved, point WORKSPACE_PAGE / tabModules() in scripts/guards/check_web_bundle_budget.mjs at them.`,
+		);
+		return { files, errors };
+	}
+	for (const mod of modules) {
+		const holders = Object.entries(chunks).filter(([, c]) => c.modules.includes(mod));
+		if (holders.length !== 1) {
+			errors.push(
+				`Workspace tab ${mod} is in ${holders.length} chunks of the build, expected exactly one. Check frontend/vite.config.ts's chunkModuleMap still writes .vite/chunk-modules.json, and that the tab is still imported lazily.`,
+			);
+			continue;
+		}
+		const [file, chunk] = holders[0];
+		if (chunk.modules.includes(WORKSPACE_PAGE)) {
+			errors.push(
+				`Workspace tab ${mod} is in the workspace page's own chunk (${file}): something imports it statically, so every catchment's cold load carries it. Load it only through the page's LOAD map.`,
+			);
+			continue;
+		}
+		files.add(file);
+		for (const css of chunk.css ?? []) files.add(css);
+	}
+	return { files, errors };
+}
+
+/**
+ * @param {{ path: string, gzipBytes: number }[]} files
+ * @param {Set<string>} [tabFiles] tabChunks().files: measured against the tab ceiling instead of the page one
+ */
+export function measure(files, tabFiles = new Set()) {
 	let codeBytes = 0;
 	let codeCount = 0;
 	let largestChunk = { path: '', gzipBytes: 0 };
+	let largestTabChunk = { path: '', gzipBytes: 0 };
+	let tabCount = 0;
 	let largestWorker = { path: '', gzipBytes: 0 };
 	let largestSpreadsheetWorker = { path: '', gzipBytes: 0 };
 	let largestAsset = { path: '', gzipBytes: 0 };
@@ -960,6 +1064,9 @@ export function measure(files) {
 				if (f.gzipBytes > largestSpreadsheetWorker.gzipBytes) largestSpreadsheetWorker = f;
 			} else if (WORKER.test(f.path)) {
 				if (f.gzipBytes > largestWorker.gzipBytes) largestWorker = f;
+			} else if (tabFiles.has(f.path)) {
+				tabCount += 1;
+				if (f.gzipBytes > largestTabChunk.gzipBytes) largestTabChunk = f;
 			} else if (f.gzipBytes > largestChunk.gzipBytes) largestChunk = f;
 		} else if (f.gzipBytes > largestAsset.gzipBytes) {
 			largestAsset = f;
@@ -970,6 +1077,8 @@ export function measure(files) {
 		codeCount,
 		totalCodeKb: kb(codeBytes),
 		largestChunk: { path: largestChunk.path, kb: kb(largestChunk.gzipBytes) },
+		tabCount,
+		largestTabChunk: { path: largestTabChunk.path, kb: kb(largestTabChunk.gzipBytes) },
 		largestWorker: { path: largestWorker.path, kb: kb(largestWorker.gzipBytes) },
 		largestSpreadsheetWorker: { path: largestSpreadsheetWorker.path, kb: kb(largestSpreadsheetWorker.gzipBytes) },
 		largestAsset: { path: largestAsset.path, kb: kb(largestAsset.gzipBytes) },
@@ -995,6 +1104,11 @@ export function violations(m, budget = BUDGET) {
 	if (m.largestChunk.kb > budget.largestChunkKb) {
 		out.push(
 			`Largest chunk ${m.largestChunk.path} is ${m.largestChunk.kb} KB, over the ${budget.largestChunkKb} KB per-chunk budget. This usually means one heavyweight dependency landed in one chunk; check it is needed before raising the ceiling.`,
+		);
+	}
+	if (m.largestTabChunk.kb > budget.largestTabChunkKb) {
+		out.push(
+			`Workspace tab chunk ${m.largestTabChunk.path} is ${m.largestTabChunk.kb} KB, over the ${budget.largestTabChunkKb} KB per-tab budget. Move a panel only some visits render (one behind a condition, a dialog) into a lazy chunk of its own, or check for a heavyweight dependency, before raising the ceiling.`,
 		);
 	}
 	if (m.largestWorker.kb > budget.largestWorkerKb) {
@@ -1055,11 +1169,21 @@ function main() {
 		console.error(`::error::No build output at ${buildDir}. Run pnpm build:frontend first.`);
 		process.exit(1);
 	}
+	const chunkModulesPath = process.argv[3] ?? CHUNK_MODULES;
+	let chunkModules;
+	try {
+		chunkModules = JSON.parse(readFileSync(chunkModulesPath, 'utf8'));
+	} catch {
+		console.error(`::error::No chunk map at ${chunkModulesPath}. frontend/vite.config.ts (chunkModuleMap) writes it during pnpm build:frontend; build again, or check the plugin still runs.`);
+		process.exit(1);
+	}
+	const tabs = tabChunks(tabModules(readFileSync(join('frontend', WORKSPACE_PAGE), 'utf8')), chunkModules);
 	const files = paths.map((p) => ({ path: relative(buildDir, p), gzipBytes: gzipSync(readFileSync(p)).length }));
-	const m = measure(files);
+	const m = measure(files, tabs.files);
 	const rows = [
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${BUDGET.totalCodeKb} KB`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${BUDGET.largestChunkKb} KB`],
+		[`Largest tab chunk (${m.largestTabChunk.path || 'none'}; ${m.tabCount} tab files)`, `${m.largestTabChunk.kb} KB`, `${BUDGET.largestTabChunkKb} KB`],
 		[`Largest worker (${m.largestWorker.path || 'none'})`, `${m.largestWorker.kb} KB`, `${BUDGET.largestWorkerKb} KB`],
 		[`Largest spreadsheet worker (${m.largestSpreadsheetWorker.path || 'none'})`, `${m.largestSpreadsheetWorker.kb} KB`, `${BUDGET.largestSpreadsheetWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${BUDGET.largestAssetKb} KB`],
@@ -1071,7 +1195,11 @@ function main() {
 		appendFileSync(process.env.GITHUB_STEP_SUMMARY, table.join('\n') + '\n');
 	}
 	const workers = paths.filter((p) => WORKER.test(relative(buildDir, p))).map((p) => ({ path: relative(buildDir, p), text: readFileSync(p, 'utf8') }));
-	const bad = [...violations(m), ...calibrationWorkerViolations(workers)];
+	// A map from another build (a stale .svelte-kit beside a fresh build dir) names files this build doesn't have.
+	const stale = tabs.errors.length === 0 && m.tabCount !== tabs.files.size
+		? [`The chunk map names ${tabs.files.size} tab files, but ${m.tabCount} of them are in ${buildDir}: the map is from another build. Run pnpm build:frontend again.`]
+		: [];
+	const bad = [...tabs.errors, ...stale, ...violations(m), ...calibrationWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

@@ -129,6 +129,57 @@ export function shortFileNames(): Plugin {
 	};
 }
 
+/** Where chunkModuleMap writes, relative to the client build's output directory. */
+export const CHUNK_MODULES_FILE = '.vite/chunk-modules.json';
+
+/**
+ * Which source modules each emitted chunk holds, for the bundle guard.
+ *
+ * The guard gives the workspace's lazy tab chunks a ceiling of their own
+ * (scripts/guards/check_web_bundle_budget.mjs), so it has to know which output
+ * file each tab landed in. File names are bare hashes, and Vite's manifest
+ * can't say either: it keys a chunk by its source only when the chunk is a
+ * facade of one module, and Rollup merges a tab with code its lazy panels
+ * share (the Settings tab) or the page with its route node, so those keys
+ * vanish. This writes `{ "<file>": { modules: [...], css: [...] } }` for every
+ * JS chunk of the client build, module paths relative to frontend/, to
+ * `.vite/` beside Vite's manifest: SvelteKit never copies `.vite/` into the
+ * site (builder.writeClient), so it isn't shipped. The server build writes
+ * nothing.
+ */
+export function chunkModuleMap(): Plugin {
+	let root = '';
+	let ssr = false;
+	return {
+		name: 'water:chunk-module-map',
+		apply: 'build',
+		configResolved(config) {
+			root = config.root;
+			ssr = !!config.build.ssr;
+		},
+		generateBundle(_options, bundle) {
+			if (ssr) return;
+			this.emitFile({ type: 'asset', fileName: CHUNK_MODULES_FILE, source: JSON.stringify(chunkModules(bundle, root)) });
+		}
+	};
+}
+
+type BundleChunk = { type: 'chunk'; moduleIds: string[]; viteMetadata?: { importedCss: Set<string> } } | { type: 'asset' };
+
+/** chunkModuleMap's content: every chunk's modules under `root` (no virtual or outside ids), and its own CSS files. */
+export function chunkModules(bundle: Record<string, BundleChunk>, root: string): Record<string, { modules: string[]; css: string[] }> {
+	const out: Record<string, { modules: string[]; css: string[] }> = {};
+	for (const [file, chunk] of Object.entries(bundle)) {
+		if (chunk.type !== 'chunk') continue;
+		const modules = chunk.moduleIds
+			.filter((id) => !id.startsWith('\0'))
+			.map((id) => relative(root, id.replace(/\?.*$/, '')).split(sep).join('/'))
+			.filter((p) => !p.startsWith('..'));
+		out[file] = { modules: [...new Set(modules)], css: [...(chunk.viteMetadata?.importedCss ?? [])] };
+	}
+	return out;
+}
+
 /**
  * The engine is pure (no I/O, and no module does anything when it loads:
  * src/lib/engineSideEffects.test.ts guards that), so an engine module whose
@@ -154,7 +205,7 @@ export function svelteRuntimeChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, sveltekit()],
+	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, chunkModuleMap(), sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
 	// builds that don't read build.rollupOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never

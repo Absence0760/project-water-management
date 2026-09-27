@@ -1050,21 +1050,32 @@ the suggested order (the IDs carry the detail):
       Code splitting). Moved: the Invite farmers dialog is its own chunk
       (+1.2 total), taking the workspace page chunk 40.7 → 38.5 KB. Numbers
       per step in the bundle guard's change log.
-- [ ] **Per-chunk ceiling vs always-rendered lazy panels.** Some lazy
-      chunks load on every visit of their tab, so they only add split
-      overhead; they were split to keep the tab under the 42 KB per-chunk
-      ceiling. Inline, the Settings tab's data feeds, scheduled reports, API
-      keys, outcome settings and pan-coefficient helper save 6.0 KB of total
-      (a 59 KB Settings chunk), and the Runs tab's uncertainty and outcome
-      panels 2.8 KB (a 48 KB Runs chunk). One file is also the lighter,
-      single-request load for that tab. Durable fix: the guard's
-      `largestChunkKb` measures page and route chunks (the first load)
-      separately from tab chunks, with a tab ceiling near 60 KB, then these
-      fold back in. Also on the workspace page (left alone while #17's
-      section header and Compare runs work is in flight): the Overview's
-      always-rendered lazy panels (Flow vs reserve, Supply by farm, Dam
-      levels) and CompareView's. Trigger: the operator's call on the
-      ceiling, or the next Settings/Runs feature that needs room.
+- [x] **Per-chunk ceiling vs always-rendered lazy panels** (issue #17,
+      2026-09-26). The bundle guard now measures the workspace tab chunks
+      (the modules the catchment page's `LOAD` map imports lazily, found
+      through the chunk map `vite.config.ts`'s `chunkModuleMap` writes to
+      `.svelte-kit/output/client/.vite/`) against a 60 KB ceiling of their
+      own, apart from the 42 KB page and route ceiling; it fails if it finds
+      no tabs, a tab in more or fewer than one chunk, or a tab in the
+      workspace page's chunk. The Settings tab took back its data feeds,
+      scheduled reports, API keys, outcome and outlook settings and
+      pan-coefficient helper (~−6.5 KB total; the tab 57 KB), the Runs tab
+      its plausibility checks (~−1.3 KB; 27 KB). The uncertainty and outcome
+      panels this entry counted for Runs had already moved into the River &
+      reserve tab's chunk. Total 987 → 979 KB (numbers in the guard's change
+      log). Left as they are: the Overview's lazy panels (Flow vs reserve,
+      Supply by farm, Share links) would fold into the workspace page chunk,
+      the one every catchment's cold load pays for, under the page ceiling;
+      and Flow vs reserve and the water-year bars are shared with other
+      tabs, so they stay chunks of their own.
+- [ ] **Compare runs' always-rendered lazy panels.** CompareView (the
+      Compare tab, and the `/compare` route's page) still loads the paired
+      uncertainty band and the daily series overlay as chunks of their own,
+      though every comparison renders both. With the tab ceiling (60 KB;
+      CompareView is ~15 KB) they can fold in like the Settings and Runs
+      panels did; measure the total, the tab chunk and `/compare`'s cold
+      load. The 2026-09-26 change was scoped to Settings and Runs.
+      Trigger: the next Compare runs change, or the next bundle trim.
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →

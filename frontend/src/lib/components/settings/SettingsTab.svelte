@@ -51,19 +51,18 @@
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
-	import Lazy from '$lib/components/common/Lazy.svelte';
-
-	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
-	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
-	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
-	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
-	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
-	// API keys for the ingest endpoint, owners only: likewise (docs/ui.md § API keys).
-	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
-	// The outcome matrix's settings (issue #53 R4): part of the form, but its own chunk (this one is at its ceiling).
-	const loadOutcomes = () => import('$lib/components/outcomes/OutcomeSettingsSection.svelte');
-	// The seasonal outlook's settings (issue #53 R5): likewise its own chunk.
-	const loadOutlook = () => import('$lib/components/outlook/OutlookSettingsSection.svelte');
+	// These panels render on every visit of the tab, so they are in its chunk rather than chunks of
+	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
+	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
+	// reports save through their own APIs, never through Save settings (docs/ui.md § Data feeds,
+	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
+	// (R5) settings are part of the form.
+	import DataFeedsPanel from '$lib/components/feeds/DataFeedsPanel.svelte';
+	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
+	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
+	import ApiKeysPanel from '$lib/components/apiKeys/ApiKeysPanel.svelte';
+	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
+	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 
 	let {
 		project,
@@ -553,17 +552,13 @@
 				<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; the source note below records which preset. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
 			</div>
 			{#if !readonly}
-				<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; code-split, it is collapsed until opened. -->
-				<Lazy load={loadPanHelper}>
-					{#snippet children(PanCoefficientHelper)}
-						<PanCoefficientHelper
-							onapply={(v: number[], note: string) => {
-								s.panCoefficient = [...v] as typeof s.panCoefficient;
-								s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
-							}}
-						/>
-					{/snippet}
-				</Lazy>
+				<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; it is collapsed until opened. -->
+				<PanCoefficientHelper
+					onapply={(v: number[], note: string) => {
+						s.panCoefficient = [...v] as typeof s.panCoefficient;
+						s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
+					}}
+				/>
 			{/if}
 			<div class="table-wrap">
 				<table class="data compact monthly">
@@ -864,18 +859,10 @@
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">
-		<Lazy load={loadOutcomes}>
-			{#snippet children(OutcomeSettingsSection)}
-				<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
-			{/snippet}
-		</Lazy>
+		<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
 	</div>
 	<div id="set-outlook">
-		<Lazy load={loadOutlook}>
-			{#snippet children(OutlookSettingsSection)}
-				<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
-			{/snippet}
-		</Lazy>
+		<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />
 	</div>
 
 	<!-- Automatic runs (WP-2.11) ------------------------------------------------------------------>
@@ -943,25 +930,13 @@
 </form>
 
 <!-- Outside the form: feeds save themselves, never through Save settings. -->
-<Lazy load={loadFeeds}>
-	{#snippet children(DataFeedsPanel)}
-		<DataFeedsPanel projectId={project.id} />
-	{/snippet}
-</Lazy>
+<DataFeedsPanel projectId={project.id} />
 
 {#if project.role === 'owner'}
-	<Lazy load={loadApiKeys}>
-		{#snippet children(ApiKeysPanel)}
-			<ApiKeysPanel projectId={project.id} />
-		{/snippet}
-	</Lazy>
+	<ApiKeysPanel projectId={project.id} />
 {/if}
 
-<Lazy load={loadReportSchedules}>
-	{#snippet children(ReportSchedulesPanel)}
-		<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
-	{/snippet}
-</Lazy>
+<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
 
 <style>
 	.lead {
