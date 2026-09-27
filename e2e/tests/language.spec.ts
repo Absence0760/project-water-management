@@ -6,19 +6,19 @@
 //
 // The Afrikaans catalogue is complete, so choosing Afrikaans turns the words
 // and <html lang> to Afrikaans (the plan's WP-2.5 e2e: the sign-in page and
-// the farm view). The Afrikaans is read from the catalogue (support/af.ts).
+// the farm view). The Afrikaans is read from the catalogue (support/lang.ts).
 // The emails are covered by backend/src/auth/locale.db.test.ts and
 // farms/invites.db.test.ts (e2e mail goes to the server log), and the alert
 // email through Mailpit by alerts-mailpit.spec.ts.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { createRun, register, seedRunnableProject } from '../support/api.ts';
-import { afWords } from '../support/af.ts';
+import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
-const words = await afWords();
+const words = await siteWords('af');
 
 const me = async (request: APIRequestContext) => ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { locale: string | null; volumeUnit: string } }).user;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

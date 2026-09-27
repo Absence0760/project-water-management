@@ -4,14 +4,14 @@
 // token gone from the address bar; the owner withdraws it and the link shows
 // the dead-link state. A catchment with too few farms gets no flow chart.
 import type { APIRequestContext } from '@playwright/test';
-import { afWords } from '../support/af.ts';
+import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
-const words = await afWords();
+const words = await siteWords('af');
 const NOTICE = 'Water is short on the river.\nIrrigate at night and cut back where you can.';
 
 /** The sample network with three more farms: five farm holders, enough for the flow chart (FARMER_K). */

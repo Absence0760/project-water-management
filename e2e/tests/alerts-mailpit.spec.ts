@@ -11,7 +11,7 @@
 // spec is skipped and says why; in CI it never skips (server-report.spec.ts's
 // rule).
 import { putSeries, seedRunnableProject } from '../support/api.ts';
-import { afMail, afWords } from '../support/af.ts';
+import { mail as mailFn, words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -54,13 +54,13 @@ async function message(id: string): Promise<{ subject: string; text: string; htm
 
 const fill = (template: string, vars: Record<string, string>) => template.replace(/\{(\w+)\}/g, (whole, name: string) => vars[name] ?? whole);
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const words = await afWords();
-const mailWords = await afMail();
+const words = await siteWords('af');
+const mailWords = await mailFn('af');
 
 /**
  * The words the farmer's alert email and the unsubscribe page are checked
  * for, per language. The Afrikaans comes from the catalogues
- * (support/af.ts); the farmer's phone is in that language too (`browser`),
+ * (support/lang.ts); the farmer's phone is in that language too (`browser`),
  * so the signed-out unsubscribe page opens in it.
  */
 const LANGUAGES: {
