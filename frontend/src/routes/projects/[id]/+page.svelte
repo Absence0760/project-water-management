@@ -17,6 +17,7 @@
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
 		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
+		project: () => import('$lib/components/project/ProjectTab.svelte'),
 		applications: () => import('$lib/components/scenarios/ApplicationsTab.svelte'),
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
@@ -86,7 +87,10 @@
 		reserve: 'river',
 		units: 'supply',
 		farms: 'supply',
-		changes: 'history'
+		changes: 'history',
+		details: 'project',
+		members: 'project',
+		sharing: 'project'
 	};
 
 	const projectId = $derived(page.params.id ?? '');
@@ -619,18 +623,7 @@
 
 			<section class="tab-body" class:readonly={!canEdit} aria-labelledby="tab-{tab}">
 				{#if tab === 'overview'}
-					<OverviewTab
-						{project}
-						{editor}
-						{series}
-						{runs}
-						{canEdit}
-						{isOwner}
-						currentUserId={session.user?.id ?? ''}
-						visibleTabs={shownIds}
-						{onProjectChange}
-						{onLeftProject}
-					/>
+					<OverviewTab {project} {editor} {series} {runs} {canEdit} visibleTabs={shownIds} />
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
 					<Lazy load={LOAD.network}>
@@ -713,6 +706,22 @@
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>
 						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} />{/snippet}
+					</Lazy>
+				{:else if tab === 'project'}
+					<Lazy load={LOAD.project}>
+						{#snippet children(ProjectTab)}
+							<ProjectTab
+								project={project!}
+								{editor}
+								{series}
+								{runs}
+								{canEdit}
+								{isOwner}
+								currentUserId={session.user?.id ?? ''}
+								{onProjectChange}
+								{onLeftProject}
+							/>
+						{/snippet}
 					</Lazy>
 				{:else if tab === 'applications'}
 					<Lazy load={LOAD.applications}>

@@ -114,7 +114,7 @@ test('the owner puts an applicant and their consultant in one party, and the app
 	await expect(a.getByRole('textbox', { name: /email/i })).toHaveCount(0);
 
 	// The owner groups the applicant and the consultant in the Members panel.
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	for (const u of [applicant.user, consultant.user]) {
 		const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${u.id}`));

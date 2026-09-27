@@ -1,13 +1,11 @@
-// The Summary tab (id `overview`, issue #17): results, setup checklist and headline facts, built from the lists
-// the project page loads (series, runs) and the model being edited.
+// The Summary tab (id `overview`, issue #17): results and the setup checklist, built from the lists the project
+// page loads (series, runs) and the model being edited. The headline facts, details and who has access moved to
+// the Project page (project-page.spec.ts).
 import type { Page } from '@playwright/test';
-import { createProject, createRun, PASSWORD, putModel, seedRunnableProject } from '../support/api.ts';
-import { API_URL } from '../support/env.ts';
+import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-const stat = (page: Page, term: string) =>
-	page.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) }).getByRole('definition');
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
 /** A run's daily dam_storage series (the Dam levels' fallback for a run older than engine 1.2.0). */
 const DAM_SERIES = /\/runs\/[^/]+\/series\?key=dam_storage/;
@@ -20,12 +18,12 @@ test('a fresh project: nothing loaded, every step to do', async ({ page, owner }
 	await expect(setup(page)).toContainText('0 of 5 done');
 	await expect(setup(page)).toContainText('Upload daily catchment rainfall (mm).');
 	await expect(setup(page)).toContainText('Run it to get unit supply & deficit');
-	await expect(stat(page, 'Time series')).toHaveText('0');
-	await expect(stat(page, 'Model runs')).toHaveText('0');
-	await expect(stat(page, 'Units')).toHaveText('0+ 0 gauges');
+	// The model's facts are on the Project page, one link away.
+	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ })).toHaveAttribute('href', '?tab=project');
 });
 
-test('a project with data and a run: setup complete, counts shown', async ({ page, owner }) => {
+test('a project with data and a run: setup complete', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Overview ready');
 	await createRun(page.request, project.id, 'Baseline');
@@ -35,10 +33,6 @@ test('a project with data and a run: setup complete, counts shown', async ({ pag
 	await done.getByText('All 5 steps done. Show checklist').click();
 	await expect(done).toContainText('Rainfall and observed flow loaded.');
 	await expect(done).toContainText(/1 run, latest \d{4}-\d{2}-\d{2}\./);
-	await expect(stat(page, 'Time series')).toHaveText('2');
-	await expect(stat(page, 'Model runs')).toHaveText('1');
-	await expect(stat(page, 'Units')).toHaveText('2+ 1 gauge');
-	await expect(stat(page, 'Outflow gauge')).toHaveText('Outflow gauge');
 });
 
 test('the latest run: its headline figures, the change from the run before, and a link to it', async ({ page, owner }) => {
@@ -133,17 +127,22 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	expect(chart.y + chart.height).toBeGreaterThan(vh - 40);
 	expect(chart.height).toBeGreaterThan(450);
 
-	// Below it, in order: alerts, the published baseline, the link to the Dams page, the checklist, then the model's facts.
-	const below = [
-		chart.y + chart.height,
-		(await box('Active alerts')).y,
-		(await box('Published baseline')).y,
-		(await damsLink.boundingBox())!.y,
-		(await box(/^Set(up| up this catchment)/)).y
-	];
-	expect([...below].sort((a, b) => a - b)).toEqual(below);
-	const modelH = (await page.getByRole('heading', { level: 2, name: 'The model' }).boundingBox())!.y;
-	expect(modelH).toBeGreaterThan(below[4]!);
+	// Below it, compact (issue #17): the alerts beside the published baseline, then one line of links (the Dams
+	// page, the Project page), then the one-line setup. Nothing else: the rest is on the Project page.
+	const alerts = await box('Active alerts');
+	const baseline = await box('Published baseline');
+	expect(alerts.y).toBeGreaterThan(chart.y + chart.height);
+	expect(Math.round(baseline.y)).toBe(Math.round(alerts.y));
+	expect(baseline.x).toBeGreaterThan(alerts.x + alerts.width);
+	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
+	const links = (await damsLink.boundingBox())!;
+	expect(links.y).toBeGreaterThan(alerts.y + alerts.height);
+	expect(Math.round((await projectLink.boundingBox())!.y)).toBe(Math.round(links.y));
+	const setupBox = await box(/^Set(up| up this catchment)/);
+	expect(setupBox.y).toBeGreaterThan(links.y);
+	expect(setupBox.height).toBeLessThan(80);
+	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Members' })).toHaveCount(0);
 
 	// ?tab=summary is the same page.
 	await page.goto(`/projects/${project.id}?tab=summary`);
@@ -301,101 +300,11 @@ test('Dams today: a run from before the summary kept dam figures still shows it,
 	expect(damSeries).toHaveLength(2);
 });
 
-test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {
-	void owner;
-	const project = await createProject(page.request, 'Overview fact links');
-	await page.goto(`/projects/${project.id}`);
-	const tabs: [string, string][] = [
-		['Units', 'Network'],
-		['Irrigated area', 'Crops & demand'],
-		['Active transfers', 'Transfers'],
-		['Time series', 'Data'],
-		['Model runs', 'Runs & results']
-	];
-	for (const [term, tab] of tabs) {
-		await page.goto(`/projects/${project.id}`);
-		// Click the tile's bottom-right corner, away from the label: the link covers the whole tile.
-		const tile = page.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
-		const box = await tile.boundingBox();
-		if (!box) throw new Error(`no ${term} tile`);
-		await tile.click({ position: { x: box.width - 6, y: box.height - 6 } });
-		await expect(page.getByRole('link', { name: tab, exact: true })).toHaveAttribute('aria-current', 'page');
-	}
-});
-
-test('who has access sits together: Team above Members, in one column beside Project details', async ({ page, owner }) => {
-	void owner;
-	await page.setViewportSize({ width: 1600, height: 1000 });
-	const project = await createProject(page.request, 'Overview access column');
-	await page.goto(`/projects/${project.id}`);
-	await expect(page.getByRole('region', { name: 'Members', exact: true }).getByRole('rowheader').first()).toBeVisible();
-	const details = await page.getByRole('region', { name: 'Project details', exact: true }).boundingBox();
-	const team = await page.getByRole('region', { name: 'Team', exact: true }).boundingBox();
-	const members = await page.getByRole('region', { name: 'Members', exact: true }).boundingBox();
-	if (!details || !team || !members) throw new Error('an Overview panel is missing');
-	expect(Math.round(team.x)).toBe(Math.round(members.x));
-	expect(team.x).toBeGreaterThan(details.x + details.width);
-	expect(team.y + team.height).toBeLessThanOrEqual(members.y);
-	expect(Math.round(team.y)).toBe(Math.round(details.y));
-});
-
-test.describe('on a phone', () => {
-	test.use({ viewport: { width: 360, height: 740 } });
-
-	test('the page stacks details, team, members, and a long description shows in full', async ({ page, owner }) => {
-		void owner;
-		const project = await createProject(page.request, 'Overview phone stack');
-		await page.goto(`/projects/${project.id}`);
-		const desc = page.getByLabel('Description');
-		await desc.fill(Array.from({ length: 12 }, (_, i) => `Line ${i + 1} of a long catchment description.`).join('\n'));
-		// It grows to fit rather than hiding the text behind an inner scrollbar.
-		const fits = await desc.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
-		expect(fits).toBe(true);
-
-		const ys: number[] = [];
-		for (const name of ['Project details', 'Team', 'Members']) {
-			const box = await page.getByRole('region', { name, exact: true }).boundingBox();
-			if (!box) throw new Error(`${name} missing`);
-			ys.push(box.y);
-		}
-		expect(ys).toEqual([...ys].sort((a, b) => a - b));
-		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
-	});
-
-	test('a long email in a member row wraps at its dots and @, never mid-word', async ({ page }) => {
-		// Realistic parts (a short unique tag): one part longer than the column may still break anywhere.
-		const tag = `${process.pid}${Date.now()}`.slice(-7);
-		const email = `catchment.hydrology-consultant.${tag}@very-long-subdomain.example.com`;
-		const res = await page.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Long Address' } });
-		expect(res.status()).toBe(201);
-		const project = await createProject(page.request, 'Long email');
-		await page.goto(`/projects/${project.id}`);
-		const cell = page.getByRole('region', { name: 'Members' }).getByRole('rowheader', { name: /Long Address/ });
-		await expect(cell).toContainText(email);
-
-		// Each part between break points is its own text node; none may span two lines.
-		const lines = await cell.locator('.sub-email').evaluate((el) => {
-			const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-			const out: { text: string; lines: number }[] = [];
-			for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-				const r = document.createRange();
-				r.selectNodeContents(n);
-				const tops = new Set([...r.getClientRects()].map((b) => Math.round(b.top)));
-				out.push({ text: n.textContent ?? '', lines: tops.size });
-			}
-			return { parts: out, height: el.getBoundingClientRect().height, lineHeight: parseFloat(getComputedStyle(el).lineHeight) };
-		});
-		expect(lines.parts.map((p) => p.text).join('')).toBe(email);
-		expect(lines.height).toBeGreaterThan(lines.lineHeight * 1.5); // it did wrap
-		expect(lines.parts.filter((p) => p.lines > 1)).toEqual([]);
-	});
-});
-
-test('data added from the Overview tab shows up in its counts and checklist straight away', async ({ page, owner }) => {
+test('data added from the Summary shows up in its checklist straight away', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Overview upload');
 	await page.goto(`/projects/${project.id}`);
-	await expect(stat(page, 'Time series')).toHaveText('0');
+	await expect(setup(page)).toContainText('Upload daily catchment rainfall (mm).');
 
 	await page.getByRole('button', { name: 'Add data' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Add data' });
@@ -408,6 +317,5 @@ test('data added from the Overview tab shows up in its counts and checklist stra
 	await dialog.getByRole('button', { name: 'Upload' }).click();
 	await expect(dialog).toBeHidden();
 
-	await expect(stat(page, 'Time series')).toHaveText('1');
 	await expect(setup(page)).toContainText('Rainfall loaded. No observed flow yet');
 });

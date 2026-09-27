@@ -2,7 +2,7 @@
 	// The importer's notes (with their severity) and the unmapped report
 	// (plan.md 1b: what couldn't be carried across as the workbook meant, with
 	// sheet, cell and element). Shared by the import review (WorkbookReview)
-	// and the Overview's import record (overview/ImportReportPanel), so what a
+	// and the Project page's import record (project/ImportReportPanel), so what a
 	// reviewer reads later is what the importer showed. Everything here comes
 	// from the file (farm names, formula text), so it is rendered as text only:
 	// plain interpolation, never {@html}.

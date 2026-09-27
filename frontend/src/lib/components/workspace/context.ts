@@ -1,7 +1,7 @@
 // The section header's one-line context for the tabs that don't give their
 // own (headerSlot.svelte.ts): a count of what the section holds, so a
-// section's header says something under its title. Network, Crops, Summary
-// and History fill their own.
+// section's header says something under its title. Network, Crops, Summary,
+// Project and History fill their own.
 import type { TabId } from '$lib/workspace/tabs';
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

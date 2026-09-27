@@ -161,7 +161,7 @@
 					{#snippet emptyAction()}
 						<p class="muted help">
 							Create one for your consultancy or department, then add colleagues by the email they registered with. Anyone can
-							still share a single project directly from its Summary tab.
+							still share a single project directly from its Project page.
 						</p>
 						<button type="button" class="btn btn-primary" onclick={openCreate}>New team</button>
 					{/snippet}

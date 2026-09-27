@@ -41,6 +41,7 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await np.getByLabel('Name').fill('Upper Breede — baseline');
 	await np.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Upper Breede — baseline' })).toBeVisible();
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'Team' })).toContainText('Belongs to Breede Hydrology');
 
 	// The colleague sees it under the team's group, as an editor.

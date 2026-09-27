@@ -13,8 +13,8 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	const secret = await createProject(page.request, 'Private catchment');
 	const viewer = await signIn('Consultant');
 
-	// Owner adds the viewer from the Overview tab's Members panel.
-	await page.goto(`/projects/${project.id}`);
+	// Owner adds the viewer from the Project page's Members panel.
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	await members.getByLabel('Add member by email').fill(viewer.user.email);
 	await members.getByLabel('Role', { exact: true }).selectOption('viewer');
@@ -33,6 +33,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	// …and can read but not change anything.
 	await listRow.getByRole('link', { name: 'Shared catchment' }).click();
 	await expect(v.getByTestId('project-name').filter({ hasText: 'Shared catchment' })).toBeVisible();
+	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	await expect(v.getByLabel('Name', { exact: true })).not.toBeEditable();
 	await expect(v.getByRole('button', { name: 'Save details' })).toHaveCount(0);
 	await expect(v.getByLabel('Add member by email')).toHaveCount(0);
@@ -94,7 +95,7 @@ test('an editor can change the shared model but cannot manage members', async ({
 	await addMember(page.request, project.id, editor.user.email, 'editor');
 
 	const e = editor.page;
-	await e.goto(`/projects/${project.id}`);
+	await e.goto(`/projects/${project.id}?tab=project`);
 	await expect(e.getByText('Only owners can manage members.')).toBeVisible();
 	await expect(e.getByLabel('Add member by email')).toHaveCount(0);
 	await expect(e.getByLabel('Name', { exact: true })).toBeEditable();
@@ -110,7 +111,7 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	const project = await createProject(page.request, 'Invite catchment');
 	const email = uniqueEmail('not-yet-registered');
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	await members.getByLabel('Add member by email').fill(email);
 	await members.getByLabel('Role', { exact: true }).selectOption('editor');
@@ -147,7 +148,7 @@ test('adding an account that never confirmed its email invites it until the addr
 	const api = await playwright.request.newContext();
 	const unconfirmed = await register(api, 'Unconfirmed colleague', { verified: false });
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	await members.getByLabel('Add member by email').fill(unconfirmed.email);
 	await members.getByLabel('Role', { exact: true }).selectOption('editor');
@@ -195,7 +196,7 @@ test('an invited person signs up through the link and lands in the project', asy
 	await context.close();
 
 	// The owner now sees a member, not an invite.
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	await expect(page.getByRole('region', { name: 'Members' }).getByRole('rowheader', { name: /Invited Hydrologist/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
 });

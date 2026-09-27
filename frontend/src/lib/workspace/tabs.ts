@@ -36,6 +36,9 @@ export const TAB_GROUP = {
 	scenarios: 'core',
 	// Registered volumes vs modelled use (WP-3.10): viewers read volumes, not names.
 	allocations: 'core',
+	// What the project is and who can open it (issue #17 option A): the model's facts, details, import
+	// record, notes, team, members, farmers and share links, moved from below the Summary's first screen.
+	project: 'core',
 	// Submitted applications, for the assessors to decide (WP-3.3).
 	applications: 'assess',
 	// The change log of the inputs, with restore actions a viewer can't use.
@@ -62,6 +65,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	compare: 'Compare runs',
 	scenarios: 'Scenarios',
 	allocations: 'Allocations',
+	project: 'Project',
 	applications: 'Applications',
 	history: 'History'
 };
@@ -141,7 +145,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 export const NAV_SECTIONS = [
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
-	{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
+	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
 export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];
