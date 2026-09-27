@@ -1,3 +1,4 @@
+import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -142,6 +143,55 @@ test('the preview fills the viewport and renders rows to the bottom of its talle
 	});
 	expect(bottomCell).toMatch(/^2020-\d\d-\d\d$/);
 });
+
+// The big case: two series over fifteen years. Only the rows in view are drawn,
+// and each is exactly the 28 px the spacers assume, so the rows line up from the
+// first day to the last (as Download → Preview's do, download-preview.spec.ts).
+for (const size of [
+	{ name: 'desktop', width: 1440, height: 960 },
+	{ name: 'phone', width: 390, height: 844 }
+]) {
+	test(`fifteen years: rows line up to the last day, no gap under the header, the table scrolls from the keyboard, no a11y violations (${size.name})`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: size.width, height: size.height });
+		const project = await createProject(page.request, `Series preview long ${size.name}`);
+		const days = 5479; // 2010-01-01 … 2024-12-31
+		await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2010-01-01', values: previewValues(days) });
+		await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2010-01-01', values: previewValues(days).map((v) => (v === null ? null : v / 10)) });
+		await page.goto(`/projects/${project.id}?tab=series`);
+		await page.getByRole('button', { name: 'Preview all data' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+		await expect(dialog).toContainText(`${days.toLocaleString('en-US')} of ${days.toLocaleString('en-US')} days shown`);
+
+		// The first row starts right under the header, and rows are exactly 28 px apart.
+		const scroll = dialog.getByRole('region', { name: 'Input time series: the daily table' });
+		const rows = dialog.locator('tbody tr:not([aria-hidden])');
+		const head = (await dialog.locator('thead').boundingBox())!;
+		const first = (await rows.first().boundingBox())!;
+		expect(Math.abs(first.y - (head.y + head.height))).toBeLessThan(2);
+		expect((await rows.nth(20).boundingBox())!.y - first.y).toBeCloseTo(20 * 28, 0);
+
+		// Scrolled to the end, the last day is the last row, at the foot of the scroll box.
+		await scroll.evaluate((d) => (d.scrollTop = d.scrollHeight));
+		const last = rows.last();
+		await expect(last.getByRole('cell').first()).toHaveText('2024-12-31');
+		const end = (await scroll.boundingBox())!;
+		const bottomScrollbar = await scroll.evaluate((d) => (d as HTMLElement).offsetHeight - d.clientHeight);
+		expect(Math.abs((await last.boundingBox())!.y + 28 - (end.y + end.height - bottomScrollbar))).toBeLessThan(3);
+		// Far in, the row at the top of the box is the day that far in.
+		await scroll.evaluate((d) => (d.scrollTop = 4000 * 28));
+		await expect(dialog.getByRole('row', { name: /^2020-12-14 / })).toBeInViewport();
+
+		// The scroll box takes focus and scrolls from the keyboard.
+		await scroll.evaluate((d) => (d.scrollTop = 0));
+		await scroll.focus();
+		await expect(scroll).toBeFocused();
+		await page.keyboard.press('PageDown');
+		await expect.poll(() => scroll.evaluate((d) => d.scrollTop)).toBeGreaterThan(0);
+		await scroll.evaluate((d) => (d.scrollTop = 0));
+		await expectNoViolations(page, { include: 'dialog[open]' });
+	});
+}
 
 test('the column picker keeps each checkbox beside its label', async ({ page, owner }) => {
 	void owner;

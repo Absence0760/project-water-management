@@ -521,7 +521,10 @@ Interaction details that bit:
   sat under the header. Pin the row height (`padding-block: 0`, a fixed
   line height), render a spacer only when it has height, and test the row
   pitch, the first row under the header and the last day at the foot with
-  a big case (30 units × 730 days, `download-preview.spec.ts`).
+  a big case (30 units × 730 days, `download-preview.spec.ts`). The Data
+  tab's Preview all data (`series/SeriesPreviewDialog.svelte`) had the same
+  drift and gap until it got the same rules (`series-preview.spec.ts`,
+  fifteen years); a new virtualised table copies them.
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

@@ -1928,7 +1928,12 @@ prefix (`2015`, `2015-03-14`) or a value comparison (`> 20`, `= 0`); *Missing
 only* and *Flagged only* look only at the currently visible series columns.
 Rows are virtualised (fixed row height, only the rows near the scrollport are
 real `<tr>`s) so a multi-year daily record doesn't put thousands of rows in
-the DOM at once. This is a read-only view of what's already loaded; a CSV
+the DOM at once. As in Download → Preview, each body row is exactly 28 px,
+border included, and a spacer row exists only when it has height, so the
+first day starts right under the header and the last day sits at the foot of
+the box on a fifteen-year record; the pinned date keeps the row's hover, and
+the scroll box is a focusable, named region, so it scrolls from the keyboard
+(`series-preview.spec.ts`, with a11y scans at desktop and phone). This is a read-only view of what's already loaded; a CSV
 export of the same model-used columns is tracked separately
 ([followups.md](./followups.md)).
 
