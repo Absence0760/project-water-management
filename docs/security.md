@@ -189,13 +189,25 @@ buys a **render session** that can read one report and nothing else.
   another origin (an image, a fetch, a frame, a script navigation) is aborted
   before it leaves, a navigation's redirect chain is walked hop by hop first
   and refused if any hop leaves, a render whose page tries to leave fails at
-  once without retry, and only a page of the site is ever printed. The
-  site's CSP is a second layer in production only. `reports/render.origin.test.ts`
-  checks each case with real Chromium against a counting "elsewhere" server,
-  with a positive control (skipped only where Playwright's Chromium isn't
-  installed). Residual: a redirect of a *subresource* is followed by the
-  browser unrouted (Playwright can't route those hops); in production the
-  CSP checks them.
+  once without retry, and only a page of the site is ever printed. What
+  Playwright can't route (the redirect hops of a subresource, WebSockets,
+  preconnects, WebRTC, service workers) is refused by Chromium itself, from
+  its launch flags (`confinementArgs`): no host but the site's and the API's
+  resolves (IP literals included, so no DNS-prefetch channel either), every
+  other origin goes to a proxy that can't exist (`*.invalid`, with the
+  implicit loopback bypass removed, so the site's own host on another port is
+  refused too), WebRTC may use only proxied UDP (none), and service workers
+  are blocked. The site's CSP is a third layer in production only.
+  `reports/render.origin.test.ts` checks each case with real Chromium
+  against a counting "elsewhere" server that also counts raw TCP
+  connections, WebSocket upgrades and STUN packets, with a positive control
+  (the report prints, and a same-site subresource redirect still loads;
+  skipped only where Playwright's Chromium isn't installed);
+  `reports/reports.test.ts` pins the flags. Residual: this is the browser
+  policing itself, so a Chromium bug that ignored its own flags, or code in
+  the renderer's Node process, could still reach the internet (the Lambda
+  has open egress). The infra-level fix is an egress allowlist, a tradeoff
+  not taken ([infra/README.md](../infra/README.md), the renderer).
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
   or taken from a message), deleted after 7 days. A download is a pre-signed

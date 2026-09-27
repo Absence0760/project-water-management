@@ -80,6 +80,34 @@ const LAMBDA_ARGS = ['--no-sandbox', '--no-zygote', '--single-process', '--disab
 const originOf = (url: string) => URL.parse(url)?.origin ?? 'null';
 
 /**
+ * Chromium flags that confine the browser itself to the site and API, below
+ * Playwright's routing (docs/security.md § Render tokens). Playwright routes
+ * only the requests a page makes; the hops of a subresource redirect, a
+ * WebSocket, a preconnect and WebRTC's UDP go out beneath it. So:
+ *   - every host but the site's and the API's fails to resolve, IP literals
+ *     included (no DNS lookup leaves either, so no DNS-prefetch channel);
+ *   - every connection goes to a proxy that can't exist (`.invalid` never
+ *     resolves), except the site's and the API's origins, which go direct
+ *     (`<-loopback>` first: Chromium otherwise sends every loopback address
+ *     direct, whatever the list says). That is the origin-level check: the
+ *     site's own host on another port or scheme is refused too. An origin
+ *     on its scheme's default port is listed without one, which Chromium
+ *     matches on any port of that scheme and host;
+ *   - WebRTC may use only proxied UDP, so none.
+ */
+export function confinementArgs(o: Pick<RenderOptions, 'siteUrl' | 'apiUrl'>): string[] {
+	const urls = [o.siteUrl, o.apiUrl].map((u) => new URL(u));
+	const hosts = [...new Set(urls.map((u) => u.hostname))];
+	const origins = [...new Set(urls.map((u) => `${u.protocol}//${u.host}`))];
+	return [
+		`--host-resolver-rules=MAP * ~NOTFOUND, ${hosts.map((h) => `EXCLUDE ${h}`).join(', ')}`,
+		'--proxy-server=http://egress-refused.invalid:9',
+		`--proxy-bypass-list=<-loopback>;${origins.join(';')}`,
+		'--force-webrtc-ip-handling-policy=disable_non_proxied_udp'
+	];
+}
+
+/**
  * The browser may talk to the configured site and API and nothing else
  * (docs/security.md § Render tokens). The renderer Lambda has open egress
  * and a live render session, so a subresource, a fetch, a script navigation
@@ -90,8 +118,10 @@ const originOf = (url: string) => URL.parse(url)?.origin ?? 'null';
  * any, and the navigation goes ahead only if every hop stays on the allowed
  * origins. (It then continues in the browser rather than being fulfilled
  * from that walk: a fulfilled document counts as "public" to Chromium's
- * local network checks, which would refuse the local API.) Whatever still
- * slips through, renderReportPdf prints only a page of the configured site.
+ * local network checks, which would refuse the local API.) What Playwright
+ * can't route (a subresource's redirect hops, WebSockets, preconnects,
+ * WebRTC) is refused by the browser's own launch flags (confinementArgs),
+ * and renderReportPdf prints only a page of the configured site.
  * Inline data: and blob: resources never reach the network and aren't routed.
  */
 const MAX_NAVIGATION_REDIRECTS = 5;
@@ -147,12 +177,13 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 		browser = await chromium.launch({
 			headless: true,
 			executablePath: o.executablePath,
-			args: process.env.AWS_LAMBDA_FUNCTION_NAME ? LAMBDA_ARGS : []
+			args: [...(process.env.AWS_LAMBDA_FUNCTION_NAME ? LAMBDA_ARGS : []), ...confinementArgs(o)]
 		});
 		// If the timeout fired while Chromium was starting, close it now.
 		if (closed) await browser.close();
 		// Light, like the print stylesheet forces; the UTC clock the tests pin too.
-		const context = await browser.newContext({ colorScheme: 'light', locale: 'en-ZA', timezoneId: 'UTC', viewport: { width: 1200, height: 1600 } });
+		// No service workers: the report needs none, and a worker's requests outlive the page's routing.
+		const context = await browser.newContext({ colorScheme: 'light', locale: 'en-ZA', timezoneId: 'UTC', viewport: { width: 1200, height: 1600 }, serviceWorkers: 'block' });
 		const { left } = await confineToOrigins(context, o);
 		const res = await context.request.post(`${o.apiUrl}/auth/render-session`, {
 			data: { token: t.token },

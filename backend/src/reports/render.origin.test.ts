@@ -10,9 +10,15 @@
 // positive control is a render that succeeds with the site and API both
 // asked; every refusal must leave elsewhere untouched.
 //
+// Playwright can't route what the browser does below it (the redirect hops of
+// a subresource, WebSockets, preconnects, WebRTC), so the browser itself is
+// confined too (render.ts confinementArgs): "elsewhere" also counts raw TCP
+// connections, WebSocket upgrades and STUN packets, and must see none.
+//
 // Runs the real renderReportPdf with the Chromium from `pnpm test:e2e:install`,
 // and is skipped (with a warning) only where that browser isn't installed.
 import { existsSync } from 'node:fs';
+import { createSocket, type Socket } from 'node:dgram';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -24,19 +30,31 @@ if (!haveChromium) console.warn('render.origin.test.ts skipped: no Playwright Ch
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 const hits = { site: [] as string[], api: [] as string[], elsewhere: [] as string[] };
+/** Every TCP connection elsewhere accepts (a preconnect opens one and sends nothing), and every STUN packet its UDP port gets. */
+const reached = { tcp: 0, udp: 0 };
 let sitePage: Handler = () => {};
 const servers: Server[] = [];
-const urls = { site: '', api: '', elsewhere: '' };
+let stun: Socket | undefined;
+const urls = { site: '', api: '', elsewhere: '', elsewhereSameHost: '' };
+let stunPort = 0;
 
 async function listen(name: keyof typeof hits, handler: Handler) {
 	const s = createServer((req, res) => {
 		hits[name].push(`${req.method} ${req.url}`);
 		handler(req, res);
 	});
+	s.on('upgrade', (req, socket) => {
+		hits[name].push(`UPGRADE ${req.url}`);
+		socket.destroy();
+	});
+	if (name === 'elsewhere') s.on('connection', () => reached.tcp++);
 	await new Promise<void>((resolve) => s.listen(0, '127.0.0.1', resolve));
 	servers.push(s);
+	const port = (s.address() as AddressInfo).port;
 	// "localhost" for elsewhere: another host as well as another port.
-	urls[name] = `http://${name === 'elsewhere' ? 'localhost' : '127.0.0.1'}:${(s.address() as AddressInfo).port}`;
+	urls[name] = `http://${name === 'elsewhere' ? 'localhost' : '127.0.0.1'}:${port}`;
+	// And the site's own host on elsewhere's port: another origin, the same host.
+	if (name === 'elsewhere') urls.elsewhereSameHost = `http://127.0.0.1:${port}`;
 }
 
 const html = (res: ServerResponse, body: string) => {
@@ -54,14 +72,19 @@ beforeAll(async () => {
 		res.end();
 	});
 	await listen('elsewhere', (_req, res) => html(res, readyPage));
+	stun = createSocket('udp4').on('message', () => reached.udp++);
+	await new Promise<void>((resolve) => stun!.bind(0, '127.0.0.1', resolve));
+	stunPort = stun.address().port;
 });
 
 afterAll(async () => {
 	await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+	stun?.close();
 });
 
 beforeEach(() => {
 	for (const k of Object.keys(hits) as (keyof typeof hits)[]) hits[k].length = 0;
+	reached.tcp = reached.udp = 0;
 });
 
 const LEFT = 'the report page tried to leave the site';
@@ -150,5 +173,72 @@ describe.skipIf(!haveChromium)('the renderer stays on its configured site and AP
 		expect(pdf.pages).toBeGreaterThan(0);
 		expect(hits.site.every((h) => h.startsWith(`GET /projects/${target.projectId}/report`))).toBe(true);
 		expect(hits.elsewhere).toEqual([]);
+	});
+	it('confines the browser below Playwright: subresource redirects, WebSockets, preconnects and WebRTC never leave (positive control: the report prints)', async () => {
+		const away = [urls.elsewhere, urls.elsewhereSameHost];
+		const bounce = (to: string) => `/bounce?to=${encodeURIComponent(to)}`;
+		sitePage = (req, res) => {
+			const u = new URL(req.url!, urls.site);
+			if (u.pathname === '/bounce') {
+				res.writeHead(302, { location: u.searchParams.get('to')! });
+				res.end();
+				return;
+			}
+			if (u.pathname === '/sw.js') {
+				res.writeHead(200, { 'content-type': 'text/javascript' });
+				res.end(`self.addEventListener('install', () => fetch(${JSON.stringify(urls.elsewhere)} + '/from-worker', { mode: 'no-cors' }));`);
+				return;
+			}
+			if (u.pathname === '/logo.png') {
+				res.writeHead(200, { 'content-type': 'image/gif' });
+				res.end(Buffer.from('R0lGODlhAQABAAAAACwAAAAAAQABAAA=', 'base64'));
+				return;
+			}
+			html(
+				res,
+				`<main class="page report"><h1>Report</h1>
+				<img id="own" src="${bounce('/logo.png')}" alt="">
+				${away.map((to, i) => `<img src="${bounce(`${to}/beacon-${i}.png`)}" alt=""><link rel="stylesheet" href="${bounce(`${to}/style-${i}.css`)}"><link rel="preconnect" href="${to}">`).join('')}
+				</main>
+				<script>
+				(async () => {
+					const away = ${JSON.stringify(away)};
+					const own = document.getElementById('own');
+					await (own.complete ? Promise.resolve() : new Promise((r) => own.addEventListener('load', r, { once: true })));
+					const results = await Promise.all(away.flatMap((to) => [
+						fetch('/bounce?to=' + encodeURIComponent(to + '/fetch'), { mode: 'no-cors' }).then(() => 'reached', () => 'refused'),
+						new Promise((r) => {
+							try {
+								const ws = new WebSocket(to.replace('http', 'ws') + '/socket');
+								ws.onopen = () => r('open');
+								ws.onerror = () => r('refused');
+							} catch { r('refused'); }
+						})
+					]));
+					// A service worker's requests would outlive the page's routing: none may register.
+					await Promise.race([navigator.serviceWorker?.register('/sw.js'), new Promise((r) => setTimeout(r, 2000))]).catch(() => {});
+					try {
+						const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:${stunPort}' }] });
+						pc.createDataChannel('x');
+						await pc.setLocalDescription(await pc.createOffer());
+						await new Promise((r) => { pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && r(); setTimeout(r, 3000); });
+						pc.close();
+					} catch {}
+					document.querySelector('h1').textContent = 'own image ' + own.naturalWidth + ', ' + results.join(' ');
+					document.querySelector('main').setAttribute('data-report-ready', 'true');
+				})();
+				</script>`
+			);
+		};
+		const pdf = await renderReportPdf(target, options());
+		expect(pdf.pages).toBeGreaterThan(0);
+		// Positive control: a same-site redirect of a subresource still loads.
+		expect(hits.site).toContain(`GET /bounce?to=${encodeURIComponent('/logo.png')}`);
+		expect(hits.site).toContain('GET /logo.png');
+		// The page did ask the site to bounce it elsewhere, every way.
+		expect(hits.site.filter((h) => h.startsWith('GET /bounce?to=http')).length).toBe(away.length * 3);
+		expect(hits.site).not.toContain('GET /sw.js');
+		expect(hits.elsewhere).toEqual([]);
+		expect(reached).toEqual({ tcp: 0, udp: 0 });
 	});
 });
