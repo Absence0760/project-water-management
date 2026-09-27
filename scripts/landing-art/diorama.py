@@ -127,7 +127,13 @@ def light(mode):
 
 
 # ---- the hero camera: the help landing shot, a little higher and wider ----
-HERO = dict(loc=(10.8, -14.2, 11.8), target=(0.0, 0.2, 0.8), lens=42)
+# Wide enough that the whole block is inside the frame: at 42 mm, aimed at
+# (0, 0.2, 0.8), the block's front corner fell 16 % of the frame below the
+# bottom edge and scene_crop's clamp cut it off. Measured through the camera,
+# this framing puts everything between 3 % and 95 % of the frame's height, so
+# the crop's 2 % margin never meets an edge; modules.mjs fails the run if the
+# hero's outermost rows or columns hold anything.
+HERO = dict(loc=(10.8, -14.2, 11.8), target=(0.0, -0.4, -0.1), lens=35)
 OG = dict(loc=(13.4, -15.8, 12.0), target=(-3.2, 0.2, 0.6), lens=36)
 
 

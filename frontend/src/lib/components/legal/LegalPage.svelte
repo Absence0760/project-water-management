@@ -1,7 +1,11 @@
 <script lang="ts">
 	// The frame of the legal pages (/privacy, /terms): outside the app shell,
-	// like the landing page. A slim header with the way home, a readable
-	// column, a contents list, and the footer links. Prerendered (their
+	// like the landing page. A slim header with the way home and into the app,
+	// a readable column, a contents list (folded on a phone, where thirteen
+	// entries took the whole first screen), and the footer links. The header's
+	// button says "Open the app", not "Sign in": the page is static and can't
+	// know the session, and /login sends a signed-in reader on to their
+	// projects (routeAccess 'leave'). Prerendered (their
 	// +page.ts), so they read before any script runs and for anyone, signed in
 	// or not. English only: the English text is the binding version
 	// (docs/legal-status.md).
@@ -29,16 +33,22 @@
 			<BrandMark size={28} />
 			<span>Water Management</span>
 		</a>
-		<a class="btn" href="{base}/login">Sign in</a>
+		<a class="btn" href="{base}/login">Open the app</a>
 	</header>
 
 	<main class="doc">
 		<h1>{title}</h1>
 		<p class="effective">{effective}</p>
+		<!-- A disclosure on a phone; above 600 px the list shows and the toggle
+		     doesn't, where the browser can style the details' content (the
+		     @supports below); elsewhere it stays a working disclosure. -->
 		<nav class="toc" aria-label="Contents">
-			<ol>
-				{#each sections as s (s.id)}<li><a href="#{s.id}">{s.label}</a></li>{/each}
-			</ol>
+			<details>
+				<summary>Contents <span class="count">({sections.length} sections)</span></summary>
+				<ol>
+					{#each sections as s (s.id)}<li><a href="#{s.id}">{s.label}</a></li>{/each}
+				</ol>
+			</details>
 		</nav>
 		{@render children()}
 	</main>
@@ -104,6 +114,32 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface);
+	}
+	.toc summary {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: var(--tap);
+		margin: -0.5rem 0;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.toc summary .count {
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.toc details[open] summary {
+		margin-bottom: 0.25rem;
+	}
+	@media (min-width: 601px) {
+		@supports selector(::details-content) {
+			.toc summary {
+				display: none;
+			}
+			.toc details::details-content {
+				content-visibility: visible;
+			}
+		}
 	}
 	/* The labels carry their section numbers. */
 	.toc ol {

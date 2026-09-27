@@ -12,10 +12,13 @@
 	import { t } from '$lib/i18n/locale.svelte';
 	import Diorama, { type StepId } from './Diorama.svelte';
 	import MiniChart from './MiniChart.svelte';
+	import { ART } from './art.generated';
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
 
 	const s = DATA.story;
+	/** The scene's height over its width, for centring the pinned scene in the window. */
+	const ratio = ART.hero.height / ART.hero.width;
 	const peak = (v: readonly number[]) => Math.max(...v);
 	const rainTotal = s.rain.reduce((a, b) => a + b, 0);
 	const farmShort = s.farm.supplied.filter((v, i) => v < s.farm.demand[i]! - 1e-9).length;
@@ -45,7 +48,7 @@
 			{t('What the model works out for every day of the record, one step at a time. The charts are the {year} water year of an example catchment, by week.', { year: s.waterYear })}
 		</p>
 	</header>
-	<div class="body">
+	<div class="body" style:--scene-h-per-w={ratio.toFixed(4)}>
 		<div class="pin">
 			<Diorama mode="story" step={active} />
 		</div>
@@ -113,7 +116,7 @@
 					scale="sqrt"
 					values={s.river.flow}
 					against={s.river.reserve}
-					unit="m³/s"
+					unit={t('m³/s, on a square-root scale')}
 					label={t('Flow at the outlet')}
 					againstLabel={t('Reserve')}
 					summary={t('Below the reserve in {weeks} of 52 weeks (shaded), mostly in summer.', { weeks: s.river.weeksBelow })}
@@ -142,14 +145,20 @@
 		color: var(--text-2);
 	}
 	.body {
+		--gap: clamp(1.5rem, 4vw, 3.5rem);
 		display: grid;
 		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-		gap: clamp(1.5rem, 4vw, 3.5rem);
+		gap: var(--gap);
 		align-items: start;
+		/* The pin's offset reads the grid's width (cqw). */
+		container: story-body / inline-size;
 	}
+	/* Stuck in the middle of the window: half the window less half the scene's
+	   height (its column is 7/12 of the grid less the gap), never above 1rem, so
+	   its top is always on screen however short the window (landing.spec.ts). */
 	.pin {
 		position: sticky;
-		top: calc(50vh - 20vw);
+		top: max(1rem, calc(50vh - (100cqw - var(--gap)) * 7 / 12 * var(--scene-h-per-w) / 2));
 	}
 	.steps {
 		list-style: none;

@@ -327,6 +327,13 @@ section it belongs to, with the example that taught it.
   % full, the reserve) use the band colours (`network/farmColour.ts`,
   `overview/supplyBars.ts`), never the categorical palette; one-directional
   amounts (irrigated area) use one hue in steps.
+- **Name each bar of a pair beside it; don't key them with a split swatch.**
+  The landing's what-if drew Today and This plan as two unlabelled bars under
+  each figure with one key below, whose "This plan" swatch was half green,
+  half amber for the two figures' plan colours, and Today's grey
+  (`--border-strong`) was 1.9:1 on the card. Each bar now has its label in
+  front of it, Today is `--text-muted` (≥ 3:1, WCAG 1.4.11), and the plan's
+  supply takes the supply bands, not a categorical `--series-*`.
 - **Say what a colour means in words too** (a band label, "below 70%"), and
   name a segment on hover and focus: colour alone fails colour-blind users
   and axe.
@@ -397,6 +404,25 @@ Interaction details that bit:
   email*, and focus fell back to the start of the page. The sign-in pages'
   `h1` takes `tabindex="-1"` and `focusAuthTitle()` (`layout/AuthCard.svelte`)
   focuses it after the swap; test it with `toBeFocused()`.
+- **An animation's first frame is its still frame.** The landing's hero is
+  prerendered on its loop's last frame (dams full, the tag shown), and the
+  loop started at 0 %, so the moment the script turned motion on the dams
+  emptied and the tag vanished. Start a looping animation in its rest with a
+  negative `animation-delay` (the hero's `--rest: -11.2s`, 80 % of 14 s), and
+  test it by pausing every animation at `currentTime = 0` and comparing the
+  computed styles with the reduced-motion page (`landing.spec.ts`).
+- **Arm a hide-then-reveal on mount, not in the markup.** The landing's icons
+  drew on from `stroke-dashoffset: 1` when their card came into view, so the
+  HTML showed them drawn, the draw blanked them, then drew them again. Hide
+  only under an `armed` class set in `onMount` (as `Screens.svelte` does for
+  its rise), inside `prefers-reduced-motion: no-preference`: without script
+  and under reduced motion the thing is simply there. Put the classes on the
+  elements the rule styles: with `armed` and `draw` on the icon's `<svg>` and
+  the rule `.armed.draw path[pathLength]`, Chromium never restyled the paths
+  when `draw` arrived (a fresh copy of a path matched; the originals kept
+  their stale style), so the icons stayed blank. `path.armed.draw[pathLength]`
+  with the classes on each path works; `landing.spec.ts` checks the stroke
+  ends drawn.
 - **Svelte drops the space at the edge of an element.** A narrow-layout
   label `<span class="cell-label"> change</span>` after a number read "1change"
   (and so did its accessible text) on the Applications phone cards. Write
@@ -547,6 +573,15 @@ Interaction details that bit:
   tab's Preview all data (`series/SeriesPreviewDialog.svelte`) had the same
   drift and gap until it got the same rules (`series-preview.spec.ts`,
   fifteen years); a new virtualised table copies them.
+- **Screens taken for pictures pin the day they are taken on.** The landing's
+  app screens were taken on the seed's day, 20 months after the examples'
+  data ends, so every one warned that the rain was stale. The art spec pins
+  the browser's clock (`page.clock.setFixedTime`) a few days after the data,
+  and answers the one request the server dates by its own clock (the farm
+  view's publication and `stale`) as the server would on that day
+  (`e2e/art/landing-screens.spec.ts`). A generated picture that runs off its
+  frame fails its generator rather than a reviewer: `scripts/landing-art/modules.mjs`
+  refuses a hero with anything on its edge.
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle
