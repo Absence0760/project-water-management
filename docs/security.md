@@ -654,7 +654,10 @@ In short:
   (`app_user_visible`: anyone who is, or was, part of a project they can
   open, or in a team with them; "was" keeps a removed member's name on the
   runs, scenarios and jobs they made, which the routes inner-join), and
-  updates only their own row. No user (an API key, pre-sign-in, the tick)
+  updates only their own row. A farmer (073) sees, in a project they are
+  only a farmer in, just the accounts their pages name (the publication's
+  publisher and last editor, a farm note's author on their farm, whoever
+  linked them), never another farmer's or a member's address. No user (an API key, pre-sign-in, the tick)
   sees no account. Nobody inserts or deletes one directly: sign-up is
   `app_register`, deletion the operator's. The pre-sign-in paths use narrow
   `SECURITY DEFINER` lookups that answer one account (`app_auth_account` for
@@ -663,7 +666,8 @@ In short:
   callers only), and the token-proven flows (verify, reset) act as the
   account the token proved (`actAsUser`, `db/tx.ts`).
   `backend/src/auth/app-user.security.db.test.ts` proves each, with positive
-  controls, and lists every inner join to `app_user` in the backend so a new
+  controls, and lists every inner join to `app_user` in the backend
+  (`JOIN … ON`, an `UPDATE`'s or a comma join's `FROM app_user`) so a new
   one needs a decision. Every view must be `security_invoker` (an
   owner-rights view skips RLS): `db/catalogue.db.test.ts` fails on one that
   isn't, or on a materialized view, unless it is allowlisted with a reason.

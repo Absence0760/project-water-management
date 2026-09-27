@@ -11,14 +11,19 @@
 //      app_register, deletion is the operator's;
 //   4. the narrow SECURITY DEFINER lookups answer one account, and the
 //      by-address one only to a signed-in caller;
-//   5. every inner join to app_user in the backend's SQL is on a list, so a
-//      new one (which would drop rows whose maker RLS hides) needs a decision.
+//   5. a farmer (073) sees only the accounts their pages name: whoever
+//      published or last changed a publication, the author of a farm note on
+//      their farm, whoever linked them; never another farmer or a member who
+//      did none of those (a viewer still sees them all);
+//   6. every inner join to app_user in the backend's SQL (JOIN … ON, an
+//      UPDATE's or a comma join's FROM app_user) is on a list, so a new one
+//      (which would drop rows whose maker RLS hides) needs a decision.
 //
 // Every "cannot" has a positive control beside it.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, anon, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { type Db, withApiKey, withoutUser, withUser } from '../db/tx.js';
 
@@ -30,7 +35,14 @@ let viewer: User; // a member of it
 let leaver: User; // an editor who made a run, then was removed
 let mate: User; // in a team with the owner, no project in common
 let stranger: User; // shares nothing with anyone here
+let farmer: User; // linked to the farm, by the owner
+let neighbour: User; // a farmer on the other farm
+let publisher: User; // an editor who published the run
+let updater: User; // an editor who changed the publication
+let quiet: User; // a viewer who wrote only a staff note on the farm, and a farm note on the other farm
 let projectId: string;
+let teamId: string;
+let farmId: string;
 let keyId: string;
 
 /** Run one statement in a savepoint and roll it back: rows it touched, or the refusal's code. */
@@ -53,23 +65,48 @@ beforeAll(async () => {
 	leaver = await signUp('Rlsleaver');
 	mate = await signUp('Rlsmate');
 	stranger = await signUp('Rlsstranger');
+	farmer = await signUp('Rlsfarmer');
+	neighbour = await signUp('Rlsneighbour');
+	publisher = await signUp('Rlspublisher');
+	updater = await signUp('Rlsupdater');
+	quiet = await signUp('Rlsquiet');
 	projectId = (await owner.call('POST', '/projects', { name: 'app_user RLS catchment' })).body.project.id;
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: leaver.email, role: 'editor' })).status).toBe(201);
 	// A model the leaver can run.
 	const outlet = node('Outlet', null);
 	const farm = node('Farm', outlet.id);
+	const farm2 = node('Other farm', outlet.id);
+	farmId = farm.id;
 	const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
 	expect(
-		(await owner.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] })).status
+		(await owner.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm, farm2], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] })).status
 	).toBe(200);
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const days = Array.from({ length: 30 }, (_, i) => (i % 5 === 0 ? 10 : 0));
 	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: days })).status).toBe(200);
-	expect((await leaver.call('POST', `/projects/${projectId}/runs`, { label: 'Leaver run' })).status).toBe(201);
+	const run = await leaver.call('POST', `/projects/${projectId}/runs`, { label: 'Leaver run' });
+	expect(run.status).toBe(201);
 	expect((await owner.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBeLessThan(300);
+	// Two farmers, the staff their pages name, and staff they don't.
+	for (const [u, role] of [
+		[publisher, 'editor'],
+		[updater, 'editor'],
+		[quiet, 'viewer']
+	] as const) {
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
+	}
+	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] })).status).toBe(201);
+	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: neighbour.email, nodeIds: [farm2.id] })).status).toBe(201);
+	expect((await viewer.call('POST', `/projects/${projectId}/notes`, { body: 'For the farmer', nodeId: farm.id, visibility: 'farm' })).status).toBe(201);
+	expect((await quiet.call('POST', `/projects/${projectId}/notes`, { body: 'Staff only', nodeId: farm.id, visibility: 'team' })).status).toBe(201);
+	expect((await quiet.call('POST', `/projects/${projectId}/notes`, { body: 'For the neighbour', nodeId: farm2.id, visibility: 'farm' })).status).toBe(201);
+	expect((await neighbour.call('POST', `/projects/${projectId}/notes`, { body: 'Mine', nodeId: farm2.id })).status).toBe(201);
+	const pub = await publisher.call('POST', `/projects/${projectId}/publication`, { runId: run.body.run.id });
+	expect(pub.status, JSON.stringify(pub.body)).toBe(201);
+	expect((await updater.call('PATCH', `/projects/${projectId}/publication/${pub.body.publication.id}`, { nextExpectedOn: '2031-01-01' })).status).toBe(200);
 	// A team the owner and the mate share, with no project.
-	const teamId = (await owner.call('POST', '/teams', { name: 'RLS team' })).body.team.id;
+	teamId = (await owner.call('POST', '/teams', { name: 'RLS team' })).body.team.id;
 	expect((await owner.call('POST', `/teams/${teamId}/members`, { email: mate.email, role: 'member' })).status).toBe(201);
 	// The stranger has a project of their own, alone.
 	expect((await stranger.call('POST', '/projects', { name: 'Stranger catchment' })).status).toBe(201);
@@ -77,6 +114,11 @@ beforeAll(async () => {
 	expect(key.status).toBe(201);
 	keyId = key.body.key.id;
 }, 60_000);
+
+afterAll(async () => {
+	// Leave no job (the publication's alert evaluation) for another file's tick.
+	await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+});
 
 describe('without a signed-in person', () => {
 	it('shows no account and changes none, with no user (positive control: the owner role sees them all)', async () => {
@@ -116,6 +158,22 @@ describe('signed in', () => {
 		expect(runs.map((r) => [r.label, r.createdBy])).toEqual([['Leaver run', 'Rlsleaver']]);
 	});
 
+	it('changes a current member’s role through UPDATE … FROM app_user, and a former member’s answers 404 as before', async () => {
+		// Positive control: the owner sees the viewer, so the joined row is there and names them.
+		const ok = await owner.call('PATCH', `/projects/${projectId}/members/${viewer.id}`, { party: 'WUA' });
+		expect(ok.status).toBe(200);
+		expect(ok.body.member).toMatchObject({ userId: viewer.id, email: viewer.email, displayName: 'Rlsviewer', party: 'WUA' });
+		// The removed member has no membership row to change, visible to the owner or not.
+		expect((await withUser(owner.id, visibleIds)).has(leaver.id)).toBe(true);
+		expect((await owner.call('PATCH', `/projects/${projectId}/members/${leaver.id}`, { party: 'x' })).status).toBe(404);
+		// The team's: the mate is a team-mate, so the join finds them.
+		const team = await owner.call('PATCH', `/teams/${teamId}/members/${mate.id}`, { role: 'viewer' });
+		expect(team.status).toBe(200);
+		expect(team.body.member).toMatchObject({ userId: mate.id, email: mate.email, displayName: 'Rlsmate', role: 'viewer' });
+		// Someone no longer in the team: no row, 404.
+		expect((await owner.call('PATCH', `/teams/${teamId}/members/${stranger.id}`, { role: 'viewer' })).status).toBe(404);
+	});
+
 	it('updates only their own row', async () => {
 		await withUser(owner.id, async (db) => {
 			expect(await attempt(db, 'UPDATE app_user SET display_name = display_name WHERE id = $1', [owner.id])).toBe(1);
@@ -138,6 +196,47 @@ describe('signed in', () => {
 			const { rows: again } = await db.query<{ id: string | null }>("SELECT app_register($1, 'Again', 'x', NULL) AS id", [owner.email]);
 			expect(again[0]!.id).toBeNull();
 		});
+	});
+});
+
+describe('a farmer', () => {
+	it('sees only themself and the people their pages name (positive control: a viewer sees every co-member)', async () => {
+		const seen = await withUser(farmer.id, visibleIds);
+		// Themself; the owner (who linked them), the viewer (a farm note on their farm), the publisher and the updater.
+		expect([...seen].sort()).toEqual([farmer.id, owner.id, viewer.id, publisher.id, updater.id].sort());
+		// Not the other farmer, not staff whose only trace is a staff note or a note on another farm, not the removed member.
+		expect([neighbour.id, quiet.id, leaver.id, mate.id, stranger.id].filter((id) => seen.has(id))).toEqual([]);
+		// The neighbour likewise: their linker, the author of the note on their farm, the publication's people.
+		expect([...(await withUser(neighbour.id, visibleIds))].sort()).toEqual([neighbour.id, owner.id, quiet.id, publisher.id, updater.id].sort());
+		const viewerSees = await withUser(viewer.id, visibleIds);
+		expect([owner.id, farmer.id, neighbour.id, publisher.id, updater.id, quiet.id, leaver.id].filter((id) => !viewerSees.has(id))).toEqual([]);
+	});
+
+	it('still sees every name their pages show', async () => {
+		const notes = await farmer.call('GET', `/projects/${projectId}/notes?nodeId=${farmId}`);
+		expect(notes.status).toBe(200);
+		expect((notes.body.notes as { body: string; author: string }[]).map((n) => [n.body, n.author])).toEqual([['For the farmer', 'Rlsviewer']]);
+		const pubs = await farmer.call('GET', `/projects/${projectId}/publication`);
+		expect(pubs.status).toBe(200);
+		expect(pubs.body.current).toMatchObject({ publishedBy: 'Rlspublisher', updatedBy: 'Rlsupdater' });
+		const view = await farmer.call('GET', `/projects/${projectId}/farm/${farmId}`);
+		expect(view.status).toBe(200);
+		expect(view.body.publication.publishedBy).toBe('Rlspublisher');
+		const exp = await app.request('/auth/me/export', { headers: { cookie: farmer.cookie, origin: ORIGIN } });
+		expect(exp.status).toBe(200);
+		const doc = (await exp.json()) as { farms: { nodeId: string; linkedBy: string | null }[] };
+		expect(doc.farms.map((f) => [f.nodeId, f.linkedBy])).toEqual([[farmId, 'Rlsowner']]);
+	});
+
+	it('sees co-members as before once they are more than a farmer in the project', async () => {
+		await asOwner(`UPDATE project_member SET role = 'viewer' WHERE project_id = $1 AND user_id = $2`, [projectId, farmer.id]);
+		try {
+			const seen = await withUser(farmer.id, visibleIds);
+			expect([neighbour.id, quiet.id, leaver.id].filter((id) => !seen.has(id))).toEqual([]);
+		} finally {
+			await asOwner(`UPDATE project_member SET role = 'farmer' WHERE project_id = $1 AND user_id = $2`, [projectId, farmer.id]);
+		}
+		expect((await withUser(farmer.id, visibleIds)).has(neighbour.id)).toBe(false);
 	});
 });
 
@@ -173,9 +272,12 @@ describe('the SECURITY DEFINER lookups', () => {
 });
 
 // The backend's SQL that inner-joins app_user, each with why its account is
-// always visible to whoever runs it (app_user_visible, 068). An inner join to
-// an account RLS hides drops the whole row, so a new one needs a decision
-// here: a LEFT JOIN, or a case app_user_visible covers.
+// always visible to whoever runs it (app_user_visible, 068 and 073). An inner
+// join to an account RLS hides drops the whole row, so a new one needs a
+// decision here: a LEFT JOIN, or a case app_user_visible covers. Three
+// spellings: `JOIN app_user x ON …`, and `FROM app_user x` (an UPDATE's
+// FROM, or a comma join, `FROM t, app_user x`) keyed by its `x.id = …`
+// condition. A farmer runs only the ones whose account is themself.
 const INNER_JOINS = new Map<string, string>([
 	['projects/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['projects/importReport.ts JOIN app_user u ON u.id = i.imported_by', 'project_import.imported_by is in app_user_visible'],
@@ -193,7 +295,12 @@ const INNER_JOINS = new Map<string, string>([
 	['reports/store.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['reports/store.ts JOIN app_user u ON u.id = $3', 'the requester, whose job transaction this is'],
 	['jobs/queue.ts JOIN app_user u ON u.id = j.acting_user_id', 'job.acting_user_id is in app_user_visible'],
-	['invites/invites.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible']
+	['invites/invites.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible'],
+	// UPDATE … FROM app_user: the member being changed, by an owner / a team admin.
+	// A removed member has no membership row to update, so 404 either way.
+	['projects/routes.ts FROM app_user u WHERE u.id = m.user_id', 'a current project member (the owner changing their role)'],
+	['teams/routes.ts FROM app_user u WHERE u.id = m.user_id', 'a current team member (a team-mate of the admin)'],
+	['alerts/send.ts FROM app_user u WHERE u.id = app_current_user_id()', 'the caller’s own row']
 ]);
 
 describe('inner joins to app_user', () => {
@@ -209,13 +316,30 @@ describe('inner joins to app_user', () => {
 		};
 		walk(src);
 		const found = new Set<string>();
+		// A table alias, not the clause after an unaliased `FROM app_user`.
+		const KEYWORDS = new Set(['WHERE', 'FOR', 'SET', 'ORDER', 'GROUP', 'LIMIT', 'JOIN', 'LEFT', 'INNER', 'CROSS', 'ON', 'RETURNING', 'UNION', 'AS']);
 		for (const f of files) {
-			for (const m of readFileSync(f, 'utf8').matchAll(/(?<!LEFT\s+)\bJOIN\s+app_user\s+(\w+)\s+ON\s+([\w.$]+\s*=\s*[\w.$]+)/g)) {
-				found.add(`${relative(src, f)} JOIN app_user ${m[1]} ON ${m[2]!.replace(/\s+/g, ' ')}`);
+			const text = readFileSync(f, 'utf8');
+			const at = relative(src, f);
+			for (const m of text.matchAll(/(?<!LEFT\s+)\bJOIN\s+app_user\s+(\w+)\s+ON\s+([\w.$]+\s*=\s*[\w.$]+)/g)) {
+				found.add(`${at} JOIN app_user ${m[1]} ON ${m[2]!.replace(/\s+/g, ' ')}`);
+			}
+			// FROM app_user x / , app_user x (and an unaliased one followed by a comma: a comma join).
+			for (const m of text.matchAll(/(?:\bFROM|,)\s*app_user\b(?!_)(?:\s+(?:AS\s+)?(\w+))?(\s*,)?/g)) {
+				const alias = m[1] && !KEYWORDS.has(m[1].toUpperCase()) ? m[1] : null;
+				const isComma = m[0].trimStart().startsWith(',') || m[2] !== undefined;
+				if (!alias && !isComma) continue; // `FROM app_user WHERE id = …`: one table, no join
+				const q = alias ?? 'app_user';
+				// The statement: up to the end of its template literal.
+				const rest = text.slice(m.index! + m[0].length);
+				const stmt = rest.slice(0, rest.indexOf('`') >= 0 ? rest.indexOf('`') : undefined);
+				const cond = new RegExp(`\\b${q}\\.id\\s*=\\s*([\\w.$]+(?:\\(\\))?)`).exec(stmt);
+				found.add(`${at} ${isComma ? ', ' : 'FROM '}app_user ${q} WHERE ${cond ? `${q}.id = ${cond[1]}` : '?'}`);
 			}
 		}
-		// Not vacuous: the scan finds the run list's join.
+		// Not vacuous: the scan finds the run list's join and an UPDATE's FROM.
 		expect(found.has('runs/routes.ts JOIN app_user u ON u.id = r.created_by')).toBe(true);
+		expect(found.has('projects/routes.ts FROM app_user u WHERE u.id = m.user_id')).toBe(true);
 		expect([...found].filter((j) => !INNER_JOINS.has(j))).toEqual([]);
 		expect([...INNER_JOINS.keys()].filter((j) => !found.has(j))).toEqual([]);
 	});

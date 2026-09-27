@@ -1514,7 +1514,13 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   people you work with (`app_user_visible`), update your own row only; the
   pre-sign-in lookups are `SECURITY DEFINER` functions answering one account
   ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)).
-  The backend never selects `password_hash` into a response.
+  In a project where you are only a farmer (073), the people you work with are
+  just those your pages name: who published or last changed a publication,
+  the author of a farm note on one of your farms, and whoever linked you; no
+  other farmer or member. `app_user_visible` runs per row of every `app_user`
+  read, so each branch is an indexed lookup on the account id (every foreign
+  key has a covering index) against your own projects; keep a new branch that
+  way. The backend never selects `password_hash` into a response.
 - Every view is `security_invoker`, so RLS applies through it (catalogue guard).
 
 ### Email tokens and invites (004_email.sql)
