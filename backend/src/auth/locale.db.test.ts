@@ -7,7 +7,7 @@
 // came out in: test data only, never wording that ships.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { anon, asOwner, lastMailTo, node, signUp, tokenIn } from '../__tests__/helpers.js';
-import { withoutUser, withUser } from '../db/tx.js';
+import { withUser } from '../db/tx.js';
 
 vi.mock('../mail/i18n/af.js', async () => {
 	const { en } = await vi.importActual<typeof import('../mail/i18n/en.js')>('../mail/i18n/en.js');
@@ -131,7 +131,8 @@ describe('a new account takes its language from the invite it accepts (050, app_
 		await invite(email, 'af'); // confirm mode: the invite rides on a verify link
 		const token = tokenIn(lastMailTo(email));
 		expect((await anon('POST', '/auth/verify-email', { token })).status).toBe(200);
-		const locale = await withoutUser(async (db) => (await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = $1', [user.id])).rows[0]?.locale);
+		// As the account itself: app_user is under RLS (068).
+		const locale = await withUser(user.id, async (db) => (await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = $1', [user.id])).rows[0]?.locale);
 		expect(locale).toBe('af');
 	});
 });

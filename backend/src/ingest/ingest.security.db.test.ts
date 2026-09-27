@@ -135,9 +135,15 @@ describe('a key of the same project, in every table and view', () => {
 	let relations: { name: string; kind: string }[] = [];
 
 	// Every table under RLS, and every view (a view runs as its owner unless it
-	// is security_invoker, so it could show what RLS hides). The tables without
-	// RLS (app_user, read before sign-in; schema_migrations) are
-	// catalogue.db.test.ts NO_RLS: app code, not a policy, keeps them from a key.
+	// is security_invoker, so it could show what RLS hides; catalogue.db.test.ts
+	// requires security_invoker). app_user is in the sweep since it came under
+	// RLS (068_app_user_rls.sql); the one table without RLS, schema_migrations,
+	// has no grant to water_app at all.
+	it('positive control: app_user is in the sweep, and has rows a key must not see', async () => {
+		expect(relations.map((r) => r.name)).toContain('app_user');
+		const [{ n }] = await asOwner('SELECT count(*)::int AS n FROM app_user');
+		expect(n).toBeGreaterThan(0);
+	});
 	beforeAll(async () => {
 		relations = (
 			await asOwner(

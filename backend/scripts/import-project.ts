@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { hashPassword } from '../src/auth/password.js';
 import { closePool } from '../src/db/pool.js';
-import { withoutUser } from '../src/db/tx.js';
+import { actAsUser, withoutUser } from '../src/db/tx.js';
 // The same validation and transaction as POST /projects/import.
 import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
 
@@ -37,18 +37,23 @@ export async function importProjectData(raw: unknown, email: string, opts: Impor
 	const data = parseProjectFile(raw);
 
 	const userId = await withoutUser(async (db) => {
-		const { rows } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [email.toLowerCase()]);
+		// app_user is under RLS (068_app_user_rls.sql): its SECURITY DEFINER lookups.
+		const { rows } = await db.query<{ id: string }>('SELECT id FROM app_auth_account($1)', [email.toLowerCase()]);
 		if (rows[0]) return rows[0].id;
 		if (!opts.password) throw new Error(`no user ${email} — register first or pass --password to create one`);
 		const hash = await hashPassword(opts.password);
-		const { rows: created } = await db.query<{ id: string }>(
-			// Created by an operator script (demo/seed users), not self-service
-			// sign-up, so no verification email: the address starts verified.
-			`INSERT INTO app_user (email, display_name, password_hash, email_verified_at)
-			 VALUES ($1, $2, $3, now()) RETURNING id`,
-			[email.toLowerCase(), opts.displayName ?? email.split('@')[0], hash]
-		);
-		return created[0]!.id;
+		const { rows: created } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, NULL) AS id', [
+			email.toLowerCase(),
+			opts.displayName ?? email.split('@')[0],
+			hash
+		]);
+		const id = created[0]?.id;
+		if (!id) throw new Error(`${email} was registered a moment ago — run the import again`);
+		// Created by an operator script (demo/seed users), not self-service
+		// sign-up, so no verification email: the address starts verified.
+		await actAsUser(db, id);
+		await db.query('UPDATE app_user SET email_verified_at = now() WHERE id = $1', [id]);
+		return id;
 	});
 
 	const { projectId, runError } = await importProjectFile(userId, data, { name: opts.name, run: opts.run });

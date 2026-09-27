@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { withoutUser, withUser, type Db } from '../db/tx.js';
+import { actAsUser, withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
 import { markVerified, verificationMail } from './email-routes.js';
@@ -91,13 +91,18 @@ export const authRoutes = new Hono<AuthEnv>()
 		const hash = await hashPassword(body.password);
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
 		const result = await withoutUser(async (db) => {
-			const { rows } = await db.query<UserRow>(
-				`INSERT INTO app_user (email, display_name, password_hash, locale) VALUES ($1, $2, $3, $4)
-				 ON CONFLICT (email) DO NOTHING RETURNING ${USER_COLS}`,
-				[body.email, body.displayName, hash, body.locale ?? null]
-			);
-			const row = rows[0];
-			if (!row) return null;
+			// app_user is under RLS (068): the insert goes through app_register,
+			// and from then on this transaction is the new account's.
+			const { rows: created } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, $4) AS id', [
+				body.email,
+				body.displayName,
+				hash,
+				body.locale ?? null
+			]);
+			const id = created[0]?.id;
+			if (!id) return null;
+			await actAsUser(db, id);
+			const row = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [id])).rows[0]!;
 			// A live invite for exactly this address proves the inbox.
 			if (inviteHash) {
 				const { rows: inv } = await db.query<{ email: string }>('SELECT email FROM app_invite_for_token($1)', [
@@ -126,10 +131,10 @@ export const authRoutes = new Hono<AuthEnv>()
 		const { lockedSeconds, row } = await withoutUser(async (db) => {
 			const lockedSeconds = await countAttempt(db, body.email);
 			if (lockedSeconds > 0) return { lockedSeconds, row: undefined };
-			const { rows } = await db.query<UserRow & { password_hash: string }>(
-				`SELECT ${USER_COLS}, password_hash FROM app_user WHERE email = $1`,
-				[body.email]
-			);
+			// app_user is under RLS (068) and nobody is signed in yet: the one-address lookup.
+			const { rows } = await db.query<{ id: string; password_hash: string }>('SELECT id, password_hash FROM app_auth_account($1)', [
+				body.email
+			]);
 			return { lockedSeconds, row: rows[0] };
 		});
 		if (lockedSeconds > 0) {
@@ -138,9 +143,14 @@ export const authRoutes = new Hono<AuthEnv>()
 		}
 		const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
 		if (!row || !ok) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
-		await withoutUser((db) => db.query('SELECT app_login_succeeded($1)', [body.email]));
+		// The password proved the account: read it as its owner.
+		const user = await withUser(row.id, async (db) => {
+			await db.query('SELECT app_login_succeeded($1)', [body.email]);
+			return (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
+		});
+		if (!user) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		await issueSession(c, row.id);
-		return c.json({ user: toUser(row) });
+		return c.json({ user: toUser(user) });
 	})
 	.post('/logout', (c) => {
 		clearSession(c);
@@ -150,14 +160,14 @@ export const authRoutes = new Hono<AuthEnv>()
 	// now, so every session issued before it is rejected (session.ts).
 	.post('/logout-everywhere', requireUser, async (c) => {
 		// This server's clock, the one that stamps session iat_ms (see reset-password).
-		await withoutUser((db) =>
+		await withUser(c.get('userId'), (db) =>
 			db.query('UPDATE app_user SET sessions_revoked_at = $2 WHERE id = $1', [c.get('userId'), new Date()])
 		);
 		clearSession(c);
 		return c.body(null, 204);
 	})
 	.get('/me', requireUser, async (c) => {
-		const row = await withoutUser(async (db) => {
+		const row = await withUser(c.get('userId'), async (db) => {
 			const { rows } = await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [
 				c.get('userId')
 			]);
@@ -186,7 +196,7 @@ export const authRoutes = new Hono<AuthEnv>()
 	.patch('/me', requireUser, async (c) => {
 		const body = MeBody.parse(await readJson(c));
 		// Only the fields sent change; locale may be set back to null (follow the browser).
-		const row = await withoutUser(async (db) => {
+		const row = await withUser(c.get('userId'), async (db) => {
 			const { rows } = await db.query<UserRow>(
 				`UPDATE app_user SET
 					display_name = coalesce($2, display_name),
@@ -208,7 +218,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		const body = ChangePasswordBody.parse(await readJson(c));
 		const userId = c.get('userId');
 		// Counted in its own transaction before the bcrypt check, as in login.
-		const { lockedSeconds, row } = await withoutUser(async (db) => {
+		const { lockedSeconds, row } = await withUser(userId, async (db) => {
 			const { rows } = await db.query<{ email: string; password_hash: string }>(
 				'SELECT email, password_hash FROM app_user WHERE id = $1',
 				[userId]

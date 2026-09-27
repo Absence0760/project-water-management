@@ -1495,8 +1495,12 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - RLS is `ENABLE`d but not `FORCE`d. The table owner (`water`) and the
   `SECURITY DEFINER` helpers bypass it on purpose, and `water_app` is never the
   owner.
-- `app_user` has no RLS: login has to look a user up by email before anyone is
-  signed in. The backend never selects `password_hash` into a response.
+- `app_user` is under RLS since `068_app_user_rls.sql`: your own row and the
+  people you work with (`app_user_visible`), update your own row only; the
+  pre-sign-in lookups are `SECURITY DEFINER` functions answering one account
+  ([security.md § Authorization](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)).
+  The backend never selects `password_hash` into a response.
+- Every view is `security_invoker`, so RLS applies through it (catalogue guard).
 
 ### Email tokens and invites (004_email.sql)
 
