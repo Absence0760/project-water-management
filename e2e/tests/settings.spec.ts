@@ -90,7 +90,10 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'Outcome matrix',
 		'Seasonal outlook',
 		'Automatic runs',
-		'Data feeds'
+		'Data feeds',
+		// The panels after Data feeds, which save on their own (API keys: an owner's only).
+		'API keys',
+		'Scheduled reports'
 	]);
 	await expect(menu.getByRole('link', { name: 'Demand' })).toHaveAttribute('aria-current', 'location');
 
