@@ -88,6 +88,7 @@ beforeAll(async () => {
 	invitee = await signUp('Pvinvitee', { verified: false });
 	projectId = (await owner.call('POST', '/projects', { name: 'Farmer privacy' })).body.project.id;
 	const bh = (nodeId: string, name: string) => ({ id: crypto.randomUUID(), nodeId, name, capacityM3Day: 50, annualCapM3: 15_000, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0.2 });
+	const town = (nodeId: string, name: string) => ({ id: crypto.randomUUID(), nodeId, name, category: 'municipal', sizing: 'monthly', monthlyM3Day: monthly(120), returnPct: 0.4, priority: 'first' });
 	const patch = (nodeId: string) => ({ id: crypto.randomUUID(), nodeId, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null });
 	const model = {
 		nodes: [outlet, home, theirs, unlinked],
@@ -100,7 +101,9 @@ beforeAll(async () => {
 		// One transfer between the two neighbours' farms only: neither end is Home's.
 		transfers: [{ id: crypto.randomUUID(), fromNodeId: theirs.id, toNodeId: unlinked.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }],
 		landCover: [patch(home.id), patch(theirs.id)],
-		boreholes: [bh(home.id, 'BH home'), bh(theirs.id, `BH ${MARKER}`)]
+		boreholes: [bh(home.id, 'BH home'), bh(theirs.id, `BH ${MARKER}`)],
+		// Demand objects (088): a farmer reads only their own units'.
+		demandObjects: [town(home.id, 'Home town'), town(theirs.id, `Town ${MARKER}`)]
 	};
 	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(3000) } })).status).toBe(200);
@@ -212,7 +215,7 @@ describe('table sweep: a farmer reads only their own farms’ rows', () => {
 	it('finds the project tables and the farm-scoped ones, and the neighbour has rows in them (the sweep is not vacuous)', async () => {
 		expect(inv.tables.length).toBeGreaterThan(30);
 		for (const t of Object.keys(FARMER_MAY_READ)) expect(inv.tables, `FARMER_MAY_READ names ${t}: renamed? update the list`).toContain(t);
-		const core = ['node', 'crop_area', 'transfer', 'land_cover', 'borehole', 'farm_link', 'invite_node', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
+		const core = ['node', 'crop_area', 'transfer', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'invite_node', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
 		for (const t of core) {
 			const cols = [...(inv.refs.get(t) ?? [])];
 			expect(cols.length, `${t} names a node`).toBeGreaterThan(0);
@@ -226,7 +229,7 @@ describe('table sweep: a farmer reads only their own farms’ rows', () => {
 			[farmer, home],
 			[neighbour, theirs]
 		] as const) {
-			const tables = ['node', 'crop_area', 'land_cover', 'borehole', 'farm_link', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
+			const tables = ['node', 'crop_area', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
 			await withUser(u.id, async (db) => {
 				for (const t of tables) {
 					const cols = [...inv.refs.get(t)!];

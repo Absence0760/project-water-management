@@ -392,16 +392,18 @@ build, median of 9 loads of an 8-year run, time to the hydrograph's first
 paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 `auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.
 
-## The landing page: the one prerendered route
+## The landing page: the prerendered routes
 
 The app is a static SPA (`ssr = false`, `prerender = false` in
 `routes/+layout.ts`): every route renders in the browser from the fallback
 `index.html`. The public landing page (issue #57) is the exception.
-`routes/welcome/+page.ts` sets `ssr = true` and `prerender = true`, so the
+`routes/welcome/+page.ts` sets `ssr = true` and `prerender = true` (as do the
+legal pages, `routes/privacy` and `routes/terms`: `STATIC_PATHS` in
+`lib/auth/session.svelte.ts`), so the
 build writes `welcome.html` with the page's HTML and its meta and Open Graph
 tags in it: crawlers and link previews read it without running the app, and a
 visitor sees it before any script. CloudFront's `spa_rewrite` function serves
-`/welcome` from `welcome.html` (`infra/s3_cloudfront.tf`, guarded in
+`/welcome` from `welcome.html`, and `/privacy` and `/terms` from theirs (`infra/s3_cloudfront.tf`, guarded in
 `guardrails.tftest.hcl`; the e2e static server mirrors it). The absolute URLs in
 its tags come from `kit.prerender.origin`: the build's `SITE_ORIGIN` (the
 deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.

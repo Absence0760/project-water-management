@@ -143,12 +143,14 @@ export function inviteMail(
 		action: confirm
 			? { label: 'Confirm email and accept', url }
 			: { label: 'Create account and accept', url },
-		footer: confirm
+		// The privacy notice's address: an invitee's details are processed before they reach sign-up (POPIA s18).
+		footer: (confirm
 			? [
 					'This link expires in 48 hours.',
 					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
 				]
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
+		).concat(`How we handle your information: ${sitePage('/privacy')}`)
 	});
 }
 
@@ -188,9 +190,13 @@ export function farmerInviteMail(
 				tr.t(confirm ? 'mail.invite.confirm' : 'mail.invite.signUp', v)
 			],
 			action: { label: tr.t(confirm ? 'mail.invite.confirmAction' : 'mail.invite.signUpAction'), url },
-			footer: confirm
-				? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
-				: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]
+			// The privacy notice's address: a farmer's details are processed before they reach sign-up (POPIA s18).
+			footer: [
+				...(confirm
+					? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
+					: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]),
+				tr.t('mail.invite.privacy', { url: sitePage('/privacy') })
+			]
 		},
 		tr
 	);

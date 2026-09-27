@@ -18,8 +18,9 @@ const PHONE = { width: 390, height: 844 };
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 type Cell = { reserveDays: number; supplied: number };
 const { DATA } = (await import(pathToFileURL(path.join(ROOT, 'frontend/src/lib/components/landing/data.generated.ts')).href)) as {
-	DATA: { whatIf: { farm: string; extraHa: number[]; damScale: number[]; grid: Cell[][] } };
+	DATA: { hero: { calibrationNse: number }; whatIf: { farm: string; extraHa: number[]; damScale: number[]; grid: Cell[][] } };
 };
+const DESKTOP = { width: 1280, height: 800 };
 
 const headline = (page: Page) => page.getByRole('heading', { level: 1, name: HEADLINE });
 
@@ -68,6 +69,8 @@ test('/welcome is prerendered HTML with its link-preview tags, before any script
 	const html = await res.text();
 	// The content is in the HTML itself, not rendered by the client.
 	expect(html).toContain(HEADLINE);
+	// No inline event handler survived prerendering (an img's onload did once): the CSP blocks them (infra/scripts/check-csp.mjs).
+	expect(html).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/i);
 	expect(html).toContain('From rainfall to river');
 	expect(html).toMatch(/<meta name="description" content="Model a catchment day by day/);
 	expect(html).toMatch(/<meta property="og:title" content="Water Management: daily water balance for a catchment"/);
@@ -124,6 +127,163 @@ test('the hero moves only when motion is allowed, and rests on its last frame ot
 	// Scrolled out of view, the loop pauses.
 	await page.getByRole('heading', { level: 2, name: 'Why trust it' }).scrollIntoViewIfNeeded();
 	await expect(scene).toHaveAttribute('data-playing', 'no');
+});
+
+test('the hero’s first animated frame is its still frame, so turning motion on changes nothing', async ({ page }) => {
+	// What each animated part shows: its opacity and transform, and the pulse's dash.
+	const frame = () =>
+		page.evaluate(() => {
+			const q = (sel: string) => document.querySelector(`.hero ${sel}`)!;
+			// At rest a transform reads as the identity (or a zero translate) where the still frame sets none.
+			const rest = (v: string) => {
+				// Rounded, so a rotate(0deg) reached through the keyframes (1.5e-17 off) reads as none.
+				const m = /^matrix\((.*)\)$/.exec(v)?.[1]?.split(',').map((n) => Math.round(Number(n) * 1000) / 1000 + 0);
+				if (m && m.join() === '1,0,0,1,0,0') return 'none';
+				return /^0px( 0px)?$/.test(v) ? 'none' : v;
+			};
+			const of = (el: Element) => {
+				const cs = getComputedStyle(el);
+				return { opacity: Number(cs.opacity).toFixed(2), transform: rest(cs.transform), translate: rest(cs.translate) };
+			};
+			return {
+				// The streaks are hidden by their own opacity when still and by their group's in the loop's rest: what shows is the product.
+				rain: (Number(getComputedStyle(q('.rain')).opacity) * Number(getComputedStyle(q('.rain path')).opacity)).toFixed(2),
+				glow: of(q('.streams .glow')),
+				dam: of(q('.dams path')),
+				needle: of(q('.gauge path')),
+				tag: of(q('.tag')),
+				pulse: Number.parseFloat(getComputedStyle(q('.streams .pulse')).strokeDashoffset) % 114
+			};
+		});
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto('/');
+	await expect(page.locator('.hero .scene')).toHaveAttribute('data-motion', 'off');
+	const still = await frame();
+
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.reload();
+	const scene = page.locator('.hero .scene');
+	await expect(scene).toHaveAttribute('data-motion', 'on');
+	// Hold every loop on its first frame (its current time 0, where the negative delay puts it in the rest).
+	await page.evaluate(() => {
+		for (const a of document.querySelector('.hero .scene')!.getAnimations({ subtree: true })) {
+			a.pause();
+			a.currentTime = 0;
+		}
+	});
+	expect(await frame()).toEqual(still);
+});
+
+test('the audience icons are drawn without script and under reduced motion, and wait undrawn only once armed', async ({ browser, page }) => {
+	const dash = (p: Page) => p.locator('.audiences svg path[pathLength]').first().evaluate((el) => getComputedStyle(el).strokeDashoffset);
+	const noScript = await browser.newContext({ javaScriptEnabled: false });
+	const still = await noScript.newPage();
+	await still.goto('/welcome');
+	await expect(still.getByRole('heading', { level: 2, name: 'Who it’s for' })).toBeAttached();
+	expect(await dash(still)).toBe('0px');
+	await noScript.close();
+
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto('/');
+	await expect(page.locator('.audiences')).toHaveAttribute('data-armed', 'yes');
+	expect(await dash(page)).toBe('0px');
+
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.reload();
+	await expect(page.locator('.audiences')).toHaveAttribute('data-armed', 'yes');
+	// Out of view, armed: waiting undrawn (it never flashes drawn, then blank, then drawn).
+	expect(await dash(page)).toBe('1px');
+	await page.locator('.audiences ul').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+	await expect.poll(() => dash(page)).toBe('0px');
+});
+
+test('on a desktop the story’s pinned scene fits the window, and the step in the middle lights its part', async ({ page }) => {
+	await page.setViewportSize(DESKTOP);
+	await page.goto('/');
+	const scene = page.locator('.story .scene');
+	const pin = page.locator('.story .pin');
+	for (const step of ['rain', 'runoff', 'dams', 'farms', 'river'] as const) {
+		const card = page.locator(`.story .steps li[data-step="${step}"]`);
+		await card.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+		await expect(scene).toHaveAttribute('data-step', step);
+		await expect(card).toHaveClass(/\bon\b/);
+		await expect(page.locator('.story .steps li.on')).toHaveCount(1);
+		// The whole scene is on screen; once stuck (past the first step), centred in the window.
+		const box = (await pin.boundingBox())!;
+		expect(box.y, `${step}: pin top`).toBeGreaterThanOrEqual(0);
+		expect(box.y + box.height, `${step}: pin bottom`).toBeLessThanOrEqual(DESKTOP.height);
+		if (step !== 'rain') expect(Math.abs(box.y + box.height / 2 - DESKTOP.height / 2), `${step}: pin centred`).toBeLessThan(24);
+	}
+	// The river's chart says its scale is not linear.
+	await expect(page.locator('.story li[data-step="river"] svg text.unit')).toHaveText('m³/s, on a square-root scale');
+});
+
+test('the story’s heading is on the first screen at 1440 × 960, and the page doesn’t scroll sideways at desktop sizes', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto('/');
+	const heading = page.getByRole('heading', { level: 2, name: 'From rainfall to river' });
+	await expect(heading).toBeInViewport({ ratio: 1 });
+	await expectNoSidewaysScroll(page);
+	await page.setViewportSize(DESKTOP);
+	await expectNoSidewaysScroll(page);
+	// The header's controls are touch-sized.
+	const signIn = page.getByRole('banner').getByRole('link', { name: 'Sign in' });
+	expect((await signIn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+});
+
+test('the trust figures are the example catchment’s, the model’s fit to its weir among them', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.goto('/');
+	const trust = page.getByRole('region', { name: 'Why trust it' });
+	await expect(trust.getByText('In the example catchment')).toBeVisible();
+	await expect(trust.locator('dd').nth(2).locator('.visually-hidden')).toHaveText(DATA.hero.calibrationNse.toFixed(2));
+	await expect(trust.getByText('fit to the weir’s measured flow (NSE, where 1 is perfect)')).toBeVisible();
+});
+
+test('the what-if names each bar, draws today in a muted grey and the plan’s supply in the supply bands', async ({ page }) => {
+	await page.goto('/');
+	const card = page.getByRole('region', { name: 'Try a what-if' });
+	await card.scrollIntoViewIfNeeded();
+	const supply = card.locator('.figure').first();
+	await expect(supply.locator('.bar-label')).toHaveText(['Today', 'This plan']);
+	await expect(card.locator('.figure').nth(1).locator('.bar-label')).toHaveText(['Today', 'This plan']);
+	const muted = await page.evaluate(() => {
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--text-muted)';
+		document.body.append(probe);
+		const c = getComputedStyle(probe).color;
+		probe.remove();
+		return c;
+	});
+	await expect(supply.locator('.bar.today')).toHaveCSS('background-color', muted);
+	// Today's farm gets 70–95 % (short, amber); sixty more hectares on today's dam, under 70 % (low, red).
+	const band = (pct: number) => (pct >= 95 ? 'met' : pct >= 70 ? 'short' : 'low');
+	const plan = supply.locator('.bar.plan');
+	await expect(plan).toHaveClass(new RegExp(`\\b${band(DATA.whatIf.grid[0]![0]!.supplied)}\\b`));
+	await card.getByRole('slider', { name: /More apples/ }).focus();
+	await page.keyboard.press('End');
+	await expect(plan).toHaveClass(new RegExp(`\\b${band(DATA.whatIf.grid.at(-1)![0]!.supplied)}\\b`));
+});
+
+test('the landing page has no a11y violations with motion on, at desktop and phone size', async ({ page }) => {
+	test.setTimeout(60_000);
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	for (const size of [DESKTOP, PHONE]) {
+		await page.setViewportSize(size);
+		await page.goto('/');
+		await expect(headline(page)).toBeVisible();
+		await expect(page.locator('.hero .scene')).toHaveAttribute('data-motion', 'on');
+		await scrollThrough(page);
+		// The hero's loop held on its first frame: its tag fading in or out is a
+		// moment of the animation, not text anyone is asked to read.
+		await page.evaluate(() => {
+			for (const a of document.querySelector('.hero .scene')!.getAnimations({ subtree: true })) {
+				a.pause();
+				a.currentTime = 0;
+			}
+		});
+		await expectNoViolations(page);
+	}
 });
 
 for (const scheme of ['light', 'dark'] as const) {

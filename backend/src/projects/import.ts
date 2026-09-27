@@ -184,6 +184,7 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), old.add(t.toNodeId);
 	for (const p of m.landCover ?? []) old.add(p.id), old.add(p.nodeId);
 	for (const b of m.boreholes ?? []) old.add(b.id), old.add(b.nodeId);
+	for (const o of m.demandObjects ?? []) old.add(o.id), old.add(o.nodeId);
 	const sortedOld = [...old].sort(idOrder);
 	const fresh = new Set<string>();
 	while (fresh.size < sortedOld.length) fresh.add(crypto.randomUUID());
@@ -197,7 +198,8 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
 			transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) })),
 			landCover: (m.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) })),
-			...(m.boreholes?.length ? { boreholes: m.boreholes.map((b) => ({ ...b, id: id(b.id), nodeId: id(b.nodeId) })) } : {})
+			...(m.boreholes?.length ? { boreholes: m.boreholes.map((b) => ({ ...b, id: id(b.id), nodeId: id(b.nodeId) })) } : {}),
+			...(m.demandObjects?.length ? { demandObjects: m.demandObjects.map((o) => ({ ...o, id: id(o.id), nodeId: id(o.nodeId) })) } : {})
 		},
 		ids: map
 	};

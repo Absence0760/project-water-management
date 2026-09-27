@@ -41,7 +41,8 @@ const network = (input: ModelInput) => ({
 	transfers: input.model.transfers,
 	crops: input.model.crops,
 	cropAreas: input.model.cropAreas,
-	apanMm: input.settings.apanMm as number[] | undefined
+	apanMm: input.settings.apanMm as number[] | undefined,
+	demandObjects: input.model.demandObjects
 });
 
 describe('the reporting window, worked out by the engine', () => {

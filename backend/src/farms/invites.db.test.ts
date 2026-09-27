@@ -3,6 +3,7 @@
 // account is invited with the farms the invite will link; accepting it
 // (app_accept_invites) creates the membership and the links. Every "cannot
 // see" check has a positive control.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
@@ -34,7 +35,7 @@ const rowsAs = async <T = Record<string, unknown>>(uid: string, sql: string, par
 
 /** Register through the API, optionally via an invite link; returns the new user's id and a caller. */
 async function register(email: string, inviteToken?: string) {
-	const res = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New Farmer', ...(inviteToken ? { inviteToken } : {}) });
+	const res = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New Farmer', acceptTerms: LEGAL_VERSION, ...(inviteToken ? { inviteToken } : {}) });
 	expect(res.status).toBe(201);
 	return res.body.user.id as string;
 }

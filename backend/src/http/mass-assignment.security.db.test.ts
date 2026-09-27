@@ -18,6 +18,7 @@
 // route that accepted the hostile body wrote rows (or is listed as writing
 // none, with the reason), the sweep's detector finds a hostile value written
 // on purpose, and the legitimate fields of a few routes are read back.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -109,7 +110,7 @@ async function scenario(steps: string[]) {
  * the owner. Each is called afresh per request, so a token is new each time.
  */
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
-	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register' } }),
+	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register', acceptTerms: LEGAL_VERSION } }),
 	'POST /auth/resend-confirmation': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com` } }),
 	'POST /auth/login': () => ({ as: null, body: { email: ctx.owner.email, password: 'correct horse' } }),
 	'POST /auth/logout': async () => ({ as: await freshUser('Mlogout') }),
@@ -459,7 +460,7 @@ describe('positive control: the detector and the legitimate fields', () => {
 		const reg = await app.request('/auth/register', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json', origin: ORIGIN },
-			body: JSON.stringify({ ...hostile(), email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Kept Name', emailVerified: true, isAdmin: true })
+			body: JSON.stringify({ ...hostile(), email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Kept Name', acceptTerms: LEGAL_VERSION, emailVerified: true, isAdmin: true })
 		});
 		// Waits for its confirmation link (202, issue #57): nothing it sent confirms it.
 		expect(reg.status).toBe(202);

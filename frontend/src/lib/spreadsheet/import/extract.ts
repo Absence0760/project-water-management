@@ -6,11 +6,11 @@
 // Python's project.json key for key and value for value, and `notes` are its
 // `note:` / `WARNING:` lines, same text, same order (the parity tests check
 // both). `unmapped` is TypeScript-only (plan.md 1b).
-import type { CalibrationParams, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
+import type { CalibrationParams, DemandObject, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
 import { clean, num, pyStr } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
-import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
+import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
@@ -203,6 +203,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		}
 	}
 	const { gross, days } = readFarmGross(wb);
+	const demandObjects: DemandObject[] = [];
 	if (days !== null && days.length === 12 && days.every((d) => d > 0)) {
 		const factors = new Map(crops.crops.map((c) => [c.name, c.cropFactor]));
 		for (const [farm, perCrop] of areas) {
@@ -210,6 +211,12 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			if (!nodeId.has(farm) || g === undefined || g.length !== 12) continue;
 			const note = grossDemandNote(farm, perCrop, g, factors, crops.apan, days);
 			if (note) report.note('farm-demand-gross-mismatch', note, { sheet: 'Farm demand', element: farm });
+			// A demand above the crop areas (a town's, typed over the formula) becomes a demand object (issue #54, 2b).
+			const extra = nonCropDemand(perCrop, g, factors, crops.apan, days);
+			if (extra !== null) {
+				const cropped = [...perCrop].some(([c, a]) => a > 0 && factors.has(c));
+				demandObjects.push(nonCropDemandObject(uid, farm, nodeId.get(farm)!, extra, cropped, num(spec.farms.get(farm)?.returnFlowPct ?? null)));
+			}
 		}
 	}
 
@@ -302,7 +309,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		name,
 		description: `Imported from ${opts.fileName.split('/').pop()}`,
 		settings: settings as ImportedSettings,
-		model: { nodes, crops: cropDefs, cropAreas, transfers: modelTransfers },
+		model: { nodes, crops: cropDefs, cropAreas, transfers: modelTransfers, ...(demandObjects.length ? { demandObjects } : {}) },
 		series: flow.series
 	};
 	return { project, notes: report.notes, unmapped: report.unmapped };

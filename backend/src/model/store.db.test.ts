@@ -35,7 +35,8 @@ function chain(n: number): ProjectModel {
 			priority: i
 		})),
 		landCover: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, coverClass: 'pine', areaKm2: 0.5, densityPct: 0.5, factors: null })),
-		boreholes: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, name: 'BH', capacityM3Day: 10, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }))
+		boreholes: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, name: 'BH', capacityM3Day: 10, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 })),
+		demandObjects: farms.map((f) => ({ id: crypto.randomUUID(), nodeId: f.id, name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(5), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }))
 	} as unknown as ProjectModel;
 }
 
@@ -123,6 +124,11 @@ describe('model store', () => {
 			boreholes: [
 				{ id: crypto.randomUUID(), nodeId: town.id, name: 'BH2', capacityM3Day: 12.5, annualCapM3: null, mode: 'primary', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0.25 },
 				{ id: crypto.randomUUID(), nodeId: town.id, name: 'BH1', capacityM3Day: 40, annualCapM3: 9000, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
+			],
+			// Demand objects (engine 1.7.0, 088) on the farm (a unit), out of name order on purpose: one monthly, one per unit.
+			demandObjects: [
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1200, litresPerUnitDay: 90, lossPct: 0.2, monthlyFactor: [1, 1, 2.5, 2.5, 1, 1, 1, 1, 1, 1, 1, 0.5], returnPct: 0.35, priority: 'first', destination: 'internal', enabled: true, note: 'Red Book norm' },
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -158,6 +164,7 @@ describe('model store', () => {
 		// By node, then cover class: 'other' before 'pine'.
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
+		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});
@@ -206,6 +213,7 @@ describe('model store', () => {
 		expect(got.model).toEqual({ nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] });
 		// No boreholes key at all when there are none, so older documents read back unchanged.
 		expect('boreholes' in got.model).toBe(false);
+		expect('demandObjects' in got.model).toBe(false);
 		expect((got.settings as { apanMm: number[] }).apanMm).toEqual(monthly(150));
 		// Another user's project: nothing visible, no settings.
 		const stranger = await signUp('Stranger');
@@ -226,10 +234,10 @@ describe('model store', () => {
 			[big, bigModel]
 		] as const) {
 			counts.push(await countStatements(u.id, (db) => saveModel(db, projectId, m)));
-			const next = { ...m, nodes: m.nodes.slice(0, -1), transfers: m.transfers.slice(0, -1), cropAreas: m.cropAreas.slice(0, -1), landCover: m.landCover!.slice(0, -1), boreholes: m.boreholes!.slice(0, -1) };
+			const next = { ...m, nodes: m.nodes.slice(0, -1), transfers: m.transfers.slice(0, -1), cropAreas: m.cropAreas.slice(0, -1), landCover: m.landCover!.slice(0, -1), boreholes: m.boreholes!.slice(0, -1), demandObjects: m.demandObjects!.slice(0, -1) };
 			counts.push(await countStatements(u.id, (db) => saveModel(db, projectId, next)));
 		}
-		expect(counts[0]).toBeLessThanOrEqual(9);
+		expect(counts[0]).toBeLessThanOrEqual(10);
 		expect(new Set(counts)).toEqual(new Set([counts[0]]));
 		const got = await withUser(u.id, (db) => loadModel(db, big));
 		expect(got.nodes).toHaveLength(60);
@@ -237,6 +245,7 @@ describe('model store', () => {
 		expect(got.cropAreas).toHaveLength(59);
 		expect(got.landCover).toHaveLength(59);
 		expect(got.boreholes).toHaveLength(59);
+		expect(got.demandObjects).toHaveLength(59);
 		expect(got.nodes.filter((n) => n.downstreamNodeId === bigModel.nodes[0]!.id)).toHaveLength(59);
 	});
 

@@ -50,6 +50,7 @@ export const en = {
 	'mail.invite.signUpAction': 'Create account and accept',
 	'mail.invite.signUpExpires': 'This invitation expires in 7 days.',
 	'mail.invite.signUpIgnore': "If you weren't expecting this, you can ignore this email.",
+	'mail.invite.privacy': 'How we handle your information: {url}',
 	'mail.invite.confirm': 'There is already a {product} account for {email}. Confirm that this is your email address to accept.',
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',

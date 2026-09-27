@@ -35,7 +35,10 @@ export const APP_USER_EXPORTED = [
 	// SES reported a bounce or complaint for the address (057): alert emails paused.
 	'mail_suppressed_at',
 	'mail_suppressed_reason',
-	'mail_resumed_at'
+	'mail_resumed_at',
+	// The terms and privacy notice this account accepted, and when (087).
+	'terms_version',
+	'terms_accepted_at'
 ] as const;
 export const APP_USER_EXCLUDED: Record<string, string> = {
 	password_hash: 'a secret (bcrypt hash of the password)'
@@ -178,7 +181,8 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		const { rows: acct } = await db.query(
 			`SELECT id, email, display_name AS "displayName", created_at AS "createdAt", email_verified_at AS "emailVerifiedAt",
 				sessions_revoked_at AS "sessionsRevokedAt", locale, volume_unit AS "volumeUnit", data_exported_at AS "dataExportedAt",
-				mail_suppressed_at AS "mailSuppressedAt", mail_suppressed_reason AS "mailSuppressedReason", mail_resumed_at AS "mailResumedAt"
+				mail_suppressed_at AS "mailSuppressedAt", mail_suppressed_reason AS "mailSuppressedReason", mail_resumed_at AS "mailResumedAt",
+				terms_version AS "termsVersion", terms_accepted_at AS "termsAcceptedAt"
 			 FROM app_user WHERE id = $1`,
 			[userId]
 		);

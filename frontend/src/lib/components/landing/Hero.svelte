@@ -52,7 +52,8 @@
 		grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
 		align-items: center;
 		gap: clamp(1.5rem, 4vw, 4rem);
-		padding-block: clamp(2rem, 6vw, 5rem) clamp(2rem, 5vw, 4rem);
+		/* Tight below: the story's heading shows on the first screen at 1440 × 960 (landing.spec.ts). */
+		padding-block: clamp(1.5rem, 3.5vw, 3rem) clamp(1rem, 2vw, 1.5rem);
 	}
 	.kicker {
 		margin: 0 0 1rem;

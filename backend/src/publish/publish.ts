@@ -11,6 +11,7 @@ import {
 	upgradeLegacyModel,
 	type CatchmentView,
 	type CropArea,
+	type DemandObject,
 	type CropDef,
 	type FarmProjection,
 	type ForecastSummary,
@@ -238,7 +239,7 @@ async function loadProjectionRun(
 		start_date: string;
 		end_date: string;
 		engine_version: string;
-		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[] } | null;
+		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[]; demandObjects?: DemandObject[] } | null;
 		apan_mm: unknown;
 		runoff_model: string;
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
@@ -284,6 +285,8 @@ async function loadProjectionRun(
 			crops: (model.crops ?? []) as CropDef[],
 			cropAreas: (model.cropAreas ?? []) as CropArea[],
 			apanMm: Array.isArray(r.apan_mm) ? r.apan_mm : [],
+			// A unit with demand objects (engine ≥ 1.7.0) takes its consumptive share from its return flow.
+			...(model.demandObjects?.length ? { demandObjects: model.demandObjects as DemandObject[] } : {}),
 			series: (nodeId, key) => byKey.get(`${nodeId ?? ''}|${key}`)
 		},
 		engineVersion: r.engine_version,

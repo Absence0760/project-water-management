@@ -1,9 +1,10 @@
 <script lang="ts">
 	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
-	// groundwater (WP-1.34) and other water users (WP-1.33). Code-split out of
+	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
+	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split out of
 	// RunSummaryView and loaded only for a run that has any of them, so the
 	// Runs tab stays within its chunk budget for every other project.
-	import { LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
+	import { DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { groundwaterByNode } from './groundwater';
@@ -15,7 +16,48 @@
 	// Their use per water year against the caps and the GN 538 ceiling (engine ≥ 0.36.0, WP-3.9).
 	const annual = $derived(groundwaterByNode(summary.groundwaterAnnualUse));
 	const m3 = (v: number | null) => (v === null ? '–' : fmtNum(v, 0));
+	// Each unit's demand objects (engine ≥ 1.7.0), unit by unit.
+	const objects = $derived((summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o }))));
+	const PRIORITY: Record<string, string> = { first: 'first', shared: 'with the crops', last: 'last' };
 </script>
+
+{#if objects.length}
+	<h3>Demand objects</h3>
+	<p class="muted small">
+		Demands on the units that aren’t crops, supplied from each unit’s dam, river pump and boreholes with its crops (daily averages over the run).
+		Their demand is part of the unit’s.
+	</p>
+	<div class="table-wrap">
+		<table class="data demand-objects" data-testid="demand-objects-table">
+			<thead>
+				<tr>
+					<th scope="col">Unit</th>
+					<th scope="col">Demand object</th>
+					<th scope="col">Priority</th>
+					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Supplied<br /><span class="u">%</span></th>
+					<th scope="col" class="num">Days short</th>
+					<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each objects as { unit, o } (o.id)}
+					<tr class:short={o.fractionSupplied < SUPPLY_TARGET}>
+						<td>{unit}</td>
+						<th scope="row">{o.name} <span class="muted small">{DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category}</span></th>
+						<td>{PRIORITY[o.priority] ?? o.priority}</td>
+						<td class="num">{fmtNum(o.avgDemandM3Day)}</td>
+						<td class="num">{fmtNum(o.avgSuppliedM3Day)}</td>
+						<td class="num">{fmtPct(o.fractionSupplied)}</td>
+						<td class="num">{fmtNum(o.daysShort, 0)}</td>
+						<td class="num">{o.destination === 'external' ? 'piped out' : fmtNum(o.avgReturnedM3Day)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
 
 {#if summary.landCover}
 	{@const lc = summary.landCover}

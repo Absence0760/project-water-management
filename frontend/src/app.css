@@ -17,6 +17,13 @@
 	--brand-navy: #102a43;
 	--brand-node: #102a43;
 	--brand-outlet: #1e9bb8;
+	/* A navy brand panel (the landing page's closing call to action): its ground,
+	   the text and outlines on it (≥ 3:1 for the outline, WCAG 1.4.11), and a
+	   focus ring that shows on navy (--focus is 2:1 there). */
+	--brand-panel: #102a43;
+	--brand-panel-text: #ffffff;
+	--brand-panel-line: #5c7a96;
+	--brand-panel-focus: #7fd5e8;
 
 	--bg: #f3f5f9;
 	--surface: #fdfdfe;
@@ -92,6 +99,7 @@
 		--accent-contrast: #06202a;
 		--brand-node: #d9e6f2;
 		--brand-outlet: #36c6e0;
+		--brand-panel: #0e2236;
 		--danger: #f07a70;
 		--danger-soft: #3a1c19;
 		--warning: #e0b050;

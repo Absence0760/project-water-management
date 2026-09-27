@@ -212,6 +212,22 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			issues.push({ area: 'network', message: `${label}: capacity and annual cap can't be negative; the emergency level and depletion are 0–100%.` });
 	}
 
+	// Demand objects (engine ≥ 1.7.0, issue #54 item 2b), as the API checks them (engine modelRules).
+	for (const o of model.demandObjects ?? []) {
+		const n = nodes.find((x) => x.id === o.nodeId);
+		const label = `Demand object "${o.name || '?'}"${n ? ` on "${nodeName(n.id)}"` : ''}`;
+		if (!n) issues.push({ area: 'network', message: 'A demand object refers to a deleted unit.' });
+		else if (n.kind !== 'farm') issues.push({ area: 'network', message: `${label}: only a unit has demand objects.` });
+		if (!o.name.trim()) issues.push({ area: 'network', message: 'Every demand object needs a name.' });
+		if (o.sizing === 'monthly' && (!o.monthlyM3Day || o.monthlyM3Day.length !== 12 || o.monthlyM3Day.some((v) => !inRange(v, 0, Infinity))))
+			issues.push({ area: 'network', message: `${label}: a monthly demand needs 12 values, none negative.` });
+		if (o.sizing === 'perUnit' && (o.count === null || o.litresPerUnitDay === null || !inRange(o.count, 0, Infinity) || !inRange(o.litresPerUnitDay, 0, Infinity)))
+			issues.push({ area: 'network', message: `${label}: a demand per unit needs a count and litres per unit per day, neither negative.` });
+		if (!inRange(o.lossPct, 0, 0.999999) || !inRange(o.returnPct, 0, 1) || (o.monthlyFactor ?? []).some((v) => !inRange(v, 0, Infinity)))
+			issues.push({ area: 'network', message: `${label}: losses are 0–99%, the return share 0–100%, and the monthly profile can't be negative.` });
+		if (o.destination === 'external' && o.returnPct > 0) issues.push({ area: 'network', message: `${label}: water piped out of the catchment returns nothing; set its return share to 0%.` });
+	}
+
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;

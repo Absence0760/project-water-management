@@ -11,7 +11,9 @@
 // turned into a path). The page draws the icons from their path data, so they
 // can draw themselves on (stroke-dashoffset) and follow the theme's colours.
 // Dependency-free: the SVGs are Inkscape's plain output, read with a few
-// regular expressions rather than a parser.
+// regular expressions rather than a parser. It also refuses a hero whose edges
+// hold anything (assertUnclipped): the block ran off the camera's frame.
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -59,6 +61,27 @@ function paths(file) {
 		return p;
 	});
 }
+
+/**
+ * The hero is trimmed to the block with a margin, on a transparent ground, so
+ * its outermost rows and columns must be empty. Anything there means the
+ * block ran off the camera's frame and was cut (diorama.py's HERO camera: at
+ * 42 mm the front corner was). The bytes are ImageMagick's to read, as the
+ * rest of the pipeline's are.
+ */
+function assertUnclipped(png) {
+	const [w, h] = execFileSync('magick', ['identify', '-format', '%w %h', png], { encoding: 'utf8' }).trim().split(' ').map(Number);
+	const edges = { top: `${w}x1+0+0`, bottom: `${w}x1+0+${h - 1}`, left: `1x${h}+0+0`, right: `1x${h}+${w - 1}+0` };
+	const cut = Object.entries(edges).filter(([, geometry]) => {
+		const max = execFileSync('magick', [png, '-alpha', 'extract', '-crop', geometry, '+repage', '-format', '%[fx:maxima*255]', 'info:'], { encoding: 'utf8' });
+		return Math.round(Number(max)) > 0;
+	});
+	if (cut.length) {
+		console.error(`modules: ${png} has picture on its ${cut.map(([e]) => e).join(', ')} edge: the diorama runs off the hero camera's frame (widen HERO in diorama.py)`);
+		process.exit(1);
+	}
+}
+for (const mode of ['day', 'dusk']) assertUnclipped(join(work, `hero-${mode}.png`));
 
 const ICONS = ['hydrologist', 'association', 'licensing', 'farmer'];
 const hero = json('hero.json');

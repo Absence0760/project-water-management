@@ -93,6 +93,8 @@
 			<nav aria-label={t('Footer')}>
 				<a href="{base}/login">{t('Sign in')}</a>
 				<a href="{base}/register">{t('Create an account')}</a>
+				<a href="{base}/privacy">{t('Privacy notice')}</a>
+				<a href="{base}/terms">{t('Terms of use')}</a>
 			</nav>
 		</div>
 	</footer>
@@ -144,6 +146,10 @@
 		align-items: center;
 		gap: 0.75rem;
 	}
+	/* A touch-sized target at every width, level with the language pair beside it. */
+	.nav .btn {
+		min-height: var(--tap);
+	}
 	.page-body {
 		position: relative;
 		display: block;
@@ -169,12 +175,18 @@
 			translate: 2px -2px;
 		}
 	}
+	/* The first river under the hero sits close to it, so the story starts on the first screen. */
+	.wrap :global(.hero + .divider) {
+		margin-block: clamp(1rem, 2vw, 1.5rem) clamp(2rem, 4vw, 3.5rem);
+	}
 	.closing {
+		--focus: var(--brand-panel-focus);
 		margin-top: clamp(3rem, 7vw, 5.5rem);
 		padding: clamp(2rem, 5vw, 3.5rem);
+		border: 1px solid var(--brand-panel);
 		border-radius: 16px;
-		background: var(--brand-navy);
-		color: #ffffff;
+		background: var(--brand-panel);
+		color: var(--brand-panel-text);
 		text-align: center;
 	}
 	.closing h2 {
@@ -190,9 +202,9 @@
 		gap: 0.75rem;
 	}
 	.closing .btn:not(.btn-primary) {
-		border-color: #5c7a96;
+		border-color: var(--brand-panel-line);
 		background: transparent;
-		color: #ffffff;
+		color: var(--brand-panel-text);
 	}
 	.btn-lg {
 		min-height: 48px;
@@ -219,12 +231,12 @@
 	}
 	.foot nav {
 		display: flex;
-		gap: 1.25rem;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.25rem;
 	}
 	@media (prefers-color-scheme: dark) {
 		.closing {
-			background: #0e2236;
-			border: 1px solid var(--border);
+			border-color: var(--border);
 		}
 	}
 	/* A phone's header: the mark alone (the link keeps its name), the language pair and Sign in on one line. */

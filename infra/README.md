@@ -208,7 +208,11 @@ reviewer.
 
 ### Region
 
-`aws_region` has no default, on purpose: it is set in tfvars. The decision
+`aws_region` has no default, on purpose: it is set in tfvars. Any region but
+af-south-1 fails the plan unless `data_outside_south_africa = true`, because
+the privacy notice tells users their data is stored in South Africa: rewrite
+its §6 (and get the client's agreement, POPIA s72) before setting it
+(`refuses_a_region_outside_south_africa_by_default` in the guardrail tests). The decision
 (**af-south-1**, with SES in the same region, 2026-09-26) and its
 reasoning, with sources, are in
 [docs/deployment.md § Region](../docs/deployment.md#region-recommendation).
