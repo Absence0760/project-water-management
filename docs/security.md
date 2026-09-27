@@ -509,6 +509,19 @@ against its owner, and a farmer's mail naming a neighbour's farm.
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
 In short:
 
+- **Cross-project isolation is swept, not sampled**
+  (`backend/src/isolation.db.test.ts`). Every API route that names a
+  project or team is called by a signed-in outsider and by another
+  project's owner with the victim's ids: every read must fail without
+  leaking the victim's data, every write must fail, and the victim's data
+  must be unchanged afterwards. Every table with a `project_id` is then
+  read, updated and deleted through RLS as those users and as another
+  project's API key: nothing visible, nothing changed. Both sweeps come
+  from the live route list and the catalogue, so a new route or table is
+  covered automatically; the owner's positive controls prove they aren't
+  vacuous. The two layers are tested apart: `requireRole` answers 404 at
+  the route, and RLS alone must hold if a route forgets it.
+
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of
   them on every team project: team **viewer → viewer**, **member → editor**,
