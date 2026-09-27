@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Seed a local demo: the invented example catchments (always), plus the client
-# workbook when present (extracted into data/, gitignored), imported with one
-# model run. The workbook is $WBT_CLIENT_WORKBOOK, or else the one b023 workbook
-# in $WBT_SOURCE_DIR/Original/ that isn't the Blank sample. Its file name names
-# the client, so it is never written into the repo.
+# Seed a local demo: the invented example catchments (always), plus each client
+# workbook present (extracted into data/, gitignored), imported as its own
+# project with one model run. The workbooks are $WBT_CLIENT_WORKBOOK alone, or
+# else every b023 workbook in $WBT_SOURCE_DIR/Original/ that isn't the Blank
+# sample. Their file names name the clients, so they are never written into
+# the repo: project names and data/ folders are derived at run time.
 #
 #   pnpm seed:demo            # uses $PYTHON, else .venv/bin/python, else python3 (needs openpyxl)
 #
@@ -13,13 +14,14 @@
 # By default the workbook's gauge column is imported with --gauge-as-reference
 # (a flow_reference_m3s series, never a calibration record; docs/model.md
 # §2.10), for a workbook whose gauge sits on a neighbouring river, into
-# data/client-catchment-app/. data/client-catchment/ stays the
+# data/client-<prefix>-app/. data/client-catchment/ stays the
 # workbook-faithful extraction the engine's regression tests read. If the
 # column is area-scaled for part of the record, undo that with
-# WBT_GAUGE_SCALING_FROM (YYYY-MM-DD) and WBT_GAUGE_SCALE_FACTOR, in the
-# environment or in $WBT_SOURCE_DIR/wbt-import.env (outside the repo, because
-# the factor is client data). Set WBT_GAUGE_AS_REFERENCE=0 to import the
-# column as observed flow instead.
+# WBT_GAUGE_SCALING_FROM (YYYY-MM-DD) and WBT_GAUGE_SCALE_FACTOR in
+# $WBT_SOURCE_DIR/wbt-import.<prefix>.env, <prefix> being the workbook's file
+# name before _WBT_b023 (outside the repo, because the factor is client data;
+# the shared wbt-import.env still applies to every workbook). Set
+# WBT_GAUGE_AS_REFERENCE=0 there to import the column as observed flow instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -76,36 +78,48 @@ if ! "$PY" -c 'import openpyxl' 2>/dev/null; then
 	exit 0
 fi
 
-# The client workbook: explicit, or the only non-Blank b023 workbook in Original/.
-WORKBOOK="${WBT_CLIENT_WORKBOOK:-}"
-if [ -z "$WORKBOOK" ]; then
-	shopt -s nullglob
-	candidates=()
+# The client workbooks: $WBT_CLIENT_WORKBOOK alone if set, else every b023
+# workbook in Original/ that isn't the Blank template. Each becomes its own
+# project, named from its file name (the part before _WBT_b023, CamelCase
+# split: "SomeRiver_WBT_b023_…" → "Some River"), at run time only.
+shopt -s nullglob
+if [ -n "${WBT_CLIENT_WORKBOOK:-}" ]; then
+	workbooks=("$WBT_CLIENT_WORKBOOK")
+else
+	workbooks=()
 	for f in "$WBT_SOURCE_DIR"/Original/*_WBT_b023_*.xlsm; do
-		case "$(basename "$f")" in Blank_*) ;; *) candidates+=("$f") ;; esac
+		case "$(basename "$f")" in Blank_*) ;; *) workbooks+=("$f") ;; esac
 	done
-	shopt -u nullglob
-	if [ "${#candidates[@]}" -gt 1 ]; then
-		echo "✗ ${#candidates[@]} client workbooks in $WBT_SOURCE_DIR/Original/ — set WBT_CLIENT_WORKBOOK to pick one" >&2
-		exit 1
-	fi
-	WORKBOOK="${candidates[0]:-$WBT_SOURCE_DIR/Original/<client workbook>.xlsm}"
 fi
-
-gauge_args=()
-if [ "${WBT_GAUGE_AS_REFERENCE:-1}" = 1 ]; then
-	gauge_args+=(--gauge-as-reference)
-	if [ -n "${WBT_GAUGE_SCALING_FROM:-}" ] || [ -n "${WBT_GAUGE_SCALE_FACTOR:-}" ]; then
-		gauge_args+=(--gauge-scaling-from "${WBT_GAUGE_SCALING_FROM:-}" --gauge-scale-factor "${WBT_GAUGE_SCALE_FACTOR:-}")
-	else
-		echo "! WBT_GAUGE_SCALING_FROM / WBT_GAUGE_SCALE_FACTOR unset: the reference gauge keeps the workbook's partial area scaling" >&2
-	fi
+shopt -u nullglob
+if [ "${#workbooks[@]}" -eq 0 ]; then
+	echo "✗ no client workbook in $WBT_SOURCE_DIR/Original/ — skipping" >&2
 fi
 
 imported=0
-if extract "$WORKBOOK" data/client-catchment-app "${gauge_args[@]}"; then
-	pnpm -s import:project "$PWD/data/client-catchment-app/project.json" --email "$EMAIL" --password "$PASSWORD" --name "Client Catchment" --run
-	imported=$((imported + 1))
-fi
+for wb in "${workbooks[@]}"; do
+	prefix=$(basename "$wb" | sed 's/_WBT_b023.*//')
+	slug=$(printf '%s' "$prefix" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')
+	name=$(printf '%s' "$prefix" | sed 's/\([a-z]\)\([A-Z]\)/\1 \2/g')
+	# Per-workbook import settings (the gauge scaling), beside the workbooks:
+	# $WBT_SOURCE_DIR/wbt-import.<prefix>.env, read in a subshell so one
+	# workbook's settings never reach the next.
+	(
+		if [ -f "$WBT_SOURCE_DIR/wbt-import.$prefix.env" ]; then
+			# shellcheck disable=SC1090
+			. "$WBT_SOURCE_DIR/wbt-import.$prefix.env"
+		fi
+		gauge_args=()
+		if [ "${WBT_GAUGE_AS_REFERENCE:-1}" = 1 ]; then
+			gauge_args+=(--gauge-as-reference)
+			if [ -n "${WBT_GAUGE_SCALING_FROM:-}" ] || [ -n "${WBT_GAUGE_SCALE_FACTOR:-}" ]; then
+				gauge_args+=(--gauge-scaling-from "${WBT_GAUGE_SCALING_FROM:-}" --gauge-scale-factor "${WBT_GAUGE_SCALE_FACTOR:-}")
+			fi
+		fi
+		out="data/client-$slug-app"
+		extract "$wb" "$out" "${gauge_args[@]}" || exit 1
+		pnpm import:project "$PWD/$out/project.json" --email "$EMAIL" --password "$PASSWORD" --name "$name" --run
+	) && imported=$((imported + 1))
+done
 echo
-echo "Imported $imported project(s). Sign in at http://localhost:7777 as $EMAIL / $PASSWORD"
+echo "Imported $imported client project(s). Sign in at http://localhost:7777 as $EMAIL / $PASSWORD"

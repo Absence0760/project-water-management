@@ -120,7 +120,7 @@ pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 ×
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
-pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
+pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run]
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
                              # GR4J at a few pan-coefficient choices, fixed vs refitted (no DB; refuses a monthly PE, settings.pe; model.md §2.4a)

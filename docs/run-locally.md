@@ -297,16 +297,22 @@ pnpm seed:demo
 The seed uses `$PYTHON` if set, else the checkout's `.venv/bin/python`, else
 `python3`.
 
-The seed picks the one b023 workbook in `Original/` that isn't `Blank_*`. If
-there are several, set `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm`. The
-workbook's file name names the client, so it never appears in the repo.
+The seed imports every b023 workbook in `Original/` that isn't `Blank_*`, each
+as its own project (issue #54's second configuration sits beside the first).
+A project is named from its workbook's file name, the part before
+`_WBT_b023` with its CamelCase split, and extracted into
+`data/client-<name>-app/`; both are worked out when the seed runs, since the
+file names name the clients and never appear in the repo. Set
+`WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm` to import just one. Running the
+seed again adds the projects again (it doesn't replace them); `pnpm
+dev:db:reset` first for a clean database.
 
-The client workbook's gauge column is a neighbouring river's gauge, so the seed
-imports it as a reference gauge (`--gauge-as-reference`, into
-`data/client-catchment-app/`) rather than as observed flow. To undo the
-column's partial area scaling, put the two values in
-`../project-water-management-source/wbt-import.env` (outside the repo, because
-they are client data):
+A client workbook's gauge column may be a neighbouring river's gauge, so the
+seed imports it as a reference gauge (`--gauge-as-reference`) rather than as
+observed flow. Per-workbook settings live beside the workbooks, in
+`../project-water-management-source/wbt-import.<Prefix>.env`, `<Prefix>`
+being the file name before `_WBT_b023` (outside the repo, because they are
+client data): for example, to undo the column's partial area scaling:
 
 ```bash
 WBT_GAUGE_SCALING_FROM=YYYY-MM-DD
