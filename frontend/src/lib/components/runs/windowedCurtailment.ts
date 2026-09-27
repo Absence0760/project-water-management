@@ -43,13 +43,15 @@ export interface RunNetwork {
 
 /**
  * Every series the recompute reads (the engine's curtailmentSeriesKeys): the
- * flows the binding site is recomputed from, the farm and other-user series
- * and the EWR sites'. null when the run predates the EWR charge (engine
- * 0.17.0), which a window can't be recomputed without.
+ * farm and other-user series, the EWR sites', and each farm's stored binding
+ * site (engine ≥ 1.3.0) or, for a run saved before it (`refs` lack them), the
+ * flows the binding site is recomputed from. null when the run predates the
+ * EWR charge (engine 0.17.0), which a window can't be recomputed without.
  */
-export function curtailmentSeriesKeys(stored: CurtailmentSummary, network: RunNetwork): SeriesKey[] | null {
+export function curtailmentSeriesKeys(stored: CurtailmentSummary, network: RunNetwork, refs?: readonly SeriesKey[]): SeriesKey[] | null {
 	if (!stored.ewrAttribution || !stored.ewrSites) return null;
-	return engineSeriesKeys(network.nodes, network.transfers);
+	const have = refs ? new Set(refs.map((r) => `${r.nodeId ?? ''}|${r.key}`)) : null;
+	return engineSeriesKeys(network.nodes, network.transfers, {}, have ? (nodeId, key) => have.has(`${nodeId ?? ''}|${key}`) : undefined);
 }
 
 /** The keys the run has no stored series for (a run saved before one of them existed). */

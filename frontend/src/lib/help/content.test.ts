@@ -29,7 +29,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
 	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true,
-	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true
+	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationEfficiency: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -60,6 +60,8 @@ const RUN_KEYS = [
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// EWR attribution (engine 0.17.0, audit Q17)
 	'ewr_charged', 'ewr_natural', 'ewr_charge', 'ewr_charge_irrigation',
+	// The EWR site that set a farm's charge each day (engine 1.3.0)
+	'ewr_binding_site',
 	// The Reserve rule table's monthly requirement (engine 0.21.0)
 	'ewr_rule',
 	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)

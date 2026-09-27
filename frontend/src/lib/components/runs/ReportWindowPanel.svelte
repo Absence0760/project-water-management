@@ -64,7 +64,8 @@
 				}
 			: network
 	);
-	const keys = $derived(stored ? curtailmentSeriesKeys(stored, runNetwork) : null);
+	// With the run's stored series, so a run that stores its binding sites (engine ≥ 1.3.0) isn't asked for the flows.
+	const keys = $derived(stored ? curtailmentSeriesKeys(stored, runNetwork, refs) : null);
 	/** Why this run can't be re-windowed (saved before the series it needs existed); null when it can. */
 	const unavailable = $derived.by(() => {
 		if (!stored || stored.farms.length === 0) return null;
@@ -121,7 +122,7 @@
 		return out;
 	}
 
-	/** The run read once (the binding-site recompute is the costly part), then any window from it. */
+	/** The run read once (for a run saved before engine 1.3.0, the binding-site recompute is the costly part), then any window from it. */
 	const prepared = $derived.by(() => {
 		if (!recompute || !keys || unavailable || loaded.runId !== run.id) return null;
 		const series = loaded.series;
