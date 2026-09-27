@@ -43,3 +43,9 @@ export async function mail(lang: string): Promise<(key: string) => string> {
 		return w;
 	};
 }
+
+/** Every language the app supports (packages/engine/src/languages.ts LANGUAGES), English first. */
+export async function languages(): Promise<readonly { code: string; name: string }[]> {
+	const { LANGUAGES } = (await import(url('packages/engine/src/languages.ts'))) as { LANGUAGES: readonly { code: string; name: string }[] };
+	return LANGUAGES;
+}
