@@ -43,7 +43,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
 		"title": "Missing catchment rain recorded as 0 runs the catchment dry",
-		"status": "Fixed, engine 0.15.0 (CR-20, issue #3; operator decision 2026-09-24, pending the hydrologist's confirmation of the flagged runs)"
+		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24, pending the hydrologist's confirmation of the flagged runs)"
 	},
 	{
 		"id": "B3",
