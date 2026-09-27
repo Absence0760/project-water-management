@@ -3,9 +3,9 @@
 	Uncertainty): each run's newest stored band side by side, with what differs
 	between their rules (stored thresholds, diffed), and the **paired** band on
 	B − A: the baseline A's kept parameter sets run again on B's inputs, the
-	difference taken set by set. Its own chunk: the compare page loads it
-	lazily. Two runs of one project and one runoff model only; bands of two
-	models are never pooled.
+	difference taken set by set. Part of Compare runs' chunk (CompareView.svelte
+	renders it for every comparison). Two runs of one project and one runoff
+	model only; bands of two models are never pooled.
 -->
 <script lang="ts">
 	import { onDestroy } from 'svelte';

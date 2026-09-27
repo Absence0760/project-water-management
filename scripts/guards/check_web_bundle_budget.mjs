@@ -1008,7 +1008,34 @@
 //             and the download preview (~300 bytes of words). Largest chunk
 //             and tab chunk unchanged. No new dependency. Headroom ~1 KB:
 //             History (the last #17 section) must trim or bring its own entry.
-// Run:   pnpm build:frontend && pnpm check:bundle
+// 2026-09-27  total 1029 → 988 KB (down; measured 976). Issue #17's bundle
+//             trim, on main @ 16272357 (1 051 240 bytes gzip, 1027 KB by this
+//             guard). Two changes:
+//             (1) Compare runs imports the three panels every comparison
+//             renders (paired uncertainty band, daily series overlay, days
+//             below the reserve) instead of lazy-loading them: the band joins
+//             the tab's chunk (16.0 → 18.9 KB with CSS), the other two stay
+//             chunks the Scenarios and River & reserve tabs share, preloaded
+//             now. 1 049 897 bytes (−1.3 KB, 319 → 315 files); /compare cold
+//             with everything it renders 154.2 → 153.0 KB, one request round.
+//             (2) Terser replaces esbuild as the minifier (frontend/vite.config.ts,
+//             build.minify; terser 5.51.2, a dev dependency, Vite's other
+//             supported minifier): 998 674 bytes, −50 KB, the same 315 files.
+//             Measured first by re-minifying the built chunks: the mangler
+//             alone is −50 KB of −56 (Terser reuses the same short names in
+//             every scope, which gzip matches across the file; esbuild's names
+//             differ per scope), compress the rest. Default options, nothing
+//             unsafe; the frontend build takes ~70 s. Largest tab chunk 58 →
+//             53 KB (Settings), largest chunk 34 KB (help text: words),
+//             workers 28 → 27 and 27 → 26 KB; /compare cold 153.0 → 147.0 KB.
+//             Looked for and not found: duplicated code across chunks (a
+//             normalised 160-character scan of every chunk finds only import
+//             lists and one viewport-fit helper), dead imports (Rollup drops
+//             them), repeated CSS (a few 40–100 byte rule bodies in 4–5
+//             files). Headroom ~12 KB, not the usual ~4, for the #17 pages
+//             being built in parallel against 1029: each must fit under 988
+//             once merged.
+// Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
@@ -1018,7 +1045,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1029,
+	totalCodeKb: 988,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

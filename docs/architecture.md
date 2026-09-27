@@ -368,6 +368,11 @@ guard finds the tabs from the page's `LOAD` map and the chunk map
 (`.svelte-kit/output/client/.vite/chunk-modules.json`, never shipped),
 since chunk file names are bare hashes.
 
+The client build minifies with Terser (`build.minify: 'terser'`), not Vite's
+default esbuild: its mangler reuses the same short names in every scope, so
+gzip compresses the output ~5% better (−50 KB in total on 2026-09-27, the
+guard's change log), at the cost of a slower build.
+
 ## Shared CSS (frontend)
 
 Styles live in two places. `frontend/src/app.css` is global and loads with
