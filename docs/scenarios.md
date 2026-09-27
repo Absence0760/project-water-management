@@ -657,8 +657,13 @@ scenario is `'team'`, and behaves exactly as above).
   receives either.
 - **Own nodes** are the owner's farm links (`app_farm_nodes`), set at create
   and each time the ops change while a draft. A contributor can't claim
-  others' (`403`), so a dam raise on their own farm is a proposal and the
-  same raise on a neighbour's is a baseline assumption.
+  others' (`403`; the `scenario_owned_nodes` trigger refuses it in the table
+  too, 077), so a dam raise on their own farm is a proposal and the same
+  raise on a neighbour's is a baseline assumption. To a contributor the own
+  nodes are the stored ones still linked to the owner
+  (`app_application_own_nodes`): a farm the owner unlinks is anonymised in
+  the base and its series hidden, even in an application made before; the
+  assessors keep the stored list.
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a

@@ -1050,6 +1050,30 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **An application's own farms are its owner's farm links, now**
+    (077_application_own_nodes). The `scenario_owned_nodes` trigger refuses
+    an application whose `owned_node_ids` name a farm its owner isn't linked
+    to (`42501`), so a write past the route can't claim a neighbour's farm;
+    and what a contributor sees in full (the base projection, the check, a
+    new run, their runs' series through `app_contributor_run_nodes`) is the
+    stored list cut to the owner's *current* links
+    (`app_application_own_nodes`): once the owner unlinks a farm (it changed
+    hands), an application made while linked shows it anonymised like any
+    other. The stored list stays the assessors' record.
+  - **The "nothing else" sweep** (`scenarios/applicant.security.db.test.ts`)
+    runs as applicant A beside applicant B over every table with a
+    `project_id` (from `pg_catalog`): what A reads is a subset of its `READ`
+    map, what A updates or deletes of `CHANGE`, and no copy of a row A can't
+    read inserts; then every contributor route that takes an id, with B's
+    application, farm, note and consultant, answers `403`/`404`, names none
+    of them and leaves B's rows unchanged. One insert is a known gap, listed
+    there: `series_blob_insert_contributor` (045) admits any blob in the
+    project, and a blob's `sha256` isn't checked against its values, so a
+    direct insert (never the API) could plant one under a hash the project
+    later stores, which that run then fails `loadRunInput`'s SHA-256 check
+    on. The durable fix is to verify the digest in the database, or to
+    write blobs only through a `SECURITY DEFINER` function that computes the
+    key itself.
   - **No existence oracles** (049_applicant_oracles,
     `scenarios/oracles.db.test.ts`: each probe answered identically for the
     hidden and the free case, each with a positive control).
