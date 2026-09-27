@@ -1,7 +1,7 @@
 // Pure helpers for the assurance-of-supply panels (engine ≥ 0.32.0, WP-3.4,
 // docs/model.md §2.11a–b): the stress heat map's cells and the water
 // account's rows. Unit-tested in reliability.test.ts.
-import { STRESS_LABEL, type StressClass, type StressGrid, type StressSummary, type WaterAccountRow } from '@water-management/engine';
+import { STRESS_LABEL, type StressClass, type StressGrid, type StressSummary, type SupplyAssurance, type WaterAccountRow } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 /** The engine version that first computed RunSummary.supplyAssurance. */
@@ -134,3 +134,13 @@ export function accountBars(r: WaterAccountRow): { inBar: Segment[]; outBar: Seg
 
 /** Share of the EWR requirement met, or null without a requirement. */
 export const ewrMetShare = (e: { requiredM3: number; metM3: number }): number | null => (e.requiredM3 > 0 ? e.metM3 / e.requiredM3 : null);
+
+/**
+ * Part water years the annual measure left out (engine ≥ 1.11.0, docs/model.md
+ * §2.11a): the most any unit or user had, since a part year counts only for
+ * one with demand in it. null on a run before 1.11.0, which counted them.
+ */
+export function partWaterYears(a: Pick<SupplyAssurance, 'reliability'>): number | null {
+	const known = a.reliability.map((r) => r.partWaterYears).filter((n): n is number => typeof n === 'number');
+	return known.length ? Math.max(...known) : null;
+}

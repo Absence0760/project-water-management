@@ -10,6 +10,7 @@ import { outlookMemberInput, runSeasonalOutlook, type OutlookMember } from './ou
 import { testCatchment } from './testCatchment';
 import {
 	bandStartStorage,
+	lowestBandFloor,
 	defaultReviewDate,
 	describeTriggerRow,
 	reviewStorageHistory,
@@ -149,6 +150,8 @@ describe('storage bands', () => {
 describe('the trigger table', () => {
 	// Edges at 200 000 and 400 000 m³; demand from 100 % down to 10 %.
 	const table = runReviewTriggers(pumped, { reviewDate: REVIEW, seasonEnd: END, levels: levels([1, 0.7, 0.5, 0.3, 0.1]), edgesM3: [200_000, 400_000], baseRun: pumpedBase });
+	// The lowest storage the base run had on 1 January (engine ≥ 1.11.0): where the lowest band runs from.
+	const driest = Math.min(...reviewStorageHistory(pumped, pumpedBase, REVIEW).map((x) => x.storageM3));
 
 	it('picks, per band, the highest level that meets the planning rule, fullest band first', () => {
 		expect(table.nYears).toBe(12);
@@ -158,8 +161,12 @@ describe('the trigger table', () => {
 		expect(table.rows.map((r) => [r.band.fromM3, r.band.toM3, r.startStorageM3])).toEqual([
 			[400_000, CAP, 400_000],
 			[200_000, 400_000, 200_000],
-			[0, 200_000, 0]
+			[0, 200_000, driest]
 		]);
+		expect(driest).toBeGreaterThan(0);
+		expect(driest).toBeLessThan(200_000);
+		expect(table.lowestOnRecordM3).toBe(driest);
+		expect(table.rows.map((r) => r.startFrom ?? null)).toEqual([null, null, 'lowestOnRecord']);
 		expect(table.rows.map((r) => r.level?.id ?? null)).toEqual(['f0.7', 'f0.3', null]);
 		for (const r of table.rows) {
 			expect(r.nYears).toBe(12);
@@ -187,10 +194,36 @@ describe('the trigger table', () => {
 		const [top, mid, bottom] = table.rows.map((r) => describeTriggerRow(table, r));
 		expect(top).toBe(`At or above 400 000 m³ on 1 January 2013: 70 % met the EWR on every day of the season in ${table.rows[0]!.metYears} of 12 analogue years.`);
 		expect(mid).toBe(`At or above 200 000 m³ on 1 January 2013: 30 % met the EWR on every day of the season in ${table.rows[1]!.metYears} of 12 analogue years.`);
-		expect(bottom).toMatch(/^Below 200 000 m³ on 1 January 2013 \(run from empty dams\): no demand level met the EWR on every day of the season in at least 80 % of the 12 analogue years; the most was \d+ of 12, at \d+ %\.$/);
+		const on = `${String(Math.round(driest)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} m³`;
+		expect(bottom!.startsWith(`Below 200 000 m³ on 1 January 2013 (run from the lowest storage on record for the date, ${on}): `)).toBe(true);
+		expect(bottom).toMatch(/^Below 200 000 m³ on 1 January 2013 \(run from the lowest storage on record for the date, [\d ]+ m³\): no demand level met the EWR on every day of the season in at least 80 % of the 12 analogue years; the most was \d+ of 12, at \d+ %\.$/);
 		for (const s of [top, mid, bottom]) expect(s).not.toMatch(FORBIDDEN);
 		const midpoint = { ...table, representative: 'midpoint' as const };
 		expect(describeTriggerRow(midpoint, { ...table.rows[1]!, startStorageM3: 300_000 })).toMatch(/^At or above 200 000 m³ on 1 January 2013 \(run from 300 000 m³\): /);
+	});
+
+	it('the lowest band runs from the lowest storage on record for the date, else from empty dams (engine ≥ 1.11.0)', () => {
+		const sample = (storageM3: number, waterYear: number): ReviewStorageSample => ({ waterYear, date: `${waterYear + 1}-01-01`, storageM3 });
+		const hist = [sample(250_000, 2001), sample(90_000, 2002), sample(310_000, 2003)];
+		expect(lowestBandFloor(hist, { fromM3: 0, toM3: 200_000 })).toEqual({ floorM3: 90_000, fromRecord: true, warning: null });
+		// No year below the band's upper edge: that band never happened on the date, so it keeps empty dams, and says so.
+		const above = lowestBandFloor(hist, { fromM3: 0, toM3: 90_000 });
+		expect(above).toMatchObject({ floorM3: 0, fromRecord: false });
+		expect(above.warning).toBe('No year of the record had less than 90 000 m³ in the dams on the review date, so the lowest band runs from empty dams.');
+		expect(lowestBandFloor([], { fromM3: 0, toM3: CAP })).toMatchObject({ floorM3: 0, fromRecord: false, warning: expect.stringMatching(/^No year of the record holds the review date/) });
+		// Shared pro rata to capacity like every band.
+		const start = bandStartStorage(plain, { fromM3: 90_000, toM3: 200_000 });
+		expect(start).toEqual({ totalM3: 90_000, storageM3ByDam: { a: 60_000, b: 30_000 } });
+		// An edge at or below the driest year: the lowest band keeps empty dams, and the table says why.
+		const t = runReviewTriggers(pumped, { reviewDate: REVIEW, seasonEnd: END, levels: levels([0.3]), edgesM3: [driest], analogueYears: [2004], baseRun: pumpedBase });
+		expect(t.rows.at(-1)).toMatchObject({ startStorageM3: 0 });
+		expect(t.rows.at(-1)!.startFrom).toBeUndefined();
+		expect(t.lowestOnRecordM3).toBeNull();
+		expect(t.warnings.some((w) => w.startsWith('No year of the record had less than'))).toBe(true);
+		expect(describeTriggerRow(t, t.rows.at(-1)!)).toMatch(/\(run from empty dams\)/);
+		// Midpoint: the lowest band's middle is between the driest start and its upper edge.
+		const mid = runReviewTriggers(pumped, { reviewDate: REVIEW, seasonEnd: END, levels: levels([0.3]), edgesM3: [200_000], analogueYears: [2004], baseRun: pumpedBase, representative: 'midpoint' });
+		expect(mid.rows.at(-1)!.startStorageM3).toBeCloseTo((driest + 200_000) / 2, 6);
 	});
 
 	it('with too few analogue years, gives no level for any band and says so', () => {

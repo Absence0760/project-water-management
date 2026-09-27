@@ -31,6 +31,19 @@ import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleSourc
 const SEC_PER_DAY = 86_400;
 /** Years of a calendar month below which the run's natural-flow percentiles are coarse. */
 export const EWR_ASSURANCE_MIN_YEARS = 10;
+/**
+ * How far the run's natural MAR at a site may differ from the determination's
+ * (EwrRuleTable.naturalMarMcm) before a run whose percentile comes from its
+ * own natural flow warns: ±15 % (engine ≥ 1.11.0, issue #46). A judgement,
+ * not a published standard: the tolerance the hydrologist and licensing
+ * persona drafts proposed, roughly the gap between WR2012 and quinary
+ * natural MARs (calibration-research.md CR-7). Pending the client's
+ * hydrologist (model.md §2.9c).
+ */
+export const EWR_NATURAL_MAR_TOLERANCE = 0.15;
+
+/** Whether a natural-MAR difference (%, run vs determination) is beyond ±EWR_NATURAL_MAR_TOLERANCE; exactly 15 % is within. */
+export const naturalMarBeyondTolerance = (differencePct: number) => Math.abs(differencePct) > 100 * EWR_NATURAL_MAR_TOLERANCE * (1 + 1e-12);
 /** Relative float tolerance on "A ≥ R". */
 const MET_TOLERANCE = 1e-9;
 
@@ -185,6 +198,14 @@ export interface EwrAssuranceSite {
 	 * month's total volume, or the table has no low-flow requirement.
 	 */
 	lowFlowMeasure?: 'baseflow';
+	/**
+	 * The run's natural MAR at the site against the determination's (engine ≥
+	 * 1.11.0): present when the table records one (naturalMarMcm) and the run
+	 * has every calendar month at least once. runMcm = Σ over the 12 calendar
+	 * months of the mean complete-month natural volume, Mm³/a; tableMcm =
+	 * naturalMarMcm × scale; differencePct = 100 (run − table) ÷ table.
+	 */
+	naturalMar?: { runMcm: number; tableMcm: number; differencePct: number };
 }
 
 /** A site to assess: its table, and its daily natural and simulated flow (m³/day). */
@@ -423,6 +444,7 @@ export function assessSite(
 		return {
 			...b,
 			w: waterYearIndex(b.month),
+			naturalM3: nat,
 			natural: toUnit(nat, b.days, unit),
 			actual: toUnit(imp, b.days, unit),
 			...(onBase ? { baseflow: toUnit(baseOf(b.from, b.days), b.days, unit) } : {})
@@ -550,6 +572,11 @@ export function assessSite(
 		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
 	}
 	if (onBase) report.lowFlowMeasure = 'baseflow';
+	if (table.naturalMarMcm != null && byW.every((list) => list.length > 0)) {
+		const runMcm = byW.reduce((s, list) => s + list.reduce((a, r) => a + r.naturalM3, 0) / list.length, 0) / 1e6;
+		const tableMcm = table.naturalMarMcm * table.scale;
+		report.naturalMar = { runMcm, tableMcm, differencePct: (100 * (runMcm - tableMcm)) / tableMcm };
+	}
 	return { requiredM3Day, report };
 }
 
@@ -593,6 +620,18 @@ export function completeWaterYears(startDate: string, blocks: readonly MonthBloc
  * stays at or above half the peak for at least half the duration.
  */
 export const EWR_HIGH_FLOW_EVENT_LEVEL = 0.5;
+
+/**
+ * A high-flow component whose peak the site's natural flow reaches in no
+ * more than this share of the complete water years draws a warning (engine
+ * ≥ 1.11.0, docs/model.md §2.9d): with required = MIN(perYear, natural
+ * events), such a requirement is waived in most years and the check can
+ * hardly fail. The usual cause is a gazetted peak entered as it is published,
+ * an instantaneous peak (BBM manual, King, Tharme & de Villiers 2008, WRC TT
+ * 354/08, §21.3), where the engine compares daily means. Half: a judgement,
+ * pending the hydrologist.
+ */
+export const EWR_HIGH_FLOW_NATURAL_MIN_SHARE = 0.5;
 
 /** Days a high-flow event must stay at or above `EWR_HIGH_FLOW_EVENT_LEVEL × peak`: ⌈duration × (1 − level)⌉, at least 1. */
 export function highFlowEventMinDays(durationDays: number): number {
@@ -677,7 +716,7 @@ function assessHighFlow(
 	};
 }
 
-/** Warnings a site's assessment carries (no complete month, calendar months missing, short records). */
+/** Warnings a site's assessment carries (no complete month, calendar months missing, short records, a high flow natural flow rarely has, a natural MAR off the determination's). */
 export function assuranceWarnings(r: EwrAssuranceSite): string[] {
 	const where = `EWR rule table at ${r.isOutlet ? `the outlet (${r.name})` : r.name}`;
 	if (r.overall.months === 0) return [`${where}: the run has no complete calendar month, so Reserve compliance is not assessed`];
@@ -693,7 +732,26 @@ export function assuranceWarnings(r: EwrAssuranceSite): string[] {
 				: `${base}, so the flow duration check rests on few years`
 		);
 	}
+	for (const h of r.highFlows ?? []) {
+		const n = h.years.length;
+		const withEvent = h.years.filter((y) => y.natural > 0).length;
+		if (n > 0 && n - withEvent > n * EWR_HIGH_FLOW_NATURAL_MIN_SHARE) {
+			out.push(
+				`${where}: high flow "${h.label}": the site's natural flow reached its ${sig(h.peakAppliedM3s)} m³/s daily-mean peak for the duration in only ${withEvent} of ${n} water years, so the requirement is waived in the rest and the check can hardly fail; a gazette's flood peak is instantaneous, so enter the daily-mean peak it corresponds to (BBM manual, WRC TT 354/08, §21.3)`
+			);
+		}
+	}
+	const mar = r.naturalMar;
+	if (r.naturalSource === 'run' && mar && naturalMarBeyondTolerance(mar.differencePct)) {
+		const pct = Math.round(Math.abs(mar.differencePct));
+		out.push(
+			`${where}: the run's natural MAR at the site (${sig(mar.runMcm)} Mm³/a) is ${pct} % ${mar.differencePct > 0 ? 'above' : 'below'} the determination's (${sig(mar.tableMcm)} Mm³/a), beyond ±${100 * EWR_NATURAL_MAR_TOLERANCE} %; with the percentile from the run, the table's flows are judged against a natural flow ${mar.differencePct > 0 ? 'wetter' : 'drier'} than the one they were set for, so months pass or fail that the determination's own curve would not: check the calibration, or enter the table's natural flows`
+		);
+	}
 	return out;
 }
+
+/** Three significant figures, for a warning. */
+const sig = (v: number) => String(Number(v.toPrecision(3)));
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

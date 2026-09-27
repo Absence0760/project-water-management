@@ -2,12 +2,12 @@
 	The per-table editor of Settings → Reserve rule tables (EwrRulesSection.svelte,
 	which loads it only once the project has a table, so a project without one
 	downloads none of it): site, source and its kind, what it covers, unit, natural source,
-	scale, % points, the EWR and natural grids, paste from a spreadsheet, the
+	scale, the determination's natural MAR, % points, the EWR and natural grids, paste from a spreadsheet, the
 	plausibility notes and Remove. Helpers in ./ewrRules.ts.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { EWR_ASSURANCE_MIN_YEARS, type EwrRuleTable } from '@water-management/engine';
+	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
@@ -206,6 +206,23 @@
 				<NumberInput id="{uid}-{i}-scale" min={0} max={1000} nullable disabled={readonly} bind:value={t.scale} aria-describedby="{uid}-{i}-scale-h" />
 				<span class="hint" id="{uid}-{i}-scale-h">
 					{#if errs.scale}<span class="err">{errs.scale}</span>{:else}1 unless the table is for a different catchment size, e.g. site area ÷ table area.{/if}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-mar">Natural MAR in the determination (Mm³/a)</label>
+				<NumberInput
+					id="{uid}-{i}-mar"
+					min={0}
+					nullable
+					disabled={readonly}
+					bind:value={() => t.naturalMarMcm ?? null, (v) => (t.naturalMarMcm = v)}
+					aria-invalid={errs.naturalMarMcm ? 'true' : undefined}
+					aria-describedby="{uid}-{i}-mar-h"
+				/>
+				<span class="hint" id="{uid}-{i}-mar-h">
+					{#if errs.naturalMarMcm}<span class="err">{errs.naturalMarMcm}</span>{:else}Optional, scaled like the table. The run compares its own natural MAR at the site{t.naturalSource === 'run'
+							? ` and warns beyond ±${100 * EWR_NATURAL_MAR_TOLERANCE} %`
+							: ''}.{/if}
 				</span>
 			</div>
 			<div class="field">

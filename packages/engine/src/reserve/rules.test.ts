@@ -186,6 +186,23 @@ describe('low flows and high-flow components (engine ≥ 0.33.0)', () => {
 	});
 });
 
+describe("the determination's natural MAR (engine ≥ 1.11.0, issue #46)", () => {
+	it('is optional: absent, null or a number above 0 up to the value ceiling; anything else is refused on its own field', () => {
+		expect(ewrRuleTableIssues(table())).toEqual([]);
+		for (const v of [null, 0.001, 12.5, 1e6]) expect(ewrRuleTableIssues(table({ naturalMarMcm: v }))).toEqual([]);
+		for (const v of [0, -1, 1e6 + 1, Number.NaN, Number.POSITIVE_INFINITY, '12' as never]) expect(fields(table({ naturalMarMcm: v }))).toEqual(['naturalMarMcm']);
+	});
+
+	it('is carried through resolve only when set, so an older table resolves unchanged', () => {
+		expect(resolveEwrRules([table({ naturalMarMcm: 12.5 })], [])[0]!.naturalMarMcm).toBe(12.5);
+		expect(resolveEwrRules([table()], [])[0]).not.toHaveProperty('naturalMarMcm');
+		expect(resolveEwrRules([table({ naturalMarMcm: null })], [])[0]).not.toHaveProperty('naturalMarMcm');
+		const w: string[] = [];
+		expect(resolveEwrRules([table({ naturalMarMcm: -3 })], w)).toEqual([]);
+		expect(w).toEqual([expect.stringMatching(/^EWR rule table for the outlet skipped: it isn't usable \(The natural MAR must be above 0/)]);
+	});
+});
+
 describe('source kind (engine ≥ 1.5.0, WP-3.7)', () => {
 	it('accepts each kind, absent and null, and refuses anything else on its own field', () => {
 		for (const k of EWR_RULE_SOURCE_KINDS) expect(ewrRuleTableIssues(table({ sourceKind: k }))).toEqual([]);

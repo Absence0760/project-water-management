@@ -896,6 +896,11 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		expect(issues([table({ sourceKind: 'guess' })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.sourceKind');
 	});
 
+	it('accepts the determination’s natural MAR, absent or null, and refuses one that isn’t above 0 (engine ≥ 1.11.0)', () => {
+		for (const naturalMarMcm of [12.5, null]) expect(issues([table({ naturalMarMcm })])).toEqual([]);
+		for (const naturalMarMcm of [0, -2, '12']) expect(issues([table({ naturalMarMcm })]).map((i) => i.split(':')[0])).toContain('ewrRules.0.naturalMarMcm');
+	});
+
 	it('accepts a low-flow grid and high-flow components, and runs the engine checks on them (engine ≥ 0.33.0)', () => {
 		const lowFlow = Array.from({ length: 12 }, () => [1, 0.6, 0.2]);
 		const fresh = { label: 'Class II freshet', months: [11, 12], peakM3s: 8, durationDays: 3, perYear: 2 };

@@ -7,7 +7,8 @@
 // - Reliability per farm and per other water user over the reporting window
 //   (settings.reportStart … reportEnd, the curtailment window): time-based
 //   (share of demand days fully met), volumetric (Σ supplied / Σ demand) and
-//   annual (share of water years whose supply ratio reaches a threshold), by
+//   annual (share of complete water years whose supply ratio reaches a
+//   threshold; engine ≥ 1.11.0 leaves part years out), by
 //   water-year month and overall; resilience (mean length of a failure run)
 //   and vulnerability (mean and largest deficit per failure run), after
 //   Hashimoto, Stedinger & Loucks (1982).
@@ -84,11 +85,21 @@ export interface SupplyReliability {
 	timeReliability: number | null;
 	/** Σ supplied ÷ Σ demand; null without demand. Equals the curtailment table's supplied ÷ demand. */
 	volumetricReliability: number | null;
-	/** Water years touching the window with demand > 0 (part years at the ends included). */
+	/**
+	 * Complete water years in the window (1 Oct … 30 Sep all inside it) with
+	 * demand > 0: the years the annual measure counts. Up to engine 1.9.0 a
+	 * part year at either end counted too.
+	 */
 	waterYears: number;
+	/**
+	 * Part water years at the window's ends with demand > 0, left out of the
+	 * annual measure (engine ≥ 1.11.0, issue #46; absent on earlier runs, which
+	 * counted them).
+	 */
+	partWaterYears?: number;
 	/** Of those, years whose Σ supplied ÷ Σ demand reached the annual threshold. */
 	waterYearsMet: number;
-	/** waterYearsMet ÷ waterYears; null without a water year with demand. */
+	/** waterYearsMet ÷ waterYears; null without a complete water year with demand. */
 	annualReliability: number | null;
 	/** Failure runs: consecutive demand days not fully met (a day without demand ends a run). */
 	failureRuns: number;
@@ -319,12 +330,15 @@ function calendarOf(startDate: string, days: number) {
 
 type Calendar = ReturnType<typeof calendarOf>;
 
+/** Days in water year `wy` (1 Oct wy … 30 Sep wy + 1): 365 or 366. */
+const waterYearLength = (wy: number) => (Date.UTC(wy + 1, 9, 1) - Date.UTC(wy, 9, 1)) / 86_400_000;
+
 /** Is the day's demand fully met? */
 const isMet = (d: number, g: number) => d - g <= MET_NOISE * d;
 
 export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number, to: number, threshold: number): SupplyReliability {
 	const months = Array.from({ length: 12 }, () => ({ demandDays: 0, metDays: 0, demandM3: 0, suppliedM3: 0 }));
-	const years = new Map<number, { d: number; g: number }>();
+	const years = new Map<number, { d: number; g: number; days: number }>();
 	let demandM3 = 0;
 	let suppliedM3 = 0;
 	let demandDays = 0;
@@ -354,9 +368,10 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 		const m = months[cal.col[t]!]!;
 		m.demandM3 += d;
 		m.suppliedM3 += g;
-		const y = years.get(cal.row[t]!) ?? { d: 0, g: 0 };
+		const y = years.get(cal.row[t]!) ?? { d: 0, g: 0, days: 0 };
 		y.d += d;
 		y.g += g;
+		y.days++;
 		years.set(cal.row[t]!, y);
 		if (!(d > 0)) {
 			endRun();
@@ -376,8 +391,14 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 	endRun();
 	let wyCount = 0;
 	let wyMet = 0;
-	for (const y of years.values()) {
+	let wyPart = 0;
+	for (const [row, y] of years) {
 		if (!(y.d > 0)) continue;
+		// Only a whole water year counts (engine ≥ 1.11.0): a part year at either end of the window would weigh a few months as a year.
+		if (y.days < waterYearLength(cal.wy0 + row)) {
+			wyPart++;
+			continue;
+		}
 		wyCount++;
 		if (y.g / y.d >= threshold) wyMet++;
 	}
@@ -392,6 +413,7 @@ export function nodeReliability(n: DemandNodeInput, cal: Calendar, from: number,
 		timeReliability: demandDays > 0 ? metDays / demandDays : null,
 		volumetricReliability: ratio(suppliedM3, demandM3),
 		waterYears: wyCount,
+		partWaterYears: wyPart,
 		waterYearsMet: wyMet,
 		annualReliability: wyCount > 0 ? wyMet / wyCount : null,
 		failureRuns: runs,

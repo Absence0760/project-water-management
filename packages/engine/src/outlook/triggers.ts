@@ -165,8 +165,10 @@ export function storageBands(edgesM3: readonly number[], capacityM3: number): { 
  * Which storage in a band each band is run from. `lowerEdge` (default): the
  * band's lowest storage, so a row's "at or above X" is what was run for the
  * band's least favourable start, the cautious reading (design §2 finding 4,
- * [Kaune 2020]); the lowest band runs from empty dams. `midpoint`: the
- * band's middle. A **judgement, pending the hydrologist**.
+ * [Kaune 2020]). `midpoint`: the band's middle. A **judgement, pending the
+ * hydrologist**. From engine 1.11.0 (issue #46) the lowest band's floor is
+ * not empty dams but the lowest total storage on record for the review date
+ * (lowestBandFloor), so it runs from the driest start the record had.
  */
 export type TriggerRepresentative = 'lowerEdge' | 'midpoint';
 
@@ -190,6 +192,23 @@ export function bandStartStorage(input: ModelInput, band: StorageBand, represent
 	return { totalM3: total, storageM3ByDam };
 }
 
+/**
+ * Where the lowest band's start comes from (engine ≥ 1.11.0, issue #46,
+ * model.md §2.15a): the lowest total farm dam storage the base run had on
+ * the review date in any year (reviewStorageHistory), when that is below
+ * the band's upper edge; else empty dams (0), with a warning. A band from
+ * 0 to X read as "below X" is most cautiously run from the worst start the
+ * catchment actually had on that date, not from a start it may never have
+ * had. **Judgement, pending the hydrologist** (the persona draft offered a
+ * 5th percentile with ≥ 20 years instead of the minimum).
+ */
+export function lowestBandFloor(history: readonly ReviewStorageSample[], lowest: StorageBand): { floorM3: number; fromRecord: boolean; warning: string | null } {
+	if (!history.length) return { floorM3: 0, fromRecord: false, warning: 'No year of the record holds the review date, so the lowest band runs from empty dams.' };
+	const min = Math.min(...history.map((x) => x.storageM3));
+	if (min < lowest.toM3) return { floorM3: Math.max(min, 0), fromRecord: true, warning: null };
+	return { floorM3: 0, fromRecord: false, warning: `No year of the record had less than ${m3(lowest.toM3)} in the dams on the review date, so the lowest band runs from empty dams.` };
+}
+
 /** One level of a band's outlook, in the table's terms. */
 export interface TriggerLevelSummary {
 	levelId: string;
@@ -208,6 +227,8 @@ export interface ReviewTriggerRow {
 	/** The total storage the band was run from, and its split over the dams. */
 	startStorageM3: number;
 	storageM3ByDam: Record<string, number>;
+	/** 'lowestOnRecord' on the lowest band when it ran from the lowest storage on record for the review date (engine ≥ 1.11.0, lowestBandFloor); absent otherwise. */
+	startFrom?: 'lowestOnRecord';
 	/** The highest level meeting the planning rule; null when none does (or too few years). */
 	level: { id: string; label: string } | null;
 	reason: PlanningReason;
@@ -230,6 +251,8 @@ export interface ReviewTriggers {
 	bandSource: TriggerBandSource;
 	/** The history the default edges came from (empty with explicit edges). */
 	history: ReviewStorageSample[];
+	/** The lowest total storage on record for the review date, which the lowest band ran from (engine ≥ 1.11.0); null when it ran from empty dams. */
+	lowestOnRecordM3?: number | null;
 	share: number;
 	shareIsDefault: boolean;
 	nYears: number;
@@ -248,6 +271,8 @@ export interface TriggerBandMembers {
 	band: StorageBand;
 	startStorageM3: number;
 	storageM3ByDam: Record<string, number>;
+	/** The lowest band ran from the lowest storage on record (engine ≥ 1.11.0). */
+	startFrom?: 'lowestOnRecord';
 	levels: { id: string; label: string; problems: string[]; members: OutlookMember[] }[];
 }
 
@@ -262,6 +287,8 @@ export interface ReviewTriggerTableInput {
 	representative: TriggerRepresentative;
 	bandSource: TriggerBandSource;
 	history: ReviewStorageSample[];
+	/** The lowest storage on record the lowest band ran from; null or absent = empty dams. */
+	lowestOnRecordM3?: number | null;
 	/** Warnings from drawing the bands. */
 	bandWarnings?: string[];
 	metric?: 'auto' | OutcomeMetric;
@@ -302,6 +329,7 @@ export function reviewTriggerTable(x: ReviewTriggerTableInput): ReviewTriggers {
 			band: b.band,
 			startStorageM3: b.startStorageM3,
 			storageM3ByDam: b.storageM3ByDam,
+			...(b.startFrom ? { startFrom: b.startFrom } : {}),
 			level: o.planning.levelId !== null ? { id: o.planning.levelId, label: o.planning.label! } : null,
 			reason: o.planning.reason,
 			metYears: o.planning.yearsMet,
@@ -341,6 +369,7 @@ export function reviewTriggerTable(x: ReviewTriggerTableInput): ReviewTriggers {
 		representative: x.representative,
 		bandSource: x.bandSource,
 		history: x.history,
+		lowestOnRecordM3: x.lowestOnRecordM3 ?? null,
 		share: first.planning.share,
 		shareIsDefault: first.planning.shareIsDefault,
 		nYears: first.nYears,
@@ -407,9 +436,13 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 	}
 	const drawn = storageBands(edges, capacity);
 	bandWarnings.push(...drawn.warnings);
+	// The lowest band's floor (engine ≥ 1.11.0): the lowest storage on record for the review date, whatever drew the edges.
+	const floor = lowestBandFloor(bandSource === 'explicit' ? reviewStorageHistory(input, baseRun, options.reviewDate) : history, drawn.bands[0]!);
+	if (floor.warning) bandWarnings.push(floor.warning);
 	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
-	const bands: TriggerBandMembers[] = drawn.bands.map((band) => {
-		const start = bandStartStorage(input, band, representative);
+	const bands: TriggerBandMembers[] = drawn.bands.map((band, i) => {
+		const fromRecord = i === 0 && floor.fromRecord;
+		const start = bandStartStorage(input, fromRecord ? { fromM3: floor.floorM3, toM3: band.toM3 } : band, representative);
 		// The band's storage in the snapshot's dams: every band shares the one history.
 		const bandSnapshot = snapshot ? withDamStorage(snapshot, input, start.storageM3ByDam) : null;
 		const levels = options.levels.map((level) => {
@@ -426,7 +459,7 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 			}
 			return { id: level.id, label: level.label, problems, members };
 		});
-		return { band, startStorageM3: start.totalM3, storageM3ByDam: start.storageM3ByDam, levels };
+		return { band, startStorageM3: start.totalM3, storageM3ByDam: start.storageM3ByDam, ...(fromRecord ? { startFrom: 'lowestOnRecord' as const } : {}), levels };
 	});
 	return reviewTriggerTable({
 		reviewDate: options.reviewDate,
@@ -438,6 +471,7 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 		representative,
 		bandSource,
 		history,
+		lowestOnRecordM3: floor.fromRecord ? floor.floorM3 : null,
 		bandWarnings,
 		...(options.metric !== undefined ? { metric: options.metric } : {}),
 		siteNodeId: options.siteNodeId ?? null,
@@ -452,14 +486,22 @@ const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(i
  * A row in words, counting years, never "recommend", "likely" or "should":
  * "At or above 250 000 m³ on 1 January 2027: 85 % met the EWR on every day
  * of the season in 17 of 21 analogue years." The lowest band reads "Below
- * X m³ … (run from empty dams)"; a midpoint band names the storage it ran from.
+ * X m³ … (run from the lowest storage on record for the date, Y m³)" (engine
+ * ≥ 1.11.0), or "(run from empty dams)" without one; a midpoint band names
+ * the storage it ran from.
  */
 export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'metric' | 'share' | 'representative'>, row: ReviewTriggerRow): string {
 	const on = `on ${longDate(table.reviewDate)}`;
 	const where =
 		row.band.fromM3 > 0
 			? `At or above ${m3(row.band.fromM3)} ${on}${table.representative === 'midpoint' ? ` (run from ${m3(row.startStorageM3)})` : ''}`
-			: `Below ${m3(row.band.toM3)} ${on} (run from ${row.startStorageM3 > 0 ? m3(row.startStorageM3) : 'empty dams'})`;
+			: `Below ${m3(row.band.toM3)} ${on} (run from ${
+					row.startFrom === 'lowestOnRecord' && table.representative !== 'midpoint'
+						? `the lowest storage on record for the date, ${m3(row.startStorageM3)}`
+						: row.startStorageM3 > 0
+							? m3(row.startStorageM3)
+							: 'empty dams'
+				})`;
 	const what = table.metric === 'reserveMonthsMet' ? 'met the Reserve in every month of the season' : 'met the EWR on every day of the season';
 	switch (row.reason) {
 		case 'met':

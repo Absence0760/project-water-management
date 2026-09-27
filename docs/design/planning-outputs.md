@@ -256,7 +256,7 @@ analogue years." Choices, each marked in model.md:
   default to the terciles of the base run's storage on the review date
   across the record, three bands as S3 has **(judgement**, the tercile
   convention of seasonal forecasts, finding 3; pending the hydrologist);
-- **a band runs from its lower edge** (the lowest from empty dams), so
+- **a band runs from its lower edge** (the lowest from the lowest storage on record for the date, engine ≥ 1.11.0; empty dams before), so
   "at or above X" is what was run for the band's least favourable start,
   the cautious reading of finding 4; a midpoint option exists
   **(judgement, pending the hydrologist)**; the total is shared over the

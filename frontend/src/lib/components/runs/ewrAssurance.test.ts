@@ -10,6 +10,7 @@ import {
 	headlineSite,
 	highFlowVerdict,
 	monthLabel,
+	naturalMarLine,
 	reserveCellText,
 	reserveGrid,
 	shareOfRequired,
@@ -63,6 +64,25 @@ describe('verdict and method', () => {
 		);
 		expect(describeMethod(site(() => 1, { naturalSource: 'run', unit: 'm3s', component: 'lowFlow', scale: 0.25 }))).toBe(
 			'Each month’s requirement is the EWR at the % point its natural flow sits at (percentile from the run’s own natural flow at the site); table in m³/s, the month’s mean, low flows only, scaled × 0.25.'
+		);
+	});
+});
+
+describe('naturalMarLine (engine ≥ 1.11.0)', () => {
+	it('is null without the determination’s natural MAR, and flags a gap beyond ±15 % only with the percentile from the run', () => {
+		expect(naturalMarLine({ naturalSource: 'run' })).toBeNull();
+		const wet = { runMcm: 12, tableMcm: 10, differencePct: 20 };
+		expect(naturalMarLine({ naturalSource: 'run', naturalMar: wet })).toEqual({
+			text: "Natural MAR at the site: 12.0 Mm³/a in this run, 20 % above the determination's 10.0 Mm³/a: beyond ±15 %, so the percentiles from the run may pass or fail months the determination's own curve would not.",
+			caution: true
+		});
+		expect(naturalMarLine({ naturalSource: 'table', naturalMar: wet })).toEqual({
+			text: "Natural MAR at the site: 12.0 Mm³/a in this run, 20 % above the determination's 10.0 Mm³/a.",
+			caution: false
+		});
+		expect(naturalMarLine({ naturalSource: 'run', naturalMar: { runMcm: 8.5, tableMcm: 10, differencePct: -15 } })!.caution).toBe(false);
+		expect(naturalMarLine({ naturalSource: 'run', naturalMar: { runMcm: 10, tableMcm: 10, differencePct: 0 } })!.text).toBe(
+			"Natural MAR at the site: 10.0 Mm³/a in this run, the same as the determination's 10.0 Mm³/a."
 		);
 	});
 });

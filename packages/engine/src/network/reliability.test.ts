@@ -45,10 +45,11 @@ describe('reliability (hand-worked)', () => {
 		expect(r!.longestFailureDays).toBe(2);
 		expect(r!.meanFailureDeficitM3).toBe(10.5);
 		expect(r!.maxFailureDeficitM3).toBe(16);
-		// Water year 2000: 15 / 20 = 0.75 ≥ 0.7; 2001: 14 / 30 < 0.7.
-		expect(r!.waterYears).toBe(2);
-		expect(r!.waterYearsMet).toBe(1);
-		expect(r!.annualReliability).toBe(0.5);
+		// Both water years are part years (engine ≥ 1.11.0): the annual measure counts neither.
+		expect(r!.waterYears).toBe(0);
+		expect(r!.partWaterYears).toBe(2);
+		expect(r!.waterYearsMet).toBe(0);
+		expect(r!.annualReliability).toBeNull();
 		// By month: September (index 11) 1 of 2 days, October (index 0) 1 of 3.
 		expect(r!.months[11]).toMatchObject({ demandDays: 2, metDays: 1, demandM3: 20, suppliedM3: 15, timeReliability: 0.5, volumetricReliability: 0.75 });
 		expect(r!.months[0]).toMatchObject({ demandDays: 3, metDays: 1, demandM3: 30, suppliedM3: 14, volumetricReliability: 14 / 30 });
@@ -60,7 +61,7 @@ describe('reliability (hand-worked)', () => {
 		const full = [10, 10, 0, 10, 10, 10];
 		x.demandNodes[0]!.supplied = full;
 		const [r] = supplyAssurance(x).reliability;
-		expect([r!.timeReliability, r!.volumetricReliability, r!.annualReliability]).toEqual([1, 1, 1]);
+		expect([r!.timeReliability, r!.volumetricReliability, r!.annualReliability]).toEqual([1, 1, null]);
 		expect(r!.failureRuns).toBe(0);
 		expect(r!.meanFailureDays).toBeNull();
 		expect(r!.maxFailureDeficitM3).toBe(0);
@@ -72,6 +73,48 @@ describe('reliability (hand-worked)', () => {
 		none.demandNodes[0]!.supplied = zeros(6);
 		const [n] = supplyAssurance(none).reliability;
 		expect([n!.timeReliability, n!.volumetricReliability, n!.annualReliability]).toEqual([null, null, null]);
+	});
+
+	it('the annual measure counts complete water years only, and says how many part years it left out (engine ≥ 1.11.0)', () => {
+		// 29–30 Sep 2000 (part of water year 1999), all of water year 2000 (365 days), 1–4 Oct 2001 (part of 2001).
+		const days = 2 + 365 + 4;
+		const demand = new Array<number>(days).fill(10);
+		// The part years get nothing; the complete year gets 8 of 10 every day.
+		const supplied = demand.map((_, t) => (t < 2 || t >= 367 ? 0 : 8));
+		const x: SupplyAssuranceInput = {
+			...pure(),
+			startDate: '2000-09-29',
+			days,
+			window: { from: 0, to: days - 1, reportStart: '2000-09-29', reportEnd: '2001-10-04' },
+			demandNodes: [{ nodeId: 'A', name: 'Farm A', kind: 'farm', demand, supplied }],
+			natural: zeros(days),
+			outflow: zeros(days)
+		};
+		const [r] = supplyAssurance(x).reliability;
+		// 0.8 ≥ 0.7 in water year 2000; counting the two failed part years would have made it 1 of 3.
+		expect(r).toMatchObject({ waterYears: 1, partWaterYears: 2, waterYearsMet: 1, annualReliability: 1 });
+		// A window that starts on 1 October and ends on 30 September has no part year.
+		const whole = supplyAssurance({ ...x, window: { from: 2, to: 366, reportStart: '2000-10-01', reportEnd: '2001-09-30' } }).reliability[0]!;
+		expect(whole).toMatchObject({ waterYears: 1, partWaterYears: 0, waterYearsMet: 1, annualReliability: 1 });
+		// One day short of the year at the end makes it a part year.
+		const short = supplyAssurance({ ...x, window: { from: 2, to: 365, reportStart: '2000-10-01', reportEnd: '2001-09-29' } }).reliability[0]!;
+		expect(short).toMatchObject({ waterYears: 0, partWaterYears: 1, annualReliability: null });
+	});
+
+	it('a leap water year is complete at 366 days', () => {
+		// Water year 2003 (1 Oct 2003 … 30 Sep 2004) holds 29 Feb 2004.
+		const days = 366;
+		const demand = new Array<number>(days).fill(10);
+		const x: SupplyAssuranceInput = {
+			...pure(),
+			startDate: '2003-10-01',
+			days,
+			window: { from: 0, to: days - 1, reportStart: '2003-10-01', reportEnd: '2004-09-30' },
+			demandNodes: [{ nodeId: 'A', name: 'Farm A', kind: 'farm', demand, supplied: demand }],
+			natural: zeros(days),
+			outflow: zeros(days)
+		};
+		expect(supplyAssurance(x).reliability[0]).toMatchObject({ waterYears: 1, partWaterYears: 0, annualReliability: 1 });
 	});
 
 	it('only the reporting window counts', () => {
@@ -207,7 +250,7 @@ describe('the water account (hand-worked)', () => {
 
 		// Farm A: met on days 1 and 2; short 1000 on day 0 and 2000 on day 3.
 		const [a, u] = o.summary.supplyAssurance!.reliability;
-		expect(a).toMatchObject({ nodeId: 'A', kind: 'farm', timeReliability: 0.5, volumetricReliability: 5000 / 8000, failureRuns: 2, meanFailureDays: 1, meanFailureDeficitM3: 1500, maxFailureDeficitM3: 2000, waterYears: 1, waterYearsMet: 0, annualReliability: 0 });
+		expect(a).toMatchObject({ nodeId: 'A', kind: 'farm', timeReliability: 0.5, volumetricReliability: 5000 / 8000, failureRuns: 2, meanFailureDays: 1, meanFailureDeficitM3: 1500, maxFailureDeficitM3: 2000, waterYears: 0, partWaterYears: 1, waterYearsMet: 0, annualReliability: null });
 		expect(u).toMatchObject({ nodeId: 'U', kind: 'user', timeReliability: 0.5, volumetricReliability: 0.5 });
 		// January is water-year month 3: 0.625 → Severe.
 		expect(o.summary.supplyAssurance!.stress.nodes[0]!.stressClass[0]![3]).toBe('severe');
@@ -262,14 +305,25 @@ describe('the water account (hand-worked)', () => {
 	});
 
 	it('settings.assuranceAnnualThreshold sets the annual test; a bad value warns and falls back to 0.9', () => {
-		const nodes = [node('G', 'gauge', null), node('A', 'farm', 'G', { damCapacityM3: 5000 })];
-		// Volumetric 0.875: met at 0.85, not at the default 0.9.
-		expect(run(input(nodes)).summary.supplyAssurance!.reliability[0]!.annualReliability).toBe(0);
-		const low = run(input(nodes, { assuranceAnnualThreshold: 0.85 })).summary.supplyAssurance!;
+		// One complete water year (2020/21): A needs 2000 m³/day in January only and gets the 1750 m³/day natural flow, so its year's ratio is 0.875.
+		const days = 365;
+		const nodes = [node('G', 'gauge', null), node('A', 'farm', 'G')];
+		const year = (settings: Partial<ModelInput['settings']> = {}) => {
+			const i = input(nodes, settings);
+			i.series = { rain_catchment_mm: { startDate: '2020-10-01', values: new Array(days).fill(0) } };
+			return withVerification(i, runModelWith(i, () => ({ naturalFlowM3Day: new Array(days).fill(1750) })));
+		};
+		const def = year().summary.supplyAssurance!.reliability[0]!;
+		expect(def).toMatchObject({ waterYears: 1, partWaterYears: 0 });
+		expect(def.volumetricReliability).toBeCloseTo(0.875, 12);
+		// Met at 0.85, not at the default 0.9.
+		expect(def.annualReliability).toBe(0);
+		const low = year({ assuranceAnnualThreshold: 0.85 }).summary.supplyAssurance!;
 		expect(low.annualThreshold).toBe(0.85);
 		expect(low.reliability[0]!.annualReliability).toBe(1);
 		const bad = run(input(nodes, { assuranceAnnualThreshold: 1.5 }));
 		expect(bad.summary.supplyAssurance!.annualThreshold).toBe(0.9);
 		expect(bad.summary.warnings.some((w) => w.startsWith('annual assurance threshold "1.5"'))).toBe(true);
 	});
+
 });

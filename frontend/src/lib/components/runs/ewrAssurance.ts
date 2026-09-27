@@ -1,6 +1,6 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
-import { ewrSourceConfidence, type EwrAssuranceMonth, type EwrAssuranceSite, type EwrHighFlowReport, type RunSummary } from '@water-management/engine';
+import { EWR_NATURAL_MAR_TOLERANCE, ewrSourceConfidence, naturalMarBeyondTolerance, type EwrAssuranceMonth, type EwrAssuranceSite, type EwrHighFlowReport, type RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import { monthName } from '$lib/format/months';
 
@@ -40,6 +40,22 @@ export function verdict(s: EwrAssuranceSite): string {
 export function sourceLine(s: Pick<EwrAssuranceSite, 'source' | 'sourceKind'>): { text: string; low: boolean } {
 	const confidence = ewrSourceConfidence(s.sourceKind);
 	return { text: confidence ? `${confidence}: ${s.source}` : `Source: ${s.source}`, low: s.sourceKind === 'desktop' };
+}
+
+/**
+ * The run's natural MAR at the site against the determination's (engine ≥
+ * 1.11.0, model.md §2.9c), or null when the table records none. `caution`
+ * when the percentile comes from the run and the gap is beyond
+ * EWR_NATURAL_MAR_TOLERANCE, the case the run warns about.
+ */
+export function naturalMarLine(s: Pick<EwrAssuranceSite, 'naturalMar' | 'naturalSource'>): { text: string; caution: boolean } | null {
+	const m = s.naturalMar;
+	if (!m) return null;
+	const d = Math.round(m.differencePct);
+	const gap = d === 0 ? 'the same as' : `${fmtNum(Math.abs(d))} % ${d > 0 ? 'above' : 'below'}`;
+	const caution = s.naturalSource === 'run' && naturalMarBeyondTolerance(m.differencePct);
+	const tail = caution ? `: beyond ±${fmtNum(100 * EWR_NATURAL_MAR_TOLERANCE)} %, so the percentiles from the run may pass or fail months the determination's own curve would not.` : '.';
+	return { text: `Natural MAR at the site: ${fmtFlow(m.runMcm)} Mm³/a in this run, ${gap} the determination's ${fmtFlow(m.tableMcm)} Mm³/a${tail}`, caution };
 }
 
 /** The method in one sentence: where the percentile comes from, the unit, what the table covers, its scale. */

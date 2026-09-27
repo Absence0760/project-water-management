@@ -471,3 +471,52 @@ describe('Reserve compliance in a run', () => {
 		expect(compared).toBeGreaterThan(10);
 	});
 });
+
+describe("the run's natural MAR against the determination's (engine ≥ 1.11.0, issue #46)", () => {
+	// One water year, every month the same natural volume, so the run's natural MAR is 12 × that.
+	const start = '2000-10-01';
+	const days = daysBetween(start, '2001-09-30');
+	const site = (monthMcm: number, over: Partial<EwrRuleTable>) => {
+		const natural = daily(start, days, () => monthMcm * 1e6);
+		return assessSite(start, days, { table: table(over), nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural }).report;
+	};
+	const marWarning = (r: EwrAssuranceSite) => assuranceWarnings(r).filter((w) => w.includes('natural MAR'));
+
+	it('reports the comparison only when the table records a natural MAR, scaled like the table', () => {
+		expect(site(1, {})).not.toHaveProperty('naturalMar');
+		expect(site(1, { naturalMarMcm: null })).not.toHaveProperty('naturalMar');
+		const r = site(1, { naturalMarMcm: 5, scale: 2 });
+		expect(r.naturalMar!.runMcm).toBeCloseTo(12, 9);
+		expect(r.naturalMar!.tableMcm).toBe(10);
+		expect(r.naturalMar!.differencePct).toBeCloseTo(20, 9);
+	});
+
+	it('warns beyond ±15 % only when the percentile comes from the run', () => {
+		const wet = site(1, { naturalSource: 'run', natural: null, naturalMarMcm: 10 });
+		expect(marWarning(wet)).toEqual([
+			"EWR rule table at the outlet (O): the run's natural MAR at the site (12 Mm³/a) is 20 % above the determination's (10 Mm³/a), beyond ±15 %; with the percentile from the run, the table's flows are judged against a natural flow wetter than the one they were set for, so months pass or fail that the determination's own curve would not: check the calibration, or enter the table's natural flows"
+		]);
+		const dry = site(0.5, { naturalSource: 'run', natural: null, naturalMarMcm: 10 });
+		expect(marWarning(dry)[0]).toMatch(/\(6 Mm³\/a\) is 40 % below the determination's \(10 Mm³\/a\).*a natural flow drier than/);
+		// The gazette's own curve places each month: the gap is reported, not warned about.
+		const onTable = site(1, { naturalMarMcm: 10 });
+		expect(onTable.naturalMar!.differencePct).toBeCloseTo(20, 9);
+		expect(marWarning(onTable)).toEqual([]);
+	});
+
+	it('within ±15 % (15 % itself included) there is no warning', () => {
+		for (const m of [11.5 / 12, 8.5 / 12, 1 / 1.2]) {
+			const r = site(m, { naturalSource: 'run', natural: null, naturalMarMcm: 10 });
+			expect(Math.abs(r.naturalMar!.differencePct)).toBeLessThanOrEqual(15 + 1e-9);
+			expect(marWarning(r)).toEqual([]);
+		}
+	});
+
+	it('without every calendar month in the run there is no comparison (the missing months are warned about already)', () => {
+		const short = daysBetween(start, '2001-05-31');
+		const natural = daily(start, short, () => 1e6);
+		const r = assessSite(start, short, { table: table({ naturalSource: 'run', natural: null, naturalMarMcm: 10 }), nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural }).report;
+		expect(r).not.toHaveProperty('naturalMar');
+		expect(marWarning(r)).toEqual([]);
+	});
+});

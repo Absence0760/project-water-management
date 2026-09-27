@@ -2819,6 +2819,28 @@ natural percentile comes from (`naturalSource`):
   determination's own curve, so the requirement is the gazette's for a given
   natural flow, but a model biased against that curve shifts the conditions.
 
+**The determination's natural MAR** (engine ≥ 1.11.0, issue #46; optional
+`naturalMarMcm`, Mm³ a year, above 0, × `scale` like every table value).
+With it, the site's report carries `naturalMar`: the run's natural MAR at
+the site (Σ over the 12 calendar months of the mean complete-month natural
+volume, so a part month at either end doesn't count; absent when a calendar
+month has no complete year in the run), the determination's, and the
+difference in %. With the percentile from the **run** and the difference
+beyond **±15 %** (`EWR_NATURAL_MAR_TOLERANCE`; exactly 15 % is within) the
+run warns: in `run` mode the requirement's flows are the table's but the
+percentiles are the run's own, so a model wetter than the determination's
+natural flow passes months the gazette's curve would fail (the flow A rises,
+the requirement R doesn't), and a drier one the reverse. With the
+percentile from the `table` the gap is reported (Reserve panel, summary CSV)
+but not warned about, since the gazette's curve places each month. No field,
+no comparison and no warning, so a table stored before behaves as it did.
+The 15 % is a **judgement**, not a published standard: the tolerance the
+hydrologist and licensing-authority persona drafts proposed, about the
+WR2012-versus-quinary MAR gap CR-7 names as the largest uncertainty.
+**Draft pending the client's hydrologist.** The same drafts prefer `table`
+wherever the determination publishes a natural curve; the default stays
+`run`.
+
 No table: nothing changes. By default the pragmatic EWR stays the daily EWR
 everywhere (the shortfall charge, curtailment, days not met), with or without
 tables; the rule tables add a report. From engine 1.3.0 the charge can follow
@@ -2894,7 +2916,8 @@ run warnings: an EWR row that rises with the % point, a natural row that rises
 (its running minimum is used), and an EWR above the natural flow at a point
 (`table` source), which even natural flow can't meet. A calendar month the
 run has no complete year of is named, and so is a record shorter than 10
-years of a calendar month.
+years of a calendar month. From engine 1.11.0, a run natural MAR more than
+±15 % from the determination's with the percentile from the run (above).
 
 **Invariants (tested, `reserve/assurance.test.ts`).**
 - **Natural flow meets its own rules.** When every EWR value is at most the
@@ -3193,6 +3216,25 @@ peaks it has, which undercounts natural and simulated flow alike; and a
 flood much longer than a triangle at half its peak (a broad, flat event)
 counts for a longer duration than its base. Both are for the hydrologist to
 confirm (below).
+
+*Instantaneous vs daily-mean peak (engine ≥ 1.11.0).* A gazetted Reserve
+gives each flood's **instantaneous** peak (the BBM manual, King, Tharme & de
+Villiers 2008, WRC TT 354/08, §21.3), while the engine compares **daily
+means**; a daily mean is always below the instantaneous peak of the same
+flood, often far below on a small, flashy catchment. Entered as published,
+the peak is rarely reached by natural daily flow, `required = MIN(perYear,
+n_nat)` falls to 0 in most years, and the check goes blind, as it did before
+1.9.0 for another reason. So the editor labels the field the **daily-mean
+peak** (the hydrologist converts the gazette's peak, e.g. with the site's
+peak-to-daily-mean ratio from an observed record), and the run warns for a
+component whose natural flow has no event in **more than half** of the
+complete water years (`EWR_HIGH_FLOW_NATURAL_MIN_SHARE` = 0.5, a judgement
+pending the hydrologist): "high flow "Class II freshet": the site's natural
+flow reached its 10 m³/s daily-mean peak for the duration in only 1 of 3
+water years, so the requirement is waived in the rest …". Exactly half is
+not warned about; tested with a positive control in `lowHighFlows.test.ts`.
+The engine doesn't convert the peak itself: the ratio depends on the site's
+flood shape, which the hydrologist has and the model doesn't.
 
 A year is never asked for a flood its natural flow didn't have: a dry year is
 not failed for it, but a dam that holds back a flood the river would have had
@@ -4373,7 +4415,7 @@ New outputs only: every figure is read off the run's own daily `demand` and
 | --- | --- |
 | Time-based | days whose demand D > 0 was fully met ÷ days with D > 0. "Fully met": D − G ≤ 10⁻⁹ D (float noise). Days without demand are neither met nor failed, so a winter without irrigation doesn't inflate it. |
 | Volumetric | Σ G ÷ Σ D. Equals the curtailment table's I ÷ H for the same farm (an invariant). |
-| Annual | water years (touching the window, part years included) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ water years with demand. Default 0.9, a project setting, not a standard. |
+| Annual | **complete** water years (1 Oct … 30 Sep all inside the window) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ complete water years with demand (`waterYears`). A part year at either end of the window is left out and counted in `partWaterYears` (engine ≥ 1.11.0, issue #46; up to 1.9.0 it counted as a whole year, so a few wet or dry months weighed a year and the window could be picked to catch or drop them). Default 0.9, a project setting, not a standard. |
 | Resilience | a failure is a run of consecutive demand days not fully met (a day without demand ends it); the mean and the longest length in days. Hashimoto et al. (1982) define resilience as the probability of recovering, 1 ÷ the mean length. |
 | Vulnerability | Σ (D − G) over each failure run: the mean and the largest, m³ (Hashimoto's "severity"). |
 
@@ -4389,8 +4431,11 @@ month's supply ratio Σ G ÷ Σ D is **Low** ≥ 95 %, **Moderate** ≥ 85 %,
 demand has no class.
 
 Decisions pending the hydrologist: demand days rather than all days for the
-time-based measure; part water years at the ends of the window counting for
-the annual measure; the v004 thresholds as they stand.
+time-based measure (kept, as the licensing-authority draft on #46 confirms);
+the annual measure on complete water years only (engine 1.11.0, from the same
+**draft, pending the client's hydrologist**; as the Reserve, the year classes
+and the allocation summary already count whole years); the v004 thresholds
+as they stand.
 
 ### 2.11b Water account (engine ≥ 0.32.0, roadmap WP-3.4)
 
@@ -4970,8 +5015,20 @@ is one band over the whole range (`wholeRange`).
 **The storage a band runs from** (`bandStartStorage`). By default the
 band's **lower edge**: a row reads "at or above X m³", and the run is then
 the band's least favourable start, the cautious reading (design §2
-finding 4, after Kaune et al. 2020); the lowest band runs from empty dams. `midpoint`
-is the other choice. Both are **judgements pending the hydrologist**. The
+finding 4, after Kaune et al. 2020). The **lowest band** (from 0) runs,
+from engine 1.11.0 (issue #46, `lowestBandFloor`), from the **lowest total
+storage on record for the review date**: the minimum over every year of
+`reviewStorageHistory` (taken for explicit edges too), still shared pro rata
+to capacity. Running "below X" from empty dams was a start the catchment may
+never have had on that date, and could make the row read "no level meets"
+for a situation that never occurred; the cautious reading of "below X" is
+the worst start actually seen. When no year holds the date, or none had less
+than the band's upper edge, the band runs from empty dams and a warning says
+why. The table carries `lowestOnRecordM3` and the row `startFrom:
+'lowestOnRecord'`. The minimum rather than the 5th percentile the
+hydrologist draft offered for ≥ 20 years is a **judgement, a draft pending
+the client's hydrologist**. `midpoint` is the other choice (for the lowest
+band, the middle of the driest start and its upper edge). Both are **judgements pending the hydrologist**. The
 total is shared over the dams **pro rata to capacity**, so every dam is at
 the same share of its capacity: with no per-dam level on the review date
 the same fill everywhere is the plain reading of "the dams hold x m³", and
@@ -5012,12 +5069,15 @@ before it is used.
 
 **Warnings**: too few analogue years (every row `notEnoughYears`, as
 §2.15), a band where no level meets the rule, a table that isn't
-monotone, band edges left out, tercile bands from a short history.
+monotone, band edges left out, tercile bands from a short history, and
+(engine ≥ 1.11.0) a lowest band run from empty dams because the record has
+no lower start on the date.
 
 **Wording** (`describeTriggerRow`): counted years only, never "recommend",
 "likely" or "should": "At or above 400 000 m³ on 1 January 2013: 70 % met
 the EWR on every day of the season in 10 of 12 analogue years." The lowest
-band reads "Below 200 000 m³ on … (run from empty dams): …"; a band run
+band reads "Below 200 000 m³ on … (run from the lowest storage on record for
+the date, 86 000 m³): …", or "(run from empty dams)" without one; a band run
 from its middle names that storage; a band where no level meets the rule
 gives the most any level met.
 
