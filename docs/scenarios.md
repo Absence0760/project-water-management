@@ -135,6 +135,21 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   raised levels are `supplyStopPct` and `supplyTriggerPct`. "What if this
   farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
   `riverFirst` and `pumpCapacityM3Day` → 1200.
+
+  **Dam capacity** (engine ≥ 1.7.0, [model.md §2.13](./model.md), pending
+  the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
+  and to a capacity above 0) resizes its geometry along the dam's own
+  area–volume relation, as the storage–yield curve does: a power-law dam's
+  `damAreaFullM2` (as entered, or the capacity ÷ 3 m estimate) becomes
+  A_full × (new ÷ old)^b with its own `damAreaExponent`; a survey curve is
+  cut at its top × the ratio, or extrapolated beyond the survey to it
+  (a power law through its top two rows). The op's note says what changed
+  (`dam area when full 33333 → 54150 m² …`, or that the curve was
+  extrapolated); it is left out for a node the caller can't see. A later
+  `damAreaFullM2` op on the node sets the enlarged dam's own area; one before
+  the capacity op describes the dam at its old size and is resized with it.
+  A new dam (from 0) keeps an unknown area unknown. Before 1.7.0 the area
+  stayed as entered, or followed capacity ÷ 3 m (constant mean depth).
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the

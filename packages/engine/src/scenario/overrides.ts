@@ -4,7 +4,7 @@
 // backend loads the base input, this transforms plain data, and runModel is
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
-import { upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	NODE_SET_FIELDS,
@@ -20,6 +20,8 @@ import {
 	type ScenarioOp
 } from './ops';
 import { structureIssues } from './structure';
+import { resolveDamCurve } from '../network/dam';
+import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
@@ -295,6 +297,42 @@ function findTransfer(d: Draft, transferId: string): Transfer {
 	return d.model.transfers.find((t) => t.id === transferId) ?? fail(`transfer ${transferId} not found`);
 }
 
+/**
+ * A farm dam whose capacity an op changed keeps its geometry along its own
+ * area–volume relation (engine ≥ 1.7.0, docs/model.md §2.13, ../network/damResize.ts):
+ * a survey curve is cut at, or extrapolated to, its top × the capacity ratio;
+ * a power-law dam's area when full (as entered, or the capacity ÷ 3 m
+ * estimate) becomes A_full × ratio^b. A later `damAreaFullM2` op on the node
+ * sets the new dam's own area; one before this op described the old dam and
+ * is resized with it. Nothing happens for a new dam (from capacity 0), a dam
+ * removed (to 0) or an unchanged capacity. Returns the op's note.
+ */
+function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
+	const cap = n.damCapacityM3;
+	if (!(oldCap > 0) || !(cap > 0) || cap === oldCap) return null;
+	const ratio = cap / oldCap;
+	const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
+	const survey = resolveDamCurve(n);
+	if (survey && n.damCurve) {
+		const top = survey.volume[survey.volume.length - 1]! * ratio;
+		const r = resizeDamCurve(n.damCurve, top, b);
+		if (r.rows.length >= 2) {
+			n.damCurve = r.rows;
+			return r.extrapolated
+				? `dam survey curve extrapolated beyond the survey to ${Math.round(top)} m³ (area ∝ volume^${r.exponent!.toFixed(2)} from its top rows): enter a surveyed curve for the enlarged dam if there is one`
+				: `dam survey curve cut at ${Math.round(top)} m³`;
+		}
+		// Cut below its lowest surveyed row: too little curve left, so the power law takes the area there.
+		n.damCurve = null;
+		n.damAreaFullM2 = r.rows.at(-1)!.areaM2;
+		return `dam survey curve cut below its lowest row; area when full ${Math.round(n.damAreaFullM2)} m² from it, on the power law`;
+	}
+	const estimated = n.damAreaFullM2 === null || n.damAreaFullM2 === undefined || !(n.damAreaFullM2 >= 0);
+	const from = estimated ? oldCap / ESTIMATED_DAM_DEPTH_M : n.damAreaFullM2!;
+	n.damAreaFullM2 = resizedFullArea(from, oldCap, cap, b);
+	return `dam area when full ${Math.round(from)} → ${Math.round(n.damAreaFullM2)} m² along the dam's own area–volume relation (× ${ratio.toFixed(3)}^${b})${estimated ? `, from the capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m estimate` : ''}`;
+}
+
 function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[] {
 	const notes: string[] = [];
 	const m = d.model;
@@ -304,7 +342,12 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!(NODE_SET_FIELDS[n.kind] as readonly string[]).includes(op.field)) fail(`"${op.field}" can't be set on a ${n.kind}`);
 			const e = nodeFieldError(op.field, op.value);
 			if (e) fail(`${op.field} ${e}`);
+			const oldCap = n.damCapacityM3;
 			(n as unknown as Record<string, unknown>)[op.field] = op.field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			if (op.field === 'damCapacityM3' && n.kind === 'farm') {
+				const note = resizeDamGeometry(n, oldCap);
+				if (note && see.node(n.id)) notes.push(note);
+			}
 			break;
 		}
 		case 'node.add': {

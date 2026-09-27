@@ -1762,8 +1762,11 @@ binds, the transfer brings enough that neither MIN bites.
   estimates `capacity ÷ 3 m`, about the median mean depth of South African
   minor dams (Mantel & Hughes 2023), and warns **W6** with the number of dams
   (and their names) that used the estimate.
-- `b` is `node.damAreaExponent`, default **0.7** (Liebe et al. 2005, small
-  reservoirs); allowed 0 < b ≤ 3.
+- `b` is `node.damAreaExponent`, default **0.7** (`DAM_AREA_EXPONENT`, Liebe
+  et al. 2005, small reservoirs; published small-reservoir fits give b ≈
+  0.65–0.85; calibration-research.md CR-32's "about 0.6" is the same
+  practice, the engine's default is 0.7); allowed 0 < b ≤ 3. The same b
+  resizes a dam along its own relation (§2.13, engine ≥ 1.7.0).
 - **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
   start-of-day surface to the whole day. When the surface grows faster than
   the volume (b > 1) and a day's evaporation is more than 1/b of the dam
@@ -4350,19 +4353,41 @@ yield takes under a second and an 11-point curve about 7 s
 of a job.
 
 **A resized dam** (the curve, and any `capacityM3`) keeps its initial and
-dead storage as the same fractions of capacity, and its mean depth: surface
-area when full scales with capacity, so evaporation and rain on it scale
-too. A transfer rule drawing from it keeps its reserve as the same fraction.
-A dam with a **survey curve** (WP-3.5, §2.7a; engine ≥ 0.35.0) is resized
-the same way: every row's volume and area × the capacity ratio, so the dam
-keeps its shape (the same depth at the same fraction full) and a curve dam
-and a power-law dam scale alike; at capacity 0 the curve is dropped. The
-mean-supply bound *B* takes rain on the curve's top-row area. Its release
-rule is kept as it is (a fixed release or an outlet cap doesn't grow with
-the dam), and the release comes before the draft, so a dam with a release
-yields less. Pending the hydrologist: a real enlargement (a higher wall, a
-wider basin) changes the curve differently from a uniform scale; a surveyed
-curve for the enlarged dam, entered on a scenario, is the durable answer.
+dead storage as the same fractions of capacity. A transfer rule drawing from
+it keeps its reserve as the same fraction. Its surface follows **the dam's
+own area–volume relation** (engine ≥ 1.7.0, `network/damResize.ts`; drafted
+from the hydrologist persona's review of issue #46, item 11, **pending the
+hydrologist**): a dam of another size at the same site is the same basin
+filled to another level, so its full-supply area is the dam's own area at
+that volume.
+
+- **Power-law dam** (A = A_full × (V / C)^b, i.e. A = k·V^b): A_full,new =
+  A_full × (C_new / C)^b, with the dam's own b (default 0.7, §2.7a). Mean
+  depth rises with capacity. Doubling a 100 000 m³ dam with 3 m mean depth
+  gives 33 333 × 2^0.7 = 54 150 m², not 66 667; halving it 20 520 m², not
+  16 667.
+- **Survey-curve dam** (WP-3.5, §2.7a; engine ≥ 0.35.0), resized to its top
+  volume × the capacity ratio (so its own capacity keeps the curve as it is):
+  smaller, the curve is cut at the new top, a top row interpolated linearly
+  in volume as the run interpolates it (exact); larger, one row is added at
+  the new top with area A_top × (V_new / V_top)^b, b fitted through the
+  curve's top two rows that have a surface (clamped to 0–3; the dam's own
+  exponent when it has only one), and level the top row's + ∫ dV / A along
+  that power law (an extrapolation beyond the survey).
+
+At capacity 0 the curve is dropped. The mean-supply bound *B* takes rain on
+the resized full-supply area (a curve's top row). Its release rule is kept as
+it is (a fixed release or an outlet cap doesn't grow with the dam), and the
+release comes before the draft, so a dam with a release yields less. Before
+1.7.0 a resized dam scaled its area with its capacity (constant mean depth),
+which describes widening the basin at the same depth, rarely what a raise
+does: it overstated an enlarged dam's evaporating surface (and understated a
+smaller one's), so it understated yield above the dam's own capacity and
+overstated it below. The larger side still depends on the valley shape above
+today's full-supply level: a surveyed curve for the enlarged dam, entered on
+a scenario (a `node.add` with its `damCurve`; there is no `node.set` for a
+curve yet), is the durable answer. A scenario's `node.set` of `damCapacityM3`
+resizes the dam the same way (scenarios.md § Dam capacity).
 
 **Monotonicity.** Yield is non-decreasing in capacity for a lossless dam
 that starts at or above its minimum operating level and is not a transfer

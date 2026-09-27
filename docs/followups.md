@@ -192,6 +192,14 @@ collected as a checklist in issue #46; tick it there as they answer.
         Gush curves by age and site the CMA uses. Confirm the daily split
         (low-flow share on each day's flow up to the Q75 natural flow, the
         other share above it) and whether orchards and vineyards need a class.
+- [ ] **A resized dam follows its own area–volume relation** (engine 1.7.0,
+      [model.md §2.13](./model.md)). Built, pending the hydrologist's
+      confirmation: drafted from the hydrologist persona's review of issue
+      #46 (item 11). The storage–yield curve and a scenario's dam-capacity op
+      take A_full × (C_new / C)^b (a survey curve cut or extrapolated) instead
+      of scaling the area with capacity; doubling a 3 m-deep 100 000 m³ dam
+      gives 54 150 m², not 66 667. Confirm, and say whether the larger side
+      should wait for a surveyed curve ("A resized dam's shape" under Yield).
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
@@ -2623,16 +2631,19 @@ from the WP:
       so no migration and no mirrored column; `GET /jobs` stays
       payload-free for the other kinds), and the panel picks one up on open
       and follows it to the end (e2e `yield.spec.ts`).
-- [ ] **A resized dam's shape** (pending the hydrologist). The storage–yield
-      curve scales a dam's full-supply area with its capacity (constant mean
-      depth) and keeps its initial and minimum levels as fractions. A real
-      raise changes the area–capacity curve differently. Since WP-3.5 merged
-      (engine 0.35.0) a dam's survey curve is used and scaled uniformly
-      (volumes and areas × the capacity ratio, model.md §2.13), which keeps
-      its shape. Durable fix: let a curve point take its own surveyed curve
-      for the enlarged dam (a scenario's dam survey), and the hydrologist to
-      confirm uniform scaling meanwhile. Trigger: the hydrologist's review,
-      or a licence application for a dam raise.
+- [ ] **A resized dam's shape** (pending the hydrologist). **Built in engine
+      1.7.0, pending the hydrologist's confirmation:** the storage–yield curve
+      and a scenario's `damCapacityM3` op resize a dam along its own
+      area–volume relation (A_full × ratio^b; a survey curve cut at the new
+      top, or extrapolated beyond it with a power law through its top rows,
+      model.md §2.13, scenarios.md § Dam capacity) instead of scaling the
+      area with capacity. Drafted from the hydrologist persona's review of
+      issue #46 (item 11), not the real hydrologist. Initial and minimum
+      levels still keep their fractions. Left: a `node.set` for a survey
+      curve, so a scenario can carry the enlarged dam's own surveyed curve
+      (today only a `node.add` can), the durable answer for the larger side.
+      Trigger: the hydrologist's review, or a licence application for a dam
+      raise.
 
 ## Applicants (WP-3.3)
 

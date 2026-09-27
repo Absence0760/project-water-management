@@ -139,7 +139,7 @@ describe('storageYieldCurve', () => {
 		}
 	});
 
-	it('scales a survey curve with the dam (WP-3.5): a linear curve resizes exactly like the power law with exponent 1', () => {
+	it('resizes a survey curve with the dam (WP-3.5, engine 1.7.0): a linear two-row curve resizes exactly like the power law with exponent 1', () => {
 		const days = 2 * 365;
 		const cap = 20_000;
 		const areaFull = 8_000;
@@ -150,8 +150,11 @@ describe('storageYieldCurve', () => {
 			return storageYieldCurve(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam', { points: 5 });
 		};
 		const power = withEvap({ damAreaFullM2: areaFull, damAreaExponent: 1 });
+		// Below its top the curve is cut (linear, as the power law with b = 1); above it, a curve with one
+		// row that has a surface carries on with the dam's own exponent, here 1.
 		const curve = withEvap({
 			damAreaFullM2: 0,
+			damAreaExponent: 1,
 			damCurve: [
 				{ levelM: 0, areaM2: 0, volumeM3: 0 },
 				{ levelM: 3, areaM2: areaFull, volumeM3: cap }
@@ -166,6 +169,26 @@ describe('storageYieldCurve', () => {
 			// The curve's surface evaporates: every dam above capacity 0 yields less than a lossless one.
 			if (k > 0) expect(b.yieldM3Day).toBeLessThan(lossless.points[k]!.yieldM3Day);
 		}
+	});
+
+	it('a resized dam follows its own area–volume relation (engine 1.7.0): A_full × ratio^b, not area ∝ capacity', () => {
+		// Rain of 2 mm/day on the full dam's surface enters the mean-supply bound, so each point's bound gives its area:
+		// B = inflow + rain × A_full ÷ 1000 + capacity ÷ days (full at the start).
+		const days = 365;
+		const cap = 100_000;
+		const areaFull = cap / 3;
+		const { input, natural } = singleDam(40, cap, days, { damAreaFullM2: areaFull, damAreaExponent: 0.7 });
+		input.series!.rain_catchment_mm = { startDate: '2001-10-01', values: new Array(days).fill(2) };
+		const curve = storageYieldCurve(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam', { points: 5 });
+		const areaOf = (q: (typeof curve.points)[number]) => ((q.boundM3Day - 40 - q.capacityM3 / days) * 1000) / 2;
+		const byCap = new Map(curve.points.map((q) => [q.capacityM3, areaOf(q)]));
+		// The dam's own capacity keeps its area; doubled, 54 150 m², not the uniform 66 667.
+		expect(byCap.get(cap)).toBeCloseTo(areaFull, 3);
+		expect(byCap.get(2 * cap)).toBeCloseTo(areaFull * 2 ** 0.7, 3);
+		expect(byCap.get(cap / 2)).toBeCloseTo(areaFull * 0.5 ** 0.7, 3);
+		expect(byCap.get(0)).toBeCloseTo(0, 6);
+		const areas = curve.points.map(areaOf);
+		for (let k = 1; k < areas.length; k++) expect(areas[k]!).toBeGreaterThanOrEqual(areas[k - 1]! - 1e-6);
 	});
 
 	it('refuses a node with no dam', () => {
