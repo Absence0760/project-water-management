@@ -182,3 +182,25 @@ test('the validation statement sits in the Record group, folded shut; opened, it
 	await expect(panel.getByRole('heading', { level: 4, name: 'Known limitations' })).toBeVisible();
 	await expectNoViolations(page);
 });
+
+test('the hydrograph draws before the groups below it render, and a link to a panel down there still lands on it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs first paint');
+	const runId = await createRun(page.request, project.id, 'First paint');
+	// What was on the page when the hydrograph first reported drawn (LineChart's data-ready).
+	await page.addInitScript(() => {
+		const w = window as unknown as { __lowerAtChart?: boolean };
+		new MutationObserver(() => {
+			if (w.__lowerAtChart === undefined && document.querySelector('#res-hydrograph figure[data-ready="true"]')) {
+				w.__lowerAtChart = !!document.querySelector('#res-calibration, #res-notes, #res-explore');
+			}
+		}).observe(document, { subtree: true, childList: true, attributes: true });
+	});
+	await openRuns(page, project.id);
+	await expect(page.locator('#res-explore')).toBeAttached();
+	expect(await page.evaluate(() => (window as unknown as { __lowerAtChart?: boolean }).__lowerAtChart)).toBe(false);
+
+	// A deep link to the Record group renders it at once and scrolls there.
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}#res-notes`);
+	await expect(page.locator('#res-notes')).toBeInViewport();
+});

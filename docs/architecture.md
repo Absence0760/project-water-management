@@ -373,6 +373,25 @@ default esbuild: its mangler reuses the same short names in every scope, so
 gzip compresses the output ~5% better (−50 KB in total on 2026-09-27, the
 guard's change log), at the cost of a slower build.
 
+## First load (frontend)
+
+A full page load resolves the session first: the root layout asks
+`GET /auth/me` and renders the route only once it has answered (a 401 sends
+the visitor to `/login?next=…`, `lib/auth/session.svelte.ts`). On the
+catchment page (`/projects/<id>`) the layout starts that page's own requests
+(the project, its model, and its series and runs lists) in the same breath
+instead of after it (`lib/workspace/firstLoad.ts`), saving one API round trip
+on every load; the page takes them over when it mounts. The auth gate is
+unchanged: nothing reads them until `/auth/me` has answered for a signed-in
+user, and when it fails the layout drops them (a signed-out visitor's just
+answer 401 into a promise nobody reads). A client navigation to a catchment
+fetches as before, since the session is already known. Then Runs & results
+renders its lower groups only after the hydrograph is painted
+([ui.md § Runs & results](./ui.md)). Measured 2026-09-27 on a production
+build, median of 9 loads of an 8-year run, time to the hydrograph's first
+paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
+`auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.
+
 ## Shared CSS (frontend)
 
 Styles live in two places. `frontend/src/app.css` is global and loads with
