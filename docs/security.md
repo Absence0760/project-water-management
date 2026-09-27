@@ -576,7 +576,16 @@ In short:
   **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
   explicit and an unrecognised team role grants nothing, in SQL
   (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
-  later can't silently become an editor.
+  later can't silently become an editor. `backend/src/teams/teams.security.db.test.ts`
+  guards it from the live `team_role` and `project_role` enums: a new team
+  role fails until its mapping is pinned there, every team role × direct role
+  pair resolves to the higher of the two, and a team role the mapping doesn't
+  name (a renamed enum value, rolled back) grants nothing. It also proves that
+  losing the team (removed, left, the team deleted, the project moved out)
+  leaves the user no row of the project in any `project_id` table, not even
+  the runs, notes and scenarios they wrote, no RLS update or delete, and no
+  route under `/projects/:id` that answers; and that no one below team admin
+  can promote, add or remove members through RLS.
   **The ladder is swept, not sampled** (`backend/src/projects/role-ladder.db.test.ts`):
   every `/projects/:id` route is called with a request its validation
   accepts (so a route that parses before it checks the role can't hide
