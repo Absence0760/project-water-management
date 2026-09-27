@@ -183,7 +183,8 @@ async function inviteFarmer(
 }
 
 type UserRow = { id: string; email: string; display_name: string; verified: boolean };
-const USER_SQL = 'SELECT id, email, display_name, email_verified_at IS NOT NULL AS verified FROM app_user WHERE email = ANY($1::citext[])';
+/** The accounts with these addresses, whoever they are: RLS (068) shows only people you work with, so the by-address lookup. */
+const USER_SQL = 'SELECT id, email, display_name, verified FROM app_user_by_email($1::citext[])';
 
 /** Language names a CSV may use in its `language` column. */
 const LANGUAGE_NAMES: Record<string, Locale> = { en: 'en', english: 'en', af: 'af', afrikaans: 'af' };

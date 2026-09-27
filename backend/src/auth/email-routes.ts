@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
-import { withoutUser } from '../db/tx.js';
+import { actAsUser, withoutUser, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { resetPasswordMail, siteLink, verifyEmailMail } from '../mail/templates.js';
 import { trySendMail, type Mail } from '../mail/transport.js';
@@ -60,8 +60,9 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/forgot-password', async (c) => {
 		const body = z.object({ email }).parse(await readJson(c));
 		const mail = await withoutUser(async (db) => {
+			// app_user is under RLS (068) and nobody is signed in: the one-address lookup.
 			const { rows } = await db.query<{ id: string; email: string; locale: string | null }>(
-				'SELECT id, email, locale FROM app_user WHERE email = $1',
+				'SELECT id, email, locale FROM app_auth_account($1)',
 				[body.email]
 			);
 			const user = rows[0];
@@ -86,6 +87,8 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			);
 			const userId = rows[0]?.user_id;
 			if (!userId) return false;
+			// The link proved the account: the rest runs as it (068, own-row policies).
+			await actAsUser(db, userId);
 			// Watermark from this server's clock, the same clock that stamps
 			// session iat, so a sign-in right after this is never mistaken as older.
 			await db.query('UPDATE app_user SET password_hash = $2, sessions_revoked_at = $3 WHERE id = $1', [
@@ -94,10 +97,8 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 				new Date()
 			]);
 			// No other reset link is outstanding: app_issue_email_token keeps one
-			// per purpose and consuming it just deleted it. (A DELETE here would
-			// be a silent no-op anyway: this transaction has no user, and
-			// email_token's RLS shows it nothing.) The address's sign-in lockout
-			// is lifted (the link proved the inbox).
+			// per purpose and consuming it just deleted it. The address's sign-in
+			// lockout is lifted (the link proved the inbox).
 			await db.query('SELECT app_login_succeeded(email) FROM app_user WHERE id = $1', [userId]);
 			await markVerified(db, userId);
 			return true;
@@ -117,6 +118,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			);
 			const userId = rows[0]?.user_id;
 			if (!userId) return false;
+			await actAsUser(db, userId);
 			await markVerified(db, userId);
 			return true;
 		});
@@ -124,7 +126,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 		return c.json({ verified: true });
 	})
 	.post('/resend-verification', requireUser, async (c) => {
-		const mail = await withoutUser(async (db) => {
+		const mail = await withUser(c.get('userId'), async (db) => {
 			const { rows } = await db.query<{ email: string; verified: boolean }>(
 				'SELECT email, email_verified_at IS NOT NULL AS verified FROM app_user WHERE id = $1',
 				[c.get('userId')]

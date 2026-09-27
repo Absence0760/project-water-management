@@ -428,8 +428,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			let userId: string;
 			if ('email' in body) {
 				if (rank[role] < rank.viewer) throw new ApiError(403, 'an applicant shares with someone from …/share-candidates, by id');
-				// app_user has no RLS (sign-in needs it); the insert's trigger checks
-				// the address belongs to a contributor-or-above member.
+				// RLS on app_user (068) shows the project's people, so an outsider's
+				// address finds nothing; the insert's trigger checks the address
+				// belongs to a contributor-or-above member.
 				const { rows: users } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [body.email]);
 				if (!users[0]) throw new ApiError(404, 'no contributor or above on this project has that address');
 				userId = users[0].id;

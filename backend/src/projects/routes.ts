@@ -373,7 +373,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
-				'SELECT id, email, display_name, email_verified_at IS NOT NULL AS verified FROM app_user WHERE email = $1',
+				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
+				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',
 				[body.email]
 			);
 			const user = users[0];

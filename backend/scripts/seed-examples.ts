@@ -23,7 +23,7 @@
 // § Example catchments; catchments.test.ts keeps them current.
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
-import { type Db, withoutUser, withUser } from '../src/db/tx.js';
+import { actAsUser, type Db, withoutUser, withUser } from '../src/db/tx.js';
 import { publishRun } from '../src/publish/publish.js';
 import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
@@ -50,13 +50,14 @@ export const APPLICANT = { email: 'applicant@example.com', password: 'demo-passw
 /** A verified demo account, created once (a re-seed finds it). */
 async function ensureUser(u: { email: string; password: string; displayName: string }) {
 	const hash = await hashPassword(u.password);
+	// app_user is under RLS (068_app_user_rls.sql): its SECURITY DEFINER sign-up and lookup.
 	return withoutUser(async (db) => {
-		await db.query(
-			`INSERT INTO app_user (email, display_name, password_hash, email_verified_at) VALUES ($1, $2, $3, now())
-			 ON CONFLICT (email) DO NOTHING`,
-			[u.email, u.displayName, hash]
-		);
-		return (await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [u.email])).rows[0]!.id;
+		const { rows } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, NULL) AS id', [u.email, u.displayName, hash]);
+		const created = rows[0]?.id;
+		if (!created) return (await db.query<{ id: string }>('SELECT id FROM app_auth_account($1)', [u.email])).rows[0]!.id;
+		await actAsUser(db, created);
+		await db.query('UPDATE app_user SET email_verified_at = now() WHERE id = $1', [created]);
+		return created;
 	});
 }
 
@@ -76,7 +77,7 @@ async function linkFarmer(ownerEmail: string, projectId: string, farmerId: strin
 }
 
 async function userId(email: string) {
-	return withoutUser(async (db) => (await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [email])).rows[0]!.id);
+	return withoutUser(async (db) => (await db.query<{ id: string }>('SELECT id FROM app_auth_account($1)', [email])).rows[0]!.id);
 }
 
 async function share(ownerEmail: string, projectId: string, email: string, role: 'viewer' | 'editor') {

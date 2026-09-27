@@ -435,8 +435,7 @@ and nothing else.
   revocation and expiry reach every one; a key of the **same** project reads,
   updates and deletes nothing in any RLS table or view but its own allowed
   series and `series_key_days` rows (`isolation.db.test.ts` does another
-  project's key; `app_user` has no RLS, so app code, not a policy, keeps it
-  from a key); no GET route returns the secret or its hash after the `201`
+  project's key; `app_user` is in the sweep, under RLS since 068); no GET route returns the secret or its hash after the `201`
   (`no-store`); an expired key's context sees nothing; a key can't rename
   or move its series out of bounds; and a wrong secret under a real prefix
   (which the History shows) takes nothing from the key's bucket.
@@ -594,6 +593,27 @@ In short:
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at
   the route, and RLS alone must hold if a route forgets it.
+- **Accounts under RLS** (`068_app_user_rls.sql`). `app_user` had no RLS
+  (sign-in reads it before anyone is signed in), so any `water_app`
+  transaction, an API key's or the job tick's included, could read every
+  account's address and password hash and update any account. Now a
+  signed-in person sees their own row and the people they work with
+  (`app_user_visible`: anyone who is, or was, part of a project they can
+  open, or in a team with them; "was" keeps a removed member's name on the
+  runs, scenarios and jobs they made, which the routes inner-join), and
+  updates only their own row. No user (an API key, pre-sign-in, the tick)
+  sees no account. Nobody inserts or deletes one directly: sign-up is
+  `app_register`, deletion the operator's. The pre-sign-in paths use narrow
+  `SECURITY DEFINER` lookups that answer one account (`app_auth_account` for
+  sign-in and forgot-password, `app_session_revoked_at` for the session
+  check), adding a member by address uses `app_user_by_email` (signed-in
+  callers only), and the token-proven flows (verify, reset) act as the
+  account the token proved (`actAsUser`, `db/tx.ts`).
+  `backend/src/auth/app-user.security.db.test.ts` proves each, with positive
+  controls, and lists every inner join to `app_user` in the backend so a new
+  one needs a decision. Every view must be `security_invoker` (an
+  owner-rights view skips RLS): `db/catalogue.db.test.ts` fails on one that
+  isn't, or on a materialized view, unless it is allowlisted with a reason.
 - **RLS refusing a write is never a silent success** (issue #56). A write
   on a row the route has already authorised goes through `mustChange`
   (`backend/src/http/errors.ts`): zero rows changed means RLS refused it,
