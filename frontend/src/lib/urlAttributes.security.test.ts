@@ -50,7 +50,8 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
  */
 const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
-	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/crops/CropsTab.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	historyHref: { why: 'BUILDER: "/projects/" + encoded project id + "?tab=history" (compare/attribution.ts)', in: ['lib/components/compare/CompareView.svelte'] },
 	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamLevels.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/LatestRun.svelte', 'lib/components/runs/RunsTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
@@ -64,6 +65,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	projectHref: { why: 'portfolio page: `${base}/projects/${id}`; OverviewTab: project/links.ts "?tab=project" + an anchor', in: ['lib/components/overview/OverviewTab.svelte', 'routes/teams/[id]/portfolio/+page.svelte'] },
 	loginHref: { why: 'register page: `${base}/login?next=` + encoded next', in: ['routes/register/+page.svelte'] },
 	forgotHref: { why: 'login page: `${base}/forgot-password…`', in: ['routes/login/+page.svelte'] },
+	scenarioHref: { why: 'ApplicationsTab: "?tab=scenarios&scenario=" + encoded id', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
+	filterHref: { why: 'ApplicationsTab: withParam / withoutParam(page.url, "status", …)', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
+	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
 	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
 	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },
