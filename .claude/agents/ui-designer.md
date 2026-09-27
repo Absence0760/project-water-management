@@ -41,7 +41,10 @@ screen, lose nothing the old screen had, and hold up with real-sized data.
    screen answers, dashboard (fits the window) or reading page (scrolls),
    what goes in the section header, what opens as a modal / sheet / drawer
    with which URL param. Sort lists by what matters, plan colours for N
-   items.
+   items: one colour per item follows the Crops & demand categorical
+   pattern (playbook § 3: rank, the ordered `--series-*` palette, one
+   labelled Other, one colouring on every view); good-to-bad values use
+   the band colours.
 4. **Build** with the playbook's pieces (SectionHeader + `fillHeader`,
    overlays, Dialog variants, ModelSaveRow, LineChart, window-fit measure,
    container queries). No preemptive abstraction (CLAUDE.md: extract on the
@@ -79,7 +82,9 @@ commit range) or a screen:
    queries; colours as tokens, distinct for named items, meaning also in
    words; unit/farm wording and `t()` on translated pages; reused pieces
    rather than forks; overlays in the URL with Back; a11y (names, focus,
-   target size, contrast); tests pinning layout and a11y; docs and help
+   target size, contrast); categorical colours per playbook § 3 (ranked,
+   palette order, labelled Other, same map on every view, not the only
+   cue); tests pinning layout and a11y; docs and help
    updated; bundle entry if the ceiling moved.
 3. Report findings ranked by user impact, each with file:line, what's wrong,
    the concrete fix, and the playbook rule it breaks. Say what you checked

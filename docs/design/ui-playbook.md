@@ -134,6 +134,47 @@ section it belongs to, with the example that taught it.
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
   words beside its number.
+- **Categorical colour: the Crops & demand pattern.** Use it for anything
+  shown as one colour per item (crops, units, runs, scenarios, sources):
+  - **The palette** is the ordered token set `--series-1`, `-2`, `-3`, `-5`,
+    `-6`, `-7`, `-8`, `-9`, `-10` in `app.css` (9 colours, each with a dark
+    value; `--series-4` is skipped because it's `LineChart`'s own violet).
+    Neighbouring pairs were checked for colour-blind separation in both
+    themes (weakest ΔE ≈ 9 colour-blind, ≈ 19 normal) and every colour is
+    ≥ 3:1 on the dark surface. Take them **in this order**; don't pick
+    favourites or add hex.
+  - **Rank first, then colour.** Sort the items by the measure that matters
+    and is known early (crops: planted area, not demand, which is zero
+    until A-pan is set), stably, and give the first nine their own colour.
+    Everything after that is **Other**, in `--text-muted`, which no named
+    item uses.
+  - **One colouring everywhere.** Compute it once and use the same map for
+    the list, the stacked chart, the bars and the grid in the modal, so an
+    item is the same colour on every view.
+  - **Stack in palette order**, so neighbouring segments are the validated
+    neighbouring pairs.
+  - **Other is a labelled row** naming its members ("Other: Crop 10, Crop
+    11…", clamped to two lines, "21 smaller crops share one colour"); each
+    member's own row gets a hatched swatch and "in Other", not a grey that
+    looks like a colour.
+  - **The colour is never the only cue:** names sit beside swatches, the key
+    is pinned under the bars, segments name themselves on hover ("Crop:
+    12 ha") and each bar has an accessible name listing its parts. Three
+    light-theme colours (aqua, yellow, pink) are under 3:1 on white, which
+    is acceptable only because the name, key and table carry the same
+    information.
+  - **Reference implementation:** `crops/cards.ts` (`rankCrops`,
+    `cropColouring`, `CROP_PALETTE`, `otherLabel`) and `crops/demand.ts`
+    (`cropStacks` taking the named list). Reuse it; on the third caller,
+    lift it into a shared helper (CLAUDE.md), e.g. `lib/format/palette.ts`.
+  - **Test it:** a unit test that the top N get distinct colours, the tail
+    is Other and the ranking is stable, and an e2e case with ≈30 items
+    that reads the swatches' computed colours and asserts no two named
+    items match (`e2e/tests/crops-page.spec.ts`).
+- **Ordered and banded colour is different.** Good-to-bad values (supply,
+  % full, the reserve) use the band colours (`network/farmColour.ts`,
+  `overview/supplyBars.ts`), never the categorical palette; one-directional
+  amounts (irrigated area) use one hue in steps.
 - **Say what a colour means in words too** (a band label, "below 70%"), and
   name a segment on hover and focus: colour alone fails colour-blind users
   and axe.
@@ -163,6 +204,7 @@ section it belongs to, with the example that taught it.
 | Time-series charts | `charts/LineChart.svelte` (`windows` for 30 days / 1 year / All; Earlier/Later; units switch where the old chart had one) |
 | Flow vs reserve with shaded days | `overview/FlowVsReserve.svelte`, `overview/summaryChart.ts` |
 | Supply colour bands | `network/farmColour.ts`, `overview/supplyBars.ts` |
+| One colour per item (categorical) | `crops/cards.ts` `rankCrops` + `cropColouring` + `CROP_PALETTE` (§ 3) |
 | Dam levels | `overview/damLevels.ts` (level, bands, capacity-weighted total, which dams are in a run) |
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
