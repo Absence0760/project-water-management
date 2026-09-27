@@ -328,6 +328,11 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 				}));
 			}
 		}
+		// What the charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64),
+		// from their own stream so the tables above are what they were.
+		const em = new Rng(seed ^ 0x9b05688e);
+		if (em.bool(0.4)) settings.ewrChargeSource = 'ruleTable';
+		if (em.bool(0.4)) settings.lowFlowMeasure = 'baseflow';
 	}
 
 	// Flow shares over 100 % are refused by the run (engine 0.27.1: they make

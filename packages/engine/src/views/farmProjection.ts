@@ -60,8 +60,9 @@ const NOISE_M3 = 1e-6;
 export const PROJECTION_SERIES = {
 	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation'],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
-	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural'],
-	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural']
+	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
+	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
+	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall']
 } as const;
 
 /** A saved run, as the projection sees it. */
@@ -162,6 +163,8 @@ export interface SeasonSite {
 	shortfall: Float64Array;
 	charged: Float64Array;
 	natural: Float64Array;
+	/** 'ruleTable' when `shortfall` is the run's ewr_charge_shortfall (the charge followed the site's Reserve rule table, engine ≥ 1.3.0). */
+	ewrSource?: 'ruleTable';
 }
 
 /** A run cut to the season, with the season's curtailment table. Shared by every farm's projection. */
@@ -182,6 +185,16 @@ function need(run: ProjectionRun, nodeId: string | null, key: string, days: numb
 	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for node ${nodeId}` : ''}: run the model again to publish it`);
 	if (v.length !== days) throw new ProjectionInputError(`the run's ${key} series has ${v.length} days, expected ${days}`);
 	return Float64Array.from({ length: days }, (_, t) => val(v[t]));
+}
+
+/**
+ * The shortfall an EWR site's charge followed: `ewr_charge_shortfall` where
+ * the run charged on the site's Reserve rule table (engine ≥ 1.3.0,
+ * settings.ewrChargeSource), else the pragmatic `ewr_shortfall`.
+ */
+function chargeShortfall(run: ProjectionRun, nodeId: string | null, days: number): { values: Float64Array; ruleTable: boolean } {
+	const ruleTable = run.series(nodeId, 'ewr_charge_shortfall') !== undefined;
+	return { values: need(run, nodeId, ruleTable ? 'ewr_charge_shortfall' : 'ewr_shortfall', days), ruleTable };
 }
 
 /**
@@ -292,7 +305,7 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 		transfers: rules,
 		sites: siteNodes.map((node, si) => ({
 			node,
-			shortfall: si === 0 && topo.outflow >= 0 ? need(run, null, 'ewr_shortfall', days) : need(run, nodes[node]!.id, 'ewr_shortfall', days)
+			shortfall: chargeShortfall(run, si === 0 && topo.outflow >= 0 ? null : nodes[node]!.id, days).values
 		}))
 	});
 	const pos = new Int32Array(nodes.length);
@@ -374,6 +387,12 @@ export interface PreparedCurtailment {
 export interface CurtailmentOptions {
 	/** Include the other water users' rows (reads their demand, return_flow and ewr_charge). Default true. */
 	otherUsers?: boolean;
+	/**
+	 * For curtailmentSeriesKeys: the EWR sites whose charge followed their
+	 * Reserve rule table (the stored EwrSiteSummary with ewrSource
+	 * 'ruleTable'; the outlet as null), whose ewr_charge_shortfall is read in place of ewr_shortfall.
+	 */
+	ruleTableSites?: readonly (string | null)[];
 }
 
 /**
@@ -386,6 +405,8 @@ export function curtailmentSeriesKeys(nodes: readonly NetworkNode[], transfers: 
 	const add = (nodeId: string | null, ...keys: string[]) => keys.forEach((key) => out.push({ nodeId, key }));
 	const topo = buildTopology(nodes);
 	const byId = new Map(nodes.map((n) => [n.id, n]));
+	// A site whose charge followed its rule table is read by its own shortfall, instead of the pragmatic one.
+	const siteShortfallKey = (id: string | null) => (options.ruleTableSites?.includes(id) ? 'ewr_charge_shortfall' : 'ewr_shortfall');
 	// The farms whose net transfer series transferVolumes reads.
 	const inRule = new Set<string>();
 	for (const tr of transfers) {
@@ -402,10 +423,10 @@ export function curtailmentSeriesKeys(nodes: readonly NetworkNode[], transfers: 
 			add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
 		} else if (n.kind === 'gauge' && i !== topo.outflow) {
-			add(n.id, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+			add(n.id, siteShortfallKey(n.id), 'ewr_charged', 'ewr_natural');
 		}
 	});
-	if (topo.outflow >= 0) add(null, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+	if (topo.outflow >= 0) add(null, siteShortfallKey(null), 'ewr_charged', 'ewr_natural');
 	return out;
 }
 
@@ -454,14 +475,16 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 	const sites: SeasonSite[] = siteNodes.map((node, si) => {
 		const isOutlet = si === 0 && nodes[node]!.downstreamNodeId === null;
 		const id = isOutlet ? null : nodes[node]!.id;
+		const short = chargeShortfall(run, id, days);
 		return {
 			nodeId: nodes[node]!.id,
 			name: nodes[node]!.name,
 			isOutlet,
 			upstream: new Set(Array.from(res.sites[si]!.farms, (f) => nodes[f]!.id)),
-			shortfall: need(run, id, 'ewr_shortfall', days),
+			shortfall: short.values,
 			charged: need(run, id, 'ewr_charged', days),
-			natural: need(run, id, 'ewr_natural', days)
+			natural: need(run, id, 'ewr_natural', days),
+			...(short.ruleTable ? { ewrSource: 'ruleTable' as const } : {})
 		};
 	});
 	const siteInputs: CurtailmentSiteInput[] = sites.map((s) => ({
@@ -471,7 +494,8 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 		farmCount: s.upstream.size,
 		shortfall: s.shortfall,
 		charged: s.charged,
-		natural: s.natural
+		natural: s.natural,
+		...(s.ewrSource ? { ewrSource: s.ewrSource } : {})
 	}));
 	return {
 		days,

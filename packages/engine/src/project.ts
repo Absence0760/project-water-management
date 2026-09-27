@@ -15,7 +15,7 @@ import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
 import type { Wr2012Report } from './reference/wr2012';
-import type { EwrRuleTable } from './reserve/rules';
+import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { SupplyAssurance } from './network/reliability';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
@@ -332,10 +332,26 @@ export interface ProjectSettings {
 	 * Q6; ./reserve/rules.ts): at most one table per site (the outlet, or a
 	 * gauge). Each run then judges monthly compliance against them
 	 * (summary.ewrAssurance, docs/model.md §2.9c). Empty (the default) = none;
-	 * the daily pragmatic EWR above still drives the shortfall charge and
-	 * curtailment either way.
+	 * the daily pragmatic EWR above drives the shortfall charge and
+	 * curtailment unless `ewrChargeSource` is 'ruleTable'.
 	 */
 	ewrRules: EwrRuleTable[];
+	/**
+	 * What the daily EWR charge, curtailment and the water account's EWR
+	 * required vs met follow at an EWR site (engine ≥ 1.3.0, issue #64,
+	 * ./reserve/rules.ts EWR_CHARGE_SOURCES): 'pragmatic' (the default) or
+	 * 'ruleTable' (the site's Reserve rule table, where it has one). Pending
+	 * the hydrologist. Optional so settings stored before it still type;
+	 * absent = 'pragmatic'.
+	 */
+	ewrChargeSource?: EwrChargeSource;
+	/**
+	 * What a month's flow is judged by against a low-flow requirement (engine
+	 * ≥ 1.3.0, issue #64, ./reserve/rules.ts LOW_FLOW_MEASURES): 'total' (the
+	 * default, the month's volume) or 'baseflow' (its base flow, from the
+	 * Lyne–Hollick filter). Pending the hydrologist. Absent = 'total'.
+	 */
+	lowFlowMeasure?: LowFlowMeasure;
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
@@ -457,6 +473,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
 		ewrPragmaticM3PerDay: zeros,
 		ewrRules: [],
+		ewrChargeSource: 'pragmatic',
+		lowFlowMeasure: 'total',
 		simulationStart: null,
 		simulationEnd: null,
 		reportStart: null,
@@ -1514,6 +1532,12 @@ export interface EwrSiteSummary {
 	chargedM3Day: number;
 	/** The natural part: natural flow was already below the EWR. */
 	naturalM3Day: number;
+	/**
+	 * 'ruleTable' when the site's shortfall, and so its charge, follows the
+	 * site's Reserve rule table (engine ≥ 1.3.0, settings.ewrChargeSource,
+	 * docs/model.md §2.9c); absent = the pragmatic EWR.
+	 */
+	ewrSource?: 'ruleTable';
 }
 
 /** b023 [Shortfalls] over a reporting window: per-farm targets and cuts, plus the totals row. */

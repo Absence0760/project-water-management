@@ -1144,20 +1144,40 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 	};
 	const rules = input.model.transfers.filter((tr) => tr.enabled && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm');
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
+	const byRule = input.settings.ewrChargeSource === 'ruleTable';
 	const siteInfo = sites.map((s, si) => {
 		const up = ancestors(s.id);
 		const key = si === 0 ? 'null' : s.id;
 		return {
 			name: s.id,
+			key,
 			farms: farms.filter((f) => up.has(f.id)),
 			// A rule with one end inside: its volume can't be told apart from the farm's other transfers.
 			exact: !rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)),
-			D: get.get(`${key}|ewr_shortfall`)!,
+			// The shortfall the charge follows (engine ≥ 1.3.0): the rule table's where it drives the charge.
+			D: get.get(`${key}|ewr_charge_shortfall`) ?? get.get(`${key}|ewr_shortfall`)!,
 			charged: get.get(`${key}|ewr_charged`),
 			natural: get.get(`${key}|ewr_natural`)
 		};
 	});
 	for (const s of siteInfo) if (!s.charged || !s.natural) return `EWR site ${s.name}: no ewr_charged / ewr_natural series`;
+	// settings.ewrChargeSource 'ruleTable' (engine ≥ 1.3.0): a site with a rule table (an ewr_rule series)
+	// charges MIN(flow − the month's requirement, 0) inside complete months and the pragmatic shortfall
+	// outside them; every other site, and every site under 'pragmatic', has no ewr_charge_shortfall.
+	for (const [si, s] of siteInfo.entries()) {
+		const own = get.get(`${s.key}|ewr_charge_shortfall`);
+		const rule = get.get(`${s.key}|ewr_rule`);
+		if (!!own !== (byRule && !!rule)) return `EWR site ${s.name}: ewr_charge_shortfall ${own ? 'present' : 'missing'} with the charge following the ${byRule ? 'rule table' : 'pragmatic EWR'}${rule ? '' : ' and no rule table'}`;
+		if (!own || !rule) continue;
+		const flow = si === 0 ? get.get('null|simulated_outflow')! : get.get(`${s.key}|outflow`)!;
+		const prag = get.get(`${s.key}|ewr_shortfall`)!;
+		for (let t = 0; t < out.days; t++) {
+			const r = rule[t]!;
+			// The engine's shortfall(): below the requirement by more than float noise (SHORTFALL_NOISE, 1e-12).
+			const d = Number.isFinite(r) ? (flow[t]! - r < -1e-12 * Math.max(flow[t]!, r) ? flow[t]! - r : 0) : prag[t]!;
+			if (!Object.is(own[t]! + 0, d + 0)) return `EWR site ${s.name} day ${t}: ewr_charge_shortfall ${own[t]} ≠ ${Number.isFinite(r) ? `MIN(flow − rule-table requirement, 0) = ${d}` : `the pragmatic shortfall ${d}`}`;
+		}
+	}
 	const zeros = new Array<number>(out.days).fill(0);
 	const F = new Map(
 		farms.map((f) => {

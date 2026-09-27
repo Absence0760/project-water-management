@@ -36,6 +36,31 @@ export type EwrNaturalSource = (typeof EWR_NATURAL_SOURCES)[number];
 export const EWR_RULE_COMPONENTS = ['total', 'lowFlow'] as const;
 export type EwrRuleComponent = (typeof EWR_RULE_COMPONENTS)[number];
 
+/**
+ * What the daily EWR charge and curtailment follow at an EWR site
+ * (settings.ewrChargeSource, engine ≥ 1.3.0, issue #64; docs/model.md
+ * §2.9c): 'pragmatic' (the default, every earlier run) = the daily pragmatic
+ * EWR; 'ruleTable' = at a site with a Reserve rule table, the month's
+ * requirement from the table spread over its days (the `ewr_rule` series),
+ * the pragmatic EWR on days outside a complete month and at sites without a
+ * table. The water account's EWR required vs met follows the same choice.
+ * Pending the hydrologist and the assessor (plan.md question 17).
+ */
+export const EWR_CHARGE_SOURCES = ['pragmatic', 'ruleTable'] as const;
+export type EwrChargeSource = (typeof EWR_CHARGE_SOURCES)[number];
+
+/**
+ * What a month's flow is judged by against a low-flow requirement (a
+ * `lowFlow` table, or the low-flow grid of a total table)
+ * (settings.lowFlowMeasure, engine ≥ 1.3.0, issue #64; docs/model.md §2.9d):
+ * 'total' (the default, every earlier run) = the month's total volume;
+ * 'baseflow' = the month's base flow, from a recursive digital filter
+ * (./baseflow.ts), so a flood month can't pass its low flows on the flood.
+ * Pending the hydrologist (plan.md question 17).
+ */
+export const LOW_FLOW_MEASURES = ['total', 'baseflow'] as const;
+export type LowFlowMeasure = (typeof LOW_FLOW_MEASURES)[number];
+
 /** The % points DRM and gazetted rule tables use. */
 export const DEFAULT_ASSURANCE_POINTS: readonly number[] = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 

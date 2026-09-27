@@ -32,6 +32,7 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
+import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, type EwrChargeSource, type LowFlowMeasure } from '../reserve/rules';
 
 // ---------------------------------------------------------------------------
 // Value checks: each returns an error message, or null when the value is fine.
@@ -246,6 +247,10 @@ export interface SettingsPathValues {
 	calibrationStart: string | null;
 	calibrationEnd: string | null;
 	calibrationFlowKind: CalibrationFlowKind | null;
+	/** What the EWR charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR or the Reserve rule tables. */
+	ewrChargeSource: EwrChargeSource;
+	/** What low flows are judged on (engine ≥ 1.3.0, issue #64): the month's total flow or its base flow. */
+	lowFlowMeasure: LowFlowMeasure;
 }
 export type SettingsPath = keyof SettingsPathValues;
 
@@ -306,7 +311,9 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	reportEnd: nullable(isoDate),
 	calibrationStart: nullable(isoDate),
 	calibrationEnd: nullable(isoDate),
-	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS))
+	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS)),
+	ewrChargeSource: oneOf(EWR_CHARGE_SOURCES),
+	lowFlowMeasure: oneOf(LOW_FLOW_MEASURES)
 };
 
 export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];
