@@ -2278,8 +2278,8 @@ Farmers get `403`.
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
 | GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
 | POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
-| GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length }[] }` (kept: the newest 5, ≤ 180 days) | viewer |
-| POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id) | editor |
+| GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length, …, siteNodeId }[] }` (kept: the newest 5, ≤ 180 days; `siteNodeId` = the flow record's gauge when the revision was kept, null = the outlet, 085) | viewer |
+| POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id; a flow record comes back at the site it had, `409` when that gauge is no longer in the model) | editor |
 
 `PUT /projects/:id/model` and `PATCH /projects/:id` (with `settings`) take an
 optional `reason` (≤ 500 characters), kept with the revision.

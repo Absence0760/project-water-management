@@ -371,7 +371,7 @@ export const historyRoutes = new Hono<AuthEnv>()
 			const { rows } = await db.query(
 				`SELECT r.id::text AS id, r.created_at AS "createdAt", u.display_name AS "createdBy", r.reason,
 					to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", cardinality(r."values") AS length, r.values_sha256 AS "valuesSha256",
-					r.kind, r.name, r.unit, r.product, r.product_version AS "productVersion", r.day_boundary AS "dayBoundary"
+					r.kind, r.name, r.unit, r.product, r.product_version AS "productVersion", r.day_boundary AS "dayBoundary", r.site_node_id AS "siteNodeId"
 				 FROM series_revision r LEFT JOIN app_user u ON u.id = r.created_by
 				 WHERE r.project_id = $1 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))
@@ -396,9 +396,10 @@ export const historyRoutes = new Hono<AuthEnv>()
 				product: string | null;
 				productVersion: string | null;
 				dayBoundary: string | null;
+				siteNodeId: string | null;
 			}>(
 				`SELECT r.kind, r.name, r.unit, to_char(r.start_date, 'YYYY-MM-DD') AS "startDate", r."values", r.product, r.product_version AS "productVersion",
-					r.day_boundary AS "dayBoundary"
+					r.day_boundary AS "dayBoundary", r.site_node_id AS "siteNodeId"
 				 FROM series_revision r
 				 WHERE r.project_id = $1 AND r.id = $3 AND (r.series_id = $2
 					OR (r.kind, r.name) IN (SELECT kind, name FROM time_series WHERE project_id = $1 AND id = $2))`,
@@ -409,7 +410,22 @@ export const historyRoutes = new Hono<AuthEnv>()
 			// The label comes back with the values (032_series_provenance): they are what it describes.
 			// So does the day boundary (033_series_day_boundary).
 			// A restore puts back values the project had, not new data, so it queues no automatic re-run.
-			const { meta } = await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev });
-			return c.json(await setDayBoundary(db, id, meta, rows[0].dayBoundary));
+			const { siteNodeId, ...body } = rows[0];
+			const { meta } = await replaceSeries(db, id, { ...body, provenance: rowProvenance(body) }, { restoredFrom: rev });
+			// And its site (085): a gauge record comes back at its gauge, never quietly at the outlet.
+			if (meta.siteNodeId !== siteNodeId) {
+				if (siteNodeId !== null) {
+					const { rows: node } = await db.query('SELECT 1 FROM node WHERE project_id = $1 AND id = $2', [id, siteNodeId]);
+					if (!node[0]) {
+						throw new ApiError(
+							409,
+							"this record was measured at a gauge that is no longer in the model: restoring it would make it the outlet's record. Add the gauge back from the model's history first"
+						);
+					}
+				}
+				await db.query('UPDATE time_series SET site_node_id = $3 WHERE project_id = $1 AND id = $2', [id, meta.id, siteNodeId]);
+				meta.siteNodeId = siteNodeId;
+			}
+			return c.json(await setDayBoundary(db, id, meta, body.dayBoundary));
 		});
 	});

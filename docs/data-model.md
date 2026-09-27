@@ -249,9 +249,15 @@ measured at a **gauge node inside the network** (engine ≥ 1.4.0, issue #64,
   column). **Carried** by a copy and the project document (`siteNodeId` on a
   series), both moved to the new project's gauge id; an import refuses a
   site that isn't a gauge above the outlet in the file's own model, and the
-  export leaves out a site whose node has gone. **Not kept by a series
-  revision**: a deleted series restored from its revision comes back at the
-  outlet.
+  export leaves out a site whose node has gone. **Kept by a series
+  revision** (`series_revision.site_node_id`, 085_series_revision_site.sql):
+  `recordSeriesRevision` reads the series' site as it records the revision,
+  and a restore (`POST …/series/:id/revisions/:revId/restore`) sets it back,
+  so a deleted gauge record comes back at its gauge, never quietly at the
+  outlet. When that gauge has since left the model the restore is refused
+  (`409`: restoring it would make it the outlet's record; bring the gauge
+  back from the model's history first). A revision recorded before 085 has
+  no site and restores to the outlet.
 - water_app's existing `time_series` grants and RLS policies cover the
   column. Farmers never read `time_series` (020), and the catalogue guard's
   farmer list says so (`FARMERS_NEVER_READ`).
@@ -524,7 +530,8 @@ the result change?", and put back any earlier version.
   its old id; `unit` is kept with it. **Retention**: the newest 5 per
   (project, kind, name) and nothing older than 180 days, trimmed by a
   `SECURITY DEFINER` trigger on insert. `product` / `product_version` (032)
-  keep the series' label with its values, so a restore puts it back.
+  keep the series' label with its values, so a restore puts it back, and
+  `site_node_id` (085) a flow record's gauge (§ Gauge records).
   `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
   values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with

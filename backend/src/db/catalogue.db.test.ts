@@ -133,11 +133,12 @@ const READ_ONLY = new Set(['language']);
  * (034_farmer_invites.sql). yield_result is a dam's yield on a whole-catchment
  * run or scenario, viewers and above like model_run (040_yield.sql). time_series
  * holds flow volumes that reveal neighbours' use (020); its site_node_id
- * (084_gauge_records) names a gauge. Every table with a node column needs a
+ * (084_gauge_records) names a gauge, and series_revision (viewers and above,
+ * 030) keeps that site since 085. Every table with a node column needs a
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'time_series', 'yield_result']);
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
