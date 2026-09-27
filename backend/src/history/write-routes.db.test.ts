@@ -13,6 +13,7 @@
 //      `call` makes one real request and returns its response. Keep what a
 //      later entry needs in `ctx`. Or, for a route that changes nothing the
 //      history covers, `exempt: '<why>'`.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
 
@@ -740,7 +741,7 @@ describe('a team change in the history', () => {
 		const email = `tinvited-${crypto.randomUUID()}@example.com`;
 		const invited = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' });
 		expect(invited.body.invited).toBe(true);
-		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Tinvited' });
+		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Tinvited', acceptTerms: LEGAL_VERSION });
 		expect(reg.status).toBe(202);
 		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
 		const { id } = ((await asOwner('SELECT id FROM app_user WHERE email = $1', [email])) as { id: string }[])[0]!;

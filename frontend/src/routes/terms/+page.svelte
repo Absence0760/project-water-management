@@ -5,6 +5,7 @@
 	// adapted to a free modelling service. Draft before counsel review:
 	// docs/legal-status.md tracks what is open.
 	import { base } from '$app/paths';
+	import { legalEffective } from '@water-management/engine/legal';
 	import LegalPage from '$lib/components/legal/LegalPage.svelte';
 
 	const sections = [
@@ -32,7 +33,7 @@
 <LegalPage
 	title="Terms of use"
 	description="The terms for using Water Management, the catchment water-balance modelling service."
-	effective="Effective 27 September 2026."
+	effective={legalEffective()}
 	{sections}
 >
 	<h2 id="agreement">1. This agreement</h2>
