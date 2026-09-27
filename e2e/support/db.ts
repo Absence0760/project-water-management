@@ -223,3 +223,35 @@ export async function failReport(jobId: string, error: string): Promise<void> {
 		if (r.rowCount !== 1) throw new Error(`no report for job ${jobId}`);
 	});
 }
+
+/**
+ * Hold a yield job as running at `progress` %, as a worker mid-calculation
+ * leaves it: claimed with an hour's lease, so another spec's worker tick
+ * won't take it. The API can't pause a job halfway, and a real one here
+ * finishes in well under a second.
+ */
+export async function holdYieldJobRunning(jobId: string, progress: number): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(
+			`UPDATE job SET status = 'running', attempts = 1, started_at = now(), locked_until = now() + interval '1 hour',
+				lease_token = gen_random_uuid()
+			 WHERE id = $1 AND kind = 'yield' AND status = 'queued'`,
+			[jobId]
+		);
+		if (r.rowCount !== 1) throw new Error(`no queued yield job ${jobId}`);
+		// A second statement: a claim (a new lease_token) resets progress (040_yield job_progress_reset).
+		await db.query(`UPDATE job SET progress = $2 WHERE id = $1`, [jobId, progress]);
+	});
+}
+
+/** Hand a held yield job back to the queue, as an expired lease does, for a worker tick to finish. */
+export async function releaseYieldJob(jobId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(
+			`UPDATE job SET status = 'queued', attempts = 0, started_at = NULL, locked_until = NULL, lease_token = NULL, progress = NULL, run_after = now()
+			 WHERE id = $1 AND kind = 'yield' AND status = 'running'`,
+			[jobId]
+		);
+		if (r.rowCount !== 1) throw new Error(`no running yield job ${jobId}`);
+	});
+}

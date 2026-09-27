@@ -1930,6 +1930,7 @@ scenario (its ops on its base run's inputs), never the live model.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job | editor |
 | GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node | viewer |
+| GET | `/projects/:id/yield/jobs?nodeId=&runId=\|scenarioId=` | – | `{ jobs: YieldJob[] }`: this dam's pending yield jobs (queued, running, or failed and waiting to retry), whoever queued them, newest first, at most 20; `nodeId` required, at most one of `runId` / `scenarioId` (`400` for both). A done or dead job drops off: read its result with `GET /yield?jobId=` | viewer |
 | POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }`: a queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
 
 - `kind`: `firm` (one yield at the dam's own capacity) or `curve` (the yield
@@ -1949,6 +1950,12 @@ scenario (its ops on its base run's inputs), never the live model.
   curve (`400`).
 - **At most 2 yield jobs queued or running per user** (`429`); a repeat of a
   pending request is never refused. A job gets 2 attempts.
+- `YieldJob = JobMeta & { target: { nodeId, runId, scenarioId, kind, params } }`:
+  what the job is for, read from its payload under RLS (a job of a project
+  the caller can view; no column mirrors it, and `GET /jobs` stays
+  payload-free). The Yield panel uses it to follow a job it didn't queue
+  (another tab, a reload, a colleague). Follow the job's status on
+  `GET /jobs`.
 - `YieldResult = { id, runId, scenarioId, nodeId, jobId, kind, params,
   points, engineVersion, createdBy, createdAt }`. `params` is the request's,
   with its defaults. `points` is `{ point: YieldPoint }` for `firm`, or

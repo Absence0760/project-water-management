@@ -4,12 +4,13 @@
 	// job, follow it (queued, running with a %, done, failed, cancel), and show
 	// the stored results as a table and a uPlot curve. On a saved run of the
 	// model (the Network tab) or on a scenario. Viewers see results but have
-	// no run buttons.
+	// no run buttons. On open it picks up a job for this dam that is already
+	// pending (another tab, a reload, a colleague) and follows it.
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type JobMeta, type RunMeta, type YieldResult } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
-	import { ASSURANCE_OPTIONS, assuranceLabel, curveChart, HISTORICAL_NOTE, jobStatus, latestResults, modelRuns, patternLabel } from './yield';
+	import { ASSURANCE_OPTIONS, assuranceLabel, curveChart, HISTORICAL_NOTE, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel } from './yield';
 
 	let {
 		projectId,
@@ -67,8 +68,16 @@
 		loading = true;
 		loadError = null;
 		try {
-			const r = await api.yield.list(projectId, { ...t, nodeId });
-			if (loadFor === key) results = r;
+			const [r, pending] = await Promise.all([api.yield.list(projectId, { ...t, nodeId }), api.yield.jobs(projectId, { ...t, nodeId })]);
+			if (loadFor !== key) return;
+			results = r;
+			// Follow a job started elsewhere, unless this panel already follows one of its own.
+			const found = jobToFollow(pending);
+			if (found && found.id !== job?.id && !jobStatus(job)?.busy) {
+				job = found;
+				clearTimeout(timer);
+				if (jobStatus(found)?.busy) timer = setTimeout(() => poll(found.id), 1500);
+			}
 		} catch (e) {
 			if (loadFor === key) loadError = msg(e);
 		} finally {

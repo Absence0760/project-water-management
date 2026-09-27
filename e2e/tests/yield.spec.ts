@@ -3,9 +3,12 @@
 // dam, the background worker runs it (one tick that queues nothing of its
 // own, so it never runs another spec's feed), and the panel shows the curve
 // and its table, passing axe (WCAG 2.2 AA). A queued firm yield can be
-// cancelled. A viewer sees the results with no run buttons.
+// cancelled. A viewer sees the results with no run buttons. A job queued
+// elsewhere (another tab, before a reload) is picked up and followed to the end.
 import type { Page } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { holdYieldJobRunning, releaseYieldJob } from '../support/db.ts';
+import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -55,4 +58,33 @@ test('an editor runs a storage–yield curve for a dam, cancels a queued yield, 
 	await expect(theirs.getByTestId('yield-curve-table').getByRole('row')).toHaveCount(12);
 	await expect(theirs.getByRole('button', { name: 'Work out the yield' })).toHaveCount(0);
 	await expect(theirs.getByRole('button', { name: 'Storage–yield curve' })).toHaveCount(0);
+});
+
+test('the panel follows a yield job it did not queue: running after a reload, then its result', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Yield elsewhere');
+	const runId = await createRun(page.request, project.id, 'Base');
+	const damId = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	// Queued as another tab would, then held mid-calculation.
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/yield`, { data: { nodeId: damId, runId, kind: 'firm' } });
+	expect(res.status()).toBe(202);
+	const { jobId } = (await res.json()) as { jobId: string };
+	await holdYieldJobRunning(jobId, 40);
+
+	await openUpperFarm(page, project.id);
+	await page.reload();
+	await openNodeForm(page);
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	const panel = page.getByRole('region', { name: 'Yield of Upper farm' });
+	await expect(panel.getByTestId('yield-status')).toHaveText('Running: 40 % done.');
+	await expect(panel.getByRole('progressbar', { name: 'Yield calculation progress' })).toHaveAttribute('value', '40');
+	await expect(panel.getByRole('button', { name: 'Work out the yield' })).toBeDisabled();
+	await expect(panel.getByRole('button', { name: 'Cancel' })).toBeVisible();
+
+	// The worker finishes it; the panel, still following it, shows the result.
+	await releaseYieldJob(jobId);
+	await runJobsTick({ schedule: false });
+	await expect(panel.getByTestId('yield-firm')).toBeVisible();
+	await expect(panel.getByTestId('yield-status')).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: 'Work out the yield' })).toBeEnabled();
 });

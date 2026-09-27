@@ -7,6 +7,7 @@ import { canonicalJson } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { JOB_META, type JobMeta } from '../jobs/queue.js';
 import { loadRunInput, RunInputError } from '../runs/execute.js';
 import { checkScenario, loadBaseInput, loadScenario } from '../scenarios/execute.js';
 
@@ -122,6 +123,37 @@ export async function listYieldResults(
 		[projectId, q.runId ?? null, q.scenarioId ?? null, q.nodeId ?? null, q.jobId ?? null]
 	);
 	return rows;
+}
+
+/** A pending yield job with what it is for, read from its payload (the validated YieldRequest). */
+export interface YieldJob extends JobMeta {
+	target: { nodeId: string; runId: string | null; scenarioId: string | null; kind: 'firm' | 'curve'; params: YieldParams };
+}
+
+/**
+ * A dam's pending yield jobs (queued, running, or failed and waiting to
+ * retry), newest first, by anyone, optionally on one run or scenario (RLS:
+ * viewer). So the Yield panel can follow a job it didn't queue itself: after
+ * a reload, or one started in another tab or by a colleague.
+ */
+export async function listPendingYieldJobs(
+	db: Db,
+	projectId: string,
+	q: { nodeId: string; runId?: string; scenarioId?: string }
+): Promise<YieldJob[]> {
+	const { rows } = await db.query<YieldJob>(
+		`SELECT ${JOB_META},
+			jsonb_build_object('nodeId', j.payload->'nodeId', 'runId', j.payload->'runId', 'scenarioId', j.payload->'scenarioId',
+				'kind', j.payload->'kind', 'params', j.payload->'params') AS target
+		 FROM job j JOIN app_user u ON u.id = j.acting_user_id
+		 WHERE j.project_id = $1 AND j.kind = 'yield' AND j.status IN ('queued', 'running', 'failed')
+		   AND j.payload->>'nodeId' = $2::text
+		   AND ($3::text IS NULL OR j.payload->>'runId' = $3) AND ($4::text IS NULL OR j.payload->>'scenarioId' = $4)
+		 ORDER BY j.created_at DESC, j.id DESC LIMIT 20`,
+		[projectId, q.nodeId, q.runId ?? null, q.scenarioId ?? null]
+	);
+	// jsonb_build_object keeps a missing key as JSON null.
+	return rows.map((r) => ({ ...r, target: { ...r.target, runId: r.target.runId ?? null, scenarioId: r.target.scenarioId ?? null } }));
 }
 
 /** Queued or running yield jobs the user has, in any project they can still see. */
