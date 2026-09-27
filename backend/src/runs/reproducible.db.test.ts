@@ -139,21 +139,23 @@ describe('stored run inputs', () => {
 	it("refuses writes that would plant or borrow a blob: viewers, another project's run, an older run", async () => {
 		const sha = '0'.repeat(64);
 		const sha256Here = seriesHash(small.series[0]!.values);
-		// Positive control: an editor may insert, and executeRun's ON CONFLICT DO
-		// NOTHING on content the project already holds is a no-op under RLS,
-		// leaving the stored values alone.
-		await withUser(owner.id, (db) =>
-			db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}') ON CONFLICT DO NOTHING`, [pid, sha256Here])
-		);
+		const store = (userId: string, json: string) =>
+			withUser(userId, async (db) => (await db.query<{ sha: string }>('SELECT app_store_series_blob($1, $2) AS sha', [pid, json])).rows[0]!.sha);
+		// No one inserts a blob directly, not even an editor (074): the caller
+		// can't choose the key.
+		for (const u of [owner, viewer, stranger])
+			await expect(
+				withUser(u.id, (db) => db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [pid, sha]))
+			).rejects.toMatchObject({ code: '42501' });
+		// The database keys a blob by its text: other values can't be put under
+		// the hash of content the project holds (or will hold), so storing
+		// content already held is a no-op and the stored values stay.
+		expect(await store(owner.id, '[1]')).toBe(seriesHash([1]));
+		// Positive control: the editor's own content comes back under its hash.
+		expect(await store(owner.id, JSON.stringify(small.series[0]!.values))).toBe(sha256Here);
 		expect(Object.keys((await withUser(owner.id, (db) => loadRunInput(db, runId))).series)).toHaveLength(small.series.length);
-		// A viewer can't store a blob.
-		await expect(
-			withUser(viewer.id, (db) => db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [pid, sha]))
-		).rejects.toMatchObject({ code: '42501' });
-		// A stranger can't store one in this project.
-		await expect(
-			withUser(stranger.id, (db) => db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [pid, sha]))
-		).rejects.toMatchObject({ code: '42501' });
+		// A viewer can't store a blob, nor a stranger one in this project.
+		for (const u of [viewer, stranger]) await expect(store(u.id, '[1]')).rejects.toMatchObject({ code: '42501' });
 		// A reference can only be written in the transaction that saved its run:
 		// the owner can't give an existing run new references afterwards.
 		await expect(
@@ -184,6 +186,24 @@ describe('stored run inputs', () => {
 				]);
 			})
 		).rejects.toMatchObject({ code: '23503' });
+	});
+
+	it('keys a stored blob by seriesHash and stores its values exactly, across every float range', async () => {
+		// Where float8's text and ECMAScript's part (2e23, 3.0747296758777432e16),
+		// the exponent boundaries (1e-6, 1e21), subnormals, extremes, null.
+		const values: (number | null)[] = [0, 1, -1, 0.1 + 0.2, 1 / 3, 1e-6, 9.99e-7, 1.5e-7, 1e21, 9.99e20, 1e15, 1e16, 2e23, -4e23, -30747296758777430, 556628952157564000];
+		values.push(5e-324, 2.2250738585072014e-308, Number.MAX_VALUE, -Number.MAX_VALUE, 2 ** 53 + 2, 123.456, 1e-5, null, 7);
+		// And a spread of arbitrary doubles, seeded so a failure repeats.
+		let seed = 0x2545f491;
+		const rand = () => ((seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) | 0) >>> 0) / 2 ** 32;
+		for (let i = 0; i < 2000; i++) values.push((rand() - 0.5) * 10 ** (Math.floor(rand() * 80) - 40));
+		const sha = await withUser(owner.id, async (db) => (await db.query<{ sha: string }>('SELECT app_store_series_blob($1, $2) AS sha', [pid, JSON.stringify(values)])).rows[0]!.sha);
+		expect(sha).toBe(seriesHash(values));
+		const [row] = await asOwner('SELECT "values" FROM series_blob WHERE project_id = $1 AND sha256 = $2', [pid, sha]);
+		expect(row.values).toEqual(values);
+		expect(seriesHash(row.values)).toBe(sha);
+		// Not a JSON array: refused, nothing stored.
+		await expect(withUser(owner.id, (db) => db.query('SELECT app_store_series_blob($1, $2)', [pid, '{"a": 1}']))).rejects.toMatchObject({ code: '22023' });
 	});
 
 	it('says a run from before stored inputs is not reproducible, and why', async () => {

@@ -116,6 +116,13 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  */
 const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member']);
 /**
+ * Written only through a SECURITY DEFINER function, never inserted by
+ * water_app: a stored run input's key is the SHA-256 the database computes
+ * from its text, so no caller can choose it (074_series_blob_digest,
+ * app_store_series_blob).
+ */
+const NO_INSERT = new Set(['series_blob']);
+/**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
  * (034_farmer_invites.sql). yield_result is a dam's yield on a whole-catchment
@@ -250,6 +257,7 @@ describe('schema catalogue', () => {
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
 				if (NO_UPDATE.has(t.relname) && priv === 'UPDATE') continue;
 				if (NO_DELETE.has(t.relname) && priv === 'DELETE') continue;
+				if (NO_INSERT.has(t.relname) && priv === 'INSERT') continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
 			}
@@ -294,6 +302,15 @@ describe('schema catalogue', () => {
 				`public.${table}`
 			]);
 			expect(policies.map((p) => p.polname), `${table} delete policies`).toEqual([]);
+		}
+	});
+
+	it('grants water_app no INSERT, and has no insert policy, on tables written through a function (series_blob)', async () => {
+		for (const table of NO_INSERT) {
+			const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, 'INSERT') AS ok`, [`public.${table}`]);
+			expect(rows[0]!.ok, `${table} INSERT`).toBe(false);
+			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('a', '*')`, [`public.${table}`]);
+			expect(policies.map((p) => p.polname), `${table} insert policies`).toEqual([]);
 		}
 	});
 

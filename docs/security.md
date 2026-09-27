@@ -975,8 +975,14 @@ In short:
     controls), and can't point a run of theirs at it (the composite foreign
     key finds no such blob in their project).
   - **Immutable by privilege.** `water_app` has `SELECT` and `INSERT` only on
-    both tables (the catalogue test's `APPEND_ONLY`). Blobs are inserted by
-    editors; a reference only by an editor, to a run of the same project
+    `run_input_series`, and `SELECT` only on `series_blob` (the catalogue
+    test's `APPEND_ONLY` and `NO_INSERT`). A blob is written only through
+    `app_store_series_blob` (074_series_blob_digest, `SECURITY DEFINER`, for
+    an editor or a contributor), which takes the values as their JSON text
+    and keys the blob by that text's SHA-256 itself, so no caller, even past
+    the API, can put other values under the hash of content a later run will
+    store (that run would otherwise reference the planted blob and fail
+    `loadRunInput`'s check). A reference only by an editor, to a run of the same project
     saved **in the same transaction** (the insert policy checks
     `model_run.created_at = now()`), so an older run can't be given inputs
     after the fact. Removal is only the `series_blob_gc` trigger
@@ -1081,14 +1087,19 @@ In short:
     map, what A updates or deletes of `CHANGE`, and no copy of a row A can't
     read inserts; then every contributor route that takes an id, with B's
     application, farm, note and consultant, answers `403`/`404`, names none
-    of them and leaves B's rows unchanged. One insert is a known gap, listed
-    there: `series_blob_insert_contributor` (045) admits any blob in the
-    project, and a blob's `sha256` isn't checked against its values, so a
-    direct insert (never the API) could plant one under a hash the project
-    later stores, which that run then fails `loadRunInput`'s SHA-256 check
-    on. The durable fix is to verify the digest in the database, or to
-    write blobs only through a `SECURITY DEFINER` function that computes the
-    key itself.
+    of them and leaves B's rows unchanged. No insert is a known gap
+    (`KNOWN_INSERTS` is empty): 045's `series_blob_insert_contributor`
+    admitted any blob, its hash unchecked, until 074_series_blob_digest
+    moved blob writes into `app_store_series_blob`, which computes the key
+    itself. One second-layer gap stays open: `model_run_insert_contributor`
+    (045) lets an applicant insert their own application's run rows, so a
+    direct insert past the API could store a summary the engine never
+    produced. The database can't tell that insert from the backend's (same
+    role, same user), so the fix belongs where the run is judged: before an
+    assessor decides or signs off, re-derive the run from its base run's
+    stored input and its ops and compare (the `…/reproduce` comparison), or
+    have the backend stamp each run with a MAC under a key the database
+    doesn't hold.
   - **No existence oracles** (049_applicant_oracles,
     `scenarios/oracles.db.test.ts`: each probe answered identically for the
     hidden and the free case, each with a positive control).

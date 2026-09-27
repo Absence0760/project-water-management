@@ -516,11 +516,11 @@ async function storeRunInputs(
 		const sha = hashes[kind]!;
 		if (have.has(sha)) continue;
 		have.add(sha);
-		await db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, $3::float8[]) ON CONFLICT DO NOTHING`, [
-			projectId,
-			sha,
-			series[kind]!.values
-		]);
+		// The database keys the blob itself, by the SHA-256 of this very text
+		// (seriesDigest, which seriesHash hashes), so no caller can plant other
+		// values under a hash a later run uses (074_series_blob_digest).
+		const { rows } = await db.query<{ sha: string }>('SELECT app_store_series_blob($1, $2) AS sha', [projectId, seriesDigest(series[kind]!.values)]);
+		if (rows[0]!.sha !== sha) throw new Error(`stored run input ${kind} under ${rows[0]!.sha}, expected ${sha}`);
 	}
 	await db.query(
 		`INSERT INTO run_input_series (run_id, project_id, kind, start_date, sha256, series_id)
