@@ -1314,7 +1314,7 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${c.first} to ${c.last})${total}`;
 }
 
-/** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.3.0) named by its gauge. */
+/** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.4.0) named by its gauge. */
 function seriesLabel(key: string, nodeName: (id: string) => string): string {
 	const g = parseGaugeSeriesKey(key);
 	return g ? `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}` : (SERIES_LABELS[key] ?? key);

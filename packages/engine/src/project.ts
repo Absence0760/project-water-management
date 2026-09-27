@@ -437,7 +437,7 @@ export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
 /**
  * The key of an observed record attached to a gauge node inside the network
- * (engine ≥ 1.3.0, docs/model.md §2.10d): `<kind>@<node id>` in
+ * (engine ≥ 1.4.0, docs/model.md §2.10d): `<kind>@<node id>` in
  * ModelInput.series, beside the outlet's records (plain kinds). The backend
  * builds it from time_series.site_node_id (084_gauge_records.sql). Only the
  * plausibility checks read it: calibration, the EWR agreement and every other
@@ -1150,7 +1150,7 @@ export interface SeriesMeta {
 	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
 	rebuilding?: boolean;
 	/**
-	 * A flow record's site (084_gauge_records, engine ≥ 1.3.0): the gauge node
+	 * A flow record's site (084_gauge_records, engine ≥ 1.4.0): the gauge node
 	 * it was measured at; null / absent = the outlet. Only the plausibility
 	 * checks read a gauge's record.
 	 */
@@ -1167,7 +1167,7 @@ export interface ModelInput {
 	model: ProjectModel;
 	/**
 	 * Keyed by SeriesKind; only the first series of each kind is used. A gauge
-	 * node's own observed records (engine ≥ 1.3.0) are keyed GaugeSeriesKey.
+	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey.
 	 */
 	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries };
 }

@@ -114,7 +114,7 @@ const LabelBody = z
 /**
  * Move a flow record to a site: a gauge node of the project's model that is
  * not the outlet, or null (the outlet). Only the plausibility checks read a
- * gauge's record (engine ≥ 1.3.0), so the outlet's calibration, EWR test and
+ * gauge's record (engine ≥ 1.4.0), so the outlet's calibration, EWR test and
  * the rest move with it only when it leaves or joins the outlet.
  */
 async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: string | null): Promise<SeriesMetaRow> {

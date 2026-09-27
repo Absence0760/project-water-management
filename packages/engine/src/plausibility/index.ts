@@ -9,7 +9,7 @@
 // They only report and warn: none changes a model result.
 //
 // Checks 1 and 4 also run at each gauge node inside the network that has an
-// observed record of its own (engine ≥ 1.3.0, a GaugeSeriesKey series),
+// observed record of its own (engine ≥ 1.4.0, a GaugeSeriesKey series),
 // against the simulated flow there, reported per site in `gauges`. Checks 2
 // and 3 stay catchment-wide: the rain is the catchment's.
 import type { CalibrationFlowKind } from '../project';
@@ -42,13 +42,13 @@ export interface PlausibilityChecks {
 	lowFlow: LowFlowCurves | null;
 	/**
 	 * Checks 1 and 4 at each gauge node with an observed record of its own
-	 * (engine ≥ 1.3.0), in node-id order; absent when none has one (every
-	 * project before 1.3.0, and any whose records are all the outlet's).
+	 * (engine ≥ 1.4.0), in node-id order; absent when none has one (every
+	 * project before 1.4.0, and any whose records are all the outlet's).
 	 */
 	gauges?: GaugePlausibility[];
 }
 
-/** Checks 1 and 4 at one gauge node inside the network (engine ≥ 1.3.0). */
+/** Checks 1 and 4 at one gauge node inside the network (engine ≥ 1.4.0). */
 export interface GaugePlausibility {
 	nodeId: string;
 	name: string;
@@ -103,7 +103,7 @@ export interface PlausibilityInput {
 	ewrShortfall: ArrayLike<number>;
 	reserve: readonly EwrAssuranceSite[];
 	areaKm2: number;
-	/** Gauge nodes with a record of their own (engine ≥ 1.3.0), in node-id order; absent or empty = none. */
+	/** Gauge nodes with a record of their own (engine ≥ 1.4.0), in node-id order; absent or empty = none. */
 	gauges?: readonly GaugePlausibilityInput[];
 	/** Warnings about gauge records the run can't place (a node gone, or no longer a gauge), in order. */
 	gaugeRecordWarnings?: readonly string[];

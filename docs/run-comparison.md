@@ -277,7 +277,7 @@ bottom:
    2×2 table of observed days, per month and per water year) sits side by
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
-5. **Plausibility checks** (engine ≥ 1.3.0 compares them, issue #64;
+5. **Plausibility checks** (engine ≥ 1.4.0 compares them, issue #64;
    `plausibility/compare.ts` `comparePlausibility`,
    `compare/PlausibilityCompare.svelte`), under its own heading; see
    [Plausibility checks](#plausibility-checks) below.
@@ -368,7 +368,7 @@ keeps the tolerances of the engine that made it. One table, a row per check
 and site, with run A, run B and the change:
 
 - **Per site**: the outlet, then each gauge node with its own observed record
-  (engine ≥ 1.3.0, `plausibility.gauges`), matched by node id, then by name
+  (engine ≥ 1.4.0, `plausibility.gauges`), matched by node id, then by name
   across a copy (a renamed gauge shows "(was …)"; a gauge only one run
   checked gets a note). Two rows each:
   - *Natural ≥ observed + abstraction*: the water years that fail and how many

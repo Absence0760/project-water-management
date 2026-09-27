@@ -79,7 +79,7 @@
 		runs?: RunMeta[] | null;
 		/** The project's settings, the same object the Settings tab gets; null only before the page's own load finishes. */
 		settings?: ProjectSettings | null;
-		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.3.0). */
+		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.4.0). */
 		gauges?: readonly { id: string; name: string }[];
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();

@@ -1,5 +1,5 @@
 -- 084_gauge_records — an observed flow record attached to a gauge node
--- inside the network (engine 1.3.0, issue #64; docs/model.md §2.10d,
+-- inside the network (engine 1.4.0, issue #64; docs/model.md §2.10d,
 -- docs/data-model.md § Gauge records).
 --
 -- Until now every flow_observed_m3s / flow_logger_m3s series was the
@@ -35,7 +35,7 @@ ALTER TABLE time_series
 		CONSTRAINT time_series_site_flow_only CHECK (site_node_id IS NULL OR kind IN ('flow_observed_m3s', 'flow_logger_m3s'));
 
 COMMENT ON COLUMN time_series.site_node_id IS
-	'The gauge node a flow record was measured at (084_gauge_records, engine >= 1.3.0); NULL = the outlet. Read only by the plausibility checks. A plain uuid: the record outlives the node, and the run warns.';
+	'The gauge node a flow record was measured at (084_gauge_records, engine >= 1.4.0); NULL = the outlet. Read only by the plausibility checks. A plain uuid: the record outlives the node, and the run warns.';
 
 CREATE TRIGGER time_series_site_same_project BEFORE INSERT OR UPDATE OF site_node_id ON time_series
 	FOR EACH ROW EXECUTE FUNCTION assert_same_project('site_node_id');

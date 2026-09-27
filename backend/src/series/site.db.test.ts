@@ -1,4 +1,4 @@
-// A flow record's site (084_gauge_records, engine 1.3.0, issue #64): PATCH
+// A flow record's site (084_gauge_records, engine 1.4.0, issue #64): PATCH
 // …/series/:id { siteNodeId } attaches an observed or logger record to a gauge
 // node inside the network. A run reads it as that gauge's own record
 // (`<kind>@<node id>`, only the plausibility checks use it), the outlet's

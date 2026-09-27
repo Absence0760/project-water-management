@@ -115,7 +115,7 @@ export function findings(p: PlausibilityChecks): { label: string; ok: boolean | 
 		{ label: 'EWR by rain source', ok: r ? (r.fallback.years === 0 ? true : rainDiff === null ? null : rainDiff < 0.1) : null },
 		{ label: 'Observed flow vs rain', ok: dm ? dm.breaks.every((b) => b.hint === 'rain') : null },
 		{ label: 'Dry-season low flows', ok: lf ? lf.withinFactor : null },
-		// Engine ≥ 1.3.0: checks 1 and 4 at each gauge with a record of its own; only when there is one.
+		// Engine ≥ 1.4.0: checks 1 and 4 at each gauge with a record of its own; only when there is one.
 		...(p.gauges?.length ? [{ label: 'At gauges in the network', ok: gaugesOk(p.gauges) }] : [])
 	];
 }
@@ -141,7 +141,7 @@ export interface GaugeRow {
 	ok: [boolean | null, boolean | null];
 }
 
-/** One gauge's row in the panel's table (RunSummary.plausibility.gauges, engine ≥ 1.3.0). */
+/** One gauge's row in the panel's table (RunSummary.plausibility.gauges, engine ≥ 1.4.0). */
 export function gaugeRow(g: NonNullable<PlausibilityChecks['gauges']>[number]): GaugeRow {
 	const n = g.naturalised;
 	const c = g.lowFlow?.comparison ?? null;

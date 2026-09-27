@@ -220,7 +220,7 @@ its interval) and sends the boundary with the values.
 ### Gauge records (084_gauge_records.sql)
 
 `time_series.site_node_id` says an observed or logger flow record was
-measured at a **gauge node inside the network** (engine ≥ 1.3.0, issue #64,
+measured at a **gauge node inside the network** (engine ≥ 1.4.0, issue #64,
 [model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6));
 `NULL` = the outlet, which every series was before.
 

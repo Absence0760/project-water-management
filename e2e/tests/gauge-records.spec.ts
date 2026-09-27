@@ -1,5 +1,5 @@
 // An observed record at a gauge inside the network (084_gauge_records, engine
-// 1.3.0, issue #64; docs/ui.md § Data, § Runs & results, run-comparison.md §
+// 1.4.0, issue #64; docs/ui.md § Data, § Runs & results, run-comparison.md §
 // Plausibility checks). On the Data page a flow record is moved from the
 // outlet to a gauge; a run then checks it there (the Plausibility checks
 // panel's gauge table), and comparing a run whose gauge record is 3× too big

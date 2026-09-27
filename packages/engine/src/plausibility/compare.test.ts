@@ -72,7 +72,7 @@ function gaugedRun(scale: number): ComparableRun {
 	i.series.flow_observed_m3s = { startDate, values: get(null, 'simulated_outflow').map((v) => v / 86_400) };
 	i.series[gaugeSeriesKey('flow_observed_m3s', 'H')] = { startDate, values: get('H', 'outflow').map((v) => (v / 86_400) * scale) };
 	const out = run(i);
-	return { engineVersion: '1.3.0', startDate, endDate: '2003-09-30', summary: out.summary };
+	return { engineVersion: '1.4.0', startDate, endDate: '2003-09-30', summary: out.summary };
 }
 
 describe('the plausibility checks in the run comparison', () => {

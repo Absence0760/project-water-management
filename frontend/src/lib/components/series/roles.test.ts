@@ -37,7 +37,7 @@ describe('seriesInUse', () => {
 	});
 });
 
-describe('gauge records (084_gauge_records, engine ≥ 1.3.0)', () => {
+describe('gauge records (084_gauge_records, engine ≥ 1.4.0)', () => {
 	const at = (id: string, kind: string, name: string, siteNodeId: string): SeriesMeta => ({ ...meta(id, kind, name), siteNodeId });
 
 	it('a record at a gauge is never the outlet’s, even when it sorts first', () => {

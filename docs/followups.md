@@ -774,7 +774,7 @@ the reports):
       2 on Q90 (every value and its reasoning is in model.md §2.10d).
       Still open, each with its trigger:
       - [x] **Checks on a gauge node inside the network.** Done 2026-09-27
-            (issue #64), engine 1.3.0, migration 084 (may need renumbering
+            (issue #64), engine 1.4.0, migration 084 (may need renumbering
             at merge): a flow record can be attached to a gauge above the
             outlet (`time_series.site_node_id`, the Data page's site select),
             and checks 1 and 4 run at each such gauge against the simulated

@@ -3714,7 +3714,7 @@ earlier wording fixes): a run saved before it keeps its old text.
 Checks 1, 3 and the Q90 comparison use the calibration record only, by
 design: the other record may be a different river (§2.10a).
 
-**At a gauge node inside the network** (engine ≥ 1.3.0, issue #64,
+**At a gauge node inside the network** (engine ≥ 1.4.0, issue #64,
 `gaugeSites` in `run.ts`, `gaugeChecks` in `plausibility/index.ts`). An
 observed or logger record can be attached to a gauge node above the outlet
 (`time_series.site_node_id`, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql));

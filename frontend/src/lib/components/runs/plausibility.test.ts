@@ -95,7 +95,7 @@ describe('breakHint, signedPct and findings', () => {
 		expect(findings(p).map((f) => f.ok)).toEqual([false, true, true, false]);
 	});
 
-	it('adds a gauges line only when a gauge has its own record (engine ≥ 1.3.0), failing when one gauge fails', () => {
+	it('adds a gauges line only when a gauge has its own record (engine ≥ 1.4.0), failing when one gauge fails', () => {
 		const none: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
 		const g = (failed: number[], within: boolean | null) =>
 			({

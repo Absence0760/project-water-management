@@ -1,4 +1,4 @@
-// The plausibility checks of two runs side by side (engine ≥ 1.3.0 compares
+// The plausibility checks of two runs side by side (engine ≥ 1.4.0 compares
 // them; docs/run-comparison.md § Plausibility checks). Per check, each run's
 // own result, never re-computed: the water years that fail check 1 (natural
 // flow ≥ observed + abstraction) and the Q90 ratio of check 4 (dry-season low

@@ -906,7 +906,7 @@ function runPlausibility(r: {
 
 /**
  * The gauge nodes inside the network with an observed record of their own
- * (a GaugeSeriesKey series, engine ≥ 1.3.0), with the flows the checks need
+ * (a GaugeSeriesKey series, engine ≥ 1.4.0), with the flows the checks need
  * at each: natural flow (the catchment's × the flow shares of the gauge and
  * every node above it), the simulated flow there (the gauge's outflow), and
  * the dams and land cover above it. In node-id order. A record whose node is

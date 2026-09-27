@@ -1,5 +1,5 @@
 // Plausibility checks 1 and 4 at gauge nodes inside the network (engine ≥
-// 1.3.0, docs/model.md §2.10d): an observed record attached to a gauge node
+// 1.4.0, docs/model.md §2.10d): an observed record attached to a gauge node
 // (a GaugeSeriesKey series) is checked against the simulated flow there,
 // reported per site. Synthetic two-gauge network, no client data:
 //
@@ -82,7 +82,7 @@ describe('gauge series keys', () => {
 	});
 });
 
-describe('plausibility checks at gauge nodes (engine ≥ 1.3.0)', () => {
+describe('plausibility checks at gauge nodes (engine ≥ 1.4.0)', () => {
 	it('a project whose records are all the outlet’s has no gauges block', () => {
 		const { input } = withRecords({});
 		const out = run(input);

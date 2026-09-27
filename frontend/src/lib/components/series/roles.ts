@@ -100,7 +100,7 @@ export function seriesInUse(list: SeriesMeta[], periodKinds: ReadonlySet<string>
 export const SITED_KINDS = new Set(['flow_observed_m3s', 'flow_logger_m3s']);
 
 /**
- * Ids of the gauge records a run checks (engine ≥ 1.3.0): per gauge in
+ * Ids of the gauge records a run checks (engine ≥ 1.4.0): per gauge in
  * `gauges` (the model's gauges above the outlet), the first series of each
  * flow kind by name attached to it, as the backend's loadLiveInput reads them.
  * A record on a node that is no longer such a gauge is not read.

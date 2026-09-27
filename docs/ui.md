@@ -1866,7 +1866,7 @@ by default, or the existing series' own label when appending to it); a
 merge of another version into a filled series is refused by the server with
 its reason. An observed or logger **flow** record also shows **where it was
 measured** when the model has a gauge above the outlet (issue #64, engine ≥
-1.3.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)):
+1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)):
 editors get a select (*At the outlet*, or *At gauge &lt;name&gt;* for each such
 gauge, `PATCH …/series/:id { siteNodeId }`), viewers the words. A record at a
 gauge is badged *Gauge record (checks only)*: the run checks it against the
@@ -3368,7 +3368,7 @@ read it before.
   another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
   Q70 / Q90 / Q95 table; then, when a gauge inside the network has its own
-  record (engine ≥ 1.3.0), **At gauges in the network**: a row per gauge with
+  record (engine ≥ 1.4.0), **At gauges in the network**: a row per gauge with
   its record, the share of the catchment's natural flow above it, check 1's
   failing water years and check 4's Q90 ratio with *within* / *outside the
   factor of 2* (a failing gauge's row shaded), and a fifth line in the check

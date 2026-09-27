@@ -982,7 +982,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(2);
 	});
 
-	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.3.0), and nothing without one', () => {
+	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
 		const without = [...plausibilityLines(checks)];
 		expect(without.some((l) => l.startsWith('At gauge'))).toBe(false);
 		const gauge = { nodeId: 'g1', name: 'Upper weir', flowKind: 'flow_logger_m3s' as const, naturalShare: 0.25, naturalised: checks.naturalised, lowFlow: null };
