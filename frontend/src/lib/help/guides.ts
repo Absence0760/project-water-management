@@ -441,11 +441,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **Add transfer** and pick its source (**From**) and destination (**To**) units.',
+							'On **Transfers**, press **+ Add transfer** at the top and pick its source (**From**) and destination (**To**) units.',
 							'Tick the [[transfer-months|months]] it runs in: one toggle per month, Oct … Sep.',
 							'Enter the [[transfer-rate|maximum rate]] in m³/s, and a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
 							'With several transfers, set each one’s [[transfer-priority|priority]]: lower moves first.',
+							'Check **When water moves** under the rules: each month’s enabled rules and the most they can move in a day together, before the dams’ own limits.',
 							'Save, then run.'
 						]
 					}

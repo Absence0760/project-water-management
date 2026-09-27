@@ -88,6 +88,13 @@ section it belongs to, with the example that taught it.
 - **Container queries, not viewport media queries**, for anything inside
   the app frame: the sidebar takes 240 px, so the viewport lies about the
   space. Name the container (`container: dams-page / inline-size`).
+  The root font size is **14 px** (`app.css`), so `1rem` in a query is
+  14 px: Transfers' first `70rem` breakpoint matched a 1016 px column it was
+  meant to miss. Work the pixels out at 14 px.
+- **Fit a wide table by stacking, not by scrolling sideways.** Transfers at
+  1280 hid Priority, On and Remove off the right edge. Stacking From over To
+  in one cell, letting the number headers wrap, and a short "On" header made
+  every column fit; side by side only where the container is wide enough.
 - **Lay drawings out to their box; don't zoom text.** Scaling the Network
   drawing made labels huge; spacing columns and rows to the box, with a cap,
   looked right.
@@ -117,6 +124,10 @@ section it belongs to, with the example that taught it.
   to the items that matter most (largest area, most demand) and group the
   tail as one labelled "Other" that names its members. The Crops page's
   6-colour palette gave five crops the same grey.
+- **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
+  with `opacity: 0.6` and axe failed its text on contrast (no scan had a
+  disabled rule until the page got one). Tint the row and say **off** in
+  words beside its number.
 - **Say what a colour means in words too** (a band label, "below 70%"), and
   name a segment on hover and focus: colour alone fails colour-blind users
   and axe.

@@ -271,7 +271,8 @@ role, freshness, Add data) and each tab's own header:
   on a Summary before the first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  **+ Add transfer**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
   same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
@@ -1489,20 +1490,49 @@ the Network tab.
 
 ## Transfers
 
-One row per transfer rule: source and destination node, the months it runs
-(twelve toggles, water-year order, with **All**/**None**), a maximum rate
-(m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
-which it stops, a **Priority** and an enabled switch. Priority is a whole
-number, lower moves first; equal priorities share a source dam pro rata to
-their limits ([engine-audit Q18](./engine-audit.md)). A new rule starts after
-the existing ones (the highest priority + 1). The help explains the
-destination's room cap (N4). The empty state says what a transfer
-is (most catchments have none); with fewer than two nodes it links to the
-Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
-its remove button on top, From and To side by side, the month toggles six to a
-row at tap size, then the numbers and an **Enabled** switch whose label is
-part of the tap target. The table's column headers and their ⓘ tips move into
-each card's field labels.
+A page of two cards under the section header, which counts the rules ("3
+transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
+map** (the Network, where transfers are dashed arrows) and **+ Add transfer**
+(editors, with at least two units). A new rule starts after the existing ones
+(the highest priority + 1), and the cursor lands in its **From**, scrolled into
+view.
+
+**Transfer rules** is one row per rule: its number (with **off** under it when
+the rule is switched off, and a tinted row), **From → To** (side by side from
+an 80rem-wide container, stacked below that), the months it runs (twelve
+toggles in water-year order, with the months in words and **All**/**None**
+under them), a maximum rate (m³/s), an optional daily cap (m³), the minimum
+source-dam storage (%) below which it stops, a **Priority**, an **On** switch
+(named "transfer N enabled") and remove. Priority is a whole number, lower
+moves first; equal priorities share a source dam pro rata to their limits
+([engine-audit Q18](./engine-audit.md)). The help explains the destination's
+room cap (N4). Thirty rules fit at 1280 × 800 without scrolling the table
+sideways.
+
+**When water moves** has a bar per month, Oct … Sep: how many enabled rules
+run in it and the most they can move in a day together, each rule's
+min(rate × 86 400, daily cap) summed (`transfers/capacity.ts`). It is an upper
+bound: on the day the source dam's minimum and the destination's room also
+limit it. A screen reader hears each month as a sentence ("Nov: 2 rules, up to
+6,912 m³ a day").
+
+From 1100 × 620 the two cards are the height left in the window (less the save
+bar) and the page doesn't scroll: the rules scroll inside their card and When
+water moves takes what they leave, so with a few rules its bars are tall and
+with thirty they keep a strip at the bottom. The empty state says what a
+transfer is (most catchments have none) and has its own **Add transfer**; with
+fewer than two units it links to the Network tab.
+
+In a container up to 64rem (a phone, a narrow window) each rule becomes a card,
+two to a row where there is room: "Transfer N" with its remove button on top,
+From and To side by side, the month toggles six to a row at tap size, then the
+numbers and an **Enabled** switch whose label is part of the tap target. The
+column headers and their ⓘ tips move into each card's field labels, the page
+scrolls rather than a box inside it, and the months show six to a row.
+
+The Network's **Transfers** grid (`grid=transfers`) and scenario override mode
+show the same table alone, with **+ Add transfer** under it and no months
+card.
 
 ## Data
 
