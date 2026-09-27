@@ -1,4 +1,19 @@
 <!-- i18n-section: auth -->
+<script lang="ts" module>
+	import { tick } from 'svelte';
+
+	/**
+	 * Focus the card's title once the page has swapped its content for another
+	 * state ("Check your email", "Your password has been changed"…): the
+	 * control that was focused (the submit button) is gone, and focus would
+	 * otherwise fall back to the page's start.
+	 */
+	export async function focusAuthTitle(): Promise<void> {
+		await tick();
+		document.querySelector<HTMLElement>('.auth h1')?.focus();
+	}
+</script>
+
 <script lang="ts">
 	// Split sign-in / register layout: a navy brand panel with the catchment
 	// illustration on the left (a short band on phones), the form on the right.
@@ -15,7 +30,7 @@
 		subtitle,
 		children,
 		footer
-	}: { title: string; subtitle?: string; children: Snippet; footer: Snippet } = $props();
+	}: { title: string; subtitle?: string; children: Snippet; footer?: Snippet } = $props();
 </script>
 
 <div class="auth">
@@ -29,10 +44,11 @@
 				</div>
 				<LanguageSwitch compact />
 			</div>
-			<h1 class:solo={!subtitle}>{title}</h1>
+			<!-- tabindex -1: focusAuthTitle moves focus here when the page changes state. -->
+			<h1 class:solo={!subtitle} tabindex="-1">{title}</h1>
 			{#if subtitle}<p class="muted intro">{subtitle}</p>{/if}
 			{@render children()}
-			<div class="footer">{@render footer()}</div>
+			{#if footer}<div class="footer">{@render footer()}</div>{/if}
 		</div>
 	</main>
 
@@ -122,11 +138,14 @@
 		border-radius: 50%;
 		background: #36c6e0;
 	}
+	/* The form starts on the brand copy's top line rather than centred, so the
+	   title sits in the same place on every sign-in page and doesn't jump when
+	   a message appears above the form (a wrong password, a sent link). */
 	.side-form {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: center;
-		padding: 2.5rem var(--gutter);
+		padding: clamp(2rem, 6vh, 4rem) var(--gutter) 2.5rem;
 		background: var(--surface);
 	}
 	.form-box {
@@ -175,9 +194,14 @@
 	.form-box :global(.field) {
 		margin-bottom: 1rem;
 	}
-	.form-box :global(.btn-primary) {
+	/* Every action is a full-width button under the form (not the demo's small one). */
+	.form-box :global(.btn:not(.btn-sm)) {
 		width: 100%;
 		justify-content: center;
+		/* Long words (an address in "Sign out and accept as …", Afrikaans) wrap inside it. */
+		white-space: normal;
+		overflow-wrap: anywhere;
+		text-align: center;
 		min-height: 44px;
 		margin-top: 0.5rem;
 		font-size: 0.95rem;
@@ -207,19 +231,20 @@
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: auto 1fr;
 		}
+		/* A short band: the form's title and first field stay in the top half
+		   of a phone, above the keyboard. */
 		.panel-brand {
 			position: relative;
-			height: 180px;
+			height: 112px;
 		}
 		.copy {
 			display: none;
 		}
 		.side-form {
-			align-items: flex-start;
-			padding-top: 1.75rem;
+			padding-top: 1.25rem;
 		}
-		.lockup {
-			margin-bottom: 1.25rem;
+		.top {
+			margin-bottom: 1.5rem;
 		}
 	}
 </style>

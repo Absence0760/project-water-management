@@ -13,7 +13,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError, type Unsubscribed } from '$lib/api';
 	import { fragmentToken, unsubscribedText } from '$lib/components/alerts/words';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 
@@ -37,10 +37,13 @@
 		try {
 			done = await api.alerts.unsubscribe(token);
 			status = 'done';
+			void focusAuthTitle();
 		} catch (e) {
 			// Only the server's "this link is no good" (404, or 400 for a malformed token) means the link is dead.
-			if (e instanceof ApiError && (e.status === 404 || e.status === 400)) status = 'dead';
-			else {
+			if (e instanceof ApiError && (e.status === 404 || e.status === 400)) {
+				status = 'dead';
+				void focusAuthTitle();
+			} else {
 				failure = errorText(e);
 				status = 'ask';
 			}
@@ -53,7 +56,8 @@
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title={t('Stop alert emails')}>
+<!-- Once the answer offers Manage alerts as its button, the footer doesn't repeat it. -->
+<AuthCard title={t('Stop alert emails')} footer={status === 'done' || status === 'dead' ? undefined : manageLink}>
 	<div data-ready={status === 'loading' ? undefined : 'true'} data-state={status}>
 		{#if status === 'ask' || status === 'working'}
 			<p>{t('Stop getting these alert emails? You can turn them back on from your account at any time.')}</p>
@@ -71,7 +75,8 @@
 			<div class="alert alert-error" role="alert">{t('This link is incomplete. Open it again from the email, or copy the whole link.')}</div>
 		{/if}
 	</div>
-	{#snippet footer()}
-		<a href="{base}/account/alerts">{t('Manage alerts')}</a>
-	{/snippet}
 </AuthCard>
+
+{#snippet manageLink()}
+	<a href="{base}/account/alerts">{t('Manage alerts')}</a>
+{/snippet}

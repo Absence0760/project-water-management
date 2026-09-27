@@ -8,7 +8,7 @@
 	import { emailAuthApi, linkToken, passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -40,9 +40,12 @@
 			// The server revoked every session, this browser's included.
 			session.user = null;
 			done = true;
+			void focusAuthTitle();
 		} catch (err) {
-			if (err instanceof ApiError && err.code === 'link_invalid') linkDead = true;
-			else error = errorText(err);
+			if (err instanceof ApiError && err.code === 'link_invalid') {
+				linkDead = true;
+				void focusAuthTitle();
+			} else error = errorText(err);
 		} finally {
 			busy = false;
 		}

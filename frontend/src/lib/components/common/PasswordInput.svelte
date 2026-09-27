@@ -1,8 +1,12 @@
+<!-- i18n-section: password -->
 <script lang="ts">
-	// Password field with a Show/Hide toggle. The toggle's accessible name is
-	// "Show password" / "Hide password" from its content, so the field itself
-	// stays the only control labelled "Password".
+	// Password field with a Show/Hide toggle. The toggle is named "Show
+	// password" / "Hide password" (one message each, so a translation can
+	// order the words its own way), and the field itself stays the only
+	// control labelled "Password". Only the translated pages use it (sign-in,
+	// register, reset, account), so its words go through t().
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	let {
 		value = $bindable(''),
@@ -15,8 +19,10 @@
 
 <div class="pw">
 	<input {...rest} {id} type={shown ? 'text' : 'password'} bind:value autocapitalize="off" spellcheck="false" />
+	<!-- Named from its content, not aria-label, so a lookup by the label "Password" finds only the field. -->
 	<button type="button" class="toggle" aria-controls={id} onclick={() => (shown = !shown)}>
-		{shown ? 'Hide' : 'Show'}<span class="visually-hidden"> password</span>
+		<span aria-hidden="true">{shown ? t('Hide', {}, 'password field') : t('Show', {}, 'password field')}</span>
+		<span class="visually-hidden">{shown ? t('Hide password') : t('Show password')}</span>
 	</button>
 </div>
 
