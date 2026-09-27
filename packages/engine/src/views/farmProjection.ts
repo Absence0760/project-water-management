@@ -98,6 +98,13 @@ export interface ProjectionRun {
 	crops?: readonly CropEfficiencyInput[];
 	cropAreas?: readonly CropArea[];
 	apanMm?: ArrayLike<unknown>;
+	/**
+	 * The snapshot's demand objects (engine ≥ 1.7.0, docs/model.md §2.7f): a
+	 * unit with an enabled one returns its objects' own shares, so its
+	 * consumptive share over a window follows its stored return_flow, not
+	 * 1 − β(1 − e). Absent = none, right for any run without them.
+	 */
+	demandObjects?: readonly { nodeId: string; enabled: boolean }[];
 	/** A stored series of the run (null node = catchment); undefined when the run has none. */
 	series(nodeId: string | null, key: string): StoredValues | undefined;
 }
@@ -418,6 +425,12 @@ export interface CurtailmentOptions {
 	 * 'ruleTable'; the outlet as null), whose ewr_charge_shortfall is read in place of ewr_shortfall.
 	 */
 	ruleTableSites?: readonly (string | null)[];
+	/**
+	 * For curtailmentSeriesKeys: the run's demand objects (engine ≥ 1.7.0,
+	 * ProjectionRun.demandObjects): a unit with an enabled one is read with
+	 * its return_flow as well.
+	 */
+	demandObjects?: readonly { nodeId: string; enabled: boolean }[];
 }
 
 /**
@@ -496,6 +509,7 @@ export function curtailmentSeriesKeys(
 		if (!stored) add(n.id, 'inflow_upstream', 'outflow');
 		if (n.kind === 'farm') {
 			add(n.id, 'supplied', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
+			if (options.demandObjects?.some((o) => o.enabled !== false && o.nodeId === n.id)) add(n.id, 'return_flow');
 			if (!stored) add(n.id, 'runoff', 'dam_storage');
 			if (!stored && !perRule && inRule.has(n.id)) add(n.id, 'transfer');
 		} else if (n.kind === 'user') {
@@ -548,7 +562,9 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 			supplied: need(run, n.id, 'supplied', days),
 			ewrCharge: need(run, n.id, 'ewr_charge', days),
 			ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
-			consumptivePerSupplied: consumptiveShare(n, run)
+			consumptivePerSupplied: consumptiveShare(n, run),
+			// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned, as runModel has it.
+			...(run.demandObjects?.some((o) => o.enabled !== false && o.nodeId === n.id) ? { returned: need(run, n.id, 'return_flow', days) } : {})
 		} satisfies CurtailmentInput;
 		return [{ i, input }];
 	});

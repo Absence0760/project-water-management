@@ -54,6 +54,18 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			if (b.target === 'dam') add(`bhDam:${b.id}`, `borehole "${b.name}" on "${n.name}": it pumps into a dam, and there is none`);
 		}
 	}
+	// Demand objects (engine ≥ 1.7.0, issue #54 item 2b): on a unit (a farm node), sized the way they say, and nothing returns from one piped out.
+	dupes('demand object id', (m.demandObjects ?? []).map((o) => o.id));
+	for (const o of m.demandObjects ?? []) {
+		const n = byId.get(o.nodeId);
+		if (!n) add(`doNode:${o.id}`, `demand object ${o.id} references an unknown node`);
+		else if (n.kind !== 'farm') add(`doKind:${o.id}`, `demand object "${o.name}" is on ${n.kind === 'user' ? 'other water user' : 'gauge'} "${n.name}": only a unit has demand objects`);
+		if (o.sizing === 'monthly' && !(Array.isArray(o.monthlyM3Day) && o.monthlyM3Day.length === 12))
+			add(`doMonthly:${o.id}`, `demand object "${o.name}": a monthly demand needs 12 values (m³/day, Oct–Sep)`);
+		if (o.sizing === 'perUnit' && (o.count === null || o.count === undefined || o.litresPerUnitDay === null || o.litresPerUnitDay === undefined))
+			add(`doPerUnit:${o.id}`, `demand object "${o.name}": a demand per unit needs a count and litres per unit per day`);
+		if (o.destination === 'external' && o.returnPct > 0) add(`doExternal:${o.id}`, `demand object "${o.name}" is piped out of the catchment, so nothing returns from it; set its return share to 0`);
+	}
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown node`);
 		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.
