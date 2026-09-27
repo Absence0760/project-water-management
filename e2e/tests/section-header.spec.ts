@@ -64,10 +64,12 @@ test.describe('desktop', () => {
 		await expect(actions).toHaveText(['Preview all data', 'Add data']);
 		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
 
-		// Runs: the tab's own form runs the model (with a label), so the header doesn't repeat it.
+		// Runs: the tab's own run form (with a label) takes Run model's place, last in the header, after a plain Add data.
 		await nav(page).getByRole('link', { name: 'Runs & results' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Run model' })).toHaveCount(0);
+		await expect(actions).toHaveText(['Add data', 'Run model']);
+		await expect(h.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
+		await expect(h.getByLabel(/^Run label/)).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(1);
 	});
 

@@ -145,9 +145,9 @@ test('the run follows run= and the header picker; Runs & results links here for 
 	const earlier = await createRun(page.request, project.id, 'Earlier');
 	const latest = await createRun(page.request, project.id, 'Latest');
 
-	// Runs & results: the group is one link row, keeping the run shown.
+	// Runs & results: the run header links here, keeping the run shown.
 	await page.goto(`/projects/${project.id}?tab=runs&run=${earlier}`);
-	await page.locator('#res-units').getByRole('link', { name: 'Units & supply for this run' }).click();
+	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Units & supply for this run' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=supply&run=${earlier}$`));
 	await expect(page.getByTestId('supply-summary')).toContainText('run “Earlier”');
 	// The oldest run has nothing before it, so no change is shown.

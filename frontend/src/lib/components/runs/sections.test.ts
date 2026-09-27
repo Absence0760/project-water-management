@@ -1,14 +1,12 @@
 import type { FarmSummary, RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { resultGroups, resultSections } from './sections';
+import { movedHref, resultGroups, resultSections } from './sections';
 
 describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary']],
-			['River & Reserve', ['res-river']],
-			['Units & users', ['res-units']],
 			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
 			['Record', ['res-notes', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
@@ -20,11 +18,10 @@ describe('resultGroups', () => {
 		expect(resultSections(summary)).toEqual(resultGroups(summary).flatMap((g) => g.sections));
 	});
 
-	it('keeps one link row for the unit panels, which moved to Units & supply, with or without units (issue #17)', () => {
+	it('lists no river or unit panel: they have their own pages, which the run header links to (issue #17)', () => {
 		for (const farms of [[], [{ nodeId: 'f' } as FarmSummary]]) {
 			const ids = resultSections({ farms }).map((s) => s.id);
-			expect(ids).toContain('res-units');
-			for (const moved of ['res-curtailment', 'res-assurance', 'res-farm', 'res-farms']) expect(ids).not.toContain(moved);
+			for (const moved of ['res-river', 'res-units', 'res-ewr', 'res-reserve', 'res-curtailment', 'res-assurance', 'res-farm', 'res-farms']) expect(ids).not.toContain(moved);
 		}
 	});
 
@@ -43,11 +40,10 @@ describe('resultGroups', () => {
 		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
-	it('puts the flow-duration curve with the hydrograph, and the river group is one link to River & reserve', () => {
+	it('puts the flow-duration curve with the hydrograph', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
 		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
-		expect(groups.find((g) => g.label === 'River & Reserve')!.sections).toEqual([{ id: 'res-river', label: 'On River & reserve' }]);
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
 	});
 
@@ -60,5 +56,25 @@ describe('resultGroups', () => {
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
+describe('movedHref', () => {
+	it('sends a moved panel to its page with the run, and the reporting window to Units & supply', () => {
+		expect(movedHref('res-ewr-grid', 'r1')).toBe('?tab=river&run=r1#res-ewr-grid');
+		expect(movedHref('res-curtailment', 'r1', 'last7')).toBe('?tab=supply&run=r1&window=last7#res-curtailment');
+		expect(movedHref('res-assurance', null)).toBe('?tab=supply#res-assurance');
+	});
+
+	it('sends the old link rows to the page itself, keeping the run', () => {
+		expect(movedHref('res-river', 'r1')).toBe('?tab=river&run=r1');
+		expect(movedHref('res-units', 'r1')).toBe('?tab=supply&run=r1');
+		expect(movedHref('res-units', null, 'last30')).toBe('?tab=supply&window=last30');
+	});
+
+	it('leaves the panels still on Runs & results alone', () => {
+		for (const s of resultSections({ farms: [], runoff: {} as RunSummary['runoff'], wr2012: {} as RunSummary['wr2012'], plausibility: {} as RunSummary['plausibility'], forecast: {} as RunSummary['forecast'] }))
+			expect(movedHref(s.id, 'r1')).toBeNull();
+		expect(movedHref('', 'r1')).toBeNull();
 	});
 });

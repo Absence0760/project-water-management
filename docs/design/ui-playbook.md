@@ -67,7 +67,11 @@ section it belongs to, with the example that taught it.
   section's own actions, **Add data** and **Run model**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
   (`workspace/headerSlot.svelte.ts`); it never draws its own title (Dams
-  briefly had two). Notices (viewer, new data, upload result) are one slim
+  briefly had two). A section whose main action replaces Run model passes
+  it as `main`, rendered last after a plain Add data: Runs & results' run
+  form (label, Run forecast, Run model) went there from a full-width panel
+  that pushed the results 110 px down, its status one slim line under the
+  header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Summary,
   Network, Crops, Dams, River & reserve, Units & supply, the portfolio) is
@@ -77,6 +81,17 @@ section it belongs to, with the example that taught it.
   where it makes sense (~1100×620). The page doesn't scroll; long lists
   scroll *inside their card*. Help, guides and account pages scroll normally
   with a readable text column (~75ch).
+- **A sticky rail on a reading page fits from where it starts.** Runs &
+  results scrolls (its results are long), with the runs list in a sticky
+  rail beside them. `max-height: calc(100vh - top-offset)` only fits once
+  the rail is stuck: at the top of the page it started 110 px down and ran
+  88 px off the bottom of a 1440×960 window. Measure the grid's own top
+  (not the sticky element's, which reads its stuck offset) and use
+  `max(stickyTop, gridTop - scrollY)` as the offset (`runs-page.spec.ts`
+  checks both). At the very end of the page a sticky rail rises with its
+  grid's bottom edge; test the fit mid-page. Stacked on a phone, cap the
+  list (20rem, scrolling inside) so twenty runs don't push the results
+  a screen down.
 - **Cards or list on one side, the picked item's detail on the other.** Dams
   and Units & supply: a scrolling column of items (worst first), the picked
   item's chart filling the rest, the pick in the URL so Back works. When

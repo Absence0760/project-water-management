@@ -233,8 +233,9 @@
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// Run model on the Summary and the Build-the-model pages; the Runs tab has
-	// its own form (with a label), and Data's main action is Add data.
+	// Run model on the Summary and the Build-the-model pages; the Runs tab puts
+	// its own form (with a label) in the same place (headerSlot.main), and
+	// Data's main action is Add data.
 	const RUN_TABS: TabId[] = ['overview', 'network', 'crops', 'transfers', 'settings'];
 	const showRun = $derived(canEdit && RUN_TABS.includes(tab));
 	// What a run still needs (the Runs tab's check: the engine refuses without these).
@@ -519,7 +520,7 @@
 		<button
 			type="button"
 			class="btn add"
-			class:btn-primary={!showRun}
+			class:btn-primary={!showRun && !headerSlot.main}
 			onclick={() => openAddData()}
 			onpointerenter={() => prefetch(loadAddData)}
 			onfocus={() => prefetch(loadAddData)}
@@ -528,6 +529,7 @@
 			Add data
 		</button>
 	{/if}
+	{@render headerSlot.main?.()}
 	{#if showRun}
 		<button
 			type="button"

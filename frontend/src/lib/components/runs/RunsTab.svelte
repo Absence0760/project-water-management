@@ -28,13 +28,15 @@
 	import RunNotes from './RunNotes.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { resultGroups } from './sections';
-	import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
+	import { movedHref, resultGroups } from './sections';
+	import { supplyHref } from '$lib/components/supply/links';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
+	import { ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
-	import { riverAnchor, riverHref } from '$lib/components/river/links';
+	import { riverHref } from '$lib/components/river/links';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
@@ -149,16 +151,13 @@
 		}
 	}
 	onMount(() => {
-		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …, issue #17):
-		// there instead, for the same run, replacing this entry so Back skips it.
-		const hash = page.url.hash.slice(1);
-		if (riverAnchor(hash)) {
-			goto(riverHref(page.url.searchParams.get('run'), hash), { replaceState: true, noScroll: true });
-			return;
-		}
-		// …and to Units & supply (#res-curtailment from a bookmarked "units short this week", …), keeping its window.
-		if (supplyAnchor(hash)) {
-			goto(supplyHref(page.url.searchParams.get('run'), { window: page.url.searchParams.get('window'), hash }), { replaceState: true, noScroll: true });
+		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Units & supply
+		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
+		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
+		// run (and reporting window), replacing this entry so Back skips it.
+		const moved = movedHref(page.url.hash.slice(1), page.url.searchParams.get('run'), page.url.searchParams.get('window'));
+		if (moved) {
+			goto(moved, { replaceState: true, noScroll: true });
 			return;
 		}
 		load();
@@ -230,7 +229,7 @@
 		if (!detail || fragmentShown) return;
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
-		if (!hash.startsWith('res-') || riverAnchor(hash) || supplyAnchor(hash)) return;
+		if (!hash.startsWith('res-') || movedHref(hash, null)) return;
 		tick().then(() => {
 			const el = destroyed ? null : document.getElementById(hash);
 			if (!el) return;
@@ -392,28 +391,68 @@
 		tablePreview = item;
 		tablePreviewOpen = true;
 	}
+
+	// The section header (workspace/SectionHeader) carries the title: the tab gives it the runs
+	// line and, for an editor, the run form where the other pages have Run model (last, after Add data).
+	$effect(() => fillHeader({ context: headerContext, main: canRun ? runForm : undefined }));
+	const runCount = (n: number) => `${n} ${n === 1 ? 'run' : 'runs'}`;
+
+	// The rail fits the window from wherever it starts: under the header at the top of the page,
+	// at its sticky offset once scrolled (the playbook's window fit, as a max-height, since the page
+	// itself is a reading page and scrolls). The grid's own top is the rail's unstuck top.
+	let layoutEl: HTMLDivElement | undefined = $state();
+	let railEl: HTMLElement | undefined = $state();
+	let layoutTop = $state(0);
+	let stickTop = $state(0);
+	let scrollY = $state(0);
+	$effect(() => {
+		if (!layoutEl || !railEl) return;
+		const grid = layoutEl;
+		const rail = railEl;
+		const measure = () => {
+			layoutTop = grid.getBoundingClientRect().top + window.scrollY;
+			stickTop = parseFloat(getComputedStyle(rail).top) || 0;
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
+	const railTop = $derived(Math.max(stickTop, layoutTop - scrollY));
 </script>
 
-{#if canRun}
-	<form class="panel run-bar" onsubmit={run} aria-busy={running}>
-		<div class="field grow">
-			<label for="run-label">Run label <span class="muted">(optional)</span></label>
-			<input id="run-label" maxlength="200" placeholder="e.g. Baseline, 2026 dam raise" bind:value={label} disabled={running} />
-		</div>
-		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0 || !!overAllocated}>
-			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
-			{running ? 'Running model…' : 'Run model'}
-		</button>
+<svelte:window bind:scrollY />
+
+{#snippet headerContext()}
+	{#if loading && !runs.length}Loading runs…{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
+{/snippet}
+<!-- The run form: in the section header, where the other pages have Run model; its status line opens the page. -->
+{#snippet runForm()}
+	<form class="run-form" onsubmit={run} aria-busy={running}>
+		<label class="run-label" for="run-label">Run label <span class="visually-hidden">(optional)</span></label>
+		<input id="run-label" maxlength="200" placeholder="optional, e.g. Baseline" bind:value={label} disabled={running} />
 		{#if hasForecast}
 			<button
 				type="button"
 				class="btn"
 				disabled={running || missing.length > 0 || !!overAllocated}
+				aria-describedby="run-note"
 				title="The record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart. Keeps one forecast run."
 				onclick={() => start(true)}>Run forecast</button
 			>
 		{/if}
-		<p class="note" role="status" aria-live="polite">
+		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0 || !!overAllocated} aria-describedby="run-note">
+			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
+			{running ? 'Running model…' : 'Run model'}
+		</button>
+	</form>
+{/snippet}
+
+<div class="runs-page">
+{#if canRun}
+	<!-- The run form's status: one slim line (the form is in the section header). -->
+	<div class="run-status">
+		<p class="note" id="run-note" role="status" aria-live="polite">
 			{#if running}
 				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
 			{:else if missing.length}
@@ -435,7 +474,7 @@
 			{/if}
 		</p>
 		{#if running}<div class="progress" aria-hidden="true"><span></span></div>{/if}
-	</form>
+	</div>
 {:else if stale}
 	<p class="alert alert-info">Inputs changed since the latest run ({stale.join('; ')}); an editor can run the model again.</p>
 {/if}
@@ -446,9 +485,9 @@
 {/if}
 {#if drift}<p class="alert alert-warning" role="status" data-testid="evidence-drift">{drift}</p>{/if}
 
-<div class="layout">
+<div class="layout" bind:this={layoutEl} style:--rail-top="{railTop}px">
 	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
-	<aside class="rail">
+	<aside class="rail" bind:this={railEl}>
 		<section class="panel list" aria-labelledby="runs-h">
 			<div class="panel-head">
 				<h2 id="runs-h">Runs</h2>
@@ -563,6 +602,20 @@
 							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}{detail.run.createdBy ? ` by ${detail.run.createdBy}` : ''} · engine {detail.run.engineVersion}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
 						</span>
+						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->
+						<nav class="outcomes small" aria-label="Outcomes for this run">
+							<span class="muted">For this run:</span>
+							<a
+								href={riverHref(shownRunId)}
+								aria-label="River & reserve for this run"
+								title="EWR against outflow, reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account">River &amp; reserve <span aria-hidden="true">→</span></a
+							>
+							<a
+								href={supplyHref(shownRunId)}
+								aria-label="Units & supply for this run"
+								title="Each unit's supply against its demand, the unit results table, the curtailment targets and assurance of supply">Units &amp; supply <span aria-hidden="true">→</span></a
+							>
+						</nav>
 					</div>
 					<div class="head-acts">
 						<!-- This run against the published baseline (docs/run-comparison.md): A = published, B = this run. -->
@@ -593,20 +646,6 @@
 				{nodeOrder}
 				forecastFrom={summary.forecast?.from ?? null}
 			>
-				{#snippet river()}
-					<!-- The group's panels are on their own page now (issue #17): one link, keeping the run. -->
-					<p class="panel moved-link" id="res-river">
-						<span>EWR against outflow, Reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account for this run are on River &amp; reserve.</span>
-						<a class="btn btn-sm" href={riverHref(shownRunId)}>River &amp; reserve for this run <span aria-hidden="true">→</span></a>
-					</p>
-				{/snippet}
-				{#snippet farmsLead()}
-					<!-- The group's panels (unit results, curtailment, assurance of supply, unit detail) are on their own page now (issue #17): one link, keeping the run. -->
-					<p class="panel moved-link" id="res-units">
-						<span>Each unit's supply against its demand, the unit results table, the curtailment targets and assurance of supply for this run are on Units &amp; supply.</span>
-						<a class="btn btn-sm" href={supplyHref(shownRunId)}>Units &amp; supply for this run <span aria-hidden="true">→</span></a>
-					</p>
-				{/snippet}
 				{#snippet modelTail()}
 					<div class="panel" id="res-calibration">
 						<CalibrationPanel
@@ -711,6 +750,8 @@
 	</div>
 </div>
 
+</div>
+
 {#if tablePreview}
 	<Lazy load={loadTableDialog}>
 		{#snippet children(DailyTableDialog)}
@@ -725,16 +766,21 @@
 {/if}
 
 <style>
-	/* Where the River & Reserve group was: one row linking to its page. */
-	.moved-link {
+	.runs-page {
+		container: runs-page / inline-size;
+	}
+	/* The river and unit pages for the shown run: one line in the run header. */
+	.outcomes {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
 		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
-		margin: 0;
-		font-size: 0.9rem;
-		color: var(--text-muted);
+		align-items: center;
+		gap: 0 0.9rem;
+		margin-top: 0.2rem;
+	}
+	.outcomes a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.head-acts {
 		display: flex;
@@ -755,27 +801,42 @@
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
-	.run-bar {
-		position: relative;
+	/* In the section header's actions: label, field and buttons on one row, wrapping on a phone. */
+	.run-form {
 		display: flex;
-		align-items: flex-end;
-		gap: 0.75rem;
+		align-items: center;
 		flex-wrap: wrap;
-		overflow: hidden;
+		gap: 0.5rem;
+		flex: 1 1 auto;
+		justify-content: flex-end;
 	}
-	.run-bar .field {
+	.run-label {
+		font-size: 0.85rem;
+		color: var(--text-2);
 		margin: 0;
 	}
-	.grow {
-		flex: 1;
-		max-width: 420px;
-		min-width: min(100%, 220px);
+	.run-form input {
+		width: 15rem;
+		min-width: 0;
+		flex: 0 1 15rem;
+		min-height: 38px;
 	}
-	.grow input {
-		width: 100%;
+	@media (max-width: 640px) {
+		.run-form {
+			justify-content: flex-start;
+		}
+		.run-form input {
+			flex: 1 1 10rem;
+			min-height: 44px;
+		}
+	}
+	/* The run form's status: one slim line above the page, with the progress bar under it while a run goes. */
+	.run-status {
+		position: relative;
+		margin: -0.4rem 0 0.75rem;
+		padding-bottom: 4px;
 	}
 	.note {
-		width: 100%;
 		margin: 0;
 		font-size: 0.85rem;
 		color: var(--text-muted);
@@ -798,6 +859,7 @@
 		right: 0;
 		bottom: 0;
 		height: 3px;
+		border-radius: 2px;
 		overflow: hidden;
 		background: var(--accent-soft);
 	}
@@ -829,7 +891,7 @@
 	}
 	.layout {
 		display: grid;
-		grid-template-columns: 250px minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
@@ -838,14 +900,24 @@
 		gap: 1rem;
 		min-width: 0;
 	}
-	/* Wide screens: the rail rides along beside the results, and a long runs
-	   list scrolls inside its panel (from a 7.5rem floor) to fit the window,
-	   clipping rather than spilling out of the rail. */
-	@media (min-width: 901px) {
+	/* Stacked (narrow): a long runs list scrolls inside its panel past about five rows, so the
+	   shown run's results start near the top instead of under twenty rows. */
+	.runs {
+		max-height: 20rem;
+		overflow-y: auto;
+	}
+	/* Wide (from 50rem = 700 px of page at the 14 px root, not the viewport: the app
+	   sidebar takes 240 px): the rail beside the results. It rides along, the height
+	   left in the window at most (less the save bar), and a long runs list scrolls
+	   inside its panel (from a 7.5rem floor), clipping rather than spilling out. */
+	@container runs-page (min-width: 50rem) {
+		.layout {
+			grid-template-columns: 250px minmax(0, 1fr);
+		}
 		.rail {
 			position: sticky;
 			top: calc(var(--header-h) + 0.75rem);
-			max-height: calc(100vh - var(--header-h) - 1.5rem);
+			max-height: calc(100vh - var(--rail-top, 0.75rem) - var(--dock-h, 0px) - 0.75rem);
 			display: flex;
 			flex-direction: column;
 		}
@@ -859,12 +931,7 @@
 		.rail .runs {
 			flex: 0 1 auto;
 			min-height: 7.5rem;
-			overflow-y: auto;
-		}
-	}
-	@media (max-width: 900px) {
-		.layout {
-			grid-template-columns: minmax(0, 1fr);
+			max-height: none;
 		}
 	}
 	.detail {

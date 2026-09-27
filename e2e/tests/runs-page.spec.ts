@@ -1,0 +1,157 @@
+// Runs & results as a page (issue #17, docs/ui.md § Runs & results): the run
+// form in the section header, the runs rail beside the shown run and fitting
+// the window, the river and unit pages one link away from the run header,
+// the old link rows' anchors sent on, a viewer's page, and a11y at desktop
+// and phone. runs.spec.ts covers the results themselves.
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
+import { expect, test } from '../support/fixtures.ts';
+import { LONG_LABEL, openRuns, runsList, seedManyRuns } from '../support/runs.ts';
+
+const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
+
+test('the run form sits in the section header, last, with its status one slim line under it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Runs header');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const h = header(page);
+	await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+
+	// Run model where the other pages have it: last, after a plain Add data, one row with the title.
+	await expect(h.getByRole('button')).toHaveText(['Add data', 'Run model']);
+	const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
+	const run = h.getByRole('button', { name: 'Run model' });
+	const box = (await run.boundingBox())!;
+	expect(box.y).toBeLessThan(title.y + title.height + 30);
+	await expect(run).toHaveAccessibleDescription('Runs use the saved network, crops, transfers, settings and time series.');
+	const status = page.locator('#run-note');
+	expect((await status.boundingBox())!.height).toBeLessThan(30);
+
+	// A run from the header: listed, shown, and counted in the header's line.
+	await h.getByLabel(/^Run label/).fill('From the header');
+	await run.click();
+	await expect(runsList(page).getByRole('button', { name: /^From the header/ })).toHaveAttribute('aria-current', 'true');
+	await expect(page.getByRole('heading', { level: 2, name: 'From the header' })).toBeVisible();
+	await expect(h.getByTestId('section-context')).toHaveText('1 run · newest ran today');
+	await expect(h.getByLabel(/^Run label/)).toHaveValue('');
+});
+
+test('the run header links to the river and unit pages for its run, and the old link rows go there, Back skipping them', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs outcomes');
+	const first = await createRun(page.request, project.id, 'First');
+	await createRun(page.request, project.id, 'Second');
+	await openRuns(page, project.id, `&run=${first}`);
+	const outcomes = page.getByRole('navigation', { name: 'Outcomes for this run' });
+	await expect(outcomes.getByRole('link', { name: 'River & reserve for this run' })).toHaveAttribute('href', `?tab=river&run=${first}`);
+	await expect(outcomes.getByRole('link', { name: 'Units & supply for this run' })).toHaveAttribute('href', `?tab=supply&run=${first}`);
+	// The groups are no longer on the page or in its menu.
+	await expect(page.locator('#res-river, #res-units')).toHaveCount(0);
+	await expect(page.getByRole('heading', { level: 2, name: 'River & Reserve' })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: /^On / })).toHaveCount(0);
+
+	// The link rows' anchors (in the menu for a while) open the page itself, for the same run.
+	await page.goto(`/projects/${project.id}?tab=overview`);
+	await page.goto(`/projects/${project.id}?tab=runs&run=${first}#res-river`);
+	await expect(page).toHaveURL(new RegExp(`\\?tab=river&run=${first}$`));
+	await expect(page.getByTestId('river-context')).toContainText('First');
+	await page.goBack();
+	await expect(page).toHaveURL(/\?tab=overview$/);
+
+	await page.goto(`/projects/${project.id}?tab=runs&run=${first}&window=last7#res-units`);
+	await expect(page).toHaveURL(new RegExp(`\\?tab=supply&run=${first}&window=last7$`));
+	await expect(page.getByTestId('supply-summary')).toContainText('run “First”');
+	await page.goBack();
+	await expect(page).toHaveURL(/\?tab=overview$/);
+
+	// A panel still on this page keeps its anchor (positive control).
+	await page.goto(`/projects/${project.id}?tab=runs&run=${first}#res-calibration`);
+	await expect(page).toHaveURL(/tab=runs.*#res-calibration$/);
+	await expect(page.locator('#res-calibration')).toBeInViewport();
+});
+
+test('with twenty long-labelled runs the rail sits beside the run and fits the window at 1440×960 and 1280×800', async ({ page, owner }) => {
+	void owner;
+	const { id } = await seedManyRuns(page.request, 'Runs rail fit');
+	for (const [width, height] of [
+		[1440, 960],
+		[1280, 800]
+	] as const) {
+		await page.setViewportSize({ width, height });
+		await openRuns(page, id);
+		const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
+		const railBox = (await rail.boundingBox())!;
+		const results = (await page.locator('#res-h').boundingBox())!;
+		// Beside, not above: the run's heading starts level with the rail, to its right.
+		expect(results.x).toBeGreaterThan(railBox.x + railBox.width);
+		expect(results.y).toBeLessThan(railBox.y + 150);
+		// The shown run's summary starts on the first screen.
+		await expect(page.getByRole('region', { name: 'Run summary' })).toBeInViewport();
+		// The rail reaches the window's bottom (less its margin), no further, and its list scrolls inside it.
+		expect(railBox.y + railBox.height).toBeLessThanOrEqual(height);
+		expect(railBox.y + railBox.height).toBeGreaterThan(height - 30);
+		const list = runsList(page).getByRole('list');
+		expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+		await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
+		// A long label is clamped to two lines in its row, never wider than the rail.
+		const long = runsList(page).getByRole('button', { name: new RegExp(`^${LONG_LABEL}`) }).first();
+		const longBox = (await long.boundingBox())!;
+		expect(longBox.x + longBox.width).toBeLessThanOrEqual(railBox.x + railBox.width);
+		// Scrolled down the results (mid-page: at the very end the grid's bottom edge lifts a sticky rail), it is still in view.
+		await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Notes & evidence' }).click();
+		await expect(page).toHaveURL(/#res-notes$/);
+		await expect(runsList(page)).toBeInViewport();
+		// Stuck at the top, it grows to the window's height, still no further.
+		await expect.poll(async () => { const b = (await rail.boundingBox())!; return b.y + b.height; }).toBeGreaterThan(height - 30);
+		const stuck = (await rail.boundingBox())!;
+		expect(stuck.y + stuck.height).toBeLessThanOrEqual(height);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+	}
+});
+
+test('on a phone the page stacks, the runs list scrolls inside its panel, and the results follow straight after', async ({ page, owner }) => {
+	void owner;
+	const { id } = await seedManyRuns(page.request, 'Runs phone');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openRuns(page, id);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	const list = runsList(page).getByRole('list');
+	expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+	// The list is capped, so the run's heading is under a screen and a half down, not under twenty rows.
+	const heading = (await page.locator('#res-h').boundingBox())!;
+	expect(heading.y).toBeLessThan(844 * 1.5);
+	// The run form wraps inside the header with a full-size field and button.
+	const field = (await header(page).getByLabel(/^Run label/).boundingBox())!;
+	expect(field.x + field.width).toBeLessThanOrEqual(390);
+	expect((await header(page).getByRole('button', { name: 'Run model' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	await expectNoViolations(page);
+});
+
+test('a viewer sees the runs and the header line, no run form, and the page passes axe', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs viewer');
+	await createRun(page.request, project.id, 'Shared');
+	const viewer = await signIn('Runs viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await openRuns(viewer.page, project.id);
+	const h = header(viewer.page);
+	await expect(h.getByTestId('section-context')).toHaveText('1 run · newest ran today');
+	await expect(viewer.page.getByLabel(/^Run label/)).toHaveCount(0);
+	await expect(viewer.page.getByRole('button', { name: 'Run model' })).toHaveCount(0);
+	await expect(viewer.page.locator('#run-note')).toHaveCount(0);
+	await expect(viewer.page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link')).toHaveCount(2);
+	await expectNoViolations(viewer.page);
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+	test(`an editor's page passes axe at 1440×960 in the ${colorScheme} theme`, async ({ page, owner }) => {
+		void owner;
+		await page.emulateMedia({ colorScheme });
+		await page.setViewportSize({ width: 1440, height: 960 });
+		const { id } = await seedManyRuns(page.request, `Runs axe ${colorScheme}`, 8);
+		await openRuns(page, id);
+		await expectNoViolations(page);
+	});
+}

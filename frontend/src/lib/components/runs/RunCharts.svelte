@@ -5,8 +5,10 @@
 	// supply and dam storage to Units & supply, supply/UnitDetail.svelte, issue
 	// #17). Each series is fetched once, on demand (see cache.ts).
 	// It also lays out the results below the summary in the groups of
-	// sections.ts, with a heading per group: the parent slots its own panels
-	// into each group, since the flow charts share one unit switch.
+	// sections.ts (model quality, record, dig deeper), with a heading per
+	// group: the parent slots its own panels into each group, since the flow
+	// charts share one unit switch. The river and unit groups have their own
+	// pages; the run header links there (RunsTab.svelte).
 	import type { Snippet } from 'svelte';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
@@ -25,8 +27,6 @@
 		refs,
 		nodeNames,
 		nodeOrder,
-		river,
-		farmsLead,
 		modelTail,
 		record,
 		deeperLead,
@@ -37,10 +37,6 @@
 		refs: RunSeriesRef[];
 		nodeNames: Map<string, string>;
 		nodeOrder: ReadonlyMap<string, number>;
-		/** Under River & Reserve: the link to the River & reserve page, where that group's panels now are. */
-		river?: Snippet;
-		/** Under Units & users: the link to the Units & supply page, where that group's panels now are. */
-		farmsLead?: Snippet;
 		/** Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
 		modelTail?: Snippet;
 		/** The Record group: notes, evidence and publication (sign-off, after the results). */
@@ -130,13 +126,6 @@
 {/snippet}
 
 <div class="charts">
-	<h2 class="group-h wide">River &amp; Reserve</h2>
-	{#if river}<div class="wide slot">{@render river()}</div>{/if}
-
-	<h2 class="group-h wide">Units &amp; users</h2>
-	{#if farmsLead}<div class="wide slot">{@render farmsLead()}</div>{/if}
-
-
 	<h2 class="group-h wide">Model quality</h2>
 	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
 		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
