@@ -84,6 +84,7 @@ const row = (over: Partial<PortfolioRow> = {}): PortfolioRow => ({
 	name: 'Alpha',
 	role: 'viewer',
 	time_zone: 'Africa/Johannesburg',
+	team_settings: null,
 	data_until: '2026-09-24',
 	last_run_at: new Date('2026-09-25T06:00:00Z'),
 	last_run_id: 'run-latest',

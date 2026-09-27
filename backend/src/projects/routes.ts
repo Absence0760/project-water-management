@@ -26,6 +26,7 @@ import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
+import { loadMyOutcomes } from '../portfolio/portfolio.js';
 
 type ProjectRow = {
 	id: string;
@@ -172,6 +173,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} ORDER BY p.updated_at DESC`);
 			return c.json({ projects: rows.map(summary) });
 		})
+	)
+	// The project list's outcome columns (issue #17): the portfolio's figures
+	// for every project you can see, one query under RLS (portfolio.ts).
+	.get('/outcomes', async (c) =>
+		withUser(c.get('userId'), async (db) => c.json({ projects: await loadMyOutcomes(db, new Date()) }))
 	)
 	.post('/', async (c) => {
 		const body = CreateBody.parse(await readJson(c));
