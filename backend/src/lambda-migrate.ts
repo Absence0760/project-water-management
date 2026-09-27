@@ -18,7 +18,11 @@
 // only — never credentials.
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import pg from 'pg';
+import { assertLambdaEnv } from './config/production.js';
 import { migrate } from '../scripts/migrate.js';
+
+// Refuse to start without its settings (config/production.ts).
+assertLambdaEnv('migrate');
 
 interface MasterSecret {
 	username: string;
