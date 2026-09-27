@@ -444,10 +444,11 @@ const EWR_TABLE_FIELDS: Record<string, Check> = {
 	natural: nullable((v) => (Array.isArray(v) ? null : 'must be 12 rows of values')),
 	scale: (v) => (isNum(v) ? null : 'must be a finite number'),
 	lowFlow: nullable((v) => (Array.isArray(v) ? null : 'must be 12 rows of values')),
-	highFlows: (v) => (Array.isArray(v) ? null : 'must be a list')
+	highFlows: (v) => (Array.isArray(v) ? null : 'must be a list'),
+	naturalMarMcm: nullable((v) => (isNum(v) ? null : 'must be a finite number'))
 };
-/** Left out = not stated (sourceKind), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
-const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'lowFlow', 'highFlows']);
+/** Left out = not stated (sourceKind, naturalMarMcm), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
+const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'lowFlow', 'highFlows', 'naturalMarMcm']);
 const HIGH_FLOW_KEYS = ['label', 'months', 'peakM3s', 'durationDays', 'perYear'] as const;
 
 /**

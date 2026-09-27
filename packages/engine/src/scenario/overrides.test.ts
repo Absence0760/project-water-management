@@ -694,6 +694,18 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 		expect(applyScenario(withWeir(), [set(desktop)]).input.settings.ewrRules![1]!.source).toBe('Desktop Reserve Model run');
 	});
 
+	it('carries the determination’s natural MAR (engine ≥ 1.7.0) when set, drops a null one, and refuses a bad one', () => {
+		const r = applyScenario(withWeir(), [set(table('W', { naturalMarMcm: 14 })), set(table(null, { naturalMarMcm: null }))]);
+		expect(r.problems).toEqual([]);
+		const [outlet, weir] = r.input.settings.ewrRules!;
+		expect(weir!.naturalMarMcm).toBe(14);
+		expect(outlet).not.toHaveProperty('naturalMarMcm');
+		const bad = applyScenario(withWeir(), [set(table('W', { naturalMarMcm: 0 }))]);
+		expect(bad.problems).toEqual([expect.stringMatching(/naturalMarMcm The natural MAR must be above 0/)]);
+		const text = applyScenario(withWeir(), [set(table('W', { naturalMarMcm: '14' as never }))]);
+		expect(text.problems).toEqual([expect.stringMatching(/naturalMarMcm must be a finite number/)]);
+	});
+
 	it('is used by the run: the scenario’s table is the one assessed at the site', () => {
 		const r = one(set(table(null, { naturalSource: 'run' })), withWeir());
 		const sites = runModel(r.input).summary.ewrAssurance ?? [];

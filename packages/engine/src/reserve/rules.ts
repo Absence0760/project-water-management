@@ -155,6 +155,14 @@ export interface EwrRuleTable {
 	lowFlow?: number[][] | null;
 	/** Freshet and flood components (engine ≥ 0.33.0). Absent = none. */
 	highFlows?: EwrHighFlowEvent[];
+	/**
+	 * The natural mean annual runoff the determination gives at the site, Mm³
+	 * a year (engine ≥ 1.7.0, issue #46), × `scale` like every table value.
+	 * Optional: absent / null = not recorded. With it, the run compares its own
+	 * natural MAR at the site and, when the percentile comes from the run,
+	 * warns beyond EWR_NATURAL_MAR_TOLERANCE (./assurance.ts; model.md §2.9c).
+	 */
+	naturalMarMcm?: number | null;
 }
 
 export interface EwrRuleIssue {
@@ -239,6 +247,9 @@ export function ewrRuleTableIssues(t: EwrRuleTable): EwrRuleIssue[] {
 	}
 	const h = highFlowsIssue(t.highFlows);
 	if (h) out.push({ field: 'highFlows', message: h });
+	if (t.naturalMarMcm !== undefined && t.naturalMarMcm !== null && !(isNum(t.naturalMarMcm) && t.naturalMarMcm > 0 && t.naturalMarMcm <= EWR_RULE_VALUE_MAX)) {
+		out.push({ field: 'naturalMarMcm', message: `The natural MAR must be above 0 and at most ${EWR_RULE_VALUE_MAX.toLocaleString('en')} Mm³ a year, or left blank.` });
+	}
 	return out;
 }
 
@@ -362,7 +373,9 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			natural: (r.natural as number[][] | null | undefined) ?? null,
 			scale: r.scale === undefined ? 1 : (r.scale as number),
 			lowFlow: (r.lowFlow as number[][] | null | undefined) ?? null,
-			highFlows: r.highFlows === undefined ? [] : (r.highFlows as EwrHighFlowEvent[])
+			highFlows: r.highFlows === undefined ? [] : (r.highFlows as EwrHighFlowEvent[]),
+			// Only when set (engine ≥ 1.7.0), so a table from before resolves as it did.
+			...(r.naturalMarMcm !== undefined && r.naturalMarMcm !== null ? { naturalMarMcm: r.naturalMarMcm as number } : {})
 		};
 		const where = t.siteNodeId === null ? 'the outlet' : `site ${t.siteNodeId}`;
 		const issues = ewrRuleTableIssues(t);

@@ -1215,6 +1215,17 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists the determination’s natural MAR changing (engine ≥ 1.7.0); absent and null are both not recorded', () => {
+		const a = snapshot();
+		a.settings.ewrRules = [rule()];
+		const b = structuredClone(a);
+		b.settings.ewrRules![0]!.naturalMarMcm = 12.5;
+		expect(texts(a, b)).toEqual(['EWR rule table at the outlet: natural MAR (determination) not recorded → 12.5 Mm³/a']);
+		const c = structuredClone(a);
+		c.settings.ewrRules![0]!.naturalMarMcm = null;
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('lists the EWR site list changing: a gauge added, taken off the sites, turned into a farm (engine ≥ 1.5.0)', () => {
 		const a = snapshot();
 		a.model.nodes.push(node('w', 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0 }));
