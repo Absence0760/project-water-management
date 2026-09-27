@@ -23,7 +23,7 @@ import { farmLinks, maskEmail, recordAudit, recordLinkChanges } from '../history
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { dropInvite, inviteByEmail, type PendingMail } from '../invites/invites.js';
-import { LOCALES, type Locale } from '../mail/templates.js';
+import { DEFAULT_LOCALE, LANGUAGES, LOCALES, type Locale } from '@water-management/engine/languages';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 
@@ -187,8 +187,10 @@ type UserRow = { id: string; email: string; display_name: string; verified: bool
 /** The accounts with these addresses, whoever they are: RLS (068) shows only people you work with, so the by-address lookup. */
 const USER_SQL = 'SELECT id, email, display_name, verified FROM app_user_by_email($1::citext[])';
 
-/** Language names a CSV may use in its `language` column. */
-const LANGUAGE_NAMES: Record<string, Locale> = { en: 'en', english: 'en', af: 'af', afrikaans: 'af' };
+/** What a CSV may write in its `language` column, lower-cased: each language's code or own name, from the language table. */
+const LANGUAGE_NAMES: ReadonlyMap<string, Locale> = new Map(LANGUAGES.flatMap((l) => [[l.code, l.code] as const, [l.name.toLowerCase(), l.code] as const]));
+/** "en, af": the codes, for the error message. */
+const CODE_LIST = LOCALES.join(', ');
 
 export type BulkStatus = 'added' | 'invited' | 'error';
 export interface BulkResult {
@@ -264,8 +266,8 @@ export const farmerRoutes = new Hono<AuthEnv>()
 				else if (matches.length === 0) res.error = `no farm named “${res.farm}” in this catchment`;
 				else if (matches.length > 1) res.error = `${matches.length} farms are named “${res.farm}”: rename one on the Network tab`;
 				const lang = (r.locale ?? '').trim().toLowerCase();
-				const locale = lang ? LANGUAGE_NAMES[lang] : 'en';
-				if (!locale) res.error = [res.error, `unknown language “${r.locale!.trim()}” (use en or af)`].filter(Boolean).join('; ');
+				const locale = lang ? LANGUAGE_NAMES.get(lang) : DEFAULT_LOCALE;
+				if (!locale) res.error = [res.error, `unknown language “${r.locale!.trim()}” (use ${CODE_LIST}, or the language’s name)`].filter(Boolean).join('; ');
 				if (res.error) continue;
 				valid.push({ row, email: email.data, nodeId: matches[0]!, locale: locale! });
 			}
