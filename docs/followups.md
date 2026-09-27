@@ -1,11 +1,19 @@
-# Follow-ups: open work (updated 2026-09-24, after the engine 0.19.0 / run notes round)
+# Follow-ups: open work (checked against the code 2026-09-27)
 
 Everything below is known, unfinished work. Longer-term features live in
 [planned-work.md](./planned-work.md); client and hydrologist questions are in
 [plan.md § Questions for the client](./plan.md#questions-for-the-client).
 Tick items off (or move them into an issue) as they are done.
 
+This file holds the detail. Anything that blocks a release or waits on
+someone outside the code also has a GitHub issue: release blockers #62,
+the history scrub #63, the disclaimer's legal review #47, POPIA #48,
+the hydrologist's decisions #46, applicant decisions #50, the Step 2
+persona run #51, planning outputs #53, the client's requests #54.
+
 ## Blocking releases (operator)
+
+The checklist for these is issue #62; the history scrub is #63.
 
 - [ ] **GitHub variables for the background Lambdas (2026-09-25).** The
       backend release preflight (`deploy-backend.yml`, `REQUIRED_CONFIG`)
@@ -17,7 +25,7 @@ Tick items off (or move them into an issue) as they are done.
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
       appear under the repo's Settings → Variables.
-- [ ] **Renderer Lambda needs a two-step first deploy (#26).** Lambda can't be
+- [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
       `backend/renderer.Dockerfile`), then set `renderer_image_tag` to that
@@ -262,7 +270,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       with its own threshold (the window's total against corrected CHIRPS),
       once the hydrologist says which; until then the gauge total is kept.
       Trigger: the hydrologist's review of issue #2.
-- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). Built
+- [ ] **Zero-rain runs treated as missing (CR-20, issue #2; the hydrologist's answer is on #46). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
@@ -771,7 +779,7 @@ the suggested order (the IDs carry the detail):
       (model.md §2.10) are done.
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
-      CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
+      CHIRPS fills them (closes the gap behind issue #2) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
       the rain slice that CR-18 then generalises.
@@ -797,7 +805,8 @@ the suggested order (the IDs carry the detail):
       scaling step if the hydrologist wants larger samples) → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
       thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
-      FDC overlays and %nMAR.
+      FDC overlays and %nMAR (monthly compliance, deficit volume and the FDC
+      check landed in engine 0.21.0 / 0.33.0; the rest of CR-29 is open).
 - [ ] **Automated calibration with pre-declared rules.** Today every pass
       of the calibrate → review → adjust → refit loop needs a person, because
       the choices (exclusions, forcing, which fit to keep) are made after the
@@ -837,7 +846,8 @@ the suggested order (the IDs carry the detail):
       dropped: engine 1.0.0 removed the legacy model (issue #16).
 - [ ] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
-      CR-32), and which of the two MAR estimates to trust (CR-7). Add them to
+      CR-32), and which of the two MAR estimates to trust (CR-7). CR-18 is
+      already plan.md hydrologist Q2; add the other three to
       [plan.md](./plan.md) when the review session is booked.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
@@ -869,8 +879,12 @@ the suggested order (the IDs carry the detail):
   water balance per water year and "Trace a day" (model.md § Verification,
   ui.md § Self-checks).
 - ✅ The engine rejects networks with more than one outflow node.
-- [ ] **Client catchment regression on real data:** the suite has a commented
-      deviation list but has never run against the real workbook. Re-extract
+- [x] **Client catchment regression on real data:** done 2026-09-27: the
+      workbook regression in `run.test.ts` passes against the re-extracted
+      workbook on engine 1.2.0 (local only; the fixture is gitignored), and
+      the self-checks passed on a real run on 2026-09-24. The original note:
+      the suite had a commented
+      deviation list but had never run against the real workbook. Re-extract
       it and run `pnpm test:engine`; a failure prints the actual difference
       next to its bound. Then load it (`pnpm seed:demo`; the workbook has
       crashed a laptop before, so cap its memory: on Linux run it under
@@ -1154,8 +1168,8 @@ the suggested order (the IDs carry the detail):
       annual borehole caps off, since more demand uses a cap up earlier and
       moves the lagged stream depletion in time (the cap working, present
       on main before #16; `checkGroundwater` still checks the caps).
-      **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
-      0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
+      **Owed for engines 1.1.0 and 1.2.0** (2026-09-27): no 20 000-case soak
+      is recorded since 1.0.0. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
       **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
       cap (N4) ignored the receiving dam's own rain, evaporation and
@@ -1411,9 +1425,10 @@ yet; each lands with the work package named.
       the language the reader chose, marked with its `lang`, or the other
       with "The WUA wrote this notice in English only" (design §7). The
       saved copy moved to `wm.farm.saved.v2` (a v1 copy is dropped).
-- [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
-      says the WUA can name them; needs an endpoint listing the people with
-      access to a farm.
+- [x] **"Who can see my farm" by name** (design §10.2): done (91b8b833):
+      `GET …/farm/:nodeId/access` lists people by name and role, never an
+      email, and the card falls back to roles if it fails
+      (`farm-view.spec.ts` checks it).
 - [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
       `FarmIndex`; the pages say "your WUA".
 - [x] **"Email me when …"** links for the notice and a low dam: alert emails
@@ -1422,9 +1437,9 @@ yet; each lands with the work package named.
 - [ ] **"Not available: the model's data starts on …"** needs the run's
       first date; `lastSeason` is null without it, so the page says the data
       doesn't reach back.
-- [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
-      farm API and the seeded publication (the backend half of #25); run it
-      once both are merged.
+- [x] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` runs in CI's
+      e2e shards against the farm API and the seeded publication (1ab1896b,
+      de671eb2).
 
 ## Afrikaans (WP-2.5)
 
@@ -1530,8 +1545,10 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       by dam level and *Dam now* read them, and fetch the daily `dam_storage`
       series only for a run from before 1.2.0. The Dams page still fetches
       every dam's series, because its sparklines and storage chart draw them.
-- [ ] **Exports carry unrounded values** now that the engine doesn't round.
-      Decide on export number formatting.
+- [x] **Exports carry unrounded values** now that the engine doesn't round.
+      Decided (step-1 roadmap D11): CSV keeps full precision; the workbook
+      keeps full values with per-unit display formats (api.md § Number
+      formats).
 - [x] **Small flows read 0.000; the FDC table was in no export; download
       names used the UTC date** (issue #45, done 2026-09-26): `fmtQty`
       (two significant figures below what the fixed decimals show), the
@@ -1690,18 +1707,16 @@ role and not before it.
         can move less than it could (never more). Same conservative choice
         as for today's inflow (§2.6). Fix with the release computed before
         the transfer (needs Z at transfer time); trigger: a scheme with both.
-      - *Self-checks water-balance table* (`runs/checks.ts` BALANCE_COLUMNS)
-        shows neither the seepage lost nor the release (nor, already,
-        groundwater, other use, depletion or land cover), so its visible
-        terms don't add up to the residual on runs that use them; the CSV
-        and `summary.waterBalance` have them all. Fix: optional columns shown
-        only when a run has them. Coordinate with the groundwater WP (3.9),
-        which touches the same table.
+      - ~~*Self-checks water-balance table*~~: done (76f24440): optional
+        columns for groundwater, storage set, other use, depletion and
+        seepage lost, shown only when a run has them; a release joins the
+        outflow, so it needs no column.
       - *Monthly lake-factor presets*: none offered; values for SA reservoirs
         (the lag of deep-water evaporation behind the pan) pending the
         hydrologist.
 
-- [ ] **The Sandspruit example fails `catchments.test.ts` on main** (seen
+- [x] **The Sandspruit example fails `catchments.test.ts` on main** (fixed:
+      the test passes, 15/15, 2026-09-27) (seen
       2026-09-25 on origin/main at 9590fa1, before the scenario merge): engine
       0.28.0's forecast-rain warning (3ae50b9) fires on the example's last 10
       days (2025-01-01 … 2025-01-10), which the test's expected-warnings list
@@ -1721,7 +1736,8 @@ role and not before it.
         measure; part water years counting for the annual one; the v004
         stress thresholds as they stand; seepage as a memo rather than an out
         term. Trigger: the hydrologist's first review of a licensing run.
-  - [ ] **Dam releases in the water account** once WP-3.5 lands: a release
+  - [x] **Dam releases in the water account** (done, engine 0.35.0: a memo
+        column, `damReleaseM3`, since a release joins the river) once WP-3.5 lands: a release
         that leaves the network is an out term; one that stays is already in
         the outflow. Owner: WP-3.5.
   - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
@@ -1731,7 +1747,8 @@ role and not before it.
         (`report/`), the farm view (a farmer's own reliability and stress
         months) and the scenario compare view (Δ reliability per farm).
         Trigger: WP-3.10's evidence pack, which needs them in the report.
-  - [ ] **Bundle budget**: the build is 829 KB against the 821 KB ceiling
+  - [x] **Bundle budget** (superseded by later ceiling moves; now 988 KB,
+        19f02741): the build was 829 KB against the 821 KB ceiling
         (both panels are lazy; the growth is the engine module in every
         runModel chunk, the help entries and the Settings field). The
         coordinator raises the ceiling at merge or trims elsewhere.
@@ -1836,13 +1853,18 @@ role and not before it.
   `/projects/:id/report?run=`, the Runs tab's **Report** button, A4 print
   CSS, charts at 2 device pixels per CSS pixel, the `data-report-ready`
   signal, e2e (`e2e/tests/report.spec.ts`) including `page.pdf()`. Left open:
-  - [ ] **Phase B, server-side PDFs** (a `report_render` job in headless
+  - [x] **Phase B, server-side PDFs**: built (issue #26); what is left is
+        under § Server-side reports. The plan was a `report_render` job in headless
         Chromium, S3 / MinIO, a single-use render token). Trigger: decision
         D9, when someone asks for emailed or scheduled reports. The job queue
         (WP-2.8) is in place; the route and `data-report-ready` are what it
         would open and wait on.
   - [ ] **Sections waiting on other work**, added to `report/sections.ts`
-        when their data exists (no placeholders until then): the cover's
+        when their data exists (no placeholders until then). WP-2.3 and
+        WP-2.4 have landed, so the published-by line, the restriction
+        notice, the changes since the previous publication and the Overview's
+        Report entry point are unblocked and not built; the evidence pack
+        still waits on Phase C: the cover's
         published-by line and restriction notice (WP-2.3), changes since the
         previous publication (WP-2.4), and the licensing evidence pack's sections and uncertainty
         display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
@@ -1852,16 +1874,17 @@ role and not before it.
   - [ ] **Firefox print check.** The acceptance asks for a clean A4 PDF from
         Chromium and Firefox; e2e runs Chromium only, so print the largest
         example from Firefox by hand before calling Phase A accepted.
-  - [ ] **Farmer access test** (a farmer gets 403): waits for WP-2.1's farmer
-        role. Today the test is a non-member, with a viewer as the positive
-        control.
+  - [ ] **Farmer access test** (a farmer gets 403): the farmer role exists and
+        `reports.db.test.ts` covers the server-side report API, but the print
+        route's e2e (`report.spec.ts`) still tests a non-member, with a viewer
+        as the positive control. Add the farmer case there.
 
 - **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
   [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
   CHIRPS, CHIRPS-GEFS and DWS parsers on synthetic fixtures, `018_feeds`,
   the jobs, the routes, Settings → Data feeds, the fetcher Lambda and its
   queues (plan only). Left open:
-  - [ ] **DWS is unverified against the live site.** It answers HTTP 403 to
+  - [ ] **DWS is unverified against the live site** (on #62's first-deploy list). It answers HTTP 403 to
         our (non-South-African) network, so the parser follows the request two
         open-source clients make (RivRetrieve-Python, aquascope) and the
         layout of an archived daily page (web.archive.org, 2024: the header
@@ -1884,8 +1907,9 @@ role and not before it.
   - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
         published into `rain_chirps_mm`; the existing CHIRPS bias correction
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
-  - [ ] Marking a fed series on the Data tab ("from CHIRPS feed"), and an
-        audit event per merge (needs WP-2.4's `audit_event`).
+  - [ ] Marking a fed series on the Data tab ("from CHIRPS feed", from
+        `time_series.feed_id`). Merges are already audited (`series.merged`,
+        `feeds/ingest.ts`).
   - [x] A debounced re-run after new data (WP-2.11, built).
   - [x] Emailing owners about a stale or failing feed: the `data_stale` and
         `feed_failing` alerts (WP-2.13), once the catchment switches them on.
@@ -2074,13 +2098,14 @@ role and not before it.
         [security.md § Share links](./security.md#share-links)). The flow
         series answer only at `FARMER_K` farm holders (design §10.3), which
         is stricter than the roadmap's D2 note "always show outflow".
-  - [ ] **Audit events for share links** (`share_link.created` /
+  - [x] **Audit events for share links** (done: `share/routes.ts` records both) (`share_link.created` /
         `share_link.revoked`): today the row records `created_by` /
         `created_at` and `revoked_by` / `revoked_at`, and a link is never
         deleted so that record stays. Needs WP-2.4's `audit_event` (issue
         #28); add the two writes to `backend/src/share/routes.ts` in the
         same change, and then decide whether revoked links may be purged.
-  - [ ] **Audit events** for publishing and for notice changes: today only
+  - [x] **Audit events** for publishing and for notice changes (done:
+        `publication.published` and `publication.notice_changed`, `publish/routes.ts`): today only
         `published_by` and `updated_at` / `updated_by` record them. Needs
         WP-2.4's `audit_event`; add the writes in the same change.
   - [x] **Roadmap UI around it** (2026-09-25): the Overview's "Published
@@ -2427,7 +2452,7 @@ from the WP:
       above makes the numbers adjustable per team; the defaults (5 % / 20 %
       of the last 30 days with the outlet EWR not met,
       `portfolio/status.ts` `EWR_THRESHOLDS`) still need the hydrologist's
-      sign-off (plan.md, questions for the hydrologist, 19). The page says
+      sign-off (plan.md, questions for the hydrologist, 19; issue #46). The page says
       so while a team uses them. Durable fix: the hydrologist confirms or
       replaces them; change `EWR_THRESHOLDS`, the 055 header, and the docs
       that quote them. Trigger: the hydrologist's answer.
