@@ -1018,6 +1018,20 @@ export interface HistoryQuery {
 	nodeId?: string;
 	/** 'revision', an event kind ('series.replaced') or its noun ('series'). */
 	kind?: string;
+	/** The parameter filter's words: only revisions with a change line holding them all (events pass). */
+	q?: string;
+}
+
+/** One field's changes (GET …/history/fields, docs/api.md § Field history). */
+export interface FieldHistory {
+	count: number;
+	lastAt: string;
+	/** Null when that account is gone. */
+	lastBy: string | null;
+	/** The last change's values, "40% → 60%". */
+	change: string;
+	/** Words for History's parameter filter that find this field's lines. */
+	filter: string;
 }
 
 /** A farmer to link again: a restore brings a farm back without its links. */

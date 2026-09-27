@@ -2,8 +2,9 @@
 	The History tab (WP-2.4, docs/ui.md § History; issue #17 option A): who
 	changed what, when and why, newest first and grouped by the viewer's day,
 	with "Restore this version" for editors. The section header says what
-	changed last, by whom and when. The unit and kind filters are in the URL
-	(`unit=`, `kind=`), so Back steps through them and a link keeps them. In a
+	changed last, by whom and when. The unit, kind and parameter filters are in
+	the URL (`unit=`, `kind=`, `q=`), so Back steps through the first two and a
+	link keeps all three (a field's "Changed 3×" line links here with them). In a
 	wide column the timeline is a list of compact rows beside the picked change
 	(`entry=`, else the newest), and from 1100 × 620 the card fills the window
 	with both columns scrolling inside it; in a narrow one (a phone) each entry
@@ -78,8 +79,31 @@
 		const v = url.searchParams.get('unit');
 		return v && farms.some((f) => f.id === v) ? v : '';
 	});
-	// The parameter filter narrows what's loaded, as you type.
-	let query = $state('');
+	// The parameter filter narrows what's loaded as you type, and, once the URL has it (`q=`,
+	// written after a pause), the server finds matching revisions on every page, however old.
+	const urlQuery = $derived(url.searchParams.get('q') ?? '');
+	let query = $state(untrack(() => urlQuery));
+	/** The last words this box wrote to the URL: the URL catching up with them isn't a new filter. */
+	let written = untrack(() => urlQuery);
+	$effect(() => {
+		const q = urlQuery;
+		if (q !== untrack(() => written)) query = written = q;
+	});
+	let queryTimer: ReturnType<typeof setTimeout> | undefined;
+	function onQueryInput() {
+		clearTimeout(queryTimer);
+		queryTimer = setTimeout(() => {
+			const words = query.trim();
+			if (words === urlQuery.trim()) return;
+			written = words;
+			const q = new URLSearchParams(url.search);
+			if (words) q.set('q', words);
+			else q.delete('q');
+			q.delete('entry');
+			void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+		}, 400);
+	}
+	$effect(() => () => clearTimeout(queryTimer));
 	const entries = $derived(filterEntries(groupByChangeSet(items), query));
 	const days = $derived(groupByDay(entries));
 
@@ -90,14 +114,15 @@
 		if (more) loadingMore = true;
 		else loading = true;
 		error = null;
-		const filtered = !!(nodeId || kind);
+		const filtered = !!(nodeId || kind || urlQuery);
 		try {
 			const [pageOf, newest] = await Promise.all([
 				api.history.list(projectId, {
 					limit: 50,
 					...(more && next ? { before: next } : {}),
 					...(nodeId ? { nodeId } : {}),
-					...(kind ? { kind } : {})
+					...(kind ? { kind } : {}),
+					...(urlQuery ? { q: urlQuery } : {})
 				}),
 				// Filtered, the header still names the latest change of all (a change set is a few items at most).
 				filtered && !more ? api.history.list(projectId, { limit: 5 }) : null
@@ -122,6 +147,7 @@
 	$effect(() => {
 		void nodeId;
 		void kind;
+		void urlQuery;
 		untrack(() => load());
 	});
 
@@ -377,7 +403,7 @@
 				</div>
 				<div class="field grow">
 					<label for="{uid}-q">Parameter</label>
-					<input id="{uid}-q" type="search" placeholder="e.g. dam capacity" bind:value={query} autocomplete="off" />
+					<input id="{uid}-q" type="search" placeholder="e.g. dam capacity" bind:value={query} oninput={onQueryInput} autocomplete="off" />
 				</div>
 			</div>
 		</div>
@@ -385,7 +411,7 @@
 		<LoadState {loading} {error} retry={() => load()}>
 			{#if days.length === 0}
 				<p class="empty" data-testid="history-empty">
-					{#if items.length || nodeId || kind}
+					{#if items.length || nodeId || kind || urlQuery}
 						Nothing matches these filters.
 					{:else}
 						No changes recorded yet. History starts from {since ? fmtDay(localDay(since)) : 'now'}.

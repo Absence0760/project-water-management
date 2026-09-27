@@ -183,3 +183,38 @@ test('a viewer sees series changes in History but no restore button', async ({ p
 	await expect(historyDetail(viewer.page)).toContainText('Replaced the Rainfall — catchment series');
 	await expect(viewer.page.getByRole('button', { name: 'Restore the earlier values' })).toHaveCount(0);
 });
+
+test('a field says how often it changed, and links to History filtered to it (WP-2.4)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Field history');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	const capacity = await openCapacity(page, project.id);
+	const line = page.locator('dialog[open] .field').filter({ has: capacity }).getByTestId('field-history');
+	// Set when the unit was added, never changed since: no line.
+	await expect(capacity).toHaveValue('150,000');
+	await expect(line).toHaveCount(0);
+
+	for (const [was, v] of [['150000', '200000'], ['200000', '250000']] as const) {
+		// Editing starts from the plain number once the field has focus.
+		await capacity.focus();
+		await expect(capacity).toHaveValue(was);
+		await capacity.fill(v);
+		await capacity.blur();
+		await saveModelChanges(page);
+		await expect(saveBar(page)).toBeHidden();
+	}
+	// The sheet stays open after a save; the line follows the saves.
+	await expect(line).toHaveText(/^Changed 2× · last by .+, \d{1,2} \w{3} \d{4}: 200,000 m³ → 250,000 m³$/);
+	await expectNoViolations(page);
+
+	await line.click();
+	await expect(page).toHaveURL(/tab=history/);
+	const url = new URL(page.url());
+	expect(url.searchParams.get('kind')).toBe('revision');
+	expect(url.searchParams.get('unit')).toBe(upper.id);
+	expect(url.searchParams.get('q')).toBe('Upper farm: dam capacity');
+	await expect(page.getByLabel('Parameter')).toHaveValue('Upper farm: dam capacity');
+	await expect(entries(page)).toHaveCount(2);
+	await expect(entries(page).first()).toContainText('Upper farm: dam capacity 200,000 m³ → 250,000 m³');
+	await expect(entries(page).last()).toContainText('Upper farm: dam capacity 150,000 m³ → 200,000 m³');
+});

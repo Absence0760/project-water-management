@@ -18,6 +18,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
 import { rowProvenance } from '../series/merge.js';
 import { replaceSeries, setDayBoundary } from '../series/routes.js';
+import { fieldHistory } from './fields.js';
 import {
 	beginModelChange,
 	describeChange,
@@ -66,7 +67,20 @@ const HistoryQuery = z.object({
 		.string()
 		.max(60)
 		.regex(/^[a-z_]+(\.[a-z_]+)?$/)
+		.optional(),
+	/**
+	 * The parameter filter's words (any order, any case): only revisions with a
+	 * change line holding every word. Events aren't filtered here (their
+	 * sentences are written by the client); the client filters those.
+	 */
+	q: z
+		.string()
+		.max(200)
 		.optional()
+		.transform((s) => {
+			const words = (s ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 10);
+			return words.length ? words : undefined;
+		})
 });
 
 export interface RevisionItem {
@@ -143,6 +157,9 @@ async function historyPage(db: Db, projectId: string, q: z.infer<typeof HistoryQ
 				u.display_name AS actor, r.source AS kind, r.reason, r.changes, NULL::jsonb AS subject, r.restored_from, r.restored_from_run
 			FROM model_revision r LEFT JOIN app_user u ON u.id = r.created_by
 			WHERE $2 AND r.project_id = $1 AND ($4::uuid IS NULL OR r.node_ids @> ARRAY[$4::uuid])
+				AND ($10::text[] IS NULL OR EXISTS (
+					SELECT 1 FROM jsonb_array_elements(r.changes) c
+					WHERE NOT EXISTS (SELECT 1 FROM unnest($10::text[]) w WHERE strpos(lower(c->>'text'), w) = 0)))
 			UNION ALL
 			SELECT 'event', e.id, ${TS.replace('created_at', 'e.created_at')}, e.created_at, e.change_set,
 				e.actor_label, e.kind, NULL, NULL, e.subject, NULL, NULL
@@ -162,7 +179,8 @@ async function historyPage(db: Db, projectId: string, q: z.infer<typeof HistoryQ
 			q.before?.ts ?? null,
 			q.before?.type ?? null,
 			q.before?.id ?? null,
-			q.limit + 1
+			q.limit + 1,
+			q.q ?? null
 		]
 	);
 	const more = rows.length > q.limit;
@@ -253,6 +271,14 @@ export const historyRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'viewer');
 			const { rows } = await db.query<{ since: Date }>('SELECT history_since AS since FROM project WHERE id = $1', [id]);
 			return c.json({ ...(await historyPage(db, id, q)), historySince: rows[0]!.since.toISOString() });
+		});
+	})
+	// Per field: how often it changed and the last change (docs/api.md § Field history).
+	.get('/:id/history/fields', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json({ fields: await fieldHistory(db, id) });
 		});
 	})
 	.get('/:id/history/revisions/:revId', async (c) => {

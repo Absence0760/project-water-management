@@ -2264,7 +2264,8 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `next` is an opaque cursor (`<ts>\|<type>\|<id>`) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`) | viewer |
+| GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
 | GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
@@ -2274,6 +2275,31 @@ Farmers get `403`.
 
 `PUT /projects/:id/model` and `PATCH /projects/:id` (with `settings`) take an
 optional `reason` (≤ 500 characters), kept with the revision.
+
+### Field history
+
+`GET /projects/:id/history/fields` (WP-2.4 UI) feeds the "Changed 3× · last by
+Ann, 12 Aug 2026: 40% → 60%" line under a model input ([ui.md § Field
+history](./ui.md#field-history)). One query over the project's revisions under
+RLS (`backend/src/history/fields.ts`), no request per field. Keys:
+
+- `settings:<path>`: a setting (`settings:lakeEvapFactor`, `settings:gr4j.x1`,
+  `settings:calibration.rainThresholdMm`, `settings:dataQuality.agreementMinRatio`),
+  from a settings line's subject (engine `settingsChangePaths`).
+- `node:<nodeId>:<field>`: a node's field (`damCapacityM3`, `downstreamNodeId`,
+  …), from the label after "Name: " on a changed node's line (engine
+  `nodeChangeFields`).
+- `crop:<nodeId>:<cropId>`: a unit's planted area of a crop, changed, added
+  or removed (an area added with its new unit isn't counted).
+
+Nodes and crops are found by name in each revision's own snapshot and keyed by
+id, so a rename doesn't split a field's count. `count` is the saved changes
+(restores included; the baseline, imports and copies not) that changed it;
+`lastAt`, `lastBy` (null for a deleted account) and `change` ("150,000 m³ →
+200,000 m³"; a planted area added or removed reads "0 ha → 5 ha" / "5 ha → 0
+ha") describe the newest. `filter` is words for `GET /history?q=` that find
+the field's lines ("Upper farm: dam capacity"). A field never changed since it
+was set isn't listed.
 
 ## Compare runs
 

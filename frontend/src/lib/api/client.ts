@@ -47,6 +47,7 @@ import type {
 	SeriesWriteResult,
 	FarmerEntry,
 	InviteLocale,
+	FieldHistory,
 	HistoryPage,
 	HistoryQuery,
 	HistoryRevision,
@@ -393,6 +394,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
 				return request<HistoryPage>('GET', `${p(id)}/history${params.size ? `?${params}` : ''}`);
 			},
+			/** Per field (`settings:<path>`, `node:<id>:<field>`, `crop:<nodeId>:<cropId>`): how often it changed, and the last change. */
+			fields: (id: string) => request<{ fields: Record<string, FieldHistory> }>('GET', `${p(id)}/history/fields`),
 			/** A revision with its snapshot, and what restoring it would change now (`preview`). */
 			revision: (id: string, revId: string) =>
 				request<{ revision: HistoryRevision & { snapshot: { settings: ProjectSettings; model: ProjectModel } }; preview: InputChange[] }>(

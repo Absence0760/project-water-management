@@ -9,6 +9,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
@@ -59,7 +60,7 @@
 			<tbody>
 				{#each planting.rows as r (r.cropId)}
 					<tr>
-						<th scope="row">{r.name || '(unnamed)'}</th>
+						<th scope="row">{r.name || '(unnamed)'}<FieldHistoryLine field="crop:{nodeId}:{r.cropId}" unit={nodeId} /></th>
 						<td>
 							<NumberInput
 								label="{r.name || 'crop'} on {name}, ha"
