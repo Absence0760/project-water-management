@@ -350,8 +350,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
-  values, each `wr2012` group, `fitRecord` and `pe` are replaced whole. Unknown
-  keys pass through, and the settings patch is capped at 64 000 characters
+  values, each `wr2012` group, `fitRecord` and `pe` are replaced whole. An
+  unknown top-level key is dropped (never stored; a new setting must be added to
+  `SettingsPatch`), and the settings patch is capped at 64 000 characters
   of JSON.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,

@@ -74,7 +74,7 @@ describe('projects', () => {
 		expect((await u.call('GET', `/projects/${projectId}`)).body.project).toMatchObject({ dataUntil: '2020-10-10', lastRunAt });
 	});
 
-	it('merges settings patches over defaults and keeps unknown engine keys', async () => {
+	it('merges settings patches over defaults and drops keys the schema does not name', async () => {
 		const u = await signUp('S');
 		const { body } = await u.call('POST', '/projects', { name: 'S' });
 		const id = body.project.id;
@@ -85,9 +85,11 @@ describe('projects', () => {
 		expect(res.body.project.settings.effectiveRainFraction).toBe(0.5);
 		expect(res.body.project.settings.calibration.rainThresholdMm).toBe(3);
 		expect(res.body.project.settings.calibration.catchmentAreaKm2).toBeNull(); // default kept
-		// The legacy runoff model's key is dropped (issue #16), an unknown top-level one kept.
+		// The legacy runoff model's key is dropped (issue #16), and so is an unknown
+		// top-level one: a body stores only what SettingsPatch names (mass assignment,
+		// http/mass-assignment.security.db.test.ts).
 		expect(res.body.project.settings.calibration).not.toHaveProperty('a');
-		expect(res.body.project.settings.futureEngineKey).toEqual([1, 2]);
+		expect(res.body.project.settings).not.toHaveProperty('futureEngineKey');
 		expect((await u.call('PATCH', `/projects/${id}`, { settings: { apanMm: [1, 2] } })).status).toBe(400);
 	});
 

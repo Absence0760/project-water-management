@@ -1054,6 +1054,18 @@ In short:
 
 - Every request body is validated with **zod** before it reaches SQL. Queries
   are parameterised (`pg`), and there is no string-built SQL.
+- **No mass assignment.** A body sets only the fields its schema names:
+  unknown keys are refused (`.strict()`, most project routes) or dropped
+  (zod's default strip), never stored, and server-owned columns (ids,
+  `project_id`, `created_by`/`author_id`/`user_id`, `role`, `created_at`,
+  `revoked_at`, hashes, statuses) come from the session and the route, not the
+  body. `http/mass-assignment.security.db.test.ts` sweeps every POST/PUT/PATCH
+  in `app.routes` with the role ladder's sample bodies plus hostile extras
+  (top level and nested) and searches every row the request wrote (by `xmin`)
+  for them; a new route or table is covered without a list. It found the
+  settings patch passing unknown keys through into `project.settings`, every
+  revision, copy and run input (including engine-only inputs such as
+  `damStorageReset`); they are now dropped.
 - Model documents are validated as a whole: references resolve inside the
   document, the network is a tree with one outflow, and names are unique.
 - Series are capped at 60 000 values. The backend itself caps every request
