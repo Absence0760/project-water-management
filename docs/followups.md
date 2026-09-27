@@ -2164,7 +2164,7 @@ role and not before it.
       build (`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, github.com/pgsty/minio,
       ~800k pulls). Re-check it on each bump; the alternative is any other
       S3-compatible local server, since the app only uses the S3 API.
-- [ ] **The printed network schematic is unreadable past ~10 units
+- [x] **The printed network schematic is unreadable past ~10 units
       (2026-09-27).** The report prints `NetworkSchematic` scaled to the A4
       width (`svg.schematic { max-width: 100% }`), and the tree lays every
       unit that drains into one node side by side: a 30-unit catchment
@@ -2178,7 +2178,25 @@ role and not before it.
       printing a 30-unit report that checks the label size in the PDF
       (`pdftotext -bbox`). Trigger: before a client prints a report of a
       real catchment (they have 10–40 units), with the next change to
-      `NetworkSchematic` or the report's print CSS.
+      `NetworkSchematic` or the report's print CSS. **Done (2026-09-27):**
+      the report prints a second copy drawn with `paper`
+      (`wrappedSchematicLayout`, at most five columns, a wide row of
+      branches wrapped onto more rows with a gutter for their rivers; the
+      screen copy is unchanged and hidden in print). A 30-unit catchment
+      prints on one page with its names at 9.4 pt;
+      `report-schematic-print.spec.ts` prints one and checks every name's
+      box in `pdftotext -bbox` (CI installs poppler-utils). Still open: the
+      drawing isn't split at a page break on purpose, so a network more than
+      ~12 rows deep (a long main stem wraps down, not across) runs over the
+      A4 height as one picture; see the entry below.
+- [ ] **A printed schematic taller than a page (2026-09-27).** The paper
+      layout bounds the width, not the height: a main stem of 12+ gauges
+      in a chain, or many wrapped rows, is taller than A4's ~1,000 px and
+      Chromium carries the one SVG over the page break wherever it falls,
+      possibly through a row of names. Durable fix: split the paper drawing
+      into page-high bands at a row boundary (draw each band as its own SVG
+      with the rivers continuing off its edge). Trigger: a real catchment
+      deeper than ~12 rows, or a client report with a cut name.
 - [ ] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move

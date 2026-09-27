@@ -1,7 +1,19 @@
 import type { NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { arcHits, arcPath, labelBox, schematicLayout, symbolBox, transferArc, type Arc, type Point } from './schematic';
+import {
+	arcHits,
+	arcPath,
+	labelBox,
+	schematicLayout,
+	symbolBox,
+	transferArc,
+	WRAP_GUTTER,
+	wrappedSchematicLayout,
+	type Arc,
+	type Point,
+	type SchematicLayout
+} from './schematic';
 
 let seq = 0;
 function node(name: string, down: string | null, areaKm2 = 1): NetworkNode {
@@ -56,6 +68,91 @@ describe('schematicLayout', () => {
 		const l = schematicLayout([node('O1', null), node('O2', null)]);
 		expect(l.nodes.map((n) => n.col)).toEqual([0, 1]);
 		expect(schematicLayout([])).toEqual({ nodes: [], edges: [], cols: 1, rows: 0, orphans: [] });
+	});
+});
+
+describe('wrappedSchematicLayout (the printed report)', () => {
+	const at = (l: SchematicLayout, id: string) => l.nodes.find((n) => n.node.id === id)!;
+	/** Columns the drawn nodes span. */
+	const span = (l: SchematicLayout) => Math.max(...l.nodes.map((n) => n.col)) + 1;
+	const fan = (n: number, into = 'Out') => Array.from({ length: n }, (_, i) => node(`U${i + 1}`, into));
+
+	/**
+	 * Nothing overlaps, and every wrapped river's gutter (`via`) is clear: no
+	 * node on the rows it runs down sits on it or has its label (~0.9 column)
+	 * running across it.
+	 */
+	function expectClean(l: SchematicLayout) {
+		const byRow = new Map<number, number[]>();
+		for (const n of l.nodes) byRow.set(n.row, [...(byRow.get(n.row) ?? []), n.col]);
+		for (const cols of byRow.values()) {
+			cols.sort((a, b) => a - b);
+			for (let i = 1; i < cols.length; i++) expect(cols[i]! - cols[i - 1]!).toBeGreaterThanOrEqual(1 - 1e-9);
+		}
+		for (const e of l.edges) {
+			if (e.via === undefined) continue;
+			const from = at(l, e.from);
+			const to = at(l, e.to);
+			expect(e.via).toBeLessThan(to.col);
+			for (const n of l.nodes) {
+				if (n.row <= from.row || n.row >= to.row) continue;
+				expect(n.col < e.via - 0.9 || n.col > e.via + 0.15, `${n.node.id} on the gutter at ${e.via}`).toBe(true);
+			}
+		}
+	}
+
+	it('is the usual layout when the network fits the width', () => {
+		const nodes = [node('Out', null, 0), node('A', 'Out'), node('B', 'Out'), node('A1', 'A'), node('A2', 'A')];
+		expect(wrappedSchematicLayout(nodes, 5)).toEqual(schematicLayout(nodes));
+	});
+
+	it('wraps 30 units draining into one gauge onto rows of 4, within 5 columns', () => {
+		const l = wrappedSchematicLayout([node('Out', null, 0), ...fan(30)], 5);
+		expect(l.nodes).toHaveLength(31);
+		expect(span(l)).toBeLessThanOrEqual(5);
+		expect(l.cols).toBeLessThanOrEqual(5);
+		expect(l.rows).toBe(1 + 8); // 30 / 4, rounded up, plus the gauge's own row
+		expect(at(l, 'Out').row).toBe(8);
+		// The first row joins as usual; the higher rows run down the gutter.
+		expect(at(l, 'U1')).toMatchObject({ row: 7, col: WRAP_GUTTER });
+		expect(l.edges.find((e) => e.from === 'U1')).toEqual({ from: 'U1', to: 'Out' });
+		expect(l.edges.find((e) => e.from === 'U30')).toEqual({ from: 'U30', to: 'Out', via: WRAP_GUTTER / 2 });
+		expect(at(l, 'U1').cumulativeAreaKm2).toBe(1);
+		expect(at(l, 'Out').cumulativeAreaKm2).toBe(30);
+		expectClean(l);
+	});
+
+	it('keeps a long main stem with side units narrow however long it is', () => {
+		// 12 gauges in a chain, each with two units beside it: 25 headwaters side by side unwrapped.
+		const nodes = [node('G0', null, 0)];
+		for (let i = 1; i < 12; i++) nodes.push(node(`G${i}`, `G${i - 1}`));
+		for (let i = 0; i < 12; i++) nodes.push(node(`F${i}a`, `G${i}`), node(`F${i}b`, `G${i}`));
+		expect(schematicLayout(nodes).cols).toBeGreaterThan(20);
+		const l = wrappedSchematicLayout(nodes, 5);
+		expect(span(l)).toBeLessThanOrEqual(5);
+		expect(l.nodes).toHaveLength(nodes.length);
+		expectClean(l);
+	});
+
+	it('wraps at every level of a branching network, and stacks several outlets', () => {
+		const nodes = [node('Out', null, 0), node('Other', null, 0)];
+		for (let t = 0; t < 4; t++) {
+			nodes.push(node(`T${t}`, 'Out'));
+			for (let i = 0; i < 7; i++) nodes.push(node(`T${t}u${i}`, `T${t}`));
+		}
+		nodes.push(...fan(6, 'Other'));
+		const l = wrappedSchematicLayout(nodes, 5);
+		expect(span(l)).toBeLessThanOrEqual(5);
+		expect(l.nodes).toHaveLength(nodes.length);
+		expect(l.edges).toHaveLength(nodes.length - 2);
+		expect(at(l, 'Out').row).toBe(l.rows - 1);
+		expect(at(l, 'Other').row).toBeLessThan(at(l, 'Out').row);
+		expectClean(l);
+	});
+
+	it('reports nodes caught in a loop, as the usual layout does', () => {
+		const l = wrappedSchematicLayout([node('Out', null), node('X', 'Y'), node('Y', 'X')], 5);
+		expect(l.orphans.map((n) => n.id)).toEqual(['X', 'Y']);
 	});
 });
 

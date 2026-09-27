@@ -112,7 +112,7 @@ export interface Model {
 	transfers: Record<string, unknown>[];
 }
 
-function node(name: string, kind: 'farm' | 'gauge', downstreamNodeId: string | null, sortOrder: number, extra: Record<string, unknown> = {}) {
+export function node(name: string, kind: 'farm' | 'gauge', downstreamNodeId: string | null, sortOrder: number, extra: Record<string, unknown> = {}) {
 	return {
 		id: crypto.randomUUID(),
 		name,

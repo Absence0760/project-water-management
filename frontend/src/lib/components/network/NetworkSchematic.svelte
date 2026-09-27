@@ -11,7 +11,7 @@
 	import { drainageTree } from '$lib/model/tree';
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
-	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, type SchematicNode } from './schematic';
+	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, wrappedSchematicLayout, type SchematicNode } from './schematic';
 	import type { Colouring } from './farmColour';
 
 	let {
@@ -22,7 +22,8 @@
 		editable = false,
 		onreparent,
 		colouring = null,
-		fill = false
+		fill = false,
+		paper = false
 	}: {
 		nodes: NetworkNode[];
 		transfers?: Transfer[];
@@ -41,7 +42,22 @@
 		 * legend is one line. The parent gives it its height.
 		 */
 		fill?: boolean;
+		/**
+		 * The printed report's drawing: at most PAPER_COLS columns wide, branches
+		 * that don't fit side by side wrapped onto more rows (wrappedSchematicLayout),
+		 * so it prints at A4 width with its names at a readable size. Not for screen.
+		 */
+		paper?: boolean;
 	} = $props();
+
+	/**
+	 * Columns on paper: a drawing this wide is at most ~790 px (a little more
+	 * for a long second line), which A4 prints at ≥ 85 % so names stay at
+	 * ≥ 8 pt (report-schematic-print.spec.ts measures them).
+	 */
+	const PAPER_COLS = 5;
+	// Ids for the drawing's markers and hatch: the report draws it twice (screen and paper).
+	const uid = $props.id();
 
 	const FILL_MAX_SPREAD = 1.8;
 	const wide = new MediaQuery('min-width: 900px');
@@ -122,7 +138,7 @@
 	const PAD_X = 24;
 	const PAD_Y = 22;
 
-	const layout = $derived(schematicLayout(nodes));
+	const layout = $derived(paper ? wrappedSchematicLayout(nodes, PAPER_COLS) : schematicLayout(nodes));
 	// Fill mode sizes the columns from the labels actually drawn, not the widest possible one, so a
 	// catchment that fits the card isn't pushed off its right edge. Columns are at least wide enough
 	// that no label runs into the next node on its row; they spread as far as every node's label still ends inside
@@ -145,7 +161,7 @@
 		Math.min(Infinity, ...layout.nodes.filter((n) => n.col > 0).map((n) => (boxW - 2 - PAD_X * 2 - 12 - labelRight(n)) / n.col))
 	);
 	const colW = $derived(fill && boxW > 0 && layout.cols > 1 ? Math.max(minColW, Math.min(COL_W * FILL_MAX_SPREAD, fitColW)) : minColW);
-	const rightEdge = $derived(fill ? Math.max(0, ...layout.nodes.map((n) => n.col * colW + labelRight(n))) : 0);
+	const rightEdge = $derived(fill || paper ? Math.max(0, ...layout.nodes.map((n) => n.col * colW + labelRight(n))) : 0);
 	// Rows spread only where the parent fixes the box's height (the Map layout from 900 px); below that
 	// the box is as tall as the drawing, and spreading to it would feed back on itself.
 	const rowH = $derived(wide.current ? spread(ROW_H, ROW_H, boxH - 2 - PAD_Y * 2 - 30, layout.rows - 1) : ROW_H);
@@ -153,18 +169,23 @@
 	const pos = $derived(
 		new Map(layout.nodes.map((n) => [n.node.id, { x: PAD_X + 12 + n.col * colW, y: PAD_Y + n.row * rowH }]))
 	);
-	const width = $derived(fill ? PAD_X * 2 + 12 + rightEdge : PAD_X * 2 + 12 + (layout.cols - 1) * colW + 126);
+	const width = $derived(fill || paper ? PAD_X * 2 + 12 + rightEdge : PAD_X * 2 + 12 + (layout.cols - 1) * colW + 126);
 	const height = $derived(PAD_Y * 2 + Math.max(layout.rows - 1, 0) * rowH + 30);
 	const maxArea = $derived(Math.max(1e-9, ...layout.nodes.map((n) => n.cumulativeAreaKm2)));
 	const areaOf = $derived(new Map(layout.nodes.map((n) => [n.node.id, n.cumulativeAreaKm2])));
 
 	const strokeFor = (id: string) => 1.5 + 4 * Math.sqrt((areaOf.get(id) ?? 0) / maxArea);
 
-	function edgePath(fromId: string, toId: string): string {
+	function edgePath(fromId: string, toId: string, via?: number): string {
 		const a = pos.get(fromId);
 		const b = pos.get(toId);
 		if (!a || !b) return '';
 		const midY = b.y - rowH / 2;
+		// A wrapped row (paper): under its own row to the gutter, down it, then into the node's confluence line.
+		if (via !== undefined) {
+			const gx = PAD_X + 12 + via * colW;
+			return `M${a.x},${a.y + 10} V${a.y + rowH / 2} H${gx} V${midY} H${b.x} V${b.y - 13}`;
+		}
 		if (Math.abs(a.x - b.x) < 0.5) return `M${a.x},${a.y + 10} V${b.y - 13}`;
 		return `M${a.x},${a.y + 10} V${midY} H${b.x} V${b.y - 13}`;
 	}
@@ -206,29 +227,30 @@
 			aria-hidden="true"
 			class="schematic"
 			class:dragging={drag?.moved}
+			style:--sch-hatch="url(#{uid}-hatch)"
 		>
 			<defs>
-				<marker id="sch-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+				<marker id="{uid}-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-river" />
 				</marker>
 				<!-- Fill for farms in the model but not in the run being coloured by. -->
-				<pattern id="sch-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+				<pattern id="{uid}-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
 					<rect class="hatch-bg" width="4" height="4" />
 					<line class="hatch-line" x1="0" y1="0" x2="0" y2="4" />
 				</pattern>
-				<marker id="sch-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+				<marker id="{uid}-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-transfer" />
 				</marker>
 			</defs>
 
 			{#each layout.edges as e (e.from)}
-				<path class="river" d={edgePath(e.from, e.to)} stroke-width={strokeFor(e.from)} marker-end="url(#sch-flow)" />
+				<path class="river" d={edgePath(e.from, e.to, e.via)} stroke-width={strokeFor(e.from)} marker-end="url(#{uid}-flow)" />
 			{/each}
 
 			{#each transfers as t (t.id)}
 				{@const d = transferPath(t)}
 				{#if d}
-					<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#sch-transfer)">
+					<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{uid}-transfer)">
 						<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId)}{t.enabled ? '' : ' (disabled)'}</title>
 					</path>
 				{/if}
@@ -584,7 +606,7 @@
 		stroke-dasharray: 2 2;
 	}
 	[data-supply='absent'] .farm {
-		fill: url(#sch-hatch);
+		fill: var(--sch-hatch);
 		stroke: var(--text-muted);
 		stroke-dasharray: 3 2;
 	}
