@@ -3964,18 +3964,32 @@ public shared view (`/share`), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
 digest). The modeller workspace stays English.
 
-- **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
-  name in its own language, the button marked with that `lang`, `aria-pressed`
-  on the current one; "EN | AF" in the phone headers, the full name as the
-  accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
+- **The language table.** Every language the site, the emails and the
+  database know is one entry in `packages/engine/src/languages.ts`
+  (`LANGUAGES`: code, own name, Intl locale, decimal mark; issue #58). The
+  switch, browser detection, number and date formatting, plural rules, API
+  validation, the invite dialog, the CSV language column and the database's
+  `language` table ([data-model.md § Languages](./data-model.md#languages-080_languagesql))
+  all read it; nothing else lists the languages. Frontend and backend import
+  it from `@water-management/engine/languages`.
+- **Switch.** `lib/i18n/LanguageSwitch.svelte`, drawn from the table. With
+  two languages it is "English | Afrikaans" (each name in its own language,
+  the button marked with that `lang`, `aria-pressed` on the current one;
+  "EN | AF" in the phone headers, the full name as the accessible name);
+  from three it becomes a `<select>` named "Language", each `<option>` in
+  its own language with its own `lang` (`LanguageSwitch.test.ts`,
+  `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
   also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
   the two buttons joined into one control sized like the form fields
   (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
-  this device's choice (`localStorage` `wm.locale`, try/catch), else
-  Afrikaans when it is the browser's first language, else English
-  (`resolveLocale`, run by the root layout whenever the session changes).
+  this device's choice (`localStorage` `wm.locale`, try/catch), else the
+  first language in the browser's list (`navigator.languages`) that the
+  table has, by primary tag (`["de-DE", "af"]` gives Afrikaans,
+  `["en-ZA", "af"]` English), else English (`resolveLocale` through the
+  engine's `matchLocale`, run by the root layout whenever the session
+  changes).
   Choosing applies at once, is kept on the device and, signed in, saved with
   `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
   sends the page's language as the account's; an account created from an
@@ -4071,11 +4085,14 @@ digest). The modeller workspace stays English.
   sideways, no text is cut off in its box, and axe finds nothing, in light
   and dark. Specs read the Afrikaans from the catalogues
   (`e2e/support/af.ts`), so a corrected translation doesn't break them.
-- **Numbers and dates** (D8). The farm view writes a decimal comma in
-  Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
-  both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
-  the Afrikaans words are in), so an English sentence never carries Afrikaans
-  month names.
+- **Numbers and dates** (D8). The farm view writes the chosen language's
+  decimal mark (the table's `decimalMark`) at once: a comma in Afrikaans
+  ("84,9 ML"), with no-break spaces between thousands in every language.
+  Dates and plural rules follow the words' language, in the table's Intl
+  locale (`en-ZA`, and `af-ZA` once the Afrikaans words are in), so an
+  English sentence never carries Afrikaans month names. The emails date in
+  the same locale (`mail/alerts.ts` `dateText`, the day without a leading
+  zero).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
   entries. It was written by the `af-translator` agent and reviewed by the
@@ -4115,6 +4132,40 @@ digest). The modeller workspace stays English.
   (`scripts/guards/i18n_stamp.mjs`) writes the current English's hash into
   its `sourceHash` and rewrites the sheet. It never writes a translation: an
   id without one is refused.
+
+### Adding a language
+
+A language is one table entry, three catalogue files, one index line and a
+translation run. No other code changes; `frontend/src/lib/i18n/testLanguage.test.ts`,
+`backend/src/mail/i18n/testLanguage.test.ts` and
+`backend/src/auth/testLanguage.db.test.ts` prove it with a stand-in `xx`
+that exists only in the tests.
+
+1. **Table entry.** Add `{ code, name, intl, decimalMark }` to `LANGUAGES`
+   in `packages/engine/src/languages.ts`: `code` the BCP 47 primary tag
+   (2–3 lower-case letters), `name` in the language itself, `intl` the Intl
+   locale South Africa writes it in (e.g. `zu-ZA`), `decimalMark` `.` or `,`.
+   The next migration run adds the code to the `language` table (no
+   migration file).
+2. **Catalogues**, each found by its file name, so they need no other line:
+   - site: `frontend/src/lib/i18n/messages/<code>.ts` exporting
+     `const <code>: Catalogue` (loaded lazily on first use);
+   - email: `backend/src/mail/i18n/<code>.ts` exporting `const <code>`,
+     **plus its line** in `backend/src/mail/i18n/catalogues.ts` (a Lambda
+     bundle can't find files by name);
+   - glossary: `frontend/src/lib/help/content.<code>.ts` exporting
+     `const HELP_<CODE>` (loaded lazily by `/farm/words`,
+     `lib/help/translations.ts`).
+   Start each empty: a missing message shows in English, and the page keeps
+   `lang="en"` until the site catalogue is complete. The unit tests fail
+   until all three exist (`locale.test.ts`, `translations.test.ts`,
+   `catalogues.test.ts`).
+3. **Translation run.** Export, translate, check and apply as above
+   (§ Translation).
+4. **Layout and axe.** The language's layout spec (as `af-layout.spec.ts`:
+   every translated page at 360 px, light and dark) passes, and so does
+   `language.spec.ts`. From the third language the switch is a `<select>`:
+   check it at 360 px in the headers and on the account page.
 
 ## Alerts
 

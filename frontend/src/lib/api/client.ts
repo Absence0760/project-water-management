@@ -1,6 +1,7 @@
 // Typed client for the backend HTTP API (docs/api.md). Every call sends the
 // session cookie (credentials: 'include') and turns a non-2xx response into an
 // ApiError carrying the HTTP status and the server's message.
+import type { Locale } from '@water-management/engine/languages';
 import type {
 	AllocationComparison,
 	DailySeries,
@@ -212,7 +213,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			login: (email: string, password: string) =>
 				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
 			/** `inviteToken` from a `/register?invite=…` link: a live invite for the same address starts the account verified and joined. */
-			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: 'en' | 'af' | null) =>
+			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: Locale | null) =>
 				request<{ user: User }>('POST', '/auth/register', {
 					email,
 					password,
@@ -225,7 +226,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
 			/** Renames the account (1–100 characters, trimmed by the server). */
 			/** Changes only the fields sent. `locale: null` goes back to following the browser. */
-			updateMe: (patch: { displayName?: string; locale?: 'en' | 'af' | null; volumeUnit?: 'm3' | 'ML' }) =>
+			updateMe: (patch: { displayName?: string; locale?: Locale | null; volumeUnit?: 'm3' | 'ML' }) =>
 				request<{ user: User }>('PATCH', '/auth/me', patch).then((r) => r.user),
 			/**
 			 * Changes the password: every other session is signed out and this

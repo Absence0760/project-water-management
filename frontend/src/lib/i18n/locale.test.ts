@@ -5,10 +5,12 @@ import { markedCatalogue } from './fixtureCatalogue';
 import { messageId, pluralId } from './msg';
 import { plainText } from './rich';
 import {
+	catalogueLanguages,
 	fill,
 	i18n,
 	isComplete,
 	joinAnd,
+	LOCALES,
 	msg,
 	readStoredLocale,
 	resolveLocale,
@@ -177,14 +179,23 @@ describe('joinAnd', () => {
 	});
 });
 
+describe('the catalogue files', () => {
+	it('exist for every language in the table but English (messages/<code>.ts), and for nothing else', () => {
+		expect(catalogueLanguages().sort()).toEqual(LOCALES.filter((l) => l !== 'en').sort());
+	});
+});
+
 describe('which language to start in', () => {
-	it('prefers the account, then this device, then an Afrikaans browser, else English', () => {
+	it('prefers the account, then this device, then the browser’s first language the site has, else English', () => {
 		expect(resolveLocale('af', 'en', ['en-ZA'])).toBe('af');
 		expect(resolveLocale(null, 'af', ['en-ZA'])).toBe('af');
 		expect(resolveLocale(undefined, null, ['af-ZA', 'en'])).toBe('af');
 		expect(resolveLocale(null, null, ['af'])).toBe('af');
 		expect(resolveLocale(null, null, ['en-ZA', 'af'])).toBe('en');
 		expect(resolveLocale(null, null, ['afr'])).toBe('en');
+		// Not only the first entry: a German browser that also reads Afrikaans gets Afrikaans (issue #58).
+		expect(resolveLocale(null, null, ['de-DE', 'af'])).toBe('af');
+		expect(resolveLocale(null, null, ['de', 'fr'])).toBe('en');
 		expect(resolveLocale('xx', null, [])).toBe('en');
 	});
 

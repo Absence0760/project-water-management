@@ -1,29 +1,28 @@
 // The email catalogue's one entry point (WP-2.5; docs/ui.md § Language).
 // Usage:
 //
-//   const tr = mailT(user.locale);          // 'en' | 'af' | null (null → en)
-//   tr.t('mail.verify.heading');            // a string, English if af has none
+//   const tr = mailT(user.locale);          // a language code, or null (→ en)
+//   tr.t('mail.verify.heading');            // a string, English if the language has none
 //   tr.t('mail.verify.body', { email });    // {email} filled in
 //   tr.lang;                                // what to put in <html lang>
 //
 // `lang` is the locale the words actually came out in: it stays 'en' when
 // any key this email used fell back to English, so a mixed email never
-// claims to be Afrikaans. Values are filled in raw; the template escapes the
-// finished string for the HTML part.
-import { af } from './af.js';
+// claims to be in another language. Values are filled in raw; the template
+// escapes the finished string for the HTML part. The languages are the
+// engine's one table; each one's catalogue is a line in ./catalogues.ts.
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@water-management/engine/languages';
+import { CATALOGUES } from './catalogues.js';
 import { en, type MailKey } from './en.js';
 
 export type { MailKey } from './en.js';
 
-/** Languages a person or an invite can have (app_user.locale 050, invite.locale 034). */
-export const LOCALES = ['en', 'af'] as const;
-export type Locale = (typeof LOCALES)[number];
-
-const CATALOGUES: Record<Locale, Partial<Record<MailKey, string>>> = { en, af };
+/** Languages a person or an invite can have (app_user.locale, invite.locale: the `language` table, synced from this list). */
+export { LOCALES, type Locale } from '@water-management/engine/languages';
 
 /** A stored locale (possibly NULL or unknown) as one we can send. */
 export function mailLocale(value: string | null | undefined): Locale {
-	return (LOCALES as readonly string[]).includes(value ?? '') ? (value as Locale) : 'en';
+	return isLocale(value) ? value : DEFAULT_LOCALE;
 }
 
 /** `{name}` → vars.name. An unknown placeholder is left as written, so a typo shows rather than vanishing. */
@@ -42,12 +41,12 @@ export function mailT(locale: string | null | undefined): MailTranslator {
 	let fellBack = false;
 	return {
 		t(key, vars) {
-			const own = CATALOGUES[want][key];
-			if (own == null) fellBack ||= want !== 'en';
+			const own = want === DEFAULT_LOCALE ? en[key] : CATALOGUES[want]?.[key];
+			if (own == null) fellBack ||= want !== DEFAULT_LOCALE;
 			return fill(own ?? en[key], vars);
 		},
 		get lang() {
-			return fellBack ? 'en' : want;
+			return fellBack ? DEFAULT_LOCALE : want;
 		}
 	};
 }

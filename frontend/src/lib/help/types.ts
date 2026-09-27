@@ -41,3 +41,15 @@ export type HelpTipText = Pick<HelpEntry, 'id' | 'term' | 'short' | 'units' | 'c
 
 /** The rest of an entry, only the glossary and search read (articles.ts). */
 export type HelpArticle = Pick<HelpEntry, 'long' | 'aliases' | 'related' | 'source'>;
+
+/**
+ * A farmer glossary entry in another language (content.<code>.ts, WP-2.5).
+ * `sourceHash` is the SHA-256 (hex) of the English `term + "\n" + short +
+ * "\n" + long` it was translated from, so a stale translation is caught.
+ */
+export interface HelpTranslation {
+	term: string;
+	short: string;
+	long: string;
+	sourceHash: string;
+}

@@ -59,7 +59,8 @@ erDiagram
 
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
-| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql) | none (the workbook has no users) |
+| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (a `language` code, NULL = not chosen; 080) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql) | none (the workbook has no users) |
+| `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`, `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Three keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null }`, null = the engine's defaults, 1 October – 30 April and 0.8, pending the client's O3 and O6; how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
@@ -1553,7 +1554,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
-| `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (`en` / `af`, the email's language, default `en`; 034); unique per (project, email) / (team, email) |
+| `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
@@ -1617,6 +1618,29 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   deleted once its window is over (at the next sign-up); the global row is
   reset. Deny-all policy, as `login_throttle`. Numbers:
   [security.md § Password reset, email verification and invites](./security.md#password-reset-email-verification-and-invites).
+
+### Languages (080_language.sql)
+
+| Table | Holds |
+| --- | --- |
+| `language` | One row per language a person or an invite can have: `code`, a BCP 47 primary tag (`^[a-z]{2,3}$`), today `en` and `af` |
+
+- `app_user.locale` and `invite.locale` are foreign keys to it (each with a
+  covering index), replacing the `CHECK (locale IN ('en', 'af'))` of 050 and
+  034 (issue #58).
+- The list itself lives in one place, the engine's language table
+  (`packages/engine/src/languages.ts`, `LANGUAGES`). The migration runner
+  (`backend/scripts/migrate.ts`, `syncLanguages`) inserts every code the
+  table lacks after each run, locally and in the migrate Lambda, so adding a
+  language needs no migration. It never deletes: a language taken off the
+  list stays while stored locales may name it (remove it, after moving those
+  rows, by hand as the owner).
+- Reference data, nothing personal: RLS on with one read policy
+  (`USING (true)`), `GRANT SELECT` to `water_app` and nothing else; only the
+  owner writes it (`catalogue.db.test.ts` `READ_ONLY`).
+- Proven with a stand-in language in the tests only
+  (`src/auth/testLanguage.db.test.ts`, `src/db/language.db.test.ts`); the
+  stand-in rows are removed afterwards.
 
 ### Jobs (016_jobs.sql)
 
@@ -2181,6 +2205,8 @@ ids are rejected.
   records applied files in `schema_migrations` and runs each file in its own
   transaction.
 - Run as `water` (`MIGRATION_DATABASE_URL`), never as `water_app`.
+- After the files, the runner syncs the `language` table from the engine's
+  language table (insert only; [Languages](#languages-080_languagesql)).
 - Every new table that holds project data needs a `project_id`, RLS enabled,
   the viewer/editor policies, same-project triggers for any foreign keys to
   `node`/`crop`, and grants to `water_app`. The `/safe-migration` command walks

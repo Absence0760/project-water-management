@@ -2,17 +2,16 @@
 // § Language). Number and date formatting read the choice from here, so a
 // module that only formats (the /share page's) never pulls in the message
 // functions. They live in ./locale.svelte.ts, which re-exports all of this.
+//
+// The languages themselves (code, own name, Intl locale, decimal mark) are
+// the engine's one table, re-exported here: nothing in the frontend lists
+// them again.
+import { isLocale, matchLocale, type Locale } from '@water-management/engine/languages';
 
-export const LOCALES = ['en', 'af'] as const;
-export type Locale = (typeof LOCALES)[number];
-
-/** Each language's name in that language (fixed names, never translated). */
-export const LANGUAGE_NAMES: Record<Locale, string> = { en: 'English', af: 'Afrikaans' };
+export { DEFAULT_LOCALE, isLocale, language, LANGUAGES, LOCALES, type Language, type Locale } from '@water-management/engine/languages';
 
 /** `locale`: the choice. `complete`: its catalogue has every key (always true for English). */
 export const i18n = $state<{ locale: Locale; complete: boolean }>({ locale: 'en', complete: true });
-
-export const isLocale = (v: unknown): v is Locale => (LOCALES as readonly unknown[]).includes(v);
 
 /** The language the words on the page are in: the chosen one once its catalogue is complete, else English. */
 export function wordsLang(): Locale {
@@ -43,8 +42,8 @@ export function storeLocale(locale: Locale, s: Storage | null = typeof localStor
 
 /**
  * The account's language (app_user.locale) when signed in and chosen, else
- * this device's choice, else Afrikaans when it is the browser's first
- * language, else English.
+ * this device's choice, else the first language in the browser's list that
+ * the site has (["de", "af"] → af; ["en-ZA", "af"] → en), else English.
  */
 export function resolveLocale(
 	accountLocale: string | null | undefined,
@@ -53,5 +52,5 @@ export function resolveLocale(
 ): Locale {
 	if (isLocale(accountLocale)) return accountLocale;
 	if (stored) return stored;
-	return /^af\b/i.test(languages[0] ?? '') ? 'af' : 'en';
+	return matchLocale(languages);
 }

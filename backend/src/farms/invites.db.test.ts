@@ -248,7 +248,7 @@ describe('POST /farmers/bulk', () => {
 			'no farm named “Farm Z” in this catchment',
 			'not a valid email address',
 			'already a member of this project (viewer)',
-			'unknown language “fr” (use en or af)',
+			'unknown language “fr” (use en, af, or the language’s name)',
 			'no farm named “Farm” in this catchment'
 		]);
 		expect(res.body.results[1]).toMatchObject({ row: 1, email: fresh, farm: 'Rietvlei' });
