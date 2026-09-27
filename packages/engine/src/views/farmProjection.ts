@@ -10,18 +10,22 @@
 // never over the modeller's settings.reportStart … reportEnd, which can be
 // any period, even last year (design §11 F2).
 //
-// One thing a run doesn't store is which EWR site bound a farm's charge each
-// day (attribution.ts `binding`), which the season's "binding site" needs. It
-// is recomputed here with the engine's own attributeEwrShortfall on the
-// run's stored flows (see reattribute below): exact, except that a transfer
-// network with a loop is cut to a tree first (documented there). The charges
-// themselves always come from the stored series, never from the recompute.
+// Which EWR site bound a farm's charge each day (attribution.ts `binding`),
+// which the season's "binding site" needs, is a run series from engine 1.3.0
+// (network/bindingSeries.ts, `ewr_binding_site`) for every farm upstream of
+// two or more EWR sites; for any other farm it follows from the charge. A run
+// saved before 1.3.0 has no such series, and there it is recomputed with the
+// engine's own attributeEwrShortfall on the run's stored flows (reattribute
+// below): exact, except that a transfer network with a loop is cut to a tree
+// first (documented there). The charges themselves always come from the
+// stored series, never from the recompute.
 //
 // The same recompute over any window, other water users included, is
 // curtailmentOverWindow (below): the Runs tab's reporting-window picker
 // (issue #44) and the season here share it.
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
+import { bindingFromCharge, EWR_BINDING_SERIES } from '../network/bindingSeries';
 import {
 	computeCurtailment,
 	DEMAND_PCT_FLOOR_M3_DAY,
@@ -31,7 +35,7 @@ import {
 	type CurtailmentUserInput,
 	type ReportWindow
 } from '../network/curtailment';
-import { buildTopology, canonicalOrder } from '../network/topology';
+import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
 import type { CropArea, CurtailmentFarm, CurtailmentSummary, NetworkNode, Transfer } from '../project';
 import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
@@ -58,7 +62,7 @@ const NOISE_M3 = 1e-6;
 
 /** The run's series a projection reads, by node kind (null node = catchment). */
 export const PROJECTION_SERIES = {
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation'],
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural'],
 	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural']
@@ -259,10 +263,11 @@ function transferVolumes(
 }
 
 /**
- * The engine's attribution, recomputed on the run's stored flows, for the
- * one thing a run doesn't store: which site bound each farm's charge each
- * day. Inputs mirror runModel's (run.ts): the canonical node order, each
- * node's consumptive share k, the sites outlet first then gauges by id.
+ * The engine's attribution, recomputed on the run's stored flows, for what a
+ * run saved before engine 1.3.0 doesn't store: which site bound each farm's
+ * charge each day. Inputs mirror runModel's (run.ts): the canonical node
+ * order, each node's consumptive share k, the sites outlet first then gauges
+ * by id.
  */
 function reattribute(run: ProjectionRun, days: number): { res: AttributionResult; pos: Int32Array; siteNodes: number[]; approximate: boolean } {
 	const nodes = run.nodes;
@@ -275,8 +280,8 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 	const supplied = nodes.map((n) => (n.kind === 'gauge' ? zeros() : need(run, n.id, 'supplied', days)));
 	const storage = nodes.map((n) => (n.kind === 'farm' ? need(run, n.id, 'dam_storage', days) : zeros()));
 	const { rules, approximate } = transferVolumes(run, index, days);
-	const gauges = nodes.flatMap((n, i) => (n.kind === 'gauge' && i !== topo.outflow ? [i] : [])).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
-	const siteNodes = [...(topo.outflow >= 0 ? [topo.outflow] : []), ...gauges];
+	// The run's EWR sites, as runModel picked them (engine ≥ 1.3.0 honours each gauge's ewrSite flag; absent = a site).
+	const siteNodes = ewrSiteNodes(nodes, topo.outflow);
 	const order = canonicalOrder(nodes, topo);
 	const res = attributeEwrShortfall({
 		days,
@@ -377,14 +382,58 @@ export interface CurtailmentOptions {
 }
 
 /**
+ * The run's EWR sites (outlet first, then the gauges that are sites, by id)
+ * and, per site, the farms and other users whose outflow reaches it, in the
+ * canonical order, as attributeEwrShortfall lists them. Topology only: no
+ * series.
+ */
+function siteCatchments(nodes: readonly NetworkNode[], topo: Topology): { siteNodes: number[]; farms: Int32Array[]; order: Int32Array } {
+	const siteNodes = ewrSiteNodes(nodes, topo.outflow);
+	const order = canonicalOrder(nodes, topo);
+	const farms = siteNodes.map((site) => {
+		const inF = new Uint8Array(nodes.length);
+		const stack = [site];
+		while (stack.length) {
+			const i = stack.pop()!;
+			if (inF[i]) continue;
+			inF[i] = 1;
+			for (const u of topo.upstream[i]!) stack.push(u);
+		}
+		return Int32Array.from(Array.from(order).filter((i) => inF[i] && nodes[i]!.kind !== 'gauge'));
+	});
+	return { siteNodes, farms, order };
+}
+
+/** The farms (node indices) upstream of two or more EWR sites: the ones whose binding site a run stores (engine ≥ 1.3.0). */
+function ambiguousFarms(nodes: readonly NetworkNode[], farms: readonly Int32Array[]): number[] {
+	const count = new Int32Array(nodes.length);
+	for (const list of farms) for (const f of list) count[f]!++;
+	return nodes.flatMap((n, i) => (n.kind === 'farm' && count[i]! >= 2 ? [i] : []));
+}
+
+/**
  * Every stored series prepareCurtailment reads for this model (null node =
  * catchment), so a caller that fetches series one at a time (the Runs tab's
  * reporting-window picker) knows what to fetch.
+ *
+ * `has` says which series the run stored. When it is given and the run
+ * stores the binding site of every farm upstream of two or more EWR sites
+ * (engine ≥ 1.3.0), those series are listed and the flows the binding-site
+ * recompute needs are not. Without it, or for a run saved before 1.3.0, the
+ * flows are listed: the recompute is the fallback.
  */
-export function curtailmentSeriesKeys(nodes: readonly NetworkNode[], transfers: readonly Transfer[], options: CurtailmentOptions = {}): { nodeId: string | null; key: string }[] {
+export function curtailmentSeriesKeys(
+	nodes: readonly NetworkNode[],
+	transfers: readonly Transfer[],
+	options: CurtailmentOptions = {},
+	has?: (nodeId: string | null, key: string) => boolean
+): { nodeId: string | null; key: string }[] {
 	const out: { nodeId: string | null; key: string }[] = [];
 	const add = (nodeId: string | null, ...keys: string[]) => keys.forEach((key) => out.push({ nodeId, key }));
 	const topo = buildTopology(nodes);
+	const { siteNodes, farms } = siteCatchments(nodes, topo);
+	const ambiguous = ambiguousFarms(nodes, farms);
+	const stored = !!has && ambiguous.every((f) => has(nodes[f]!.id, EWR_BINDING_SERIES.key));
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	// The farms whose net transfer series transferVolumes reads.
 	const inRule = new Set<string>();
@@ -393,37 +442,56 @@ export function curtailmentSeriesKeys(nodes: readonly NetworkNode[], transfers: 
 		const b = byId.get(tr.toNodeId);
 		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);
 	}
+	const sites = new Set(siteNodes);
 	nodes.forEach((n, i) => {
-		add(n.id, 'inflow_upstream', 'outflow');
+		if (!stored) add(n.id, 'inflow_upstream', 'outflow');
 		if (n.kind === 'farm') {
-			add(n.id, 'runoff', 'supplied', 'dam_storage', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
-			if (inRule.has(n.id)) add(n.id, 'transfer');
+			add(n.id, 'supplied', 'demand', 'ewr_charge', 'ewr_charge_irrigation');
+			if (!stored) add(n.id, 'runoff', 'dam_storage');
+			if (!stored && inRule.has(n.id)) add(n.id, 'transfer');
 		} else if (n.kind === 'user') {
-			add(n.id, 'supplied');
+			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');
-		} else if (n.kind === 'gauge' && i !== topo.outflow) {
+		} else if (n.kind === 'gauge' && i !== topo.outflow && sites.has(i)) {
 			add(n.id, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
 		}
 	});
+	if (stored) for (const f of ambiguous) add(nodes[f]!.id, EWR_BINDING_SERIES.key);
 	if (topo.outflow >= 0) add(null, 'ewr_shortfall', 'ewr_charged', 'ewr_natural');
+	return out;
+}
+
+/** A stored binding-site series (NaN / null = not charged) as site indices, −1 = none. */
+function storedBinding(v: StoredValues, days: number, sites: number): Int32Array {
+	if (v.length !== days) throw new ProjectionInputError(`the run's ${EWR_BINDING_SERIES.key} series has ${v.length} days, expected ${days}`);
+	const out = new Int32Array(days).fill(-1);
+	for (let t = 0; t < days; t++) {
+		const x = v[t];
+		if (typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < sites) out[t] = x;
+	}
 	return out;
 }
 
 /**
  * Reads a saved run once for curtailmentOverWindow: its farm, other-user and
- * EWR-site series, and each day's binding site, recomputed with the engine's
- * attribution on the stored flows (reattribute). `over` is cheap, so a caller
- * showing several windows of one run prepares once.
+ * EWR-site series, and each day's binding site: stored by the run (engine ≥
+ * 1.3.0), told from the charge for a farm upstream of one site, or else, for
+ * a run saved before 1.3.0, recomputed with the engine's attribution on the
+ * stored flows (reattribute). `over` is cheap, so a caller showing several
+ * windows of one run prepares once.
  */
 export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOptions = {}): PreparedCurtailment {
 	const d0 = toEpochDay(run.startDate);
 	const days = toEpochDay(run.endDate) - d0 + 1;
 	if (!(days > 0)) throw new ProjectionInputError('the run has no days');
-	const { res, pos, siteNodes, approximate } = reattribute(run, days);
 	const nodes = run.nodes;
+	const topo = buildTopology(nodes);
+	const { siteNodes, farms: siteFarms, order } = siteCatchments(nodes, topo);
+	const pos = new Int32Array(nodes.length);
+	order.forEach((node, k) => (pos[node] = k));
 	const farms = nodes.flatMap((n, i) => {
 		if (n.kind !== 'farm') return [];
-		const input: CurtailmentInput = {
+		const input = {
 			nodeId: n.id,
 			name: n.name,
 			demand: need(run, n.id, 'demand', days),
@@ -431,7 +499,7 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 			ewrCharge: need(run, n.id, 'ewr_charge', days),
 			ewrChargeIrrigation: need(run, n.id, 'ewr_charge_irrigation', days),
 			consumptivePerSupplied: consumptiveShare(n, run)
-		};
+		} satisfies CurtailmentInput;
 		return [{ i, input }];
 	});
 	const users: CurtailmentUserInput[] = [];
@@ -458,7 +526,7 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 			nodeId: nodes[node]!.id,
 			name: nodes[node]!.name,
 			isOutlet,
-			upstream: new Set(Array.from(res.sites[si]!.farms, (f) => nodes[f]!.id)),
+			upstream: new Set(Array.from(siteFarms[si]!, (f) => nodes[f]!.id)),
 			shortfall: need(run, id, 'ewr_shortfall', days),
 			charged: need(run, id, 'ewr_charged', days),
 			natural: need(run, id, 'ewr_natural', days)
@@ -473,6 +541,34 @@ export function prepareCurtailment(run: CurtailmentRun, options: CurtailmentOpti
 		charged: s.charged,
 		natural: s.natural
 	}));
+
+	// Each farm's binding site per day: told from the charge (upstream of one
+	// site), stored by the run (engine ≥ 1.3.0), or else, for a run saved
+	// before 1.3.0, the recompute's, which is approximate only after a
+	// transfer loop.
+	const binding: Int32Array[] = nodes.map(() => new Int32Array(days).fill(-1));
+	const charge: Float64Array[] = nodes.map(() => new Float64Array(days));
+	let recomputed: ReturnType<typeof reattribute> | null = null;
+	for (const { i, input } of farms) {
+		charge[i] = input.ewrCharge;
+		const above = siteFarms.flatMap((list, si) => (list.includes(i) ? [si] : []));
+		const derived = bindingFromCharge(input.ewrCharge, above);
+		const stored = derived ? undefined : run.series(nodes[i]!.id, EWR_BINDING_SERIES.key);
+		if (derived) binding[i] = derived;
+		else if (stored) binding[i] = storedBinding(stored, days, siteNodes.length);
+		else {
+			recomputed ??= reattribute(run, days);
+			binding[i] = recomputed.res.binding[i]!;
+		}
+	}
+	// What bindingSite reads: each site's node, each farm's binding and (stored) charge.
+	const res: AttributionResult = {
+		sites: sites.map((s, si) => ({ node: siteNodes[si]!, farms: siteFarms[si]!, charged: s.charged, natural: s.natural })),
+		charge,
+		chargeIrrigation: [],
+		binding
+	};
+	const approximate = recomputed?.approximate ?? false;
 	return {
 		days,
 		over(window) {

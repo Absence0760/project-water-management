@@ -8,7 +8,8 @@
 // (across copies). See docs/run-comparison.md.
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { fromEpochDay, toEpochDay } from './calendar';
-import type { EwrRuleTable } from './reserve/rules';
+import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
+import { isEwrSite } from './network/topology';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { provenanceLabel, sameProvenance, type SeriesProvenance } from './seriesProvenance';
@@ -902,6 +903,8 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 
 const RULE_FIELDS: Record<string, ScalarField> = {
 	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
+	// Engine ≥ 1.3.0: gazetted, desktop estimate or other; absent = not stated.
+	sourceKind: { label: 'kind of source', fmt: (v) => ewrSourceConfidence(v as EwrRuleSourceKind | null | undefined) ?? 'not stated' },
 	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
 	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
 	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },
@@ -1044,8 +1047,47 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['supplyRule', 'supply rule', (v) => (SUPPLY_RULE_LABEL as Record<string, string>)[String(v)] ?? String(v)],
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
-	['supplyStopPct', 'supply switch-back level', pct]
+	['supplyStopPct', 'supply switch-back level', pct],
+	// EWR site flag (engine ≥ 1.3.0), gauges; the site list as a whole is diffed below.
+	['ewrSite', 'EWR site', (v) => (v === false ? 'no' : 'yes')]
 ];
+
+/**
+ * The EWR site list (engine ≥ 1.3.0), when it differs: one line naming the
+ * sites in each run, with what was added and removed and why. Nodes are
+ * paired as the node diff pairs them (by id, then by name).
+ */
+function diffEwrSites(a: readonly NetworkNode[], b: readonly NetworkNode[], nodes: { pairs: [NetworkNode, NetworkNode][]; onlyA: NetworkNode[]; onlyB: NetworkNode[] }): InputChange[] {
+	const kindName = (k: NetworkNode['kind']) => (k === 'user' ? 'water user' : k);
+	const name = (n: NetworkNode) => (n.downstreamNodeId === null ? `${n.name} (outlet)` : n.name);
+	const added: string[] = nodes.onlyB.filter(isEwrSite).map((n) => `${name(n)} (new node)`);
+	const removed: string[] = nodes.onlyA.filter(isEwrSite).map((n) => `${name(n)} (node removed)`);
+	for (const [x, y] of nodes.pairs) {
+		const sx = isEwrSite(x);
+		const sy = isEwrSite(y);
+		if (sx === sy) continue;
+		const why =
+			x.kind !== y.kind
+				? sy
+					? `was a ${kindName(x.kind)}`
+					: `now a ${kindName(y.kind)}`
+				: x.downstreamNodeId === null || y.downstreamNodeId === null
+					? sy
+						? 'now the outlet'
+						: 'no longer the outlet'
+					: sy
+						? 'marked as an EWR site'
+						: 'taken off the EWR sites';
+		(sy ? added : removed).push(`${name(sy ? y : x)} (${why})`);
+	}
+	if (!added.length && !removed.length) return [];
+	const list = (l: readonly NetworkNode[]) => {
+		const sites = l.filter(isEwrSite).sort((x, y) => (x.downstreamNodeId === null ? -1 : y.downstreamNodeId === null ? 1 : x.name.localeCompare(y.name)));
+		return sites.length ? sites.map(name).join(', ') : 'none';
+	};
+	const parts = [...(added.length ? [`added ${added.join(', ')}`] : []), ...(removed.length ? [`removed ${removed.join(', ')}`] : [])];
+	return [{ area: 'network', kind: 'changed', subject: 'EWR sites', text: `EWR sites: ${list(a)} → ${list(b)} (${parts.join('; ')})` }];
+}
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
 
@@ -1103,6 +1145,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (!same(da && nameKey(da), db && nameKey(db))) parts.push(`drains into ${db ?? 'nothing (outflow)'} (was ${da ?? 'nothing (outflow)'})`);
 		for (const p of parts) out.push({ area: 'network', kind: 'changed', subject: y.name, text: `${y.name}: ${p}` });
 	}
+
+	// --- EWR sites (engine ≥ 1.3.0) ---
+	// The outlet and every gauge not taken off the list: a gauge added, removed,
+	// turned into a farm or its flag changed moves where the EWR is assessed
+	// and who is charged for a shortfall.
+	out.push(...diffEwrSites(a.nodes, b.nodes, nodes));
 
 	// --- crops ---
 	const crops = matchByIdThenName(a.crops, b.crops, (c) => c.id, (c) => c.name);

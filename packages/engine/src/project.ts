@@ -756,6 +756,17 @@ export interface NetworkNode {
 	supplyTriggerPct?: number;
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
 	supplyStopPct?: number;
+	/**
+	 * Gauges only (engine ≥ 1.3.0, audit Q17 follow-on, WP-3.7, docs/model.md
+	 * §2.7b): whether the EWR is assessed at this gauge. An EWR site's
+	 * shortfall is charged to the farms and other users upstream of it, and a
+	 * Reserve rule table can sit there. false = the gauge only measures (a
+	 * flow-record station that is no Reserve site): it keeps its flow and
+	 * EWR-shortfall series but charges nobody. Absent / true = an EWR site,
+	 * every engine before 1.3.0. The outlet is always one, and only a gauge
+	 * can be taken off the list (model rules).
+	 */
+	ewrSite?: boolean;
 }
 
 /**
@@ -922,6 +933,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
+				// EWR site flag (engine ≥ 1.3.0): every gauge was one.
+				n.ewrSite ??= true;
 				return n;
 			})
 		: model.nodes;

@@ -128,18 +128,24 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
  * `downstreamNodeId` (the network's shape: `node.add` / `node.remove` change
- * it) or `sortOrder` (display only). A gauge only measures, so only its name.
+ * it) or `sortOrder` (display only). A gauge only measures, so only its name
+ * and whether it is an EWR site (engine ≥ 1.3.0; the outlet always is one, a
+ * model rule).
  */
 export const NODE_SET_FIELDS = {
 	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...BOREHOLES, ...SUPPLY],
 	user: ['name', ...USER, ...BOREHOLES],
-	gauge: ['name']
+	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 
 export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
 
-/** node.set fields that are baseline hydrology even on the applicant's own farm (classifyOp). */
-export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = LAND;
+/**
+ * node.set fields that are baseline assumptions even on the applicant's own
+ * node (classifyOp): land and flow share split the catchment's natural
+ * runoff, and where the EWR is assessed is the Reserve's, never a proposal.
+ */
+export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite'];
 
 const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	name,
@@ -173,7 +179,8 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	supplyRule: oneOf(SUPPLY_RULES),
 	pumpCapacityM3Day: nullable(nonNeg),
 	supplyTriggerPct: frac,
-	supplyStopPct: frac
+	supplyStopPct: frac,
+	ewrSite: boolean
 };
 
 export type NodeSetValue<F extends NodeSetField> = Exclude<NetworkNode[F], undefined>;
@@ -526,7 +533,9 @@ const NODE_OPTIONAL = new Set<string>([
 	...SUPPLY,
 	...DAM_STORAGE,
 	...USER,
-	...BOREHOLES
+	...BOREHOLES,
+	// A new gauge is an EWR site unless it says otherwise (engine ≥ 1.3.0).
+	'ewrSite'
 ]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,

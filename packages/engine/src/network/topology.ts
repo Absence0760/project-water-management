@@ -119,3 +119,24 @@ export function canonicalOrder(nodes: readonly NetworkNode[], topo: Pick<Topolog
 	}
 	return Int32Array.from(topo.order).sort((a, b) => depth[b]! - depth[a]! || cmpStr(nodes[a]!.id, nodes[b]!.id));
 }
+
+/**
+ * Is node `n` an EWR site (engine ≥ 1.3.0)? The outlet always; a gauge unless
+ * its `ewrSite` flag is false; a farm or other user never.
+ */
+export function isEwrSite(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 'ewrSite'>): boolean {
+	return n.downstreamNodeId === null || (n.kind === 'gauge' && n.ewrSite !== false);
+}
+
+/**
+ * The EWR sites in the engine's order (./attribution.ts, docs/model.md §2.7b):
+ * the outlet first, then every gauge that is an EWR site, by node id. One
+ * function for runModel, the stored-run recompute (views/farmProjection.ts)
+ * and the checks, so they can't disagree on which sites a run had.
+ */
+export function ewrSiteNodes(nodes: readonly NetworkNode[], outflow: number): number[] {
+	const gauges = nodes
+		.flatMap((n, i) => (i !== outflow && n.kind === 'gauge' && n.ewrSite !== false ? [i] : []))
+		.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	return [...(outflow >= 0 ? [outflow] : []), ...gauges];
+}
