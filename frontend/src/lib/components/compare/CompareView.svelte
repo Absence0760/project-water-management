@@ -45,14 +45,16 @@
 	import { runYears } from '$lib/components/runs/runList';
 	import { fmtDate } from '$lib/format/number';
 
-	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
-	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
-	// The per-node daily series overlay (issue #8): its own chunk too.
-	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
+	// Every comparison renders the paired uncertainty band (issue #4 phase 9), the daily series
+	// overlay (issue #8) and the days below the reserve each year (issue #17 A4), so they are static
+	// imports: the band sits in this chunk (tab chunks have their own ceiling,
+	// scripts/guards/check_web_bundle_budget.mjs), and the overlay and the reserve years, which the
+	// Scenarios and River & reserve tabs load lazily, stay shared chunks this one preloads.
+	import PairedUncertaintyPanel from '$lib/components/uncertainty/PairedUncertaintyPanel.svelte';
+	import CompareOverlay from '$lib/components/compare/CompareOverlay.svelte';
+	import ReserveYearsChart from '$lib/components/compare/ReserveYearsChart.svelte';
 	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
 	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
-	// Days below the reserve per water year (issue #17 A4): its own chunk (it fetches series).
-	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
 	type Side = 'a' | 'b' | 'c';
@@ -562,9 +564,7 @@
 				</section>
 				<section class="panel years" aria-labelledby="years-h">
 					<h2 id="years-h">Days below the reserve, each year</h2>
-					<Lazy load={loadReserveYears}>
-						{#snippet children(ReserveYearsChart)}<ReserveYearsChart runs={chartRuns} />{/snippet}
-					</Lazy>
+					<ReserveYearsChart runs={chartRuns} />
 				</section>
 			</div>
 		{/if}
@@ -691,19 +691,15 @@
 				</section>
 
 				<div class="panel">
-					<Lazy load={loadPairedUncertainty}>
-						{#snippet children(PairedUncertaintyPanel)}
-							<PairedUncertaintyPanel
-								projectA={data!.a.project.id}
-								runA={data!.a.run.id}
-								projectB={data!.b.project.id}
-								runB={data!.b.run.id}
-								modelA={runoffModelOf(data!.a)}
-								modelB={runoffModelOf(data!.b)}
-								canEdit={(projects.find((p) => p.id === data!.b.project.id)?.role ?? 'viewer') !== 'viewer'}
-							/>
-						{/snippet}
-					</Lazy>
+					<PairedUncertaintyPanel
+						projectA={data.a.project.id}
+						runA={data.a.run.id}
+						projectB={data.b.project.id}
+						runB={data.b.run.id}
+						modelA={runoffModelOf(data.a)}
+						modelB={runoffModelOf(data.b)}
+						canEdit={(projects.find((p) => p.id === data!.b.project.id)?.role ?? 'viewer') !== 'viewer'}
+					/>
 				</div>
 
 				{#if data.comparison.ewrAssurance?.length}
@@ -725,9 +721,7 @@
 
 				<section class="panel" aria-labelledby="chart-h">
 					<div class="panel-head"><h2 id="chart-h">Daily series</h2></div>
-					<Lazy load={loadOverlay}>
-						{#snippet children(CompareOverlay)}<CompareOverlay data={data!} />{/snippet}
-					</Lazy>
+					<CompareOverlay {data} />
 				</section>
 			{/if}
 		</LoadState>

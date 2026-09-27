@@ -1068,14 +1068,18 @@ the suggested order (the IDs carry the detail):
       the one every catchment's cold load pays for, under the page ceiling;
       and Flow vs reserve and the water-year bars are shared with other
       tabs, so they stay chunks of their own.
-- [ ] **Compare runs' always-rendered lazy panels.** CompareView (the
-      Compare tab, and the `/compare` route's page) still loads the paired
-      uncertainty band and the daily series overlay as chunks of their own,
-      though every comparison renders both. With the tab ceiling (60 KB;
-      CompareView is ~15 KB) they can fold in like the Settings and Runs
-      panels did; measure the total, the tab chunk and `/compare`'s cold
-      load. The 2026-09-26 change was scoped to Settings and Runs.
-      Trigger: the next Compare runs change, or the next bundle trim.
+- [x] **Compare runs' always-rendered lazy panels** (issue #17,
+      2026-09-27). CompareView imports the paired uncertainty band, the
+      daily series overlay and the days below the reserve each year
+      statically: every comparison renders all three. The band (used only
+      there) is now in Compare runs' chunk: 14.3 + 1.7 CSS → 17.1 + 1.8 CSS
+      KB, under the 60 KB tab ceiling. The overlay and the reserve years
+      stay chunks of their own, since the Scenarios and River & reserve
+      tabs load them lazily, but Compare runs now preloads them with its
+      chunk instead of fetching them after it renders. Total 1 051 240 →
+      1 049 897 bytes gzip (−1.3 KB, 319 → 315 files); `/compare`'s cold
+      load with everything it renders 154.2 KB in 65 files → 153.0 KB in
+      61, with no second round of requests.
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →

@@ -109,8 +109,8 @@ Above the detail, for the baseline and every what-if at once
   reserve, one line says which costs less and by how much. A what-if over
   other dates, or on another engine version, gets a line saying part of its
   change comes from that.
-- **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a lazy
-  chunk): grouped bars per water year (Oct–Sep) for every run, from each
+- **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a chunk
+  shared with River & reserve): grouped bars per water year (Oct–Sep) for every run, from each
   run's stored `ewr_shortfall` series (through the Runs tab's series cache)
   by the engine's `reserveDaysByWaterYear` (`views/reserveYears.ts`). That
   is the test behind `summary.catchment.ewrDaysNotMet` (a day whose
@@ -291,8 +291,8 @@ bottom:
    river pump at a farm reads as 0 there"), under the rule in
    [Series and metrics only one run has](#series-and-metrics-only-one-run-has)
    (`delta.ts` `farmFeatureMetrics`). These columns don't sort.
-6. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, its own
-   chunk). Pick a **node** and one of its **series** (outflow, dam storage,
+6. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
+   shared with the Scenarios tab). Pick a **node** and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
    **B − A** on a second chart underneath. It opens on the catchment's
    simulated outflow; switching node keeps the same kind of series when the
@@ -321,7 +321,7 @@ bottom:
    compare-specific route.
 
 **Uncertainty** (engine ≥ 0.26.0, issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
-`uncertainty/PairedUncertaintyPanel.svelte`, its own chunk), after the
+`uncertainty/PairedUncertaintyPanel.svelte`, in Compare runs' chunk), after the
 headline results, for two runs of **one project**:
 
 - Each run's own newest band side by side (EWR days not met, shortfall,

@@ -3492,7 +3492,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
 - **Days below the reserve, each year** (right): grouped bars per water year
-  (`ReserveYearsChart.svelte`, its own chunk; part years faded), a legend,
+  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years faded), a legend,
   a note and **Show as a table**. It fills the height of its row.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
   a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,

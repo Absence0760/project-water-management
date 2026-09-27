@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Per-node daily series overlay (issue #8, docs/run-comparison.md § Daily
 	// series): pick the catchment or a node matched across the two runs, and one
-	// series both stored, then chart A against B and B − A underneath. Loaded
-	// as its own chunk by the compare page. Series lists come from
+	// series both stored, then chart A against B and B − A underneath. Its own
+	// chunk: Compare runs imports it, the Scenarios tab loads it lazily. Series lists come from
 	// GET …/runs/:runId and values from GET …/runs/:runId/series, one pair at a
 	// time; the node matching and the delta are the pure helpers in overlay.ts.
 	// A feature series only one run stored (a river pump the scenario added)
