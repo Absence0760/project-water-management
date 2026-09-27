@@ -99,7 +99,14 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			unsupported.push(`Moving ${label(n)} (what it drains into): a scenario can't move a node yet. Remove it and add a new one where it should drain.`);
 		const settable = new Set<string>(NODE_SET_FIELDS[n.kind]);
 		const keys = new Set([...Object.keys(was), ...Object.keys(n)]);
+		// A damCapacityM3 op resizes an existing dam's area (or survey curve) along its own relation (engine
+		// ≥ 1.10.0, model.md §2.13). The table records what it shows, so the area as shown follows the capacity
+		// op; a curve dam's resized curve can't be shown, so its capacity is changed through "Add a change".
+		const resized = n.kind === 'farm' && was.damCapacityM3 > 0 && n.damCapacityM3 > 0 && n.damCapacityM3 !== was.damCapacityM3;
+		if (resized && was.damCurve?.length)
+			unsupported.push(`The capacity of ${label(n)}'s dam, which has a survey curve: a scenario resizes the curve along the dam's own relation, which the table can't show. Add it as a change instead.`);
 		for (const k of keys) {
+			if (resized && k === 'damAreaFullM2') continue;
 			if (IGNORED_NODE_KEYS.has(k) || k === 'kind' || k === 'downstreamNodeId') continue;
 			const before = (was as unknown as Record<string, unknown>)[k];
 			const now = (n as unknown as Record<string, unknown>)[k];
@@ -108,6 +115,7 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			else if (k === 'damCurve') unsupported.push(`The dam survey curve of ${label(n)}: a scenario can't change a survey curve yet.`);
 			else unsupported.push(`${NODE_FIELD_SPECS[k as NodeSetField]?.label ?? k} on ${label(n)}: a scenario can't set that on a ${n.kind}.`);
 		}
+		if (resized) ops.push({ op: 'node.set', nodeId: n.id, field: 'damAreaFullM2', value: n.damAreaFullM2 ?? null });
 	}
 
 	// --- nodes added: node.add, each after the node it drains into

@@ -638,9 +638,16 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   holding the rest back until undone (the engine has no op for them yet;
   [§ Not yet supported](#not-yet-supported)): editing or removing an
   existing crop, changing a node's kind, moving a node (what it drains
-  into), a new node that drains nowhere, a dam survey curve, and a field the
+  into), a new node that drains nowhere, a dam survey curve, the capacity
+  of a dam with a survey curve (the op would resize the curve, which the
+  table can't show; add it as a change instead, engine ≥ 1.10.0), and a field the
   engine doesn't let a scenario set on that kind of node (a gauge's area).
   Row order is display only and isn't recorded.
+- **A dam's capacity in the table** records the area the table shows: the
+  capacity op (which resizes the area along the dam's own relation, § Dam
+  capacity) is followed by a `damAreaFullM2` op with the table's value
+  (blank = estimated). To enlarge a dam along its own relation, add the
+  capacity as a change instead.
 
 Tests: `scenarios/fields.test.ts` (every node field, transfer field and
 settings path the engine allows has a spec; values round-trip through the
