@@ -63,13 +63,12 @@ describe('fitInput', () => {
 
 describe('fitParams', () => {
 	it('offers GR4J X1, X3, X4 ticked, and X2 only when groundwater exchange is on (unticked)', () => {
-		expect(fitParams('gr4j').map((p) => [p.key, p.checked])).toEqual([
+		expect(fitParams().map((p) => [p.key, p.checked])).toEqual([
 			['x1', true],
 			['x3', true],
 			['x4', true]
 		]);
-		expect(fitParams('gr4j', true).find((p) => p.key === 'x2')).toMatchObject({ checked: false });
-		expect(fitParams('legacy').filter((p) => p.checked).map((p) => p.key)).toEqual(['a', 'b', 'summerFactor', 'winterFactor']);
+		expect(fitParams(true).find((p) => p.key === 'x2')).toMatchObject({ checked: false });
 	});
 });
 
@@ -196,14 +195,11 @@ describe('validationRecordOptions', () => {
 });
 
 describe('applyReport', () => {
-	it('writes only the fitted parameters, into gr4j or calibration, and leaves the rest of the form alone', () => {
+	it('writes only the fitted parameters into gr4j, and leaves the rest of the form alone', () => {
 		const s = defaultProjectSettings();
 		const g = applyReport(s, report());
 		expect(g.gr4j).toEqual({ x1: 800, x2: 0, x3: 40, x4: 1.2, warmupDays: 365 });
 		expect(g.calibration).toBe(s.calibration);
-		const legacy = applyReport(s, report({ model: 'legacy', free: ['a', 'b'], params: { a: 0.2, b: 1.4, summerFactor: 0.9 } }));
-		expect(legacy.calibration).toMatchObject({ a: 0.2, b: 1.4, summerFactor: 0.1 });
-		expect(legacy.gr4j).toBe(s.gr4j);
 	});
 
 	it('round-trips an engine report: applied settings reproduce the fitted score', () => {

@@ -72,8 +72,8 @@ export function ageText(p: Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDa
 /** "2 of 12 farms short this week"; null when unknown (the caller says why). */
 export function farmsShortText(p: Pick<PortfolioProject, 'farmsShort7' | 'farmCount'>): string | null {
 	if (p.farmsShort7 == null) return null;
-	if (!p.farmCount) return 'No farms';
-	return `${p.farmsShort7} of ${plural(p.farmCount, 'farm')} short this week`;
+	if (!p.farmCount) return 'No units';
+	return `${p.farmsShort7} of ${plural(p.farmCount, 'unit')} short this week`;
 }
 
 /** Why the farm counts are unknown. */
@@ -84,7 +84,7 @@ export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
 /** "Kareebos 18 %", "No farm dams", or why it is unknown. */
 export function damText(p: Pick<PortfolioProject, 'lowestDamPct' | 'damsKnown'>): string {
 	if (!p.damsKnown) return 'Unknown until a run is published';
-	if (!p.lowestDamPct) return 'No farm dams';
+	if (!p.lowestDamPct) return 'No dams';
 	return `${p.lowestDamPct.nodeName} ${fmtNum(p.lowestDamPct.pct * 100)} %`;
 }
 
@@ -125,7 +125,7 @@ export const SORT_LABELS: Record<PortfolioSortKey, string> = {
 	status: 'EWR status (worst first)',
 	name: 'Catchment name',
 	age: 'Figures age (oldest first)',
-	farms: 'Farms short this week (most first)',
+	farms: 'Units short this week (most first)',
 	dam: 'Lowest dam (lowest first)'
 };
 
@@ -249,6 +249,6 @@ export function portfolioTotals(rows: readonly PortfolioProject[]): PortfolioTot
 /** "2 of 14 farms", "No farms", or null when no catchment's count is known (the caller says why). */
 export function farmsShortTotalText(t: Pick<PortfolioTotals, 'farmsShort7' | 'farmsCounted'>): string | null {
 	if (t.farmsShort7 == null) return null;
-	if (!t.farmsCounted) return 'No farms';
-	return `${fmtNum(t.farmsShort7)} of ${plural(t.farmsCounted, 'farm')}`;
+	if (!t.farmsCounted) return 'No units';
+	return `${fmtNum(t.farmsShort7)} of ${plural(t.farmsCounted, 'unit')}`;
 }

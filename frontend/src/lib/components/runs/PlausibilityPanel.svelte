@@ -25,7 +25,7 @@
 		projectId: string;
 		runId: string;
 		/** The shown run's runoff model (RunMeta.runoffModel). */
-		runoffModel: string | undefined;
+		runoffModel: RunMeta['runoffModel'];
 		/** The project's runs, newest first: the latest run of each other runoff model is overlaid. */
 		runs: RunMeta[];
 	} = $props();

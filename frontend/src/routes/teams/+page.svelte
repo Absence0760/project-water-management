@@ -97,7 +97,7 @@
 					<div><dt>Projects</dt><dd>{t.projectCount}</dd></div>
 					<div><dt>Members</dt><dd>{t.memberCount}</dd></div>
 					<div>
-						<dt>Farms short this week</dt>
+						<dt>Units short this week</dt>
 						<dd>
 							{#if totals}{farmsShortTotalText(totals) ?? '–'}{:else if pf === null}–{:else}<span class="muted">…</span>{/if}
 						</dd>

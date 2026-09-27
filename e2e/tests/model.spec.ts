@@ -183,7 +183,7 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	});
 	await projectsLink.click();
 	await expect.poll(() => asked).toBe('You have unsaved model changes. Leave without saving?');
-	await expect(page.getByRole('heading', { level: 1, name: 'Unsaved guard' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Unsaved guard' })).toBeVisible();
 	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
 
 	page.once('dialog', (d) => void d.accept());
@@ -197,7 +197,7 @@ test('large values show thousands separators in the one-node form and the view-o
 	await putModel(page.request, project.id, sampleModel()); // Upper farm: 150 000 m³ dam
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByRole('dialog').getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+	await page.getByRole('dialog').getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
 
 	const capacity = page.getByLabel('Capacity (m³)');
 	await expect(capacity).toHaveValue('150,000');
@@ -307,7 +307,7 @@ test.describe('network layout', () => {
 			await card.getByRole('button', { name: 'Edit Upper farm' }).click();
 			const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
 			const picker = sheet.getByLabel('Node to edit');
-			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · farm');
+			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · unit');
 			await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
 			expect((await sheet.boundingBox())!.width).toBeGreaterThan(370);
 
@@ -316,7 +316,7 @@ test.describe('network layout', () => {
 			await expect(picker).toBeInViewport();
 			await expect(sheet.getByRole('button', { name: 'Next node' })).toBeInViewport();
 			await sheet.getByRole('button', { name: 'Next node' }).click();
-			await expect(page.getByRole('dialog', { name: 'Edit Lower farm' }).getByLabel('Node to edit').locator('option:checked')).toHaveText('3. Lower farm · farm');
+			await expect(page.getByRole('dialog', { name: 'Edit Lower farm' }).getByLabel('Node to edit').locator('option:checked')).toHaveText('3. Lower farm · unit');
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 		});
 	});
@@ -328,11 +328,11 @@ test('the schematic can colour farms by the latest run’s supply, and says whic
 	await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=network`);
 
-	const colourBy = page.getByLabel('Colour farms by');
+	const colourBy = page.getByLabel('Colour units by');
 	// On by default once there is a run (issue #17: the map answers "who is short?" first).
 	await expect(colourBy.locator('option:checked')).toHaveText('Supply, latest run');
 	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
-	await expect(page.getByText(/^Farms coloured by share of irrigation demand supplied in run “Baseline”, ran today\./)).toBeVisible();
+	await expect(page.getByText(/^Units coloured by share of irrigation demand supplied in run “Baseline”, ran today\./)).toBeVisible();
 	await expect(upper).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
 	// Not colour-only: the share (or "no demand") is on the node's label and in the drainage tree.
 	await expect(upper).toContainText(/(\d+% supplied|no demand)/);
@@ -350,5 +350,5 @@ test('the schematic can colour farms by the latest run’s supply, and says whic
 	// Back to Nothing: today's plain drawing.
 	await colourBy.selectOption({ label: 'Nothing' });
 	await expect(page.locator('svg.schematic g.node[data-supply]')).toHaveCount(0);
-	await expect(page.getByText(/^Farms coloured by/)).toHaveCount(0);
+	await expect(page.getByText(/^Units coloured by/)).toHaveCount(0);
 });

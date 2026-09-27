@@ -1,9 +1,11 @@
 // The nominated evidence run (010_run_nomination, docs/ui.md § Evidence
 // nomination): an editor nominates a run with a reason, replaces it, and the
 // history keeps both; nominated runs can't be deleted; a newer run with a
-// different runoff model is flagged; compare says which side is the evidence;
+// different runoff model (an old legacy run, planted: the API can't make one
+// since engine 1.0.0) is flagged; compare says which side is the evidence;
 // a viewer reads it all but can't nominate.
-import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('an editor nominates a run as evidence, replaces it, and the history keeps both', async ({ page, owner, signIn }) => {
@@ -51,17 +53,17 @@ test('an editor nominates a run as evidence, replaces it, and the history keeps 
 	const rowB = list.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^GR4J B/ }) });
 	await expect(rowB.getByText('Evidence', { exact: true })).toBeVisible();
 
-	// A newer run of another runoff model is flagged; it can't itself be nominated.
+	// A newer run of another runoff model (a stored legacy run, engine < 1.0.0) is flagged; it can't itself be nominated.
 	await expect(page.getByTestId('evidence-drift')).toHaveCount(0);
-	await updateSettings(page.request, project.id, { runoffModel: 'legacy' });
 	const legacy = await createRun(page.request, project.id, 'Legacy');
+	await plantLegacyRun(legacy);
 	await page.goto(`/projects/${project.id}?tab=runs&run=${legacy}`);
 	await expect(page.getByTestId('evidence-drift')).toHaveText(
 		'1 run made after the nominated evidence run “GR4J B” uses a different runoff model (legacy (b023 workbook), not GR4J). ' +
 			'The nomination still stands: results from those runs are not the evidence unless one is nominated, with a reason.'
 	);
 	await expect(page.getByRole('heading', { level: 2, name: 'Legacy' })).toBeVisible();
-	await expect(evidence.getByText(/legacy runoff model is workbook comparison only/)).toBeVisible();
+	await expect(evidence.getByText(/legacy runoff model \(removed in engine 1\.0\.0\) is workbook comparison only/)).toBeVisible();
 	await expect(evidence.getByRole('button', { name: /^Nominate/ })).toHaveCount(0);
 
 	// Compare says which side is the evidence, and what replaced the other.

@@ -32,7 +32,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 
 	// …and can read but not change anything.
 	await listRow.getByRole('link', { name: 'Shared catchment' }).click();
-	await expect(v.getByRole('heading', { level: 1, name: 'Shared catchment' })).toBeVisible();
+	await expect(v.getByTestId('project-name').filter({ hasText: 'Shared catchment' })).toBeVisible();
 	await expect(v.getByLabel('Name', { exact: true })).not.toBeEditable();
 	await expect(v.getByRole('button', { name: 'Save details' })).toHaveCount(0);
 	await expect(v.getByLabel('Add member by email')).toHaveCount(0);
@@ -81,7 +81,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	// A project that was never shared is indistinguishable from one that doesn't exist.
 	await v.goto(`/projects/${secret.id}`);
 	await expect(v.getByRole('alert')).toContainText("This project doesn't exist or you don't have access to it.");
-	await expect(v.getByRole('heading', { level: 1, name: 'Private catchment' })).toHaveCount(0);
+	await expect(v.getByTestId('project-name').filter({ hasText: 'Private catchment' })).toHaveCount(0);
 	await v.getByRole('alert').getByRole('link', { name: 'Back to projects' }).click();
 	await expect(v.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 });
@@ -137,7 +137,7 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
 	await expect(pending).toHaveCount(0);
 	await page.reload();
-	await expect(page.getByRole('heading', { level: 1, name: 'Invite catchment' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Invite catchment' })).toBeVisible();
 	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
 });
 

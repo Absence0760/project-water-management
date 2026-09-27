@@ -23,7 +23,7 @@ const text = (max: number) =>
 		.max(max)
 		.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 
-/** Why a legacy run can't be signed. */const LEGACY = 'a legacy (b023 workbook) run is a workbook comparison only, not evidence (audit H1), so it cannot be signed off';
+/** Why a legacy run can't be signed. */const LEGACY = 'a legacy (b023 workbook) run, from before engine 1.0.0 removed that model, is a workbook comparison only, not evidence (audit H1), so it cannot be signed off';
 
 export const SignoffBody = z.object({
 	fullName: text(200),

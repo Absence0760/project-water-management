@@ -19,7 +19,6 @@
 		type ObjectiveId,
 		type ProjectModel,
 		type ProjectSettings,
-		type RunoffModelId,
 		type SeriesProvenance,
 		type ApanDailyFingerprint
 	} from '@water-management/engine';
@@ -52,7 +51,6 @@
 
 	let {
 		projectId,
-		runoffModel,
 		x2Open,
 		settings,
 		model,
@@ -63,7 +61,6 @@
 		onApply
 	}: {
 		projectId: string;
-		runoffModel: RunoffModelId;
 		x2Open: boolean;
 		/** The Settings form as it stands (unsaved edits included). */
 		settings: () => ProjectSettings;
@@ -98,7 +95,7 @@
 	const recordOptions = $derived(validationRecordOptions(seriesKinds, calibrationFlowKind));
 	const chosenRecord = $derived(validationRecord && recordOptions.includes(validationRecord) ? validationRecord : null);
 	// Seeded from the defaults up front, so the checkbox bindings never see a missing key.
-	let picked = $state<Record<string, boolean>>(untrack(() => Object.fromEntries(fitParams(runoffModel, x2Open).map((p) => [p.key, p.checked]))));
+	let picked = $state<Record<string, boolean>>(untrack(() => Object.fromEntries(fitParams(x2Open).map((p) => [p.key, p.checked]))));
 	let status = $state<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
 	let progress = $state<CalibrationProgress | null>(null);
 	let report = $state.raw<CalibrationReport | null>(null);
@@ -107,7 +104,7 @@
 	// What the shown report was run on, for its fit record.
 	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null } | null = null;
 
-	const params = $derived(fitParams(runoffModel, x2Open));
+	const params = $derived(fitParams(x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
 	// once exchange is on) starts at its default.
 	$effect(() => {
@@ -122,7 +119,6 @@
 	const columns = $derived(report ? scoreColumns(report) : []);
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty, runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
-	const stale = $derived(report !== null && report.model !== runoffModel);
 
 	async function start() {
 		if (!canStart || budget === null || seed === null || starts === null) return;
@@ -145,7 +141,7 @@
 			};
 			status = 'running';
 			runStarts = starts;
-			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
+			handle = startFit({ input, model: 'gr4j', objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
 			ran = context;
 			status = 'done';
@@ -166,7 +162,7 @@
 	}
 
 	function apply() {
-		if (report && ran && !stale) onApply(report, fitRecordFor(report, ran.settings, ran));
+		if (report && ran) onApply(report, fitRecordFor(report, ran.settings, ran));
 	}
 
 	const fmtScore = (v: number | null, unit: '' | '%') => (v === null ? '–' : unit === '%' ? `${v > 0 ? '+' : ''}${fmtNum(v, 1)}%` : fmtNum(v, 2));
@@ -182,7 +178,7 @@
 		<p class="muted small">Upload an observed or logger flow record (Data) to fit the parameters to it.</p>
 	{:else}
 		<p class="muted small">
-			Searches the {runoffModel === 'gr4j' ? 'GR4J' : 'legacy'} parameters for the best match between the run and the observed record, over the
+			Searches the GR4J parameters for the best match between the run and the observed record, over the
 			calibration window above. It uses the form as it stands, fits in your browser, and never saves: check the result, apply it to the form,
 			then save.
 		</p>
@@ -286,7 +282,6 @@
 					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>
 				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
-				{#if stale}<p class="alert alert-info small">This fit is for the other runoff model; switch back to apply it.</p>{/if}
 				<div class="table-wrap">
 					<table class="data compact">
 						<caption>Parameters</caption>
@@ -355,7 +350,7 @@
 				</p>
 				{#if !readonly}
 					<div class="row">
-						<button type="button" class="btn btn-primary" onclick={apply} disabled={stale}>Apply to form</button>
+						<button type="button" class="btn btn-primary" onclick={apply}>Apply to form</button>
 						<span class="muted small">Fills in the fitted parameters and records this fit with them; nothing is saved until you press Save settings.</span>
 					</div>
 				{/if}

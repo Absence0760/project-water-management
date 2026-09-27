@@ -8,8 +8,10 @@
 	// first screen is the height left below its top (measured, as the Summary's
 	// is). Below it, the panels that were Runs & results' River & Reserve group,
 	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
-	// the uncertainty bands, the outcome matrix and the water account.
+	// the uncertainty bands, the outcome matrix, the seasonal outlook and the
+	// water account.
 	import { onDestroy, tick, untrack } from 'svelte';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
@@ -25,16 +27,21 @@
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import UncertaintyPanel from '$lib/components/uncertainty/UncertaintyPanel.svelte';
+	import OutcomeMatrixPanel from '$lib/components/outcomes/OutcomeMatrixPanel.svelte';
+	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
+	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
 	import { riverAnchor } from './links';
 	import { deltaLabel, ewrRuleText, pickRiverRun, riverKpis } from './river';
 
-	// The chart pulls in uPlot and the panels are the Runs tab's lazy chunks: each its own chunk here too.
+	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
+	// water account) are in this tab's chunk: only this tab uses them, and as chunks of their own they
+	// loaded on every visit anyway, paying split overhead (issue #9). The flow chart (uPlot, shared with
+	// the Summary), the water-year bars (shared with Compare runs) and Reserve compliance (only with a
+	// rule table) stay lazy.
 	const loadFlowVsReserve = () => import('$lib/components/overview/FlowVsReserve.svelte');
 	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
 	const loadAssurancePanel = () => import('$lib/components/runs/EwrAssurancePanel.svelte');
-	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
-	const loadOutcomePanel = () => import('$lib/components/outcomes/OutcomeMatrixPanel.svelte');
-	const loadWaterAccountPanel = () => import('$lib/components/reliability/WaterAccountPanel.svelte');
 
 	let {
 		projectId,
@@ -186,44 +193,45 @@
 		return () => ro.disconnect();
 	});
 
+	// The section header (workspace/SectionHeader) carries the title; the page gives it the run line,
+	// the run picker and Open in Runs & results.
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
+
 	const LEGACY_TITLE =
 		'Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
 </script>
 
-<div class="river-head">
-	<div class="title">
-		<h2 id="river-h">River &amp; reserve</h2>
-		{#if pick}
-			<p class="context muted" data-testid="river-context">
-				<strong class="lbl">{name(pick.run)}</strong>
-				{#if pick.run.legacy}<span class="badge badge-warn" title={LEGACY_TITLE}>Workbook comparison</span>{/if}
-				{#if pick.run.evidence === 'current'}<span class="badge badge-owner">Evidence</span>{/if}
-				<span>· {fmtDay(pick.run.startDate)} – {fmtDay(pick.run.endDate)}</span>
-				<span>· engine {pick.run.engineVersion}</span>
-				{#if summary}<span>· {ewrRuleText(summary)}</span>{/if}
-			</p>
-		{:else}
-			<p class="context muted">Whether enough water stays in the river for its Ecological Reserve, run by run.</p>
-		{/if}
-	</div>
+{#snippet headerContext()}
 	{#if pick}
-		<div class="head-actions">
-			<div class="field inline">
-				<label for="river-run">Run</label>
-				<select id="river-run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
-					{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
-				</select>
-			</div>
-			<a class="btn btn-sm" href={runHref(pick.run.id)}>Open in Runs &amp; results</a>
-		</div>
+		<span class="river-context" data-testid="river-context">
+			<strong class="lbl">{name(pick.run)}</strong>
+			{#if pick.run.legacy}<span class="badge badge-warn" title={LEGACY_TITLE}>Workbook comparison</span>{/if}
+			{#if pick.run.evidence === 'current'}<span class="badge badge-owner">Evidence</span>{/if}
+			<span>· {fmtDay(pick.run.startDate)} – {fmtDay(pick.run.endDate)}</span>
+			<span>· engine {pick.run.engineVersion}</span>
+			{#if summary}<span>· {ewrRuleText(summary)}</span>{/if}
+		</span>
+	{:else}
+		<span>Whether enough water stays in the river for its Ecological Reserve, run by run.</span>
 	{/if}
-</div>
+{/snippet}
+{#snippet headerActions()}
+	{#if pick}
+		<div class="field inline run-pick">
+			<label for="river-run">Run</label>
+			<select id="river-run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
+				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+			</select>
+		</div>
+		<a class="btn" href={runHref(pick.run.id)}>Open in Runs &amp; results</a>
+	{/if}
+{/snippet}
 
 {#if runs === null}
 	<p class="alert alert-error" role="alert">The run list couldn’t be loaded, so there is nothing to show yet. Reload the page to try again.</p>
 {:else if !pick}
 	<section class="panel empty" aria-labelledby="river-empty-h">
-		<h3 id="river-empty-h">No run yet</h3>
+		<h2 id="river-empty-h">No run yet</h2>
 		<p class="muted">
 			After a run, this page shows the simulated outflow against the EWR, how often the reserve was met, the days below it each
 			water year, compliance by month and the uncertainty on those findings.
@@ -299,77 +307,42 @@
 			</div>
 			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify. -->
 			<div class="panel" id="res-uncertainty">
-				<Lazy load={loadUncertaintyPanel}>
-					{#snippet children(UncertaintyPanel)}
-						{#key shownRun.id}
-							<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
-						{/key}
-					{/snippet}
-				</Lazy>
+				{#key shownRun.id}
+					<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
+				{/key}
 			</div>
 			<div class="panel" id="res-outcomes">
-				<Lazy load={loadOutcomePanel}>
-					{#snippet children(OutcomeMatrixPanel)}
-						{#key shownRun.id}
-							<OutcomeMatrixPanel
-								{projectId}
-								run={shownRun}
-								hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
-								outcomes={project.settings.outcomes}
-								nodes={editor.model.nodes}
-								ewrRules={project.settings.ewrRules}
-								{onProjectChange}
-								canEdit={canEdit}
-							/>
-						{/key}
-					{/snippet}
-				</Lazy>
+				{#key shownRun.id}
+					<OutcomeMatrixPanel
+						{projectId}
+						run={shownRun}
+						hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
+						outcomes={project.settings.outcomes}
+						nodes={editor.model.nodes}
+						ewrRules={project.settings.ewrRules}
+						{onProjectChange}
+						canEdit={canEdit}
+					/>
+				{/key}
+			</div>
+			<div class="panel" id="res-outlook">
+				{#key shownRun.id}
+					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} />
+				{/key}
 			</div>
 			<div class="panel" id="res-water-account">
-				<Lazy load={loadWaterAccountPanel}>
-					{#snippet children(WaterAccountPanel)}
-						<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-					{/snippet}
-				</Lazy>
+				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
 			</div>
 		</div>
 	{/if}
 {/if}
 
 <style>
-	.river-head {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.75rem 1.5rem;
-		margin: 0 0 1rem;
+	.river-context {
+		display: contents;
 	}
-	.river-head h2 {
-		margin: 0;
-		font-size: 1.6rem;
-	}
-	.title {
-		min-width: 0;
-	}
-	.context {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.25rem 0.4rem;
-		margin: 0.2rem 0 0;
-		font-size: 0.9rem;
-	}
-	.context .lbl {
+	.river-context .lbl {
 		color: var(--text);
-	}
-	.head-actions {
-		display: flex;
-		align-items: flex-end;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		min-width: 0;
-		max-width: 100%;
 	}
 	.inline {
 		flex-direction: row;
@@ -386,8 +359,9 @@
 	.empty {
 		max-width: 44rem;
 	}
-	.empty h3 {
+	.empty h2 {
 		margin-top: 0;
+		font-size: 1.05rem;
 	}
 	.first {
 		display: grid;
@@ -491,9 +465,6 @@
 			width: 100%;
 			max-width: 100%;
 			min-height: 44px;
-		}
-		.head-actions {
-			width: 100%;
 		}
 	}
 </style>

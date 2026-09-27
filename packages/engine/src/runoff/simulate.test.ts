@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultProjectSettings, type ModelInput } from '../project';
+import { defaultProjectSettings, LEGACY_UPGRADED_WARNING, type ModelInput } from '../project';
 import { runModel } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { gr4j } from './gr4j';
@@ -108,7 +108,7 @@ describe('runModel with GR4J', () => {
 		// Closed catchment: no exchange series.
 		expect(series(out, 'exchange')).toBeUndefined();
 		expect(b.exchangeMm).toBe(0);
-		// The legacy intermediates are gone.
+		// No legacy intermediates (the b023 model was removed in engine 1.0.0).
 		expect(series(out, 'base_flow')).toBeUndefined();
 		// Conservation: a closed model can't make more flow than the rain plus what it started with.
 		expect(b.flowMm).toBeLessThanOrEqual(b.rainMm + b.storageStartMm);
@@ -137,8 +137,6 @@ describe('runModel with GR4J', () => {
 		// Boundaries themselves are fine: 0.6 and 0.85 are inside the range.
 		const boundary = [0.6, ...flat.slice(1, 11), 0.85] as never;
 		expect(runModel(catchment(rain, { panCoefficient: boundary })).summary.warnings.some((w) => w.includes('pan coefficient'))).toBe(false);
-		// Legacy doesn't use the pan coefficient at all: no warning even when it's out of range.
-		expect(runModel(catchment(rain, { runoffModel: 'legacy', panCoefficient: mixed })).summary.warnings.some((w) => w.includes('pan coefficient'))).toBe(false);
 	});
 
 	it('explains a short run whose flow exceeds its rain', () => {
@@ -151,8 +149,15 @@ describe('runModel with GR4J', () => {
 		expect(out.summary.warnings.find((w) => w.startsWith('natural flow is'))).toMatch(/GR4J stores held 220 mm after the warm-up/);
 	});
 
-	it('a legacy run has no runoff balance', () => {
-		expect(runModel(catchment(rain, { runoffModel: 'legacy' })).summary.runoff).toBeUndefined();
+	it('a project still set to the removed legacy model runs GR4J, with its balance, and says so (engine 1.0.0)', () => {
+		const settings = { runoffModel: 'legacy', calibration: { a: 0.09, recessionFactors: [0.9], rainThresholdMm: 2, catchmentAreaKm2: null } } as never;
+		const out = runModel(catchment(rain, settings));
+		expect(out.summary.runoff).toMatchObject({ model: 'gr4j' });
+		expect(out.summary.warnings).toContain(LEGACY_UPGRADED_WARNING);
+		// Bit for bit the GR4J run of the same project (positive control: that one doesn't warn).
+		const gr4jRun = runModel(catchment(rain));
+		expect(gr4jRun.summary.warnings).not.toContain(LEGACY_UPGRADED_WARNING);
+		expect(series(out, 'natural_flow')).toEqual(series(gr4jRun, 'natural_flow'));
 	});
 
 	it('refuses to run with no potential evaporation, which would turn nearly all rain into flow', () => {
@@ -164,8 +169,6 @@ describe('runModel with GR4J', () => {
 		const one = new Array(12).fill(0);
 		one[3] = 200;
 		expect(runModel(catchment(rain, { apanMm: one as never })).summary.runoff!.petMm).toBeGreaterThan(0);
-		// Legacy doesn't use evaporation, so it still runs.
-		expect(runModel(catchment(rain, { runoffModel: 'legacy', apanMm: zeros })).days).toBe(rain.length);
 	});
 
 	it('hasPotentialEvaporation needs A-pan × pan coefficient above 0 in some month', () => {

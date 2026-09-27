@@ -170,7 +170,7 @@ function input(nodes: NetworkNode[], settings: Partial<ModelInput['settings']> =
 	const apanMm = new Array(12).fill(0);
 	apanMm[3] = 2000;
 	return {
-		settings: { runoffModel: 'legacy', apanMm: apanMm as never, effectiveRainFraction: 0, lakeEvapFactor: 0, ewrPragmaticM3PerDay: flat(500) as never, ...settings },
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, lakeEvapFactor: 0, ewrPragmaticM3PerDay: flat(500) as never, ...settings },
 		model: {
 			nodes,
 			crops: [{ id: 'c', name: 'Crop', cropFactor: flat(1) }],

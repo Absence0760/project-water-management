@@ -86,7 +86,8 @@ consultant or an Australian irrigator. It also recommends where to go first:
   hydrologist should be asked to trust an engine the home hydrologist hasn't
   accepted. In particular, audit **H1** (the rain model doesn't conserve water
   at event scale) must be decided before a new climate regime is calibrated on
-  it ([engine-audit.md](../engine-audit.md)).
+  it ([engine-audit.md](../engine-audit.md)). *Done 2026-09-26: engine 1.0.0
+  removed that model; GR4J is the only one.*
 - **Commercial model abroad.** Who sells outside South Africa (the operator
   directly, local partners, a joint venture). See Open decision D1.
 - **What this plan needs from Step 4** (named seams, not designed here):
@@ -118,15 +119,15 @@ consultant or an Australian irrigator. It also recommends where to go first:
 | --- | --- | --- |
 | Water year is Oct–Sep | `packages/engine/src/calendar.ts` · `waterYearIndex()` (`(m + 2) % 12`); `calendar.ts` · `waterYearOf()` (doc: "South African water year"); `network/ewr.ts` · `ewrCompliance()` rows; `quality.ts` ("Water year starting 1 October"); `compare.ts` · `WY_MONTHS`; `frontend/src/lib/format/months.ts` · `WATER_YEAR_MONTHS`, `WATER_YEAR_CALENDAR`, `describeMonths()`; `components/ewr/EwrHeatmap.svelte` ("water years October to September") | `settings.waterYearStartMonth` (WP-I.4) |
 | Monthly tables stored Oct-first | `calendar.ts` · `Monthly`; `project.ts` · `apanMm`, `ewrPragmaticM3PerDay`, `CropDef.cropFactor`; `run.ts:158` and `:585` index them with `waterYearIndex` | Storage order stays (Decision D4). Display rotates. |
-| SA seasons | `project.ts` · `defaultProjectSettings()` `summerMonths: [1,2,3,4,5,11,12]`, `winterTodayRainMm: 35`, `winterNextDayRainMm: 9`; `flow.ts` · `seasonFlag()` (b023 winter-rainfall logic) | Configurable already. Defaults move into country presets (WP-I.4). Non-winter-rainfall climates use another generator (WP-I.6). |
+| ~~SA seasons~~ | Removed with the legacy runoff model in engine 1.0.0 (issue #16): the summer months and winter thresholds of `flow.ts` · `seasonFlag()` (b023 winter-rainfall logic) are gone; GR4J has no season switch | – |
 | A-pan is the only evaporation input | `demand.ts` · `grossCropMm()` ("WR90 A-pan × crop factor"); `project.ts` · `ProjectSettings.apanMm`; `run.ts:610` warning | `settings.evaporation` union (WP-I.5) |
-| Rain → flow is the b023 recession | `flow.ts` · `computeFlowColumns()`, `CalibrationParams` | Generator interface (WP-I.6) |
-| Rain priority is catchment → CHIRPS → forecast | `flow.ts` · `rainUsed()`; `run.ts:575-580`; `project.ts` · `SERIES_KINDS` (`rain_chirps_mm`) | `settings.rainPriority` plus series provenance (WP-I.10) |
+| ~~Rain → flow is the b023 recession~~ | GR4J only since engine 1.0.0 (issue #16), behind the `RunoffModel` interface (`runoff/types.ts`) | Another generator (WP-I.6) |
+| Rain priority is catchment → CHIRPS → forecast | `runoff/simulate.ts` · `runoffForcing()` (`flow.ts` · `rainUsed()` until engine 1.0.0); `run.ts:575-580`; `project.ts` · `SERIES_KINDS` (`rain_chirps_mm`) | `settings.rainPriority` plus series provenance (WP-I.10) |
 | ~~Pitman is the modelled-flow fallback~~ | Removed in engine 0.10.0 (engine-audit P1): no fallback, no `flow_pitman_m3s` | A "modelled natural flow" kind with a source (GloFAS, WRSM, …) would be a new, comparison-only kind (WP-I.10) |
 | EWR is 12 pragmatic m³/day values | `project.ts` · `ewrPragmaticM3PerDay`; `run.ts:156-158` | EWR rule sets (WP-I.7) |
 | Allocation is proportional sharing | `network/curtailment.ts` · `computeCurtailment()` (equitable fraction ΣI/ΣH) | Allocation rule sets (WP-I.8) |
 | Units fixed to m³/day, l/s, Mm³ | `curtailment.ts` · `M3_PER_DAY_PER_LS`; run series `unit` strings; UI | Display-unit layer (WP-I.9). The engine stays SI. |
-| English strings leave the engine | `RunSummary.warnings: string[]`; `RunSeries.label`; `flow.ts` series labels; `compare.ts` labels | Warning codes plus params (WP-I.3) |
+| English strings leave the engine | `RunSummary.warnings: string[]`; `RunSeries.label`; `runoff/simulate.ts` series labels; `compare.ts` labels | Warning codes plus params (WP-I.3) |
 | en-US number format | `frontend/src/lib/format/number.ts` · `fmtNum()` (`'en-US'` on purpose, to match the workbook), `fmtDate()`; `series/csv.ts:88` and `network/fields.ts:147` `toLocaleString('en-US')`; `projects/grouping.ts:45` `Intl.Collator('en')` | Locale-aware (WP-I.2) |
 | **Fixed:** `parseNum` stripped commas | A comma-decimal `1,5` used to store **15**. Now a comma is a thousands separator only in a valid grouping (`1,500`); a lone non-grouping comma is a decimal comma; ambiguous input is rejected (commit 44308a8). | Locale-driven parsing still in WP-I.2 |
 | **Fixed:** CSV dates assumed DD/MM | The order is now detected for the whole file (any part above 12); a mixed file is rejected; an undecidable file assumes day/month and the upload summary says so (commit 44308a8). | A user-chosen order and locale default still in WP-I.2 |
@@ -143,7 +144,7 @@ packages/engine/src/
   calendar.ts          waterYearIndex(m, start), daysPerMonth unchanged
   presets/             pure data: country presets (defaults only, versioned)
   evaporation.ts       A-pan ↔ ET0 conversion, FAO-56 Penman–Monteith (pure)
-  generators/          b023.ts (today's flow.ts), gr4j.ts, awbm.ts  → FlowGenerator
+  generators/          gr4j.ts, awbm.ts  → FlowGenerator (b023.ts dropped: flow.ts went in engine 1.0.0)
   ewr/                 pragmatic.ts, tennant.ts, fdc.ts, series.ts   → EwrRule
   allocation/          proportional.ts (today), entitlement.ts, priority.ts
   warnings.ts          WarningCode + params, English renderer
@@ -460,15 +461,15 @@ rather than add a dependency:
   logic, and audit H1 says it doesn't conserve event volume.
 - **Status:** the GR4J half has landed through issue #4, under other names:
   the `RunoffModel` interface in `packages/engine/src/runoff/types.ts`, with
-  `runoff/legacy.ts` (the b023 recession) and `runoff/gr4j.ts`, selected by
-  `settings.runoffModel` (`'legacy' | 'gr4j'`, GR4J the default since engine
-  0.11.0). AWBM still to come; it fits that interface rather than the
+  `runoff/gr4j.ts`, recorded in `settings.runoffModel`. `runoff/legacy.ts`
+  (the b023 recession) was the other model until engine 1.0.0 removed it
+  (issue #16, audit H1 closed), so GR4J is the only one. AWBM still to come; it fits that interface rather than the
   `generators/` layout below.
 - **Changes (engine):**
   - `generators/types.ts`:
     `interface FlowGenerator<P> { id; version; defaults(): P; validate(p): string[]; run(p, { rainMm, petMm?, areaKm2, startDate, days }): { naturalFlowM3Day; stores?; series; warnings } }`.
-  - `generators/b023.ts` wraps today's `flow.ts`. `flow.ts` stays as the
-    implementation, with no behaviour change.
+  - ~~`generators/b023.ts` wraps today's `flow.ts`~~: engine 1.0.0 removed
+    `flow.ts` (issue #16), so there is no b023 generator to wrap.
   - `generators/gr4j.ts` is a daily 4-parameter model ([Perrin et al. 2003](https://doi.org/10.1016/S0022-1694(03)00225-7)).
     **Implement it from the paper, not from airGR, which is GPL-2**
     ([CRAN](https://cran.r-project.org/package=airGR)). airGR outputs can be
@@ -677,7 +678,8 @@ rather than add a dependency:
   - **engine:**
     - `settings.rainPriority: SeriesKind[]`, default
       `['rain_catchment_mm','rain_chirps_mm','rain_forecast_mm']`, used by
-      `flow.ts` · `rainUsed()` and `run.ts:575`;
+      `runoff/simulate.ts` · `runoffForcing()` (formerly `flow.ts` ·
+      `rainUsed()`) and `run.ts:575`;
     - new kinds `et0_mm` and `rain_gridded_mm`;
     - a new comparison-only `flow_modelled_m3s` ("modelled natural flow",
       with its source), never a driver or a fallback (`flow_pitman_m3s` was
@@ -1194,7 +1196,7 @@ For the international track (first market live):
 
 | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- |
-| The b023 recession (H1) doesn't transfer to bimodal East African rainfall | High | High | GR4J (WP-I.6) before the pilot calibrates. H1 decided at Step 1. |
+| The b023 recession (H1) doesn't transfer to bimodal East African rainfall | High | High | GR4J (WP-I.6) before the pilot calibrates. H1 closed at Step 1: engine 1.0.0 removed the b023 recession, GR4J is the only model. |
 | Rule sets are read as "the official method" in a permit or court case | Medium | High | "-style" naming until validated, the provenance block, partner sign-off, terms |
 | Ability to pay in donor-funded markets | High | Medium | Attach to donor programmes (GIZ, CIWA, GEF). Price per basin or programme, not per seat. |
 | Incumbents (WEAP, Source, Aquatool, StateMod) | High in AU/ES/CL/US | Medium | Lead where the farm-scale daily balance plus Reserve is the job (Kenya, SADC). Don't compete head-on in the MDB. |

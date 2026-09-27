@@ -19,6 +19,8 @@ describe('damsWithoutStopLevel', () => {
 describe('publishBlocker and publishedRunIds', () => {
 	it('blocks only a legacy run', () => {
 		expect(publishBlocker({ legacy: true })).toMatch(/legacy runoff model/);
+		// The model is gone (engine 1.0.0): the way out is a new run, which uses GR4J.
+		expect(publishBlocker({ legacy: true })).toMatch(/run the project again \(a new run uses GR4J\)/);
 		expect(publishBlocker({ legacy: false })).toBeNull();
 	});
 	it('collects every run the history holds', () => {

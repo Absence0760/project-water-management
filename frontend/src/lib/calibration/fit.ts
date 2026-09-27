@@ -66,10 +66,10 @@ export function fitInput(server: ModelInput, settings: ProjectSettings, model?: 
 	return { settings: settings as unknown as ModelInput['settings'], model: model ?? server.model, series: server.series };
 }
 
-/** Parameters the form offers to fit, with which are ticked by default. */
-export function fitParams(model: RunoffModelId, x2Open = false) {
-	return CALIBRATION_PARAMS[model]
-		.filter((p) => !(model === 'gr4j' && p.key === 'x2' && !x2Open))
+/** GR4J parameters the form offers to fit, with which are ticked by default (X2 only when the form opened it). */
+export function fitParams(x2Open = false) {
+	return CALIBRATION_PARAMS.gr4j
+		.filter((p) => !(p.key === 'x2' && !x2Open))
 		.map((p) => ({ key: p.key, label: p.label, unit: p.unit, min: p.min, max: p.max, checked: !p.fixedByDefault }));
 }
 
@@ -185,15 +185,10 @@ export const marPenaltyOn = (s: Pick<ProjectSettings, 'wr2012'>) => !!(s.wr2012?
 /** The objective's label, without the citation. */
 export const objectiveName = (id: ObjectiveId) => OBJECTIVE_LABELS[id];
 
-/**
- * The form's settings with the fitted parameters written in: settings.gr4j
- * for GR4J, settings.calibration for the legacy model. Nothing is saved.
- */
-export function applyReport<S extends Pick<ProjectSettings, 'gr4j' | 'calibration'>>(settings: S, r: CalibrationReport): S {
+/** The form's settings with the fitted GR4J parameters written in. Nothing is saved. */
+export function applyReport<S extends Pick<ProjectSettings, 'gr4j'>>(settings: S, r: CalibrationReport): S {
 	const fitted = Object.fromEntries(r.free.map((k) => [k, r.params[k]!]));
-	return r.model === 'gr4j'
-		? { ...settings, gr4j: { ...settings.gr4j, ...fitted } }
-		: { ...settings, calibration: { ...settings.calibration, ...fitted } };
+	return { ...settings, gr4j: { ...settings.gr4j, ...fitted } };
 }
 
 /** Largest seed: the engine's generator takes a 32-bit integer. */

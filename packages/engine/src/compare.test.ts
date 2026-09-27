@@ -88,6 +88,27 @@ function snapshot(over: Partial<RunInputsSnapshot> = {}): RunInputsSnapshot {
 	};
 }
 
+/**
+ * A run saved on the legacy runoff model (engine < 1.0.0): its settings carry
+ * the model's own calibration keys, which runs today no longer have.
+ */
+function legacySnapshot(): RunInputsSnapshot {
+	const s = snapshot();
+	const settings = s.settings as unknown as Record<string, unknown>;
+	settings.runoffModel = 'legacy';
+	settings.calibration = {
+		...(settings.calibration as object),
+		a: 0.09,
+		b: 1.2,
+		summerFactor: 0.1,
+		winterFactor: 1,
+		summerMonths: [1, 2, 3, 4, 5, 11, 12],
+		baseFlowInitial: 300,
+		recessionFactors: Array.from({ length: 80 }, (_, i) => 0.25 + (0.73 * i) / 79)
+	};
+	return s;
+}
+
 /** Structured clone with fresh ids everywhere, like POST /projects/:id/copy. */
 function copyWithFreshIds(s: RunInputsSnapshot): RunInputsSnapshot {
 	const c = structuredClone(s);
@@ -372,7 +393,7 @@ describe('diffInputs', () => {
 		// zero-rain runs: none stored means flagged runs ran as recorded (< 0.15.0),
 		// and dam evaporation (engine < 0.16.0).
 		const b = snapshot();
-		b.settings.runoffModel = 'legacy';
+		(b.settings as Record<string, unknown>).runoffModel = 'legacy';
 		b.settings.effectiveRainStoreMm = 0;
 		b.settings.zeroRainRuns = { ...ACC, mode: 'asRecorded', keepDry: [], missing: [] };
 		b.settings.lakeEvapFactor = 0;
@@ -629,11 +650,14 @@ describe('diffInputs', () => {
 	});
 
 	it('describes settings: scalars, calibration, monthly tables and unknown keys', () => {
-		const a = snapshot();
+		// Two legacy runs, so the legacy model's own calibration settings count too.
+		const a = legacySnapshot();
 		const b = structuredClone(a);
-		b.settings.calibration!.a = 0.12;
-		b.settings.calibration!.summerMonths = [11, 12, 1, 2];
-		b.settings.calibration!.recessionFactors = [...a.settings.calibration!.recessionFactors.slice(0, 79), 0.99];
+		const ca = a.settings.calibration as unknown as Record<string, number[]>;
+		const cb = b.settings.calibration as unknown as Record<string, unknown>;
+		cb.a = 0.12;
+		cb.summerMonths = [11, 12, 1, 2];
+		cb.recessionFactors = [...ca.recessionFactors!.slice(0, 79), 0.99];
 		b.settings.effectiveRainFraction = 0.7;
 		b.settings.simulationStart = '2005-10-01';
 		(b.settings as Record<string, unknown>).ewrPragmaticM3PerDay = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -774,11 +798,24 @@ describe('diffInputs', () => {
 		expect(diffInputs(b, structuredClone(b))).toEqual([]);
 	});
 
+	it('a GR4J run saved before engine 1.0.0 (with the legacy calibration keys stored) compares clean against one after', () => {
+		const before = legacySnapshot();
+		before.settings.runoffModel = 'gr4j';
+		const after = snapshot();
+		expect(Object.keys(after.settings.calibration!).sort()).toEqual(['catchmentAreaKm2', 'rainThresholdMm']);
+		expect(diffInputs(before, after)).toEqual([]);
+		// Positive control: a setting both kept still shows.
+		(after.settings.calibration as unknown as Record<string, unknown>).rainThresholdMm = 3;
+		expect(texts(before, after)).toEqual(['Calibration rain threshold: 2 mm → 3 mm']);
+	});
+
 	it('describes a switch of runoff model and GR4J parameter changes', () => {
-		const a = snapshot();
-		a.settings.runoffModel = 'legacy';
+		// A legacy run (engine < 1.0.0) against a GR4J one: the model line says it, and the
+		// legacy model's own settings, which never touched the GR4J run, are not listed.
+		const a = legacySnapshot();
 		const b = structuredClone(a);
 		b.settings.runoffModel = 'gr4j';
+		b.settings.calibration = snapshot().settings.calibration;
 		b.settings.gr4j = { x1: 420, x2: 0, x3: 90, x4: 2.1, warmupDays: 365 };
 		(b.settings as Record<string, unknown>).panCoefficient = [0.8, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
 		expect(texts(a, b)).toEqual([
@@ -870,10 +907,11 @@ describe('diffInputs', () => {
 	it('treats month lists as sets: order and repeats are not a change', () => {
 		const a = snapshot();
 		a.model.transfers = [{ id: 't', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 2, 1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.3, enabled: true, priority: 0 }];
-		a.settings.calibration!.summerMonths = [12, 1, 11];
+		(a.settings as Record<string, unknown>).runoffModel = 'legacy';
+		(a.settings.calibration as unknown as Record<string, unknown>).summerMonths = [12, 1, 11];
 		const b = structuredClone(a);
 		b.model.transfers[0]!.months = [1, 2, 10, 10];
-		b.settings.calibration!.summerMonths = [1, 11, 12];
+		(b.settings.calibration as unknown as Record<string, unknown>).summerMonths = [1, 11, 12];
 		expect(texts(a, b)).toEqual([]);
 		b.model.transfers[0]!.months = [1, 2];
 		expect(texts(a, b)).toEqual(['Transfer Rooikloof → Bergwater: months Oct, Jan, Feb → Jan, Feb']);

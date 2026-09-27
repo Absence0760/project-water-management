@@ -17,7 +17,6 @@
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
@@ -41,8 +40,9 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 
-	// The server-side PDF (Generate / Email me): its own chunk, loaded with the bar.
-	const loadServerPdf = () => import('$lib/components/report/ServerPdf.svelte');
+	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
+	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
+	import ServerPdf from '$lib/components/report/ServerPdf.svelte';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -208,9 +208,7 @@
 			<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
 			{#if run}
-				<Lazy load={loadServerPdf}>
-					{#snippet children(ServerPdf)}<ServerPdf {projectId} runId={run!.id} />{/snippet}
-				</Lazy>
+				<ServerPdf {projectId} runId={run!.id} />
 			{/if}
 			<p class="muted small" role="status">
 				{#if ready}
@@ -242,8 +240,8 @@
 					</dl>
 					{#if run.legacy}
 						<p class="alert alert-warning">
-							Legacy runoff model (b023 workbook): it does not conserve water at the event scale (audit H1). Workbook comparison only, not
-							evidence.
+							Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1).
+							Workbook comparison only, not evidence.
 						</p>
 					{/if}
 					<p class="lede">{runSentence(summary)}</p>
@@ -277,8 +275,8 @@
 								</tbody>
 							</table>
 						</div>
-						{@render table('Farms, gauges and other users', ['Node', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model))}
-						{@render table('Crops and planted areas', ['Farm', 'Crop', 'Area (ha)'], [2], cropAreaRows(model))}
+						{@render table('Units, gauges and other users', ['Node', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model))}
+						{@render table('Crops and planted areas', ['Unit', 'Crop', 'Area (ha)'], [2], cropAreaRows(model))}
 						{@render table('Transfers', ['From', 'To', 'Months', 'Max rate (m³/s)', 'Daily cap (m³)', 'On'], [3, 4], transferRows(model))}
 						{@render table(
 							'Data coverage (the project’s input series today; the run used them up to its end date)',

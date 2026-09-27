@@ -29,7 +29,7 @@ export function reportSections(run: ReportRun): ReportSection[] {
 	out.push({ id: 'calibration', title: 'Calibration' });
 	if (run.summary.curtailment) out.push({ id: 'curtailment', title: 'Shortfalls and curtailment' });
 	out.push({ id: 'ewr', title: 'EWR compliance' });
-	out.push({ id: 'farms', title: 'Farms, warnings and checks' });
+	out.push({ id: 'farms', title: 'Units, warnings and checks' });
 	if (run.notes?.trim()) out.push({ id: 'notes', title: 'Notes' });
 	out.push({ id: 'validation', title: 'Validation statement' });
 	out.push({ id: 'signoff', title: 'Professional sign-off' });

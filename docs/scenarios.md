@@ -143,12 +143,10 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
 `ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
-`runoffModel`, `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
+`gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
-`calibration.a`, `calibration.b`, `calibration.rainThresholdMm`,
-`calibration.summerFactor`, `calibration.winterFactor`,
-`calibration.baseFlowInitial`, `calibration.catchmentAreaKm2`,
-`calibration.summerMonths`, `simulationStart`, `simulationEnd`,
+`calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
+`simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
 `calibrationFlowKind`, `pe`. Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
@@ -157,6 +155,17 @@ of potential evaporation: `{ kind: 'pan' }` with no other key, or
 a source that is not blank when trimmed, at most 600 characters. Like every
 `settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
+
+**Retired paths (engine 1.0.0, issue #16).** `runoffModel`,
+`calibration.a`, `calibration.b`, `calibration.summerFactor`,
+`calibration.winterFactor`, `calibration.baseFlowInitial` and
+`calibration.summerMonths` belonged to the legacy runoff model, which engine
+1.0.0 removed (`RETIRED_SETTINGS_PATHS` in `scenario/ops.ts`). An op on one
+is refused with "… belonged to the legacy runoff model, removed in engine
+1.0.0: delete this change": a new one when the ops are saved, a stored one
+as a problem when the scenario is checked or run. Migration 063 leaves
+stored ops alone (they are hashed), so the scenario shows the op by its path
+and the editor deletes it.
 
 **Demand scaling (`demand.scale`, engine ≥ 0.41.0, [planning-outputs.md
 R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).**
@@ -173,8 +182,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
-  every month *list* in the engine (`transfer.months`,
-  `calibration.summerMonths`); the 12-value *rows* (`demandFactor`,
+  every month *list* in the engine (`transfer.months`); the 12-value *rows* (`demandFactor`,
   `userDemandM3Day`) run Oct–Sep. Left out, every month.
 - **Categories:** `farm` (default) and `user`. One op scales one category;
   both is two ops. A gauge has no demand.
@@ -415,7 +423,7 @@ A **sweep** (issue #53 R2, [planning-outputs.md §3.2](./design/planning-outputs
 is one saved base run × a list of named **members**, each an op set, run
 as one background job. The main use is demand levels: `demand.scale` at
 1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
-and R5's seasonal outlook read. Built as backend and API only
+reads. Built as backend and API only
 (`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
 migration 062). The first screen that starts and reads one is R4's
 outcome matrix on the Runs tab ([ui.md § Outcome matrix](./ui.md#outcome-matrix)):
@@ -424,7 +432,7 @@ demand levels only, one `demand.scale` op per member.
 - **Not a scenario.** A member has no row in `scenario` and makes no
   `model_run`: it stores its **run summary** (the `RunSummary` a run
   stores in `model_run.summary`) and the catchment-level daily series R4's
-  outcome matrix and R5's outlook read (`natural_flow`,
+  outcome matrix reads (`natural_flow`,
   `simulated_outflow`, `ewr`, `ewr_shortfall`; `SWEEP_SERIES_KEYS`), never
   every node's series, so a sweep never counts against the 20-run cap and
   never shows in the run list. A member's `{ startDate, series, summary }`
@@ -459,11 +467,11 @@ demand levels only, one `demand.scale` op per member.
   with its base run.
 - **Base run.** An ordinary run of the model only, as for a scenario: not a
   scenario run, not a forecast run (a sweep is judged on history).
-  R5's outlook needs a sweep from a run's state on a decision date: the
-  engine builds those members (`outlookMemberInput`, [model.md
-  §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)),
-  the job that runs and stores them is not built yet
-  ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml)).
+- **Not the seasonal outlook.** R5's outlook runs from a run's state on a
+  decision date, one member per demand level × analogue year, measured
+  over the season only: its own `outlook` job and tables, not a sweep mode
+  ([api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
+  [data-model.md § Seasonal outlooks](./data-model.md#seasonal-outlooks-063_seasonal_outlooksql)).
 
 API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 ([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`

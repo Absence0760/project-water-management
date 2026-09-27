@@ -104,8 +104,6 @@ describe('settings.pe: kind monthly', () => {
 		const out = runModel(catchment({ pe: monthly(), apanMm: zeros as never, panCoefficient: zeros as never }));
 		expect(out.summary.runoff!.petMm).toBeGreaterThan(0);
 		expect(hasPotentialEvaporation({ apanMm: zeros as never, panCoefficient: zeros as never, pe: monthly() })).toBe(true);
-		// The legacy model doesn't use PE, so a zero row doesn't stop it.
-		expect(runModel(catchment({ runoffModel: 'legacy', pe: monthly(zeros) })).days).toBe(730);
 	});
 
 	it('warns about the pan coefficient only when GR4J uses it (kind pan)', () => {

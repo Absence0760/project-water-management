@@ -261,6 +261,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   project document moves the site to the copy's gauge. Like
   `autoRun` it is no model input: runs don't record it, and a `PATCH` that
   changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
+  `settings.outlook = { season, planningShare }` (issue #53 R5,
+  `projects/outlookSettings.ts`, [ui.md § Seasonal outlook](./ui.md#seasonal-outlook))
+  is always present too, defaults `{ season: null, planningShare: null }`:
+  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April,
+  pending the client's O3) and `DEFAULT_PLANNING_SHARE` (0.8, pending O6).
+  `PATCH` takes either field: `season` null or `{ startMonth, startDay,
+  endMonth, endDay }` (the decision date and the season end as a month and
+  day; whole, each a real day of a common year, so not 29 February, and
+  not the same day; `400`), `planningShare` null or a number in (0, 1]. It
+  says how a [seasonal outlook](#seasonal-outlooks) is set up; like
+  `outcomes` it is no model input (runs don't record it, and saving only it
+  leaves `updatedAt` alone).
   `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
@@ -271,9 +283,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366); any subset may be sent.
-  `runoffModel` picks the rain → natural-flow model: `gr4j` (engine ≥ 0.5.0,
-  the default since 0.11.0; model.md §2.4a) or `legacy` (the b023 recession
-  model).
+  `runoffModel` records the rain → natural-flow model: `gr4j` (model.md
+  §2.4a) is the only value, since engine 1.0.0 removed the legacy b023
+  recession model (issue #16). `legacy` is a `400`, "the legacy runoff model
+  was removed in engine 1.0.0: GR4J is the only runoff model". Reading
+  settings maps a stored `legacy` to `gr4j` (migration 064 did the same to
+  every stored project), and drops a stored fit record of the legacy model.
+  `calibration` takes `rainThresholdMm` (0–1000 mm) and `catchmentAreaKm2`
+  (0–1 000 000 km², or `null` = the sum of the farm areas); any subset may be
+  sent, and any other key is a `400`, except the legacy model's own keys
+  (`a`, `b`, the season factors, `summerMonths`, `baseFlowInitial`, the
+  recession tables and the rest of the engine's `RETIRED_CALIBRATION_KEYS`),
+  which are dropped, so an older export still imports.
   `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
   (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
   `panCoefficient` is 12 monthly values, each 0–2, in water-year order. That
@@ -1038,11 +1059,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
-| GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model: `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
+| GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model (a stored run from before engine 1.0.0): `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, `[]` when none | viewer |
-| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, a forecast run (WP-2.12: evidence is judged on the record, and a forecast run's last days are modelled on forecast rain), or a project at its limit of 50 nominations | editor |
+| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (a stored run from before engine 1.0.0; workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, a forecast run (WP-2.12: evidence is judged on the record, and a forecast run's last days are modelled on forecast rain), or a project at its limit of 50 nominations | editor |
 | GET | `/projects/:id/runs/:runId/reproduce` | – | `200 Reproduction`: the run re-run on the server from its stored inputs (`loadRunInput`) with the current engine, its summary and every daily output compared with what was stored (WP-3.1). `{ status, identical, engineVersionThen, engineVersionNow, differences, truncated, message? }`: `status` is `identical`, `differs` (`differences` lists up to 50: `{ kind: 'summary', path }`, `{ kind: 'series', key, nodeId, label, days, firstDate, maxAbsDiff }`, `{ kind: 'series_missing' \| 'series_extra', key, nodeId, label }`; `truncated` counts the rest), `not_reproducible` (a run from before stored inputs, `message` says so), `inconsistent` (a stored input fails its check against the run's record: never presented as the run) or `failed` (today's engine refuses the stored input, `message` has its reason). `404` for a run not in this project | viewer |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -1088,13 +1109,15 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   or `forecast`; `forecastFrom` a forecast run's first forecast day
   (`summary.forecast.from`), else `null`.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
-  saved before the setting existed), so the app can badge it without a second
-  fetch (audit H1, workbook comparison only — not evidence). `notes` is the
+  saved before the setting existed): a run of the legacy runoff model, which
+  engine 1.0.0 removed, so only a stored run from before it can be one. The
+  app badges it without a second fetch (audit H1, workbook comparison only —
+  not evidence). `notes` is the
   modeller's written explanation of the run (`''` = none; e.g. why a WR2012
   *query* or *not usable* flag stands), `notesUpdatedAt` / `notesUpdatedBy`
   (display name) when and by whom it last changed (`null` until first
-  written). `runoffModel` is the run's `settings.runoffModel` (`gr4j`,
-  `legacy`, …; absent → `legacy`). `evidence` is the run's place in the
+  written). `runoffModel` is the run's `settings.runoffModel` (`gr4j`, or
+  `legacy` for a stored run from before engine 1.0.0; absent → `legacy`). `evidence` is the run's place in the
   evidence history: `'current'` (the project's nominated evidence run),
   `'past'` (nominated before, since replaced) or `null`. `pinned` is whether
   an editor pinned the run (015_run_pinned), so it survives the run cap.
@@ -1296,7 +1319,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   one row per water year (Oct–Sep, `waterYear` = its start year) and one for
   the run (`waterYear: null`): `rainMm`, `naturalFlowMm`, `runoffCoefficient`,
   `runoff` (GR4J store balance: `aetMm`, `exchangeMm`, `storageChangeMm`,
-  `residualMm`; `null` for legacy), and in m³ `naturalFlowM3`, `farmRunoffM3`,
+  `residualMm`; `null` on a stored legacy run), and in m³ `naturalFlowM3`, `farmRunoffM3`,
   `openingStorageM3`, `demandM3`, `suppliedM3`, `returnFlowM3`,
   `consumptiveUseM3`, `transfersM3`, `spillM3`, `outflowM3`,
   `closingStorageM3`, `residualM3` (opening + runoff + transfers − consumptive
@@ -1509,7 +1532,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
@@ -1588,7 +1611,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
-| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
+| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, noticeEn?: string | null, noticeAf?: string | null }`.
@@ -1959,6 +1982,75 @@ outcome series, or the problems that kept it from running.
 - Progress: the job reports 0–100 after each member (`job.progress`, and
   `GET /jobs`). A sweep can't be cancelled; it is at most 12 runs.
 
+## Seasonal outlooks
+
+The seasonal outlook (issue #53 R5, [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core),
+[ui.md § Seasonal outlook](./ui.md#seasonal-outlook)): an ESP ensemble from
+a saved run's state on a decision date. One background `outlook` job runs
+every demand level × every analogue water year of the record as one member
+(the engine's `outlookMemberInput` → `runModelWithoutChecks` →
+`outlookMember`), stores each member, then the engine's `summariseOutlook`
+as the result. Not a [sweep](#sweeps): a sweep member is a whole-record
+run; an outlook member is one level in one year, measured over the season.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` | viewer |
+| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` (null while pending). `404` for one that isn't this project's | viewer |
+
+- Body (strict): `name` 1–200 characters; `baseRunId` a saved run of this
+  project; `levels` **1–6** (`OUTLOOK_LEVELS_MAX`), each `{ label, ops }`
+  with a `label` of 1–100 characters, unique whatever the case, and `ops`
+  checked as a scenario's are ([§ Scenarios](#scenarios)) and **all
+  `demand.scale`** (`400`: any other op would change the history the
+  season starts from). `ops: []` is today's demand; R1's `months` form
+  makes a monthly plan (one op per group of months). `decisionDate` and
+  `seasonEnd` (ISO, both or neither, at most 366 days, the engine's
+  `resolveSeason`, `400` with its message): absent, the project's
+  `settings.outlook.season` from the base run's **newest state**: the latest
+  decision date (that month and day) whose day before the run holds, and
+  the season end the first of its month and day after it. `planningShare`
+  (0, 1]: absent, the project's setting, else null (the engine's default,
+  `shareIsDefault` in the result). `analogueYears` (1–200 distinct water
+  years): absent, every one the record holds but the season's own.
+- Checked before anything is queued: the base run as for a sweep (`404`,
+  `409` for a scenario or forecast run), and the season: the decision date
+  must fall after the run's first day and at most the day after its last
+  (`422`, the state on the day before must be in the run), or the run must
+  hold a decision date of the project's season (`422`). Whether each
+  level's ops *apply* (the node ids exist) is the job's to find out.
+- **Limits**: at most **2 outlook jobs queued or running per user**
+  (`429`); a job gets 2 attempts; a project keeps its newest **20**
+  outlooks; an outlook goes with its base run. At most **40 analogue years**
+  (`OUTLOOK_YEARS_MAX`, the record's newest; older ones are listed in
+  `excluded` as `overLimit`), so at most 240 members, each a full run (the
+  history, then the season), in the job's one transaction: that has to fit
+  the worker Lambda's 300 s. No cancel.
+- `Outlook = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  decisionDate, seasonEnd, planningShare, levels: [{ id, label, ops }],
+  analogueYears, status, engineVersion, job, createdBy, createdAt,
+  completedAt, result? }`. `levels[].id` is its place, `"0"` …; `status`
+  `pending` until the job stores the result, then `complete`; `job` as a
+  sweep's (a `pending` outlook behind a `dead` job says why in `job.error`).
+- `result`: the engine's `SeasonalOutlook` (model.md §2.15): `decisionDate`,
+  `seasonEnd`, `days`, `metric` (`reserveMonthsMet` or `daysBelowEwr`),
+  `siteNodeId` (the outlet), `startStorageM3`, `capacityM3`, `analogues`,
+  `nYears`, `enoughYears` (≥ `OUTLOOK_MIN_YEARS` = 10), `levels` (per level:
+  `problems`, `nYears`, `meanDemandM3`, `seasonEndStorageM3`, `demandMet`,
+  `userDemandMet`, `ewr` as `{ p10, p50, p90 }` or null, `yearsEwrMet`,
+  `storageByDam`, and every year's values), `planning` (`share`,
+  `shareIsDefault`, `reason` `met` / `noLevelMeets` / `notEnoughYears` /
+  `noLevels`, the level, `yearsMet`, `ranked`) and `warnings`; plus
+  `excluded` (each `{ waterYear, reason }`: the engine's `outsideRecord`,
+  `missingRain`, `theSeason`, `duplicate`, `notAYear`, or `overLimit`, or
+  `memberFailed`) and `failures` (`{ levelId, label, waterYear, message }`
+  for each member the engine refused). A level whose ops don't apply has
+  `problems` and no years; a level refused in every year likewise; a year
+  a running level was refused in is left out of every level (`memberFailed`)
+  so the levels compare the same years. One member never fails the outlook.
+- Progress: 0–100 after each member (`job.progress`).
+
 ## Data feeds
 
 Scheduled fetches of CHIRPS rainfall, the CHIRPS-GEFS forecast or a DWS
@@ -2196,8 +2288,8 @@ server report PDF, `GET …/reports/:jobId`'s `url`, is dated the same way;
 the account's `my-data_<date>.json`, which belongs to no project, is dated in
 `Africa/Johannesburg`) and `Cache-Control: no-store`; CORS exposes
 `Content-Disposition` so the SPA can read the name when it downloads with
-`fetch`. `daily.csv` and `summary.csv` for a **legacy-runoff-model run** (audit
-H1) start with a leading comment line,
+`fetch`. `daily.csv` and `summary.csv` for a **legacy-runoff-model run** (a
+stored run from before engine 1.0.0, audit H1) start with a leading comment line,
 `# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
 ahead of the usual header row.
 

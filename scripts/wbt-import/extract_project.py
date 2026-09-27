@@ -41,24 +41,15 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:  # written alongside this script; falls back to engine defaults if absent
-    from calibration import extract_calibration, extract_calibration_window, summer_months_note  # type: ignore
+    from calibration import extract_calibration, extract_calibration_window  # type: ignore
 except ImportError:  # pragma: no cover
     extract_calibration = None
     extract_calibration_window = None
-    summer_months_note = None
 
 _REF = re.compile(r"^'?(?P<sheet>.+?)'?!\$?(?P<c1>[A-Z]+)\$?(?P<r1>\d+)(?::\$?(?P<c2>[A-Z]+)\$?(?P<r2>\d+))?$")
 
 # Defaults from packages/engine/src/project.ts defaultProjectSettings().
-DEFAULT_CALIBRATION = {
-    "a": 0.09,
-    "b": 1.2,
-    "rainThresholdMm": 2,
-    "summerFactor": 0.1,
-    "winterFactor": 1,
-    "summerMonths": [10, 11, 12, 1, 2, 3],
-    "baseFlowInitial": 300,
-}
+DEFAULT_CALIBRATION = {"rainThresholdMm": 2, "catchmentAreaKm2": None}
 
 # b023 rounding precisions the engine hard-codes (packages/engine/src/network/round.ts).
 MONTHS_WY = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"]
@@ -961,9 +952,6 @@ def extract(
 
         if extract_calibration is not None:
             calibration = extract_calibration(wb.wb)
-            note = summer_months_note(wb.wb) if summer_months_note is not None else None
-            if note:
-                wb.notes.append(note)
         else:
             calibration = dict(DEFAULT_CALIBRATION)
             wb.notes.append("calibration.py not found: settings.calibration uses engine defaults")

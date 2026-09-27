@@ -589,6 +589,31 @@ describe('sweeps client', () => {
 	});
 });
 
+describe('outlooks client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('creates an outlook, lists a base run’s outlooks, and reads one', async () => {
+		const body = { name: 'Seasonal outlook', baseRunId: 'r', levels: [{ label: '100 %', ops: [{ op: 'demand.scale' as const, factor: 1 }] }] };
+		const create = mockFetch(202, { outlook: { id: 'o' }, jobId: 'j', job: { id: 'j' } });
+		expect((await createApi('', create).outlooks.create('p', body)).outlook.id).toBe('o');
+		expect(call(create)).toEqual({ url: '/projects/p/outlooks', method: 'POST', body });
+
+		const list = mockFetch(200, { outlooks: [{ id: 'o' }] });
+		expect(await createApi('', list).outlooks.list('p', { baseRunId: 'r/1' })).toEqual([{ id: 'o' }]);
+		expect(call(list).url).toBe('/projects/p/outlooks?baseRunId=r%2F1');
+		const all = mockFetch(200, { outlooks: [] });
+		await createApi('', all).outlooks.list('p');
+		expect(call(all).url).toBe('/projects/p/outlooks');
+
+		const get = mockFetch(200, { outlook: { id: 'o' } });
+		expect(await createApi('', get).outlooks.get('p', 'o/1')).toEqual({ id: 'o' });
+		expect(call(get)).toEqual({ url: '/projects/p/outlooks/o%2F1', method: 'GET', body: undefined });
+	});
+});
+
 describe('jobs and yield client', () => {
 	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
 		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];

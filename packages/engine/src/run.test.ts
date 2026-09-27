@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
 import { defaultProjectSettings, OBSERVED_SERIES_LABEL } from './project';
 
-const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
@@ -1460,9 +1459,9 @@ describe.skipIf(!clientCatchmentFixture)(
 		//
 		//   B1     (engine ≥ 0.7.0) CHIRPS used as fallback rain is bias-corrected
 		//          per calendar month. Demand is compared per day except on the
-		//          fallback days; natural flow end to end is compared year by year
-		//          with the correction off, and with it on only years holding
-		//          fallback days may differ. The mean columns fed by demand
+		//          fallback days (natural flow end to end was compared year by
+		//          year until engine 1.0.0 removed the legacy model; see the
+		//          RETIRED note below). The mean columns fed by demand
 		//          (supplied, deficit, …) stay within their R1 bound.
 		//   N3     (engine ≥ 0.14.0) effective rain carries over through a
 		//          soil-water store (default 25 mm). Demand, and everything fed
@@ -1648,54 +1647,24 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, outletRule)).toBeNull(); // R1
 		});
 
-		/** Water years whose end-to-end natural flow is off the workbook's by more than E1/R1 allow. */
-		function naturalFlowYearsOff(full: ReturnType<typeof runModel>): { wy: number; text: string }[] {
-			// E1 (day-1 base flow) and R1 (no rounding floor in the recessions): compare
-			// water-year volumes, allowing 2 % plus the workbook's rounding floor
-			// 0.5 / (1 − f_max) m³/day, which the engine no longer adds on dry days.
-			const cal = { ...defaultCal(), ...(project.settings.calibration as object | undefined) } as ReturnType<typeof defaultCal>;
-			const floor = 0.5 / (1 - Math.max(...cal.recessionFactors)) + 1;
-			const got = get(full, null, 'natural_flow');
-			const want = expected.catchment.natural_flow!;
-			const d0 = Math.round(Date.parse(`${expected.startDate}T00:00:00Z`) / 86_400_000);
-			const years = new Map<number, { e: number; w: number; days: number }>();
-			for (let t = 0; t < want.length; t++) {
-				const d = new Date((d0 + t) * 86_400_000);
-				const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
-				const y = years.get(wy) ?? { e: 0, w: 0, days: 0 };
-				y.e += got[t]!;
-				y.w += want[t] ?? 0;
-				y.days++;
-				years.set(wy, y);
-			}
-			return [...years]
-				.filter(([, y]) => Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor)
-				.map(([wy, y]) => ({ wy, text: `${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³` }));
-		}
-
-		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
-			// With the CHIRPS correction off, rain used is the workbook's: every year within E1/R1.
-			// Timing for this call is checked separately in run.perf.test.ts.
-			const raw = runModel({ ...modelInput, settings: { ...modelInput.settings, chirpsBiasCorrection: 'none' } });
-			expect(naturalFlowYearsOff(raw).map((y) => y.text)).toEqual([]);
-			// With it on (the default), only water years that hold corrected fallback days may differ (B1).
-			const full = runModel(modelInput);
-			const d0 = toEpochDay(expected.startDate);
-			const b1Years = new Set<number>();
-			chirpsFallback.forEach((f, t) => {
-				if (!f) return;
-				const d = new Date((d0 + t) * 86_400_000);
-				b1Years.add(d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1);
-			});
-			expect(naturalFlowYearsOff(full).filter((y) => !b1Years.has(y.wy)).map((y) => y.text)).toEqual([]);
-			const cal = { ...defaultCal(), ...(project.settings.calibration as object | undefined) } as ReturnType<typeof defaultCal>;
-			const floor = 0.5 / (1 - Math.max(...cal.recessionFactors)) + 1;
-			const sim = get(raw, null, 'simulated_outflow');
-			const simW = expected.catchment.simulated_outflow!;
-			const mean = (v: ArrayLike<number | null>) => Array.from(v).reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
-			// N1: an outlet below farms with return flow abstracts more than the workbook (skipped as above).
-			if (!outletN1) expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
+		// RETIRED (engine 1.0.0, issue #16): the end-to-end comparison of natural
+		// flow from rain with the workbook's [Flow data] column. It needed the
+		// legacy b023 recession model, which engine 1.0.0 removed (audit H1: it
+		// doesn't conserve water at the event scale). Its last run, on engine
+		// 0.45.0 (2026-09-26), passed: with the CHIRPS correction off, every water
+		// year's natural flow was within E1/R1 (2 % plus the workbook's rounding
+		// floor) of the workbook's, and with it on only the B1 years differed. That
+		// is the written record that the port was faithful before it was removed.
+		// Every other comparison here feeds the workbook's own natural flow
+		// (`natural`), so the network port is still checked against the workbook.
+		// Legacy vs GR4J: the two don't agree day by day, and aren't meant to;
+		// docs/engine-audit.md H1 and docs/model.md §2.4 record why GR4J replaced
+		// it. The client figures are in the private repo's Research/.
+		it('end to end on GR4J (natural flow from rain): runs, scores the logger and passes its self-checks', () => {
+			const full = withVerification(modelInput, runModel(modelInput));
+			expect(full.summary.runoff?.model).toBe('gr4j');
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
+			expect(full.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
 		});
 
 		it('B1: changes CHIRPS only on the fallback days, by the month factor, and never catchment rain', () => {
@@ -1982,21 +1951,23 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 	});
 	const warns = (out: { summary: { warnings: string[] } }, re: RegExp) => out.summary.warnings.filter((w) => re.test(w));
 
-	it('W1: warns when the rain model makes more runoff than the rain that fell, and reports the runoff coefficient', () => {
-		// One 10 mm winter storm on a dry 100 km² catchment: the base flow resets to the
-		// storm peak and recedes along the slow part of the default curve, giving ~7× the rain volume.
-		const rain = new Array(400).fill(0);
-		rain[1] = 10;
-		const out = runModel(rainInput(rain, '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
-		const c = out.summary.catchment.runoffCoefficient!;
-		const natural = get(out, null, 'natural_flow').reduce((a, b) => a + b, 0);
-		expect(c).toBeCloseTo(natural / (10 * 100 * 1000), 9);
+	it('W1: warns when natural flow is more than the rain that fell, and reports the runoff coefficient', () => {
+		// GR4J conserves water, so only its stores draining can do it: a short run from half-full stores, no warm-up.
+		const rain = new Array(20).fill(0);
+		rain[19] = 0.1;
+		const short = runModel(rainInput(rain, '2021-07-01', { gr4j: { ...defaultProjectSettings().gr4j, warmupDays: 0 } }));
+		const c = short.summary.catchment.runoffCoefficient!;
+		const natural = get(short, null, 'natural_flow').reduce((a, b) => a + b, 0);
+		expect(c).toBeCloseTo(natural / (0.1 * 100 * 1000), 9);
 		expect(c).toBeGreaterThan(1);
-		expect(warns(out, /more runoff than rainfall/)).toHaveLength(1);
+		expect(warns(short, /× the rain volume over the run: the GR4J stores held/)).toHaveLength(1);
+		// Natural flow a caller supplies (runModelWith) has no stores to blame: the plain warning.
+		const supplied = runModelWith(rainInput([10, 0, 0], '2021-07-01'), () => ({ naturalFlowM3Day: [2e6, 1e6, 5e5] }));
+		expect(warns(supplied, /more runoff than rainfall/)).toHaveLength(1);
 		// A plausible catchment: no warning.
 		const calm = runModel(rainInput(new Array(30).fill(5), '2021-01-01'));
 		expect(calm.summary.catchment.runoffCoefficient!).toBeLessThan(1);
-		expect(warns(calm, /more runoff than rainfall/)).toHaveLength(0);
+		expect(warns(calm, /more runoff than rainfall|× the rain volume/)).toHaveLength(0);
 	});
 
 	it('W2: counts days with no rainfall value from any source (treated as dry)', () => {
@@ -2018,33 +1989,15 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
 	});
 
-	it('W4: warns about a recession table that cannot describe a recession', () => {
-		const cal = defaultCal();
-		const factors = [...cal.recessionFactors];
-		factors[3] = 1.2;
-		const curve = [...cal.recessionCurveM3Day];
-		curve[10] = curve[9]! + 1;
-		const out = runModel(rainInput([0, 0], '2021-01-01', { runoffModel: 'legacy', calibration: { ...cal, recessionFactors: factors, recessionCurveM3Day: curve } }));
-		expect(warns(out, /recession factor 4 is 1.2/)).toHaveLength(1);
-		expect(warns(out, /recession curve rises/)).toHaveLength(1);
-		expect(warns(runModel(rainInput([0, 0], '2021-01-01')), /recession/)).toHaveLength(0);
-	});
-
 	it('P1: natural flow never falls back to a Pitman series, so there is no W5 warning', () => {
-		const i = rainInput([0, 0, 20], '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } });
+		const without = runModel(rainInput([0, 0, 20], '2021-07-01'));
+		const i = rainInput([0, 0, 20], '2021-07-01');
 		(i.series as Record<string, unknown>).flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
 		const out = runModel(i);
-		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([0, 0]);
+		expect(get(out, null, 'natural_flow')).toEqual(get(without, null, 'natural_flow'));
 		expect(warns(out, /Pitman/)).toHaveLength(0);
 	});
 
-	it('H1: every legacy run carries LEGACY_NOT_EVIDENCE; a GR4J run never does', () => {
-		const legacy = runModel(rainInput([0, 0, 20], '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
-		expect(legacy.summary.warnings).toContain(LEGACY_NOT_EVIDENCE_WARNING);
-		const gr4j = runModel(rainInput([0, 0, 20], '2021-07-01'));
-		expect(gr4j.summary.warnings).not.toContain(LEGACY_NOT_EVIDENCE_WARNING);
-		expect(gr4j.summary.warnings.some((w) => w.startsWith('LEGACY_NOT_EVIDENCE'))).toBe(false);
-	});
 });
 
 describe('catchment area', () => {

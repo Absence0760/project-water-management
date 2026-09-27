@@ -35,7 +35,7 @@ const run = (id: string, createdAt: string, runoffModel?: string): RunMeta => ({
 	createdAt,
 	createdBy: 'Ann',
 	legacy: runoffModel === 'legacy',
-	runoffModel
+	runoffModel: runoffModel as RunMeta['runoffModel']
 });
 
 describe('runoffModelName', () => {

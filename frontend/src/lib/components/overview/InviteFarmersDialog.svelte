@@ -168,7 +168,7 @@
 			</div>
 		{:else}
 			<p class="muted small" id="invite-csv-help">
-				One farm per row: <code>email,farm,language</code>. The farm name must match a farm on the Network tab (capitals don’t
+				One farm per row: <code>email,farm,language</code>. The farm name must match a unit’s name on the Network tab (capitals don’t
 				matter); language is <code>en</code> or <code>af</code>, English if left out. A farmer with two farms gets two rows and one
 				email. At most 200 rows.
 			</p>

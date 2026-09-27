@@ -2,30 +2,38 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { defaultProjectSettings, fitPeriodText, fromEpochDay, rainSourceText, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, fitPeriodText, fromEpochDay, rainSourceText, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peText } from '$lib/components/settings/peInput';
 
-type RawSettings = Partial<ProjectSettings> & Record<string, unknown>;
+type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 
-/** The run's settings over the defaults, as the engine reads them (one level deep for GR4J). */
-export function effectiveSettings(raw: RawSettings | undefined): ProjectSettings {
+/** A stored run's settings: its runoff model may be the legacy one, removed in engine 1.0.0. */
+export type RunSettings = Omit<ProjectSettings, 'runoffModel'> & { runoffModel: StoredRunoffModelId };
+
+/**
+ * The run's settings over the defaults, as the engine read them (one level
+ * deep for GR4J). A run whose settings don't name GR4J ran the legacy runoff
+ * model (the backend's "absent → legacy"), so it is never read as GR4J.
+ */
+export function effectiveSettings(raw: RawSettings | undefined): RunSettings {
 	const d = defaultProjectSettings();
-	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
+	const s = { ...d, ...(raw ?? {}) } as unknown as RunSettings;
 	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
+	s.runoffModel = raw?.runoffModel === 'gr4j' ? 'gr4j' : 'legacy';
 	return s;
 }
 
-const RUNOFF_MODEL: Record<string, string> = { gr4j: 'GR4J', legacy: 'Legacy (b023 workbook): workbook comparison only' };
+const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy: 'Legacy (b023 workbook, removed in engine 1.0.0): workbook comparison only' };
 
 /** The settings a reader needs to know the run by, as label → value. */
-export function settingsRows(s: ProjectSettings, run: { startDate: string; endDate: string }): [string, string][] {
+export function settingsRows(s: RunSettings, run: { startDate: string; endDate: string }): [string, string][] {
 	const rows: [string, string][] = [
 		['Simulated period', `${run.startDate} – ${run.endDate}`],
-		['Runoff model', RUNOFF_MODEL[s.runoffModel] ?? s.runoffModel]
+		['Runoff model', RUNOFF_MODEL[s.runoffModel]]
 	];
 	if (s.runoffModel === 'gr4j') {
 		const g = s.gr4j;
@@ -50,7 +58,7 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 }
 
 /** Monthly settings in water-year order (Oct … Sep). */
-export function monthlyRows(s: ProjectSettings): { label: string; values: string[] }[] {
+export function monthlyRows(s: RunSettings): { label: string; values: string[] }[] {
 	const row = (label: string, v: readonly number[], digits: number) => ({ label, values: Array.from({ length: 12 }, (_, i) => fmtNum(v[i], digits, true)) });
 	const monthlyPe = s.runoffModel === 'gr4j' && s.pe?.kind === 'monthly' ? s.pe : null;
 	return [
@@ -62,7 +70,7 @@ export function monthlyRows(s: ProjectSettings): { label: string; values: string
 	];
 }
 
-const KIND: Record<string, string> = { farm: 'Farm', gauge: 'Gauge', user: 'Other water user' };
+const KIND: Record<string, string> = { farm: 'Unit', gauge: 'Gauge', user: 'Other water user' };
 
 /** Every node in network order: kind, what it drains into, area, dam and irrigation efficiency. */
 export function nodeRows(model: Partial<ProjectModel>): string[][] {

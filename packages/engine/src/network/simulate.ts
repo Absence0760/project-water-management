@@ -49,6 +49,16 @@ export interface PlanNode {
 	 */
 	storageResetM3?: number;
 	/**
+	 * The rest of the node's state on the day before the first simulated day,
+	 * for a run resumed from a model-state snapshot (engine ≥ 1.1.0,
+	 * ../warmstart): the stream-depletion lag store, whether the river pump
+	 * was on yesterday (the trigger rule) and each pumping unit's volume so far
+	 * this water year. Absent = a fresh start (0, off, 0).
+	 */
+	initialDepletionStoreM3?: number;
+	initialOnRiver?: boolean;
+	initialBoreholeUsedM3?: readonly number[];
+	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
 	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
@@ -166,6 +176,18 @@ export interface NetworkPlan {
 	damRainMm?: Float64Array;
 	/** The run day the dams with a storageResetM3 start from it (engine ≥ 0.46.0); absent = none. */
 	storageResetDay?: number;
+	/**
+	 * The land-cover low-flow threshold to use (m³/day), pinned from the run a
+	 * snapshot was captured from (engine ≥ 1.1.0, ../warmstart); absent = the
+	 * natural flow's own Q75 over this run.
+	 */
+	lowFlowThresholdM3Day?: number;
+	/**
+	 * A run resumed part-way through a record (engine ≥ 1.1.0): the calendar
+	 * month of the day before its first day, so day 0 starts a water year (and
+	 * clears the boreholes' annual volumes) only when it is 1 October.
+	 */
+	continued?: { monthBefore: number };
 }
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
@@ -227,7 +249,7 @@ export interface NodeResult {
 function deplete(node: PlanNode, r: NodeResult, t: number, depleting: number, flow: number): number {
 	const b = node.borehole;
 	if (!b) return 0;
-	const store = (t === 0 ? 0 : r.depletionStore[t - 1]!) + depleting;
+	const store = (t === 0 ? (node.initialDepletionStoreM3 ?? 0) : r.depletionStore[t - 1]!) + depleting;
 	const due = b.depletionAlpha * store;
 	const taken = Math.min(due, Math.max(flow, 0));
 	r.depletionStore[t] = store - due;
@@ -274,8 +296,21 @@ export interface FarmWorkings {
 	passedForSenior: Float64Array;
 }
 
+/** The network's day-to-day state at the start of a day, per node (simulateNetwork's `captureAt`, engine ≥ 1.1.0). */
+export interface NetworkState {
+	/** Dam storage the day before (before any storage reset that day). */
+	storageM3: Float64Array;
+	depletionStoreM3: Float64Array;
+	/** 1 = the river pump was on the day before. */
+	onRiver: Uint8Array;
+	/** Each pumping unit's volume so far this water year (before a 1 October clears it); null without boreholes. */
+	boreholeUsedM3: (number[] | null)[];
+}
+
 export interface NetworkResult {
 	nodes: NodeResult[];
+	/** The state at the start of day `captureAt`, when asked. */
+	captured?: NetworkState;
 	/** Per node when simulated with { workings: true } (gauges get none). */
 	workings?: (FarmWorkings | null)[];
 	/** Volume moved by each transfer per day (m³). */
@@ -382,7 +417,7 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 	};
 }
 
-export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } = {}): NetworkResult {
+export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; captureAt?: number } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map((n) => {
 		const r = allocNode(days);
@@ -400,9 +435,27 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 		return t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!;
 	};
 	// Whether each farm under the trigger rule (WP-3.8) pumped from the river yesterday.
-	const onRiver = new Uint8Array(nodes.length);
+	const onRiver = Uint8Array.from(nodes, (n) => (n.initialOnRiver ? 1 : 0));
 	// Each pumping unit's volume so far this water year (WP-3.9 annual caps).
-	const bhUsed = nodes.map((n) => (n.borehole ? new Float64Array(n.borehole.units.length) : null));
+	const bhUsed = nodes.map((n) => {
+		if (!n.borehole) return null;
+		const u = new Float64Array(n.borehole.units.length);
+		const init = n.initialBoreholeUsedM3;
+		if (init) {
+			if (init.length !== u.length) throw new Error(`a node's saved borehole volumes have ${init.length} units, its plan ${u.length}`);
+			u.set(init);
+		}
+		return u;
+	});
+	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 1.1.0).
+	const startsYear = (t: number) => (t === 0 && plan.continued ? month[0] === 10 && plan.continued.monthBefore !== 10 : startsWaterYear(month, t));
+	let captured: NetworkState | undefined;
+	const capture = (t: number): NetworkState => ({
+		storageM3: Float64Array.from(nodes, (n, i) => (t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!)),
+		depletionStoreM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionStoreM3 ?? 0) : res[i]!.depletionStore[t - 1]!)),
+		onRiver: onRiver.slice(),
+		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null))
+	});
 	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
@@ -417,9 +470,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 	const freeBy = new Float64Array(nodes.length);
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
-	const qLow = nodes.some((n) => n.landCover) ? lowFlowThreshold(naturalFlow.subarray(0, days)) : 0;
+	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, days));
 
 	for (let t = 0; t < days; t++) {
+		if (t === opts.captureAt) captured = capture(t);
 		if (t === resetDay) {
 			for (let i = 0; i < nodes.length; i++) {
 				const r = res[i]!;
@@ -500,7 +554,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 		const nat = naturalFlow[t]!;
 		const ewrT = ewr[t]!;
 		// Annual borehole caps (WP-3.9) run per water year, October to September.
-		if (startsWaterYear(month, t)) for (const u of bhUsed) u?.fill(0);
+		if (startsYear(t)) for (const u of bhUsed) u?.fill(0);
 		for (let oi = 0; oi < order.length; oi++) {
 			const i = order[oi]!;
 			const node = nodes[i]!;
@@ -744,5 +798,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			}
 		}
 	}
-	return { nodes: res, transfers: trOut, ...(work ? { workings: work } : {}) };
+	if (opts.captureAt === days) captured = capture(days);
+	return { nodes: res, transfers: trOut, ...(work ? { workings: work } : {}), ...(captured ? { captured } : {}) };
 }

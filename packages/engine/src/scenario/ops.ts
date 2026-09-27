@@ -32,14 +32,12 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
-import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 
 // ---------------------------------------------------------------------------
 // Value checks: each returns an error message, or null when the value is fine.
 // Ranges follow the backend's zod schemas (backend/src/model/validate.ts,
 // backend/src/projects/settings.ts), so an applied scenario still validates.
-// The backend leaves `calibration` unbounded; the calibration.* bounds here
-// are plausibility limits of the engine's own, wider than LEGACY_PARAMS.
+// The calibration.* bounds here are plausibility limits of the engine's own.
 // ---------------------------------------------------------------------------
 
 type Check = (v: unknown) => string | null;
@@ -229,7 +227,6 @@ export interface SettingsPathValues {
 	flowShareMethod: FlowShareMethod;
 	'hiLoSplit.hi': number;
 	'hiLoSplit.lo': number;
-	runoffModel: RunoffModelId;
 	'gr4j.x1': number;
 	'gr4j.x2': number;
 	'gr4j.x3': number;
@@ -240,14 +237,8 @@ export interface SettingsPathValues {
 	pe: PeInput;
 	'zeroRainRuns.mode': ZeroRainMode;
 	'zeroRainRuns.accumulationMode': AccumulationMode;
-	'calibration.a': number;
-	'calibration.b': number;
 	'calibration.rainThresholdMm': number;
-	'calibration.summerFactor': number;
-	'calibration.winterFactor': number;
-	'calibration.baseFlowInitial': number;
 	'calibration.catchmentAreaKm2': number | null;
-	'calibration.summerMonths': number[];
 	simulationStart: string | null;
 	simulationEnd: string | null;
 	reportStart: string | null;
@@ -298,7 +289,6 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	flowShareMethod: oneOf(['area', 'hiLo', 'manual']),
 	'hiLoSplit.hi': frac,
 	'hiLoSplit.lo': frac,
-	runoffModel: oneOf(RUNOFF_MODELS),
 	'gr4j.x1': gr4j('x1'),
 	'gr4j.x2': gr4j('x2'),
 	'gr4j.x3': gr4j('x3'),
@@ -308,14 +298,8 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	pe: peInput,
 	'zeroRainRuns.mode': oneOf(ZERO_RAIN_MODES),
 	'zeroRainRuns.accumulationMode': oneOf(ACCUMULATION_MODES),
-	'calibration.a': range(0, 100, { loOpen: true }),
-	'calibration.b': range(0, 5, { loOpen: true }),
 	'calibration.rainThresholdMm': range(0, 1000),
-	'calibration.summerFactor': range(0, 100),
-	'calibration.winterFactor': range(0, 100),
-	'calibration.baseFlowInitial': nonNeg,
 	'calibration.catchmentAreaKm2': nullable(range(0, 1e6, { loOpen: true })),
-	'calibration.summerMonths': months,
 	simulationStart: nullable(isoDate),
 	simulationEnd: nullable(isoDate),
 	reportStart: nullable(isoDate),
@@ -327,9 +311,26 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 
 export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];
 
+/**
+ * Paths a scenario could change before engine 1.0.0 removed the legacy runoff
+ * model (issue #16). A stored op on one is refused with this reason, so the
+ * scenario shows what to delete rather than a generic error.
+ */
+export const RETIRED_SETTINGS_PATHS: readonly string[] = [
+	'runoffModel',
+	'calibration.a',
+	'calibration.b',
+	'calibration.summerFactor',
+	'calibration.winterFactor',
+	'calibration.baseFlowInitial',
+	'calibration.summerMonths'
+];
+const RETIRED_PATH_REASON = 'belonged to the legacy runoff model, removed in engine 1.0.0: delete this change';
+
 export function settingsValueError(path: string, value: unknown): string | null {
 	const c = (SETTINGS_CHECKS as Record<string, Check>)[path];
-	return c ? c(value) : `"${path}" is not a setting a scenario can change`;
+	if (c) return c(value);
+	return RETIRED_SETTINGS_PATHS.includes(path) ? RETIRED_PATH_REASON : `"${path}" is not a setting a scenario can change`;
 }
 
 // ---------------------------------------------------------------------------
@@ -623,7 +624,9 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			op = { op: 'borehole.remove', boreholeId: need('boreholeId', id) as string };
 			break;
 		case 'settings.set': {
-			const path = need('path', (v) => (typeof v === 'string' && v in SETTINGS_CHECKS ? null : 'is not a setting a scenario can change'));
+			const path = need('path', (v) =>
+				typeof v === 'string' && v in SETTINGS_CHECKS ? null : typeof v === 'string' && RETIRED_SETTINGS_PATHS.includes(v) ? RETIRED_PATH_REASON : 'is not a setting a scenario can change'
+			);
 			if (typeof path === 'string' && path in SETTINGS_CHECKS) need('value', (v) => settingsValueError(path, v));
 			op = { op: 'settings.set', path, value: cloneValue(raw.value) } as ScenarioOp;
 			break;

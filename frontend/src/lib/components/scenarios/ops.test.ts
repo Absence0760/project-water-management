@@ -1,7 +1,7 @@
 import { applyScenario, classifyOp, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { buildOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
+import { buildOp, checkOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -88,7 +88,7 @@ describe('describeOp', () => {
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 2022-01-01 to end');
-		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every farm: 85 % of what they'd take (× 0.85)");
+		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
 		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a node the base run doesn’t have: 50 % of what they'd take (× 0.5)");
@@ -107,7 +107,7 @@ describe('describeOp', () => {
 
 	it('describes additions from the op itself', () => {
 		const node = { ...newNode(4, LO), id: 'n9', name: 'Pump scheme', damCapacityM3: 50_000 };
-		expect(d({ op: 'node.add', node })).toBe('Add the farm “Pump scheme”, draining into Lower farm, dam 50,000 m³');
+		expect(d({ op: 'node.add', node })).toBe('Add the unit “Pump scheme”, draining into Lower farm, dam 50,000 m³');
 		const user = { ...newNode(4, G), id: 'n10', name: 'Town', kind: 'user' as const, userDemandM3Day: new Array(12).fill(300) };
 		expect(d({ op: 'node.add', node: user })).toBe('Add the other water user “Town”, draining into Outflow gauge, demand 300 m³/day every month');
 		expect(
@@ -124,6 +124,12 @@ describe('describeOp', () => {
 		expect(describeOp({ op: 'node.remove', nodeId: 'nope' }, gone, namesOf([b.model]))).toBe('Remove “a node the base run doesn’t have”');
 		expect(describeOp(raise, null, namesOf([b.model]))).toBe('Upper farm: Dam capacity → 180,000 m³');
 		expect(describeOp({ op: 'transfer.remove', transferId: 'x' }, null)).toBe('Remove a transfer');
+	});
+
+	it('shows a stored change to a legacy runoff setting (removed in engine 1.0.0) by its path, and checks it as retired', () => {
+		const old = { op: 'settings.set', path: 'calibration.a', value: 0.2 } as unknown as ScenarioOp;
+		expect(d(old)).toBe('calibration.a: → 0.2');
+		expect(checkOp(old)).toEqual({ ok: false, error: expect.stringMatching(/legacy runoff model, removed in engine 1\.0\.0: delete this change/) });
 	});
 });
 
@@ -244,7 +250,7 @@ describe('buildOp', () => {
 			draft({ kind: 'landCover.add', nodeId: UP, coverClass: 'invasive', coverAreaKm2: '0.4', densityPct: '30' }),
 			draft({ kind: 'landCover.remove', patchId: P }),
 			draft({ kind: 'settings.set', field: 'flowShareMethod', value: 'hiLo' }),
-			draft({ kind: 'settings.set', field: 'calibration.summerMonths', months: [12, 1, 2] }),
+			draft({ kind: 'settings.set', field: 'calibration.rainThresholdMm', value: '3' }),
 			draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'monthly', mm: '100', source: ' Station ET₀ ' } }),
 			draft({ kind: 'series.scale', seriesKind: 'rain_catchment_mm', changePct: '-10', from: '2022-01-01', to: '' })
 		].map((x) => buildOp(x, m, id));

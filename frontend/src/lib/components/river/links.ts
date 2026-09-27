@@ -10,6 +10,7 @@ export const RIVER_ANCHORS = [
 	'res-ewr-grid',
 	'res-uncertainty',
 	'res-outcomes',
+	'res-outlook',
 	'res-water-account'
 ] as const;
 

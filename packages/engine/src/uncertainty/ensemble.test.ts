@@ -155,13 +155,6 @@ describe('resolveEnsembleOptions', () => {
 		expect(resolveEnsembleOptions(logger, { members: 40 }).options.records).toEqual(['flow_logger_m3s', 'flow_observed_m3s']);
 	});
 
-	it('does not vary the pan coefficient for the legacy model, and says so', () => {
-		const { options, notes } = resolveEnsembleOptions(input, { members: 40, model: 'legacy', panOffset: 0.1 });
-		expect(options.panOffset).toBe(0);
-		expect(options.dimensions.some((d) => d.kind === 'pan')).toBe(false);
-		expect(notes.join(' ')).toMatch(/legacy model does not use potential evaporation/);
-	});
-
 	it('does not vary the pan coefficient when GR4J runs on a monthly PE row, and says so (engine ≥ 0.31.0)', () => {
 		const pe = { kind: 'monthly' as const, mm: [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75] as never, source: 'invented monthly PE' };
 		const monthly = { ...input, settings: { ...input.settings, pe } };
@@ -500,12 +493,14 @@ describe('paired bands on the difference between a run and its baseline', () => 
 	});
 
 	it('refuse two runoff models (never pooled) and two different periods', () => {
-		expect(pairedRefusal({ ...application, settings: { ...application.settings, runoffModel: 'legacy' } }, baseline)).toMatch(/different runoff models/);
+		// A baseline band stored from a legacy run (engine < 1.0.0) is never paired with a GR4J one.
+		const legacyBaseline = { ...baseline, options: { ...baseline.options, model: 'legacy' as never } };
+		expect(pairedRefusal(application, legacyBaseline)).toMatch(/different runoff models/);
 		// The baseline's members shift the pan coefficient, which a monthly PE never reads: the pairs wouldn't match.
 		expect(baseline.options.panOffset).toBeGreaterThan(0);
 		const pe = { kind: 'monthly' as const, mm: new Array(12).fill(100) as never, source: 'invented' };
 		expect(pairedRefusal({ ...application, settings: { ...application.settings, pe } }, baseline)).toMatch(/monthly PE row does not use/);
-		expect(() => runPairedEnsemble({ ...application, settings: { ...application.settings, runoffModel: 'legacy' } }, baseline)).toThrow(/different runoff models/);
+		expect(() => runPairedEnsemble(application, legacyBaseline)).toThrow(/different runoff models/);
 		const shorter = { ...application, settings: { ...application.settings, simulationEnd: '1994-09-30' } };
 		expect(pairedRefusal(shorter, baseline)).toMatch(/different periods/);
 		expect(pairedRefusal(application, baseline)).toBeNull();

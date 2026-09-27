@@ -96,3 +96,30 @@ export async function plantAlertSubscription(email: string, projectId: string, k
 	});
 	return token;
 }
+
+/**
+ * Turn a run into a stored run of the legacy runoff model, as a run made
+ * before engine 1.0.0 removed that model (issue #16) sits in the database:
+ * its settings snapshot says 'legacy' (what every reader keys on), it has no
+ * runoff store balance, its low-flow curves name the legacy model, and its
+ * engine version predates 1.0.0. The API can no longer make such a run, so
+ * the specs that cover "old legacy runs open read-only, badged" plant one.
+ * The run's other numbers stay its GR4J ones: nothing reads them as legacy.
+ */
+export async function plantLegacyRun(runId: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(
+			`UPDATE model_run SET
+				engine_version = '0.45.0',
+				inputs = jsonb_set(inputs, '{settings,runoffModel}', '"legacy"'),
+				summary = CASE
+					WHEN jsonb_typeof(summary #> '{plausibility,lowFlow}') = 'object'
+						THEN jsonb_set(summary - 'runoff', '{plausibility,lowFlow,runoffModel}', '"legacy"')
+					ELSE summary - 'runoff'
+				END
+			 WHERE id = $1`,
+			[runId]
+		);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}

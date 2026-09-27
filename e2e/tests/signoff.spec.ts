@@ -21,7 +21,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	// The validation statement and the draft disclaimer, before anyone signs.
 	const validation = page.locator('#rep-validation');
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
-	await expect(validation.getByRole('rowheader', { name: 'H1', exact: true })).toBeVisible();
+	await expect(validation.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
 	await expect(page.locator('#rep-disclaimer')).toContainText('Draft wording, pending the client’s legal review');
 	const signoff = page.locator('#rep-signoff');

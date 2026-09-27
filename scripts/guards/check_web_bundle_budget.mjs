@@ -779,6 +779,22 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// 2026-09-26  total 924 → 939 KB (measured 934: 955 896 bytes, from 923 on
+//             main @ 6380d36, R6's engine half merged). Issue #53 R5's seasonal outlook screen: the
+//             Runs tab's panel (outlook/OutlookPanel.svelte with its view
+//             model: the demand levels and the monthly plan, the table of
+//             medians and 10–90 % ranges, every analogue year, the planning
+//             figure, 7.0 KB), Settings → Seasonal outlook (1.8 KB), the
+//             engine's outlook defaults and describePlanningFigure (0.5 KB, a
+//             chunk the two share) and the draft disclaimer (0.5 KB, now a
+//             chunk the report and the panel share), the lazy hooks, menu
+//             entries and outlooks API client. All lazy: the panel loads when
+//             a run is shown, the section when Settings is. The outlook runner
+//             (runSeasonalOutlook, outlookMemberInput) is in no chunk: the
+//             backend's job runs it. The Settings chunk is 42 741 bytes, 267
+//             under its 42 KB ceiling, so the next Settings group must
+//             lazy-load its blocker check too. No new dependency. Headroom
+//             ~5 KB.
 // 2026-09-26  total 924 → 935 KB (measured 931). origin/main already measured
 //             926 before this merge (work landed after the entry above without
 //             a raise); issue #17's Summary (board A1: KPI row with Dams today,
@@ -804,6 +820,11 @@
 //             Crops chunk; the largest chunk is unchanged (41.7 KB, the
 //             workspace page). No new dependency. Headroom ~4 KB; the i18n
 //             catalogue trim is still the next saving.
+// 2026-09-26  total 949 → 957 KB (measured 953). A merge: the 924 → 939
+//             entry (#53 R5's seasonal outlook) and the 935 → 949 entries
+//             (#17's Summary, Teams and Crops pages) were each measured without
+//             the other's growth; together with #54 2a's Unit labels (+0.3 KB)
+//             they measure 953. Headroom ~4 KB; the i18n catalogue trim is due.
 // 2026-09-26  total 949 → 959 KB (measured 955; the branch measured 924
 //             from 914 on main @ 3f0f056, +10). Issue #17 board A4, Compare runs: a baseline and up
 //             to two what-ifs. The CompareView chunk (already lazy, the
@@ -814,18 +835,60 @@
 //             reserveDaysByWaterYear). No page chunk or largest chunk moves;
 //             no new dependency. Headroom ~4 KB; the bundle-weight trim
 //             under way should bring this back down.
-// 2026-09-26  total 959 → 967 KB (measured 963; main @ 7c2ae71 measured
-//             955, +8). Issue #17, River & reserve: a new lazy workspace tab
-//             (RiverTab, 6.5 KB + 0.8 KB CSS: the header and run picker,
-//             four KPI tiles, the fitted first screen, and EwrHeatmap moved
-//             in from Runs & results). The Runs & results chunks shrink
-//             4.7 KB as the River & Reserve group moves out, but the modules
-//             the two tabs now share (ewr/heatmap.ts, its CSS, the tab
-//             labels) split into small chunks of their own, ~3 KB of gzip
-//             and import overhead. The workspace page chunk 41.6 → 41.96 KB
-//             (the tab's loader and label, the Summary's River & reserve
-//             links); the largest-chunk ceiling is unchanged. No new
-//             dependency. Headroom ~4 KB.
+// 2026-09-26  total 959 → 967 KB (measured 963). A merge: the 949 → 957
+//             entry above and #17's 949 → 959 Compare runs entry were each
+//             measured without the other's growth; together they measure 963.
+//             Headroom ~4 KB; the bundle-weight trim under way is due.
+// 2026-09-26  total 959 → 968 KB (measured 964, with main's pulled work (the legacy
+//             runoff model removal, #16) included; the branch measured 947.3
+//             from 944.2 on main @ da785083, +3). Issue #17 shell: one section header per
+//             workspace section (workspace/SectionHeader, the header slot
+//             tabs fill, context.ts), the notices as one slim line, the
+//             role badge in the sidebar and the Data "series behind" badge,
+//             and the help guide's new paragraph. The workspace chunk went
+//             41.6 → 41.2 KB: the Overview's Share links panel became its
+//             own lazy chunk (owners only, far below the first screen) to
+//             pay for the header; splitting the Farmers panel too added ~3 KB
+//             to the total and wasn't needed, so it stays in the page. Largest
+//             chunk is still 41.7 KB (unchanged). No new dependency.
+// 2026-09-26  total 968 → 955 KB (down; measured 951, from 964, after merging onto
+//             main with the section header; the branch alone measured 931
+//             against 945 on its base); other ceilings unchanged. Issue #9, a weight cut for #17's pages. From a
+//             per-chunk and per-module attribution of a sourcemapped build on
+//             main @ da78508: 966 722 bytes (945 KB by this guard's rounding)
+//             over 309 files, of which ~63 KB is split overhead in the JS
+//             (the chunks gzip to 812 KB concatenated, 876 apart) and ~30 KB
+//             in the CSS (109 files: 75 KB apart, 44 together). Removed, each
+//             measured alone in order (bytes gzip):
+//             - preload lists without chunks the importer already has
+//               (vite.config.ts preloadDedupe): 966 722 → 964 390 (−2.3)
+//             - the Runs tab's six always-rendered panels back in its chunk
+//               (supply assurance, water account, evidence, reproduce,
+//               changes since, publication): → 957 463 (−6.8, 13 files)
+//             - the report's server-PDF controls in its chunk: → 957 105 (−0.4)
+//             - Svelte's scoping class s<hash>, not svelte-<hash>
+//               (svelte.config.js cssHash): → 954 446 (−2.6)
+//             - 7-character file hashes, CSS named by hash alone
+//               (vite.config.ts shortFileNames): → 951 731 (−2.7)
+//             Moved, not removed: the Invite farmers dialog is its own chunk
+//             (→ 953 006, +1.2), taking the workspace page chunk 40.7 →
+//             38.5 KB for the redesign's section header. Net −13.7 KB. The
+//             largest chunk is the Settings tab's, 41.2 KB (the ceiling
+//             stays 42). Measured and not landed: the Settings tab's four
+//             always-rendered lazy panels inline (−6.0 total, but a 59 KB
+//             chunk), and the Runs tab's uncertainty and outcome panels
+//             inline (−2.8 total, a 48 KB chunk; the outcome panel alone
+//             −1.6 with Runs at 41.2): both wait on the per-chunk ceiling
+//             (docs/followups.md). Rollup generatedCode es2015: +0.05.
+//             Headroom ~4 KB.
+// 2026-09-26  total 955 → 962 KB (measured 958, +7); largest chunk unchanged.
+//             The Dams page (issue #17,
+//             option A · Outcomes): dam cards with sparklines, the picked
+//             dam's storage chart and the Dam levels table, moved from the
+//             Summary (dams/DamsTab, DamLevels, dams.ts). A lazy chunk of
+//             7.4 KB gzipped, including the table, which left the Summary's
+//             own lazy chunk; LineChart and uPlot are shared chunks already.
+//             No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -836,7 +899,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 967,
+	totalCodeKb: 962,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

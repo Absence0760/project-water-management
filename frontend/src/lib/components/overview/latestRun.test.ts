@@ -131,7 +131,7 @@ describe('headlines', () => {
 			flagged: true,
 			delta: null
 		});
-		expect(card(hs, 'supply')).toMatchObject({ value: '80.0%', sub: ['1 of 2 farms below 95%'], flagged: true });
+		expect(card(hs, 'supply')).toMatchObject({ value: '80.0%', sub: ['1 of 2 units below 95%'], flagged: true });
 		expect(card(hs, 'nse')).toMatchObject({ term: 'Calibration NSE', value: '0.62', sub: ['90 days observed', 'calibration period (in-sample)'] });
 		// In-sample only when the parameters were fitted on these days (issue #45).
 		const handSet = headlines(summary({ calibration: { ...summary().calibration!, fitStatus: 'notFitted' } }), 120, null);
@@ -179,7 +179,7 @@ describe('headlines', () => {
 		// Current run without calibration or farms: no NSE or supply change.
 		const hs = headlines(uncalibrated, 120, summary());
 		expect(card(hs, 'nse')).toMatchObject({ term: 'Calibration', value: '–', sub: ['no observed flow in the run'], delta: null });
-		expect(card(hs, 'supply')).toMatchObject({ value: '–', sub: ['no farms in the run'], delta: null });
+		expect(card(hs, 'supply')).toMatchObject({ value: '–', sub: ['no units in the run'], delta: null });
 		// Previous run without calibration: none either.
 		expect(card(headlines(summary(), 120, summary({ calibration: { days: 0 } as RunSummary['calibration'] })), 'nse').delta).toBeNull();
 	});
@@ -199,7 +199,7 @@ describe('headlines', () => {
 		});
 		const hs = headlines(clean, 120, null);
 		expect(hs.some((h) => h.flagged)).toBe(false);
-		expect(card(hs, 'supply').sub).toEqual(['all farms ≥ 95%']);
+		expect(card(hs, 'supply').sub).toEqual(['all units ≥ 95%']);
 		expect(card(hs, 'outflow').sub).toEqual([]);
 	});
 });
@@ -223,5 +223,7 @@ describe('damsHeadline', () => {
 		expect(damsHeadline({ state: 'loading' })).toMatchObject({ value: '…', sub: ['loading dam levels'], delta: null });
 		expect(damsHeadline({ state: 'error' })).toMatchObject({ value: '–', sub: ['dam levels couldn’t be loaded'] });
 		expect(damsHeadline({ state: 'none' })).toMatchObject({ value: '–', sub: ['no dams in the run'], flagged: false });
+		// In every state the card leads to the Dams page.
+		for (const d of [{ state: 'loading' }, { state: 'none' }, today(64, -11)] as const) expect(damsHeadline(d).href).toBe('?tab=dams');
 	});
 });

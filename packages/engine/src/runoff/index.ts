@@ -1,4 +1,3 @@
-import { legacyNaturalFlow } from './legacy';
 import { gr4jNaturalFlow } from './simulate';
 import type { NaturalFlowGenerator, RunoffModelId } from './types';
 
@@ -11,6 +10,5 @@ export { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, type R
 
 /** The natural-flow generator for settings.runoffModel. */
 export const NATURAL_FLOW: Record<RunoffModelId, NaturalFlowGenerator> = {
-	legacy: legacyNaturalFlow,
 	gr4j: gr4jNaturalFlow
 };

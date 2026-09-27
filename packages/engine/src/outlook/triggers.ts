@@ -5,32 +5,38 @@
 //
 // For each storage band, the outlook (./outlook.ts) runs from the review
 // date to the season end with the farm dams set to a representative storage
-// in the band on the review date (settings.damStorageReset, engine 0.46.0,
-// through outlookMemberInput's `start`), every other part of the state the
-// base run's history. Each band's row is the outlook's planning figure: the
+// in the band on the review date, every other part of the state the base
+// run's history: the base run's snapshot at the review date with the band's
+// storage in its dams (withDamStorage, ../warmstart, engine 1.1.0), or with
+// warmStart false settings.damStorageReset (engine 0.46.0, through
+// outlookMemberInput's `start`) in a full re-run of the history. Each band's row is the outlook's planning figure: the
 // highest demand level that met the river's requirement in at least the
 // planning share of the analogue years. Reported as data ("level L met the
 // EWR in a of b years"), never as advice; a band where no level meets the
 // rule, too few analogue years and a table that isn't monotone in storage
 // are reported, never smoothed.
 //
-// Cost: bands × analogue years × levels member runs, each a full run of the
-// history then the season (the engine can't start from a saved state, so
-// the history can't be shared between bands either; model.md §2.15a).
+// Cost: one run of the history (to capture the snapshot), then bands ×
+// analogue years × levels member runs of the season alone; every band
+// shares the one history, since a band only changes the dams' storage on
+// the review date (model.md §2.15a, §2.16).
 //
 // Pure: no I/O. Deterministic.
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput } from '../project';
-import { runModelWithoutChecks } from '../run';
+import { runModelFrom, runModelWithoutChecks } from '../run';
+import { withDamStorage, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
 import { quantileSorted } from '../uncertainty/bands';
 import type { OutcomeMetric } from '../views/outcomeMatrix';
 import {
 	OUTLOOK_MIN_YEARS,
 	outlookAnalogues,
+	outlookBaseAndSnapshot,
 	outlookLevelProblems,
 	outlookMember,
 	outlookMemberInput,
+	outlookSeasonInput,
 	summariseOutlook,
 	type OutlookBaseRun,
 	type OutlookLevel,
@@ -361,11 +367,16 @@ export interface ReviewTriggerOptions {
 	metric?: 'auto' | OutcomeMetric;
 	siteNodeId?: string | null;
 	planningShare?: number;
+	/** Run each member from the base run's snapshot at the review date with the band's storage (default true, engine ≥ 1.1.0); false: re-run the history per member with a storage reset. */
+	warmStart?: boolean;
+	/** The snapshot at the review date (captureModelState(input, reviewDate)); captured here when absent. */
+	snapshot?: ModelStateSnapshot;
 }
 
 /**
  * The review triggers: the outlook from every storage band at the review
- * date, bands × analogue years × levels member runs. Needs a farm dam.
+ * date, bands × analogue years × levels member runs of the season, from the
+ * one snapshot of the history (warmStart). Needs a farm dam.
  */
 export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptions): ReviewTriggers {
 	const season: OutlookSeason = { decisionDate: options.reviewDate, seasonEnd: options.seasonEnd };
@@ -375,7 +386,10 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 	const dams = farmDams(input);
 	if (!dams.length) throw new Error('review triggers need a farm dam: the bands are dam storage');
 	const capacity = dams.reduce((a, n) => a + n.damCapacityM3, 0);
-	const baseRun = options.baseRun ?? runModelWithoutChecks(input);
+	const warm = options.warmStart !== false;
+	const got = warm ? outlookBaseAndSnapshot(input, options.reviewDate, options) : null;
+	const baseRun = got?.baseRun ?? options.baseRun ?? runModelWithoutChecks(input);
+	const snapshot = got?.snapshot ?? null;
 	const representative = options.representative ?? 'lowerEdge';
 	const bandWarnings: string[] = [];
 	let history: ReviewStorageSample[] = [];
@@ -396,17 +410,19 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
 	const bands: TriggerBandMembers[] = drawn.bands.map((band) => {
 		const start = bandStartStorage(input, band, representative);
+		// The band's storage in the snapshot's dams: every band shares the one history.
+		const bandSnapshot = snapshot ? withDamStorage(snapshot, input, start.storageM3ByDam) : null;
 		const levels = options.levels.map((level) => {
 			let problems = outlookLevelProblems(level);
 			const members: OutlookMember[] = [];
 			for (const a of problems.length ? [] : analogues) {
-				const m = outlookMemberInput(input, baseRun, season, a, level.ops, { storageM3: start.storageM3ByDam });
+				const m = bandSnapshot ? outlookSeasonInput(input, baseRun, season, a, level.ops) : outlookMemberInput(input, baseRun, season, a, level.ops, { storageM3: start.storageM3ByDam });
 				if (m.problems.length) {
 					problems = m.problems;
 					members.length = 0;
 					break;
 				}
-				members.push(outlookMember(runModelWithoutChecks(m.input), m.input.model, season, a, options.siteNodeId ?? null));
+				members.push(outlookMember(bandSnapshot ? runModelFrom(bandSnapshot, m.input) : runModelWithoutChecks(m.input), m.input.model, season, a, options.siteNodeId ?? null));
 			}
 			return { id: level.id, label: level.label, problems, members };
 		});

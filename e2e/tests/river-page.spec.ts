@@ -19,7 +19,7 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await openRiver(page, id);
 
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true })).toHaveAttribute('aria-current', 'page');
-	await expect(page.getByRole('heading', { level: 2, name: 'River & reserve' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
 	const context = page.getByTestId('river-context');
 	await expect(context).toContainText('Second');
 	await expect(context).toContainText('1 Oct 2019 – 30 Sep 2022');
@@ -157,7 +157,7 @@ test('before the first run: the frame, and a way to run the model', async ({ pag
 	void owner;
 	const project = await createProject(page.request, 'River empty');
 	await page.goto(`/projects/${project.id}?tab=river`);
-	await expect(page.getByRole('heading', { level: 2, name: 'River & reserve' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
 	const empty = page.getByRole('region', { name: 'No run yet' });
 	await expect(empty).toContainText('After a run, this page shows the simulated outflow against the EWR');
 	await expect(empty.getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');

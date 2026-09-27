@@ -125,7 +125,7 @@
 		</p>
 		{#if anonymisedCount}
 			<p data-testid="override-anonymised">
-				Other farms and users appear under an anonymous name with their values blank, as in the published baseline you can see. A value you
+				Other units and users appear under an anonymous name with their values blank, as in the published baseline you can see. A value you
 				enter on one replaces the baseline's own, which you can't see, and is a baseline assumption.
 			</p>
 		{/if}

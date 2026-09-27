@@ -18,7 +18,7 @@
 
 {#if rows.length}
 	<section class="panel supply" aria-labelledby="supply-h">
-		<h2 id="supply-h">Supply by farm</h2>
+		<h2 id="supply-h">Supply by unit</h2>
 		<ul class="rows">
 			{#each rows as r (r.nodeId)}
 				<li data-farm={r.nodeId} data-band={r.band}>

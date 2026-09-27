@@ -554,7 +554,7 @@
 							{#if data.a.run.legacy && data.b.run.legacy}Both runs use
 							{:else if data.a.run.legacy}Run A uses
 							{:else}Run B uses{/if}
-							the legacy runoff model (b023 workbook) — it doesn’t conserve water at the event scale (audit H1), so this
+							the legacy runoff model (b023 workbook, removed in engine 1.0.0) — it doesn’t conserve water at the event scale (audit H1), so this
 							comparison is workbook comparison only, not evidence for a licence, Reserve or compliance assessment.
 						</div>
 					{/if}
@@ -621,7 +621,7 @@
 				</section>
 
 				<section class="panel" aria-labelledby="farms-h">
-					<div class="panel-head"><h2 id="farms-h">Farms</h2></div>
+					<div class="panel-head"><h2 id="farms-h">Units</h2></div>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
 

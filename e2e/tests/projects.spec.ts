@@ -18,7 +18,7 @@ async function createThroughDialog(page: Page, name: string, description = '') {
 	if (description) await dialog.getByLabel(/Description/).fill(description);
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	// Creating opens the new project's workspace.
-	await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: name })).toBeVisible();
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await expect(row(page, name)).toBeVisible();
 }
@@ -51,11 +51,11 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 
 	// The copy carries A's model but is its own project.
 	await row(page, 'Example Valley — new orchard').getByRole('link', { name: 'Example Valley — new orchard', exact: true }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'Example Valley — new orchard' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Example Valley — new orchard' })).toBeVisible();
 	await expect(page).not.toHaveURL(new RegExp(idA));
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
 	await expect(stat('Outflow gauge')).toHaveText('Outflow gauge');
-	await expect(stat('Farms')).toHaveText(/^2\s*\+ 1 gauge$/);
+	await expect(stat('Units')).toHaveText(/^2\s*\+ 1 gauge$/);
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).
@@ -85,7 +85,7 @@ test('clicking anywhere on a project row opens it, and its buttons still work', 
 	// covered element, so click the screen point).
 	await clickAt(page, r.getByRole('cell', { name: 'owner', exact: true }));
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
-	await expect(page.getByRole('heading', { level: 1, name: 'Example Ridge' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Example Ridge' })).toBeVisible();
 	// On a phone the row folds into the name cell; tapping its meta line opens it too.
 	await page.setViewportSize({ width: 390, height: 800 });
 	await page.goto('/');

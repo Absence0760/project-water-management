@@ -8,6 +8,7 @@ import type {
 	InputChange,
 	MemberResult,
 	OpClass,
+	OutlookExcluded,
 	PairedMember,
 	PairedSummary,
 	ProjectModel,
@@ -21,7 +22,9 @@ import type {
 	SignoffStatement,
 	RunSummary,
 	ScenarioOp,
+	SeasonalOutlook,
 	SeriesMeta,
+	StoredRunoffModelId,
 	YearClassMethod,
 	YieldPoint
 } from '@water-management/engine';
@@ -112,10 +115,28 @@ export interface OutcomeSettings {
 	siteNodeId?: string | null;
 }
 
+/** A season as a month and day each end (settings.outlook.season): the decision date and the season end. */
+export interface OutlookSeasonSetting {
+	startMonth: number;
+	startDay: number;
+	endMonth: number;
+	endDay: number;
+}
+
+/**
+ * settings.outlook (issue #53 R5, backend projects/outlookSettings.ts): how a
+ * seasonal outlook is set up. null = the engine's defaults, pending the
+ * client (O3, O6). Not a model input; the API always sends both fields.
+ */
+export interface OutlookSettings {
+	season: OutlookSeasonSetting | null;
+	planningShare: number | null;
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 }
@@ -466,7 +487,10 @@ export interface RunMeta {
 	endDate: string;
 	createdAt: string;
 	createdBy: string | null;
-	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
+	/**
+	 * The run used the legacy runoff model (its settings don't say 'gr4j'; audit H1): workbook comparison only,
+	 * not evidence. Only a run made before engine 1.0.0 removed that model (issue #16); never a new run.
+	 */
 	legacy: boolean;
 	/**
 	 * The modeller's written explanation of the run ('' = none), e.g. why a
@@ -477,8 +501,8 @@ export interface RunMeta {
 	/** When and by whom (display name) the notes last changed; null = never written. */
 	notesUpdatedAt?: string | null;
 	notesUpdatedBy?: string | null;
-	/** settings.runoffModel the run used ('gr4j', 'legacy', …; absent → legacy). Absent from an older API. */
-	runoffModel?: string;
+	/** settings.runoffModel the run used: 'gr4j', or 'legacy' for a run before engine 1.0.0 (absent → legacy). Absent from an older API. */
+	runoffModel?: StoredRunoffModelId;
 	/**
 	 * The run's place in the evidence history (010_run_nomination): 'current'
 	 * is the project's nominated evidence run, 'past' was nominated and since
@@ -566,7 +590,7 @@ export interface Nomination {
 	runLabel: string;
 	runCreatedAt: string;
 	/** Copied from the run when it was nominated. */
-	runoffModel: string;
+	runoffModel: StoredRunoffModelId;
 	engineVersion: string;
 	reason: string;
 	nominatedAt: string;
@@ -687,8 +711,8 @@ export interface RunCatchmentDay {
 	nodeId: null;
 	name: string;
 	kind: 'catchment';
-	/** 'legacy' for a run without a runoff balance (no stores to trace). */
-	runoffModel: string;
+	/** 'legacy' for a run of the legacy runoff model (engine < 1.0.0), which has no stores to trace. */
+	runoffModel: StoredRunoffModelId;
 	/** Area the mm are spread over; null for a legacy run. */
 	areaKm2: number | null;
 	/** The runoff model's parameters as the run used them (GR4J: x1 … x4, warmupDays); null for a legacy run. */
@@ -1344,6 +1368,48 @@ export interface SweepRequest {
 	name: string;
 	baseRunId: string;
 	members: { name: string; ops: ScenarioOp[] }[];
+}
+
+/** A water year an outlook left out (docs/api.md § Seasonal outlooks): the engine's reasons, or the backend's. */
+export type OutlookExcludedYear = OutlookExcluded | { waterYear: number; reason: 'overLimit' | 'memberFailed' };
+
+/** An outlook's result: the engine's SeasonalOutlook, with the backend's exclusions and the members the engine refused. */
+export type OutlookResult = Omit<SeasonalOutlook, 'excluded'> & {
+	excluded: OutlookExcludedYear[];
+	failures: { levelId: string; label: string; waterYear: number; message: string }[];
+};
+
+/** A seasonal outlook (issue #53 R5, docs/api.md § Seasonal outlooks, backend outlooks/store.ts OutlookRow). */
+export interface Outlook {
+	id: string;
+	name: string;
+	baseRunId: string;
+	baseRun: { id: string; label: string; createdAt: string };
+	decisionDate: string;
+	seasonEnd: string;
+	/** null = the engine's default share (pending the client's O6). */
+	planningShare: number | null;
+	levels: { id: string; label: string; ops: ScenarioOp[] }[];
+	analogueYears: number[] | null;
+	status: 'pending' | 'complete';
+	engineVersion: string | null;
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	/** Only on GET …/outlooks/:outlookId; null while pending. */
+	result?: OutlookResult | null;
+}
+
+/** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
+export interface OutlookRequest {
+	name: string;
+	baseRunId: string;
+	levels: { label: string; ops: ScenarioOp[] }[];
+	decisionDate?: string;
+	seasonEnd?: string;
+	planningShare?: number;
+	analogueYears?: number[];
 }
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */

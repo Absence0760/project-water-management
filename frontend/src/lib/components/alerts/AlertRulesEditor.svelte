@@ -96,8 +96,8 @@
 		</fieldset>
 		{#if groups.farms.length}
 			<fieldset>
-				<legend>Farm dams</legend>
-				{#each groups.farms as r (key(r))}{@render rule(r, r.nodeName ?? 'Farm')}{/each}
+				<legend>Dams</legend>
+				{#each groups.farms as r (key(r))}{@render rule(r, r.nodeName ?? 'Unit')}{/each}
 			</fieldset>
 		{/if}
 		{#if groups.feeds.length}

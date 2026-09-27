@@ -18,17 +18,10 @@ describe('engine invariants on the example catchments', () => {
 	});
 
 	for (const ex of examples) {
-		it(`${ex.name}, legacy runoff: balance, limits, report totals, order invariance, crop-area property`, () => {
+		it(`${ex.name}: every invariant (balance, limits, report totals, order invariance, crop-area property, the runoff water balance)`, () => {
 			const input = inputOf(ex);
-			input.settings = { ...input.settings, runoffModel: 'legacy' };
 			// Guard against a vacuous pass: the example must actually irrigate.
 			expect(input.model.cropAreas.length).toBeGreaterThan(0);
-			for (const seed of [1, 2, 3]) expect(checkAll(input, seed)).toBeNull();
-		}, 60_000);
-
-		it(`${ex.name}, GR4J runoff: every invariant, including the runoff water balance`, () => {
-			const input = inputOf(ex);
-			input.settings = { ...input.settings, runoffModel: 'gr4j' };
 			expect(runModel(input).summary.runoff?.model).toBe('gr4j');
 			for (const seed of [1, 2]) expect(checkAll(input, seed)).toBeNull();
 		}, 60_000);
@@ -39,7 +32,6 @@ describe('engine invariants on the example catchments', () => {
 	it('the supply fields at their defaults change nothing (WP-3.8)', () => {
 		const ex = examples[1]!;
 		const bare = inputOf(ex);
-		bare.settings = { ...bare.settings, runoffModel: 'legacy' };
 		for (const n of bare.model.nodes) {
 			delete n.supplyRule;
 			delete n.pumpCapacityM3Day;
@@ -59,7 +51,7 @@ describe('engine invariants on the example catchments', () => {
 	for (const ex of examples) {
 		it(`${ex.name}: the default window is the whole record, the same run as that window written out`, () => {
 			const base = inputOf(ex);
-			base.settings = { ...base.settings, runoffModel: 'legacy', simulationStart: null, simulationEnd: null };
+			base.settings = { ...base.settings, simulationStart: null, simulationEnd: null };
 			const auto = runModel(base);
 			// The rule before 0.45.0: the span of every rain series (Sandspruit's forecast runs past the record).
 			const spans = (['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'] as const).flatMap((k) => {

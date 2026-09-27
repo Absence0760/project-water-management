@@ -8,7 +8,7 @@ describe('resultGroups', () => {
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary']],
 			['River & Reserve', ['res-river']],
-			['Farms & users', ['res-curtailment', 'res-assurance', 'res-farm']],
+			['Units & users', ['res-curtailment', 'res-assurance', 'res-farm']],
 			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
 			['Record', ['res-notes', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]

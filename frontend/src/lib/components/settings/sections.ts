@@ -17,6 +17,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-quality', label: 'Data quality' },
 	// How the Runs tab's outcome matrix reads a demand sweep (issue #53 R4); changes no result.
 	{ id: 'set-outcomes', label: 'Outcome matrix' },
+	// The season and planning share of the Runs tab's seasonal outlook (issue #53 R5); changes no result.
+	{ id: 'set-outlook', label: 'Seasonal outlook' },
 	// When the project re-runs itself after new data (WP-2.11); last in the form: it changes no result.
 	{ id: 'set-auto', label: 'Automatic runs' },
 	// After the settings form, saved on its own (feeds/DataFeedsPanel.svelte).

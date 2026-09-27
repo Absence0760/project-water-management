@@ -52,7 +52,7 @@ test('each demo user sees their own and shared example catchments with the right
 test('a shared example opens read-only with its seeded run', async ({ page }) => {
 	await signInAs(page, DEMO);
 	await page.getByRole('link', { name: SANDSPRUIT }).click();
-	await expect(page.getByRole('heading', { level: 1, name: SANDSPRUIT })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
 
 	// A viewer's model inputs sit behind "Show model inputs" (issue #6).
 	await page.getByLabel('Show model inputs').check();
@@ -65,7 +65,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 
 	await page.getByRole('link', { name: 'Runs & results' }).click();
 	await expect(page.getByRole('button', { name: /^Initial run \(seed\)/ })).toHaveAttribute('aria-current', 'true');
-	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Farms' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Units' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(0);
 });
 
@@ -73,7 +73,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 test('the owner sees the seeded farmers with their farms, and a farmer sees only their own catchment', async ({ page, browser }) => {
 	await signInAs(page, ANALYST);
 	await page.getByRole('link', { name: SANDSPRUIT, exact: true }).click();
-	await expect(page.getByRole('heading', { level: 1, name: SANDSPRUIT })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
 	const farmers = page.getByRole('region', { name: /^Farmers/ });
 	// The two farmers, and the demo applicant (WP-3.3), who keeps a farm link too.
 	await expect(farmers.getByRole('heading', { name: 'Farmers (3)' })).toBeVisible();

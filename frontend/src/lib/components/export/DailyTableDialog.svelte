@@ -105,18 +105,18 @@
 	{:else if !shown}
 		<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading…</div>
 	{:else}
-		{#if shown.comment}<div class="alert alert-warning" role="note">This run used the legacy runoff model: a workbook comparison only, not evidence.</div>{/if}
+		{#if shown.comment}<div class="alert alert-warning" role="note">This run used the legacy runoff model (removed in engine 1.0.0): a workbook comparison only, not evidence.</div>{/if}
 		<div class="controls">
 			<label for="{uid}-q" class="visually-hidden">Find a date</label>
 			<input id="{uid}-q" type="search" autocomplete="off" placeholder="Date prefix: 2015, 2015-03 or 2015-03-14" bind:value={query} />
 			<p class="muted period" role="status" aria-live="polite">
 				{#if shown.dates.length}{shown.dates[0]} → {shown.dates[shown.dates.length - 1]} ·{/if}
-				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} farm{shown.headers.length === 1 ? '' : 's'}
+				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} unit{shown.headers.length === 1 ? '' : 's'}
 			</p>
 		</div>
 		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll}>
 			<table class="data compact" aria-rowcount={rows.length + 1}>
-				<caption class="visually-hidden">{title}: one row per day, one column per farm</caption>
+				<caption class="visually-hidden">{title}: one row per day, one column per unit</caption>
 				<thead>
 					<tr aria-rowindex="1">
 						<th scope="col" class="datecol">Date</th>

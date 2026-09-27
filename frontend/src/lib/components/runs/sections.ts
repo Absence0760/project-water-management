@@ -27,19 +27,19 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 		},
 		{
 			// Its panels (Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the
-			// outcome matrix, the water account) moved to the River & reserve page (issue #17,
+			// outcome matrix, the seasonal outlook, the water account) moved to the River & reserve page (issue #17,
 			// river/RiverTab.svelte); the group keeps its place as one row linking there.
 			label: 'River & Reserve',
 			sections: [{ id: 'res-river', label: 'On River & reserve' }]
 		},
 		{
-			label: 'Farms & users',
+			label: 'Units & users',
 			sections: [
 				{ id: 'res-curtailment', label: 'Curtailment' },
 				// Reliability and stress classes (engine ≥ 0.32.0, WP-3.4); older runs say they weren't computed.
 				{ id: 'res-assurance', label: 'Assurance of supply' },
 				// Farm detail is only drawn when the run has farms.
-				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Farm detail' }] : [])
+				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Unit detail' }] : [])
 			]
 		},
 		{

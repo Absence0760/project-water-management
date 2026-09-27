@@ -531,7 +531,7 @@ describe('water balance block', () => {
 		const header = lines.findIndex((l) => l.startsWith('Water year,'));
 		expect(lines[header]).toContain('Residual (m³)');
 		expect(lines.slice(header + 1).map((l) => l.split(',')[0])).toEqual(['1999/00', '2000/01', 'Whole run']);
-		// Legacy runs have no runoff-model stores: those cells are empty.
+		// A run without runoff-model stores (a stored legacy run, engine < 1.0.0): those cells are empty.
 		expect(lines[header + 1]!.split(',').slice(1, 9)).toEqual(['365', '500', '50', '0.1', '', '', '', '']);
 	});
 

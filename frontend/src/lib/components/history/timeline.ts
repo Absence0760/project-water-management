@@ -83,7 +83,7 @@ function trafficLights(v: unknown): string {
 }
 
 const UNLINK_CAUSES: Record<string, string> = {
-	model_saved: ' (the farm was removed, or is no longer a farm)',
+	model_saved: ' (the unit was removed, or is no longer a unit)',
 	member_removed: ' (they left, or were removed from the project)',
 	restore: ' (by a restore)'
 };
@@ -113,9 +113,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
 		case 'farmer.linked':
-			return `Linked ${who} to the farm ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
+			return `Linked ${who} to the unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
-			return `Unlinked ${who} from the farm ${str(s.nodeName)}${UNLINK_CAUSES[str(s.cause)] ?? ''}`;
+			return `Unlinked ${who} from the unit ${str(s.nodeName)}${UNLINK_CAUSES[str(s.cause)] ?? ''}`;
 		case 'invite.sent':
 			return `Invited ${str(s.email)} as ${str(s.role)}`;
 		case 'invite.revoked':

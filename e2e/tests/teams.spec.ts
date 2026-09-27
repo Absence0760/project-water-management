@@ -40,7 +40,7 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await expect(np.getByLabel('Belongs to').locator('option:checked')).toHaveText('Breede Hydrology');
 	await np.getByLabel('Name').fill('Upper Breede — baseline');
 	await np.getByRole('button', { name: 'Create' }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'Upper Breede — baseline' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Upper Breede — baseline' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Team' })).toContainText('Belongs to Breede Hydrology');
 
 	// The colleague sees it under the team's group, as an editor.
@@ -205,7 +205,7 @@ test('the teams list shows each team’s numbers and its projects’ traffic lig
 	await page.goto('/teams');
 	const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Card Board' }) });
 	await expect(card.getByRole('definition').first()).toHaveText('2'); // projects
-	await expect(card).toContainText(/Farms short this week\s*\d+ of \d+ farms?/);
+	await expect(card).toContainText(/Units short this week\s*\d+ of \d+ units?/);
 	await expect(card).toContainText(/1 (red|amber|unknown), 1 (unknown|green)/);
 	await expect(card.getByRole('list', { name: /^Projects of Card Board/ }).getByRole('link')).toHaveCount(2);
 	await expect(card.getByText('Unknown: no run yet')).toBeVisible();

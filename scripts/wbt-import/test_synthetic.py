@@ -81,7 +81,8 @@ class SyntheticWorkbook(unittest.TestCase):
         # The last column's draw formula is =0: switched off in the workbook, imported disabled (issue #54).
         self.assertEqual([t["enabled"] for t in m["transfers"]], [True, True, True, True, False])
         self.assertIsNone(project["settings"]["simulationStart"])  # [Home] calculates the whole flow record
-        self.assertEqual(project["settings"]["calibration"]["summerMonths"], [3, 10, 11, 12])
+        # Only what outlived the legacy runoff model (engine 1.0.0): the rain threshold and catchment area.
+        self.assertEqual(sorted(project["settings"]["calibration"]), ["catchmentAreaKm2", "rainThresholdMm"])
         self.assertEqual(
             [s["kind"] for s in project["series"]], ["flow_observed_m3s", "flow_logger_m3s", "rain_catchment_mm", "rain_chirps_mm"]
         )
@@ -92,7 +93,6 @@ class SyntheticWorkbook(unittest.TestCase):
 
         for fragment in (
             "substring match also runs it in months [1, 2]",
-            "substring match also makes months [1, 2] summer",
             "farm Bravo Farm: [Farm spec] min dam % 0.3 is the workbook's transfer minimum",
             "is missing from [Farm spec]",
             "dam(s) have no surface area",

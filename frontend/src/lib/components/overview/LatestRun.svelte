@@ -1,16 +1,17 @@
 <script lang="ts">
 	// Summary → the newest run's KPI row (issue #17 A1): the Reserve, irrigation
 	// supplied, Dams today and the calibration NSE, each with its change from
-	// the run before (Dams: over the run's last 30 days); overview/latestRun.ts
-	// has the rules. The mean simulated outflow is the line under the cards, a
-	// short mention: its change and the rest of the river are on River & reserve.
+	// the run before (Dams: over the run's last 30 days, and the card opens the
+	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow
+	// is the line under the cards, a short mention: its change and the rest of the
+	// river are on River & reserve.
 	// Only this section waits for the run's summary; the rest of the tab
-	// renders at once.
+	// renders at once. Which run it is (label, period, engine, age, a link to
+	// it) is the section header's context line (OverviewTab, RunContext).
 	import type { Run, RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDay } from '$lib/format/number';
 	import { runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
 	import { damsHeadline, headlines, ranAgo, runDays, type DamsState } from './latestRun';
@@ -27,7 +28,7 @@
 		retry,
 		dams
 	}: {
-		/** The run shown (from the page's list, so the context line is there on the first frame). */
+		/** The run shown (from the page's list). */
 		meta: RunMeta;
 		/** Its full record (summary), once loaded. */
 		run: Run | null;
@@ -50,27 +51,14 @@
 	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams), ...all.filter((h) => h.id === 'nse')] : []);
 	const outflow = $derived(all.find((h) => h.id === 'outflow') ?? null);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
-	const LEGACY_TITLE =
-		'Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.';
 </script>
 
-<section class="latest" aria-labelledby="latest-h" aria-busy={loading}>
-	<div class="head">
-		<h2 id="latest-h">Latest run</h2>
-		<a href={runHref(meta.id)}>Open in Runs</a>
-	</div>
-	<p class="context muted">
-		<strong class="lbl">{name(meta)}</strong>
-		{#if meta.legacy}<span class="badge badge-warn" title={LEGACY_TITLE}>Workbook comparison</span>{/if}
-		{#if meta.evidence === 'current'}<span class="badge badge-owner">Evidence</span>{/if}
-		<span>· {fmtDay(meta.startDate)} – {fmtDay(meta.endDate)}</span>
-		<span>· engine {meta.engineVersion}</span>
-		<span>· ran {ranAgo(meta.createdAt)}</span>
-	</p>
+<section class="latest" aria-label="Latest run" aria-busy={loading}>
 	{#if meta.legacy}
 		<p class="alert alert-warning" role="note">
 			This run used the legacy runoff model of the b023 workbook, which does not conserve water at the event scale. Its
-			figures are for comparison with the workbook only, not evidence.
+			figures are for comparison with the workbook only, not evidence. Engine 1.0.0 removed that model, so the run can’t be
+			re-run: a new run uses GR4J.
 		</p>
 	{/if}
 	{#if evidence}
@@ -82,8 +70,8 @@
 	<LoadState loading={loading && !run} error={run ? null : error} {retry}>
 		<dl class="stats">
 			{#each cards as h (h.id)}
-				<div class="stat" class:flagged={h.flagged} data-headline={h.id}>
-					<dt>{h.term}{#if h.help} <HelpTip key={h.help} />{/if}</dt>
+				<div class="stat" class:flagged={h.flagged} class:linked={!!h.href} data-headline={h.id}>
+					<dt>{#if h.href}<a href={h.href}>{h.term}</a>{:else}{h.term}{/if}{#if h.help} <HelpTip key={h.help} />{/if}</dt>
 					<dd class="value" class:none={h.value === '–' || h.value === '…'}>{h.value}{#if h.unit}<small>{h.unit}</small>{/if}</dd>
 					{#each h.sub as line, i (i)}<dd class="sub">{line}</dd>{/each}
 					{#if h.delta}<dd class="sub change"><Delta m={h.delta} spec={h.spec} /> {h.deltaLabel ?? 'vs previous run'}</dd>{/if}
@@ -112,28 +100,7 @@
 	.latest {
 		margin: 0;
 	}
-	.head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-	.head h2 {
-		margin: 0;
-	}
-	.context {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.25rem 0.4rem;
-		margin: 0.25rem 0 0.6rem;
-		font-size: 0.85rem;
-	}
-	.context .lbl {
-		color: var(--text);
-	}
-	/* Four cards: one row, then 2 × 2 on narrow screens. */
+/* Four cards: one row, then 2 × 2 on narrow screens. */
 	.stats {
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		margin-bottom: 0.4rem;
@@ -165,6 +132,32 @@
 	}
 	.stat dd.none {
 		color: var(--text-muted);
+	}
+	/* A card with a page behind it (Dams today → Dams): the term's link is stretched over the card, as the model facts'. */
+	.stat.linked {
+		position: relative;
+	}
+	.stat.linked:hover {
+		border-color: var(--accent);
+	}
+	.stat.linked:has(dt a:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.stat dt a {
+		color: inherit;
+		text-decoration: underline;
+		text-decoration-color: var(--border-strong);
+		text-underline-offset: 3px;
+	}
+	.stat dt a:focus-visible {
+		outline: none;
+	}
+	.stat dt a::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: var(--radius);
 	}
 	.stat.flagged {
 		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));

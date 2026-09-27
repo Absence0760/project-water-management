@@ -53,7 +53,6 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 		expect(codes).toContain('transfer-inout-formula:Echo Farm');
 		expect(codes).toContain('flow-share-missing:Charlie Farm');
 		expect(codes).toContain('transfer-months-substring:Foxtrot Farm');
-		expect(codes).toContain('summer-months-substring:');
 		expect(unmapped.some((u) => u.code === 'transfer-zero-rate')).toBe(true);
 		expect(unmapped.some((u) => u.code === 'transfer-no-destination')).toBe(true);
 		// The text cells in the gauge and rain columns read as blank, as in the Python.

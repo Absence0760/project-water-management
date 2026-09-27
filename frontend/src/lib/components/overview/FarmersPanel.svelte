@@ -11,8 +11,13 @@
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import { expiryText } from '$lib/components/auth-extras/invites';
 	import { fmtDate } from '$lib/format/number';
-	import InviteFarmersDialog from './InviteFarmersDialog.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { farmNames, toggleFarm, type FarmOption } from './farmers';
+
+	// The invite dialog (its CSV preview and pending-invite list) is its own chunk, fetched on the
+	// first "Invite farmers": it was ~2.4 KB gzip of the workspace page chunk, which every catchment
+	// opening downloads, for a dialog only owners open (issue #9).
+	const loadInviteDialog = () => import('./InviteFarmersDialog.svelte');
 
 	let {
 		projectId,
@@ -34,6 +39,7 @@
 	let busy = $state<string | null>(null);
 	let message = $state<string | null>(null);
 	let inviting = $state(false);
+	let inviteMounted = $state(false);
 
 	/** The farmer whose farms are being edited, and the draft selection. */
 	let editing = $state<string | null>(null);
@@ -142,7 +148,7 @@
 	<div class="panel-head">
 		<h2 id="farmers-h">Farmers{#if !loading && !loadError}&nbsp;({farmers.length}){/if}</h2>
 		{#if isOwner && farms.length > 0}
-			<button type="button" class="btn btn-sm btn-primary" onclick={() => (inviting = true)}>Invite farmers</button>
+			<button type="button" class="btn btn-sm btn-primary" onclick={() => (inviteMounted = inviting = true)}>Invite farmers</button>
 		{/if}
 	</div>
 	<p class="muted small intro">
@@ -258,12 +264,16 @@
 
 	<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	{#if isOwner && farms.length === 0}
-		<p class="muted small add-hint">Add a farm on the Network tab before inviting a farmer to it.</p>
+		<p class="muted small add-hint">Add a unit on the Network tab before inviting a farmer to it.</p>
 	{/if}
 </section>
 
-{#if isOwner}
-	<InviteFarmersDialog bind:open={inviting} {projectId} {farms} ondone={invited} />
+{#if isOwner && inviteMounted}
+	<Lazy load={loadInviteDialog}>
+		{#snippet children(InviteFarmersDialog)}
+			<InviteFarmersDialog bind:open={inviting} {projectId} {farms} ondone={invited} />
+		{/snippet}
+	</Lazy>
 {/if}
 
 <style>

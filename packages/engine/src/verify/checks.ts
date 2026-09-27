@@ -603,8 +603,8 @@ function waterYearOfDay(day: number): number {
 }
 
 /**
- * The runoff model's water balance, from the run's own series (conceptual
- * models; nothing to check for legacy runs, which have no summary.runoff):
+ * The runoff model's water balance, from the run's own series (nothing to
+ * check when the caller supplied the natural flow):
  * - every day, rain − AET − Q + exchange = Δ(Σ stores), Q = natural flow in
  *   mm over the catchment, starting from the post-warm-up storage;
  * - Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1;
@@ -612,11 +612,9 @@ function waterYearOfDay(day: number): number {
  */
 export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string | null {
 	const b = out.summary.runoff;
-	// An absent setting runs the engine's default model, as runModel does.
-	const legacy = (input.settings.runoffModel ?? defaultProjectSettings().runoffModel) === 'legacy';
-	if (!b) return legacy ? null : `runoff model ${String(input.settings.runoffModel)} reported no water balance`;
-	if (legacy) return 'a legacy run reported a runoff balance';
 	const get = seriesMap(out);
+	// Natural flow a caller supplied (runModelWith: tests, the workbook replay) has no runoff model, so no stores and no balance.
+	if (!b) return get.has('null|aet') ? `runoff model ${String(input.settings.runoffModel ?? defaultProjectSettings().runoffModel)} reported its stores but no water balance` : null;
 	const s = (k: string) => get.get(`null|${k}`);
 	const rain = s('rain_used')!;
 	const pet = s('pet')!;

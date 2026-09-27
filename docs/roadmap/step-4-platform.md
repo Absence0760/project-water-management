@@ -140,7 +140,7 @@ What changes in the existing system:
 | Auth | TOTP MFA, OIDC SSO (`openid-client`), SCIM 2.0 endpoints | `backend/src/auth/`, new `backend/src/sso/`, `backend/src/scim/` |
 | Billing | `plan`, `subscription`, `billing_invoice`, `usage_event`. Entitlements are enforced in Postgres where they must hold under concurrency (catchment count) | new `backend/src/billing/` |
 | Run storage | `run_series.values` moves to one compressed S3 object per run. The DB keeps metadata and summaries | `backend/src/runs/execute.ts`, `backend/src/runs/routes.ts`, `backend/src/export/*`, `backend/src/compare/routes.ts` |
-| Engine | Scenario transforms, seeded stochastic generator, ensemble statistics, `bucket-v1` flow generator | `packages/engine/src/flow.ts`, new `packages/engine/src/scenario/`, `packages/engine/src/flow/bucket.ts` |
+| Engine | Scenario transforms, seeded stochastic generator, ensemble statistics, `bucket-v1` flow generator | `packages/engine/src/runoff/` (`flow.ts` went in engine 1.0.0), new `packages/engine/src/scenario/`, `packages/engine/src/flow/bucket.ts` |
 | Public API | `/v1` sub-app with `@hono/zod-openapi`, API-client principal in RLS, webhooks on the queue | `backend/src/app.ts`, new `backend/src/v1/` |
 | Frontend | Org switcher, org settings and billing pages, SSO/MFA pages, onboarding wizard and tour, i18n catalogues, unit preferences | `frontend/src/routes/+layout.svelte`, new `frontend/src/routes/orgs/`, `frontend/src/lib/format/number.ts` (hard-coded `'en-US'` today) |
 | Infra | S3 runs bucket, SQS (Step 2), egress (D4), KMS key for app-level encryption, region-parameterised stack | `infra/*.tf`, `infra/variables.tf`, `infra/tests/guardrails.tftest.hcl` |
@@ -805,7 +805,8 @@ run in parallel after WP-4.1.
 ### WP-4.12 The runoff module as an alternative flow generator
 
 - **Goal.** A `bucket-v1` rainfall-runoff generator behind the same interface
-  as b023's recession routine (model.md §5), selectable per project, **after
+  as the runoff model (model.md §5; first planned beside b023's recession
+  routine, which engine 1.0.0 removed), selectable per project, **after
   its water balance closes**.
 - **Engine.** `packages/engine/src/flow/bucket.ts`, `FlowGenerator = (rain,
   params, topology) → naturalFlowPerNode`. Fix the four known faults first:
@@ -818,8 +819,8 @@ run in parallel after WP-4.1.
   `ProjectSettings.flowGenerator: 'b023-recession' | 'bucket-v1'` (default
   unchanged). Bumps `ENGINE_VERSION`. (Since written, the seam has landed as
   the `RunoffModel` interface in `packages/engine/src/runoff/` and
-  `settings.runoffModel: 'legacy' | 'gr4j'`, GR4J by default; the bucket
-  model becomes a third `runoffModel` value.)
+  `settings.runoffModel`, `'gr4j'` only since engine 1.0.0 removed
+  `'legacy'`; the bucket model becomes a second `runoffModel` value.)
 - **Data model.** `hydro_unit(id, project_id, node_id, name, area_km2,
   map_mm, params jsonb)`, `hydro_unit_gauge(unit_id, series_id, weight)`.
   RLS through `app_has_role`. Same-project triggers on `node_id` and
@@ -1292,7 +1293,7 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 | R7 **WR2012 licensing blocks hosted data** | Med | Low | User uploads; importer works on their files |
 | R8 **Scope and time** (18 WPs, one developer) | High | High | Tracks in parallel; SAML, SCIM and a second region only on demand; build WP-4.5/4.6 as manual first |
 | R9 **Ensemble results misread** as forecasts | Med | Med | Clear labelling, seed and method on every chart, the hydrologist's wording in help |
-| R10 **Runoff module never calibrates well enough** | Med | Low | Keep `b023-recession` as the default; the module ships only on the hydrologist's acceptance |
+| R10 **Runoff module never calibrates well enough** | Med | Low | Keep GR4J as the default (the b023 recession was removed in engine 1.0.0); the module ships only on the hydrologist's acceptance |
 | R11 **Support load swamps the operator** | Med | Med | Guides for the top tasks, the tour, the guided wizard, D9 |
 | R12 **Bus factor on auth/billing code** | Med | High | Reuse estate patterns (feohledger) so the design is familiar; docs per WP; the CISO reviews the trust boundaries |
 

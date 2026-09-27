@@ -50,7 +50,7 @@ describe('riverHref and riverAnchor', () => {
 		expect(riverHref(null, 'res-ewr')).toBe('?tab=river#res-ewr');
 	});
 	it('knows the panels that moved from Runs & results, and no others', () => {
-		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-outcomes', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
+		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-outcomes', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
 		for (const id of ['res-curtailment', 'res-ewr-agreement', 'res-summary', '']) expect(riverAnchor(id)).toBe(false);
 	});
 });

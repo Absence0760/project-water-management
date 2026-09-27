@@ -51,9 +51,9 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	const form = page.getByRole('form', { name: 'Add a change' });
 	await form.getByLabel('Kind of change').selectOption({ label: 'Scale demand' });
 	await expect(form.getByLabel('Whose demand')).toHaveValue('farm');
-	const farms = form.getByRole('group', { name: 'Farms (none ticked: all of them)' });
+	const farms = form.getByRole('group', { name: 'Units (none ticked: all of them)' });
 	await expect(farms.getByRole('checkbox')).toHaveCount(2);
-	await expect(farms).toHaveText(/^Farms \(none ticked: all of them\)\s*Upper farm\s*Lower farm$/);
+	await expect(farms).toHaveText(/^Units \(none ticked: all of them\)\s*Upper farm\s*Lower farm$/);
 	const months = form.getByRole('group', { name: 'Months (none ticked: every month)' });
 	await expect(months.getByRole('checkbox')).toHaveCount(12);
 	await expect(months.locator('label').first()).toHaveText('Oct');
@@ -87,7 +87,7 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 
 	await page.getByRole('button', { name: 'Run scenario' }).click();
 	const compare = page.getByRole('region', { name: 'Scenario against its base' });
-	const table = compare.getByRole('region', { name: 'Farms' }).getByRole('table', { name: 'Change per farm, run B minus run A' });
+	const table = compare.getByRole('region', { name: 'Units' }).getByRole('table', { name: 'Change per unit, run B minus run A' });
 	await expect(table).toBeVisible();
 
 	// The stored runs: the scenario's daily demand is the base's × 0.5 in Dec and Jan, the base's on every other day.

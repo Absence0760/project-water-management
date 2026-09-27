@@ -147,8 +147,9 @@ collected as a checklist in issue #46; tick it there as they answer.
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
       **not** client sign-off. Put each to the hydrologist as "confirm or change":
-      - H1: legacy kept unchanged but labelled workbook comparison only, never
-        evidence (warning, badge, CSV comment); GR4J is the model of record.
+      - H1: closed. Engine 1.0.0 removed the legacy model (2026-09-26,
+        issue #16); GR4J is the only runoff model, and the operator waived
+        the review that was to come first. Nothing left to confirm.
       - N3 (engine 0.14.0): a 25 mm soil-water store carries effective rain
         over; 0 reproduces the workbook. Confirm the size per soil/root depth.
       - Q5 (0.16.0): `damMinPct` is the dam's minimum operating level;
@@ -241,9 +242,10 @@ collected as a checklist in issue #46; tick it there as they answer.
         else the pooled factor) and the 0.25–4 clamp;
       - whether a neighbouring gauge should fill gaps before CHIRPS does.
 
-      Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
-      catchment with the correction on (condition 1), and record the result
-      in the issue.
+      The issue #4 phase 6 GR4J-vs-legacy comparison can no longer be re-run:
+      engine 1.0.0 removed the legacy model (issue #16). The last client
+      record of legacy against the workbook is the regression run on engine
+      0.45.0 (`run.test.ts`, engine-audit.md § Regression suite).
 - [ ] **Multi-day rain accumulations (issue #2, audit B4). Built (engine
       0.20.0, model.md §2.4d): detection, spreading by bias-corrected CHIRPS
       (default on), keep-as-recorded and listed windows in Settings → Rain
@@ -588,7 +590,8 @@ the reports):
   desirable, not mandatory; the app removed it as an input in engine 0.10.0,
   audit P1.) Legacy is not acceptable as evidence at all, because it
   doesn't conserve water (H1). If both models run, declare the primary one
-  before seeing results.
+  before seeing results. (Settled: engine 1.0.0 removed legacy, so GR4J is
+  the only model, issue #16.)
 - **Q2: WR2012.** Always report it; never make it a hard constraint. Keep
   the soft MAR penalty off by default and record its weight when it's on
   (an applied fit's record keeps the weight and the MAR ratio with and without it).
@@ -748,9 +751,11 @@ the reports):
             failing years nor the Q90 ratio side by side. Trigger: the
             hydrologist asks to compare the checks between runs (for
             example before and after a refit).
-- [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
-      hydrologist asks for it. Phase 10 (remove legacy) is issue #16, due by
-      2026-11-30 (sign-off assumed 2026-09-25, issue #4 closed).
+- [x] **Phase 10 of issue #4: remove legacy** (issue #16). Done 2026-09-26,
+      engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
+      hydrologist-review trigger ([plan.md](./plan.md) Decisions,
+      [model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)).
+- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it.
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -827,11 +832,10 @@ the suggested order (the IDs carry the detail):
       fit is used as evidence; add that to [plan.md](./plan.md) with the
       other hydrologist questions. Trigger: once the sweep and CR-18 have
       landed.
-- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q against the imported
-      table), then CR-14 mass-conserving store once the hydrologist decides
-      (question 1 below).
-- [ ] **Hydrologist questions** from the review: recession fix vs GR4J (CR-14),
-      the EWR form the CMA expects (CR-30), the logger's highest gauging and
+- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
+      to overlay went with the legacy model in engine 1.0.0). CR-14 is
+      dropped: engine 1.0.0 removed the legacy model (issue #16).
+- [ ] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which of the two MAR estimates to trust (CR-7). Add them to
       [plan.md](./plan.md) when the review session is booked.
@@ -1030,6 +1034,37 @@ the suggested order (the IDs carry the detail):
       (−0.3 KB total, +0.1 KB on /farm, /share and sign-in), `.stat dd.sub`
       (−0.07 KB; would leak into three components that style it their own
       way), the Settings sections' repeats (one lazy chunk already).
+- [x] **Cut weight for issue #17's pages** (issue #9, 2026-09-26): total
+      966 722 → 953 006 bytes gzip (945 → 931 KB by the guard's rounding;
+      ceiling 949 → 935), from a per-chunk and per-module attribution of a
+      sourcemapped build. The weight left is mostly content (help text
+      62 KB, uPlot 22, Svelte's runtime 21, SvelteKit's client 11) and
+      split overhead (~63 KB in the JS, ~30 KB in 109 CSS files), not dead
+      code: tree-shaking already drops unused exports and components, no
+      module ships twice outside the two spreadsheet workers (~1 KB), and
+      no global CSS class is unused. Removed: preload lists without chunks
+      the importer already has (−2.3), the Runs tab's six always-rendered
+      panels back in its chunk (−6.8), the report's server-PDF controls in
+      its chunk (−0.4), Svelte's scoping class `s<hash>` (−2.6), 7-character
+      file hashes and CSS files by hash alone (−2.7) (architecture.md §
+      Code splitting). Moved: the Invite farmers dialog is its own chunk
+      (+1.2 total), taking the workspace page chunk 40.7 → 38.5 KB. Numbers
+      per step in the bundle guard's change log.
+- [ ] **Per-chunk ceiling vs always-rendered lazy panels.** Some lazy
+      chunks load on every visit of their tab, so they only add split
+      overhead; they were split to keep the tab under the 42 KB per-chunk
+      ceiling. Inline, the Settings tab's data feeds, scheduled reports, API
+      keys, outcome settings and pan-coefficient helper save 6.0 KB of total
+      (a 59 KB Settings chunk), and the Runs tab's uncertainty and outcome
+      panels 2.8 KB (a 48 KB Runs chunk). One file is also the lighter,
+      single-request load for that tab. Durable fix: the guard's
+      `largestChunkKb` measures page and route chunks (the first load)
+      separately from tab chunks, with a tab ceiling near 60 KB, then these
+      fold back in. Also on the workspace page (left alone while #17's
+      section header and Compare runs work is in flight): the Overview's
+      always-rendered lazy panels (Flow vs reserve, Supply by farm, Dam
+      levels) and CompareView's. Trigger: the operator's call on the
+      ceiling, or the next Settings/Runs feature that needs room.
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →
@@ -1096,7 +1131,14 @@ the suggested order (the IDs carry the detail):
       English. `lazy-chunk.spec.ts` covers each. Total bundle 894.0 KB gzip
       (the guard rounds up and prints 895, its ceiling: under 1 KB left).
 - [ ] Soak the fuzz tests after any engine change:
-      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
+      (the random cases moved from `run.invariants.test.ts` into the shard
+      files; GR4J only since engine 1.0.0). **Engine 1.0.0 (2026-09-26,
+      issue #16): 20 000 cases with `FUZZ_MAX_FAILURES=100` passed** once
+      seed 2909 was fixed: the doubled-crop-area law is now checked with
+      annual borehole caps off, since more demand uses a cap up earlier and
+      moves the lagged stream depletion in time (the cap working, present
+      on main before #16; `checkGroundwater` still checks the caps).
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
       0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
@@ -1113,7 +1155,7 @@ the suggested order (the IDs carry the detail):
       so later seeds are unscanned. **20 000-case soak on 0.21.1
       (2026-09-25, `FUZZ_MAX_FAILURES=100`, seeds 1–20 000):** GR4J passed;
       legacy failed on one seed, 14313 (order invariance, below). Repro any seed with
-      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/fuzz`.
 - [x] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
       9681).** Fixed in engine 0.19.1 (2026-09-25). The cause was not the
       summing order of E but which farms counted as having an impact at all.
@@ -1384,16 +1426,18 @@ No Afrikaans wording ships yet: none is reviewed.
       #5): the menu's *Account* link opens `/account` (display name, email
       and confirmation status, change password); `PATCH /auth/me` and
       `POST /auth/change-password` (docs/api.md § Auth).
-- [ ] **Dam figures in the run summary** (issue #55; from #17, Summary → Dam levels,
-      [ui.md § Summary](./ui.md#summary)). The Summary's Dam levels panel
-      and its Dams today card fetch each dam's daily `dam_storage` series (one request per dam,
+- [ ] **Dam figures in the run summary** (issue #55; from #17, the Dams page,
+      [ui.md § Dams](./ui.md#dams)). The Dams page (its cards and Dam levels
+      table), the Summary's Dams today card and the Network's colour by dam
+      level fetch each dam's daily `dam_storage` series (one request per dam,
       ~16 000 values each, four at a time) and reduces them in the browser
       (`overview/damLevels.ts`), because `RunSummary.farms` has no storage
       figures. Durable fix: the engine adds per-farm end-of-run storage, the
       storage 30 days before the end, the lowest in the last year (value and
       day) and days at the minimum level to
       `FarmSummary` (an `ENGINE_VERSION` bump), and the panel reads those,
-      keeping the series path only for runs saved before it. Trigger: a
+      keeping the series path only for runs saved before it (the Dams page's
+      sparklines and storage chart still need the picked dam's series). Trigger: a
       catchment with enough dams (tens) that the Summary's fetches are slow,
       or the next engine release that touches `FarmSummary`.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
@@ -2238,7 +2282,10 @@ from the WP:
       so while a team uses them. Durable fix: the hydrologist confirms or
       replaces them; change `EWR_THRESHOLDS`, the 055 header, and the docs
       that quote them. Trigger: the hydrologist's answer.
-- [ ] **Bundle ceiling after the team thresholds.** The team page's
+- [x] **Bundle ceiling after the team thresholds.** Superseded: the ceiling
+      has been re-measured and moved since (the guard's change log), and the
+      2026-09-26 weight cut took the total to 931 KB under a 935 ceiling.
+      The team page's
       thresholds panel, the portfolio's thresholds sentence and the History
       line add ~1.4 KB gzip: 925.5 KB against the 925 KB ceiling (main
       measured 924.1 KB before them), so `pnpm check:bundle` reports 926.

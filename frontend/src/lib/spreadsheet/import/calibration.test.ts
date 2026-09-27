@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractCalibration, extractCalibrationWindow, summerMonthsNote } from './calibration';
+import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { InvalidWorkbookError } from './errors';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -7,54 +7,22 @@ import { B023Workbook } from './workbook';
 const wbOf = (b = syntheticB023()) => new B023Workbook(b.build());
 
 describe('extractCalibration', () => {
-	it('reads every parameter from its named range, keys in the Python order', () => {
+	it('reads the rain threshold and catchment area from their named ranges, keys in the Python order', () => {
 		const c = extractCalibration(wbOf());
-		expect(Object.keys(c)).toEqual([
-			'a',
-			'b',
-			'rainThresholdMm',
-			'summerFactor',
-			'winterFactor',
-			'summerMonths',
-			'baseFlowInitial',
-			'catchmentAreaKm2',
-			'baseResetRatio',
-			'winterTodayRainMm',
-			'winterNextDayRainMm',
-			'shiftPeakIndexLo',
-			'shiftPeakIndexHi',
-			'amplitudeM3Day',
-			'recessionDaysMax',
-			'recessionFactors',
-			'recessionCurveM3Day'
-		]);
-		expect(c).toMatchObject({ a: 0.09, b: 1.2, summerMonths: [1, 2, 3, 10, 11, 12], baseFlowInitial: 250, catchmentAreaKm2: 12, recessionDaysMax: 5 });
-		expect(c.recessionFactors).toEqual([0.9, 0.92, 0.94, 0.96, 0.98]);
-		expect(c.recessionCurveM3Day).toEqual([5000, 4000, 3000, 2000, 1000]);
+		expect(Object.keys(c)).toEqual(['rainThresholdMm', 'catchmentAreaKm2']);
+		expect(c).toEqual({ rainThresholdMm: 2, catchmentAreaKm2: 12 });
 	});
 
 	it('reads blanks as 0 but stops on text that is not a number (the Python raises)', () => {
-		expect(extractCalibration(wbOf(syntheticB023().set('Flow Calibration Cfg', 'D20', null))).a).toBe(0);
-		expect(() => extractCalibration(wbOf(syntheticB023().set('Flow Calibration Cfg', 'D20', 'n/a')))).toThrow(
-			"[Flow Calibration Cfg] rCalibration_PeakCoef_a: expected a number, got 'n/a'"
-		);
+		// D22 is the rain threshold in the test workbook.
+		const at = (v: string | null) => extractCalibration(wbOf(syntheticB023().set('Flow Calibration Cfg', 'D22', v)));
+		expect(at(null).rainThresholdMm).toBe(0);
+		expect(() => at('n/a')).toThrow("[Flow Calibration Cfg] rCalibration_RainThreshold: expected a number, got 'n/a'");
 	});
 
-	it("stops a table at the sheet's last row, as openpyxl's read-only rows do", () => {
-		// The recession table's range runs past the sheet's used range: the Python gets the rows that exist.
-		const b = syntheticB023().name('rCalibration_RecessionFactors', "'Flow Calibration Cfg'!$F$20:$F$60");
-		const factors = extractCalibration(wbOf(b)).recessionFactors;
-		const lastRow = wbOf(b).lastRow('Flow Calibration Cfg');
-		expect(factors.length).toBe(lastRow - 19);
-		expect(factors.slice(0, 5)).toEqual([0.9, 0.92, 0.94, 0.96, 0.98]);
-	});
-});
-
-describe('summerMonthsNote', () => {
-	it('notes the months the substring match adds', () => {
-		expect(summerMonthsNote(wbOf())).toBeNull();
-		const note = summerMonthsNote(wbOf(syntheticB023().set('Flow Calibration Cfg', 'D32', '10,11,12,3,')));
-		expect(note?.message).toBe("summer months '10,11,12,3,': the workbook's substring match also makes months [1, 2] summer; the app uses the listed months only (audit M1)");
+	it('no longer reads the legacy runoff model’s cells (engine 1.0.0): text in one does not stop the import', () => {
+		// D20 is the legacy peak-flow coefficient a in the test workbook.
+		expect(extractCalibration(wbOf(syntheticB023().set('Flow Calibration Cfg', 'D20', 'n/a')))).toEqual({ rainThresholdMm: 2, catchmentAreaKm2: 12 });
 	});
 });
 

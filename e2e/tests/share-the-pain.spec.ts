@@ -73,7 +73,7 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 	await expect(table).toBeVisible();
 	// The panel still opens on its own heading (the portfolio's "farms short this week" link lands there), the board under it.
 	await expect(panel.getByRole('heading').first()).toHaveText('Curtailment targets');
-	await expect(panel.getByRole('heading', { name: 'Per farm' })).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Per unit' })).toBeVisible();
 
 	// The board, as rendered: its groups and stages in order, the users on their own rows and marked.
 	const rows = await rowsOf(table);
@@ -82,7 +82,7 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 		'Upper farm',
 		'Lower farm',
 		'Dam only',
-		'All farms',
+		'All units',
 		'Other water users (outside the equitable share)',
 		'Town senior, not curtailed',
 		'Mill junior, curtailed',
@@ -99,11 +99,11 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 	for (const r of rows) for (const c of r) expect(c).not.toMatch(/(^|\s)[-−]\d/);
 
 	// The equal share: one % for every farm with demand, the same as the stage card.
-	const shares = ['Upper farm', 'Lower farm', 'All farms'].map((n) => stage(rows.find((r) => r[0] === n)![3]!)[0]);
+	const shares = ['Upper farm', 'Lower farm', 'All units'].map((n) => stage(rows.find((r) => r[0] === n)![3]!)[0]);
 	expect(new Set(shares).size).toBe(1);
-	const cards = board.getByRole('list', { name: 'The three stages, all farms' });
+	const cards = board.getByRole('list', { name: 'The three stages, all units' });
 	await expect(cards.getByTestId('stage-share')).toHaveText(shares[0]!);
-	await expect(cards).toContainText('of its demand for every farm: a fairness benchmark, not an allocation');
+	await expect(cards).toContainText('of its demand for every unit: a fairness benchmark, not an allocation');
 	expect(parseInt(shares[0]!, 10)).toBeGreaterThan(0);
 	expect(parseInt(shares[0]!, 10)).toBeLessThan(100);
 	await expect(cards.getByTestId('stage-today')).toHaveText(stage(rows[4]![2]!)[0]);
@@ -123,7 +123,7 @@ test('the curtailment panel leads with the share-the-pain board: three stages, b
 	expect(millRow[3]).toBe('not in the share');
 
 	// The board's figures are the tables' under it: supplied, equitable share volume, volume left and demand left %.
-	const farms = panel.getByRole('table', { name: /^Curtailment targets per farm/ });
+	const farms = panel.getByRole('table', { name: /^Curtailment targets per unit/ });
 	const col = async (header: RegExp) =>
 		farms.locator('thead tr').nth(1).locator('th').evaluateAll((ths, src) => ths.findIndex((th) => new RegExp(src).test((th.textContent ?? '').replace(/\s+/g, ' '))) + 1, header.source);
 	const [supplied, target, left, leftPct] = await Promise.all([col(/^Supplied\s*m³\/day/), col(/^Equitable share volume/), col(/^Volume left/), col(/^Demand left/)]);

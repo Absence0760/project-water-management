@@ -7,14 +7,13 @@ import { randomInput } from '../testing/fuzz';
 import { checkYield, firstDam } from '../testing/yieldInvariants';
 
 describe('firm-yield invariants on random networks', () => {
-	it('hold on the first 40 seeds with a dam, legacy and GR4J', () => {
+	it('hold on the first 40 seeds with a dam', () => {
 		let tested = 0;
 		for (let seed = 1; seed < 400 && tested < 40; seed++) {
-			const runoffModel = seed % 2 ? 'legacy' : 'gr4j';
-			const input = randomInput(seed, { maxDays: 500, maxNodes: 8, runoffModel });
+			const input = randomInput(seed, { maxDays: 500, maxNodes: 8 });
 			const dam = firstDam(input);
 			if (!dam) continue;
-			expect(checkYield(input, dam), `seed ${seed} (${runoffModel})`).toBeNull();
+			expect(checkYield(input, dam), `seed ${seed}`).toBeNull();
 			tested++;
 		}
 		expect(tested).toBe(40);

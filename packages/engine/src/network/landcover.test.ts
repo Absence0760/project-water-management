@@ -37,7 +37,7 @@ const patch = (over: Partial<LandCoverPatch>): LandCoverPatch => ({ id: 'p', nod
 /** Two farms of 10 km² each (area shares ½) above the outlet, no demand. */
 function input(landCover: LandCoverPatch[], days: number): ModelInput {
 	return {
-		settings: { runoffModel: 'legacy', ewrPragmaticM3PerDay: new Array(12).fill(0) as never },
+		settings: { ewrPragmaticM3PerDay: new Array(12).fill(0) as never },
 		model: { nodes: [node('G', 'gauge', null), node('A', 'farm', 'G'), node('B', 'farm', 'G', { sortOrder: 1 })], crops: [], cropAreas: [], transfers: [], landCover },
 		series: { rain_catchment_mm: { startDate: '2021-01-01', values: new Array(days).fill(0) } }
 	};

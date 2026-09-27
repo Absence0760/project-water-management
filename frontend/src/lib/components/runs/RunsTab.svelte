@@ -36,22 +36,21 @@
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverAnchor, riverHref } from '$lib/components/river/links';
-	// Assurance of supply (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
-	const loadSupplyAssurancePanel = () => import('$lib/components/reliability/AssurancePanel.svelte');
-	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
-	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
+	// Panels every shown run renders (assurance of supply, evidence, "Check reproduction", "Changes
+	// since this run", publication) are in the Runs chunk: as chunks of their own they loaded on every
+	// visit anyway and cost ~7 KB gzip of split overhead (issue #9).
+	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
+	import EvidencePanel from './EvidencePanel.svelte';
+	import ReproducePanel from './ReproducePanel.svelte';
+	import PublicationPanel from './PublicationPanel.svelte';
+	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
+	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
-	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
-	// "Check reproduction" (WP-3.1): its own chunk, like the evidence panel.
-	const loadReproducePanel = () => import('./ReproducePanel.svelte');
-	// Publishing a run and the WP-2.3 notice editor: their own chunk, like the evidence panel.
-	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
-	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix and the
-	// water account moved to River & reserve (issue #17, river/RiverTab.svelte); this page links there.
-	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
-	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
+	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
+	// seasonal outlook and the water account moved to River & reserve (issue #17, river/RiverTab.svelte);
+	// this page links there.
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
 	const loadForecastPanel = () => import('$lib/components/forecast/ForecastPanel.svelte');
 	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
@@ -493,7 +492,7 @@
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
 										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
 										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
-										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
+										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
 							</button>
@@ -543,7 +542,7 @@
 						{#if detail.run.legacy}
 							<span
 								class="badge badge-warn"
-								title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence."
+								title="Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run."
 								>Workbook comparison</span
 							>
 						{/if}
@@ -603,7 +602,7 @@
 				{#snippet river()}
 					<!-- The group's panels are on their own page now (issue #17): one link, keeping the run. -->
 					<p class="panel river-link" id="res-river">
-						<span>EWR against outflow, Reserve compliance, EWR by month, the uncertainty bands, the outcome matrix and the water account for this run are on River &amp; reserve.</span>
+						<span>EWR against outflow, Reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account for this run are on River &amp; reserve.</span>
 						<a class="btn btn-sm" href={riverHref(shownRunId)}>River &amp; reserve for this run <span aria-hidden="true">→</span></a>
 					</p>
 				{/snippet}
@@ -613,11 +612,7 @@
 						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} network={editor.model} {farmNames} />
 					</section>
 					<section class="panel" id="res-assurance">
-						<Lazy load={loadSupplyAssurancePanel}>
-							{#snippet children(AssurancePanel)}
-								<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-							{/snippet}
-						</Lazy>
+						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
 					</section>
 				{/snippet}
 				{#snippet modelTail()}
@@ -673,26 +668,14 @@
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}
-								<Lazy load={loadEvidencePanel}>
-									{#snippet children(EvidencePanel)}
-										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-									{/snippet}
-								</Lazy>
+								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
 							{/key}
 							{#key shownRunId}
-								<Lazy load={loadReproducePanel}>
-									{#snippet children(ReproducePanel)}
-										<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
-									{/snippet}
-								</Lazy>
+								<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
 							{/key}
 						</div>
 						{#key shownRunId}
-							<Lazy load={loadRunInputsPanel}>
-								{#snippet children(RunInputsPanel)}
-									<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
-								{/snippet}
-							</Lazy>
+							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
 						{/key}
 					</section>
 					<section class="panel" id="res-publication">
@@ -703,11 +686,7 @@
 							</div>
 						{:else if publication}
 							{#key shownRunId}
-								<Lazy load={loadPublicationPanel}>
-									{#snippet children(PublicationPanel)}
-										<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
-									{/snippet}
-								</Lazy>
+								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
 							{/key}
 						{:else}
 							<p class="muted" role="status">Loading the publication…</p>
@@ -738,7 +717,7 @@
 		{:else}
 			<div class="panel placeholder muted">
 				Results appear here after a run: flows at the outflow gauge, calibration against observed flow, EWR compliance and each
-				farm's supply and dam storage.
+				unit's supply and dam storage.
 			</div>
 		{/if}
 	</div>

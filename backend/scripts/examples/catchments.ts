@@ -498,8 +498,6 @@ const SANDSPRUIT: CatchmentSpec = {
 		calibrationStart: '2011-10-01',
 		calibrationEnd: '2021-09-30'
 	},
-	// Summer storms on dry soil still run off, so soften the legacy model's summer penalty.
-	calibration: { summerFactor: 0.35 },
 	referenceGauge: { name: 'Neighbouring river weir (synthetic, reference only)', scale: 0.7 },
 	forecastDays: 10,
 	// The model is about 11 % drier than the reference: noted, not queried.

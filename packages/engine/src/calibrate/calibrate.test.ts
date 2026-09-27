@@ -4,7 +4,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
 import { gr4j } from '../runoff/gr4j';
-import { GR4J_PARAMS, LEGACY_PARAMS, type Gr4jParams } from '../runoff/params';
+import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 import { GR4J_NO_PET } from '../runoff/pet';
 import { runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
@@ -74,8 +74,8 @@ function synthetic(truth: Gr4jParams, years = 8, start = '1990-10-01'): ModelInp
 }
 
 describe('the pan coefficient / A-pan evaporation is forcing, never a calibratable parameter', () => {
-	it('is not among GR4J_PARAMS or LEGACY_PARAMS — the trade-off with X1/X3 means it must stay fixed', () => {
-		const keys = [...GR4J_PARAMS, ...LEGACY_PARAMS].map((p) => p.key);
+	it('is not among GR4J_PARAMS — the trade-off with X1/X3 means it must stay fixed', () => {
+		const keys = GR4J_PARAMS.map((p) => p.key);
 		expect(keys).not.toContain('panCoefficient');
 		expect(keys).not.toContain('apanMm');
 	});
@@ -99,7 +99,7 @@ describe('prepareCalibration scores what runModel produces', () => {
 	it('on random GR4J networks, gauge/logger records against simulated outflow', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 150 && checked < 30; seed++) {
-			const input = randomInput(seed, { runoffModel: 'gr4j' });
+			const input = randomInput(seed);
 			let pb;
 			try {
 				pb = prepareCalibration(input);
@@ -123,39 +123,7 @@ describe('prepareCalibration scores what runModel produces', () => {
 	});
 });
 
-describe('prepareCalibration for the legacy model', () => {
-	it('scores what a legacy runModel produces, bit for bit', () => {
-		let checked = 0;
-		for (let seed = 1; seed <= 150 && checked < 20; seed++) {
-			const input = randomInput(seed);
-			input.settings.runoffModel = 'legacy';
-			let pb;
-			try {
-				pb = prepareCalibration(input);
-			} catch {
-				continue;
-			}
-			expect(pb.model).toBe('legacy');
-			const want = runModel(input).series.find((s) => s.nodeId === null && s.key === 'simulated_outflow')!.values;
-			const got = pb.simulate(pb.startParams);
-			for (const t of pb.scoredDays) expect(got[t], `seed ${seed} day ${t}`).toBe(want[t]);
-			checked++;
-		}
-		expect(checked).toBeGreaterThanOrEqual(10);
-	});
-});
-
 describe('calibrate', () => {
-	it('fits the legacy model too, so both models can be compared calibrated (issue #4 phase 6)', () => {
-		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
-		const report = calibrate(input, { model: 'legacy', budget: 300, validate: false });
-		expect(report.model).toBe('legacy');
-		expect(report.free).toEqual(['a', 'b', 'summerFactor', 'winterFactor']);
-		expect(report.startParams).toEqual({ a: 0.09, b: 1.2, summerFactor: 0.1, winterFactor: 1, baseResetRatio: 1.5 });
-		expect(report.fit.scores.kgePrime!).toBeGreaterThan(report.before.scores.kgePrime!);
-		expect(() => calibrate(input, { model: 'legacy', free: ['x1'] })).toThrow(/not a calibratable legacy parameter: x1/);
-	}, 60_000);
-
 	it('recovers known GR4J parameters from noise-free flow (X1, X3 within 10 %, X4 within 0.2 days)', () => {
 		const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
 		const report = calibrate(synthetic(truth), { budget: 5000, seed: 1, validate: false });
@@ -171,7 +139,7 @@ describe('calibrate', () => {
 	it('fitted parameters, applied to the project, pass every run invariant', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 200 && checked < 8; seed++) {
-			const input = randomInput(seed, { runoffModel: 'gr4j' });
+			const input = randomInput(seed);
 			let report;
 			try {
 				report = calibrate(input, { budget: 40, seed, validate: false });
@@ -356,10 +324,9 @@ describe('calibrate', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
 		const noObs = { ...input, series: { rain_catchment_mm: input.series.rain_catchment_mm } };
 		expect(() => calibrate(noObs)).toThrow(/no observed flow series/);
-		// GR4J with no evaporation is refused, as runModel refuses it; legacy doesn't need it.
+		// GR4J with no evaporation is refused, as runModel refuses it.
 		const noPet = { ...input, settings: { ...input.settings, apanMm: new Array(12).fill(0) as never } };
 		expect(() => calibrate(noPet, { budget: 20, validate: false })).toThrow(GR4J_NO_PET);
-		expect(calibrate(noPet, { model: 'legacy', budget: 20, validate: false }).model).toBe('legacy');
 		const seen: string[] = [];
 		const report = calibrate(input, {
 			budget: 500,

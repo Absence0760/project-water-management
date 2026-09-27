@@ -23,6 +23,7 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
+	import { fillHeader } from '$lib/components/workspace/sectionHeader.svelte';
 
 	let {
 		editor,
@@ -139,28 +140,25 @@
 		document.addEventListener('pointerdown', onDoc);
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
+	// The page's section header shows the summary line, Grids and Add crop (not in a modal or override mode).
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, !sections));
 </script>
+
+{#snippet headerContext()}<span data-testid="crops-summary">{summary}</span>{/snippet}
+{#snippet headerActions()}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
+		<summary class="btn">Grids <span aria-hidden="true">▾</span></summary>
+		<div class="grids-pop" role="group" aria-label="Open as a grid">
+			{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+		</div>
+	</details>
+	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add crop</button>{/if}
+{/snippet}
 
 {#if sections}
 	<CropGrids {editor} {settings} {readonly} {sections} />
 {:else}
-	<div class="crops-head">
-		<div>
-			<h2>Crops &amp; demand</h2>
-			<p class="muted" data-testid="crops-summary">{summary}</p>
-		</div>
-		<div class="head-actions">
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
-				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
-				<div class="grids-pop" role="group" aria-label="Open as a grid">
-					{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
-				</div>
-			</details>
-			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add crop</button>{/if}
-		</div>
-	</div>
-
 	{#if crops.length === 0}
 		<section class="panel" aria-label="No crops yet">
 			<div class="empty">
@@ -206,7 +204,7 @@
 				</div>
 			{/if}
 			{#if farms.length === 0}
-				<p class="muted">No farms yet. Add farms on the <a href="?tab=network">Network</a>.</p>
+				<p class="muted">No units yet. Add units on the <a href="?tab=network">Network</a>.</p>
 			{:else}
 				{#if stacks.length && demandTotal.annual > 0}
 					<figure class="demand-chart" bind:clientWidth={chartW} bind:clientHeight={chartH}>
@@ -221,7 +219,7 @@
 						highest in {WATER_YEAR_MONTHS[peakMonth]} at {fmtNum(demandTotal.monthly[peakMonth])} m³/day. Before effective rain and irrigation efficiency.
 					</p>
 				{:else if apanSet}
-					<p class="muted">No demand yet: add crops with their factors and each farm's planted area.</p>
+					<p class="muted">No demand yet: add crops with their factors and each unit's planted area.</p>
 				{/if}
 				<details class="show-table" bind:open={tableOpen}>
 					<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
@@ -234,14 +232,14 @@
 
 		<section class="panel area-card" aria-labelledby="crop-area-h">
 			<div class="panel-head">
-				<h3 id="crop-area-h">Planted area by farm</h3>
+				<h3 id="crop-area-h">Planted area by unit</h3>
 				<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
 			</div>
 			{#if farms.length === 0 || crops.length === 0}
-				<p class="muted">Add at least one farm (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
+				<p class="muted">Add at least one unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
 			{:else}
 				{#if bars.length}
-					<ul class="bars" aria-label="Planted area by farm">
+					<ul class="bars" aria-label="Planted area by unit">
 						{#each bars as b (b.id)}
 							<li>
 								<a class="farm" href={withParam(page.url, 'farm', b.id)} aria-label="{b.name}: planted areas">{b.name}</a>
@@ -267,28 +265,6 @@
 {/if}
 
 <style>
-	.crops-head {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 0.75rem 1.5rem;
-		margin: 0 0 1rem;
-	}
-	.crops-head h2 {
-		margin: 0;
-		font-size: 1.6rem;
-	}
-	.crops-head p {
-		margin: 0.2rem 0 0;
-		font-size: 0.9rem;
-	}
-	.head-actions {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
 	.grids-menu {
 		position: relative;
 	}

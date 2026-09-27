@@ -10,8 +10,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from calibration import substring_extra_months as summer_extra  # noqa: E402
-from calibration import summer_months  # noqa: E402
 from extract_project import month_list, substring_extra_months  # noqa: E402
 
 
@@ -19,18 +17,14 @@ class MonthLists(unittest.TestCase):
     def test_keeps_the_listed_months_only(self):
         # The workbook's FIND("1,", "11,12,") also matches January and February.
         self.assertEqual(month_list("11,12"), [11, 12])
-        self.assertEqual(summer_months("11,12"), [11, 12])
         self.assertEqual(substring_extra_months("11,12"), [1, 2])
-        self.assertEqual(summer_extra("11,12"), [1, 2])
 
     def test_lists_that_already_name_january_and_february_are_unchanged(self):
         for text in ("1,2,3,4,5,11,12", "10,11,12,1,2,3", "5,6,7,8,9,10"):
             self.assertEqual(substring_extra_months(text), [], text)
-            self.assertEqual(summer_extra(text), [], text)
 
     def test_cells_holding_a_number_or_spaces(self):
         self.assertEqual(month_list(7.0), [7])
-        self.assertEqual(summer_months(12.0), [12])
         self.assertEqual(month_list(" 1, 2 , 12"), [1, 2, 12])
         self.assertEqual(month_list(None), [])
         self.assertEqual(month_list("0,13,6"), [6])

@@ -12,7 +12,7 @@ import { randomInput } from './testing/fuzz';
 import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 
 describe('engine invariants on random networks', () => {
-	// The random soak itself (checkAll on FUZZ_CASES seeds, legacy and GR4J) is
+	// The random soak itself (checkAll on FUZZ_CASES seeds, GR4J) is
 	// sharded across src/fuzz/*.test.ts so it runs on several cores; the pinned
 	// regression seeds stay here.
 
@@ -25,8 +25,8 @@ describe('engine invariants on random networks', () => {
 		// split round, model.md §3 Q1; 2538 until N1 and the soil-water store's
 		// draws in the generator, then 2079 until dam evaporation (N2); 25 is
 		// the first seed that shows it now.)
+		// The property is the network's, not the runoff model's: it was found under the legacy model's flow (removed in engine 1.0.0).
 		const input = randomInput(25);
-		input.settings.runoffModel = 'legacy'; // found under legacy flow; the property is the network's, not the runoff model's
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
 			return t[1]! / t[0]!;
@@ -42,10 +42,8 @@ describe('engine invariants on random networks', () => {
 		// that seepage until 0.19.0, so the dam fell below its dead storage by a
 		// fixed volume and the farm's supply fraction rose with its demand
 		// (5.8 % → 7.3 % legacy, 7.5 % → 8.5 % GR4J; n13, 2 000-case soak on 0.17.0).
-		for (const runoffModel of ['legacy', 'gr4j'] as const) {
-			expect(checkDoubledCropAreas(randomInput(921, { runoffModel })), runoffModel).toBeNull();
-			expect(checkAll(randomInput(921, { runoffModel }), 921), runoffModel).toBeNull();
-		}
+		expect(checkDoubledCropAreas(randomInput(921))).toBeNull();
+		expect(checkAll(randomInput(921), 921)).toBeNull();
 	});
 
 	it('engine 0.21.1: doubling crop areas never raises the supply fraction below a steep, shallow dam (seeds 4197, 7686, 15979, 17277)', () => {
@@ -55,9 +53,10 @@ describe('engine invariants on random networks', () => {
 		// lost entirely (seed 15979: 149 m³ all evaporated, 144 m³ kept 3 m³), and the farm's
 		// supply fraction rose 0.838 → 0.870. Evaporation is now capped at (1 − seepage) × Q[t−1] / b
 		// for b > 1 (network/simulate.ts damDay); the check itself is unchanged.
-		for (const [seed, runoffModel] of [[4197, 'gr4j'], [7686, 'legacy'], [15979, 'legacy'], [17277, 'gr4j']] as const) {
-			expect(checkDoubledCropAreas(randomInput(seed, { runoffModel })), `seed ${seed}`).toBeNull();
-			expect(checkAll(randomInput(seed, { runoffModel }), seed), `seed ${seed}`).toBeNull();
+		// (7686 and 15979 were found under the legacy model's flow, removed in engine 1.0.0; they now run GR4J.)
+		for (const seed of [4197, 7686, 15979, 17277]) {
+			expect(checkDoubledCropAreas(randomInput(seed)), `seed ${seed}`).toBeNull();
+			expect(checkAll(randomInput(seed), seed), `seed ${seed}`).toBeNull();
 		}
 	});
 
@@ -92,20 +91,21 @@ describe('engine invariants on random networks', () => {
 		// volume in the balance, dam storage and upstream flows included (network/attribution.ts).
 		// 0.19.1 judged the storage and upstream terms at 1e-12 and zeroed real ~1e-6 m³ impacts
 		// next to a 10⁶ m³ dam (the attribution self-check caught it, seeds 9051 … 15426); 0.19.2
-		// uses ~45 ulp (RESIDUE) for those terms.
-		for (const [seed, opts] of [[4014, {}], [8984, {}], [9681, { runoffModel: 'gr4j' as const }]] as const) {
+		// uses ~45 ulp (RESIDUE) for those terms. (Seeds without an option were found under the legacy
+		// model's flow, removed in engine 1.0.0; every seed runs GR4J now.)
+		for (const [seed, opts] of [[4014, {}], [8984, {}], [9681, {}]] as const) {
 			const input = randomInput(seed, opts);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		// 0.21.1: a transfer source at its reserve sends a one-ulp residue in one node order (seed 14313).
 		// 0.24.1: Reserve rule tables. Two tables for one site were resolved by list order, and a site's
 		// natural flow summed in display order moved the percentile across a flat stretch of the curve.
-		for (const [seed, opts] of [[3238, {}], [6191, {}], [17126, { runoffModel: 'gr4j' as const }], [18472, { runoffModel: 'gr4j' as const }]] as const) {
+		for (const [seed, opts] of [[3238, {}], [6191, {}], [17126, {}], [18472, {}]] as const) {
 			const input = randomInput(seed, opts);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		expect(checkOrderInvariance(randomInput(14313), runModel(randomInput(14313)), 14313), 'seed 14313').toBeNull();
-		for (const [seed, opts] of [[9051, {}], [11240, { runoffModel: 'gr4j' as const }], [15426, { runoffModel: 'gr4j' as const }]] as const) {
+		for (const [seed, opts] of [[9051, {}], [11240, {}], [15426, {}]] as const) {
 			const input = randomInput(seed, opts);
 			expect(checkEwrAttribution(input, runModel(input)), `seed ${seed}`).toBeNull();
 		}
@@ -127,7 +127,7 @@ describe('engine invariants on random networks', () => {
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		for (const seed of [3321, 4260, 9912, 18288, 18330, 19214, 3899, 7094]) {
-			const input = randomInput(seed, { runoffModel: 'gr4j' });
+			const input = randomInput(seed);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}, GR4J`).toBeNull();
 		}
 	});
@@ -301,7 +301,7 @@ describe('the invariants reject broken results', () => {
 		expect(checkInvariants(g, summary)).toMatch(/runoff summary/);
 		const missing = structuredClone(o);
 		delete missing.summary.runoff;
-		expect(checkInvariants(g, missing)).toMatch(/reported no water balance/);
+		expect(checkInvariants(g, missing)).toMatch(/reported its stores but no water balance/);
 	});
 
 	it('order invariance and the crop-area property hold on the real model', () => {

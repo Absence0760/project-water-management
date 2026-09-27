@@ -9,8 +9,9 @@ describes them generically. The build is tracked in
 Built so far: R1 (`demand.scale`, engine 0.41.0,
 [scenarios.md](../scenarios.md)), R2's sweeps (§3.2), R3's equal-share board
 ([ui.md § Share the pain](../ui.md#share-the-pain)), R4 in full (§3.4: the
-engine, the settings and the matrix screen), R5's engine core (§3.5,
-engine 0.44.0) and R6's engine half (§3.6, engine 0.46.0); the rest is not
+engine, the settings and the matrix screen), R5 but its farmer view
+(§3.5: the engine core, engine 0.44.0; the `outlook` job, its settings and
+the WUA screen) and R6's engine half (§3.6, engine 0.46.0); the rest is not
 yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
@@ -165,34 +166,46 @@ new sweep.
 
 ### 3.5 R5: the seasonal outlook (**M–L**)
 
-**Status: engine core built** (`packages/engine/src/outlook/`, engine
-0.44.0 for `settings.demandFactorFrom`; method, day mapping, state
-continuation, metric and planning rule in
-[model.md §2.15](../model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)).
-`runSeasonalOutlook(input, { decisionDate, seasonEnd, levels,
-analogueYears?, planningShare?, … })` runs every analogue year × demand
-level from the base run's state on the decision date and returns, per
-level, season-end storage (total and per dam), % of demand met and the
-EWR/Reserve share as median and 10th–90th percentiles with every year's
-values, and the planning figure as data (`describePlanningFigure`: "in 17
-of 21 analogue years"). Defaults waiting on the client: the season,
-1 October – 30 April (`defaultOutlookSeason`, O3), and the planning share,
-80 % (O6); the 10-year minimum for percentiles waits on the hydrologist.
-Only `demand.scale` ops make a level (anything else would change the
-history the season starts from). Still to build:
-- **the backend half**: a sweep from a decision-date state. R2's sweep job
-  runs whole-record members; the outlook needs a job kind (or a sweep mode)
-  that builds its members with `outlookMemberInput` and stores each
-  `OutlookMember` (years × levels of them, more than the 12-member sweep
-  cap, so its own limits), then `summariseOutlook`; plus the project
-  settings for the season (O3) and the planning share (O6);
-- **the WUA screen**: the demand levels side by side (the percentiles, the
-  per-year spread, the planning figure in its own words, the pending
-  defaults marked), and the monthly-plan entry of R1's `months` form;
-- **the farmer view E3**: the published level's outcome per farm, once the
-  WUA publishes it (O5 decides whether farmers see it, and in Afrikaans);
-- R6's review triggers, which re-run this from storage bands at the review
-  date.
+**Status: built but the farmer view.** The engine core
+(`packages/engine/src/outlook/`, engine 0.44.0 for
+`settings.demandFactorFrom`; method, day mapping, state continuation,
+metric and planning rule in
+[model.md §2.15](../model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
+`runSeasonalOutlook` and its member-at-a-time parts, per level
+season-end storage, % of demand met and the EWR/Reserve share as median
+and 10th–90th percentiles with every year's values, and the planning
+figure as data (`describePlanningFigure`). Only `demand.scale` ops make a
+level (anything else would change the history the season starts from).
+- **The backend** (migration 064, [api.md § Seasonal outlooks](../api.md#seasonal-outlooks)):
+  job kind `outlook`, its own tables `seasonal_outlook` /
+  `seasonal_outlook_member` rather than a sweep mode (a member is one level
+  in one year measured over the season, and there are years × levels of
+  them). Each member is stored once and never updated; `summariseOutlook`
+  is the result. Up to 6 levels and the newest 40 analogue years (240
+  member runs), 2 pending per user, the newest 20 per project. A member
+  the engine refuses is stored as failed and the outlook carries on. The
+  job runs the history once and each member over the season only, from a
+  snapshot of the decision date (engine 1.1.0, model.md §2.16,
+  `runOutlookMember`).
+- **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
+  season as a month and day each end (default 1 October – 30 April,
+  pending the client's O3) and the planning share (default 80 %, pending
+  O6), each marked *pending the client* while the default is used. The
+  decision date is the latest one of that month and day the base run's
+  state reaches. The 10-year minimum for percentiles still waits on the
+  hydrologist.
+- **The WUA screen** (Runs tab → River & Reserve → Seasonal outlook,
+  [ui.md § Seasonal outlook](../ui.md#seasonal-outlook)): the demand levels
+  and an optional monthly plan (R1's `months` form), the levels side by
+  side with medians, 10–90 % ranges and years met, every analogue year,
+  the planning figure in the engine's words, the pending defaults marked,
+  a plain note that lower demand can add days below the EWR where return
+  flow reaches the river, and the draft disclaimer (D10).
+- **Still to build**: the farmer view E3 (the published level's outcome
+  per farm, once the WUA publishes it; O5 decides whether farmers see it,
+  and in Afrikaans), and R6's review triggers beyond their engine half
+  (§3.6: the job and the screen that re-run this from storage bands at the
+  review date).
 
 - **Method:** ESP from the run's state on a decision date (a project
   setting, default the start of the irrigation season). For each historical
@@ -248,21 +261,25 @@ analogue years." Choices, each marked in model.md:
   the cautious reading of finding 4; a midpoint option exists
   **(judgement, pending the hydrologist)**; the total is shared over the
   dams pro rata to capacity (every dam at the same fill);
-- **starting from a storage** needed an engine setting,
-  `damStorageReset` (the engine can't start from a saved state): the dams
-  start the review date at the set volume, the rest of the state is the
-  history's, and the step is counted in every balance; runs without it are
-  unchanged to the bit.
+- **starting from a storage**: since engine 1.1.0 the base run's state at
+  the review date is captured once (a model-state snapshot, model.md
+  §2.16) and each band sets its storage in the snapshot's dams
+  (`withDamStorage`); the older path, `damStorageReset` (engine 0.46.0),
+  re-runs the history per member and sets the dams on the review date.
+  Either way the rest of the state is the history's; runs without them
+  are unchanged to the bit.
 
-Cost: bands × years × levels full runs (3 × 12 × 4 in about 1.3 s on the
-test catchment); sharing the history across bands needs the engine to
-start from a stored state, the durable fix if a record makes it slow.
+Cost: one run of the history, then bands × years × levels runs of the
+season alone (3 × 12 × 4 in 53 ms on the test catchment, against 1.1 s
+re-running the history per member, engine 1.1.0).
 WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:
 - **the backend half**: a job like R5's outlook job, bands × years ×
-  levels members (`outlookMemberInput(…, { storageM3 })` per band, then
-  `reviewTriggerTable`), with its own member limits; the project settings
+  levels members (from the review date's snapshot with each band's
+  storage, `withDamStorage`, then `outlookSeasonInput` + `runModelFrom`
+  per member; or `outlookMemberInput(…, { storageM3 })` re-running the
+  history), then `reviewTriggerTable`, with its own member limits; the project settings
   for the review date (O3) and, if the WUA sets them, the band edges;
 - **the WUA screen**: the table beside the outlook, each row in
   `describeTriggerRow`'s words, the pending defaults marked, the notes and

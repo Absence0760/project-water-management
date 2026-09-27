@@ -288,16 +288,16 @@ describe('POST /projects/import', () => {
 		const fitRecord = {
 			fittedAt: '2026-09-24T10:00:00.000Z',
 			engineVersion: '0.6.0',
-			model: 'legacy',
+			model: 'gr4j',
 			objective: 'kgePrime',
 			bounds: 'wide',
 			seed: 42,
 			budget: 300,
 			evaluations: 900,
 			cancelled: false,
-			free: ['a', 'b'],
-			params: { a: 0.2, b: 1.4, summerFactor: 0.1, winterFactor: 1 },
-			startParams: { a: 0.09, b: 1.2, summerFactor: 0.1, winterFactor: 1 },
+			free: ['x1', 'x3'],
+			params: { x1: 500, x2: 0, x3: 60, x4: 1.7 },
+			startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
 			flowKind: 'flow_observed_m3s',
 			simulatedKey: 'simulated_outflow',
 			calibrationStart: null,
@@ -313,11 +313,23 @@ describe('POST /projects/import', () => {
 			notes: [],
 			editedParams: []
 		};
-		// The file's calibration has `a` edited since the fit, but claims no edits.
-		const doc = { ...syntheticDoc('Fit import'), settings: { runoffModel: 'legacy', calibration: { a: 0.5, b: 1.4 }, fitRecord } };
+		// The file's X1 has been edited since the fit, but it claims no edits.
+		const doc = { ...syntheticDoc('Fit import'), settings: { apanMm: monthly(150), gr4j: { x1: 900, x2: 0, x3: 60, x4: 1.7 }, fitRecord } };
 		const res = await importFile(u, doc);
 		expect(res.status).toBe(201);
-		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['a']);
+		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['x1']);
+	});
+
+	it('imports an export from before engine 1.0.0: the legacy calibration keys are dropped, a legacy model is refused with the reason', async () => {
+		const u = await signUp('Oldfile');
+		const calibration = { a: 0.09, b: 1.2, summerMonths: [1, 2], recessionFactors: [0.9, 0.95], rainThresholdMm: 3, catchmentAreaKm2: null };
+		const res = await importFile(u, { ...syntheticDoc('Old GR4J export'), settings: { apanMm: monthly(150), runoffModel: 'gr4j', calibration } });
+		expect(res.status).toBe(201);
+		expect(res.body.project.settings.calibration).toEqual({ rainThresholdMm: 3, catchmentAreaKm2: null });
+		const legacy = await importFile(u, { ...syntheticDoc('Old legacy export'), settings: { apanMm: monthly(150), runoffModel: 'legacy', calibration } });
+		expect(legacy.status).toBe(400);
+		expect(JSON.stringify(legacy.body)).toMatch(/legacy runoff model was removed in engine 1\.0\.0/);
+		expect(JSON.stringify(legacy.body)).not.toMatch(/violates|constraint|relation|syntax error|SQLSTATE/i);
 	});
 
 	it('accepts a file up to the export cap and refuses a larger one with 413 and a hint', async () => {

@@ -102,7 +102,7 @@ async function importAndOpen(page: Page) {
 	await review(dialog, synthetic(), 'synthetic_b023');
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'synthetic_b023' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'synthetic_b023' })).toBeVisible();
 }
 
 test('imports the synthetic workbook with a first run, and the project opens with results', async ({ page, owner }) => {
@@ -113,7 +113,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	// The counts: 9 farms and 2 gauges, 5 crops on 11 planted areas, 5 transfers (one switched off), 4 series.
 	await expect(dialog.getByText('From synthetic_b023.xlsx')).toBeVisible();
 	const contents = dialog.getByRole('region', { name: 'In this workbook' });
-	await expect(contents.getByRole('definition').nth(0)).toHaveText('9 farms, 2 gauges');
+	await expect(contents.getByRole('definition').nth(0)).toHaveText('9 units, 2 gauges');
 	await expect(contents.getByRole('definition').nth(1)).toHaveText('5 crops, 11 planted areas');
 	await expect(contents.getByRole('definition').nth(2)).toHaveText('5');
 	await expect(contents.getByRole('definition').nth(3)).toHaveText('4');
@@ -150,7 +150,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await expect(done.getByRole('status')).toHaveText(/Imported Synthetic — from the workbook\.\s+Its first run is ready on the Runs tab\./);
 	await expect(done.getByRole('alert')).toHaveCount(0);
 	await done.getByRole('link', { name: 'Open project' }).click();
-	await expect(page.getByRole('heading', { level: 1, name: 'Synthetic — from the workbook' })).toBeVisible();
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Synthetic — from the workbook' })).toBeVisible();
 
 	// The Overview keeps what the importer flagged: the same notes and unmapped report, each list closed at first.
 	await expectImportRecord(page, owner.displayName);

@@ -23,7 +23,7 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	// (The Email column folds into the name cell on a phone, so wait on a member row.)
 	{ id: 'overview', ready: (p) => expect(p.getByRole('region', { name: 'Members' }).getByRole('rowheader').first()).toBeVisible() },
 	{ id: 'network', ready: (p) => expect(p.getByRole('list', { name: 'Drainage tree' })).toBeVisible() },
-	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by farm' })).toBeVisible() },
+	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by unit' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('Source of transfer 1')).toBeVisible() },
 	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
 	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },
@@ -32,6 +32,14 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 		ready: async (p) => {
 			await expect(p.getByRole('region', { name: 'Run summary' })).toBeVisible();
 			await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
+		}
+	},
+	// The two farm dams' cards, the picked one's storage chart drawn, and the Dam levels table.
+	{
+		id: 'dams',
+		ready: async (p) => {
+			await expect(p.getByRole('region', { name: /^Storage: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Dam levels' }).getByRole('rowheader')).toHaveCount(2);
 		}
 	},
 	// One seeded run, so the tab says there is nothing to compare yet.
@@ -149,7 +157,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y one node');
 				await page.goto(`/projects/${project.id}?tab=network`);
 				await openNodeForm(page);
-				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
 				await expect(page.getByLabel('Capacity (m³)')).toHaveValue('150,000');
 				await expectNoViolations(page);
 				await closeModal(page);
@@ -317,7 +325,7 @@ test.describe('phone', () => {
 		await expectNoViolations(page);
 
 		await page.goto('/help/guides/how-the-model-works');
-		await expect(page.getByRole('img', { name: /runoff model, GR4J or legacy/ })).toBeVisible();
+		await expect(page.getByRole('img', { name: /runoff model, GR4J, which makes/ })).toBeVisible();
 		await expectNoViolations(page);
 	});
 

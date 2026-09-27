@@ -12,7 +12,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 
 async function openUpperFarm(page: Page) {
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
 	return page.getByRole('group', { name: 'Dam survey and releases' });
 }
 
@@ -38,7 +38,7 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await dam.getByLabel('Release rule').selectOption('fixed');
 	await dam.getByLabel('Dam release of Upper farm in Oct, m³/day').fill('120');
 	await dam.getByRole('button', { name: 'Use October’s amount for every month' }).click();
-	await page.getByRole('group', { name: 'Farm dam' }).getByLabel('Seepage returning (%)').fill('40');
+	await page.getByRole('group', { name: 'Dam' }).getByLabel('Seepage returning (%)').fill('40');
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
@@ -50,7 +50,7 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await expect(again.getByRole('img', { name: /Area against volume for Upper farm: from 0 m² at 0 m³ to 55,000 m² at 150,000 m³/ })).toBeVisible();
 	await expect(again.getByLabel('Release rule')).toHaveValue('fixed');
 	await expect(again.getByLabel('Dam release of Upper farm in Sep, m³/day')).toHaveValue('120');
-	await expect(page.getByRole('group', { name: 'Farm dam' }).getByLabel('Seepage returning (%)')).toHaveValue('40');
+	await expect(page.getByRole('group', { name: 'Dam' }).getByLabel('Seepage returning (%)')).toHaveValue('40');
 	await expectNoViolations(page, { include: `[data-testid^="dam-storage-"]` });
 
 	// A gauge has no dam, so no survey or releases.

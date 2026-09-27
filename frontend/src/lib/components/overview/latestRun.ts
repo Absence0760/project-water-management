@@ -77,6 +77,8 @@ export interface Headline {
 	spec: MetricSpec;
 	/** What the change is against, after it; "vs previous run" when absent. */
 	deltaLabel?: string;
+	/** The page behind the card: its term links there, over the whole card (Dams today → the Dams page). */
+	href?: string;
 }
 
 /** Share of all farms' demand supplied (as the Runs tab's "Irrigation supplied"); null without demand. */
@@ -155,10 +157,10 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		unit: 'of demand',
 		sub: [
 			!farms.length
-				? 'no farms in the run'
+				? 'no units in the run'
 				: short
-					? `${fmtNum(short)} of ${fmtNum(farms.length)} farms below ${target}`
-					: `all farms ≥ ${target}`
+					? `${fmtNum(short)} of ${fmtNum(farms.length)} units below ${target}`
+					: `all units ≥ ${target}`
 		],
 		flagged: short > 0,
 		delta: previous ? change(supplyFraction(previous), supplied) : null,
@@ -213,10 +215,14 @@ export type DamsState = { state: 'loading' } | { state: 'error' } | { state: 'no
  * AGO_DAYS days (not against the previous run: the question is which way the
  * dams are heading). Flagged below LOW_PCT.
  */
+/** The Dams page (each dam's level and storage chart), where the Dams today card leads. */
+export const DAMS_HREF = '?tab=dams';
+
 export function damsHeadline(d: DamsState): Headline {
 	const base = {
 		id: 'dams' as const,
 		term: 'Dams today',
+		href: DAMS_HREF,
 		unit: '',
 		flagged: false,
 		delta: null,

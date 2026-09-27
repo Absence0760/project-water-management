@@ -9,7 +9,6 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 | --- | --- |
 | `extract_project.py WORKBOOK OUTDIR [--gauge-as-reference …]` | `OUTDIR/project.json` holds a project: `{ name, description, settings, model, series }`, with `settings` = `ProjectSettings`, `model` = `ProjectModel` and `series` = `[{ kind, name, unit, startDate, values }]` (see `packages/engine/src/project.ts`). `OUTDIR/expected.json` holds the workbook's own daily results per Element sheet plus the catchment columns, for the engine regression test. |
 | `calibration.py WORKBOOK` | Prints the [Flow Calibration Cfg] parameters. `extract_project.py` uses it for `settings.calibration`. |
-| `extract_flow_fixture.py WORKBOOK OUT.json` | The rain-model fixture for `packages/engine/src/flow.test.ts`, which reads `data/fixtures/client-catchment-flow.json`. |
 | `frontend/src/lib/spreadsheet/import/` (TypeScript) | The same `project.json` and notes in the browser, plus an unmapped report; see [The TypeScript port](#the-typescript-port-in-browser-import). |
 | `make_synthetic_workbook.py [OUTDIR]` | The **synthetic** b023 workbook of an invented catchment and `extract_project.py`'s output for it, committed in `fixtures/` (see [The synthetic workbook](#the-synthetic-workbook)). |
 | `make_string_decoding_fixture.py [OUTDIR]` | A small hand-written workbook of every cell-text decoding case and what openpyxl reads from it, committed in `fixtures/` (see [The string-decoding fixture](#the-string-decoding-fixture)). |
@@ -252,7 +251,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | [Transfers] an 8th column, Foxtrot → Golf, whose draw formula is `=0` | `WARNING:` "its draw formula is the constant 0", imported with `enabled: false`; the InOut formulas include it, so no unmapped row |
 | [Home] `zHome_CalcDate1/CalcDateN` equal to [Flow data]'s first and last dates | `model_window` reads them and leaves `simulationStart/End` null (the window covers the whole record) |
 | [Transfers] InOut formula `=S7*0.9-V7` on Echo (a conveyance loss) beside six add/subtract formulas | a hand-written formula that doesn't fit the rule shape, for the TypeScript unmapped report (the Python importer doesn't read formulas) |
-| [Flow Calibration Cfg] summer months `"10,11,12,3,"` (trailing comma), recession table, calibration window 2019-10-01..2021-09-30 | `extract_calibration`, the summer-months M1 note, `calibrationStart/End` |
+| [Flow Calibration Cfg] rain threshold, calibration window 2019-10-01..2021-09-30 (the legacy model's summer months, factors and recession table are still in the sheet, and not read since engine 1.0.0) | `extract_calibration`, `calibrationStart/End` |
 | [Flow data] `rUseFlow` 2 | `calibrationFlowKind: "flow_observed_m3s"` |
 | Pitman column with 120 days of values | note "Pitman flow column has 120 days"; never imported |
 | Gauge column: blanks, the text "n/a", values × 0.8 from 2021-10-01 | blanks and text read as null; the gauge-reference output undoes the scaling (note "divided by 0.8 (365 days)") and warns that `rUseFlow` pointed at the gauge, falling back to the logger |
@@ -326,7 +325,7 @@ in-browser workbook import (roadmap WP-1.31): `await readWorkbook(bytes)` then
 `extractProject(wb, { fileName, gaugeAsReference })` gives `{ project, notes,
 unmapped }`. Per decision D17 the **TypeScript port is the user path** (the
 import in the UI), and the Python scripts stay for the regression fixtures
-(`expected.json`, `extract_flow_fixture.py`), `pnpm seed:demo` and the
+(`expected.json`), `pnpm seed:demo` and the
 synthetic fixture's committed output.
 
 **Parity rule.** For the same workbook and options, `project` equals the

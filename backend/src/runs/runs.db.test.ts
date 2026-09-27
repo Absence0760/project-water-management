@@ -2,7 +2,7 @@
 // model-input read that in-browser calibration runs on.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runModelChecked } from '@water-management/engine';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { executeRun, trimRuns } from './execute.js';
 
@@ -26,7 +26,7 @@ async function runnable(u: User) {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('POST /projects/:id/runs', () => {
-	it('refuses a GR4J run with no evaporation and says how to fix it; legacy still runs', async () => {
+	it('refuses a GR4J run with no evaporation and says how to fix it', async () => {
 		const u = await signUp('Nopan');
 		const projectId = await runnable(u);
 		const set = async (settings: object) => expect((await u.call('PATCH', `/projects/${projectId}`, { settings })).status).toBe(200);
@@ -35,9 +35,13 @@ describe('POST /projects/:id/runs', () => {
 		expect(res.status).toBe(400);
 		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Settings → Demand/);
 		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
-		// Positive control: the same project runs under legacy, which doesn't use evaporation.
-		await set({ runoffModel: 'legacy' });
-		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).status).toBe(201);
+		// The legacy model, which didn't use evaporation, was removed in engine 1.0.0: no way round it.
+		const legacy = await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } });
+		expect(legacy.status).toBe(400);
+		expect(JSON.stringify(legacy.body)).toMatch(/legacy runoff model was removed in engine 1\.0\.0/);
+		// Positive control: with evaporation it runs.
+		await set({ apanMm: monthly(150) });
+		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'pan' })).status).toBe(201);
 	});
 
 	it('refuses flow shares over 100 % with the reason, stores no run, and runs once they fit (engine 0.27.1)', async () => {
@@ -62,12 +66,13 @@ describe('POST /projects/:id/runs', () => {
 		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'fits' })).status).toBe(201);
 	});
 
-	it('reports which runs used the legacy runoff model (audit H1), on the list and on each run', async () => {
+	it('reports which stored runs used the legacy runoff model (audit H1), on the list and on each run', async () => {
 		const u = await signUp('Legacyflag');
 		const projectId = await runnable(u);
 		const gr4jRunId = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'gr4j' })).body.run.id as string;
-		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		// A run saved before engine 1.0.0 removed the legacy model (the API can't make one now).
 		const legacyRunId = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).body.run.id as string;
+		await makeStoredLegacyRun(legacyRunId);
 
 		const list = (await u.call('GET', `/projects/${projectId}/runs`)).body.runs as { id: string; legacy: boolean }[];
 		expect(list.find((r) => r.id === gr4jRunId)?.legacy).toBe(false);
@@ -187,16 +192,16 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 	const record = {
 		fittedAt: '2026-09-24T10:00:00.000Z',
 		engineVersion: '0.6.0',
-		model: 'legacy',
+		model: 'gr4j',
 		objective: 'kgePrime',
 		bounds: 'wide',
 		seed: 42,
 		budget: 300,
 		evaluations: 900,
 		cancelled: false,
-		free: ['a', 'b'],
-		params: { a: 0.2, b: 1.4, summerFactor: 0.1, winterFactor: 1 },
-		startParams: { a: 0.09, b: 1.2, summerFactor: 0.1, winterFactor: 1 },
+		free: ['x1', 'x3'],
+		params: { x1: 500, x2: 0, x3: 60, x4: 1.7 },
+		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
 		flowKind: 'flow_observed_m3s',
 		simulatedKey: 'simulated_outflow',
 		calibrationStart: null,
@@ -206,7 +211,7 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 		validationRecord: null,
 		fit: period,
 		before: period,
-		splitSample: { params: { a: 0.21, b: 1.3 }, calibration: period, validation: { ...period, scores: { days: 15, kgePrime: 0.4 } } },
+		splitSample: { params: { x1: 510, x2: 0, x3: 58, x4: 1.7 }, calibration: period, validation: { ...period, scores: { days: 15, kgePrime: 0.4 } } },
 		differential: null,
 		independentRecord: null,
 		notes: ['The record has 0 water years…'],
@@ -218,7 +223,7 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 		const projectId = await runnable(u);
 		const current = (await u.call('GET', `/projects/${projectId}`)).body.project.settings;
 		const res = await u.call('PATCH', `/projects/${projectId}`, {
-			settings: { calibration: { ...current.calibration, a: 0.2, b: 1.4 }, calibrationExclusions: exclusions, fitRecord: record }
+			settings: { gr4j: { ...current.gr4j, x1: 500, x3: 60 }, calibrationExclusions: exclusions, fitRecord: record }
 		});
 		expect(res.status).toBe(200);
 		return { projectId, settings: res.body.project.settings };
@@ -237,25 +242,25 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 		expect(detail.settings.calibrationExclusions).toEqual(exclusions);
 
 		// Edit a fitted parameter by hand: the stored record is marked, not cleared.
-		const edited = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibration: { ...settings.calibration, b: 1.5 } } });
-		expect(edited.body.project.settings.fitRecord.editedParams).toEqual(['b']);
+		const edited = await u.call('PATCH', `/projects/${projectId}`, { settings: { gr4j: { ...settings.gr4j, x3: 70 } } });
+		expect(edited.body.project.settings.fitRecord.editedParams).toEqual(['x3']);
 		const second = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'edited' })).body.run.id;
-		expect((await u.call('GET', `/projects/${projectId}/runs/${second}`)).body.run.settings.fitRecord.editedParams).toEqual(['b']);
+		expect((await u.call('GET', `/projects/${projectId}/runs/${second}`)).body.run.settings.fitRecord.editedParams).toEqual(['x3']);
 		// The first run keeps the record as it was when it ran.
 		expect((await u.call('GET', `/projects/${projectId}/runs/${first}`)).body.run.settings.fitRecord.editedParams).toEqual([]);
 
 		const cmp = await u.call('GET', `/compare/runs?a=${projectId}:${first}&b=${projectId}:${second}`);
 		expect(cmp.status).toBe(200);
-		expect(cmp.body.changes.map((c: { text: string }) => c.text)).toContain('Fit record: parameters edited since the fit (b)');
+		expect(cmp.body.changes.map((c: { text: string }) => c.text)).toContain('Fit record: parameters edited since the fit (x3)');
 	});
 
 	it('a client cannot hide an edit by sending editedParams: []', async () => {
 		const u = await signUp('Hider');
 		const { projectId, settings } = await fitted(u);
 		const res = await u.call('PATCH', `/projects/${projectId}`, {
-			settings: { calibration: { ...settings.calibration, a: 0.5 }, fitRecord: { ...record, editedParams: [] } }
+			settings: { gr4j: { ...settings.gr4j, x1: 900 }, fitRecord: { ...record, editedParams: [] } }
 		});
-		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['a']);
+		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['x1']);
 	});
 
 	it('rejects an exclusion without a reason, and a fit record without its seed', async () => {
@@ -322,7 +327,7 @@ describe('settings.pe (engine ≥ 0.31.0, issue #39)', () => {
 		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.pe).toEqual({ kind: 'pan' });
 	});
 
-	it('refuses GR4J on a monthly PE of zeros with GR4J_NO_PET, even with A-pan set; legacy still runs', async () => {
+	it('refuses GR4J on a monthly PE of zeros with GR4J_NO_PET, even with A-pan set', async () => {
 		const u = await signUp('Pezero');
 		const projectId = await runnable(u); // A-pan 150 mm every month
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { pe: { ...pe, mm: monthly(0) } } })).status).toBe(200);

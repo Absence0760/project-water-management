@@ -38,7 +38,7 @@ test('a viewer picks the last 7 days on Runs & results: worked out from the run,
 	const v = viewer.page;
 	const panel = v.locator('#res-curtailment');
 	const period = panel.getByTestId('curtailment-period');
-	const table = panel.getByRole('table', { name: /^Curtailment targets per farm/ });
+	const table = panel.getByRole('table', { name: /^Curtailment targets per unit/ });
 	const picker = panel.getByLabel('Reporting window');
 
 	await v.goto(`/projects/${project.id}?tab=runs&run=${second}`);

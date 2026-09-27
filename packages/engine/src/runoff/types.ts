@@ -4,16 +4,24 @@
 //
 // Two layers:
 // - NaturalFlowGenerator: a whole run, rain in → natural flow (m³/day) out.
-//   The legacy b023 recession model lives at this level (./legacy.ts), because
-//   its day depends on the calendar (seasons).
 // - RunoffModel: one conceptual model stepped a day at a time in mm over the
 //   catchment (./gr4j.ts), wrapped into a generator by ./simulate.ts. Its
 //   stores are explicit, so the water balance can be checked every day.
 import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind } from '../project';
 
-/** Runoff models a project can select (settings.runoffModel). */
-export const RUNOFF_MODELS = ['legacy', 'gr4j'] as const;
+/**
+ * Runoff models a run can use (settings.runoffModel). GR4J only since engine
+ * 1.0.0, which removed the legacy b023 recession model (issue #16).
+ */
+export const RUNOFF_MODELS = ['gr4j'] as const;
 export type RunoffModelId = (typeof RUNOFF_MODELS)[number];
+/**
+ * The runoff model a stored run records: a run saved before engine 1.0.0 may
+ * have used the legacy b023 recession model ('legacy'), and a run whose
+ * settings don't name one predates the setting and ran it too. Such runs stay
+ * readable, never re-run (docs/engine-audit.md H1).
+ */
+export type StoredRunoffModelId = RunoffModelId | 'legacy';
 
 /** One parameter of a RunoffModel: what a form, validation and calibration need. */
 export interface ParamSpec<P> {
@@ -54,7 +62,7 @@ export interface StoreSpec {
  * holds for every model (testing/runoff.ts checks it).
  */
 export interface RunoffModel<P, S> {
-	id: Exclude<RunoffModelId, 'legacy'>;
+	id: RunoffModelId;
 	params: ParamSpec<P>[];
 	/** A fresh state; `fill` is the starting fraction of each finite store (default ½). */
 	init(p: P, fill?: number): S;
@@ -67,6 +75,15 @@ export interface RunoffModel<P, S> {
 	capacities(p: P): (number | null)[];
 	/** Each store's content (mm), in `stores` order, into `out`. */
 	readStores(s: S, out: Float64Array): void;
+	/**
+	 * The whole state as plain numbers (unit-hydrograph queues included), for a
+	 * model-state snapshot (engine ≥ 1.1.0, ../warmstart); loadState(p, it)
+	 * gives back a state that steps on to the bit. Optional: a model without
+	 * them can't be captured or resumed.
+	 */
+	saveState?(s: S): number[];
+	/** A state from saveState's numbers under the same parameters; throws when they don't fit. */
+	loadState?(p: P, data: readonly number[]): S;
 }
 
 /** Natural flow for the run window, plus any extra catchment series to report. */
@@ -77,6 +94,8 @@ export interface NaturalFlowInput {
 	warnings?: string[];
 	/** The runoff model's water balance (conceptual models), reported as summary.runoff. */
 	balance?: RunoffBalance;
+	/** The model's state at the start of run day `ctx.warm.captureAt`, when asked (engine ≥ 1.1.0, ../warmstart). */
+	state?: number[];
 }
 
 export interface RunContext {
@@ -85,6 +104,13 @@ export interface RunContext {
 	days: number;
 	/** A project series cut/padded to the run window (null where missing). */
 	aligned(kind: SeriesKind): (number | null)[];
+	/**
+	 * Capture and resume (engine ≥ 1.1.0, ../warmstart): return the model's
+	 * state at the start of run day `captureAt` (0 … days) as
+	 * NaturalFlowInput.state; or start the run from `resume`, a state captured
+	 * that way, instead of the initial fill and the warm-up.
+	 */
+	warm?: { captureAt?: number; resume?: readonly number[] };
 }
 
 /** Produces a run's natural flow. */

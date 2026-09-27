@@ -114,7 +114,10 @@ Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and River & reserve's compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). The compare page loads its daily overlay and, only when a side
+water users). Inside the Overview, the flow chart, the Dam levels table,
+Supply by farm and the owner's Share links panel are their own chunks too, so
+the route's chunk stays under its 42 KB budget (the Share links split made
+room for the section header, issue #17). The compare page loads its daily overlay and, only when a side
 is a scenario run, its Scenario overrides section the same way. uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
@@ -219,6 +222,33 @@ nothing) the total dropped 12 KB and every page's first load 3–6 KB, although
 a page now also loads the few runtime pieces it doesn't use.
 `src/lib/svelteRuntimeChunk.test.ts` keeps the rule in place.
 
+Each dynamic import carries a preload list (Vite's `__vite__mapDeps`): the
+chunks and CSS the loaded chunk needs, fetched in parallel with it. Vite lists
+the loaded chunk's whole static import tree, most of which (the Svelte
+runtime, the API client, shared UI) the importing chunk already imports
+statically and so has loaded before its code runs. `preloadDedupe`
+(`build.modulePreload.resolveDependencies` in `frontend/vite.config.ts`)
+drops those entries; every CSS file and every chunk not yet loaded stays, so
+nothing loads later or in a different order. −2.3 KB gzip across the bundle;
+`src/lib/preloadDedupe.test.ts` pins the rule.
+
+Svelte scopes each component's styles with a class on its elements. The
+default is `svelte-<hash>`; `frontend/svelte.config.js` sets `cssHash` to
+`s<hash>` (the same hash of the file name), which appears thousands of times
+in the compiled templates and CSS: −2.6 KB gzip across the bundle and a little
+off every first load. `src/lib/cssHash.test.ts` computes every component's
+class the way the build does and fails if one equals a class the app writes
+itself (`small`, `steps`…), or two components share one.
+
+Output file names are short (`shortFileNames` in `frontend/vite.config.ts`):
+7-character hashes instead of Rollup's 8 (the least it accepts below 4 096
+chunks), and CSS files named by their hash alone, like SvelteKit's JS chunks
+(`DaDhZLr.css`, not `LoadState.DaDhZLrP.css`). The names are repeated in
+import statements, preload lists and the route manifest, where random
+characters compress badly: −2.7 KB gzip. Everything under `_app/immutable/`
+is still content-hashed, so the deploy's year-long caching is unchanged;
+`src/lib/shortFileNames.test.ts` pins the patterns.
+
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
@@ -242,7 +272,7 @@ They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
 (`prepareRun`: settings, run window and aligned inputs, for the Data tab's
 series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
 `calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
-GR4J and legacy parameter tables), `runoff/pet.ts`
+GR4J parameter table; the legacy one went with that model in engine 1.0.0), `runoff/pet.ts`
 (`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012
 settings, defaults and checks; `wr2012Resolve.ts` is the run's merge),
 `uncertainty/options.ts` (ensemble options, labels and their diff),
@@ -481,8 +511,8 @@ stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
 
-**Jobs keep the engine inside their transaction.** The `rerun`, `yield` and
-`sweep` handlers run in the job's `withUser` transaction (`executeRun`, one
+**Jobs keep the engine inside their transaction.** The `rerun`, `yield`,
+`sweep` and `outlook` handlers run in the job's `withUser` transaction (`executeRun`, one
 transaction). A job's writes must commit together with its `done` (see
 [Background work](#background-work)), which is what makes a retry after a
 crash or a lost lease store nothing twice. The worker's pool serves one job
@@ -499,7 +529,8 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 [§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield` and the scenario sweep's `sweep` (below); step 2's
+dam yield's `yield`, the scenario sweep's `sweep` and the seasonal
+outlook's `outlook` (below); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -581,6 +612,21 @@ alerts plug in as a further kind.
   catchment). The sweep row and its members are written by the request in
   the same transaction as the job, and completed by the job. At most 2
   pending per user.
+- **`outlook`** (issue #53 R5, `jobs/handlers/outlook.ts`, [api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
+  [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
+  a base run × a season × up to 6 demand levels over the record's analogue
+  years (at most the newest 40), as the editor who asked. The base run's
+  stored input is rebuilt and run once (its state and rain on this engine),
+  capturing the model's state on the decision date
+  (`outlookBaseAndSnapshot`, [model.md §2.16](./model.md)); then every
+  level × year is one member run over the season only, from that snapshot
+  (`runOutlookMember`), each stored as it finishes;
+  the engine's `summariseOutlook` is the result. A member the engine
+  refuses is stored as failed and the outlook carries on. At most 240
+  member runs, each a season-long run, in one transaction: on the
+  synthetic test catchment 12 years × 4 levels take about 35 ms of engine
+  time (388 ms before snapshots); the cap keeps a long record inside the worker Lambda's 300 s. `progress`
+  after each member, no cancel, at most 2 pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one
   with its key is running. That departs from the roadmap's index over

@@ -20,15 +20,15 @@
 	<p>{forecastHeading(forecast)}</p>
 	<p class="muted small">
 		Forecast rain is uncertain, and so is everything modelled on it. Read these figures as a guide to the coming days. Every
-		other figure of this run (farm totals, curtailment, EWR days, calibration) covers the days before {forecast.from} only; on the
+		other figure of this run (unit totals, curtailment, EWR days, calibration) covers the days before {forecast.from} only; on the
 		charts these days are the hatched band marked “Forecast”.
 	</p>
 	{#if rows.length}
 		<table class="data compact">
-			<caption class="visually-hidden">Expected over the forecast days, by farm</caption>
+			<caption class="visually-hidden">Expected over the forecast days, by unit</caption>
 			<thead>
 				<tr>
-					<th scope="col">Farm</th>
+					<th scope="col">Unit</th>
 					<th scope="col">Lowest dam level expected</th>
 					<th scope="col">Days short expected</th>
 					<th scope="col">Share of demand supplied</th>

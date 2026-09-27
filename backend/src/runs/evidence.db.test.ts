@@ -4,7 +4,7 @@
 // control) and the grants (the history is append-only for water_app, and a
 // nominated run can't be deleted or trimmed).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { NOMINATIONS_PER_PROJECT_MAX } from './evidence.js';
 import { trimRuns } from './execute.js';
@@ -57,8 +57,10 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
 	}
 	gr4jA = await newRun(owner, projectId, 'GR4J A');
-	legacyRun = await newRun(owner, projectId, 'Legacy', { runoffModel: 'legacy' });
-	gr4jB = await newRun(owner, projectId, 'GR4J B', { runoffModel: 'gr4j' });
+	// A run saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
+	legacyRun = await newRun(owner, projectId, 'Legacy');
+	await makeStoredLegacyRun(legacyRun);
+	gr4jB = await newRun(owner, projectId, 'GR4J B');
 });
 
 describe('POST /projects/:id/evidence', () => {

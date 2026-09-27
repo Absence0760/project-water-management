@@ -29,6 +29,7 @@ import {
 	OBJECTIVES,
 	PE_SOURCE_MAX,
 	resolveFitRecord,
+	RETIRED_CALIBRATION_KEYS,
 	RUNOFF_MODELS,
 	WR2012_MAX_PENALTY_WEIGHT,
 	WR2012_SCALINGS,
@@ -42,6 +43,7 @@ import {
 import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
 import { OutcomesPatch } from './outcomeSettings.js';
+import { OutlookPatch } from './outlookSettings.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -58,7 +60,28 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 	for (const [k, v] of Object.entries(base)) {
 		if (isObj(v) && isObj(raw[k])) out[k] = { ...v, ...(raw[k] as Json) };
 	}
-	return out as unknown as ProjectSettings;
+	return withoutLegacyRunoff(out) as unknown as ProjectSettings;
+}
+
+/**
+ * Settings with what the legacy runoff model left behind removed (engine
+ * 1.0.0, issue #16; migration 064 does the same to the stored rows): the
+ * model is GR4J, the calibration group loses the legacy model's keys, and a
+ * fit of the legacy model is dropped. A run's snapshot comes from here
+ * (runs/execute.ts), and a snapshot that names any model but 'gr4j' reads as
+ * a legacy run, so a project still stored as 'legacy' must not reach one.
+ */
+function withoutLegacyRunoff(s: Json): Json {
+	s.runoffModel = 'gr4j';
+	if (isObj(s.calibration)) s.calibration = withoutRetiredCalibration(s.calibration);
+	if (isObj(s.fitRecord) && s.fitRecord.model !== 'gr4j') s.fitRecord = null;
+	return s;
+}
+
+function withoutRetiredCalibration(c: Json): Json {
+	const out = { ...c };
+	for (const k of RETIRED_CALIBRATION_KEYS) delete out[k];
+	return out;
 }
 
 /**
@@ -467,7 +490,8 @@ export const SettingsPatch = z
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
-		runoffModel: z.enum(RUNOFF_MODELS),
+		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
+		runoffModel: z.enum(RUNOFF_MODELS, { error: 'the legacy runoff model was removed in engine 1.0.0: GR4J is the only runoff model' }),
 		// GR4J parameters inside the bounds calibration searches (engine
 		// GR4J_PARAMS); any subset may be patched.
 		gr4j: z
@@ -504,7 +528,12 @@ export const SettingsPatch = z
 			})
 			.partial()
 			.strict(),
-		calibration: z.record(z.string(), z.unknown()),
+		// The rain threshold and catchment area (engine CalibrationParams). The legacy runoff
+		// model's keys (engine RETIRED_CALIBRATION_KEYS, e.g. in an older export) are dropped.
+		calibration: z.preprocess(
+			(v) => (isObj(v) ? withoutRetiredCalibration(v) : v),
+			z.object({ rainThresholdMm: z.number().finite().min(0).max(1000), catchmentAreaKm2: z.number().finite().min(0).max(1e6).nullable() }).partial().strict()
+		),
 		ewrPragmaticM3PerDay: monthly,
 		// Reserve rule tables per EWR site (engine ≥ 0.21.0); the list is replaced whole.
 		ewrRules: EwrRuleList,
@@ -541,7 +570,9 @@ export const SettingsPatch = z
 		// When the project re-runs itself after new data (runs/autoRun.ts, WP-2.11): any subset. Not a model input.
 		autoRun: AutoRunPatch,
 		// How the outcome matrix reads a sweep (outcomeSettings.ts, issue #53 R4): either field. Not a model input.
-		outcomes: OutcomesPatch
+		outcomes: OutcomesPatch,
+		// How a seasonal outlook is set up (outlookSettings.ts, issue #53 R5): either field. Not a model input.
+		outlook: OutlookPatch
 	})
 	.partial()
 	.passthrough()

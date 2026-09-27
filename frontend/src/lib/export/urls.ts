@@ -79,15 +79,15 @@ export function farmTableItems(urls: ExportUrls, projectId: string, runId: strin
 	return [
 		{
 			key: 'runoff',
-			label: 'Fragmented flow — all farms (CSV)',
+			label: 'Fragmented flow — all units (CSV)',
 			url: urls.runFarms(projectId, runId, 'runoff'),
-			hint: 'Each farm’s runoff [I], a column per farm, like the workbook sheet'
+			hint: 'Each unit’s runoff [I], a column per unit, like the workbook sheet'
 		},
 		{
 			key: 'ewr',
-			label: 'Fragmented EWR — all farms (CSV)',
+			label: 'Fragmented EWR — all units (CSV)',
 			url: urls.runFarms(projectId, runId, 'ewr'),
-			hint: 'Each farm’s EWR share [Y], a column per farm, like the workbook sheet'
+			hint: 'Each unit’s EWR share [Y], a column per unit, like the workbook sheet'
 		}
 	];
 }
@@ -112,7 +112,7 @@ export function runDownloadItems(
 			hint: 'Every table in one file: summary, daily sheets per node, curtailment, EWR grid, inputs',
 			workbook: { apiBase: urls.apiBase, projectId, runId }
 		},
-		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-farm table, catchment and calibration' },
+		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-unit table, catchment and calibration' },
 		{ label: 'Daily series — catchment (CSV)', url: urls.runDaily(projectId, runId), hint: 'Natural flow, outflow, EWR, rain…' },
 		...(farms
 			? farmTableItems(urls, projectId, runId).map((f) => {

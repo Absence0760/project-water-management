@@ -60,7 +60,7 @@ export interface ResolvedEnsembleOptions {
 	seed: number;
 	bounds: CalibrationBounds;
 	free: string[];
-	/** Half-width of the additive pan-coefficient shift; 0 = not varied (always 0 for legacy). */
+	/** Half-width of the additive pan-coefficient shift; 0 = not varied. */
 	panOffset: number;
 	rainSources: RainSource[];
 	/** The first is the primary record: it sets the split date. */

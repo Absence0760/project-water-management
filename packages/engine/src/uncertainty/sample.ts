@@ -33,7 +33,7 @@ export function pickUnit<T>(u: number, values: readonly T[]): T {
 
 /**
  * 'log' for a positive range spanning at least a factor of ten (GR4J's X1
- * and X3, the legacy peak-flow coefficient): a uniform draw would put nearly
+ * and X3): a uniform draw would put nearly
  * every member in the top decade. Otherwise 'linear'.
  */
 export function defaultScale(min: number, max: number): 'linear' | 'log' {
