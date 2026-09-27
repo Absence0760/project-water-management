@@ -299,7 +299,7 @@ function findTransfer(d: Draft, transferId: string): Transfer {
 
 /**
  * A farm dam whose capacity an op changed keeps its geometry along its own
- * area–volume relation (engine ≥ 1.7.0, docs/model.md §2.13, ../network/damResize.ts):
+ * area–volume relation (engine ≥ 1.10.0, docs/model.md §2.13, ../network/damResize.ts):
  * a survey curve is cut at, or extrapolated to, its top × the capacity ratio;
  * a power-law dam's area when full (as entered, or the capacity ÷ 3 m
  * estimate) becomes A_full × ratio^b. A later `damAreaFullM2` op on the node
@@ -390,6 +390,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)', (t) => see.item(t.id));
 			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)', (p) => see.item(p.id));
 			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
+			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
+			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId));
 			if (Array.isArray(d.settings.ewrRules)) {
 				// Settings are catchment-wide and the applicant sees them in full.
 				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there', () => true);

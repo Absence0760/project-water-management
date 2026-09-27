@@ -1,4 +1,4 @@
-// Resizing a dam along its own area–volume relation (engine ≥ 1.7.0,
+// Resizing a dam along its own area–volume relation (engine ≥ 1.10.0,
 // docs/model.md §2.13, hydrologist persona review of issue #46 item 11,
 // pending the hydrologist). A dam of another size at the same site is the
 // same basin filled to another level, so its surface area when full is the
@@ -6,7 +6,7 @@
 // power-law dam (A = A_full × (V / C)^b), and a survey curve cut at the new
 // top (exact) or carried beyond its top by a power law fitted to its top two
 // rows (an extrapolation). Uniform scaling (area ∝ capacity, constant mean
-// depth), used before 1.7.0, describes widening the basin at the same depth,
+// depth), used before 1.10.0, describes widening the basin at the same depth,
 // and overstated an enlarged dam's evaporating surface. Pure.
 import type { DamCurvePoint } from '../project';
 

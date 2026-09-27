@@ -141,7 +141,7 @@ describe('boreholes (WP-1.34)', () => {
 		expect(o.summary.warnings.some((w) => w.startsWith('stream depletion of 4000 m³ is still owed to the river at the end of the run') && w.includes('A 4000 m³'))).toBe(true);
 	});
 
-	it('the deficit carries over and comes off the first flow that returns (engine 1.7.0, hydrologist review item 15)', () => {
+	it('the deficit carries over and comes off the first flow that returns (engine 1.10.0, hydrologist review item 15)', () => {
 		// Dry days 0–2: the farm takes all 1000 and pumps 2000 (d = 0.5, no lag): 1000 owed a day.
 		// Day 3: 10 000 in the river, the farm takes 3000 of it and pumps nothing: the 3000 owed comes off the 7000 left.
 		// Day 4: 5000 − 3000 = 2000 left, owed 0: nothing taken.
@@ -338,6 +338,36 @@ describe('individual boreholes (WP-3.9)', () => {
 		// The water balance counts water pumped into the dam as groundwater in.
 		expect(prim.summary.waterBalance!.total.groundwaterM3).toBe(13_500);
 		expect(Math.abs(prim.summary.waterBalance!.total.residualM3)).toBeLessThan(1e-6);
+	});
+
+	it('a dam-target borehole pumps nothing on a day with no demand, so it never fills the dam ahead of rain that then spills', () => {
+		// A winter-rainfall case: a 30 000 m³ dam, empty, no demand at all; 92 dry
+		// days, then 10 days of 5000 m³/day inflow. A 200 m³/day borehole into the dam.
+		const days = 102;
+		const natural = [...new Array(92).fill(0), ...new Array(10).fill(5000)];
+		const dam = { damCapacityM3: 30_000, damInitialPct: 0 };
+		const none = run(input(dam, 0, days), natural);
+		const spilled = sum(col(none, 'A', 'spill'));
+		expect(spilled).toBe(20_000);
+		for (const mode of ['primary', 'emergency', 'supplemental'] as const) {
+			const o = run(withBores(input(dam, 0, days), [bh({ capacityM3Day: 200, target: 'dam', mode })]), natural);
+			ok(o);
+			expect(sum(col(o, 'A', 'demand')), mode).toBe(0);
+			// Until engine 1.8.0 a primary one pumped 94 × 200 = 18 800 m³ into the dam
+			// (the dry spell and the first wet days) and an emergency one 9000 m³ (up
+			// to its 30 % level), and all of it spilled again once the rain came:
+			// 38 800 and 29 000 m³ of spill instead of 20 000.
+			expect(sum(col(o, 'A', 'groundwater_to_dam')), mode).toBe(0);
+			expect(sum(col(o, 'A', 'spill')), mode).toBe(spilled);
+			expect(o.summary.groundwaterAnnualUse![0]!.abstractionM3, mode).toBe(0);
+		}
+		// Positive control: with demand drawn from the dam, primary and emergency still top it up at full capacity.
+		for (const mode of ['primary', 'emergency'] as const) {
+			const o = run(withBores(input(dam, 50, 3), [bh({ capacityM3Day: 200, target: 'dam', mode })]), [0, 0, 0]);
+			ok(o);
+			expect(col(o, 'A', 'groundwater_to_dam'), mode).toEqual([200, 200, 200]);
+			expect(col(o, 'A', 'dam_storage'), mode).toEqual([150, 300, 450]);
+		}
 	});
 
 	it('a supplemental dam-target borehole first lifts a dam below its dead storage to it', () => {

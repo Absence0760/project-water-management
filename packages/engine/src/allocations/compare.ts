@@ -3,8 +3,8 @@
 // docs/allocations.md).
 //
 // Pure and I/O-free like the rest of the engine: the backend feeds it a
-// stored run's daily `supplied` and `groundwater_used` series and the
-// project's allocations, and the result is shown next to the run. It does not
+// stored run's daily `supplied`, `groundwater_used`, `groundwater_to_dam` and
+// `river_abstraction` series and the project's allocations, and the result is shown next to the run. It does not
 // change a run and is not part of runModel, so ENGINE_VERSION doesn't move.
 //
 // The comparison is arithmetic, not a finding. "Over" means the model's
@@ -46,9 +46,17 @@ export interface AllocationUseNode {
 	 * 0.36.0): the run's `groundwater_to_dam` series; absent without dam-target
 	 * boreholes. Not part of supplied. It counts as groundwater use when pumped,
 	 * so the groundwater side per water year equals RunSummary.groundwaterAnnualUse's
-	 * abstraction (to the crop + into the dam).
+	 * abstraction (to the crop + into the dam). Drawing it back out of the dam is
+	 * not a second (surface) take: the surface side nets it out, at most the
+	 * water year's dam draw (docs/model.md §2.12).
 	 */
 	groundwaterToDam?: readonly (number | null)[] | null;
+	/**
+	 * Daily water pumped from the river below the dam (m³/day, part of supplied;
+	 * WP-3.8): the run's `river_abstraction` series; absent without a river
+	 * pump. Only used to tell the dam draw (supplied − groundwater − river) apart.
+	 */
+	riverAbstraction?: readonly (number | null)[] | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }
@@ -146,8 +154,16 @@ const waterYearStart = (wy: number) => toEpochDay(`${wy}-10-01`);
 
 /**
  * Compare each farm's and water user's modelled abstraction per water year
- * with the volumes registered for it, for surface water (supplied − groundwater)
- * and groundwater separately.
+ * with the volumes registered for it, for surface water and groundwater
+ * separately. Per water year y (docs/model.md §2.12):
+ *
+ *   groundwater(y) = Σ groundwater_used + Σ groundwater_to_dam
+ *   surface(y)     = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw)
+ *   dam draw       = MAX(supplied − groundwater_used − river_abstraction, 0), per day
+ *
+ * Groundwater pumped into the dam is counted once, as groundwater, when it is
+ * pumped; the dam draw attributes to it first, up to what was pumped in that
+ * water year, so re-drawing it is not a second, surface take.
  */
 export function compareAllocations(input: AllocationComparisonInput): AllocationComparison {
 	const tolerance = input.tolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
@@ -196,15 +212,29 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const allocs = byNode.get(n.nodeId) ?? [];
 		const gw = n.groundwater ?? null;
 		const gd = n.groundwaterToDam ?? null;
+		const ra = n.riverAbstraction ?? null;
 		const side = (source: AllocationWaterSource): AllocationSourceComparison => {
 			const own = allocs.filter((a) => a.waterSource === source);
 			const years = spans.map((s): AllocationYear => {
 				let modelled = 0;
+				let toDam = 0;
+				let damDraw = 0;
 				for (let d = s.from; d <= s.to; d++) {
 					const t = d - start;
 					const g = gw ? finite(gw[t]) : 0;
-					modelled += source === 'groundwater' ? g + (gd ? finite(gd[t]) : 0) : finite(n.supplied[t]) - g;
+					const pumped = gd ? finite(gd[t]) : 0;
+					if (source === 'groundwater') modelled += g + pumped;
+					else {
+						const surface = finite(n.supplied[t]) - g;
+						modelled += surface;
+						if (gd) {
+							toDam += pumped;
+							damDraw += Math.max(surface - (ra ? finite(ra[t]) : 0), 0);
+						}
+					}
 				}
+				// Groundwater pumped into the dam and drawn back out that water year (§2.12).
+				if (source === 'surface') modelled -= Math.min(toDam, damDraw);
 				const reg = registered(own, s.from, s.to, s.yearDays);
 				const covered = s.to - s.from + 1;
 				return {

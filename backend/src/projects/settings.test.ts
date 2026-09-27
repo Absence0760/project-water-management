@@ -907,7 +907,7 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		]);
 		expect(issues([table({ lowFlow: lowFlow.map((r) => r.slice(1)) })])).toEqual(['ewrRules.0.lowFlow: Each low-flow row needs one value per % point (Oct has 2 of 3).']);
 		expect(issues([table({ highFlows: [{ ...fresh, durationDays: 90, perYear: 5 }] })])).toEqual(["ewrRules.0.highFlows: High flow 1: 5 events of 90 days don't fit in a year."]);
-		expect(issues([table({ highFlows: [{ ...fresh, months: [11, 11] }] })])).toEqual(['ewrRules.0.highFlows: High flow 1: pick the months it may start in (each once).']);
+		expect(issues([table({ highFlows: [{ ...fresh, months: [11, 11] }] })])).toEqual(['ewrRules.0.highFlows: High flow 1: pick the months it may peak in (each once).']);
 		// The shape: whole days, months 1–12, a peak above 0, no unknown keys, at most 12.
 		for (const bad of [{ durationDays: 1.5 }, { months: [0] }, { peakM3s: 0 }, { perYear: 13 }, { label: '' }, { extra: 1 }]) {
 			expect(issues([table({ highFlows: [{ ...fresh, ...bad }] })]).length, JSON.stringify(bad)).toBeGreaterThan(0);

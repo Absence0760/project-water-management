@@ -19,6 +19,7 @@
 //   calibration.<CalibrationParams field>
 //   crop.<CropDef field>            cropArea.<CropArea field>
 //   transfer.<Transfer field>       series.<SeriesKind>
+//   demandObject.<DemandObject field>
 //   summary.<FarmSummary field>     catchment.<RunSummary.catchment field>
 //   stats.<CalibrationStats field>  run.<run series key>
 //   preview.<column>                the Data tab's daily preview (series/preview.ts):
@@ -184,6 +185,14 @@ export const TIPS: HelpTipText[] = [
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day']
+	},
+	{
+		id: 'demand-object',
+		term: 'Demand object',
+		short: 'A demand on a unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from the unit’s dam.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['demandObject.category', 'demandObject.priority', 'demandObject.returnPct', 'summary.demandObjects']
 	},
 	{
 		id: 'supply-rule',

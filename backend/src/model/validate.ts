@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DAM_RELEASE_RULES, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -127,6 +127,29 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				emergencyBelowPct: frac.default(0.3),
 				target: z.enum(BOREHOLE_TARGETS).default('direct'),
 				depletionFactor: frac.default(0)
+			})
+		)
+		.max(5_000)
+		.optional(),
+	// Demand objects (engine 1.7.0, issue #54 item 2b): part of the model document, like boreholes. Absent = none.
+	demandObjects: z
+		.array(
+			z.object({
+				id: uuid,
+				nodeId: uuid,
+				name: z.string().trim().min(1).max(200),
+				category: z.enum(DEMAND_OBJECT_CATEGORIES).default('other'),
+				sizing: z.enum(DEMAND_OBJECT_SIZINGS).default('monthly'),
+				monthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				count: nonNeg.nullable().default(null),
+				litresPerUnitDay: nonNeg.nullable().default(null),
+				lossPct: z.number().min(0).lt(1).default(0),
+				monthlyFactor: z.array(nonNeg).length(12).nullable().default(null),
+				returnPct: frac.default(0),
+				priority: z.enum(DEMAND_OBJECT_PRIORITIES).default('shared'),
+				destination: z.enum(DEMAND_OBJECT_DESTINATIONS).default('internal'),
+				enabled: z.boolean().default(true),
+				note: z.string().max(1000).default('')
 			})
 		)
 		.max(5_000)

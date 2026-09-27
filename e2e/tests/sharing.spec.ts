@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, PASSWORD, putModel, register, sampleModel, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
+import { addMember, createProject, LEGAL_VERSION, PASSWORD, putModel, register, sampleModel, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
 import { plantEmailToken, plantInviteToken, userIdByEmail } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -206,7 +206,7 @@ test('an invited person signs up through the link and lands in the project', asy
 
 test('a dead invite link falls back to a normal sign-up', async ({ page }) => {
 	await page.goto('/register?invite=' + 'y'.repeat(43));
-	await expect(page.getByRole('alert')).toContainText('This invitation link is invalid, was revoked, or has expired');
+	await expect(page.getByRole('alert')).toContainText('This invitation link has expired or was withdrawn');
 	await expect(page.getByRole('heading', { level: 1, name: 'Create an account' })).toBeVisible();
 	await expect(page.getByLabel('Email')).toBeEditable();
 });
@@ -253,7 +253,7 @@ test('the invitee, signed up without the link, is told to confirm their email to
 	// Signs up directly (not through the link), so the invite waits for a confirmed address.
 	const context = await browser.newContext();
 	const v = await context.newPage();
-	const res = await v.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Early Bird' } });
+	const res = await v.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Early Bird', acceptTerms: LEGAL_VERSION } });
 	expect(res.status()).toBe(202);
 	// Signed in before confirming: a session from before confirmation was required (issue #57).
 	await signInUnconfirmed(context, { id: await userIdByEmail(email), email, displayName: 'Early Bird', password: PASSWORD });

@@ -166,7 +166,7 @@ collected as a checklist in issue #46; tick it there as they answer.
         reservoir with capture share d and time constant k, not a Glover/Hunt
         kernel) and the values. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
-        **Changed in engine 1.7.0, pending the hydrologist's confirmation:**
+        **Changed in engine 1.10.0, pending the hydrologist's confirmation:**
         depletion the river can't give was dropped; it is now carried over as
         a deficit, taken off the first flow back and never written off
         (bounded by the depletion generated; the run warns with what is still
@@ -179,7 +179,11 @@ collected as a checklist in issue #46; tick it there as they answer.
         supplemental, then emergency), what a dam-target borehole does in each
         mode (primary keeps the dam topped up; supplemental adds today's
         shortfall and first lifts a dam below dead storage; emergency refills
-        a low dam), and that annual caps reset on 1 October. Should a project
+        a low dam; primary and emergency only on a day the dam is drawn for
+        demand, engine 1.8.0, since pumping into it with nothing to irrigate
+        took the room winter inflow needed and spilled; model.md §2.7d), and
+        whether a farm needs a fill-to level or pumping season per borehole
+        instead, and that annual caps reset on 1 October. Should a project
         carry each property's own GN 538 volume (area × the schedule's rate,
         by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
         the first licence application with boreholes. Also: one depletion lag
@@ -192,7 +196,7 @@ collected as a checklist in issue #46; tick it there as they answer.
         Gush curves by age and site the CMA uses. Confirm the daily split
         (low-flow share on each day's flow up to the Q75 natural flow, the
         other share above it) and whether orchards and vineyards need a class.
-- [ ] **A resized dam follows its own area–volume relation** (engine 1.7.0,
+- [ ] **A resized dam follows its own area–volume relation** (engine 1.10.0,
       [model.md §2.13](./model.md)). Built, pending the hydrologist's
       confirmation: drafted from the hydrologist persona's review of issue
       #46 (item 11). The storage–yield curve and a scenario's dam-capacity op
@@ -249,6 +253,32 @@ collected as a checklist in issue #46; tick it there as they answer.
       only where no transfer crosses a site; the loop cut). About 1 % more
       series before compression on the examples with transfers
       ([model.md §2.7b](./model.md)).
+- [ ] **Issue #46 persona drafts: the safe changes, not built yet** (2026-09-27).
+      Two simulated reviewers (hydrologist, licence assessor) drafted "confirm or
+      change" answers to every #46 item (issue comment; full reasoning in the
+      gitignored `reviews/persona-*-issue46.md`). Three were defects and are
+      fixed: dam-target boreholes pump only on a day the dam is drawn for
+      demand (engine 1.8.0), a freshet is a flood hydrograph, not days held at
+      the peak (1.9.0), and groundwater pumped into a dam is netted out of
+      surface use in the allocation comparison (no engine bump). Still to
+      build, each adding an option or fixing a mechanism without changing a
+      default: GA volume per property (area × the quaternary's GN 538 rate,
+      capped at 40 000 m³/a, any 12 months); an enlarged dam resized along its
+      own area–volume curve; unmet borehole depletion carried over, not
+      dropped; a warning when the run's natural MAR is > ±15 % off the
+      gazetted one; assurance of supply over complete water years only; the
+      lowest review-trigger band starting from the lowest storage on record
+      for the date; a flow flat-line flagged only above Q30 (else 30 days).
+      Part-done work sits in stopped worktree branches
+      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion),
+      `worktree-agent-ac21d77185b90f6ec` (MAR warning, water years, bands) and
+      `worktree-agent-ac030f837ff7f9ec4` (GA, flat-line), uncommitted.
+      Waiting on the real hydrologist (they change defaults or rest on thin
+      evidence): `ewrChargeSource` → `ruleTable`, `lowFlowMeasure` →
+      `baseflow`, τ 0.2, outcome cut-offs 0.95 / 0.85, senior users exempt
+      only for basic human needs. The primary-source research on the
+      low-confidence answers was stopped before it wrote anything; rerun it
+      before relying on those answers.
 - [ ] **Client regression suite is thinner since N1.** Nearly every client
       farm has return flow, which the new efficiency model can't reproduce,
       so the replay skips those farms' balance columns and everything
@@ -2529,6 +2559,58 @@ from the WP:
       the engine and use it in both places; that changes what a new pick in
       the node form sets, not any saved value. Trigger: Q10.
 
+## Demand objects and run of river (issue #54 items 2b–2d)
+
+- [x] **Demand objects, phase 1** (2026-09-27, engine 1.7.0, migration 088).
+      Several non-crop demands per unit (category, monthly or per-unit
+      sizing with losses and a profile, return share, priority against the
+      crops, internal or piped out), supplied from the unit's own sources,
+      reported per object ([model.md §2.7f](./model.md)); the Network node
+      form's Demand objects section ([ui.md](./ui.md)); the b023 importers map
+      a gross demand typed over the crop formula to one
+      (scripts/wbt-import/README.md). No project's numbers change.
+- [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
+      (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
+      and dam-less units as run of river with an uncapped pump; on for the
+      second configuration.
+- [ ] **Demand objects: the daily schedule.** Not built: date windows with a
+      factor (including an Easter token), an uploaded daily factor series
+      through Add data, and the reason a day is off (not needed: no demand,
+      no return; supplied from elsewhere: no river take, the return goes on;
+      curtailed: a shortfall), with switched-off days reported apart from
+      short days. Durable fix: a `schedule` on the object (windows) and an
+      object-scoped series kind for the uploaded factor, applied in
+      `network/demandObjects.ts planObjects` before the split, with the
+      reason carried into the return (a per-day return override) and the
+      summary. Trigger: the client's answer on Q4/Q12 (fixed pattern or
+      uploaded series; what off means), or the newer workbook's register (Q1).
+- [ ] **A scenario op for demand objects.** Scenarios can't add, change or
+      remove one (`demand.scale` on a unit scales its crops and objects
+      together); override mode says an object edit can't be recorded. Durable
+      fix: `demandObject.add` / `.remove` / `.set` ops (like `borehole.*`),
+      classified proposal / baseline by the object's unit, with a mask kind
+      for applicants, and per-category scaling for #53 R3's restriction
+      what-ifs. Trigger: the first licensing or restriction what-if that
+      needs a town's demand changed.
+- [ ] **Pump capacities for the run-of-river units.** The importer leaves
+      them uncapped (b023 has none) and every run warns. Enter them in the
+      Network tab's Supply section once the client's input page arrives (Q2).
+      Trigger: Q2's answer.
+- [ ] **Effective rain on a typed-over demand beside crops.** b023 takes
+      effective rain off a farm's whole gross demand, typed part included;
+      the imported object isn't reduced by rain. No effect where the farm has
+      no crops (the second configuration's case). Durable fix, if a workbook
+      needs it: an object option to share the unit's effective rain, or the
+      hydrologist confirming a town's demand isn't reduced by rain (the
+      physical reading). Trigger: a workbook with a typed-over demand on a
+      cropped farm.
+- [ ] **The browser importer has no run-of-river option.** Only the Python
+      importer (and so the seed) has `--run-of-river`; the in-app workbook
+      import keeps the flag-and-warn behaviour. Durable fix: the same option
+      in `spreadsheet/import/extract.ts` behind a checkbox in the import
+      dialog, with parity on the synthetic workbook. Trigger: a user
+      importing such a workbook in the app rather than through the seed.
+
 ## Notes (WP-2.7)
 
 - [x] **Notes in the project export and copy** (2026-09-26). The export
@@ -2632,7 +2714,7 @@ from the WP:
       payload-free for the other kinds), and the panel picks one up on open
       and follows it to the end (e2e `yield.spec.ts`).
 - [ ] **A resized dam's shape** (pending the hydrologist). **Built in engine
-      1.7.0, pending the hydrologist's confirmation:** the storage–yield curve
+      1.10.0, pending the hydrologist's confirmation:** the storage–yield curve
       and a scenario's `damCapacityM3` op resize a dam along its own
       area–volume relation (A_full × ratio^b; a survey curve cut at the new
       top, or extrapolated beyond it with a power law through its top rows,

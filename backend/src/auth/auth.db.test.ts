@@ -1,5 +1,8 @@
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+import { SESSION_COOKIE, signSession } from './session.js';
 
 const json = (body: unknown) => ({
 	method: 'POST',
@@ -12,7 +15,7 @@ describe('auth', () => {
 		const u = await signUp('Ann', { verified: false });
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
-		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] } });
+		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
 		expect(JSON.stringify(me.body)).not.toContain('password');
 	});
 
@@ -33,7 +36,7 @@ describe('auth', () => {
 	// but nobody is signed in until the address is confirmed.
 	it('a sign-up signs nobody in: it mails a confirmation link and answers 202', async () => {
 		const email = `n-${crypto.randomUUID()}@x.io`;
-		const res = await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'N' }));
+		const res = await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'N', acceptTerms: LEGAL_VERSION }));
 		expect(res.status).toBe(202);
 		expect(await res.json()).toEqual({ confirm: true, email });
 		expect(res.headers.get('set-cookie')).toBeNull();
@@ -42,7 +45,7 @@ describe('auth', () => {
 
 	it('an unconfirmed account can’t sign in, and can once the emailed link confirms it', async () => {
 		const email = `u-${crypto.randomUUID()}@x.io`;
-		await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'U' }));
+		await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'U', acceptTerms: LEGAL_VERSION }));
 		const refused = await anon('POST', '/auth/login', { email, password: 'longenough' });
 		expect(refused.status).toBe(403);
 		expect(refused.body.code).toBe('email_unconfirmed');
@@ -57,8 +60,8 @@ describe('auth', () => {
 
 	it('answers a taken address exactly like a free one, and mails its owner instead', async () => {
 		const u = await signUp('Dup');
-		const free = await app.request('/auth/register', json({ email: `f-${crypto.randomUUID()}@x.io`, password: 'longenough', displayName: 'X' }));
-		const taken = await app.request('/auth/register', json({ email: u.email.toUpperCase(), password: 'longenough', displayName: 'X' }));
+		const free = await app.request('/auth/register', json({ email: `f-${crypto.randomUUID()}@x.io`, password: 'longenough', displayName: 'X', acceptTerms: LEGAL_VERSION }));
+		const taken = await app.request('/auth/register', json({ email: u.email.toUpperCase(), password: 'longenough', displayName: 'X', acceptTerms: LEGAL_VERSION }));
 		expect(taken.status).toBe(free.status);
 		expect(Object.keys((await taken.json()) as object)).toEqual(Object.keys((await free.json()) as object));
 		expect(taken.headers.get('set-cookie')).toBeNull();
@@ -72,13 +75,13 @@ describe('auth', () => {
 
 	it('a taken but never-confirmed address gets a fresh confirmation link', async () => {
 		const u = await signUp('Pending', { verified: false });
-		await app.request('/auth/register', json({ email: u.email, password: 'longenough', displayName: 'X' }));
+		await app.request('/auth/register', json({ email: u.email, password: 'longenough', displayName: 'X', acceptTerms: LEGAL_VERSION }));
 		expect(lastMailTo(u.email)?.subject).toMatch(/Confirm your email address/);
 	});
 
 	it('“send the link again” answers the same for any address, and mails only an unconfirmed account', async () => {
 		const pending = `p-${crypto.randomUUID()}@x.io`;
-		await app.request('/auth/register', json({ email: pending, password: 'longenough', displayName: 'P' }));
+		await app.request('/auth/register', json({ email: pending, password: 'longenough', displayName: 'P', acceptTerms: LEGAL_VERSION }));
 		const confirmed = await signUp('Confirmed');
 		const before = { pending: lastMailTo(pending), confirmed: lastMailTo(confirmed.email) };
 		// Within the cooldown of the sign-up's own mail: nothing new yet, the same answer.
@@ -109,8 +112,76 @@ describe('auth', () => {
 	});
 
 	it('validates register input', async () => {
-		const res = await app.request('/auth/register', json({ email: 'not-an-email', password: 'short', displayName: '' }));
+		const res = await app.request('/auth/register', json({ email: 'not-an-email', password: 'short', displayName: '', acceptTerms: LEGAL_VERSION }));
 		expect(res.status).toBe(400);
+	});
+});
+
+// Which terms each account accepted (087, docs/legal-status.md): the form
+// says "By signing up, you accept the Terms of use and Privacy notice" and
+// sends the version it showed; the server refuses any other and stores it.
+describe('terms acceptance', () => {
+	const register = (email: string, extra: Record<string, unknown>) => anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Terms', ...extra });
+	const record = async (email: string) =>
+		(await asOwner('SELECT terms_version, terms_accepted_at FROM app_user WHERE email = $1', [email])) as { terms_version: string | null; terms_accepted_at: Date | null }[];
+
+	it('refuses a sign-up without the current version (400 terms_not_accepted) and makes no account', async () => {
+		for (const extra of [{}, { acceptTerms: '2020-01-01' }, { acceptTerms: '' }]) {
+			const email = `t-${crypto.randomUUID()}@x.io`;
+			const res = await register(email, extra);
+			expect(res.status).toBe(400);
+			expect(res.body).toMatchObject({ code: 'terms_not_accepted', params: { version: LEGAL_VERSION } });
+			expect(await record(email)).toEqual([]);
+			expect(lastMailTo(email)).toBeUndefined();
+		}
+	});
+
+	it('stores the version and the database’s time with the account (positive control)', async () => {
+		const email = `t-${crypto.randomUUID()}@x.io`;
+		const before = Date.now();
+		expect((await register(email, { acceptTerms: LEGAL_VERSION })).status).toBe(202);
+		const [row] = await record(email);
+		expect(row!.terms_version).toBe(LEGAL_VERSION);
+		expect(row!.terms_accepted_at!.getTime()).toBeGreaterThanOrEqual(before - 5_000);
+		expect(row!.terms_accepted_at!.getTime()).toBeLessThanOrEqual(Date.now() + 5_000);
+	});
+
+	it('a sign-up through an invite records it too', async () => {
+		const owner = await signUp('Inviter');
+		const project = await owner.call('POST', '/projects', { name: 'Terms invite' });
+		const email = `t-${crypto.randomUUID()}@x.io`;
+		expect((await owner.call('POST', `/projects/${project.body.project.id}/members`, { email, role: 'viewer' })).status).toBe(201);
+		const res = await register(email, { acceptTerms: LEGAL_VERSION, inviteToken: tokenIn(lastMailTo(email)) });
+		expect(res.status).toBe(201);
+		expect(res.body.user.termsCurrent).toBe(true);
+		expect((await record(email))[0]!.terms_version).toBe(LEGAL_VERSION);
+	});
+
+	it('/auth/me says termsCurrent false for an account that accepted an older version, or none', async () => {
+		const u = await signUp('Olderterms');
+		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(true);
+		await asOwner('UPDATE app_user SET terms_version = $2 WHERE id = $1', [u.id, '2020-01-01']);
+		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(false);
+		// Made by a script (seed:examples, import:project): app_register without a version accepted nothing.
+		const email = `script-${crypto.randomUUID()}@x.io`;
+		const [made] = (await asOwner("SELECT app_register($1, 'Script', 'x', NULL) AS id", [email])) as { id: string }[];
+		expect(await record(email)).toEqual([{ terms_version: null, terms_accepted_at: null }]);
+		const me = await anon('GET', '/auth/me', undefined, `${SESSION_COOKIE}=${await signSession(made!.id)}`);
+		expect(me.body.user.termsCurrent).toBe(false);
+	});
+
+	it('the acceptance time is the database’s: an account can’t backdate or clear its own record', async () => {
+		const u = await signUp('Backdater');
+		const [before] = await record(u.email);
+		await withUser(u.id, (db) => db.query("UPDATE app_user SET terms_accepted_at = '2000-01-01' WHERE id = $1", [u.id]));
+		await withUser(u.id, (db) => db.query('UPDATE app_user SET terms_version = NULL WHERE id = $1', [u.id]));
+		expect(await record(u.email)).toEqual([before]);
+		// A new version is stamped now, whatever time was sent with it.
+		await withUser(u.id, (db) => db.query("UPDATE app_user SET terms_version = '2099-01-01', terms_accepted_at = '2000-01-01' WHERE id = $1", [u.id]));
+		const [after] = await record(u.email);
+		expect(after!.terms_version).toBe('2099-01-01');
+		expect(after!.terms_accepted_at!.getTime()).toBeGreaterThan(before!.terms_accepted_at!.getTime() - 1);
+		expect(after!.terms_accepted_at!.getFullYear()).toBeGreaterThan(2020);
 	});
 });
 
@@ -223,7 +294,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		const u = await signUp('Renamed');
 		const res = await u.call('PATCH', '/auth/me', { displayName: '  Dr Renamed  ' });
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] } });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
@@ -241,7 +312,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 
 		const res = await change(u.cookie, 'correct horse', 'battery staple');
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] } });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
 		const fresh = cookieOf(res);
 		expect(fresh).toMatch(/^wm_session=.+/);
 

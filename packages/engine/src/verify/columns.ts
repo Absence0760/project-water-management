@@ -95,7 +95,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'groundwater_to_dam',
 		letter: 'GWd',
 		formula:
-			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity; P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
+			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity, primary and emergency only on a day with demand left for the dam (engine ≥ 1.7.0); P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
 		optional: true
 	},
 	{
@@ -113,7 +113,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	},
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + Σ d × pumped), all of it when lag = 0; each borehole its own d', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
-	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep: depletion owed to the river while it had no flow left, carried over and taken off the first flow back (engine ≥ 1.7.0)', optional: true },
+	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep: depletion owed to the river while it had no flow left, carried over and taken off the first flow back (engine ≥ 1.10.0)', optional: true },
 	{
 		key: 'senior_requirement',
 		letter: 'Zs',
@@ -143,7 +143,7 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, demand − river take), primary MIN(capacity, demand) first; part of G (WP-1.34)', optional: true },
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, H − river take + T); U = H − river take + T − Dep', optional: true },
-	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.7.0)', optional: true }
+	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.10.0)', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */

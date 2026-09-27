@@ -269,6 +269,10 @@ const CASES: Record<string, Case> = {
 		insert: (h, ref) => [`INSERT INTO land_cover (project_id, node_id, cover_class, area_km2, density_pct) VALUES ($1, $2, 'pine', 1, 0.5)`, [h.projectId, ref]]
 	},
 	'borehole.node_id': { ref: (w) => w.farmId, insert: (h, ref) => [`INSERT INTO borehole (project_id, node_id, name, capacity_m3_day) VALUES ($1, $2, 'Bore', 10)`, [h.projectId, ref]] },
+	'demand_object.node_id': {
+		ref: (w) => w.farmId,
+		insert: (h, ref) => [`INSERT INTO demand_object (project_id, node_id, name, monthly_m3_day) VALUES ($1, $2, 'Town', array_fill(1::float8, ARRAY[12]))`, [h.projectId, ref]]
+	},
 	'farm_link.node_id': { ref: (w) => w.farm2Id, insert: (h, ref) => ['INSERT INTO farm_link (project_id, node_id, user_id) VALUES ($1, $2, $3)', [h.projectId, ref, farmer.id]] },
 	'invite_node.invite_id': { ref: (w) => w.inviteId, insert: (h, ref) => ['INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [ref, h.projectId, h.farmId]] },
 	'invite_node.node_id': { ref: (w) => w.farmId, insert: (h, ref) => ['INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [h.inviteId, h.projectId, ref]] },
@@ -637,7 +641,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'PUT /projects/:id/model landCover.nodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { landCover: [{ id: randomUUID(), nodeId: r.farmId, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null }] })),
 	'PUT /projects/:id/model boreholes.nodeId': (h, r) =>
-		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { boreholes: [{ id: randomUUID(), nodeId: r.farmId, name: 'Bore', capacityM3Day: 10 }] }))
+		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { boreholes: [{ id: randomUUID(), nodeId: r.farmId, name: 'Bore', capacityM3Day: 10 }] })),
+	'PUT /projects/:id/model demandObjects.nodeId': (h, r) =>
+		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { demandObjects: [{ id: randomUUID(), nodeId: r.farmId, name: 'Town', monthlyM3Day: new Array(12).fill(1) }] }))
 };
 
 describe('through the routes, by an editor of both projects', () => {
@@ -696,7 +702,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'model/validate.ts:downstreamNodeId': ['PUT /projects/:id/model downstreamNodeId'],
-	'model/validate.ts:nodeId': ['PUT /projects/:id/model cropAreas.nodeId', 'PUT /projects/:id/model landCover.nodeId', 'PUT /projects/:id/model boreholes.nodeId'],
+	'model/validate.ts:nodeId': ['PUT /projects/:id/model cropAreas.nodeId', 'PUT /projects/:id/model landCover.nodeId', 'PUT /projects/:id/model boreholes.nodeId', 'PUT /projects/:id/model demandObjects.nodeId'],
 	'model/validate.ts:cropId': ['PUT /projects/:id/model cropAreas.cropId'],
 	'model/validate.ts:fromNodeId': 'the same store path as toNodeId (transfer_same_project checks both)',
 	'model/validate.ts:toNodeId': ['PUT /projects/:id/model transfers.toNodeId'],

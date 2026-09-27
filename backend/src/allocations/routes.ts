@@ -471,7 +471,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const users = (r.nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
 			const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 				`SELECT node_id AS "nodeId", key, "values" FROM run_series
-				 WHERE run_id = $1 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam') AND node_id = ANY($2::uuid[])`,
+				 WHERE run_id = $1 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction') AND node_id = ANY($2::uuid[])`,
 				[runId, users.map((n) => n.id)]
 			);
 			const get = (nodeId: string, key: string) => series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
@@ -484,6 +484,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					supplied: get(n.id, 'supplied')!,
 					groundwater: get(n.id, 'groundwater_used') ?? null,
 					groundwaterToDam: get(n.id, 'groundwater_to_dam') ?? null,
+					riverAbstraction: get(n.id, 'river_abstraction') ?? null,
 					damCapacityM3: n.damCapacityM3 ?? null
 				}));
 			const allocations = await loadAllocations(db, id);

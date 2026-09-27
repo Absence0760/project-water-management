@@ -100,9 +100,17 @@ For a run, per farm or water user, per water source and per **water year**
   dam-target borehole, WP-3.9, `groundwater_to_dam`) counts as groundwater use
   on the day it is pumped, so the groundwater side of a water year equals the
   run's groundwater use table (to the crop + into the dam). Water pumped into
-  the dam and later supplied from it is also in `supplied`, so it counts under
-  surface water too when it is drawn; pending the hydrologist (whether to net
-  it out of the surface side).
+  the dam and later supplied from it is also in `supplied`; drawing it back
+  out isn't a new surface take (in WARMS the groundwater take and the storage
+  are separate registered uses), so the surface side nets it out: each water
+  year, surface water = supplied − groundwater − MIN(pumped into the dam, drawn
+  from the dam), where the dam draw is supplied less groundwater to the crop
+  and the river pump (`river_abstraction`). 10 000 m³ pumped into a dam and
+  40 000 m³ drawn from it read 30 000 m³ surface + 10 000 m³ groundwater,
+  not 40 000 + 10 000. Water pumped before 1 October and drawn after it is
+  not netted. The rule and its reasoning are in
+  [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310);
+  pending the hydrologist's confirmation.
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated

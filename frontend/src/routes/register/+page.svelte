@@ -95,6 +95,10 @@
 				: 'Water Management'
 	);
 
+	// "By creating an account, you agree to the {terms} and {privacy}.",
+	// split around its two links (t leaves a placeholder it isn't given as written).
+	const agreeParts = $derived(t('By creating an account, you agree to the {terms} and {privacy}.').split(/(\{terms\}|\{privacy\})/));
+
 	// Keep ?next= across to sign-in, but not the invite token.
 	const next = page.url.searchParams.get('next');
 	const loginHref = `${base}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`;
@@ -196,6 +200,7 @@
 	</AuthCard>
 {:else}
 <AuthCard
+	legal={false}
 	title={inviteState === 'ok' ? t('Accept your invitation') : t('Create an account')}
 	subtitle={inviteState === 'none' ? t('Model your own catchments, or join a team’s.') : undefined}
 >
@@ -207,7 +212,7 @@
 			<p class="muted">{t('Create your account to join. You’ll have access straight away.')}</p>
 		</div>
 	{:else if inviteState === 'dead'}
-		<div class="alert alert-warning" role="alert">{t('This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an account — then ask whoever invited you to add you again.')}</div>
+		<div class="alert alert-warning" role="alert">{t('This invitation link has expired or was withdrawn. You can still create an account, then ask to be invited again.')}</div>
 	{:else if inviteState === 'error'}
 		<div class="alert alert-warning" role="alert">{t('We couldn’t check your invitation right now. You can still create an account; you’ll join once your email address is confirmed.')}</div>
 	{/if}
@@ -264,9 +269,15 @@
 			/>
 		</div>
 
+		<!-- Directly above the button that makes the account, so the terms are seen before they are accepted
+		     (a notice below the button is weak evidence of assent). -->
+		<p class="agree">
+			{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
+		</p>
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>
 			{busy ? t('Creating…') : inviteState === 'ok' ? t('Create account and join') : t('Create account')}
 		</button>
+
 	</form>
 	{#snippet footer()}
 		{t('Already registered?')} <a href={loginHref}>{t('Sign in')}</a>
@@ -287,6 +298,15 @@
 		justify-content: center;
 		min-height: 44px;
 		margin-top: 0.75rem;
+	}
+	.agree {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+	.agree a {
+		color: inherit;
+		font-weight: 400;
 	}
 	.status {
 		margin: 0.5rem 0 0;

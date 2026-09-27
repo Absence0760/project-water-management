@@ -139,7 +139,7 @@ describe('storageYieldCurve', () => {
 		}
 	});
 
-	it('resizes a survey curve with the dam (WP-3.5, engine 1.7.0): a linear two-row curve resizes exactly like the power law with exponent 1', () => {
+	it('resizes a survey curve with the dam (WP-3.5, engine 1.10.0): a linear two-row curve resizes exactly like the power law with exponent 1', () => {
 		const days = 2 * 365;
 		const cap = 20_000;
 		const areaFull = 8_000;
@@ -171,7 +171,7 @@ describe('storageYieldCurve', () => {
 		}
 	});
 
-	it('a resized dam follows its own area–volume relation (engine 1.7.0): A_full × ratio^b, not area ∝ capacity', () => {
+	it('a resized dam follows its own area–volume relation (engine 1.10.0): A_full × ratio^b, not area ∝ capacity', () => {
 		// Rain of 2 mm/day on the full dam's surface enters the mean-supply bound, so each point's bound gives its area:
 		// B = inflow + rain × A_full ÷ 1000 + capacity ÷ days (full at the start).
 		const days = 365;

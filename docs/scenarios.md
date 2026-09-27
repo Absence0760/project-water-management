@@ -136,7 +136,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
   `riverFirst` and `pumpCapacityM3Day` → 1200.
 
-  **Dam capacity** (engine ≥ 1.7.0, [model.md §2.13](./model.md), pending
+  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md), pending
   the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
   and to a capacity above 0) resizes its geometry along the dam's own
   area–volume relation, as the storage–yield curve does: a power-law dam's
@@ -148,7 +148,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   extrapolated); it is left out for a node the caller can't see. A later
   `damAreaFullM2` op on the node sets the enlarged dam's own area; one before
   the capacity op describes the dam at its old size and is resized with it.
-  A new dam (from 0) keeps an unknown area unknown. Before 1.7.0 the area
+  A new dam (from 0) keeps an unknown area unknown. Before 1.10.0 the area
   stayed as entered, or followed capacity ÷ 3 m (constant mean depth).
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
@@ -201,6 +201,8 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   soil-water store), so the abstraction D = F ÷ e scales with it while the
   crop area, the gross demand, the rain used, the irrigation efficiency and
   the loss return stay as they are: 85 % means "85 % of what they'd take".
+  A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
+  month by month; there is no op for one object yet (followups.md).
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of

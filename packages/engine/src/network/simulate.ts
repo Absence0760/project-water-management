@@ -8,6 +8,7 @@ import { curveAreaAt, releaseToday, type DamCurve, type PlanRelease } from './da
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, type PlanBorehole } from './boreholes';
 import { pumpsRiverToday, riverRoom, surfaceSplit, type PlanSupply } from './supply';
+import { splitSupply, type PlanObjects } from './demandObjects';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -56,7 +57,7 @@ export interface PlanNode {
 	 * this water year. Absent = a fresh start (0, off, 0).
 	 */
 	initialDepletionStoreM3?: number;
-	/** The stream-depletion deficit still owed to the river the day before (engine ≥ 1.7.0); absent = 0. */
+	/** The stream-depletion deficit still owed to the river the day before (engine ≥ 1.10.0); absent = 0. */
 	initialDepletionDeficitM3?: number;
 	initialOnRiver?: boolean;
 	initialBoreholeUsedM3?: readonly number[];
@@ -115,6 +116,14 @@ export interface PlanNode {
 	 * run of river (rule 3) also sends all inflow and runoff below the (absent) dam.
 	 */
 	supply?: PlanSupply;
+	/**
+	 * A unit's demand objects (engine ≥ 1.7.0, ./demandObjects.ts,
+	 * docs/model.md §2.7f); absent = none. Their demand adds to the crops'
+	 * abstraction demand F / e; what the unit is supplied is split between
+	 * crops and objects by priority class (splitSupply), and each object
+	 * returns its share of its part below the unit.
+	 */
+	objects?: PlanObjects;
 	/**
 	 * Land cover on this farm (WP-1.35, ./landcover.ts): the shares of its
 	 * runoff above and up to the low-flow threshold that it removes. Absent = none.
@@ -228,6 +237,8 @@ export interface NodeResult {
 	boreholePumped?: Float64Array[];
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
+	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
+	objectSupplied?: Float64Array[];
 	/**
 	 * The storage reset's step (engine ≥ 0.46.0): on the reset day, the
 	 * storage set − the storage the day before left (m³, + added / − taken);
@@ -237,7 +248,7 @@ export interface NodeResult {
 	/** Stream depletion taken from the node's outflow (WP-1.34), after the clamp. */
 	depletion: Float64Array;
 	/**
-	 * The stream-depletion deficit at the end of the day (engine ≥ 1.7.0, m³):
+	 * The stream-depletion deficit at the end of the day (engine ≥ 1.10.0, m³):
 	 * depletion that fell due while the river had no flow left at the node,
 	 * carried over and taken off the first flow there. Never dropped.
 	 */
@@ -253,7 +264,7 @@ export interface NodeResult {
  * reservoir and α of its content falls due. What is owed is yesterday's
  * deficit plus today's due; the river gives at most what flows out of the node
  * (`flow`), and the rest stays owed as the deficit, taken off the first flow
- * that returns (engine ≥ 1.7.0; before it, the rest was dropped). Writes the
+ * that returns (engine ≥ 1.10.0; before it, the rest was dropped). Writes the
  * node's depletion columns and returns the depletion taken.
  */
 function deplete(node: PlanNode, r: NodeResult, t: number, depleting: number, flow: number): number {
@@ -312,7 +323,7 @@ export interface NetworkState {
 	/** Dam storage the day before (before any storage reset that day). */
 	storageM3: Float64Array;
 	depletionStoreM3: Float64Array;
-	/** The stream-depletion deficit the day before (engine ≥ 1.7.0). */
+	/** The stream-depletion deficit the day before (engine ≥ 1.10.0). */
 	depletionDeficitM3: Float64Array;
 	/** 1 = the river pump was on the day before. */
 	onRiver: Uint8Array;
@@ -436,6 +447,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
 		if (n.supply) r.riverAbstraction = new Float64Array(days);
+		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
 		return r;
 	});
@@ -536,7 +548,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const dst = nodes[tr.to]!;
 				const q = prevQ(tr.to);
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
-				const room = Math.max(0, dst.damCapacityM3 - (q + loss.Pd - loss.E - loss.Sp) + dst.demand[t]! / dst.irrigationEfficiency - intoToday[tr.to]!);
+				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
+				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
+				const room = Math.max(0, dst.damCapacityM3 - (q + loss.Pd - loss.E - loss.Sp) + dstD - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
 			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
@@ -635,8 +649,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			}
 
 			const F = node.demand[t]!;
-			// Abstraction demand: the crop requirement plus the application losses (audit N1).
-			const D = F / node.irrigationEfficiency;
+			// Abstraction demand: the crop requirement plus the application losses (audit N1),
+			// plus the unit's demand objects (engine ≥ 1.7.0, docs/model.md §2.7f).
+			const Dc = F / node.irrigationEfficiency;
+			const objs = node.objects;
+			const D = objs ? Dc + objs.total[t]! : Dc;
 			const H = sumU;
 			// Land cover removes part of the farm's natural runoff before it reaches the river or dam (WP-1.35).
 			const I0 = nat * node.share;
@@ -756,7 +773,15 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
-			const T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
+			// With demand objects (engine ≥ 1.7.0) G is split between the crops and the objects
+			// first, and each object returns its share of its own part.
+			let T: number;
+			if (objs) {
+				const got = r.objectSupplied!;
+				const Gc = splitSupply(G, Dc, objs, t, got);
+				T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * Gc;
+				for (let k = 0; k < got.length; k++) T += objs.returnShare[k]! * got[k]![t]!;
+			} else T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
 			// Seepage leaves the dam below the wall and joins the outflow the same
 			// day (N2), all of it unless a share is set to be lost (WP-3.5).
 			const SpRet = node.seepageReturn === undefined ? Sp : Sp * node.seepageReturn;

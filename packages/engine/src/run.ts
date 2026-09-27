@@ -32,6 +32,7 @@ import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transf
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { supplyOf } from './network/supply';
+import { DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -56,6 +57,7 @@ import {
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
+	type DemandObjectSummary,
 	type FarmSummary,
 	type ForecastRainDays,
 	type LandCoverClass,
@@ -397,6 +399,8 @@ function runNetwork(
 		supplied: sim.nodes.map((r) => r.supplied),
 		storage: sim.nodes.map((r) => r.storage),
 		consumptivePerSupplied: plan.nodes.map(consumptivePerSupplied),
+		// A unit with demand objects (engine ≥ 1.7.0): its objects return their own shares, so c = G − T day by day.
+		...(plan.nodes.some((n) => n.objects) ? { consumptive: plan.nodes.map((n, i) => (n.objects ? consumptiveDaily(sim.nodes[i]!.supplied, sim.workings![i]!.returnFlow) : undefined)) } : {}),
 		...(resume && warm.continued ? { storageBefore: resume.nodes.map((r) => r.setFromM3 ?? r.storageM3) } : {}),
 		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
 		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
@@ -425,7 +429,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -464,12 +468,16 @@ function runNetwork(
 	const userSeries = new Set<keyof NodeResult>(['demand', 'supplied', 'deficit', 'inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
 	// The senior users' requirement passing each node, only when a senior user's demand is passed down to it.
 	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
+	// Each unit's enabled demand objects' names, in the plan's order (engine ≥ 1.7.0).
+	const objectNames = new Map<string, string[]>();
+	for (const [nodeId, list] of demandObjectsByNode(upgradeLegacyModel(input.model), [])) objectNames.set(nodeId, list.map((o) => o.name));
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
+		const withObjects = !!plan.nodes[i]!.objects;
 		for (const [field, key, label] of farmSeries) {
 			if (node.kind === 'gauge' && !gaugeSeries.has(field)) continue;
 			if (node.kind === 'user' && !userSeries.has(field)) continue;
-			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
+			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : withObjects ? (OBJECT_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
@@ -479,12 +487,21 @@ function runNetwork(
 			// Dam-target boreholes (WP-3.9): pumped into the farm dam, not straight to the crop.
 			if (plan.nodes[i]!.borehole!.units.some((u) => u.toDam)) push(node.id, 'groundwater_to_dam', 'Groundwater pumped into the dam', 'm³/day', r.groundwaterToDam);
 			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
-			// Engine ≥ 1.7.0: depletion the river can't give is owed, not dropped (depletion_unmet before).
+			// Engine ≥ 1.10.0: depletion the river can't give is owed, not dropped (depletion_unmet before).
 			push(node.id, 'depletion_deficit', 'Stream depletion owed to the river (it had no flow left), taken off the first flow back', 'm³', r.depletionDeficit);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
+		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
+		const po = plan.nodes[i]!.objects;
+		if (po) {
+			const names = objectNames.get(node.id)!;
+			po.ids.forEach((id, k) => {
+				push(node.id, objectDemandKey(id), DEMAND_OBJECT_SERIES.demandLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, po.demand[k]!);
+				push(node.id, objectSuppliedKey(id), DEMAND_OBJECT_SERIES.suppliedLabel(names[k]!), DEMAND_OBJECT_SERIES.unit, r.objectSupplied![k]!);
+			});
+		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
 		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
 		if (node.kind === 'user') {
@@ -495,7 +512,7 @@ function runNetwork(
 		const w = sim.workings?.[i];
 		if (!w) return;
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
-		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
+		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, withObjects ? (OBJECT_LABELS[key] ?? label) : label, unit, w[field]);
 		// Dam releases and seepage lost from the catchment (WP-3.5): only on a dam that has them.
 		if (plan.nodes[i]!.release) push(node.id, 'dam_release', 'Released below the dam (before irrigation; joins the outflow)', 'm³/day', w.damRelease);
 		if (plan.nodes[i]!.seepageReturn !== undefined) push(node.id, 'dam_seepage_lost', 'Dam seepage lost from the catchment (the rest joins the outflow)', 'm³/day', w.damSeepageLost);
@@ -549,6 +566,7 @@ function runNetwork(
 			daysEwrNotMet: notMet,
 			...groundwaterMeans(plan.nodes[i]!, r),
 			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
+			...(plan.nodes[i]!.objects ? { demandObjects: objectSummaries(plan.nodes[i]!.objects!, r.objectSupplied!, input.model.demandObjects ?? [], mean) } : {}),
 			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
 			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate) ?? {})
 		});
@@ -600,6 +618,8 @@ function runNetwork(
 					ewrCharge: attribution.charge[i]!,
 					ewrChargeIrrigation: attribution.chargeIrrigation[i]!,
 					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
+					// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned.
+					...(plan.nodes[i]!.objects ? { returned: sim.workings![i]!.returnFlow } : {}),
 					ewrBindingSiteId: bind < 0 ? null : nodes[attribution.sites[bind]!.node]!.id
 				}
 			];
@@ -1103,6 +1123,14 @@ export function buildNetworkPlan(
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
+	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
+	const objectsBy = demandObjectsByNode(model, warnings);
+	const wyOfDay = objectsBy.size ? waterYearMonths(month, days) : null;
+	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
+		const list = objectsBy.get(n.id);
+		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
+		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings) : undefined;
+	};
 
 	const plan: NetworkPlan = {
 		days,
@@ -1140,6 +1168,7 @@ export function buildNetworkPlan(
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...supplyOf(n, warnings),
+				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
@@ -1244,7 +1273,7 @@ const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_obs
 /**
  * Run warnings for boreholes (WP-1.34): stream depletion still owed to the
  * river at the end of the run (it had no flow left at the node to give it,
- * engine ≥ 1.7.0), and, when the project has an
+ * engine ≥ 1.10.0), and, when the project has an
  * observed record, the double-counting caution: flows measured while these
  * boreholes pumped already carry their depletion, so a calibration that
  * leaves them out would fit natural flow too low and then take it off again.
@@ -1296,6 +1325,44 @@ function capHits(b: NonNullable<NetworkPlan['nodes'][number]['borehole']>, pumpe
 }
 
 /** k: the share of what a node is supplied that it consumes, 1 − β(1 − e) for a farm (audit N1), 1 − r for an other user (WP-1.33). */
+/** A unit's consumptive use per day, c = G − T (engine ≥ 1.7.0, for a unit with demand objects). */
+function consumptiveDaily(G: Float64Array, T: Float64Array): Float64Array {
+	const c = new Float64Array(G.length);
+	for (let t = 0; t < G.length; t++) c[t] = G[t]! - T[t]!;
+	return c;
+}
+
+/**
+ * Each of a unit's demand objects over the run (engine ≥ 1.7.0): whole-run
+ * means of its demand, supply and return, and the days it got less than its
+ * demand beyond float noise (1e-12 of it).
+ */
+function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly import('./project').DemandObject[], mean: (a: ArrayLike<number>) => number): DemandObjectSummary[] {
+	const byId = new Map(all.map((o) => [o.id, o]));
+	return po.ids.map((id, k) => {
+		const o = byId.get(id)!;
+		const d = po.demand[k]!;
+		const g = got[k]!;
+		let short = 0;
+		for (let t = 0; t < d.length; t++) if (g[t]! < d[t]! * (1 - 1e-12)) short++;
+		const avgDemand = mean(d);
+		const avgSupplied = mean(g);
+		return {
+			id,
+			name: o.name,
+			category: o.category,
+			priority: o.priority,
+			destination: o.destination,
+			avgDemandM3Day: avgDemand,
+			avgSuppliedM3Day: avgSupplied,
+			avgDeficitM3Day: avgDemand - avgSupplied,
+			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
+			avgReturnedM3Day: avgSupplied * po.returnShare[k]!,
+			daysShort: short
+		};
+	});
+}
+
 function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
 	return n.kind === 'user' ? 1 - (n.userReturn ?? 0) : 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency);
 }
@@ -1729,6 +1796,14 @@ export function resolveReportWindow(
 }
 
 /** Series labels that read differently on an other water user (WP-1.33). */
+/** A unit with demand objects (engine ≥ 1.7.0): its demand, supply and return are its crops' and its objects' together. */
+const OBJECT_LABELS: Record<string, string> = {
+	demand: 'Demand (irrigation abstraction + demand objects)',
+	supplied: 'Supplied (irrigation + demand objects)',
+	deficit: 'Deficit (irrigation + demand objects)',
+	return_flow: 'Return flow (irrigation losses + demand objects)'
+};
+
 const USER_LABELS: Record<string, string> = {
 	demand: 'Demand from the river',
 	supplied: 'Taken from the river',

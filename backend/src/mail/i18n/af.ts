@@ -74,6 +74,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.invite.signUpExpires': 'Hierdie uitnodiging verval oor 7 dae.',
 	// If you weren't expecting this, you can ignore this email.
 	'mail.invite.signUpIgnore': 'As jy dit nie verwag het nie, kan jy hierdie e-pos ignoreer.',
+	// How we handle your information: {url}
+	'mail.invite.privacy': 'Hoe ons jou inligting hanteer: {url}',
 	// There is already a {product} account for {email}. Confirm that this is your email address to accept.
 	'mail.invite.confirm': 'Daar is reeds ’n {product}-rekening vir {email}. Bevestig dat dit jou e-posadres is om te aanvaar.',
 	// Confirm email and accept

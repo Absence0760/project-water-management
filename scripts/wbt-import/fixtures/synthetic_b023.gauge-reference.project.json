@@ -515,6 +515,38 @@
         "enabled": false,
         "priority": 4
       }
+    ],
+    "demandObjects": [
+      {
+        "id": "456581ab-e52b-51aa-95d6-9e5f4f3d0c71",
+        "nodeId": "f1a3b682-c623-5a5a-9b04-32614e3bab49",
+        "name": "Non-crop demand",
+        "category": "municipal",
+        "sizing": "monthly",
+        "monthlyM3Day": [
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0,
+          150.0
+        ],
+        "count": null,
+        "litresPerUnitDay": null,
+        "lossPct": 0,
+        "monthlyFactor": null,
+        "returnPct": 0.0,
+        "priority": "shared",
+        "destination": "internal",
+        "enabled": true,
+        "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)"
+      }
     ]
   },
   "series": [

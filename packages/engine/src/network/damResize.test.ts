@@ -1,4 +1,4 @@
-// Resizing a dam along its own area–volume relation (engine 1.7.0,
+// Resizing a dam along its own area–volume relation (engine 1.10.0,
 // docs/model.md §2.13, hydrologist persona review of issue #46 item 11).
 import { describe, expect, it } from 'vitest';
 import type { DamCurvePoint } from '../project';

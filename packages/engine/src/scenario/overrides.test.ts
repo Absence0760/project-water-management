@@ -89,7 +89,7 @@ describe('applyScenario: each op', () => {
 		expect(r.applied).toHaveLength(1);
 	});
 
-	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.7.0, model.md §2.13)', () => {
+	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {
 		const set = (id: string, field: string, value: unknown) => ({ op: 'node.set', nodeId: id, field, value }) as ScenarioOp;
 		// Estimated area (capacity ÷ 3 m): doubling 100 000 m³ gives 33 333 × 2^0.7 = 54 150 m², not 66 667.
 		const b = base();
@@ -329,6 +329,16 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'landCover.add', patch: { ...p, id: 'lc1' } }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'landCover.remove', patchId: 'lc1' }).input.model.landCover).toEqual([]);
 		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
+	});
+
+	it('a removed node takes its demand objects with it (engine 1.7.0)', () => {
+		const b = base();
+		b.model.demandObjects = [
+			{ id: 'do1', nodeId: 'B', name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(10), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		];
+		const gone = applyScenario(b, [{ op: 'node.remove', nodeId: 'B' }]);
+		expect(gone.input.model.demandObjects).toEqual([]);
+		expect(gone.applied.flatMap((a) => a.notes)).toContain('dropped 1 demand object(s)');
 	});
 
 	it('borehole.add / remove (WP-3.9), and a removed node takes its boreholes with it', () => {

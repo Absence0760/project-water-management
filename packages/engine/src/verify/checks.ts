@@ -17,6 +17,7 @@ import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { cmpStr } from '../order';
 import { supplyOf, type PlanSupply } from '../network/supply';
+import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -54,6 +55,47 @@ function runEfficiency(input: ModelInput, n: NetworkNode): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
 	const apan = input.settings?.apanMm;
 	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan : []);
+}
+
+/**
+ * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
+ * each one's demand and supply series, return share and priority class; null
+ * for a unit without any, an error when a series is missing.
+ */
+interface ObjectColumns {
+	demand: number[][];
+	supplied: number[][];
+	returnShare: number[];
+	tier: number[];
+	monthly: Float64Array[];
+}
+function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap): ObjectColumns | string | null {
+	const list = demandObjectsByNode(input.model, []).get(n.id);
+	if (!list) return null;
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [] };
+	for (const o of list) {
+		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
+		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
+		if (!d || !g) return `${n.id}: demand object ${o.id} has no ${d ? 'supplied' : 'demand'} series`;
+		out.demand.push(d);
+		out.supplied.push(g);
+		out.returnShare.push(objectReturnShare(o));
+		out.tier.push(PRIORITY_TIER[o.priority] ?? 1);
+		out.monthly.push(objectMonthlyM3Day(o, []));
+	}
+	return out;
+}
+
+/** Return flow of a unit on day t: β(1 − e) × what its crops got + Σ each object's return share × what it got. */
+function unitReturn(G: number, returnPerSupplied: number, objs: ObjectColumns | null, t: number): number {
+	if (!objs) return G * returnPerSupplied;
+	let got = 0;
+	let back = 0;
+	for (let k = 0; k < objs.supplied.length; k++) {
+		got += objs.supplied[k]![t]!;
+		back += objs.returnShare[k]! * objs.supplied[k]![t]!;
+	}
+	return (G - got) * returnPerSupplied + back;
 }
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
@@ -103,8 +145,11 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const cap = n.damCapacityM3;
 		let qPrev = n.damInitialPct * cap;
 		totIn += qPrev;
-		// Return flow: the share β of the application losses (1 − e)·G (audit N1).
+		// Return flow: the share β of the application losses (1 − e)·G (audit N1),
+		// of the crops' part when the unit has demand objects, which return their own shares (engine ≥ 1.7.0).
 		const returnPerSupplied = n.lossReturnFraction * (1 - runEfficiency(input, n));
+		const objs = objectColumns(input, n, get);
+		if (typeof objs === 'string') return objs;
 		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.16.0 have neither.
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
@@ -122,7 +167,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 				qPrev += SET[t]!;
 				totIn += SET[t]!;
 			}
-			const T = G![t]! * returnPerSupplied;
+			const T = unitReturn(G![t]!, returnPerSupplied, objs, t);
 			const pd = Pd?.[t] ?? 0;
 			const ev = Ev?.[t] ?? 0;
 			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
@@ -181,7 +226,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * docs/model.md §2.7d), from the day's published columns: primary units to
  * the crop first, then the units that pump into the dam (primary fill it,
  * supplemental add what it lacks for the demand left, emergency fill it while
- * triggered; never above capacity), then the dam and river, then supplemental
+ * triggered; primary and emergency only on a day with demand left for the dam;
+ * never above capacity), then the dam and river, then supplemental
  * and triggered emergency units. Each unit pumps at most MIN(capacity, its
  * annual cap − what it pumped since 1 October). A farm's river pump (WP-3.8,
  * `river` what it may take today) is part of the surface: before the dam
@@ -211,7 +257,9 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
-			const want = u.mode === 1 ? room : u.mode === 2 ? (qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
+			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
+			const drawn = left > D * 1e-12;
+			const want = u.mode === 1 ? (drawn ? room : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
 			dam += pump(k, Math.min(want, room));
 		}
 		const fromDam = Math.max(avail + dam - dead, 0);
@@ -769,6 +817,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const dff = input.settings?.demandFactorFrom;
 		const factorFrom = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, out.days) : 0;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
+		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
+		const objs = objectColumns(input, n, get);
+		if (typeof objs === 'string') return objs;
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
 		let qPrev = n.damInitialPct * cap;
@@ -783,7 +834,13 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const df = factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${factor ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor ? ')' : ''}`;
-			if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
+			if (objs) {
+				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where);
+				if (bad) return bad;
+				let od = 0;
+				for (const x of objs.demand) od += x[t]!;
+				if (!near(d, f / e + od, Math.max(f, od))) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e} + the demand objects' ${od}`;
+			} else if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
@@ -872,7 +929,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (ss < Math.min(zs, h + i) - tol(Math.max(h + i, zs))) return `${where}: below-dam flow S ${ss} does not pass the senior requirement MIN(${zs}, H + I)`;
 				if (pass < -tol(0) || (zs === 0 && pass !== 0)) return `${where}: kept back ${pass} for a senior requirement of ${zs}`;
 			}
-			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
+			if (!near(tt, unitReturn(gg, returnPerSupplied, objs, t), gg))
+				return objs ? `${where}: return flow ${tt} ≠ β·(1 − e) × the crops' part of G + Σ each demand object's return share × its part` : `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			const spl = SPL?.[t] ?? 0;
 			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
 			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x - dep, Math.max(r, ss, tt, sp, x))) return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${bore ? ' − stream depletion' : ''}`;
@@ -886,6 +944,51 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 }
 
 /**
+ * A unit's demand objects on day t (engine ≥ 1.7.0, docs/model.md §2.7f):
+ * each one's demand is its month's value × the day's demand factor `df`;
+ * each gets between 0 and its demand, together no more than G; classes are
+ * served in order (a later class, or the crops after class 0, gets water
+ * only once every earlier one is met), and within a class every member
+ * (the crops, demand `crop`, in class 1) gets the same share of its demand.
+ */
+function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number, crop: number, G: number, where: string): string | null {
+	const n = objs.demand.length;
+	let got = 0;
+	let scale = Math.max(G, crop);
+	for (let k = 0; k < n; k++) scale = Math.max(scale, objs.demand[k]![t]!);
+	const eps = tol(scale);
+	const share = [NaN, NaN, NaN];
+	const want = [0, crop, 0];
+	const gotBy = [0, 0, 0];
+	for (let k = 0; k < n; k++) {
+		const d = objs.demand[k]![t]!;
+		const g = objs.supplied[k]![t]!;
+		const expect = objs.monthly[k]![wy]! * df;
+		if (Math.abs(d - expect) > tol(expect)) return `${where}: demand object ${k}'s demand ${d} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}`;
+		if (g < -eps || g > d + eps) return `${where}: demand object ${k} got ${g}, outside [0, its demand ${d}]`;
+		got += g;
+		want[objs.tier[k]!]! += d;
+		gotBy[objs.tier[k]!]! += g;
+		if (d > eps) {
+			const s = g / d;
+			const c = share[objs.tier[k]!]!;
+			if (c === c && Math.abs(c - s) > 1e-9) return `${where}: demand objects of one priority got different shares of their demand (${c} vs ${s})`;
+			share[objs.tier[k]!] = s;
+		}
+	}
+	if (got > G + eps) return `${where}: the demand objects got ${got}, more than the ${G} the unit was supplied`;
+	// The crops' part is what the objects didn't get; in class 1 it takes the class's share.
+	const cropGot = G - got;
+	gotBy[1]! += cropGot;
+	if (crop > eps && share[1] === share[1] && Math.abs(cropGot / crop - share[1]!) > 1e-9 * Math.max(1, scale / crop)) return `${where}: the crops got ${cropGot} of ${crop}, not the share ${share[1]} the demand objects they share with got`;
+	for (let c = 1; c < 3; c++) {
+		if (!(gotBy[c]! > eps)) continue;
+		for (let e = 0; e < c; e++) if (gotBy[e]! < want[e]! - eps) return `${where}: a later priority class got water while class ${e} was short (${gotBy[e]} of ${want[e]})`;
+	}
+	return null;
+}
+
+/**
  * Boreholes and stream depletion (WP-1.34, WP-3.9, docs/model.md §2.7d), on
  * every farm and other user with boreholes:
  * - 0 ≤ groundwater to the crop ≤ supplied, 0 ≤ into the dam, and together
@@ -893,7 +996,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
  * - the lag store S[t] = S[t−1] + infeed − due, due = α × (S[t−1] + infeed),
  *   S ≥ 0, starting empty, with the day's infeed between the smallest and the
  *   largest depletion factor × what was pumped;
- * - the deficit carries over (engine ≥ 1.7.0): taken + deficit[t] =
+ * - the deficit carries over (engine ≥ 1.10.0): taken + deficit[t] =
  *   deficit[t−1] + due, both ≥ 0, starting at 0, and a deficit only when
  *   nothing flows out, so the river never goes negative and is repaid first;
  * - volume is conserved: Σ taken + the deficit at the end = Σ due (depletion
@@ -1223,8 +1326,10 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			const user = f.kind === 'user';
 			const G = col(f.id, 'supplied');
 			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - f.lossReturnFraction * (1 - runEfficiency(input, f));
+			// A unit with demand objects (engine ≥ 1.7.0): consumptive use is G − T day by day, its objects returning their own shares.
+			const T = !user && demandObjectsByNode(input.model, []).has(f.id) ? col(f.id, 'return_flow') : null;
 			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).
-			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k }];
+			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k, T }];
 		})
 	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
@@ -1287,7 +1392,8 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 			const Ri = -x.Ri[t]!;
 			const where = `${f.id} day ${t}`;
 			if (R < 0 || Ri < 0 || Ri > R + tol(R)) return `${where}: EWR charge ${-R} and its irrigation part ${-Ri} must satisfy charge ≤ irrigation part ≤ 0`;
-			if (Ri > x.G[t]! * x.k + tol(x.G[t]!)) return `${where}: irrigation part ${Ri} of the EWR charge > consumptive irrigation ${x.G[t]! * x.k}`;
+			const used = x.T ? x.G[t]! - x.T[t]! : x.G[t]! * x.k;
+			if (Ri > used + tol(x.G[t]!)) return `${where}: irrigation part ${Ri} of the EWR charge > consumptive irrigation ${used}`;
 			if (allExact.get(f.id) && Math.abs(R - (best.get(f.id) ?? 0)) > tol(Math.max(R, x.U[t]!, x.H[t]! + x.I[t]!))) return `${where}: EWR charge ${-R} ≠ its largest share ${best.get(f.id) ?? 0} over the sites below it`;
 			const b = binding.get(f.id)?.[t];
 			if (b === undefined) continue;

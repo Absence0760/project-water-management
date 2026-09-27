@@ -30,7 +30,7 @@ import { executeRun } from '../src/runs/execute.js';
 import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
 import { buildExamples } from './examples/catchments.js';
-import { importProjectData } from './import-project.js';
+import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
 
 
@@ -110,8 +110,35 @@ async function publish(email: string, projectId: string, runId: string, restrict
 	await withUser(await userId(email), (db) => publishRun(db, projectId, { runId, note: 'Seeded example run', ...(restriction ? { restriction } : {}) }));
 }
 
+/**
+ * The examples are one bundle (a team, a share, farmer links and an
+ * application tie them together), so a database that already has them is left
+ * as it is, and one that has only some of them is refused rather than patched:
+ * running the seed again never makes copies. Returns the existing ids, or null
+ * when none of them exist yet.
+ */
+async function existingExamples(names: [string, string][]): Promise<string[] | null> {
+	const found = await Promise.all(names.map(([name, email]) => findOwnedProject(email, name)));
+	if (found.every((id) => id === null)) return null;
+	if (found.some((id) => id === null)) {
+		throw new Error(
+			'some of the example catchments exist and some don’t: the seed won’t patch a partial set. Reset the database (pnpm dev:db:reset) and seed again.'
+		);
+	}
+	return found as string[];
+}
+
 export async function seedExamples(): Promise<string[]> {
 	const [kleinberg, droevlei, sandspruit] = buildExamples();
+	const existing = await existingExamples([
+		[kleinberg!.name, DEMO.email],
+		[droevlei!.name, DEMO.email],
+		[sandspruit!.name, ANALYST.email]
+	]);
+	if (existing) {
+		console.log('✓ the example catchments already exist: skipped');
+		return existing;
+	}
 	const ids: string[] = [];
 	for (const [ex, who] of [
 		[kleinberg!, DEMO],

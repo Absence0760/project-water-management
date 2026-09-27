@@ -63,6 +63,12 @@ export interface User {
 	mailSuppressed?: { reason: 'bounce' | 'complaint'; at: string } | null;
 	/** The person's own display preferences (user_preferences, 083). */
 	preferences?: UserPreferences;
+	/**
+	 * Accepted the terms of use and privacy notice now in force (app_user.terms_version,
+	 * 087, against the engine's LEGAL_VERSION). False after a new version, or for an
+	 * account a script made. Nothing asks again yet (docs/legal-status.md).
+	 */
+	termsCurrent?: boolean;
 }
 
 export interface UserPreferences {

@@ -57,6 +57,12 @@ export interface AttributionInput {
 	storageBefore?: ArrayLike<number>;
 	/** Per node: consumptive share of what is supplied, k = 1 − β(1 − e), so c = G·k = G − T (audit N1). */
 	consumptivePerSupplied: ArrayLike<number>;
+	/**
+	 * Per node, daily consumptive use c = G − T where it isn't G·k: a unit with
+	 * demand objects (engine ≥ 1.7.0), whose objects return their own shares.
+	 * Omitted (or undefined for a node) = G·k.
+	 */
+	consumptive?: readonly (ArrayLike<number> | undefined)[];
 	/** Each transfer rule's daily volume. */
 	transfers: readonly { from: number; to: number; volume: ArrayLike<number> }[];
 	/** The EWR sites, the outlet first by convention (any order gives the same result). */
@@ -133,7 +139,7 @@ export function siteUnits(
 }
 
 export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?: boolean } = {}): AttributionResult {
-	const { days, kind, upstream, order, inflow, runoff, outflow, supplied, consumptivePerSupplied, transfers } = input;
+	const { days, kind, upstream, order, inflow, runoff, outflow, supplied, consumptivePerSupplied, consumptive, transfers } = input;
 	const n = kind.length;
 	const pos = new Int32Array(n);
 	for (let i = 0; i < order.length; i++) pos[order[i]!] = i;
@@ -237,7 +243,8 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 			const A = best[f]!;
 			if (!(A > 0)) continue;
 			charge[f]![t] = -A;
-			const c = supplied[f]![t]! * consumptivePerSupplied[f]!;
+			const own = consumptive?.[f];
+			const c = own ? own[t]! : supplied[f]![t]! * consumptivePerSupplied[f]!;
 			const o = bestE[f]! - c;
 			const denom = c + Math.max(o, 0);
 			const irr = denom > 0 ? Math.min((A * c) / denom, A) : 0;

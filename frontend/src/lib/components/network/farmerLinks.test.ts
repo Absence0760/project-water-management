@@ -46,6 +46,10 @@ describe('removeMessage', () => {
 		);
 	});
 
+	it('names the demand objects that go with the unit (engine 1.7.0)', () => {
+		expect(removeMessage({ ...base, isFarm: false, farmers: null, demandObjects: 1 })).toMatch(/1 demand object\(s\) are removed too/);
+	});
+
 	it('names the boreholes that go with the node (WP-3.9), even on a node with nothing else', () => {
 		expect(removeMessage({ ...base, isFarm: false, farmers: null, boreholes: 2 })).toBe(
 			'Remove "Farm A"? Its 0 crop area(s), 0 transfer(s) and 2 borehole(s) are removed too; nodes draining into it are re-routed downstream.'
