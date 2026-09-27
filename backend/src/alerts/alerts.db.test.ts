@@ -549,9 +549,9 @@ describe('the restriction notice', () => {
 		const fm = mailsTo(farmer).at(-1)!;
 		expect(mailsTo(farmer).length).toBe(f0 + 1);
 		expect(fm.text).toContain('Besproei net snags.');
-		// No reviewed Afrikaans alert wording yet: English words, marked lang="en".
-		expect(fm.html).toContain('<html lang="en">');
-		expect(fm.subject).toBe('New restriction notice — Alerts');
+		// The farmer reads Afrikaans: the WUA's own Afrikaans notice inside Afrikaans words, marked lang="af".
+		expect(fm.html).toContain('<html lang="af">');
+		expect(fm.subject).toBe('Nuwe beperkingskennisgewing — Alerts');
 		expect(mailsTo(viewer).at(-1)!.text).toContain('Irrigate at night only.');
 		expect(mailsTo(viewer).length).toBe(v0 + 1);
 		// The same notice again: nothing new.
@@ -561,7 +561,7 @@ describe('the restriction notice', () => {
 		// Lifted.
 		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, { restriction: { level: 'none', pct: null, noticeEn: null, noticeAf: null } })).status).toBe(200);
 		await tick();
-		expect(mailsTo(farmer).at(-1)!.subject).toBe('Restriction lifted — Alerts');
+		expect(mailsTo(farmer).at(-1)!.subject).toBe('Beperking opgehef — Alerts');
 		expect((await farmer.call('PATCH', '/auth/me', { locale: null })).status).toBe(200);
 		await reset();
 	});

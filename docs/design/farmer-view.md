@@ -188,9 +188,10 @@ breakdown; not in the first release.
 | WUA | "the WUA" | "die WGV" (Watergebruikersvereniging) | – |
 
 Jargon appears only behind "What do these words mean?" (WP-2.6 acceptance),
-and the Afrikaans help carries the same entries. The Afrikaans column is a
-first draft; nothing ships in Afrikaans until the named translator
-(roadmap Step 2 prerequisite 6) has reviewed it.
+and the Afrikaans help carries the same entries. The Afrikaans column was
+the word list for the app's Afrikaans (written and checked by the
+`af-translator` / `af-checker` agents, 2026-09-26, issue #49); a native
+speaker's review is still open (docs/followups.md § Afrikaans).
 
 ### 5.2 Q13: the two parts of the river's share
 

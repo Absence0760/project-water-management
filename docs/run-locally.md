@@ -418,10 +418,9 @@ pnpm gen:i18n:stamp <id>    # re-stamp a glossary translation from the current E
 ```
 
 **Afrikaans locally.** Pick "Afrikaans" on the sign-in page, the farm view
-or the account page. Until reviewed wording lands in
-`frontend/src/lib/i18n/messages/af.ts`, the words stay English and only the
-farm view's decimal comma changes; the farmer emails in Mailpit likewise
-stay English ([ui.md § Language](./ui.md#language)).
+or the account page. The words, `<html lang>`, dates and numbers all turn
+Afrikaans (a decimal comma), and an account or invite in Afrikaans gets its
+emails in Afrikaans in Mailpit ([ui.md § Language](./ui.md#language)).
 
 The client catchment regression data comes from the import step above
 (`expected.json`) and from the extractors in `scripts/wbt-import/`, all written
