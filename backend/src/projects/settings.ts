@@ -9,6 +9,7 @@ import {
 	exclusionError,
 	exclusionKey,
 	EXCLUSIONS_MAX,
+	EWR_CHARGE_SOURCES,
 	EWR_NATURAL_SOURCES,
 	EWR_RULE_COMPONENTS,
 	EWR_RULE_POINTS_MAX,
@@ -24,6 +25,7 @@ import {
 	ewrRuleListIssues,
 	ewrRuleTableIssues,
 	GR4J_PARAMS,
+	LOW_FLOW_MEASURES,
 	MAX_STARTS,
 	provenanceError,
 	OBJECTIVES,
@@ -541,6 +543,9 @@ export const SettingsPatch = z
 		ewrPragmaticM3PerDay: monthly,
 		// Reserve rule tables per EWR site (engine ≥ 0.21.0); the list is replaced whole.
 		ewrRules: EwrRuleList,
+		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.
+		ewrChargeSource: z.enum(EWR_CHARGE_SOURCES),
+		lowFlowMeasure: z.enum(LOW_FLOW_MEASURES),
 		simulationStart: isoDate.nullable(),
 		simulationEnd: isoDate.nullable(),
 		reportStart: isoDate.nullable(),

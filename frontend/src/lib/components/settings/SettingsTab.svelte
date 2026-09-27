@@ -837,7 +837,14 @@
 
 	<!-- Reserve rule tables (engine ≥ 0.21.0) -------------------------------------->
 	<div id="set-reserve">
-		<EwrRulesSection bind:value={s.ewrRules} bind:error={reserveError} {readonly} nodes={editor?.model.nodes ?? []} />
+		<EwrRulesSection
+			bind:value={s.ewrRules}
+			bind:error={reserveError}
+			bind:chargeSource={s.ewrChargeSource}
+			bind:lowFlowMeasure={s.lowFlowMeasure}
+			{readonly}
+			nodes={editor?.model.nodes ?? []}
+		/>
 	</div>
 
 	<!-- Period ------------------------------------------------------------------------>

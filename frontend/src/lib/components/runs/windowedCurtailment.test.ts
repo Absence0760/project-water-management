@@ -98,6 +98,31 @@ describe('the reporting window, worked out by the engine', () => {
 		}
 	});
 
+	it('fetches a rule-table site’s own shortfall when the charge followed the rule table (engine 1.3.0), and windows it as runModel does', () => {
+		let ruled = 0;
+		for (const { input } of runs(40)) {
+			if (!input.settings.ewrRules?.length) continue;
+			const byRule: ModelInput = { ...input, settings: { ...input.settings, ewrChargeSource: 'ruleTable' } };
+			const run = runModel(byRule);
+			const sites = run.summary.curtailment!.ewrSites!.filter((s) => s.ewrSource === 'ruleTable');
+			if (!sites.length) continue;
+			ruled++;
+			const keys = curtailmentSeriesKeys(run.summary.curtailment!, network(byRule))!;
+			expect(missingSeries(keys, run.series)).toEqual([]);
+			for (const s of sites) {
+				const nodeId = s.isOutlet ? null : s.nodeId;
+				expect(keys).toContainEqual({ nodeId, key: 'ewr_charge_shortfall' });
+				expect(keys).not.toContainEqual({ nodeId, key: 'ewr_shortfall' });
+			}
+			const res = resolveWindow({ preset: 'last30' }, run, run.summary.curtailment!);
+			if (!res.ok) throw new Error(res.error);
+			const got = prepareWindowed(run, network(byRule), storedLookup(run)).over(res.window);
+			if (got.bindingApproximate) continue;
+			expect(got.curtailment).toEqual(runModel(withWindow(byRule, res.window.reportStart, res.window.reportEnd)).summary.curtailment);
+		}
+		expect(ruled).toBeGreaterThan(0);
+	});
+
 	it('says a run saved before the EWR charge cannot be re-windowed', () => {
 		const { input, run } = cases[0]!;
 		expect(curtailmentSeriesKeys({ ...run.summary.curtailment!, ewrAttribution: undefined }, network(input))).toBeNull();
