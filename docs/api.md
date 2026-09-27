@@ -68,8 +68,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
 - **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed }`.
-  `locale` is `'en' | 'af' | null` (`app_user.locale`, 050_user_locale.sql,
-  WP-2.5): the language of the farmer-facing pages and of the emails the
+  `locale` is a language code from the engine's language table
+  (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
+  (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
   account receives; `null` means not chosen (the site follows the browser,
   emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
   the farm view shows volumes. `mailSuppressed` is `null`, or
@@ -99,8 +100,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   link material. One export a minute per account
   (`app_user.data_exported_at`); a render session is refused (403).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
-  1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
-  following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one
+  1–100 characters), `locale` (a code in the language table, e.g. `'en'` or
+  `'af'`, or `null` to go back to following the browser; any other value,
+  including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`). At least one
   is required. The email address isn't editable; other keys are ignored.
 - **`register`** takes an optional `locale` (the language the sign-up page
   was in). Without one, an account that accepts an invite takes the invite's
@@ -610,7 +612,7 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: 'en' \| 'af' }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code> }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
 | POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
@@ -620,14 +622,16 @@ the invite will link; revoke a pending one with
   'expired', inviteId, email, nodeIds, invitedBy, expiresAt, locale }`. An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
   farm; it never gains one.
-- `locale` is the invite email's language, `en` by default. `af` is stored
-  and sent in English until the Afrikaans wording lands (WP-2.5).
+- `locale` is the invite email's language, `en` by default: any code in the
+  language table (another is a `400`). A key the language's email catalogue
+  lacks is sent in English.
 - **Bulk** takes one farm per row (a CSV of `email,farm,language`). Each row
   is checked on its own, and a bad row never stops the others: an invalid
   address, a farm name that doesn't match a farm of this project **exactly
   and case-insensitively** (never a guess at a near name), or a language
-  other than `en`/`af` (`English`/`Afrikaans` also accepted) is that row's
-  `error`. Rows are then grouped by address: a verified account is added (or,
+  that is neither a code in the language table nor a language's own name
+  (`en`, `English`, `af`, `Afrikaans`, any case) is that row's `error`
+  (`unknown language “fr” (use en, af, or the language’s name)`). Rows are then grouped by address: a verified account is added (or,
   already a farmer, gains the farms; the rows never take one away), anyone
   else is invited with the farms of all their rows (added to any the invite
   already names), and a member with another role is an `error`, as is an
