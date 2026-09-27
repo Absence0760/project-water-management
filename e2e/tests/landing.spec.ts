@@ -68,6 +68,8 @@ test('/welcome is prerendered HTML with its link-preview tags, before any script
 	const html = await res.text();
 	// The content is in the HTML itself, not rendered by the client.
 	expect(html).toContain(HEADLINE);
+	// No inline event handler survived prerendering (an img's onload did once): the CSP blocks them (infra/scripts/check-csp.mjs).
+	expect(html).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/i);
 	expect(html).toContain('From rainfall to river');
 	expect(html).toMatch(/<meta name="description" content="Model a catchment day by day/);
 	expect(html).toMatch(/<meta property="og:title" content="Water Management: daily water balance for a catchment"/);
