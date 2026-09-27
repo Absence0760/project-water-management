@@ -99,8 +99,10 @@ async function run(email: string, projectId: string): Promise<string> {
 export const SANDSPRUIT_NOTICE = {
 	level: 'advisory' as const,
 	pct: null,
-	noticeEn: 'The river is low. Please irrigate at night and check your pipes for leaks. (Demo notice.)',
-	noticeAf: 'Die rivier is laag. Besproei asseblief snags en kyk jou pype vir lekke. (Demonstrasie-kennisgewing.)'
+	notice: {
+		en: 'The river is low. Please irrigate at night and check your pipes for leaks. (Demo notice.)',
+		af: 'Die rivier is laag. Besproei asseblief snags en kyk jou pype vir lekke. (Demonstrasie-kennisgewing.)'
+	}
 };
 
 /** Publish the seeded run as the project's owner (WP-2.3), so farmers and viewers see it straight away. */

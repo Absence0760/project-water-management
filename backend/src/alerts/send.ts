@@ -21,6 +21,7 @@
 // outcome is recorded in the worker's own context (app_alert_finish). A
 // transport error is retried on the next tick (3 attempts in all); a worker
 // that dies mid-send leaves a delivery marked failed, never sent twice.
+import { pickNotice } from '@water-management/engine';
 import { hashToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { alertMail, digestMail, type AlertFacts, type Recipient } from '../mail/alerts.js';
@@ -164,15 +165,14 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 		case 'job_dead':
 			return { kind: 'job_dead', count: Number(d.count) };
 		case 'restriction_published': {
-			const { rows: p } = await db.query<{ restriction_level: 'none' | 'advisory' | 'restricted'; restriction_pct: string | null; notice_en: string | null; notice_af: string | null; published_at: Date }>(
-				'SELECT restriction_level, restriction_pct, notice_en, notice_af, published_at FROM run_publication WHERE id = $1',
+			const { rows: p } = await db.query<{ restriction_level: 'none' | 'advisory' | 'restricted'; restriction_pct: string | null; notice: Record<string, string>; published_at: Date }>(
+				'SELECT restriction_level, restriction_pct, notice, published_at FROM run_publication WHERE id = $1',
 				[d.publicationId]
 			);
 			if (!p[0]) return 'cannot see the publication';
 			const { rows: me } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = app_current_user_id()');
-			const af = me[0]?.locale === 'af';
-			// The notice in the reader's language, else the other one (the farm view's rule).
-			const notice = (af ? (p[0].notice_af ?? p[0].notice_en) : (p[0].notice_en ?? p[0].notice_af)) ?? null;
+			// The notice in the reader's language, else English, else any (the farm view's rule).
+			const notice = pickNotice(p[0].notice, me[0]?.locale)?.text ?? null;
 			return {
 				kind: 'restriction_published',
 				level: d.level ?? p[0].restriction_level,

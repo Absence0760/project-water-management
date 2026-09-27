@@ -65,7 +65,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/farmers/bulk': () => ({ body: { rows: [{ email: `ladder-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }] } }),
 	'PUT /projects/:id/farmers/:userId': (c) => ({ body: { nodeIds: [c.otherFarmId] }, params: { userId: c.farmer.id } }),
 	'POST /projects/:id/publication': (c) => ({ body: { runId: c.runId } }),
-	'PATCH /projects/:id/publication/:pubId': () => ({ body: { restriction: { level: 'advisory', noticeEn: 'Use water sparingly' } } }),
+	'PATCH /projects/:id/publication/:pubId': () => ({ body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } } }),
 	'POST /projects/:id/share-links': () => ({ body: { label: 'Ladder link', expiresInDays: 7 } }),
 	'POST /projects/:id/allocations': (c) => ({ body: { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),

@@ -14,7 +14,7 @@ function view(over: Partial<ShareView['publication']> = {}): ShareView {
 		publication: {
 			publishedAt: '2024-01-11T23:30:00Z',
 			publishedBy: 'Thandi Mokoena',
-			restriction: { level: 'advisory', pct: 15, noticeEn: 'Please cut back\nIrrigate at night.', noticeAf: 'Sny asseblief terug\nBesproei snags.' },
+			restriction: { level: 'advisory', pct: 15, notice: { en: 'Please cut back\nIrrigate at night.', af: 'Sny asseblief terug\nBesproei snags.' } },
 			nextExpectedOn: '2024-02-01',
 			catchmentView: {
 				runStart: '2021-10-01',
@@ -54,23 +54,23 @@ describe('the notice', () => {
 		expect(n).toMatchObject({ level: 'advisory', label: 'Notice from the WUA · Advisory', heading: 'Please cut back', body: 'Irrigate at night.', lang: 'en' });
 		// The WUA's own words carry the cut; the percentage stands alone only without them.
 		expect(n.pctLine).toBeNull();
-		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, noticeEn: null, noticeAf: null } }))!.pctLine)).toBe('Set by the WUA: 15 % of registered use.');
+		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, notice: {} } }))!.pctLine)).toBe('Set by the WUA: 15 % of registered use.');
 		expect(sp(n.byline)).toMatch(/^Thandi Mokoena, 1[12] Jan 2024$/);
 	});
 
-	it('reads the notice in the language the page chose, or the other with a line saying so', async () => {
+	it('reads the notice in the language the page chose, else English, with a line saying so', async () => {
 		await setLocale('af', {});
 		expect(shareNotice(view())).toMatchObject({ heading: 'Sny asseblief terug', lang: 'af', langNote: null });
-		const enOnly = view({ restriction: { level: 'advisory', pct: null, noticeEn: 'Please cut back', noticeAf: null } });
+		const enOnly = view({ restriction: { level: 'advisory', pct: null, notice: { en: 'Please cut back' } } });
 		expect(shareNotice(enOnly)).toMatchObject({ heading: 'Please cut back', lang: 'en', langNote: 'The WUA wrote this notice in English only.' });
 		await setLocale('en');
 		expect(shareNotice(view())).toMatchObject({ heading: 'Please cut back', lang: 'en', langNote: null });
 	});
 
 	it('with no text, heads the card with the level; with none, has no card', () => {
-		const n = shareNotice(view({ restriction: { level: 'restricted', pct: null, noticeEn: null, noticeAf: null } }))!;
+		const n = shareNotice(view({ restriction: { level: 'restricted', pct: null, notice: {} } }))!;
 		expect(n).toMatchObject({ heading: 'Notice from the WUA · Restriction', label: null, body: null, pctLine: null, lang: null });
-		expect(shareNotice(view({ restriction: { level: 'none', pct: null, noticeEn: null, noticeAf: null } }))).toBeNull();
+		expect(shareNotice(view({ restriction: { level: 'none', pct: null, notice: {} } }))).toBeNull();
 		expect(shareNotice(view({ publishedBy: null }))!.byline).toMatch(/^A former member, /);
 	});
 });

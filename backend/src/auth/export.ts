@@ -7,7 +7,7 @@
 // choices) through app_subject_export (054_subject_export.sql), which reads
 // only the caller's own rows. Never a secret: no password hash, token hash,
 // unsubscribe nonce or API key material.
-import type { FarmProjection } from '@water-management/engine';
+import type { FarmProjection, NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { currentFor, farmerProjection } from '../farms/view.js';
@@ -131,7 +131,7 @@ async function farmSection(db: Db, link: FarmLinkRow) {
 	const cur = await currentFor(db, link.projectId, link.nodeId);
 	let publication: {
 		publishedAt: string;
-		restriction: { level: string; pct: number | null; noticeEn: string | null; noticeAf: string | null };
+		restriction: { level: string; pct: number | null; notice: NoticeText };
 		nextExpectedOn: string | null;
 		figures: FarmProjection;
 	} | null = null;
@@ -141,8 +141,7 @@ async function farmSection(db: Db, link: FarmLinkRow) {
 			restriction: {
 				level: cur.restriction_level,
 				pct: cur.restriction_pct === null ? null : Number(cur.restriction_pct),
-				noticeEn: cur.notice_en,
-				noticeAf: cur.notice_af
+				notice: cur.notice
 			},
 			nextExpectedOn: cur.next_expected_on,
 			figures: await farmerProjection(db, link.projectId, cur.view)

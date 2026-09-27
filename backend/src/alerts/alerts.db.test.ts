@@ -542,7 +542,7 @@ describe('the restriction notice', () => {
 		const f0 = mailsTo(farmer).length;
 		const v0 = mailsTo(viewer).length;
 		const res = await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, {
-			restriction: { level: 'restricted', pct: 20, noticeEn: 'Irrigate at night only.', noticeAf: 'Besproei net snags.' }
+			restriction: { level: 'restricted', pct: 20, notice: { en: 'Irrigate at night only.', af: 'Besproei net snags.' } }
 		});
 		expect(res.status).toBe(200);
 		await tick();
@@ -555,11 +555,11 @@ describe('the restriction notice', () => {
 		expect(mailsTo(viewer).at(-1)!.text).toContain('Irrigate at night only.');
 		expect(mailsTo(viewer).length).toBe(v0 + 1);
 		// The same notice again: nothing new.
-		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, { restriction: { level: 'restricted', pct: 20, noticeEn: 'Irrigate at night only.', noticeAf: 'Besproei net snags.' } })).status).toBe(200);
+		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, { restriction: { level: 'restricted', pct: 20, notice: { en: 'Irrigate at night only.', af: 'Besproei net snags.' } } })).status).toBe(200);
 		await tick();
 		expect(mailsTo(farmer).length).toBe(f0 + 1);
 		// Lifted.
-		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, { restriction: { level: 'none', pct: null, noticeEn: null, noticeAf: null } })).status).toBe(200);
+		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${pub.id}`, { restriction: { level: 'none', pct: null, notice: {} } })).status).toBe(200);
 		await tick();
 		expect(mailsTo(farmer).at(-1)!.subject).toBe('Beperking opgehef — Alerts');
 		expect((await farmer.call('PATCH', '/auth/me', { locale: null })).status).toBe(200);

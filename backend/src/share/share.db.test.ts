@@ -54,7 +54,7 @@ async function publish(pid: string) {
 	const res = await owner.call('POST', `/projects/${pid}/publication`, {
 		runId: run.body.run.id,
 		note: NOTE,
-		restriction: { level: 'advisory', pct: 15, noticeEn: NOTICE, noticeAf: 'Die rivier is laag.' },
+		restriction: { level: 'advisory', pct: 15, notice: { en: NOTICE, af: 'Die rivier is laag.' } },
 		nextExpectedOn: '2024-02-01'
 	});
 	expect(res.status).toBe(201);
@@ -172,7 +172,7 @@ describe('what a link shows', () => {
 			project: { name: 'Share catchment' },
 			publication: {
 				publishedBy: 'Sowner',
-				restriction: { level: 'advisory', pct: 15, noticeEn: NOTICE, noticeAf: 'Die rivier is laag.' },
+				restriction: { level: 'advisory', pct: 15, notice: { en: NOTICE, af: 'Die rivier is laag.' } },
 				nextExpectedOn: '2024-02-01',
 				catchmentView: { runStart: '2021-10-01', farmCount: 6 }
 			}

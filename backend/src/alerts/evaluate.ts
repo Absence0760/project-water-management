@@ -157,10 +157,9 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		published_at: Date;
 		restriction_level: 'none' | 'advisory' | 'restricted';
 		restriction_pct: string | null;
-		notice_en: string | null;
-		notice_af: string | null;
+		notice: Record<string, string>;
 	}>(
-		`SELECT id, run_id, published_at, restriction_level, restriction_pct, notice_en, notice_af
+		`SELECT id, run_id, published_at, restriction_level, restriction_pct, notice
 		 FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL`,
 		[projectId]
 	);
@@ -270,7 +269,12 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		if (r.kind === 'restriction_published') {
 			if (!pub) continue;
 			const pct = pub.restriction_pct === null ? null : Number(pub.restriction_pct);
-			const signature = `${pub.restriction_level}|${pct ?? ''}|${md5(pub.notice_en)}|${md5(pub.notice_af)}`;
+			// The notice's languages in a fixed order, so the same words always make the same signature.
+			const words = Object.keys(pub.notice)
+				.sort()
+				.map((code) => `${code}:${md5(pub.notice[code]!)}`)
+				.join(',');
+			const signature = `${pub.restriction_level}|${pct ?? ''}|${words}`;
 			const { rows: last } = await db.query<{ signature: string | null }>(
 				`SELECT detail->>'signature' AS signature FROM alert_event WHERE rule_id = $1 ORDER BY opened_at DESC, id DESC LIMIT 1`,
 				[r.id]

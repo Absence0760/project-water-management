@@ -223,7 +223,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	},
 	'PATCH /projects/:id/publication/:pubId': async () => ({
 		params: { pubId: (await ok(ctx.owner.call('GET', `${at()}/publication`))).current.id },
-		body: { restriction: { level: 'advisory', noticeEn: 'Use water sparingly' } }
+		body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } }
 	}),
 	// The owner can't demote themselves as the last owner; change the viewer instead.
 	'PATCH /projects/:id/members/:userId': () => ({ params: { userId: ctx.viewer.id }, body: { role: 'editor' } })

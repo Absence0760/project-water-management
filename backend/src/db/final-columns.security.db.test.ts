@@ -57,13 +57,13 @@ async function expectRefused(sql: string, params: unknown[]) {
 }
 
 /** A run of the owner's (a run's creator can't be deleted), published by `by`. */
-async function publish(by: User, noticeEn: string) {
-	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: noticeEn });
+async function publish(by: User, notice: string) {
+	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: notice });
 	expect(run.status).toBe(201);
 	const res = await by.call('POST', `/projects/${projectId}/publication`, {
 		runId: run.body.run.id,
 		note: 'staff note',
-		restriction: { level: 'advisory', pct: 10, noticeEn, noticeAf: null },
+		restriction: { level: 'advisory', pct: 10, notice: { en: notice } },
 		nextExpectedOn: '2023-06-01'
 	});
 	expect(res.status).toBe(201);
@@ -195,7 +195,7 @@ describe('publications', () => {
 
 	it('refuses to bring back or rewrite a superseded publication, even as an editor in SQL', async () => {
 		for (const sql of [
-			"UPDATE run_publication SET notice_en = 'rewritten history' WHERE id = $1",
+			"UPDATE run_publication SET notice = '{\"en\": \"rewritten history\"}' WHERE id = $1",
 			"UPDATE run_publication SET superseded_at = superseded_at + interval '1 year' WHERE id = $1",
 			"UPDATE run_publication SET restriction_level = 'none', restriction_pct = NULL WHERE id = $1"
 		]) {
@@ -209,8 +209,8 @@ describe('publications', () => {
 				await db.query('UPDATE run_publication SET superseded_at = NULL WHERE id = $1', [first]);
 			})
 		).rejects.toMatchObject(CHECK);
-		const [row] = await asOwner('SELECT notice_en, superseded_at FROM run_publication WHERE id = $1', [first]);
-		expect(row).toMatchObject({ notice_en: 'First notice' });
+		const [row] = await asOwner('SELECT notice, superseded_at FROM run_publication WHERE id = $1', [first]);
+		expect(row).toMatchObject({ notice: { en: 'First notice' } });
 		expect(row.superseded_at).not.toBeNull();
 	});
 

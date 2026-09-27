@@ -17,7 +17,7 @@ async function publishedBaseline(request: APIRequestContext, projectId: string) 
 	const middle = await createRun(request, projectId, 'Middle');
 	const newest = await createRun(request, projectId, 'Newest');
 	const pub = await request.post(`${API_URL}/projects/${projectId}/publication`, {
-		data: { runId: baseline, restriction: { level: 'advisory', pct: 15, noticeEn: 'Irrigate at night only.', noticeAf: null }, nextExpectedOn: '2022-03-01' }
+		data: { runId: baseline, restriction: { level: 'advisory', pct: 15, notice: { en: 'Irrigate at night only.' } }, nextExpectedOn: '2022-03-01' }
 	});
 	expect(pub.status()).toBe(201);
 	return { baseline, middle, newest };

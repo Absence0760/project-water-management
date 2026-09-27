@@ -8,6 +8,7 @@ import type {
 	EnsembleSummary,
 	InputChange,
 	MemberResult,
+	NoticeText,
 	OpClass,
 	OutlookExcluded,
 	PairedMember,
@@ -922,8 +923,8 @@ export interface PublicationRestriction {
 	level: RestrictionLevel;
 	/** 0–100 with two decimals; null for 'none' or when the notice gives none. */
 	pct: number | null;
-	noticeEn: string | null;
-	noticeAf: string | null;
+	/** The WUA's words by language code ({} for none); only languages of the table (packages/engine/src/languages.ts). */
+	notice: NoticeText;
 }
 
 /** A publication's line in the history (GET …/publication). */

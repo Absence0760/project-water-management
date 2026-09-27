@@ -3,14 +3,15 @@
 // It loads no message code (only $lib/i18n/msg, which marks the names for the
 // translation sheet), so /share uses it without the workspace's code
 // (./cards.ts re-exports it).
-import type { RestrictionLevel } from '@water-management/engine';
+import { language, pickNotice, type Locale, type RestrictionLevel } from '@water-management/engine';
 import { msg, type Msg } from '$lib/i18n/msg';
+import { wordsLang } from '$lib/i18n/state.svelte';
+
+export { pickNotice };
 
 // i18n-section: farm.level
 /** The restriction level's name, worded with t(): "No restriction", "Advisory", "Restriction". */
 export const LEVEL_WORDS: Record<RestrictionLevel, Msg> = { none: msg('No restriction'), advisory: msg('Advisory'), restricted: msg('Restriction') };
-
-export type NoticeLang = 'en' | 'af';
 
 export interface NoticeVm {
 	level: RestrictionLevel;
@@ -25,23 +26,23 @@ export interface NoticeVm {
 	/** The notice's first line (its title), for the "Why?" page and the offline view. */
 	title: string | null;
 	/** The language the WUA's words are in; null without words. */
-	lang: NoticeLang | null;
+	lang: Locale | null;
 	/** "The WUA wrote this notice in English only.": when the words aren't in the reader's language (design §7). */
 	langNote: string | null;
 }
 
+// i18n-section: farm.notice
+/** Under the notice when it isn't in the reader's language: t(WRITTEN_ONLY_IN, { language: languageName(lang) }). */
+export const WRITTEN_ONLY_IN = msg('The WUA wrote this notice in {language} only.');
+
 /**
- * The WUA's notice in the reader's language, or in the other one when theirs
- * isn't written (design §7); null when it wrote neither. Blank counts as not
- * written.
+ * A language's name in the language the page's words are in ("Engels" on an
+ * Afrikaans page), from the browser's own list (Intl.DisplayNames), so a new
+ * language needs no message of its own; the table's own name when the
+ * browser has none.
  */
-export function pickNotice(r: { noticeEn: string | null; noticeAf: string | null }, reader: NoticeLang): { text: string; lang: NoticeLang } | null {
-	const en = r.noticeEn?.trim() ? r.noticeEn : null;
-	const af = r.noticeAf?.trim() ? r.noticeAf : null;
-	if (reader === 'af' && af) return { text: af, lang: 'af' };
-	if (en) return { text: en, lang: 'en' };
-	if (af) return { text: af, lang: 'af' };
-	return null;
+export function languageName(code: Locale): string {
+	return new Intl.DisplayNames([language(wordsLang()).intl], { type: 'language', fallback: 'none' }).of(code) ?? language(code).name;
 }
 
 /**

@@ -3,7 +3,7 @@
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
 // reaches a server log.
-import type { RestrictionLevel, CatchmentSite } from '@water-management/engine';
+import type { RestrictionLevel, CatchmentSite, NoticeText } from '@water-management/engine';
 import { z } from 'zod';
 
 /** Longest label, in characters (025_share_links.sql CHECK). */
@@ -87,8 +87,7 @@ export interface ShareViewRow {
 	catchment_view: SharedCatchmentView;
 	restriction_level: RestrictionLevel;
 	restriction_pct: string | null;
-	notice_en: string | null;
-	notice_af: string | null;
+	notice: NoticeText;
 	next_expected_on: string | null;
 }
 
@@ -110,7 +109,7 @@ export interface ShareView {
 		publishedAt: string;
 		publishedBy: string | null;
 		catchmentView: SharedCatchmentView;
-		restriction: { level: RestrictionLevel; pct: number | null; noticeEn: string | null; noticeAf: string | null };
+		restriction: { level: RestrictionLevel; pct: number | null; notice: NoticeText };
 		nextExpectedOn: string | null;
 	};
 }
@@ -124,8 +123,7 @@ export const toShareView = (r: ShareViewRow): ShareView => ({
 		restriction: {
 			level: r.restriction_level,
 			pct: r.restriction_pct === null ? null : Number(r.restriction_pct),
-			noticeEn: r.notice_en,
-			noticeAf: r.notice_af
+			notice: r.notice
 		},
 		nextExpectedOn: r.next_expected_on
 	}
