@@ -1,9 +1,9 @@
-// The reporting-window picker on Runs & results (issue #44, docs/ui.md §
-// Runs & results): a viewer looks at the last 7 days without re-running or
+// The reporting-window picker on Units & supply (issue #44, since issue #17; docs/ui.md §
+// Units & supply): a viewer looks at the last 7 days without re-running or
 // touching the project setting; the table worked out in the browser matches
 // the engine's own table for that window, the EWR site setting each farm's
 // charge included; the choice lives in the URL, so
-// back / forward and a reload keep it; and the Summary says its farm figures
+// back / forward and a reload keep it; and the unit figures say they
 // are over the whole record.
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -23,7 +23,7 @@ async function farmFigures(table: Locator): Promise<string[][]> {
 	);
 }
 
-test('a viewer picks the last 7 days on Runs & results: worked out from the run, kept in the URL, the project setting untouched', async ({ page, owner, signIn }) => {
+test('a viewer picks the last 7 days on Units & supply: worked out from the run, kept in the URL, the project setting untouched', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Report window');
 	await updateSettings(page.request, project.id, { reportStart: '2021-11-01', reportEnd: '2021-12-31', ewrPragmaticM3PerDay: new Array(12).fill(1_000_000) });
@@ -41,17 +41,17 @@ test('a viewer picks the last 7 days on Runs & results: worked out from the run,
 	const table = panel.getByRole('table', { name: /^Curtailment targets per unit/ });
 	const picker = panel.getByLabel('Reporting window');
 
-	await v.goto(`/projects/${project.id}?tab=runs&run=${second}`);
+	await v.goto(`/projects/${project.id}?tab=supply&run=${second}`);
 	await expect(period).toHaveText('Project window: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
 	const engine = await farmFigures(table);
 	// The reserve is set high enough to be short every day, so the farms carry a charge and the outlet sets it.
 	expect(engine.map((row) => row.includes('Outflow gauge'))).toEqual([true, true]);
 
-	await v.goto(`/projects/${project.id}?tab=runs&run=${first}`);
+	await v.goto(`/projects/${project.id}?tab=supply&run=${first}`);
 	await expect(period).toHaveText('Project window: daily averages over 2021-11-01 – 2021-12-31 (61 days).');
 	await expect(picker).toHaveValue('project');
 	await expect(picker.locator('option:checked')).toHaveText('Project window (2021-11-01 to 2021-12-31)');
-	// The Summary's farm table is over the whole record, and says so.
+	// The unit results table is over the whole record, and says so.
 	await expect(v.getByTestId('farms-period')).toHaveText(
 		'Daily averages over the whole record, 2021-10-01 to 2022-01-28 (120 days); the curtailment targets cover the reporting window.'
 	);
@@ -107,7 +107,7 @@ test('the reporting-window picker passes axe in both themes and on a phone', asy
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Report window a11y');
 	const run = await createRun(page.request, project.id, 'Baseline');
-	await page.goto(`/projects/${project.id}?tab=runs&run=${run}&window=2021-12-01..2021-12-31`);
+	await page.goto(`/projects/${project.id}?tab=supply&run=${run}&window=2021-12-01..2021-12-31`);
 	const panel = page.locator('#res-curtailment');
 	await expect(panel.getByTestId('curtailment-period')).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-31 (31 days).');
 	await expect(panel.getByLabel('From', { exact: true })).toBeVisible();

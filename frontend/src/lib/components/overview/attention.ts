@@ -5,6 +5,7 @@
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
+import { supplyHref } from '$lib/components/supply/links';
 import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { describeAge } from '$lib/components/series/coverage';
@@ -75,8 +76,9 @@ export function attention(input: AttentionInput): AttentionItem[] {
 					short.length === 1
 						? `${worstText}, below the ${target} target.`
 						: `${worstText}, the least of the ${fmtNum(short.length)} units below ${target} (of ${fmtNum(farms.length)}).`,
+				// Units & supply for the run, opened on the worst unit (issue #17).
 				action: 'See the unit results',
-				href: runHref(latest.id),
+				href: supplyHref(latest.id, { unit: worst.nodeId }),
 				...(inModel ? { also: { action: 'Its planted areas', href: farmDrawerHref(null, worst.nodeId) } } : {})
 			});
 		}

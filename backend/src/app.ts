@@ -37,6 +37,18 @@ import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
 import { yieldRoutes } from './yield/routes.js';
 
+/**
+ * The production entry point (lambda.ts) refuses to start without the
+ * CloudFront shared secret: createApp skips the check when it is unset, which
+ * is right for local dev and would silently let direct Function URL calls
+ * past the WAF in Lambda. Terraform generates 48 characters (s3_cloudfront.tf).
+ */
+export function assertEdgeSecret(env: NodeJS.ProcessEnv = process.env) {
+	if ((env.CLOUDFRONT_SHARED_SECRET ?? '').length < 32) {
+		throw new Error('CLOUDFRONT_SHARED_SECRET must be set (≥ 32 characters) in Lambda');
+	}
+}
+
 export function createApp() {
 	const app = new Hono<AuthEnv>();
 

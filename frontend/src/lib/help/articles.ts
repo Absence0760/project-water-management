@@ -71,7 +71,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.10a'
 	},
 	'report-window': {
-		long: 'Pick a critical period — a dry season or a drought year — to see how much each unit would need to reduce for irrigation to balance and the EWR to be met in that period. A window partly outside the run is clipped to it.\n\nOn Runs & results, the Reporting window picker above the curtailment table shows the same tables over another period (the last 7, 14 or 30 days, the whole record or a custom range) without changing this setting or re-running: anyone who can see the run can use it.',
+		long: 'Pick a critical period — a dry season or a drought year — to see how much each unit would need to reduce for irrigation to balance and the EWR to be met in that period. A window partly outside the run is clipped to it.\n\nOn Units & supply, the Reporting window picker above the curtailment table shows the same tables over another period (the last 7, 14 or 30 days, the whole record or a custom range) without changing this setting or re-running: anyone who can see the run can use it.',
 		aliases: ['reporting period', 'shortfall period'],
 		related: ['ewr'],
 		source: 'b023 [Shortfalls] "Set reporting period"; docs/model.md §2.11'

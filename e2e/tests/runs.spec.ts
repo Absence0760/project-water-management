@@ -22,11 +22,11 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
-	await expect(summary.getByRole('heading', { name: 'Units' })).toBeVisible();
-	const farms = summary.getByRole('table');
-	await expect(farms.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
-	await expect(farms.getByRole('rowheader', { name: /^Lower farm/ })).toBeVisible();
-	await expect(farms.getByRole('rowheader', { name: 'All units' })).toBeVisible();
+	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
+	// The per-unit table moved to Units & supply (issue #17, supply-page.spec.ts): a link row for this run keeps its place.
+	await expect(summary.getByRole('heading', { name: 'Units', exact: true })).toHaveCount(0);
+	const runId = new URL(page.url()).searchParams.get('run')!;
+	await expect(page.getByRole('link', { name: 'Units & supply for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.
@@ -59,7 +59,7 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	// The run is stored: a reload shows it again, newest first.
 	await page.reload();
 	await expect(list.getByRole('button', { name: /^Baseline/ })).toHaveAttribute('aria-current', 'true');
-	await expect(summary.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
+	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 });
 
 // Regression: a chart effect that re-triggered itself froze the Runs tab
@@ -193,7 +193,8 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 });
 
 test('every daily results chart moves through the record like the hydrograph, and the flow charts share the m³/s ↔ m³/day switch', async ({ page, owner }) => {
-	// EWR vs outflow moved to River & reserve (river-page.spec.ts), with the Summary's time windows instead.
+	// EWR vs outflow moved to River & reserve (river-page.spec.ts), and a unit's supply vs demand to Units & supply
+	// (supply-page.spec.ts), both with the Summary's time windows.
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Chart parity');
 	const days = 8 * 365;
@@ -206,11 +207,11 @@ test('every daily results chart moves through the record like the hydrograph, an
 	const hydro = figure(/^Flow at the outflow gauge/);
 	const fdc = figure(/^Flow-duration curve/);
 	const explore = page.locator('#res-explore figure');
-	const farmSupply = figure(/^Supply vs demand/);
 
 	// Earlier / Later on every windowed daily chart, not just the hydrograph.
 	await expect(figure(/^EWR vs simulated outflow/)).toHaveCount(0);
-	for (const chart of [explore, farmSupply]) {
+	await expect(figure(/^Supply vs demand/)).toHaveCount(0);
+	for (const chart of [explore]) {
 		await expect(chart.locator('canvas')).toBeVisible();
 		const end = await chart.getAttribute('data-view-end');
 		await expect(chart.getByRole('button', { name: /Later/ })).toBeDisabled();
@@ -229,8 +230,6 @@ test('every daily results chart moves through the record like the hydrograph, an
 		await expect(chart.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
 		await expect(chart.locator('.u-legend')).toContainText('(m³/day)');
 	}
-	// A chart that isn't a flow has no flow-unit switch.
-	await expect(farmSupply.getByRole('button', { name: 'm³/s' })).toHaveCount(0);
 });
 
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
@@ -242,9 +241,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
 		'On River & reserve',
-		'Curtailment',
-		'Assurance of supply',
-		'Unit detail',
+		'On Units & supply',
 		'Hydrograph',
 		'Flow duration',
 		'Calibration',
@@ -261,7 +258,8 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Units & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
 	// River & Reserve is one row now, linking to its own page (river-page.spec.ts).
 	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['On River & reserve']);
-	await expect(menu.getByRole('list', { name: 'Units & users' }).getByRole('link')).toHaveText(['Curtailment', 'Assurance of supply', 'Unit detail']);
+	// So is Units & users (supply-page.spec.ts).
+	await expect(menu.getByRole('list', { name: 'Units & users' }).getByRole('link')).toHaveText(['On Units & supply']);
 	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
 	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
 	// The summary opens with the model checks, each linking to its panel.
@@ -277,13 +275,13 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu.getByRole('link', { name: 'Summary' })).not.toHaveAttribute('aria-current', 'location');
 
-	await menu.getByRole('link', { name: 'Unit detail' }).click();
-	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
-	const farm = page.getByRole('region', { name: 'Unit detail' });
-	await expect(farm).toBeInViewport();
+	await menu.getByRole('link', { name: 'Calibration' }).click();
+	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-calibration$/);
+	const calibration = page.locator('#res-calibration');
+	await expect(calibration).toBeInViewport();
 	// The section's top edge clears the sticky menu (no app bar across the top since the sidebar, issue #17).
 	const menuBox = await menu.boundingBox();
-	const top = await farm.boundingBox();
+	const top = await calibration.boundingBox();
 	expect(menuBox!.y).toBeGreaterThanOrEqual(-1);
 	expect(top!.y).toBeGreaterThanOrEqual(menuBox!.y + menuBox!.height);
 
@@ -334,7 +332,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	await expect(menu.getByRole('link', { name: 'Summary' })).toBeInViewport({ ratio: 1 });
 
 	// Once the rail and the menu are stuck under the header, the list and every menu link fit on screen.
-	await menu.getByRole('link', { name: 'Curtailment' }).click();
+	await menu.getByRole('link', { name: 'Calibration' }).click();
 	await expect(page.getByRole('region', { name: 'Runs', exact: true })).toBeInViewport();
 	// The rail needs no scrollbar of its own: nothing in it is clipped (a fixed 16rem list overflowed by 17px here).
 	// The runs rail (the app sidebar is a complementary landmark too, since issue #17's shell).

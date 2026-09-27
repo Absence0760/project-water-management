@@ -34,6 +34,7 @@
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
+	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
 	import { loadHumanImpacts } from '$lib/components/runs/humanImpacts';
 	import { runSentence } from '$lib/components/runs/runSentence';
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
@@ -330,7 +331,9 @@
 							<p class="muted">This run was made before the monthly EWR compliance grid existed.</p>
 						{/if}
 					{:else if s.id === 'farms'}
-						<RunSummaryView {summary} {days} {nodeOrder} />
+						<RunSummaryView {summary} {days}>
+							{#snippet units()}<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />{/snippet}
+						</RunSummaryView>
 						<div class="sub">
 							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} nodes={[]} trace={false} />
 						</div>

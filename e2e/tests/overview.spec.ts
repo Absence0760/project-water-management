@@ -179,7 +179,7 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the dashed EWR line (EWR not met).`);
 });
 
-test('needs attention cards and supply by farm: coloured by how much it matters, each farm opens its drawer', async ({ page, owner }) => {
+test('needs attention cards and supply by unit: coloured by how much it matters, each unit opens its drawer, and both lead to Units & supply', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary side column');
 	// Plant far more on Lower farm than its water can serve, so it comes up short.
@@ -205,6 +205,8 @@ test('needs attention cards and supply by farm: coloured by how much it matters,
 	const pcts = await rows.evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.pct')!.textContent!)));
 	expect(pcts[0]!).toBeGreaterThan(pcts[1]!);
 	await expect(supply).toContainText(/supplied/);
+	// The whole picture is on Units & supply, for the same run (issue #17).
+	await expect(supply.getByRole('link', { name: 'More on Units & supply' })).toHaveAttribute('href', /^\?tab=supply&run=[0-9a-f-]{36}$/);
 
 	// A farm's name opens its planted areas over the Summary.
 	await rows.last().getByRole('link', { name: 'Lower farm' }).click();
@@ -213,9 +215,10 @@ test('needs attention cards and supply by farm: coloured by how much it matters,
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 
-	// The whole card is the link: a click on its detail follows the main action.
+	// The whole card is the link: a click on its detail follows the main action, Units & supply on the worst unit (issue #17).
 	await short.click({ position: { x: 16, y: 34 } });
-	await expect(page).toHaveURL(/[?&]tab=runs&run=/);
+	await expect(page).toHaveURL(new RegExp(`[?&]tab=supply&run=[0-9a-f-]{36}&unit=${project.model.nodes[2]!.id}$`));
+	await expect(page.getByRole('region', { name: 'Unit detail: Lower farm' })).toBeVisible();
 });
 
 test.describe('the first screen has no accessibility violations', () => {

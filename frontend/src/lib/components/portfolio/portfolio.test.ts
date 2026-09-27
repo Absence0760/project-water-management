@@ -145,7 +145,7 @@ describe('sorting', () => {
 
 describe('curtailmentHref', () => {
 	it('opens the run on the Runs tab with the last 7 days as its reporting window', () => {
-		expect(curtailmentHref({ id: 'p1', sourceRunId: 'r1' }, '/app')).toBe('/app/projects/p1?tab=runs&run=r1&window=last7#res-curtailment');
+		expect(curtailmentHref({ id: 'p1', sourceRunId: 'r1' }, '/app')).toBe('/app/projects/p1?tab=supply&run=r1&window=last7#res-curtailment');
 	});
 });
 

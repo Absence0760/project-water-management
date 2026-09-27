@@ -19,11 +19,9 @@
 	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
-	import { runDamCapacity } from './results';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
-	import ReportWindowPanel from './ReportWindowPanel.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -31,15 +29,16 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { resultGroups } from './sections';
+	import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverAnchor, riverHref } from '$lib/components/river/links';
-	// Panels every shown run renders (assurance of supply, evidence, "Check reproduction", "Changes
-	// since this run", publication) are in the Runs chunk: as chunks of their own they loaded on every
-	// visit anyway and cost ~7 KB gzip of split overhead (issue #9).
-	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
+	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
+	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
+	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
+	// with the other unit panels (issue #17).
 	import EvidencePanel from './EvidencePanel.svelte';
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
@@ -120,8 +119,6 @@
 		const inRun = new Set((detail?.series ?? []).map((s) => s.nodeId));
 		return editor.model.nodes.filter((n) => inRun.has(n.id)).map((n) => ({ id: n.id, name: n.name, kind: n.kind }));
 	});
-	// The shown run's own dam sizes (its model snapshot), not today's (runs/results.ts).
-	const damCapacity = $derived(runDamCapacity(detail?.run.model as Parameters<typeof runDamCapacity>[0], editor.model.nodes));
 	const runDays = (r: { startDate: string; endDate: string }) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -155,6 +152,11 @@
 		const hash = page.url.hash.slice(1);
 		if (riverAnchor(hash)) {
 			goto(riverHref(page.url.searchParams.get('run'), hash), { replaceState: true, noScroll: true });
+			return;
+		}
+		// …and to Units & supply (#res-curtailment from a bookmarked "units short this week", …), keeping its window.
+		if (supplyAnchor(hash)) {
+			goto(supplyHref(page.url.searchParams.get('run'), { window: page.url.searchParams.get('window'), hash }), { replaceState: true, noScroll: true });
 			return;
 		}
 		load();
@@ -213,8 +215,8 @@
 		});
 	});
 
-	// A link to a results panel (#res-curtailment from the portfolio's "farms
-	// short this week"): the panels render only once the run's details are in,
+	// A link to a results panel (#res-publication from the Summary's published
+	// baseline, #res-notes from a note): the panels render only once the run's details are in,
 	// after the browser's own jump, so scroll there then and hold it while the
 	// panels above load (holdAnchor), with focus on the panel's heading so Tab
 	// carries on from there. Once: later jumps (the section menu) find their
@@ -226,7 +228,7 @@
 		if (!detail || fragmentShown) return;
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
-		if (!hash.startsWith('res-') || riverAnchor(hash)) return;
+		if (!hash.startsWith('res-') || riverAnchor(hash) || supplyAnchor(hash)) return;
 		tick().then(() => {
 			const el = destroyed ? null : document.getElementById(hash);
 			if (!el) return;
@@ -368,7 +370,6 @@
 	// The editor's model, like the Network tab's total (unsaved edits have their own note).
 	const overAllocated = $derived(overAllocationError(inputFlowShares({ model: editor.model, settings: project.settings }).sum));
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
-	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 	// The in-page menu above the results (SectionNav).
 	const groups = $derived(detail ? resultGroups(detail.run.summary) : []);
 	const downloadItems = $derived(
@@ -572,14 +573,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView
-						summary={detail.run.summary}
-						days={runDays(detail.run)}
-						{nodeOrder}
-						startDate={detail.run.startDate}
-						endDate={detail.run.endDate}
-						reserveHref={riverHref(detail.run.id, 'res-reserve')}
-					/>
+					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -593,27 +587,23 @@
 				{projectId}
 				runId={detail.run.id}
 				refs={detail.series}
-				farms={summary.farms ?? []}
 				{nodeNames}
 				{nodeOrder}
-				{damCapacity}
 				forecastFrom={summary.forecast?.from ?? null}
 			>
 				{#snippet river()}
 					<!-- The group's panels are on their own page now (issue #17): one link, keeping the run. -->
-					<p class="panel river-link" id="res-river">
+					<p class="panel moved-link" id="res-river">
 						<span>EWR against outflow, Reserve compliance, EWR by month, the uncertainty bands, the outcome matrix, the seasonal outlook and the water account for this run are on River &amp; reserve.</span>
 						<a class="btn btn-sm" href={riverHref(shownRunId)}>River &amp; reserve for this run <span aria-hidden="true">→</span></a>
 					</p>
 				{/snippet}
 				{#snippet farmsLead()}
-					<section class="panel" id="res-curtailment">
-						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
-						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} network={editor.model} {farmNames} />
-					</section>
-					<section class="panel" id="res-assurance">
-						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-					</section>
+					<!-- The group's panels (unit results, curtailment, assurance of supply, unit detail) are on their own page now (issue #17): one link, keeping the run. -->
+					<p class="panel moved-link" id="res-units">
+						<span>Each unit's supply against its demand, the unit results table, the curtailment targets and assurance of supply for this run are on Units &amp; supply.</span>
+						<a class="btn btn-sm" href={supplyHref(shownRunId)}>Units &amp; supply for this run <span aria-hidden="true">→</span></a>
+					</p>
 				{/snippet}
 				{#snippet modelTail()}
 					<div class="panel" id="res-calibration">
@@ -738,7 +728,7 @@
 
 <style>
 	/* Where the River & Reserve group was: one row linking to its page. */
-	.river-link {
+	.moved-link {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;

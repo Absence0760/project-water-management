@@ -773,7 +773,7 @@
 				</div>
 			</div>
 			<span class="hint">
-				Period the curtailment targets and the assurance of supply on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
+				Period the curtailment targets and the assurance of supply on Units & supply average over, e.g. the last dry season. Leave blank for the whole run.
 			</span>
 			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
 			<div class="field">

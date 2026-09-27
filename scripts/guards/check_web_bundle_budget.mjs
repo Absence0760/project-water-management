@@ -889,15 +889,28 @@
 //             7.4 KB gzipped, including the table, which left the Summary's
 //             own lazy chunk; LineChart and uPlot are shared chunks already.
 //             No new dependency. Headroom ~4 KB.
-// 2026-09-26  total 962 → 980 KB (measured 976, +18); largest chunk unchanged.
+// 2026-09-26  total 962 → 978 KB (measured 974, +12 on main's 962 with River &
+//             reserve); largest chunk unchanged (39 KB). The Units & supply
+//             page (issue #17, option A · Outcomes): unit cards, four tiles,
+//             the picked unit's supply chart (supply/SupplyTab, UnitDetail,
+//             UnitResultsTable, supply.ts), a lazy chunk of 16.6 KB gzipped
+//             that carries the panels moved from Runs & results (the
+//             curtailment panel with its reporting window, assurance of
+//             supply, the unit table, the unit detail). The Runs chunk went
+//             31.8 → 23.0 KB, so the page's own code is ~7.8 KB; the rest is
+//             split overhead: the Runs + report shared chunk (run summary,
+//             curtailment table, share-the-pain board, 23.3 KB) is now two
+//             (13.9 + 10.2), one per importer set, and the report chunk
+//             +0.4 for the unit table it now imports itself. No new
+//             dependency. Headroom ~4 KB.
+// 2026-09-26  total 978 → 991 KB (measured 987, +13 on main's 974); largest chunk unchanged.
 //             The Afrikaans (issue #49, WP-2.5): every farmer-facing string
 //             translated. The site catalogue (messages/af.ts) is a lazy
 //             chunk of 11.4 KB gzipped that only someone who picks
 //             Afrikaans downloads; the farmer glossary's Afrikaans
 //             (help/content.af.ts) adds ~3 KB to the /farm/words page. Words,
 //             not code: nothing to trim without dropping a translation.
-//             The rest is main's own growth since the last entry. No new
-//             dependency. Headroom ~4 KB.
+//             No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -908,7 +921,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 980,
+	totalCodeKb: 991,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

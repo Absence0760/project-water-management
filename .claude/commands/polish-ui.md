@@ -1,79 +1,66 @@
 ---
-description: Polish the UI/UX of a single page or component to this site's quality bar — section-rhythm layouts, image-led product cards, dl-based legal disclosures, mobile-first stacking, leaf-and-cream design tokens. Delegates to the `ui-polisher` agent.
-argument-hint: <page-route or component path>
+description: Design, build or review one screen to the app's UI standard (docs/design/ui-playbook.md). Delegates to the `ui-designer` agent. `/polish-ui <target>` builds; `/polish-ui review <target>` reports only.
+argument-hint: [review] <section, route or component>, or "review diff"
 ---
 
-Polish the UI/UX of `$ARGUMENTS` using the `ui-polisher` agent.
+Run the `ui-designer` agent on `$ARGUMENTS`.
 
-## When to use this command
+## When to use it
 
 **Right fit:**
 
-- A page where the hierarchy is muddled — the most important thing isn't at the top, or chrome / boilerplate competes with content for the first viewport.
-- A page whose archetype doesn't match its data — flat prose where a `<dl>` would surface structure, a 3-column grid for two items, a long unstructured policy doc.
-- A page that doesn't collapse cleanly on mobile (SA traffic skews mobile — two-column desktop layouts must stack, touch targets must be ≥44px).
-- A page leaking raw ISO dates, arbitrary hex colors that should be design tokens, arbitrary `rem` spacing that breaks the `--space-*` rhythm.
-- A component used in multiple places (`Button`, `Cart`, `<payment-processor>Redirecting`) where consistency across surfaces matters.
+- A workspace section or page that should follow option A (issue #17's
+  "Remaining work" comment lists them: the Project page, Runs & results,
+  Data, Transfers, Settings, Scenarios, Allocations, Applications, History).
+- A screen that wastes the first viewport, scrolls when it's a dashboard,
+  crowds out its results as data grows, runs out of colours, or doesn't stack
+  on a phone.
+- Before landing any UI change: `/polish-ui review diff` checks it against
+  the playbook.
 
-**Wrong fit — tell the user and stop:**
+**Wrong fit (say so and stop):**
 
-- A purely-functional admin / settings / dev page with no real-estate or scanability problem.
-- A payment surface (`/payment/cancelled`, the retry CTA in `/track`, the `Cart.svelte` <payment-processor> form construction). These are inside the payment-retry threat model in `docs/payment-retry-plan.md` — they need `/safe-edit`, not polish.
-- A request that's really a feature, not a polish — "add an FAQ section to the home page" needs a content plan, not the polish agent.
-- An asks-for-everything sweep ("polish all the pages"). Pick one and tell the user to invoke this command again for the next.
+- A one-line CSS tweak: just edit it.
+- A new feature with no design yet: plan the content first (a design spec in
+  `docs/design/`, like the farmer view's).
+- "Polish everything": pick one target; run the command again for the next.
 
 ## Resolving the target
 
-`$ARGUMENTS` can be:
-
-- A **route slug** (`/shop`, `/gallery`, `/returns`, `/contact`) — resolves to `frontend/src/routes/<slug>/+page.svelte`. The home page is `frontend/src/routes/+page.svelte`. Nested routes follow the obvious pattern (`/shop/[slug]` → `frontend/src/routes/shop/[slug]/+page.svelte`).
-- A **file path** (`frontend/src/lib/Cart.svelte`) — used as-is.
-- A **component name** (`Cart`, `Button`, `<payment-processor>Redirecting`) — resolve via `find frontend/src/lib -maxdepth 1 -name "<name>.svelte"`.
-
-If the argument is empty or "audit", list the candidate pages with a one-line "why this one matters most right now" and ask the user to pick. Don't blanket-sweep.
+- A **section name** ("Data", "Runs & results") → the tab in
+  `frontend/src/lib/workspace/tabs.ts` and its component.
+- A **route** (`/teams`, `/account`) → `frontend/src/routes/<route>/+page.svelte`.
+- A **file path** → used as-is.
+- `review diff` (or `review` with no target) → the working diff; `review
+  <branch>` → that branch against `main`.
+- Empty → list the open screens from #17's "Remaining work" comment with one
+  line each on why it matters, and ask which.
 
 ## The flow
 
-1. **Pre-flight:**
-   - Confirm the target file exists. If not, stop and report.
-   - Confirm `pnpm frontend check` passes on the working tree before you start — if it's already failing, something else is broken; fix that first.
-   - The repo convention is "don't run the dev server to visually verify UI/frontend changes" (per `CLAUDE.md`). The agent does not take screenshots; the operator reviews the page in their own browser session. No pre-flight check on a running dev server.
+1. **Pre-flight:** the target exists; `pnpm check` passes on the tree (if it
+   already fails, fix that first).
+2. **Spawn `ui-designer`** with the mode and target on the first line:
+   - build: `build: <target>. The operator's intent: <original argument>.`
+     Pass `isolation: "worktree"` when other sessions or agents are working
+     in this checkout.
+   - review: `review: <target>.` (read-only; no worktree needed.)
+3. **Relay the report:** files changed (`git diff --stat` or the branch's
+   commits), screenshot paths, the "nothing lost" inventory check, the tests
+   that ran, bundle numbers, and anything deferred. For a review, the
+   findings ranked by impact.
+4. **Land it** as the operator prefers (merge the worktree branch, run the
+   gate, push per the memory rule); a review's findings are fixed in a build
+   run or by hand.
 
-2. **Resolve target → invoke the agent:**
+## Cost
 
-   Spawn the `ui-polisher` agent with a prompt like:
+A build run redesigns a screen end to end (screenshots, specs, docs); it
+earns its cost on layout-level changes, not padding tweaks.
 
-   > "Polish the UI/UX of `<resolved file path>`. The user's stated intent was: `<the original argument string>`. Follow your agent spec: audit, plan, edit, verify, report. Do not commit. Respect the safety-critical guards in the cart and payment surfaces if your target overlaps with them."
+## Not a replacement for
 
-   The agent's spec covers the design language, type-check, and any e2e selector updates. Trust it.
-
-3. **Relay the agent's report.** When it returns, surface:
-
-   - The list of files changed (run `git diff --stat` to confirm matches).
-   - Any e2e selector updates the agent applied so the user can sanity-check those edits.
-   - The "Notes for the human" section verbatim — including the agent's request that the user open `pnpm frontend dev` and review the page visually.
-
-4. **Wait for the user's call on the commit.** Do not pre-stage or pre-commit. When the user says yes:
-
-   - Stage the changed files explicitly (don't `git add -A` — risks pulling in scratch test output or screenshots an experimental run may have left behind).
-   - Commit message follows the repo's `content(<scope>):` convention seen in `git log --oneline` (the most recent UI polish to the cart was `content(cart): visual treatment for the CPA s49 clickwrap`). **No `Co-Authored-By` / "Generated with Claude Code" / robot-emoji footers** — the user-level rule in `~/.claude/CLAUDE.md` wins.
-   - Example: `git commit -m "content(<scope>): <one-liner>" -m "<3–5 line body explaining what archetype + which patterns applied + why>"`.
-
-## Cost reality
-
-This command costs more than a normal edit — a full type-check, possibly an e2e re-run, an agent context. Don't burn it on a 5-pixel padding tweak — for that, the user edits directly. The command earns its cost on archetype-level or hierarchy-level changes (a flat product list that should be a card grid, a comma-list of materials that should be a `<dl>`, a clickwrap label that needs to clear CPA s49 conspicuousness, etc.).
-
-## What this command does NOT replace
-
-- `/check` for a pre-commit gate (code-review + test-gap + doc-hygiene).
-- `/safe-edit` for security- or payment-sensitive changes (cart submit, ITN handling, <payment-processor> form construction, anything inside `docs/payment-retry-plan.md`'s threat model).
-- `/audit/*` for periodic broad sweeps (secrets, XSS, deps, infra, cost-controls).
-- Visual verification. The operator runs `pnpm frontend dev` and reviews the page themselves — that's the repo convention.
-
-## Tone
-
-Don't narrate the agent's internal steps. The user sees:
-
-- A one-sentence "Resolving target → `<path>`. Spawning the polisher."
-- The agent's structured report (audit findings + changes + verification + notes), relayed.
-- A "Want me to commit?" question with the suggested commit message.
+- `/check` (code review, test gaps, doc hygiene on a diff).
+- `/a11y-hunt` and `/ux-hunt` (interaction and accessibility defects found
+  by driving the app); `/persona` (domain users' point of view).
+- `/safe-edit` for security-sensitive changes.

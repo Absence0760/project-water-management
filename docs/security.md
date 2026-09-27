@@ -1258,7 +1258,10 @@ readable by anyone. The rules:
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **Lambda Function URL**: the backend rejects any request without the
   CloudFront shared-secret header, so the WAF and CloudFront can't be bypassed
-  by calling the Function URL directly.
+  by calling the Function URL directly. The check is skipped when the secret is unset (local
+  dev), so the Lambda entry point (`lambda.ts`, `assertEdgeSecret`) refuses to
+  start without a secret of at least 32 characters: a deploy missing it fails
+  loudly instead of opening the Function URL (`app.security.test.ts`).
 - **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
   default 1000 per 5 minutes) covering the whole site and `/api/*`.

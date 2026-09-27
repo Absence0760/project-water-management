@@ -1,6 +1,7 @@
 // Assurance of supply, stress classes and the water account (engine 0.32.0,
-// WP-3.4): the Runs tab's two new panels on a synthetic run (docs/ui.md §
-// Assurance of supply).
+// WP-3.4) on a synthetic run: assurance of supply on Units & supply and the
+// water account on River & reserve, both reached from the run on Runs &
+// results (issue #17; docs/ui.md § Assurance of supply).
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -10,9 +11,10 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await createRun(page.request, project.id, 'Assured');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Assured' })).toBeVisible();
-	const nav = page.getByRole('navigation', { name: 'Result sections' });
 
-	await nav.getByRole('link', { name: 'Assurance of supply' }).click();
+	// Assurance of supply moved to Units & supply (issue #17): the Runs page links there for this run.
+	await page.locator('#res-units').getByRole('link', { name: 'Units & supply for this run' }).click();
+	await expect(page).toHaveURL(/[?&]tab=supply&run=/);
 	const assurance = page.getByRole('region', { name: 'Assurance of supply' });
 	const reliability = assurance.getByTestId('reliability-table');
 	await expect(reliability.getByRole('rowheader')).toHaveText(['Upper farm', 'Lower farm']);
@@ -29,6 +31,7 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await expect(grid.getByRole('caption')).toContainText('Upper farm');
 
 	// The water account moved to River & reserve (issue #17): the Runs page links there for this run.
+	await page.goBack();
 	await page.locator('#res-river').getByRole('link', { name: 'River & reserve for this run' }).click();
 	await expect(page).toHaveURL(/[?&]tab=river&run=/);
 	const account = page.getByRole('region', { name: 'Water account' });

@@ -1,5 +1,7 @@
 # The catchment workspace (UI)
 
+What each screen is and does. How to design, build and test a screen (process, layout rules, reusable pieces) is in [design/ui-playbook.md](./design/ui-playbook.md).
+
 ## App shell and account menu
 
 Every signed-in page sits in one frame (`lib/components/layout/AppShell.svelte`,
@@ -114,7 +116,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, River & reserve, Runs & results, Dams, Compare runs, Scenarios, Allocations),
+first): **Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -395,8 +397,10 @@ put the results first; its first screen follows board A1 of the redesign
   supply bands (`network/supplyColour.ts`: amber below `SUPPLY_TARGET`, red
   below `LOW_SUPPLY`, with a key; a farm with no demand says "no demand"
   and goes last). A farm's name opens its [farm drawer](#farm-drawer)
-  (`farmDrawerHref`), unless it has left the model since the run. Its own
-  chunk (it waits for the run's record anyway).
+  (`farmDrawerHref`), unless it has left the model since the run. Beside its
+  heading, **More on Units & supply** opens [Units & supply](#units--supply)
+  for that run (`supplyHref`, `supply/links.ts`). Its own chunk (it waits for
+  the run's record anyway).
 - **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
   the Summary keeps only the **Dams today** card (which links there) and the
   one-line link below the first screen. `OverviewTab` reads the card's
@@ -471,7 +475,8 @@ put the results first; its first screen follows board A1 of the redesign
   is below `LOW_SUPPLY`, amber for a short farm above it, run warnings and
   stale data, grey for new rainfall and unplanted farms (the title always says
   what's wrong, so colour is never the only cue). Items: farms below `SUPPLY_TARGET` in the latest run (the
-  worst named, links to the run, and, while it is still a farm in the model,
+  worst named, links to [Units & supply](#units--supply) for the run with the
+  worst unit picked (`?tab=supply&run=<id>&unit=<nodeId>`), and, while it is still a farm in the model,
   a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
   the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
   (`newDataSinceRun`, links to Runs to re-run), input data older than
@@ -854,10 +859,11 @@ Portfolio](./api.md#portfolio)):
   "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
   run it again" (dashed outline). Under it, how old the figures are
   ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
-- **Units short**: "2 of 12 units short this week" (a link to the Runs tab's
-  Curtailment section of that run, over the last 7 days; the tab scrolls
-  there once the run's results render and moves focus to the table's
-  heading) and the count over 30 days; "Unknown
+- **Units short**: "2 of 12 units short this week" (a link to the
+  Curtailment panel of that run on [Units & supply](#units--supply), over the
+  last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
+  scrolls there once the run's results render and moves focus to the table's
+  heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
   until a run is published" without a publication.
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
   recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
@@ -2190,6 +2196,84 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
   editor can run it.
 
+## Units & supply
+
+`?tab=supply` (aliases `?tab=units`, `?tab=farms`), under *Outcomes* after
+River & reserve (issue #17, option A: the outcome pages; the issue's
+*Farms & supply*, named for the workspace's word for a farm node since
+#54 2a, as its Summary card *Supply by unit* and the Runs group *Units &
+users*). How much of each unit's irrigation demand one run supplied: the
+Runs & results tab's former **Units & users** group and its unit results
+table, moved here unchanged, beside a card per unit and the picked unit's
+chart (`supply/SupplyTab.svelte`, its own lazy chunk, which carries the
+moved panels: the curtailment panel with its reporting window and
+share-the-pain board, and assurance of supply, used by no other tab. Rules
+in `supply/supply.ts`, links in `supply/links.ts`). Every role that reads
+runs sees it (`TAB_GROUP.supply = 'core'`); farm names show as on Runs &
+results, to the same members, so nothing is shown to anyone who couldn't
+read it before.
+
+- **Which run.** `run=<id>` picks it; without one the newest run by
+  `createdAt`, as the Summary shows (`pickRuns`). A `run=` naming a run that
+  is gone shows the newest with a note. The run before it (by `createdAt`,
+  `previousRunOf`) is what the change is against. The header's **Run shown**
+  menu lists every run; picking one is a history entry. **Open in Runs**
+  goes to `?tab=runs&run=<id>`.
+- **Header.** The shared section header; the context line (`supplySummary`)
+  is "12 units · 3 short this week · run “Baseline”, ran today", with the
+  unit count alone before a run.
+- **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
+  Summary card's figure and its change from the previous run, from
+  `overview/latestRun.ts` `headlines`); *Units below 95 %* (N of M, every unit
+  under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
+  deficit above float noise on any of the run's last 7 days, the reporting
+  window's *Last 7 days* and the publication's own rule,
+  `backend/src/publish/recent.ts`; with the number the curtailment table asks
+  to cut; the tile links to the curtailment over those days); *Total
+  shortfall* (Mm³/a and mean m³/day of demand not supplied). The week needs
+  each unit's `deficit` series: fetched four at a time through the Runs
+  cache; "…" until they are in, with a Try again if one fails.
+- **Unit cards**, worst supplied first (`unitCards`; units without demand
+  last): the name (today's, or the run's for a unit removed since), % supplied
+  with a bar, in the Summary's and the Network's supply bands
+  (`network/supplyColour.ts`: accent at or above 95 %, amber from 70 %, red
+  below, grey without demand) with the band in words beside the %; then
+  (`cardFacts`) the mean shortfall (m³/day and Mm³/a), the demand days short
+  in the reporting window (assurance of supply, engine ≥ 0.32.0), the days
+  short in the last 7 when there were any, and the cut the curtailment table
+  asks for; links to its node on the Network (`?tab=network&node=`) and its
+  planted areas (the farm drawer, `farm=`). The whole card picks the unit:
+  `unit=<nodeId>`, a history entry, so Back returns and the link can be
+  shared; a `unit=` the run doesn't have picks the worst unit.
+- **Unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
+  panel of Runs & results, moved. Its demand, supply, share and dam size in a
+  line, then one chart at a time: **Supply vs demand** (the days the unit was
+  short shaded, from its `deficit` series) or, for a unit with a dam, **Dam
+  storage** (% of the capacity the run had, `runDamCapacity`); the **30 days
+  / 1 year / All** switch (opening on a year), Earlier / Later, and a forecast
+  run's band.
+- **Layout.** From 56rem of page width the cards are a column beside the
+  chart; with a window at least 620px tall that block is exactly the height
+  left below it (measured, less the save bar), the cards scrolling inside
+  their column and the chart filling its panel, as on Dams. Narrower, one
+  column; picking a card scrolls the chart into view.
+- **Below it**, under *Tables for this run*, the moved panels with their
+  ids: **Unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
+  table that was in the run summary; the printable report still shows it
+  there), **Curtailment** (`#res-curtailment`, with the
+  [reporting window](#report-window), `window=`) and **Assurance of supply**
+  (`#res-assurance`). Each is described under [§ Runs & results](#runs--results).
+- **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment` or
+  `#res-assurance` fragment scrolls to its panel once the run is in and holds
+  it there (`holdAnchor`), focus on its heading. An old link to one of them on
+  Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
+  its `run=` and `window=`. The portfolio's and team page's "units short this
+  week", the Summary's *Supply by unit* and its short-units card, and the
+  Runs & results link row lead here.
+- **Empty states:** no run yet (editors get **Run the model (Runs &
+  results)**; a viewer reads that an editor can run it); no units in the model
+  (a link to the Network); a run with no units (added since: run again).
+
 ## Runs & results
 
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
@@ -2228,8 +2312,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   `runs/sections.ts` in groups). Each group's name leads its pills, and each
   group is a list labelled by that name. It sticks at the top (under the
   phone bar on a phone) down the long results page, marks the section being read, wraps to about two
-  rows on a laptop, and on phones is one sideways strip. Unit detail appears
-  only when the run has farms,
+  rows on a laptop, and on phones is one sideways strip.
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to
@@ -2257,8 +2340,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
      (issue #17); they are still described below. A link to one of them here
      (`#res-reserve`, …) is sent there, and the headline's "by month of the
      year" goes there too.
-  3. **Units & users**: curtailment (led by the share-the-pain board, with
-     the other water users and the EWR sites tables), unit detail.
+  3. **Units & users**: one row (`#res-units`, menu entry **On Units &
+     supply**) linking to [Units & supply](#units--supply) for the shown run
+     (`?tab=supply&run=<id>`). Its panels (curtailment, led by the
+     share-the-pain board, with the other water users and the EWR sites
+     tables; assurance of supply; unit detail) and the summary's per-unit
+     table moved there (issue #17); they are still described below. A link to
+     one of them here (`#res-curtailment`, …) is sent there.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
@@ -2357,7 +2445,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   same words (compare: one label when both runs agree, else "run A …, run B
   …"). When the parameters came from Fit automatically, the fit's validation
   scores sit beside the fit's own score under **Where the parameters came
-  from** (below). Below them is the per-farm table: sortable, in network
+  from** (below). The per-unit table below them moved to
+  [Units & supply](#units--supply) (issue #17; the printable report keeps it
+  under the run summary): sortable, in network
   order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
   badge and a tinted row). The **Supplied % of demand** column has a small bar
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
@@ -2728,7 +2818,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   legacy run can be one; fetched on demand, left out with a note when it used
   another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
-  Q70 / Q90 / Q95 table. Unit detail (dam
+  Q70 / Q90 / Q95 table. Unit detail (on Units & supply since issue #17; dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
@@ -2737,9 +2827,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
-- **Assurance of supply** (`#res-assurance`, under *Units & users* after the
-  curtailment table; `reliability/AssurancePanel.svelte`, helpers in
-  `reliability/reliability.ts`, in the Runs chunk; engine ≥ 0.32.0, WP-3.4,
+- **Assurance of supply** (`#res-assurance`, on Units & supply after the
+  curtailment table, under *Units & users* on the Runs tab until issue #17;
+  `reliability/AssurancePanel.svelte`, helpers in
+  `reliability/reliability.ts`, in the Units & supply chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, water years met against the annual threshold (Settings), the
