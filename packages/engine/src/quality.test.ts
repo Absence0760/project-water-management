@@ -5,6 +5,8 @@ import {
 	areaMismatches,
 	areaMismatchWarning,
 	checkSeries,
+	FLATLINE_FLOW_HIGH_EXCEEDANCE,
+	FLATLINE_FLOW_LOW_MIN_DAYS,
 	FLATLINE_MIN_DAYS,
 	LOW_VS_CHIRPS_MIN_DAYS,
 	MAX_LISTED,
@@ -196,6 +198,31 @@ describe('checkSeries', () => {
 		});
 	});
 
+	it('flow: 14 days flag a flat stretch above the record’s Q30, lower flows need 30 (issue #46 item 17)', () => {
+		expect(FLATLINE_FLOW_HIGH_EXCEEDANCE).toBe(0.3);
+		expect(FLATLINE_FLOW_LOW_MIN_DAYS).toBe(30);
+		// 300 days varying 1–10 m³/s (Q30 ≈ 7), then a dry-season low flow of 0.004 repeated.
+		const varied = Array.from({ length: 300 }, (_, i) => 1 + ((i * 37) % 90) / 10);
+		const low = (n: number) => [...varied, ...new Array(n).fill(0.004), 2.5];
+		// 29 days of a steady low flow: a normal record, not flagged.
+		expect(checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: low(29) }).filter((c) => c.check === 'flatline')).toEqual([]);
+		expect(seriesRowFlags('flow_observed_m3s', { startDate: '2020-01-01', values: low(29) }).flatline.some(Boolean)).toBe(false);
+		// 30 days of it: flagged.
+		const [c30] = checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: low(30) }).filter((c) => c.check === 'flatline');
+		expect(c30).toMatchObject({ days: 30, examples: [{ value: 0.004, runDays: 30 }] });
+		expect(c30!.text).toMatch(/1 flat stretch of 14 or more days above the record's Q30 of \S+ m³\/s, or 30 or more at lower flows, with the same value/);
+		// A logger stuck at a high flow (above Q30) for 14 days: flagged, 13 days not.
+		const high = (n: number) => [...varied, ...new Array(n).fill(9.5), 2.5];
+		const [c14] = checkSeries('flow_logger_m3s', { startDate: '2020-01-01', values: high(14) }).filter((c) => c.check === 'flatline');
+		expect(c14).toMatchObject({ days: 14, examples: [{ value: 9.5, runDays: 14 }] });
+		expect(seriesRowFlags('flow_logger_m3s', { startDate: '2020-01-01', values: high(14) }).flatline.filter(Boolean)).toHaveLength(14);
+		expect(checkSeries('flow_logger_m3s', { startDate: '2020-01-01', values: high(13) }).filter((c) => c.check === 'flatline')).toEqual([]);
+		// Zero-flow stretches are never flat-lines, however long.
+		expect(checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: [...varied, ...new Array(200).fill(0)] }).filter((c) => c.check === 'flatline')).toEqual([]);
+		// Rain keeps its single 5-day limit, whatever the level.
+		expect(checkSeries('rain_chirps_mm', { startDate: '2021-01-01', values: [...rain(400), 0.2, 0.2, 0.2, 0.2, 0.2] }).find((c) => c.check === 'flatline')).toMatchObject({ days: 5 });
+	});
+
 	it('seriesChecks runs every present series in kind order', () => {
 		const bad = { startDate: '2020-01-01', values: [-1] };
 		expect(seriesChecks({ flow_logger_m3s: bad, rain_catchment_mm: bad }).map((c) => c.seriesKind)).toEqual(['rain_catchment_mm', 'flow_logger_m3s']);
@@ -253,7 +280,8 @@ describe('seriesRowFlags', () => {
 	});
 
 	it('a day can carry more than one flag (a flat stretch of an impossible negative value)', () => {
-		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
+		// A negative flow is never above the record's Q30, so the low-flow limit applies.
+		const n = FLATLINE_FLOW_LOW_MIN_DAYS;
 		const v: (number | null)[] = new Array(n).fill(-0.5);
 		const flags = seriesRowFlags('flow_logger_m3s', { startDate: '2021-01-01', values: v });
 		expect(flags.negative.every(Boolean)).toBe(true);
