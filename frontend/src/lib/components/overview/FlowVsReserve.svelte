@@ -7,6 +7,10 @@
 	// through the Runs tab's cache, so opening the run there next draws at once.
 	// With `fill` the chart takes the height its panel is given (the Summary's
 	// first screen fits the window, issue #17 A1) instead of a fixed one.
+	// River & reserve shows the same chart, larger (river/RiverTab.svelte),
+	// with the Runs tab's old controls turned on: the m³/s ↔ m³/day switch
+	// (`units`) and Earlier / Later by the window picked (`pannable`). The
+	// shaded days are dates from the shortfall series, so they hold in both units.
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -23,7 +27,10 @@
 		runId,
 		refs,
 		forecastFrom = null,
-		fill = false
+		fill = false,
+		more = null,
+		units = false,
+		pannable = false
 	}: {
 		projectId: string;
 		runId: string;
@@ -33,6 +40,12 @@
 		forecastFrom?: string | null;
 		/** Fill the panel's height (its parent sizes it). */
 		fill?: boolean;
+		/** A link beside the heading (the Summary's "More on River & reserve"). */
+		more?: { href: string; label: string } | null;
+		/** The m³/s ↔ m³/day switch (River & reserve; the Summary shows m³/s only). */
+		units?: boolean;
+		/** Earlier / Later through the record, by the window picked, and Shift+drag (River & reserve). */
+		pannable?: boolean;
 	} = $props();
 
 	const SLOTS = [
@@ -74,7 +87,8 @@
 			});
 	});
 
-	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
+	let unit = $state<'m³/s' | 'm³/day'>('m³/s');
+	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', unit).values;
 	const series = $derived(ewrChartSeries(flows, conv));
 	const band = $derived(forecastBand(forecastFrom));
 	const shade = $derived(flows.shortfall ? belowReserve(flows.shortfall) : []);
@@ -111,8 +125,18 @@
 	const height = $derived(fill ? fillH : FIXED_H);
 </script>
 
+{#snippet unitToggle()}
+	<span class="seg" role="group" aria-label="Flow units">
+		<button type="button" class="btn btn-sm" aria-pressed={unit === 'm³/s'} onclick={() => (unit = 'm³/s')}>m³/s</button>
+		<button type="button" class="btn btn-sm" aria-pressed={unit === 'm³/day'} onclick={() => (unit = 'm³/day')}>m³/day</button>
+	</span>
+{/snippet}
+
 <section class="panel flow" class:fill aria-labelledby="flow-h" aria-busy={loading}>
-	<h2 id="flow-h">Flow vs reserve</h2>
+	<div class="head">
+		<h2 id="flow-h">Flow vs reserve</h2>
+		{#if more}<a class="small" href={more.href}>{more.label}</a>{/if}
+	</div>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
@@ -121,7 +145,7 @@
 				<div bind:this={fig}>
 					<LineChart
 						title="EWR vs simulated outflow"
-						unit="m³/s"
+						{unit}
 						{height}
 						{series}
 						{shade}
@@ -129,7 +153,8 @@
 						bind:log
 						recentDays={FLOW_OPEN_DAYS}
 						windows={FLOW_WINDOWS}
-						pannable={false}
+						{pannable}
+						toolbar={units ? unitToggle : undefined}
 						{band}
 						{caption}
 					/>
@@ -140,8 +165,22 @@
 </section>
 
 <style>
-	.flow h2 {
+	.head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
 		margin: 0 0 0.25rem;
+	}
+	/* A 24 px target (WCAG 2.5.8). */
+	.head a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+	}
+	.flow h2 {
+		margin: 0;
 		font-size: 1.05rem;
 	}
 	.flow.fill {

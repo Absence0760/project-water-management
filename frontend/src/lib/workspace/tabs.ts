@@ -24,6 +24,8 @@ export const TAB_GROUP = {
 	series: 'core',
 	settings: 'inputs',
 	runs: 'core',
+	// One run's river against its EWR (issue #17, option A): the Runs tab's River & Reserve group, moved.
+	river: 'core',
 	// Each dam's level and storage in the latest run (issue #17 option A · Outcomes): anyone who can read runs.
 	dams: 'core',
 	// Two runs side by side (the /compare page's view, issue #17): anyone who can read runs.
@@ -52,6 +54,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	series: 'Data',
 	settings: 'Settings & calibration',
 	runs: 'Runs & results',
+	river: 'River & reserve',
 	dams: 'Dams',
 	compare: 'Compare runs',
 	scenarios: 'Scenarios',
@@ -133,7 +136,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  * `?tab=<id>`.
  */
 export const NAV_SECTIONS = [
-	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
 	{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];

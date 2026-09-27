@@ -70,6 +70,7 @@
 		 * Earlier / Later buttons as the non-drag route (shown once there is
 		 * somewhere to move to). A plain drag still draws a box to zoom into,
 		 * as on every chart. On by default; `false` opts a daily chart out.
+		 * With `windows`, Earlier / Later step by the whole window picked.
 		 */
 		pannable?: boolean;
 		/**
@@ -292,10 +293,16 @@
 		});
 	}
 
-	/** Earlier / Later: move by half the visible window. */
+	/**
+	 * Earlier / Later: move by half the visible window, or, on a chart with
+	 * `windows`, by the whole window (30 days, a year), keeping that window's
+	 * button pressed.
+	 */
 	function step(dir: -1 | 1) {
 		if (!plot || !view) return;
-		plot.setScale('x', panWindow(view.min, view.max, (dir * (view.max - view.min)) / 2, dataLo, dataHi));
+		const next = panWindow(view.min, view.max, (dir * (view.max - view.min)) / (windows?.length ? 1 : 2), dataLo, dataHi);
+		if (windows?.length && activeWindow !== null) pickedView = next;
+		plot.setScale('x', next);
 	}
 
 	/** Tints each `shade` range over the full plot height, a day wide at each end. */

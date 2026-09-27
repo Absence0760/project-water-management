@@ -26,11 +26,11 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
 
 /** Project workspace tabs a guide can point at (`?tab=`). */
-export type TabId = (typeof SETUP_TABS)[number] | 'compare';
+export type TabId = (typeof SETUP_TABS)[number] | 'compare' | 'river';
 
 /** Their names, the workspace's own (lib/workspace/tabs.ts), so help can't drift from a rename. */
 export const TAB_TITLES: Record<TabId, string> = Object.fromEntries(
-	[...SETUP_TABS, 'compare'].map((id) => [id, TAB_LABELS[id as TabId]])
+	[...SETUP_TABS, 'compare', 'river'].map((id) => [id, TAB_LABELS[id as TabId]])
 ) as Record<TabId, string>;
 
 export const DIAGRAM_IDS = [
@@ -677,12 +677,16 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which units fell short, the fit when there is observed flow), the headline figures and the per-unit table. Units under 95 % supplied are flagged, with a small bar beside each unit’s %.',
-							'**River & Reserve**: Reserve compliance by month (with a rule table), EWR against outflow, EWR by month, and the uncertainty bands on those findings.',
+							'**River & Reserve**: a link to the **River & reserve** page for the same run, where the river’s results now are (see below).',
 							'**Units & users**: **Curtailment** (each unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]), then **Unit detail**: dam storage and supply against demand, per unit.',
 							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, **Calibration** with **Where the parameters came from**, the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
 							'**Dig deeper**: **Self-checks** (whether each unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
 						]
+					},
+					{
+						type: 'p',
+						text: '**River & reserve**, under *Outcomes* in the sections, is the river’s page for one run (the newest, or pick another from its **Run** menu; the Summary’s flow chart links there too). Four tiles: how often the reserve was met (days at the outflow gauge, and the Reserve rule months with a rule table), the days below it and how many in an average year, the mean simulated outflow and its share of natural flow, and the worst month, each with its change from the run before. Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the reserve shaded, beside the days below the reserve each water year. Below them: Reserve compliance by month (with a rule table), EWR by month, the uncertainty bands on those findings, the outcome matrix, the seasonal outlook and the water account.'
 					},
 					{
 						type: 'note',
