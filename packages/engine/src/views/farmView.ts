@@ -8,6 +8,7 @@
 // a run; the frontend (WP-2.6) formats them. Volumes are m³ and m³/day,
 // fractions 0–1, dates ISO 'YYYY-MM-DD', months 'YYYY-MM'. Nothing here
 // names or counts another farm except FarmContext's anonymised counts.
+import type { NoticeText } from './notice';
 
 /** Totals over a window of days (inclusive). */
 export interface WindowTotals {
@@ -163,13 +164,13 @@ export interface FarmView {
 			/** The WUA's percentage, 0–100 (run_publication.restriction_pct), not a fraction. */
 			pct: number | null;
 			/**
-			 * The WUA's notice as it wrote it, in English and in Afrikaans (either
-			 * may be null). The page shows the one in the reader's language, or the
-			 * other with a "not translated" line (design §7), so a language switch
-			 * or the saved copy on the phone needs no second request.
+			 * The WUA's notice as it wrote it, by language code (`{}` when it
+			 * wrote none). The page shows the one in the reader's language, or
+			 * another with a "not translated" line (pickNotice, design §7), so a
+			 * language switch or the saved copy on the phone needs no second
+			 * request.
 			 */
-			noticeEn: string | null;
-			noticeAf: string | null;
+			notice: NoticeText;
 		};
 		/** E10: when the WUA expects to publish next; null if not set. */
 		nextExpectedOn: string | null;

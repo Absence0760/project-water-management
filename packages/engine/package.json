@@ -10,7 +10,8 @@
 		"./calendar": "./src/calendar.ts",
 		"./dws": "./src/dws.ts",
 		"./provenance": "./src/seriesProvenance.ts",
-		"./testing": "./src/testing/index.ts"
+		"./testing": "./src/testing/index.ts",
+		"./testing/language": "./src/testing/testLanguage.ts"
 	},
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",
