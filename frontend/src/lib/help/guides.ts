@@ -159,7 +159,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the farms and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the farms and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**. On a phone the actions sit under the name in full-width rows, with **Add data** and **Run model** always side by side at the end.'
 					},
 					{
 						type: 'p',
