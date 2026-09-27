@@ -740,7 +740,8 @@ run "dkim_uses_global_domain_outside_opt_in_regions" {
   command = plan
 
   variables {
-    aws_region = "eu-west-1"
+    aws_region                = "eu-west-1"
+    data_outside_south_africa = true
   }
 
   assert {
@@ -751,6 +752,17 @@ run "dkim_uses_global_domain_outside_opt_in_regions" {
     condition     = aws_vpc_endpoint.ses.service_name == "com.amazonaws.eu-west-1.email"
     error_message = "The SES endpoint follows var.aws_region."
   }
+}
+
+# The privacy notice promises storage in South Africa: another region is refused unless deliberately allowed.
+run "refuses_a_region_outside_south_africa_by_default" {
+  command = plan
+
+  variables {
+    aws_region = "eu-west-1"
+  }
+
+  expect_failures = [var.aws_region]
 }
 
 run "rejects_invalid_dmarc_policy" {

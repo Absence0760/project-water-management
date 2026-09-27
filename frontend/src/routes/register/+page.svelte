@@ -95,9 +95,9 @@
 				: 'Water Management'
 	);
 
-	// "By signing up, you accept the {terms} and {privacy}.",
+	// "By creating an account, you agree to the {terms} and {privacy}.",
 	// split around its two links (t leaves a placeholder it isn't given as written).
-	const agreeParts = $derived(t('By signing up, you accept the {terms} and {privacy}.').split(/(\{terms\}|\{privacy\})/));
+	const agreeParts = $derived(t('By creating an account, you agree to the {terms} and {privacy}.').split(/(\{terms\}|\{privacy\})/));
 
 	// Keep ?next= across to sign-in, but not the invite token.
 	const next = page.url.searchParams.get('next');
@@ -269,16 +269,17 @@
 			/>
 		</div>
 
+		<!-- Directly above the button that makes the account, so the terms are seen before they are accepted
+		     (a notice below the button is weak evidence of assent). -->
+		<p class="agree">
+			{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
+		</p>
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>
 			{busy ? t('Creating…') : inviteState === 'ok' ? t('Create account and join') : t('Create account')}
 		</button>
 
 	</form>
 	{#snippet footer()}
-		<!-- The terms bind only if they are shown before the account is made. -->
-		<p class="agree">
-			{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
-		</p>
 		{t('Already registered?')} <a href={loginHref}>{t('Sign in')}</a>
 	{/snippet}
 </AuthCard>
@@ -299,7 +300,7 @@
 		margin-top: 0.75rem;
 	}
 	.agree {
-		margin: 0 0 0.25rem;
+		margin: 0;
 		font-size: 0.8rem;
 		color: var(--text-muted);
 	}

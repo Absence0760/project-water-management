@@ -26,7 +26,8 @@
 		{ id: 'law', label: '15. Governing law and disputes' },
 		{ id: 'changes', label: '16. Changes to these terms' },
 		{ id: 'general', label: '17. General' },
-		{ id: 'contact', label: '18. Contact' }
+		{ id: 'notices', label: '18. Notices' },
+		{ id: 'contact', label: '19. Contact' }
 	];
 </script>
 
@@ -68,8 +69,15 @@
 			Decisions about irrigation, dams, licence applications, the ecological reserve or anything else remain yours and those of
 			the qualified professionals advising you. Check the results against your own knowledge and data before relying on them.
 		</li>
-		<li>A sign-off in the service records who reviewed a run; it is that person’s professional statement, not ours.</li>
+		<li>
+			A sign-off in the service records who reviewed a run; it is that person’s professional statement, not ours. The professional
+			registration shown with it is typed in by the person signing: we don’t check it against the professional body’s register.
+		</li>
 	</ul>
+	<p>
+		Reports the service produces carry their own disclaimer, which says the same thing for anyone a report is shared with,
+		including that results are not an authorisation or licence under the National Water Act, 1998 (sections 27 and 41).
+	</p>
 
 	<h2 id="accounts">4. Accounts</h2>
 	<ul>
@@ -176,9 +184,10 @@
 	<p>
 		These terms are governed by the laws of the Commonwealth of Virginia, United States, without regard to its conflict-of-laws
 		rules. Before either of us starts legal proceedings, the one with a concern must write to the other describing it and proposing
-		a solution (to us at the address in section 18, to you at your account’s email address), and we will both try in good faith to
+		a solution (to us at the address in section 19, to you at your account’s email address), and we will both try in good faith to
 		resolve it for at least 30 days. If that fails, the dispute must be brought in the state or federal courts in Virginia. There is
-		no arbitration and no class-action waiver.
+		no arbitration and no class-action waiver. To the extent the law allows, a claim must be brought within one year after it
+		arises.
 	</p>
 	<p>
 		Nothing in these terms takes away rights you have under the mandatory law of the country you live in, such as consumer or
@@ -197,10 +206,18 @@
 		These terms and the privacy notice are the whole agreement between us about the service. If a part is found unenforceable, the
 		rest still applies. Not enforcing a right is not giving it up. You may not transfer this agreement without our consent; we may
 		transfer it to whoever takes over the service, and will tell you. Neither of us is responsible for delays caused by events
-		beyond reasonable control. These terms are written in English, and the English version is the one that applies.
+		beyond reasonable control. We are independent of each other: these terms create no partnership, employment or agency. You may
+		not use the service in breach of the export or sanctions laws that apply to you or to us. These terms are written in English,
+		and the English version is the one that applies.
 	</p>
 
-	<h2 id="contact">18. Contact</h2>
+	<h2 id="notices">18. Notices</h2>
+	<p>
+		We send notices to the email address on your account; you send them to the address in section 19. A notice counts as received
+		the day after it is sent, unless the sender learns it wasn’t delivered.
+	</p>
+
+	<h2 id="contact">19. Contact</h2>
 	<p>
 		Jared Howard<br />
 		<a href="mailto:jared@jaredhoward.com">jared@jaredhoward.com</a>

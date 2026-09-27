@@ -11,7 +11,7 @@
 		{ id: 'who', label: '1. Who we are' },
 		{ id: 'roles', label: '2. Who decides about your information' },
 		{ id: 'what', label: '3. What we collect' },
-		{ id: 'why', label: '4. Why we use it' },
+		{ id: 'why', label: '4. Why we use it, and whether you must give it' },
 		{ id: 'sharing', label: '5. Who can see it' },
 		{ id: 'where', label: '6. Where it is kept' },
 		{ id: 'retention', label: '7. How long we keep it' },
@@ -108,6 +108,13 @@
 		</table>
 	</div>
 	<p>We do not sell personal information, use it for advertising, or make decisions about you by automated means alone.</p>
+	<h3>Do you have to give it?</h3>
+	<p>
+		No law requires you to give us personal information, and using the service is voluntary. An email address, a name and a
+		password are needed to create an account: without them we can’t give you one. Everything else is up to you or the organisation
+		that invited you; leaving it out only means the service can show you less (for example, no alert emails without an address to
+		send them to).
+	</p>
 
 	<h2 id="sharing">5. Who can see it</h2>
 	<ul>
@@ -133,8 +140,14 @@
 	<h2 id="where">6. Where it is kept</h2>
 	<p>
 		The service runs on Amazon Web Services in its Cape Town region (af-south-1), so your information is stored in South Africa.
-		We run the service from the United States, so when we operate or support it, information may be accessed from there. We do
-		that only as needed, under the safeguards in section 9, and on the terms of this notice (POPIA s72).
+		Two AWS services that carry traffic to it (the content-delivery network and its firewall) work worldwide, but they only pass
+		requests through; they don’t store your information.
+	</p>
+	<p>
+		We run the service from the United States, so when we operate or support it, information may be accessed from there. POPIA
+		allows this (s72): it is needed to provide the service you asked for (s72(1)(c) and (d)), and Amazon Web Services is bound by
+		a written agreement to protect it to a standard at least as high as POPIA’s (s72(1)(a)). We access it only as needed, under the
+		safeguards in section 9.
 	</p>
 
 	<h2 id="retention">7. How long we keep it</h2>
@@ -145,25 +158,40 @@
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
-			as the project exists, as its audit trail. Deleting a project deletes them.
+			as the project exists, as its audit trail. Deleting a project deletes them. Model runs are pruned as a project goes on: its
+			newest 12 published results and 20 unpublished runs are kept.
 		</li>
+		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>
 		<li><strong>Backups:</strong> kept for up to 35 days, so deleted information remains in them until they expire.</li>
 	</ul>
 	<p>
 		When your account is deleted, your name is removed from the project history (it reads “Deleted user”). A few things are kept
 		because they are the project’s record rather than yours: a note’s text, and a sign-off’s typed name and registration.
 	</p>
+	<p>
+		<strong>One exception.</strong> If your account created something a project relies on as evidence (the project itself, a
+		model run, a scenario or licence application, an import, or a run put forward as evidence), we can’t simply delete the account,
+		because that would break the project’s record. We will then agree with you and the organisation responsible for the project
+		what happens to that record (for example, removing your name from it or handing it to a colleague) before the account is
+		deleted, and tell you how long that will take.
+	</p>
 
 	<h2 id="cookies">8. Cookies and your browser</h2>
 	<p>We use two cookies, both strictly necessary, so there is nothing to opt into:</p>
 	<ul>
 		<li><code>wm_session</code>: keeps you signed in (up to 7 days).</li>
-		<li><code>wm_device</code>: remembers that this browser proved it can reach your inbox, so someone guessing your password can’t lock you out.</li>
+		<li><code>wm_device</code>: remembers, for up to 180 days, that this browser proved it can reach your inbox, so someone guessing your password can’t lock you out.</li>
 	</ul>
-	<p>
-		Your browser also keeps your language choice and a few display settings (such as a collapsed panel) on your device. None of
-		this leaves your device or is used to track you.
-	</p>
+	<p>Your browser also keeps some things on your device, in its own storage:</p>
+	<ul>
+		<li>your language choice and a few display settings (such as a collapsed panel);</li>
+		<li>
+			on a farmer’s phone, a copy of the farm’s latest figures, so the farm page opens without a signal; it is removed after 30
+			days unused, and the farm page’s “Don’t keep a copy on this phone” turns it off;
+		</li>
+		<li>after you sign up, the address the confirmation link went to, so the sign-in page can show it, until you sign in or close the tab.</li>
+	</ul>
+	<p>None of this is sent to anyone else or used to track you.</p>
 
 	<h2 id="security">9. How we protect it</h2>
 	<p>
@@ -181,7 +209,7 @@
 			everything we hold about you, as a file, straight away.
 		</li>
 		<li><strong>Correct it.</strong> You can change your name and settings on your account page; ask the project’s owner, or us, for anything else.</li>
-		<li><strong>Have it deleted.</strong> Email us from your account’s address and we will delete the account as described in section 7.</li>
+		<li><strong>Have it deleted.</strong> Email us from your account’s address and we will delete the account as described in section 7 (including its one exception).</li>
 		<li><strong>Object</strong> to our using it for a legitimate interest, or <strong>stop alert emails</strong> at any time from any alert email or your alert settings.</li>
 	</ul>
 	<p>

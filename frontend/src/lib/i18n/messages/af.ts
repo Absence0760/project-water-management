@@ -867,6 +867,8 @@ export const af: Catalogue = {
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
+	// The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.
+	'c3395d0e': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy, lees hulle en registreer weer.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
@@ -1127,8 +1129,8 @@ export const af: Catalogue = {
 	'4b568eda': 'die projek {name}',
 	// the team {name}
 	'bbe4f51e': 'die span {name}',
-	// By signing up, you accept the {terms} and {privacy}.
-	'e463bcac': 'Deur te registreer, aanvaar jy die {terms} en die {privacy}.',
+	// By creating an account, you agree to the {terms} and {privacy}.
+	'db2110ec': 'Deur ’n rekening te skep, aanvaar jy die {terms} en die {privacy}.',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
 	// The two passwords don’t match. Type the same password in both.
@@ -1247,6 +1249,8 @@ export const af: Catalogue = {
 	'60cadb22': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen plaas se syfers nie.',
 	// A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.
 	'e4b3fdc4': '’n Model van die opvanggebied, nie metings nie; dit kan verkeerd wees. Hierdie skakel werk totdat dit verval of teruggetrek word.',
+	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
+	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// We’ve sent a new link to {email}.
 	'c77d6547': 'Ons het ’n nuwe skakel na {email} gestuur.',
 	// your address

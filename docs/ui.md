@@ -144,9 +144,7 @@ column, and footer links. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in
-`AuthCard`), and in the sign-up form's own sentence ("By signing up, you
-accept the Terms of use and Privacy notice", in its footer, where the
-**Legal** nav is left off). Drafts before counsel review: what they assume
+`AuthCard`), and in the sign-up form's own sentence, directly above its button ("By creating an account, you agree to the Terms of use and Privacy notice"). Drafts before counsel review: what they assume
 and what is open is in [legal-status.md](./legal-status.md).
 The **Effective** line under each title is `legalEffective()` of the
 engine's `LEGAL_VERSION` (`packages/engine/src/legal.ts`), the same

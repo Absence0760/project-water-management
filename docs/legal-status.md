@@ -12,15 +12,36 @@ client goes live. Not customer-facing.
 
 - **Operator / responsible party for accounts:** Jared Howard, sole
   proprietor, Virginia, US. Also named as the POPIA **information officer**.
-- **Contact and legal notices:** `jared@jaredhoward.com`.
+- **Contact and legal notices:** `jared@jaredhoward.com`, **email only, no
+  postal address** (the operator's decision, 2026-09-27, as on the
+  `jaredhoward` site). POPIA s18(1)(a) asks for the responsible party's
+  address: counsel to confirm that an email address is enough, or which
+  address to publish. The Regulator's registration (information-officer
+  pack) takes a postal address privately; that isn't published.
 - **Roles (POPIA):** the organisation using the service (WUA, consultancy)
   is the responsible party for what it puts into its projects; we are its
   operator (s20–21). Accounts are ours.
 - **Hosting:** AWS `af-south-1` (Cape Town): the privacy notice says data is
-  stored in South Africa. **If the deploy uses another region, change §6 of
-  the notice first** (infra `aws_region` has no default on purpose).
+  stored in South Africa, and Terraform now enforces it: any other
+  `aws_region` fails the plan unless `data_outside_south_africa = true`,
+  which is only for after §6 is rewritten (infra/README.md § Region).
 - **Cross-border:** the operator is in the US; access from there is
-  disclosed under POPIA s72.
+  disclosed under POPIA s72, naming the gateways relied on: s72(1)(c)/(d)
+  (needed to provide the service) and s72(1)(a) (AWS's binding agreement).
+  Counsel to confirm which gateway fits an operator that is itself offshore.
+- **Deletion:** on emailed request, with the one exception disclosed in
+  Privacy §7: an account that created project evidence is kept until the
+  person and the responsible organisation agree what happens to that record
+  (`docs/security.md`, the restrict foreign keys). Self-service deletion
+  stays open (issue #48).
+- **Assent:** "By creating an account, you agree to the Terms of use and
+  Privacy notice", directly above the sign-up button (the US review: a
+  notice below the button is weak evidence of assent), and the account
+  records the version (087).
+- **Third parties who accepted nothing:** the public share page carries the
+  model-results disclaimer (not an authorisation under the National Water
+  Act) and links to both pages; invitation emails link the privacy notice
+  (POPIA s18, notice at collection).
 - **Fees:** none; Terms §8 commits to notice and agreement before any fee.
 - **Liability cap:** greater of 12 months' fees or US $100 (estate standard).
   Indemnity one-way (user → operator). Governing law Virginia, courts in
@@ -33,9 +54,20 @@ client goes live. Not customer-facing.
 
 ## Open before the first client goes live
 
-- [ ] **Counsel review** of both pages: South African counsel for POPIA and
-  the Consumer Protection Act's reach over a free service to SA users; US
-  counsel for the Virginia terms.
+- [ ] **Counsel review** of both pages. Two pre-counsel reviews ran on
+  2026-09-27 (a US terms review and a POPIA audit, reports in `reviews/`,
+  git-ignored); their fixes are in. The questions left for counsel:
+  1. Does South Africa's Consumer Protection Act reach a **free** service at
+     all? If not, what is the delict exposure to people who accepted no
+     terms (share-link viewers, readers of a forwarded report)?
+  2. Is the exclusive Virginia-courts clause enforceable against South
+     African farmers and WUAs, given the savings clause for local rights?
+  3. Must the s21 operator agreement and the s55 registration exist before
+     the notice describes the roles (it describes them as they will be)?
+  4. Is an email address enough as the responsible party's address (s18)?
+  5. Should Terms §3 carry the same National Water Act citation as the
+     report disclaimer (it now refers to it), and should both go through
+     the disclaimer review together (docs/legal/disclaimer-review.md)?
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):

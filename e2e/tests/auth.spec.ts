@@ -36,7 +36,7 @@ test('sign-up asks for the password twice, emails a link and goes to sign-in; th
 	await expect(notice).toContainText('You can’t sign in until your address is confirmed.');
 	await expect(page.getByLabel('Email')).toHaveValue(email);
 	await expectNoViolations(page);
-	// "By signing up, you accept the Terms of use and Privacy notice": the account records which (087).
+	// "By creating an account, you agree to the Terms of use and Privacy notice": the account records which (087).
 	expect(await termsAccepted(email)).toEqual({ version: LEGAL_VERSION, at: expect.any(Date) });
 
 	// Signing in before confirming says so, and offers the link again.

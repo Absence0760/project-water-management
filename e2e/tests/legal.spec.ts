@@ -55,8 +55,12 @@ test('the landing footer, the sign-in pages and the sign-up form link both pages
 	await expect(page.getByRole('navigation', { name: 'Legal' }).getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
 
 	await page.goto('/register');
-	const agree = page.getByText('By signing up, you accept the');
-	await expect(agree).toHaveText('By signing up, you accept the Terms of use and Privacy notice.');
+	const agree = page.getByText('By creating an account, you agree to the');
+	await expect(agree).toHaveText('By creating an account, you agree to the Terms of use and Privacy notice.');
+	// Above the button that makes the account, so it is read before the click that accepts it.
+	const agreeBox = (await agree.boundingBox())!;
+	const button = (await page.getByRole('button', { name: 'Create account' }).boundingBox())!;
+	expect(agreeBox.y + agreeBox.height).toBeLessThanOrEqual(button.y);
 	await expect(agree.getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
 	await expect(agree.getByRole('link', { name: 'Privacy notice' })).toHaveAttribute('href', '/privacy');
 	await expect(page.getByRole('navigation', { name: 'Legal' })).toHaveCount(0);

@@ -6,8 +6,24 @@ variable "aws_region" {
     be enabled on the account first; us-east-1 is the cheaper fallback. See
     infra/README.md § Region. The CloudFront certificate, WAF and CloudFront
     alarm are always in us-east-1 regardless.
+
+    The privacy notice (frontend/src/routes/privacy, §6) tells users their
+    data is stored in South Africa, so any other region is refused unless
+    data_outside_south_africa is set, which must only happen together with
+    rewriting that section (and the client's agreement: POPIA s72).
   EOT
   type        = string
+
+  validation {
+    condition     = var.aws_region == "af-south-1" || var.data_outside_south_africa
+    error_message = "The privacy notice says data is stored in South Africa (af-south-1). To deploy elsewhere, change the notice's §6 first, then set data_outside_south_africa = true."
+  }
+}
+
+variable "data_outside_south_africa" {
+  description = "Deliberately host outside af-south-1 (Cape Town). Only with the privacy notice's §6 rewritten to say where data is stored, and the client's agreement (POPIA s72). docs/legal-status.md."
+  type        = bool
+  default     = false
 }
 
 variable "domain_name" {
