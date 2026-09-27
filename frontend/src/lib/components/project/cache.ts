@@ -1,4 +1,4 @@
-// Last-seen member and team lists per project for the Overview tab's panels,
+// Last-seen member and team lists per project for the Project page's panels,
 // so switching back to the tab renders the final layout on the first frame
 // (then refreshes quietly) instead of a loading state that jumps once data
 // arrives. (Series and runs come from the project page.) Module scope = one

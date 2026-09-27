@@ -44,8 +44,12 @@ section it belongs to, with the example that taught it.
 5. **Old links keep working.** `?tab=` values, overlay params and `#res-…`
    fragments are in emails, bookmarks, help and other pages. When a view
    moves, redirect its old URL (the Runs tab redirects moved `#res-…`
-   anchors to River & reserve and Units & supply) and grep the app, the
-   help guides, `docs/` and `backend/src/alerts` for links to repoint.
+   anchors to River & reserve and Units & supply; the Summary sends its
+   panels' heading ids, `#members-h` and the rest, to the Project page) and
+   grep the app, the help guides, `docs/` and `backend/src/alerts` for links
+   to repoint. Grep the prose too: "on the Summary tab" in History's
+   restore notes and the team pages' empty states pointed at panels that
+   had moved.
 6. **One piece, one push**, with its tests and docs, and say exactly which
    tests ran (CI is off while Actions billing is paused).
 
@@ -75,7 +79,13 @@ section it belongs to, with the example that taught it.
   with a readable text column (~75ch).
 - **Cards or list on one side, the picked item's detail on the other.** Dams
   and Units & supply: a scrolling column of items (worst first), the picked
-  item's chart filling the rest, the pick in the URL so Back works.
+  item's chart filling the rest, the pick in the URL so Back works. When
+  the items are genuinely tabular (Data: last date, period, % missing,
+  coverage, per-row actions), keep the table and stack it over the chart
+  instead: the table capped at a share of the fitted height (55 %) with its
+  rows scrolling in `.table-wrap`, the chart filling the rest. Ten specs
+  leaned on the Data table's rows; cards would have lost the columns and
+  broken them for nothing.
 - **Design for N.** Assume 30 crops, 40 units, 10 dams, 20 runs and names
   three times longer than the seed's. A card per item works for a handful;
   past that use a compact row list that scrolls inside its column, so the
@@ -84,6 +94,13 @@ section it belongs to, with the example that taught it.
 - **Container queries, not viewport media queries**, for anything inside
   the app frame: the sidebar takes 240 px, so the viewport lies about the
   space. Name the container (`container: dams-page / inline-size`).
+  The root font size is **14 px** (`app.css`), so `1rem` in a query is
+  14 px: Transfers' first `70rem` breakpoint matched a 1016 px column it was
+  meant to miss. Work the pixels out at 14 px.
+- **Fit a wide table by stacking, not by scrolling sideways.** Transfers at
+  1280 hid Priority, On and Remove off the right edge. Stacking From over To
+  in one cell, letting the number headers wrap, and a short "On" header made
+  every column fit; side by side only where the container is wide enough.
 - **Lay drawings out to their box; don't zoom text.** Scaling the Network
   drawing made labels huge; spacing columns and rows to the box, with a cap,
   looked right.
@@ -98,9 +115,9 @@ section it belongs to, with the example that taught it.
   rendered at a time. Below 900 px a slim bar with a Menu; every layout
   stacks to one column with no sideways scroll, sheets go full screen. Keep
   the sidebar short enough to fit a 960 px-high window: with the 15 sections
-  an owner sees it measured 1033 px until the rows went to 34 px, the section
-  gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare
-  now, room for one more row). Below that height the slot scrolls on its own
+  an owner saw it measured 1033 px until the rows went to 34 px, the section
+  gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare;
+  the Project entry then took one row, leaving room for one more). Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
   entry re-runs that spec.
@@ -113,6 +130,10 @@ section it belongs to, with the example that taught it.
   to the items that matter most (largest area, most demand) and group the
   tail as one labelled "Other" that names its members. The Crops page's
   6-colour palette gave five crops the same grey.
+- **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
+  with `opacity: 0.6` and axe failed its text on contrast (no scan had a
+  disabled rule until the page got one). Tint the row and say **off** in
+  words beside its number.
 - **Categorical colour: the Crops & demand pattern.** Use it for anything
   shown as one colour per item (crops, units, runs, scenarios, sources):
   - **The palette** is the ordered token set `--series-1`, `-2`, `-3`, `-5`,
@@ -164,7 +185,11 @@ section it belongs to, with the example that taught it.
 - **Honest numbers:** a figure on an outcome page comes from the same helper
   as the same figure elsewhere (Units & supply's irrigation supplied comes
   from `overview/latestRun.ts`, the per-year reserve days from the engine's
-  `ewr_shortfall`), so two pages never disagree.
+  `ewr_shortfall`), so two pages never disagree. The same holds for a
+  status: Data's rows turned amber past 31 days on any series while the
+  sidebar badge counted driver series past 7, so "1 behind" sat beside five
+  amber rows. Now the rows, the panel head and the badge all read
+  `freshness().behind`.
 
 ## 4. Pieces to reuse
 
@@ -190,7 +215,8 @@ picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Grids menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
-with a sticky header).
+with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
+window fit, the pick in the URL).
 
 Interaction details that bit:
 
@@ -202,21 +228,32 @@ Interaction details that bit:
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
   closes the overlay rather than leaving the page.
+- **A tab that copies a list from the page must take the page's updates.**
+  Data kept its own copy of the series (`untrack(() => initial)`), so a file
+  added through the header's Add data didn't show until a reload. Sync from
+  the prop when it changes to an array that isn't the tab's own.
 
 ## 5. Testing
 
 - Every new page gets its own spec with a11y scans at desktop and phone
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
-  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`).
+  (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card (see `network-map.spec.ts`,
-  `portfolio.spec.ts`, `dams-page.spec.ts`).
+  `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
   names across page and modal cause strict-mode errors.
 - **Find things by their exact name.** "Runs" also matched "Compare runs";
   a card repeating a change's text caused duplicate matches in Compare.
+  But a badge is part of a link's name: once Data's sidebar link read "Data
+  (1 series behind)", two specs waiting for `{ name: 'Data', exact: true }`
+  timed out. Match the badge (`/^Data \(\d+ series behind\)$/`) or use
+  `/^Data/`.
+- **A click on a row lands in its middle**, which may be a control that
+  rightly ignores row picking (the CHIRPS row header holds its version
+  select). Click the row's text instead.
 - **Run the neighbours**, not only the spec for the screen: `a11y`,
   `golden-path`, `section-header`, `tabs-by-role`, `overview` and whatever
   links into the screen. `--repeat-each 5 --retries 0` on every new

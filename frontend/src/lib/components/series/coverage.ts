@@ -108,8 +108,9 @@ export function describeAge(days: number): string {
 	if (days === 0) return 'today';
 	if (days === 1) return 'yesterday';
 	if (days < 60) return `${days} days ago`;
-	if (days < 730) return `${Math.floor(days / 30.44)} months ago`;
-	return `${Math.floor(days / 365.25)} years ago`;
+	// At least 2: 60 days is under two 30.44-day months and 730 under two years, which read "1 months" / "1 years".
+	if (days < 730) return `${Math.max(2, Math.floor(days / 30.44))} months ago`;
+	return `${Math.max(2, Math.floor(days / 365.25))} years ago`;
 }
 
 export interface MergePreview {

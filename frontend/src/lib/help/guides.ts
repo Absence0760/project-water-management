@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas and **More on Units & supply** opens that page. The **Dams today** card opens the **Dams** tab. The checklist and the project’s details follow below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas and **More on Units & supply** opens that page. The **Dams today** card opens the **Dams** tab. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
 					}
 				]
 			},
@@ -143,7 +143,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
+					},
+					{
+						type: 'p',
+						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
 					},
 					{
 						type: 'p',
@@ -222,7 +226,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project.'
+						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
 					}
 				]
 			}
@@ -410,12 +414,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'Coverage per year, % missing and the last date of each series.',
+							'The table lists the series that are **behind** first: rainfall or evaporation a run reads whose data is more than a week old, the same ones the number beside **Data** counts, each marked **Behind**. Then the last date of each series, its coverage per year and % missing. Click a row (or its **View**) to chart it; the link can be shared, and Back returns to the series before.',
 							'**Data checks**: negative values, outliers, flat stretches, suspect zero rain and breaks in catchment rain’s ratio to CHIRPS, which the [[double-mass|double-mass]] chart shows by water year.',
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
-							'**Preview all data** (card header) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
+							'**Preview all data** (at the top, beside **Add data**) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
 						]
 					}
 				]
@@ -437,11 +441,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **Add transfer** and pick its source (**From**) and destination (**To**) units.',
+							'On **Transfers**, press **+ Add transfer** at the top and pick its source (**From**) and destination (**To**) units.',
 							'Tick the [[transfer-months|months]] it runs in: one toggle per month, Oct … Sep.',
 							'Enter the [[transfer-rate|maximum rate]] in m³/s, and a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
 							'With several transfers, set each one’s [[transfer-priority|priority]]: lower moves first.',
+							'Check **When water moves** under the rules: each month’s enabled rules and the most they can move in a day together, before the dams’ own limits.',
 							'Save, then run.'
 						]
 					}

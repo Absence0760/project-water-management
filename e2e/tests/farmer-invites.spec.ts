@@ -1,4 +1,4 @@
-// Farmer invites (WP-2.2, issue #27): the Overview's "Invite farmers" dialog,
+// Farmer invites (WP-2.2, issue #27): the Project page's "Invite farmers" dialog,
 // one farmer by email or many from a CSV (e2e/fixtures/farmers.csv,
 // synthetic), and an invited farmer signing up through the link and landing
 // on their own farm. e2e mails go to the backend log (MAIL_TRANSPORT=log), so
@@ -20,7 +20,7 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
 	const email = uniqueEmail('farmer-invitee');
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: /^Farmers/ });
 	await expect(panel.getByText('No farmers yet: invite them to see their own farm.')).toBeVisible();
 	await panel.getByRole('button', { name: 'Invite farmers' }).click();
@@ -67,7 +67,7 @@ test('an owner previews a CSV of farmers, row by row, before sending it', async 
 	const project = await createProject(page.request, 'Bulk-invite catchment');
 	await putModel(page.request, project.id, sampleModel());
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: /^Farmers/ });
 	await panel.getByRole('button', { name: 'Invite farmers' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Invite farmers' });

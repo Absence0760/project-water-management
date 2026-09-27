@@ -25,6 +25,7 @@ const OWNER_TABS = [
 	'Transfers',
 	'Data',
 	'Settings & calibration',
+	'Project',
 	'Applications',
 	'History'
 ];

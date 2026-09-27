@@ -122,7 +122,8 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 
 	// The Data tab follows the saved settings (in-app navigation, as a user moves between tabs).
-	await tab('Data').click();
+	// Its old rain is behind, so the section's link carries the badge's count in its name.
+	await page.getByRole('link', { name: /^Data \(\d+ series behind\)$/ }).click();
 	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
 	await expect(shaded).toHaveCount(0);

@@ -322,7 +322,7 @@ untouched.
 now answer 403 to farmers. Document this in api.md § Errors and add the role
 to § Projects.
 
-**UI.** In the Members panel (`overview/MembersPanel.svelte`), farmers are
+**UI.** In the Members panel (`project/MembersPanel.svelte`), farmers are
 listed separately as "Farmers (N)" with their linked farms. The Network tab
 shows a "2 farmers linked" chip on a farm row. Deleting a linked farm warns
 that its links go with it (the cascade).
@@ -372,7 +372,7 @@ the aggregate rule), api.md.
 ### WP-2.2 Farmer invites (single and bulk)
 
 > **Status: built** (issue #27; `034_farmer_invites.sql`,
-> `backend/src/farms/routes.ts`, `overview/InviteFarmersDialog.svelte`;
+> `backend/src/farms/routes.ts`, `project/InviteFarmersDialog.svelte`;
 > [api.md § Farmers](../api.md#farmers)). Where the build departs from the
 > plan below, and why:
 > - **`PUT /farmers/:userId` stays** (the plan's `PATCH`), and there is no

@@ -125,7 +125,7 @@ the standard "Loading…" state in the meantime
 The tabs are grouped into three sections (issue #17, option A · Results
 first): **Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
-calibration) and **Review** (Applications, History). The sections are
+calibration) and **Review** (Project, Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
@@ -178,6 +178,7 @@ wrapping at the ends (Right/Down next, Left/Up previous).
 | Transfers | `transfers` | | `lib/components/transfers/` |
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
+| Project | `project` | `details`, `members`, `sharing` | `lib/components/project/` ([§ Project](#project)) |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
 
@@ -188,7 +189,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, Data, Runs & results, Compare runs, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -203,8 +204,8 @@ This is **presentation, not access control**: RLS still lets a viewer read
 every input. A deep link to a hidden tab (`?tab=settings`, or an alias) still
 opens it, and the sections list then shows that tab in its place while it is
 open (`stripTabs`), so you can see where you are. The Summary's checklist keeps a
-hidden tab's step and its status, but as plain text rather than a link; its
-headline facts still link to their tabs (a deep link, as above). The
+hidden tab's step and its status, but as plain text rather than a link; the
+Project page's headline facts still link to their tabs (a deep link, as above). The
 per-member "choose your own tabs" preference is not built yet
 ([followups.md](./followups.md#roles-and-what-each-member-sees)); it will
 arrive through `prefs`.
@@ -270,7 +271,8 @@ role, freshness, Add data) and each tab's own header:
   on a Summary before the first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Grids** and **+ Add node**,
-  Crops' **Grids** and **+ Add crop**), **Add data** (editors), and **Run
+  Crops' **Grids** and **+ Add crop**, Transfers' **Show on the map** and
+  **+ Add transfer**, Data's **Preview all data**), **Add data** (editors), and **Run
   model** (editors; on the Summary, Network, Crops, Transfers and Settings).
   Run model starts a run with no label and opens it in Runs, through the
   same `startRun` as the new-data line's Re-run model; the Runs tab keeps its
@@ -373,13 +375,20 @@ put the results first; its first screen follows board A1 of the redesign
    side column's cards scroll inside themselves, and the page doesn't need
    scrolling to see any of it. Narrower, the columns stack and the chart is
    240 px tall; on a phone the KPIs are 2 × 2.
-3. **Below the first screen**, until the planned Project page exists: the
-   active alerts ([§ Alerts](#alerts)), the published baseline, a one-line
-   link **Dam levels for each dam → Dams** (once the latest run has dams; the
-   table moved to the [Dams](#dams) page), the setup checklist (usually the one-line "Setup
-   complete"), then **The model**: eight headline facts, project details,
-   the import record (an imported project only), recent notes
-   ([§ Notes](#notes)), team, members, farmers and share links.
+3. **Below the first screen**, compact: the active alerts
+   ([§ Alerts](#alerts)) beside the published baseline (two columns once the
+   tab is 56rem wide, a container query; stacked below that), each panel
+   unchanged; one line of links, **Dam levels for each dam → Dams** (once the
+   latest run has dams; the table moved to the [Dams](#dams) page) and
+   **Model facts, details, team and sharing → Project**; then the setup
+   checklist, the one-line "Setup complete" once every step is done. The
+   model's headline facts, project details, import record, recent notes,
+   team, members, farmers and share links moved to the [Project](#project)
+   page (2026-09-27, issue #17). A link to one of their panels' old
+   fragments on the Summary (`#details-h`, `#import-record-h`,
+   `#recent-notes-h`, `#team-h`, `#members-h`, `#farmers-h`, `#share-h`,
+   and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
+   sent there, replacing the history entry so Back skips it.
 
 - **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
   record is in: the Runs tab's *EWR vs simulated outflow* chart
@@ -494,83 +503,6 @@ put the results first; its first screen follows board A1 of the redesign
   drawer; several: Crops; before anything is planted the checklist's crops
   step covers it). Run items wait for the run's summary.
 
-- **Headline facts** each link to the tab where they are edited or looked at
-  (farms, area, dams and the outflow gauge to Network, irrigated area to
-  Crops, transfers to Transfers, time series to Data, runs to Runs). The
-  whole tile is the click target (the label's link is stretched over it), and
-  a focused tile gets an outline.
-- **Import record** (`overview/ImportReportPanel.svelte`, 017_project_import),
-  under Project details, only for a project imported through the import dialog
-  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
-  shows nothing). "Imported from the b023 workbook *file* on *date time* by
-  *name*.", the importer and web build, then the review's two lists, shared
-  with it (`import/ImportReportLists.svelte`): **Importer notes** and the
-  **Unmapped report** (a workbook's only), each with its count sentence and
-  the list behind a *Show the N notes* / *Show the N items* disclosure, closed
-  at first. Items the client trimmed past the caps show as "And N more …, not
-  kept." Every member sees it, viewers included, so a reviewer or assessor
-  can check what the importer interpreted long after the import. All the text
-  came from the file and renders as text only.
-- **Time zone** (Project details, under Description; issue #45): the
-  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
-  from the browser's list of zones, saved with **Save details** (editors;
-  read-only for viewers). Every download of the project (CSV, JSON, the
-  .xlsx workbook, the server report PDF) is dated by the calendar day there,
-  so an export made just after local midnight carries today's date, not
-  UTC's yesterday. The same day dates what the server counts for a person:
-  the portfolio's ages, the feeds' health, the farm page's "not recent"
-  notice and forecast date, and the alerts (their "today" and the 06:00
-  digest). A zone the server doesn't know is refused with its error.
-- **Layout**: Project details (and the import record) on the left; on the
-  right, "who has access": Team above Members (or "Shared directly with" for a
-  team project), so the two panels that refer to each other sit together, then
-  **Farmers**. Below 900 px it is one column in the order details, import
-  record, team, members, farmers, share links.
-- **Members**: each applicant row has an **Applying party** box for owners
-  (saved on change; blank for none): an applicant shares applications only
-  with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text.
-- **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
-  farms linked to them, by name. Owners change a farmer's farms and remove
-  one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
-  opens a dialog with two modes: *One farmer* (email, a tick box per farm,
-  the email's language) and *Several, from a CSV* (`email,farm,language`,
-  one farm per row, pasted or uploaded, header optional; parsing in
-  `overview/farmers.ts`). A CSV is previewed first: a table of every row's
-  line, email, farm and what will happen (added, invited, or the row's
-  error), from a server dry run that sends nothing; **Send** then does it and
-  the table shows the results. A verified account is added at once; anyone
-  else is invited and listed under **Pending farmer invitations** (owners
-  only) with their farms, who sent it and when it expires, with Resend and
-  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
-  Farmers aren't in the Members list (it hides the `farmer` role), and a
-  farmer never sees this tab: their own view is WP-2.6. A link to a farm
-  deleted but not yet saved reads "a removed farm".
-- **Share links** (WP-2.3 phase 2, `overview/ShareLinksPanel.svelte`, rules
-  in `overview/shareLinks.ts`), owners only, under Farmers: read-only links
-  to the published baseline for people outside the project. *Make link*
-  takes who it's for (up to 100 characters) and how long it works (1 week,
-  30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
-  field with **Copy** (it falls back to selecting the field when the
-  clipboard is refused), because the token isn't kept. The list shows each
-  link's label and state (Live, Expired, Withdrawn), who made it and when,
-  when it ends or who withdrew it, and when it was last opened (to the
-  hour), live links first. **Withdraw** asks first, then the link shows the
-  dead-link state to whoever holds it. With nothing published, a note says
-  a link opens only once a run is published.
-- On the **Network** tab, a farm with linked farmers says how many in its
-  detail panel, and removing it asks first, naming the farmers who lose
-  access when the model is saved.
-- The **description** box grows with its text (up to about 24rem) instead of
-  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
-  without it keep four rows).
-
-Email addresses (member rows here and on team pages,
-pending invitations, the confirm-email banner) render through
-`common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
-`-`, `_` or `+` rather than mid-word on a phone.
-
 ## Dams
 
 `?tab=dams` (`dams/DamsTab.svelte`, rules in `dams/dams.ts` and
@@ -642,6 +574,112 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart or table.
+
+## Project
+
+`?tab=project` (`project/ProjectTab.svelte`; aliases `details`, `members`,
+`sharing`), first under **Review** (issue #17, option A): what the project is
+and who can open it. Every member who sees the Summary sees it
+(`TAB_GROUP.project = 'core'`, no model inputs needed); an applicant sees the
+Applicant view instead. Its own chunk. Everything on it sat below the
+Summary's first screen until 2026-09-27 and moved unchanged (the panels'
+files moved from `overview/` to `project/`); the Summary links here and
+sends its old `#…-h` fragments here ([§ Summary](#summary)). A reading page:
+it scrolls, and isn't fitted to the window.
+
+- **Header**: the section header titled "Project", with the context line
+  "Personal project · created 3 Sep 2026 · time zone Africa/Johannesburg"
+  (or "Team “North WUA” · …"; `project/project.ts` `projectContext`) and
+  **Download** (Download project (JSON): the model, settings and input
+  series; every member, viewers included), both through `fillHeader`. The
+  download menu was in the Project details panel's head.
+- **The model**: eight headline facts (units and gauges, catchment area, dam
+  capacity and farm dams, irrigated area and crops, active transfers, time
+  series, model runs, the outflow gauge), counted from the page's lists and
+  the model as edited, so an upload or a run shows at once.
+- **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`)
+  waits for that panel's heading, scrolls it to the top and holds it while
+  the page settles (`holdAnchor`), with focus on the heading. History's
+  "farmers to link again" notes link to `#farmers-h`.
+- **Headline facts** each link to the tab where they are edited or looked at
+  (farms, area, dams and the outflow gauge to Network, irrigated area to
+  Crops, transfers to Transfers, time series to Data, runs to Runs). The
+  whole tile is the click target (the label's link is stretched over it), and
+  a focused tile gets an outline.
+- **Import record** (`project/ImportReportPanel.svelte`, 017_project_import),
+  under Project details, only for a project imported through the import dialog
+  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
+  shows nothing). "Imported from the b023 workbook *file* on *date time* by
+  *name*.", the importer and web build, then the review's two lists, shared
+  with it (`import/ImportReportLists.svelte`): **Importer notes** and the
+  **Unmapped report** (a workbook's only), each with its count sentence and
+  the list behind a *Show the N notes* / *Show the N items* disclosure, closed
+  at first. Items the client trimmed past the caps show as "And N more …, not
+  kept." Every member sees it, viewers included, so a reviewer or assessor
+  can check what the importer interpreted long after the import. All the text
+  came from the file and renders as text only.
+- **Time zone** (Project details, under Description; issue #45): the
+  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
+  from the browser's list of zones, saved with **Save details** (editors;
+  read-only for viewers). Every download of the project (CSV, JSON, the
+  .xlsx workbook, the server report PDF) is dated by the calendar day there,
+  so an export made just after local midnight carries today's date, not
+  UTC's yesterday. The same day dates what the server counts for a person:
+  the portfolio's ages, the feeds' health, the farm page's "not recent"
+  notice and forecast date, and the alerts (their "today" and the 06:00
+  digest). A zone the server doesn't know is refused with its error.
+- **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
+  on a phone), then Project details, the import record and recent notes on
+  the left; on the right, "who has access": Team above Members (or "Shared
+  directly with" for a team project), so the two panels that refer to each
+  other sit together, then **Farmers** and share links. The columns answer to
+  the page's width (container queries on `project-page`: two columns from
+  about 760 px of page), then one column in the order facts, details, import
+  record, notes, team, members, farmers, share links.
+- **Members**: each applicant row has an **Applying party** box for owners
+  (saved on change; blank for none): an applicant shares applications only
+  with the members of their own party, so put an applicant and their
+  consultant or client in the same one. Others see the party as text.
+- **Farmers** (WP-2.1, `project/FarmersPanel.svelte`): each farmer with the
+  farms linked to them, by name. Owners change a farmer's farms and remove
+  one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
+  opens a dialog with two modes: *One farmer* (email, a tick box per farm,
+  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  one farm per row, pasted or uploaded, header optional; parsing in
+  `project/farmers.ts`). A CSV is previewed first: a table of every row's
+  line, email, farm and what will happen (added, invited, or the row's
+  error), from a server dry run that sends nothing; **Send** then does it and
+  the table shows the results. A verified account is added at once; anyone
+  else is invited and listed under **Pending farmer invitations** (owners
+  only) with their farms, who sent it and when it expires, with Resend and
+  Revoke. Empty state: "No farmers yet: invite them to see their own farm."
+  Farmer invites stay out of the Members panel's pending list.
+  Farmers aren't in the Members list (it hides the `farmer` role), and a
+  farmer never sees this page: their own view is WP-2.6. A link to a farm
+  deleted but not yet saved reads "a removed farm".
+- **Share links** (WP-2.3 phase 2, `project/ShareLinksPanel.svelte`, rules
+  in `project/shareLinks.ts`), owners only, under Farmers: read-only links
+  to the published baseline for people outside the project. *Make link*
+  takes who it's for (up to 100 characters) and how long it works (1 week,
+  30 days, 90 days or 1 year); the new URL shows **once**, in a read-only
+  field with **Copy** (it falls back to selecting the field when the
+  clipboard is refused), because the token isn't kept. The list shows each
+  link's label and state (Live, Expired, Withdrawn), who made it and when,
+  when it ends or who withdrew it, and when it was last opened (to the
+  hour), live links first. **Withdraw** asks first, then the link shows the
+  dead-link state to whoever holds it. With nothing published, a note says
+  a link opens only once a run is published.
+- On the **Network** tab, a farm with linked farmers says how many in its
+  detail panel, and removing it asks first, naming the farmers who lose
+  access when the model is saved.
+- The **description** box grows with its text (up to about 24rem) instead of
+  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
+  without it keep four rows).
+
+Email addresses (member rows here and on team pages,
+pending invitations, the confirm-email banner) render through
+`common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
+`-`, `_` or `+` rather than mid-word on a phone.
 
 ## Project list
 
@@ -1452,28 +1490,104 @@ the Network tab.
 
 ## Transfers
 
-One row per transfer rule: source and destination node, the months it runs
-(twelve toggles, water-year order, with **All**/**None**), a maximum rate
-(m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
-which it stops, a **Priority** and an enabled switch. Priority is a whole
-number, lower moves first; equal priorities share a source dam pro rata to
-their limits ([engine-audit Q18](./engine-audit.md)). A new rule starts after
-the existing ones (the highest priority + 1). The help explains the
-destination's room cap (N4). The empty state says what a transfer
-is (most catchments have none); with fewer than two nodes it links to the
-Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
-its remove button on top, From and To side by side, the month toggles six to a
-row at tap size, then the numbers and an **Enabled** switch whose label is
-part of the tap target. The table's column headers and their ⓘ tips move into
-each card's field labels.
+A page of two cards under the section header, which counts the rules ("3
+transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
+map** (the Network, where transfers are dashed arrows) and **+ Add transfer**
+(editors, with at least two units). A new rule starts after the existing ones
+(the highest priority + 1), and the cursor lands in its **From**, scrolled into
+view.
+
+**Transfer rules** is one row per rule: its number (with **off** under it when
+the rule is switched off, and a tinted row), **From → To** (side by side from
+an 80rem-wide container, stacked below that), the months it runs (twelve
+toggles in water-year order, with the months in words and **All**/**None**
+under them), a maximum rate (m³/s), an optional daily cap (m³), the minimum
+source-dam storage (%) below which it stops, a **Priority**, an **On** switch
+(named "transfer N enabled") and remove. Priority is a whole number, lower
+moves first; equal priorities share a source dam pro rata to their limits
+([engine-audit Q18](./engine-audit.md)). The help explains the destination's
+room cap (N4). Thirty rules fit at 1280 × 800 without scrolling the table
+sideways.
+
+**When water moves** has a bar per month, Oct … Sep: how many enabled rules
+run in it and the most they can move in a day together, each rule's
+min(rate × 86 400, daily cap) summed (`transfers/capacity.ts`). It is an upper
+bound: on the day the source dam's minimum and the destination's room also
+limit it. A screen reader hears each month as a sentence ("Nov: 2 rules, up to
+6,912 m³ a day").
+
+From 1100 × 620 the two cards are the height left in the window (less the save
+bar) and the page doesn't scroll: the rules scroll inside their card and When
+water moves takes what they leave, so with a few rules its bars are tall and
+with thirty they keep a strip at the bottom. The empty state says what a
+transfer is (most catchments have none) and has its own **Add transfer**; with
+fewer than two units it links to the Network tab.
+
+In a container up to 64rem (a phone, a narrow window) each rule becomes a card,
+two to a row where there is room: "Transfer N" with its remove button on top,
+From and To side by side, the month toggles six to a row at tap size, then the
+numbers and an **Enabled** switch whose label is part of the tap target. The
+column headers and their ⓘ tips move into each card's field labels, the page
+scrolls rather than a box inside it, and the months show six to a row.
+
+The Network's **Transfers** grid (`grid=transfers`) and scenario override mode
+show the same table alone, with **+ Add transfer** under it and no months
+card.
 
 ## Data
 
-Each series shows its role in the model, its period, its last date and age,
+`?tab=series` (`?tab=data` and `?tab=timeseries` also work;
+`series/SeriesTab.svelte`), under **Build the model** (issue #17, option A;
+no board of its own, so it follows the Dams page's list-and-chart layout
+with the table the data needs).
+
+- **Header**: the section header titled "Data", its context line counting
+  the series and those behind ("5 input series · 2 behind",
+  `workspace/context.ts`), then the Rain up to pill, **Preview all data**
+  (filled through `fillHeader`; absent with no series) and **Add data**, the
+  main (primary) action for editors. The tab's own notices (new data since
+  the latest run with its *Re-run the model* link, a feed rebuilding a
+  series, a failed delete or relabel) are slim lines under the header, like
+  the page's.
+- **Freshness first**: the table lists the series **behind** first, most
+  days behind first, then the series a run reads, then the rest (another
+  series of that kind is read, reference only), keeping the list's order
+  within each group (`series/freshness.ts` `freshnessOrder`). *Behind* is
+  exactly the sidebar badge's rule (`freshness().behind`): a series a run is
+  driven by (recorded rain, daily A-pan) ending more than 7 days
+  (`STALE_DAYS`) before the viewer's date; a forecast runs ahead and observed
+  flow only scores a run, so neither is. Each such row carries a **Behind**
+  pill beside its age and an amber edge, the key line says what it means,
+  and the panel head repeats "2 behind (more than 7 days old)", so the
+  table, the header and the badge always give the same count. **Data up
+  to** is the column straight after the series. (Until 2026-09-26 any row
+  older than 31 days, flow included, was amber, which disagreed with the
+  badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
+  (`describeAge`; those two days used to read "1 months" / "1 years").
+- **Picking a series**: clicking a row (or its **View** button) charts it
+  through the URL (`series=<id>`, `withParam`), so the link can be shared
+  and Back returns to the series before. Without `series=` (or with one that
+  no longer exists) the observed flow a run reads is charted, else the main
+  rainfall, else the first. Deleting the charted series drops the parameter
+  (`replaceState`); an upload through the form below charts the new series.
+  When the layout is stacked, the chart comes into view after a pick.
+- **Layout**: when the page is at least 720 px wide and the window at least
+  720 px tall, the table and the chart are the height left in the window
+  below their top (measured with a `ResizeObserver` on `body`, less the save
+  bar; at least 540 px): the table takes up to 55 % and its rows scroll
+  inside its box (the sticky column headers stay), the chart fills the rest
+  (the plot takes what the chart's head, legend and caption leave). Shorter
+  or narrower, the page scrolls as before, and below 640 px each row is a
+  card. The gauge-vs-logger table, the double mass panel, Data checks, the
+  Upload CSV form and *What the model uses* follow below.
+- **Add data from the header** refreshes the table at once: the tab takes
+  the page's new series list when it changes (before 2026-09-26 the table
+  kept its own copy until the page was reloaded).
+
+Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Editors can **Delete** a series (after a
+their kind by name) are marked. Editors can **Delete** a series (after a
 confirm; runs already stored are not affected). A CHIRPS series shows which
 product and version it holds (issue #40 part c): editors get a select
 (*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
@@ -1500,7 +1614,7 @@ timestamp closes its interval. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card
-(series and role on top, then labelled Period / Data up to / Missing (% of
+(series and role on top, then labelled Data up to / Period / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. For editors the
@@ -1576,7 +1690,7 @@ side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
 and the window's height, with the table filling what's left and only the rows
 in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
-The card header's **Preview all data** button opens it with every column shown; a
+The section header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
 un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its

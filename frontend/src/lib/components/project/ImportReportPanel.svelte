@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The project's import record on the Overview (017_project_import; docs/ui.md
-	// § Overview, "Import record"): which file it was imported from, when and by
+	// The project’s import record on the Project page (017_project_import; docs/ui.md
+	// § Project, "Import record"): which file it was imported from, when and by
 	// whom, and what the importer flagged, its notes and the unmapped report,
 	// each list closed at first. Shown only for an imported project, to every
 	// member (viewers included), so a reviewer or assessor can see what the

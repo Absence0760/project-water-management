@@ -77,6 +77,8 @@ test('the owner sees the seeded farmers with their farms, and a farmer sees only
 	await signInAs(page, ANALYST);
 	await page.getByRole('link', { name: SANDSPRUIT, exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: SANDSPRUIT })).toBeVisible();
+	// Who has access is on the Project page (issue #17).
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	const farmers = page.getByRole('region', { name: /^Farmers/ });
 	// The two farmers, and the demo applicant (WP-3.3), who keeps a farm link too.
 	await expect(farmers.getByRole('heading', { name: 'Farmers (3)' })).toBeVisible();

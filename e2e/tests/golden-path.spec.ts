@@ -88,7 +88,8 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 
 	// --- transfers: Ridge → River in summer ------------------------------------
 	await tab(page, 'Transfers').click();
-	await page.getByRole('button', { name: 'Add transfer' }).click();
+	// The section header's main action (issue #17).
+	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await page.getByLabel('Source of transfer 1').selectOption({ label: 'Ridge farm' });
 	await page.getByLabel('Destination of transfer 1').selectOption({ label: 'River farm' });
 	const months = page.getByRole('group', { name: /^Months transfer 1 runs/ });
