@@ -657,7 +657,10 @@ In short:
   updates only their own row. A farmer (073) sees, in a project they are
   only a farmer in, just the accounts their pages name (the publication's
   publisher and last editor, a farm note's author on their farm, whoever
-  linked them), never another farmer's or a member's address. No user (an API key, pre-sign-in, the tick)
+  linked them), never another farmer's or a member's address. An applicant
+  (a `contributor`, 076) sees the same, plus the owner, the other shared
+  members and the deciding assessor of the applications they read, never
+  another applicant's or a member's address. No user (an API key, pre-sign-in, the tick)
   sees no account. Nobody inserts or deletes one directly: sign-up is
   `app_register`, deletion the operator's. The pre-sign-in paths use narrow
   `SECURITY DEFINER` lookups that answer one account (`app_auth_account` for

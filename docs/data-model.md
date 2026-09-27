@@ -1523,7 +1523,10 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   In a project where you are only a farmer (073), the people you work with are
   just those your pages name: who published or last changed a publication,
   the author of a farm note on one of your farms, and whoever linked you; no
-  other farmer or member. `app_user_visible` runs per row of every `app_user`
+  other farmer or member. Where you are only an applicant (a `contributor`,
+  076), the same, plus the owner, the other shared members and the deciding
+  assessor of the applications you read (your own and those shared with you);
+  no other applicant. `app_user_visible` runs per row of every `app_user`
   read, so each branch is an indexed lookup on the account id (every foreign
   key has a covering index) against your own projects; keep a new branch that
   way. The backend never selects `password_hash` into a response.
