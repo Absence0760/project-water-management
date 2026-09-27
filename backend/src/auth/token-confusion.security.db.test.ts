@@ -345,7 +345,11 @@ describe('where the backend reads a credential (source sweep)', () => {
 		// Not an access credential: the sign-in lockout's trusted-device mark
 		// (070). It only picks which throttle record counts a sign-in attempt;
 		// the password is still checked, and it opens nothing (test below).
-		'auth/device.ts': ['getCookie(c, DEVICE_COOKIE)']
+		'auth/device.ts': ['getCookie(c, DEVICE_COOKIE)'],
+		// Not a credential: the viewer's address the CloudFront Function sets,
+		// read only after the shared-secret check (edgeVerified), to key the
+		// sign-up throttle (079, http/clientAddress.ts). It grants nothing.
+		'http/clientAddress.ts': ['c.req.header(VIEWER_ADDRESS_HEADER)']
 	};
 	const SRC = join(import.meta.dirname, '..');
 	const files = (dir: string): string[] =>
