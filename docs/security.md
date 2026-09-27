@@ -377,7 +377,17 @@ and nothing else.
   before any database work, and the comparison going through
   `timingSafeEqual` whichever byte differs), `routes.test.ts` (the ingest
   routes key-gated, the owner routes session-gated) and
-  `e2e/tests/api-keys.spec.ts`.
+  `e2e/tests/api-keys.spec.ts`. `ingest/ingest.security.db.test.ts` sweeps
+  the live inventories: every policy a key context can pass (`pg_policies`)
+  is on an allowlist with its reason and calls `app_api_key_project`, so
+  revocation and expiry reach every one; a key of the **same** project reads,
+  updates and deletes nothing in any RLS table or view but its own allowed
+  series and `series_key_days` rows (`isolation.db.test.ts` does another
+  project's key; `app_user` has no RLS, so app code, not a policy, keeps it
+  from a key); no GET route returns the secret or its hash after the `201`
+  (`no-store`); an expired key's context sees nothing; a key can't rename
+  or move its series out of bounds; and a wrong secret under a real prefix
+  (which the History shows) takes nothing from the key's bucket.
 
 ## Alerts
 
