@@ -8,6 +8,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
 import { z } from 'zod';
 import {
+	assertRoomForSeries,
 	bodyProvenance,
 	checkProvenance,
 	mergeInto,
@@ -54,6 +55,7 @@ export async function replaceSeries(
 	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
 ): Promise<{ meta: SeriesMetaRow; daysChanged: number }> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
+	if (!existing) await assertRoomForSeries(db, projectId);
 	const provenance = body.provenance ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
 		// A person's replace (or restore) makes the whole series the user's: a

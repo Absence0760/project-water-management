@@ -1003,6 +1003,24 @@ In short:
   one exception is `POST /projects/import` (a whole project document), capped
   at 5 MB on the route, after the session check, so an anonymous caller never
   gets a large body read.
+- **Hostile JSON bodies** are refused once, for every route, by `readJson`
+  (`backend/src/http/body.ts`) with `400` and the code `body_refused`: a NUL
+  (`\u0000`) in any string or key (Postgres refuses NUL in text and jsonb,
+  which was a `500` on `PATCH /projects/:id`, `POST /projects`, `/copy` and
+  `/teams`), a number that overflows to ±Infinity (`1e400`), and nesting past
+  64 levels (a deep `settings` value overflowed the stack). The walk is
+  iterative. `http/body.security.db.test.ts` sweeps every POST/PUT/PATCH in
+  the live route inventory with each.
+- **Series values** must stay finite and below 10¹² in the canonical unit
+  *after* conversion (1e308 in inches was Infinity in mm), and a project holds
+  at most **1 000 series** (`series/limits.ts`): a new series past it is `409`
+  on PUT and merge, and a project file with more is `400`, where one 5 MB file
+  had created 50 000 in a 12-second transaction. The cap counts the series
+  the writer can see, so an API key limited to some series counts only those
+  (still bounded: keys × 1 000). `series/limits.security.db.test.ts`.
+- **Allocation files** (`allocations/parse.ts`): 2 MB, 5 000 rows and
+  **200 columns** a row, the last checked while splitting so a million-column
+  header is refused before it is built (`allocations/parse.security.test.ts`).
 - The server never parses a workbook. A b023 `.xlsm` / `.xlsx` is parsed
   either offline by the Python importer or **in the browser**, and only the
   resulting project document reaches the API (`POST /projects/import`, the
