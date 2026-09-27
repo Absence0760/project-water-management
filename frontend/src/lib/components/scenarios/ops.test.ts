@@ -1,7 +1,7 @@
-import { applyScenario, classifyOp, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, blankEwrRuleTable, classifyOp, classifyScenario, type EwrRuleTable, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { buildOp, checkOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
+import { OUTLET_SITE, buildOp, checkOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -300,6 +300,72 @@ describe('buildOp', () => {
 		expect(remove).toEqual({ ok: true, op: { op: 'borehole.remove', boreholeId } });
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the borehole “BH new”');
 		expect(buildOp(draft({ kind: 'borehole.add', nodeId: UP, bhName: '', bhCapacityM3Day: '1' }), m, id)).toMatchObject({ ok: false });
+	});
+});
+
+describe('ewrRule.set: a site\'s Reserve rule table (engine ≥ 1.6.0, WP-3.7)', () => {
+	const W = '00000000-0000-4000-8000-0000000000e1';
+	/** The base with a second gauge, the Weir, above the outlet, and a desktop table at the outlet keyed by its node id. */
+	const withTables = (): ModelInput => {
+		const b = base();
+		b.model.nodes.push({ ...newNode(3, G), id: W, name: 'Weir', kind: 'gauge' });
+		b.settings = { ...b.settings, ewrRules: [{ ...blankEwrRuleTable(G), source: 'Invented desktop run', sourceKind: 'desktop' }] };
+		return b;
+	};
+	const draft = (o: Partial<OpDraft>): OpDraft => ({ ...emptyDraft('ewrRule.set'), ...o });
+	const filled = (t: EwrRuleTable): EwrRuleTable => ({
+		...t,
+		source: '  Invented gazette notice, table 2 ',
+		sourceKind: 'gazetted',
+		ewr: t.ewr.map((row) => row.map((_, i) => 10 - i))
+	});
+
+	it('starts from the site\'s table (the outlet\'s, however it is keyed), or a blank one', () => {
+		const b = withTables();
+		expect(startTable(b, OUTLET_SITE)).toMatchObject({ siteNodeId: null, source: 'Invented desktop run', sourceKind: 'desktop' });
+		expect(startTable(b, W)).toEqual(blankEwrRuleTable(W));
+		// A copy: editing it leaves the base alone.
+		startTable(b, OUTLET_SITE).source = 'changed';
+		expect(b.settings.ewrRules![0]!.source).toBe('Invented desktop run');
+	});
+
+	it('builds the op from the Settings editor\'s table, checked with the Settings form\'s own words', () => {
+		const b = withTables();
+		expect(buildOp(draft({}), b.model)).toEqual({ ok: false, error: 'Pick an EWR site' });
+		expect(buildOp(draft({ ewrSite: W }), b.model)).toEqual({ ok: false, error: 'The table was removed: pick the site again' });
+		expect(buildOp(draft({ ewrSite: W, ewrTables: [startTable(b, W)] }), b.model)).toEqual({
+			ok: false,
+			error: 'Say where the table comes from (Reserve determination, gazette notice, table).'
+		});
+		// A blank cell in the editor is NaN: named, not sent.
+		const gap = filled(startTable(b, W));
+		gap.ewr[0]![3] = NaN;
+		expect(buildOp(draft({ ewrSite: W, ewrTables: [gap] }), b.model)).toEqual({ ok: false, error: "EWR values must be numbers from 0 to 1,000,000 (Oct has one that isn't)." });
+		const r = buildOp(draft({ ewrSite: OUTLET_SITE, ewrTables: [filled(startTable(b, OUTLET_SITE))] }), b.model);
+		expect(r.ok, JSON.stringify(r)).toBe(true);
+		const op = (r as { op: ScenarioOp }).op;
+		expect(op).toMatchObject({ op: 'ewrRule.set', table: { siteNodeId: null, source: 'Invented gazette notice, table 2', sourceKind: 'gazetted' } });
+		// It applies (replacing the outlet's table) and is a baseline assumption even with every node owned.
+		const applied = applyScenario(b, [op]);
+		expect(applied.problems).toEqual([]);
+		expect(applied.input.settings.ewrRules).toHaveLength(1);
+		expect(classifyScenario(b, [op], b.model.nodes.map((x) => x.id))).toEqual(['baseline']);
+	});
+
+	it('describes the table it sets and the one it replaces, each with its source and confidence line', () => {
+		const b = withTables();
+		const set = (t: EwrRuleTable): ScenarioOp => ({ op: 'ewrRule.set', table: t });
+		const gazette = filled(blankEwrRuleTable(null));
+		expect(describeOp(set(gazette), b)).toBe(
+			'Reserve rule table at the outlet (Outflow gauge): “Invented desktop run” (Desktop estimate, low confidence) → “Invented gazette notice, table 2” (Gazetted Reserve), total flow, 10 % points'
+		);
+		expect(describeOp(set({ ...gazette, siteNodeId: W, sourceKind: null, component: 'lowFlow' }), b)).toBe(
+			'Reserve rule table at Weir: none → “Invented gazette notice, table 2” (kind of source not stated), low flows, 10 % points'
+		);
+		// No base (a scenario run compared with another run): only what it set.
+		expect(describeOp(set(gazette), null)).toBe('Reserve rule table at the outlet: → “Invented gazette notice, table 2” (Gazetted Reserve), total flow, 10 % points');
+		const { items } = opItems([set(gazette)], ['baseline'], null, b, new Map());
+		expect(items[0]).toMatchObject({ cls: 'baseline', problem: null });
 	});
 });
 

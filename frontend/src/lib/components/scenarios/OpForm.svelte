@@ -6,10 +6,12 @@
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
 	import { BOREHOLE_MODES, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { siteOptions } from '$lib/components/settings/ewrRules';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
 	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
-	import { OP_LABEL, buildOp, draftSpec, emptyDraft, type OpDraft } from './ops';
+	import { OP_LABEL, OUTLET_SITE, buildOp, draftSpec, emptyDraft, siteTable, startTable, tableText, type OpDraft } from './ops';
 
 	let {
 		input,
@@ -33,6 +35,11 @@
 	// demand.scale (issue #53 R1): the nodes of the category picked.
 	const demandNodes = $derived(nodes.filter((n) => n.kind === d.demandCategory));
 	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
+	// ewrRule.set (engine ≥ 1.6.0): the outlet and every gauge still marked as an EWR site; the table itself is the Settings tab's editor.
+	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
+	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
+	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
+	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
 	const node = $derived(nodes.find((n) => n.id === d.nodeId));
 	const transfer = $derived(input.model.transfers.find((t) => t.id === d.transferId));
 	const spec = $derived(draftSpec(d));
@@ -76,6 +83,10 @@
 		// A field the new node's kind doesn't have is dropped (a gauge has only a name).
 		if (d.kind === 'node.set' && !fieldOptions.some((f) => f.value === d.field)) d.field = '';
 		prefill();
+	}
+	function pickEwrSite(site: string) {
+		d.ewrSite = site;
+		d.ewrTables = site ? [startTable(input, site)] : [];
 	}
 	function copyFactors(cropId: string) {
 		const c = input.model.crops.find((x) => x.id === cropId);
@@ -456,6 +467,31 @@
 			</div>
 		</div>
 		<p class="hint">Scales recorded rain only; missing days stay missing. Evaporation is the A-pan setting (“Change a setting”).</p>
+	{:else if d.kind === 'ewrRule.set'}
+		<div class="form-row">
+			<div class="field">
+				<label for="op-ewr-site">EWR site</label>
+				<select id="op-ewr-site" value={d.ewrSite} onchange={(e) => pickEwrSite(e.currentTarget.value)}>
+					<option value="" disabled>Pick a site</option>
+					{#each ewrSites as o (o.id ?? OUTLET_SITE)}<option value={o.id ?? OUTLET_SITE}>{o.label}</option>{/each}
+				</select>
+				{#if ewrCurrent !== undefined}
+					<span class="hint" data-testid="op-current">Now: {ewrCurrent ? tableText(ewrCurrent, true) : 'no rule table'}</span>
+				{/if}
+			</div>
+		</div>
+		<p class="hint" data-testid="op-ewr-baseline">
+			Always a <strong>baseline assumption</strong>: the Reserve is the authority's, never part of the proposal, so an assessor sees this change in red.
+		</p>
+		{#if d.ewrSite && ewrSiteOption}
+			{#if d.ewrTables.length}
+				<Lazy load={loadRuleEditor}>
+					{#snippet children(Editor)}<Editor bind:value={d.ewrTables} options={[ewrSiteOption]} />{/snippet}
+				</Lazy>
+			{:else}
+				<p class="hint">The table was removed. <button type="button" class="btn btn-sm" onclick={() => pickEwrSite(d.ewrSite)}>Start again</button></p>
+			{/if}
+		{/if}
 	{:else if d.kind === 'demand.scale'}
 		<div class="form-row">
 			<div class="field">
