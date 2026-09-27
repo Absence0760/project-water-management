@@ -154,6 +154,9 @@ test.describe('layout', () => {
 		expect(Math.abs(data.x - prefs.x)).toBeLessThan(1);
 		// The two columns use the width: together they span most of the page beside the sidebar.
 		expect(prefs.x + prefs.width - profile.x).toBeGreaterThan(1000);
+		// The unit radios' rows are 32 px with a mouse (2rem was 28 px at the 14 px root).
+		const m3 = (await page.locator('label.radio').filter({ hasText: 'Cubic metres (m³)' }).boundingBox())!;
+		expect(m3.height).toBeGreaterThanOrEqual(32);
 		// Everything in view: no page scroll at all.
 		const { scrollH, innerH, scrollW, innerW } = await page.evaluate(() => ({
 			scrollH: document.documentElement.scrollHeight,

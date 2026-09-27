@@ -3,12 +3,14 @@
 // on a phone and sees the catchment's reserve status and the WUA's notice, the
 // token gone from the address bar; the owner withdraws it and the link shows
 // the dead-link state. A catchment with too few farms gets no flow chart.
+// The layout (issue #17) is pinned at 1440 × 960 and on a phone.
 import type { APIRequestContext } from '@playwright/test';
 import { afWords } from '../support/af.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
 const words = await afWords();
@@ -141,5 +143,65 @@ test('a catchment with too few farms shows its status without the flow chart, an
 
 	await shared.goto('/share');
 	await expect(shared.getByRole('alert')).toHaveText(/^This page needs the whole link\./);
+	await stranger.close();
+});
+
+// Screen use (issue #17): on a laptop the whole result fits the window in two
+// columns (the notice and the reserve, then the flow chart and About), with
+// the header's content lined up over the page's; on a phone the header stays
+// one row (the name with "Shared view" under it, the EN | AF switch beside)
+// and the page stacks with no sideways scroll. axe in both themes at both sizes.
+test('a share link fits a laptop screen in two columns and a phone in one', async ({ page, owner, browser }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Two-column catchment');
+	await putModel(page.request, project.id, fiveFarms(project.model));
+	await publish(page.request, project.id);
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/share-links`, { data: { label: 'Laptop', expiresInDays: 7 } });
+	expect(made.status()).toBe(201);
+	const { link } = (await made.json()) as { link: { url: string } };
+
+	const stranger = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+	const shared = await stranger.newPage();
+	await shared.goto(link.url);
+	await expect(shared.locator('main[data-share-state="ready"]')).toBeVisible();
+	await expect(shared.getByRole('heading', { level: 1 })).toHaveCount(1);
+	const notice = (await shared.getByRole('region', { name: 'Water is short on the river.' }).boundingBox())!;
+	const reserve = (await shared.getByRole('region', { name: 'The river’s ecological reserve' }).boundingBox())!;
+	const chart = (await shared.getByRole('region', { name: 'River flow each month, in m³ a day' }).boundingBox())!;
+	const about = (await shared.getByRole('region', { name: 'About this page' }).boundingBox())!;
+	// Notice and chart side by side at the top; reserve under the notice, About under the chart.
+	expect(Math.abs(notice.y - chart.y)).toBeLessThan(1);
+	expect(chart.x).toBeGreaterThan(notice.x + notice.width);
+	expect(Math.abs(reserve.x - notice.x)).toBeLessThan(1);
+	expect(Math.abs(about.x - chart.x)).toBeLessThan(1);
+	// All of it inside 1440 × 960: no page scroll.
+	expect(about.y + about.height).toBeLessThanOrEqual(960);
+	expect(await shared.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
+	// The header's brand starts where the page's content does.
+	const brand = (await shared.locator('.share-header .brand').boundingBox())!;
+	expect(Math.abs(brand.x - notice.x)).toBeLessThan(1);
+	for (const colorScheme of ['light', 'dark'] as const) {
+		await shared.emulateMedia({ colorScheme });
+		await expectNoViolations(shared);
+	}
+	await shared.emulateMedia({ colorScheme: 'light' });
+
+	for (const viewport of [PHONE, { width: 390, height: 844 }]) {
+		await shared.setViewportSize(viewport);
+		const header = (await shared.locator('.share-header').boundingBox())!;
+		expect(header.height).toBeLessThanOrEqual(64);
+		const en = (await shared.getByRole('button', { name: 'English' }).boundingBox())!;
+		const af = (await shared.getByRole('button', { name: 'Afrikaans' }).boundingBox())!;
+		expect(Math.abs(en.y - af.y)).toBeLessThan(1);
+		const notice2 = (await shared.getByRole('region', { name: 'Water is short on the river.' }).boundingBox())!;
+		const chart2 = (await shared.getByRole('region', { name: 'River flow each month, in m³ a day' }).boundingBox())!;
+		expect(Math.abs(notice2.x - chart2.x)).toBeLessThan(1);
+		expect(chart2.y).toBeGreaterThan(notice2.y + notice2.height);
+		await expectNoSidewaysScroll(shared);
+	}
+	for (const colorScheme of ['light', 'dark'] as const) {
+		await shared.emulateMedia({ colorScheme });
+		await expectNoViolations(shared);
+	}
 	await stranger.close();
 });

@@ -3,16 +3,19 @@
 // kept on reload); an alert email's unsubscribe link works signed out, asks
 // before it acts, says what it turned off and takes the token out of the
 // address bar; a replaced or tampered link says it no longer works. Both
-// pages pass axe, on a phone. A bounced address (SES, stood in for by
+// pages pass axe, on a phone. The alert emails page's layout (issue #17) is
+// pinned at 1440 × 960 and on a phone, with an owner's four catchments and a
+// farmer's thirty farms. A bounced address (SES, stood in for by
 // `pnpm dev:mail:bounce`) pauses a person's alert emails behind a banner on
 // the account and alert pages, which turns them back on. An editor sets a
 // staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, seedRunnableProject } from '../support/api.ts';
+import { createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { simulateBounce } from '../support/jobs.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
 
@@ -40,38 +43,126 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	// Nothing of the other farm, and nothing catchment-wide a farmer doesn't get.
 	await expect(section.getByRole('group')).toHaveCount(2);
 	await expect(dam.getByRole('radio', { name: 'Right away' })).toBeChecked();
-	await expect(notice.getByText('Not switched on for this catchment yet')).toBeVisible();
-	await expect(dam.getByText('Not switched on for this catchment yet')).toHaveCount(0);
+	// An alert the WUA hasn't switched on is starred, and the card's footnote
+	// says what the star means (read out as the row's description).
+	const off = 'Not switched on for this catchment yet: you get nothing until the WUA turns it on.';
+	await expect(notice).toHaveAccessibleDescription(off);
+	await expect(notice.locator('legend')).toHaveText('Restriction notices from the WUA*');
+	await expect(dam).not.toHaveAccessibleDescription(off);
+	await expect(dam.locator('legend')).toHaveText('Dam running low: Lower farm');
+	await expect(section.getByText(off)).toBeVisible();
 	await expectNoViolations(p);
 
 	await dam.getByRole('radio', { name: 'Once a day (06:00)' }).check();
 	await expect(section.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+	// The switch is a radio group underneath: the arrow keys move the choice, and it saves.
+	await dam.getByRole('radio', { name: 'Once a day (06:00)' }).focus();
+	await p.keyboard.press('ArrowRight');
+	await expect(dam.getByRole('radio', { name: 'Off' })).toBeChecked();
+	await expect(dam.getByRole('radio', { name: 'Off' })).toBeFocused();
+	const saved = async () => {
+		const mine = await p.request.get(`${API_URL}/me/alerts`);
+		const entry = ((await mine.json()).projects as { id: string; choices: { kind: string; mode: string }[] }[]).find((x) => x.id === project.id)!;
+		return entry.choices.find((c) => c.kind === 'dam_below')!.mode;
+	};
+	await expect.poll(saved).toBe('off');
+	await dam.getByRole('radio', { name: 'Once a day (06:00)' }).check();
+	await expect.poll(saved).toBe('daily_digest');
 	await p.reload();
 	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 	await expect(p.getByRole('region', { name: 'Alerting catchment' }).getByRole('group', { name: 'Dam running low: Lower farm' }).getByRole('radio', { name: 'Once a day (06:00)' })).toBeChecked();
 });
 
-// Screen use (issue #17): one card per catchment, side by side on a wide
-// screen, stacked on a phone, never a sideways scroll.
+// Screen use (issue #17): the section header is the page's one title; one
+// card per catchment, side by side on a wide screen, stacked on a phone,
+// never a sideways scroll; each alert one row, its name beside the switch.
+// Four catchments of an owner's six alerts each fit 1440 × 960 unscrolled.
 test('the alert emails page lays its catchments out as cards across the width', async ({ page, owner }) => {
 	void owner;
-	await seedRunnableProject(page.request, 'Cards catchment A');
-	await seedRunnableProject(page.request, 'Cards catchment B');
+	for (const name of ['Cards catchment A', 'Cards catchment B', 'Cards catchment C', 'Cards catchment D']) await seedRunnableProject(page.request, name);
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await page.goto('/account/alerts');
 	await expect(page.locator('main[data-ready="true"]')).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+	await expect(page.getByTestId('section-header').getByRole('heading', { level: 1, name: 'Alert emails' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Back to your account' })).toHaveAttribute('href', /\/account$/);
 	const a = (await page.getByRole('region', { name: 'Cards catchment A' }).boundingBox())!;
 	const b = (await page.getByRole('region', { name: 'Cards catchment B' }).boundingBox())!;
 	expect(Math.abs(a.y - b.y)).toBeLessThan(1);
 	expect(Math.abs(a.x - b.x)).toBeGreaterThan(a.width - 1);
+	// A row: the alert's name and its switch side by side, one 32 px control tall.
+	const row = page.getByRole('region', { name: 'Cards catchment A' }).getByRole('group', { name: 'Dam running low' });
+	const legend = (await row.locator('legend').boundingBox())!;
+	const right = (await row.getByRole('radio', { name: 'Right away' }).boundingBox())!;
+	expect(Math.abs(legend.y + legend.height / 2 - (right.y + right.height / 2))).toBeLessThan(4);
+	expect(right.x).toBeGreaterThan(legend.x + legend.width);
+	expect(right.height).toBeGreaterThanOrEqual(32);
+	// Every card inside the window: no page scroll.
+	const d = (await page.getByRole('region', { name: 'Cards catchment D' }).boundingBox())!;
+	expect(d.y + d.height).toBeLessThanOrEqual(960);
+	expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
+	for (const colorScheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
 
 	await page.setViewportSize(PHONE);
 	const a2 = (await page.getByRole('region', { name: 'Cards catchment A' }).boundingBox())!;
 	const b2 = (await page.getByRole('region', { name: 'Cards catchment B' }).boundingBox())!;
 	expect(Math.abs(a2.x - b2.x)).toBeLessThan(1);
 	expect(Math.abs(a2.y - b2.y)).toBeGreaterThan(Math.min(a2.height, b2.height) - 1);
-	expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+	// On a phone the switch sits under the name, full width, 44 px tall.
+	const legend2 = (await row.locator('legend').boundingBox())!;
+	const right2 = (await row.getByRole('radio', { name: 'Right away' }).boundingBox())!;
+	expect(right2.y).toBeGreaterThanOrEqual(legend2.y + legend2.height - 1);
+	expect(right2.height).toBeGreaterThanOrEqual(44);
+	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
+	await page.emulateMedia({ colorScheme: 'dark' });
+	await expectNoViolations(page);
+});
+
+// The big case: a farmer with thirty farms in one catchment. The lone card
+// takes the whole width and lays its thirty rows out in two columns, so the
+// page is a short read rather than thirty stacked groups; on a phone it stacks.
+test('thirty farms’ dam alerts read as two columns of rows in one wide card', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Thirty-farm catchment');
+	const gauge = project.model.nodes.find((n) => n.kind === 'gauge')!;
+	const lower = project.model.nodes.find((n) => n.name === 'Lower farm')!;
+	const extra = Array.from({ length: 28 }, (_, i) => ({ ...lower, id: crypto.randomUUID(), name: `Farm number ${i + 3} on the long river road`, downstreamNodeId: gauge.id, sortOrder: 4 + i }));
+	const model: Model = { ...project.model, nodes: [...project.model.nodes, ...extra] };
+	await putModel(page.request, project.id, model);
+	const farmer = await signIn('Thirty-farm farmer');
+	const farms = model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
+	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: farms } });
+	expect(add.status(), await add.text()).toBe(201);
+
+	const p = farmer.page;
+	await p.setViewportSize({ width: 1440, height: 960 });
+	await p.goto('/account/alerts');
+	await expect(p.locator('main[data-ready="true"]')).toBeVisible();
+	const card = p.getByRole('region', { name: 'Thirty-farm catchment' });
+	// Thirty farms and the WUA's notices.
+	await expect(card.getByRole('group')).toHaveCount(31);
+	const main = (await p.locator('main').boundingBox())!;
+	const box = (await card.boundingBox())!;
+	expect(box.width).toBeGreaterThan(main.width * 0.9);
+	const first = (await card.getByRole('group').nth(0).boundingBox())!;
+	const second = (await card.getByRole('group').nth(1).boundingBox())!;
+	expect(Math.abs(first.y - second.y)).toBeLessThan(1);
+	expect(second.x).toBeGreaterThan(first.x + first.width);
+	// Two columns of rows: well under two screens at 1440 × 960 (it was about three).
+	expect(await p.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(1400);
+	await expectNoViolations(p);
+
+	await p.setViewportSize(PHONE);
+	const first2 = (await card.getByRole('group').nth(0).boundingBox())!;
+	const second2 = (await card.getByRole('group').nth(1).boundingBox())!;
+	expect(second2.y).toBeGreaterThan(first2.y + first2.height - 1);
+	await expectNoSidewaysScroll(p);
+	await expectNoViolations(p);
 });
 
 test('an alert email’s unsubscribe link works signed out, asks first, and a dead link says so', async ({ page, owner, browser }) => {

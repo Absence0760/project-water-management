@@ -4105,18 +4105,35 @@ the catalogue, [§ Language](#language)); both unit-tested.
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
-  panel and from every alert email; translated): a card per catchment you
-  can open, as many across as fit the page's own width (at least 28rem
-  each; two at 1440, stacked on a phone), in the account page's frame
-  (capped at 92rem), each with a group per alert you can get, with *Right away* / *Once a day (06:00)* /
-  *Off* radios (32 px rows with a mouse, 44 px on touch and phones). A farmer sees a *Dam running low: <farm>* group
-  per own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  panel and from every alert email; translated): the section header
+  (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
+  emails**, with what the page is for as its context line, **Back to your
+  account** on the right, and under it one slim line with the daily cap (5
+  right away, the rest in the next morning's summary) and, when mail is
+  paused, the banner below. Then a card per catchment you can open, as many
+  across as fit the page's own width (at least 34rem each: two at 1440 and
+  1280, stacked on a phone; `auto-fit`, so a lone catchment takes the whole
+  width and lays its rows out in two columns once the card is 66rem wide),
+  in the account page's frame (capped at 92rem, a 1.5rem bottom gutter so a
+  page that fits doesn't scroll). Each alert you can get is **one row**: its
+  name (a fieldset legend) beside a joined three-way switch, *Right away* /
+  *Once a day (06:00)* / *Off* (real radios under the segments, so arrow keys
+  move the choice; the picked one tinted, bold and ticked; 32 px with a
+  mouse, 44 px on touch and phones; in a narrow card the switch goes under
+  the name at full width). A farmer sees a *Dam running low: <farm>* row per
+  own farm and *Restriction notices from the WUA*, nothing else; a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
-  ("Saved."), and the page says when the catchment hasn't switched that
-  alert on yet. A catchment muted by a digest's unsubscribe says so, with
-  *Turn alert emails back on*. It notes the daily cap (5 right away, the rest
-  in the next morning's summary).
+  ("Saved." in the card's head); the switch stays usable while it saves
+  (disabling it dropped the keyboard's focus), and a catchment's saves go
+  to the server in order, the page taking the server's answer once the last
+  is back. An alert the catchment hasn't switched on yet is starred, and the
+  card's footnote (also each starred row's description) says "Not switched
+  on for this catchment yet: you get nothing until the WUA turns it on." A
+  catchment muted by a digest's unsubscribe says so, with *Turn alert emails
+  back on*. An owner's four catchments fit 1440 × 960 unscrolled; thirty
+  farms read as two columns of rows (`alerts.spec.ts` pins both, and the
+  phone).
 - **Paused alert emails** (translated; on `/account/alerts` and in the
   account page's **Alert emails** panel): when SES stopped delivering to the
   person's address (`user.mailSuppressed`), a warning banner says so and
@@ -4163,7 +4180,10 @@ signed in or out, for someone outside the project, on a phone first.
   `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way. The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
-  Management · Shared view", with the EN | AF switch), not the app's; it is
+  Management" with "Shared view" under it, and the EN | AF switch beside,
+  one row on a 360 px phone; its content lined up over the page's), not
+  the app's sidebar frame: it is a public page for someone outside the
+  project, signed out or not, like the sign-in pages; it is
   a route chunk of its own, loaded only when opened. Its words come from the
   message catalogue (`share/share.ts`, the `share.*` keys, and the farm
   view's for the notice card; [§ Language](#language)), in this device's
@@ -4182,6 +4202,13 @@ signed in or out, for someone outside the project, on a phone first.
   when the series come back, otherwise a line saying that with so few farms
   the flows could reveal a farm's use; and **About this page** with the
   farm count and the model disclaimer.
+- **Layout (issue #17):** one column on a phone (560 px at most). Once the
+  page is 860 px wide (a container query) the result is 1120 px wide in two
+  columns under the name: the notice and the reserve on the left, the flow
+  chart and About on the right, so at 1440 × 960 and 1280 × 800 it all
+  fits without a page scroll. The message states (dead link, error) stay
+  one 560 px card. `share-links.spec.ts` pins both layouts and axe in both
+  themes.
 - **States:** loading; a dead link ("This link has expired or was
   withdrawn. Ask whoever sent it for a new one.") for every `404`; a link
   without its token ("This page needs the whole link…"); and an error with
