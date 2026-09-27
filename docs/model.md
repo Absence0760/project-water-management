@@ -2396,13 +2396,50 @@ pumping through the lag), `annualCapM3` (Σ of the caps, null when any unit
 can pump without one), `gaLimitM3` and each unit's volume, cap and whether it
 reached the cap. **This is the field the licensing comparisons read** (WARMS
 registered volumes, WP-3.10): modelled groundwater abstraction per farm per
-water year, m³. `gaLimitM3` is `GA538_GROUNDWATER_LIMIT_M3_YEAR` = 40 000 m³/a,
-the GN 538 (2016) general authorisation's ceiling per property; what a
-property may take under the GA depends on its size and where it is, so it is
-context only. The app shows modelled use against the caps and the ceiling and
-**never decides whether a use is lawful**. Pending the hydrologist: whether a
-project should carry each property's own GA volume (area × the schedule's
-rate) instead of the ceiling.
+water year, m³. The app shows modelled use against the caps and the GN 538
+volume and **never decides whether a use is lawful**.
+
+**The GN 538 volume per property (engine ≥ 1.10.0, issue #46 item 7; a
+draft from the hydrologist persona, pending the real hydrologist).** GN 538
+of 2 September 2016 (Government Gazette 40243) lets a property take
+groundwater under the general authorisation up to its size × the rate Table 2
+(Appendix B) gives its quaternary catchment, one of 0, 45, 75, 150, 275 or 400
+m³/ha/a (`GA538_GROUNDWATER_RATES`), and never more than 40 000 m³ a year on a
+property (§4.1.1, `GA538_GROUNDWATER_LIMIT_M3_YEAR`). A farm or other user
+carries the inputs: `gaPropertyAreaHa` (ha; a property is land registered
+separately in a Deeds Office) and `gaRateM3HaYear`. `gaLimitM3` =
+min(area × rate, 40 000) (`ga538VolumeM3`), with `gaBasis` `'property'`;
+without both (or with a rate not in the table) it is the 40 000 ceiling, with
+`gaBasis` `'ceiling'` and a run warning naming the nodes ("GN 538 volume
+unknown for …"). Before 1.10.0 every row was the ceiling. A 60 ha property at
+45 m³/ha/a gets 2 700 m³/a, not 40 000; in a zero-rate quaternary no
+groundwater may be taken under the GA at all. The app doesn't carry the
+quaternary → rate schedule: the gazette's table is a scanned list of ranges
+across six columns, and a mis-read row would put a wrong legal number in front
+of an applicant, so the modeller looks the rate up in Appendix B and enters it.
+A node spanning several registered properties should be split, or carry the
+property the boreholes stand on: the 40 000 cap applies per property.
+
+GN 538's "year" is **any 12 consecutive months** (§1 definition 5), so a use
+split across 1 October can pass both water years and still exceed the volume.
+Each row also carries `rolling12MaxM3`: the most pumped (to the crop and into
+the dam) in any 12 consecutive calendar months **ending** in that water year
+(a window ending on day e starts the day after the same date a year earlier,
+29 February counting as the 28th; `twelveMonthsStart`), null while the run has
+no full 12 months behind the day. The results count a year above the GA when
+either its water-year total or that 12-month figure passes `gaLimitM3`.
+
+The GA's exclusions: its groundwater excludes "alluvial aquifers directly
+connected to a stream", which it counts as surface water (definitions 2 and
+4), and no GA groundwater may be taken within 100 m of the riparian edge of a
+watercourse or state dam, 500 m of a wetland, pan or estuary, 500 m of a state
+dam wall or 500 m of the high-water mark (§2.2). The run warns on a pumping
+unit with a stream depletion share of `GA538_ALLUVIAL_DEPLETION_FRAC` (80 %)
+or more, which suggests a stream-connected alluvial aquifer (a judgement). The
+app has no borehole locations, so the distance exclusions can't be checked:
+the results note says so. No revision of GN 538 after 2016 was found
+(2026-09-27); the GA runs 20 years from 2 March 2017 unless withdrawn, so the
+hydrologist should confirm no area-specific withdrawal applies.
 
 **Output keys.** The roadmap names `groundwater_abstraction` and
 `streamflow_depletion`; they are WP-1.34's `groundwater_used` (+
@@ -3718,14 +3755,35 @@ primary catchment series only.
 | --- | --- | --- |
 | Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
-| Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal | a stuck logger or a filled-in gap |
+| Flat-lines | rain: the same non-zero value on 5+ consecutive days (A-pan 7). Flow (engine ≥ 1.10.0): the same value, zero included, on max(14, ⌈3·r / (0.01·Q)⌉) consecutive days, capped at 90, where r is the record's resolution and Q the value (below). Rain's zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
 | Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
 | Double mass vs CHIRPS (CR-20, engine ≥ 0.18.0) | cumulative catchment rain against cumulative CHIRPS over water years with **300+ shared days and 100+ mm of CHIRPS** (10+ such years, else no result); a **break** where the slope (Σ catchment / Σ CHIRPS) changes by **20 %+** and a Pettitt test or the BIC gain confirms it (see below) | a station change, a moved gauge or a new way of building the catchment average; the CHIRPS factors then blend eras |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
 
+**Flow flat-lines by resolution (engine ≥ 1.10.0, issue #46 item 17; a
+draft, pending the hydrologist).** Up to 1.9 a flow flat-line was 14 days of
+one non-zero value at any level, which fired on sound records: DWS publishes
+daily flow in m³/s to three decimals, and a slow dry-season recession stays on
+one value for weeks (0.004 m³/s at a weir with a stable pool). GSIM Part 2
+(Gudmundsson et al. 2018, *ESSD* 10, 787–804,
+https://essd.copernicus.org/articles/10/787/2018/) uses a 10-day rule for the
+same reason. Now the limit depends on the value and the record's resolution
+r, the smallest difference between two of its distinct values (`seriesResolution`,
+float noise below 1e-9 ignored): a recession falling 1 % a day
+(`FLATLINE_FLOW_RECESSION_PER_DAY`) moves a flow Q one step of r in
+r / (0.01·Q) days, and a run is flagged once it lasts three such steps
+(`FLATLINE_FLOW_RESOLUTION_STEPS`), never fewer than 14 days
+(`FLATLINE_MIN_DAYS`) nor more than 90 (`FLATLINE_FLOW_MAX_DAYS`;
+`flowFlatlineMinDays`). At r = 0.001: 1 m³/s needs 14 days, 0.01 needs 30,
+0.004 needs 75, and 0.002 or less the cap. Zero flow counts like any low value
+and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
+rivers; the check never changes results). With fewer than two distinct values
+the resolution is unknown and a non-zero run needs 14 days. Every number here
+is judgement. The Data tab's per-day flags use the same rule.
+
 The outlier, flat-line and rain limits are engine constants
-(`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `ZERO_RUN_MIN_WET_DAYS`,
+(`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `FLATLINE_FLOW_*`, `ZERO_RUN_MIN_WET_DAYS`,
 `ZERO_RUN_PLAIN_DAYS`, `CLIMATOLOGY_MIN_DAYS_PER_MONTH`, `LOW_VS_CHIRPS_*`,
 `RATIO_BASELINE_MIN_YEARS`, `DOUBLE_MASS_*`), not settings; whether they suit these catchments
 is a question for the hydrologist. Like the other series checks they look at

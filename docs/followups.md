@@ -176,10 +176,15 @@ collected as a checklist in issue #46; tick it there as they answer.
         demand, engine 1.8.0, since pumping into it with nothing to irrigate
         took the room winter inflow needed and spilled; model.md §2.7d), and
         whether a farm needs a fill-to level or pumping season per borehole
-        instead, and that annual caps reset on 1 October. Should a project
-        carry each property's own GN 538 volume (area × the schedule's rate,
-        by quaternary) instead of showing the 40 000 m³/a ceiling? Trigger:
-        the first licence application with boreholes. Also: one depletion lag
+        instead, and that annual caps reset on 1 October. **Built as a draft
+        (engine 1.10.0, issue #46 item 7):** each property's own GN 538 volume
+        (area × the Table 2 rate the modeller enters, at most 40 000 m³/a),
+        the most pumped in any 12 months, and warnings for an unknown volume
+        and a depletion share ≥ 80 % (model.md §2.7d). Confirm with the
+        hydrologist: the 80 % alluvial threshold, whether to ship the
+        gazette's quaternary → rate schedule as data (not done: the scanned
+        table's column layout can't be verified row by row), and one property
+        per node. Trigger: the first licence application with boreholes. Also: one depletion lag
         per node is shared by its boreholes; per-borehole lags if a
         geohydrology report gives different response times.
       - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
@@ -241,23 +246,26 @@ collected as a checklist in issue #46; tick it there as they answer.
 - [ ] **Issue #46 persona drafts: the safe changes, not built yet** (2026-09-27).
       Two simulated reviewers (hydrologist, licence assessor) drafted "confirm or
       change" answers to every #46 item (issue comment; full reasoning in the
-      gitignored `reviews/persona-*-issue46.md`). Three were defects and are
+      gitignored `reviews/persona-*-issue46.md`). Built as drafts since (engine
+      1.10.0, pending the real hydrologist): the GA volume per property with a
+      12-month check (item 7), and flow flat-lines by the record's resolution
+      (item 17, replacing the persona's "above Q30" with GSIM Part 2's
+      reasoning; model.md §2.10a). Three were defects and are
       fixed: dam-target boreholes pump only on a day the dam is drawn for
       demand (engine 1.8.0), a freshet is a flood hydrograph, not days held at
       the peak (1.9.0), and groundwater pumped into a dam is netted out of
       surface use in the allocation comparison (no engine bump). Still to
       build, each adding an option or fixing a mechanism without changing a
-      default: GA volume per property (area × the quaternary's GN 538 rate,
-      capped at 40 000 m³/a, any 12 months); an enlarged dam resized along its
+      default: an enlarged dam resized along its
       own area–volume curve; unmet borehole depletion carried over, not
       dropped; a warning when the run's natural MAR is > ±15 % off the
       gazetted one; assurance of supply over complete water years only; the
       lowest review-trigger band starting from the lowest storage on record
-      for the date; a flow flat-line flagged only above Q30 (else 30 days).
+      for the date.
       Part-done work sits in stopped worktree branches
-      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion),
-      `worktree-agent-ac21d77185b90f6ec` (MAR warning, water years, bands) and
-      `worktree-agent-ac030f837ff7f9ec4` (GA, flat-line), uncommitted.
+      `worktree-agent-a48c8c720e48719b7` (dam curve, depletion) and
+      `worktree-agent-ac21d77185b90f6ec` (MAR warning, water years, bands),
+      uncommitted.
       Waiting on the real hydrologist (they change defaults or rest on thin
       evidence): `ewrChargeSource` → `ruleTable`, `lowFlowMeasure` →
       `baseflow`, τ 0.2, outcome cut-offs 0.95 / 0.85, senior users exempt
@@ -278,7 +286,9 @@ collected as a checklist in issue #46; tick it there as they answer.
       in-sample ones (model.md §2.10b). Calibration exclusions are stored too,
       and `runModel` passes them to the EWR agreement (model.md §2.9b).
 - [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
-      10× for flow; flat-lines are 5 days for rain and 14 for flow. The
+      10× for flow; flat-lines are 5 days for rain and, for flow, 14 to 90 days
+      by the record's resolution and the flow (engine 1.10.0, a draft pending
+      the hydrologist; model.md §2.10a). The
       catchment-rain checks (issue #2) flag a zero run with 60+ days in the
       series' six wettest months (180+ days without two years of data) and a
       water year below 50 % of the record's usual catchment / CHIRPS share.

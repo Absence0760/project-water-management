@@ -1257,9 +1257,15 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   water year the run touches: `{ nodeId, name, kind, waterYear (start year),
   label ('2003/04'), days, abstractionM3 (pumped to the crop + into the dam),
   toDamM3, streamDepletionM3, annualCapM3 (Σ caps, null if any borehole can
-  pump uncapped), gaLimitM3 (40 000, the GN 538 ceiling per property, context
-  only), boreholes: [{ id (null = the combined capacity), name, abstractionM3,
-  annualCapM3, capReached }] }`. It is the modelled groundwater abstraction per
+  pump uncapped), gaLimitM3 (the GN 538 volume for the property, context
+  only: min(gaPropertyAreaHa × gaRateM3HaYear, 40 000) from engine 1.10.0,
+  else, and on older runs, the 40 000 ceiling), gaBasis ('property' |
+  'ceiling', engine ≥ 1.10.0), rolling12MaxM3 (the most pumped in any 12
+  consecutive months ending in the year, null without 12 months of run behind
+  it; engine ≥ 1.10.0), boreholes: [{ id (null = the combined capacity), name,
+  abstractionM3, annualCapM3, capReached }] }`. The model document's nodes
+  carry `gaPropertyAreaHa` (ha, ≥ 0, null = unknown) and `gaRateM3HaYear`
+  (one of 0, 45, 75, 150, 275, 400, or null); anything else is a 400. It is the modelled groundwater abstraction per
   farm per water year that licensing comparisons (WARMS, WP-3.10) read. A node
   with a dam-target borehole has the run series `groundwater_to_dam`, and its
   farm summary `avgGroundwaterToDamM3Day`. The summary CSV adds a
