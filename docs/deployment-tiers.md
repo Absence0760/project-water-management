@@ -184,10 +184,54 @@ and the budget alarm pages at 50%, 100% and forecast 100%.
 | Stop RDS when idle | Up to ~$12 | AWS restarts a stopped instance after 7 days; not a production pattern. |
 | Region us-east-1 instead of af-south-1 | ~$8–35 depending on tier | Adds a POPIA cross-border transfer and ~200 ms to every API call ([deployment.md § Region](./deployment.md#region-recommendation)). |
 
+### Alternatives if cost becomes a real objection
+
+Neither is built; both are recorded so the decision isn't re-derived.
+
+| Alternative | ≈ $/month (minimal) | Keeps data in SA | Tradeoff | Switch when |
+| --- | --- | --- | --- | --- |
+| **NAT instance** (e.g. a `t4g.nano`) instead of the 3 interface endpoints | ~$35–40 (af-south-1) | Yes | One more server to patch; email and job wake-ups stop if it dies until it's replaced | The client pushes back on the hosting fee |
+| **Hosted Postgres** (Supabase / Neon paid plan, with backups) instead of RDS, no VPC | ~$32–40 | Only if the provider has a South African region | A new sub-processor holding client data (privacy notice, vendor review); the free tiers pause idle projects and have no backups, so never those | Data may leave SA *and* the client wants no servers at all |
+
+This is why threkir's AWS bill is ~$3: its database is Supabase, outside
+AWS, so it needs no VPC and no endpoints.
+
+## Where the data lives
+
+**Decision: host in af-south-1 (Cape Town) while the users are South
+African.** This is not legal advice; confirm with counsel and the CISO
+before go-live.
+
+- **POPIA doesn't strictly require data to stay in South Africa.** Section
+  72 allows a transfer abroad with adequate protection (for AWS, its DPA),
+  consent or a contract ([deployment.md § Region](./deployment.md#region-recommendation)).
+- **Government data can.** The National Data and Cloud Policy (Government
+  Gazette 50741, 31 May 2024) requires government data that bears on
+  national security and sovereignty to be stored only in South Africa; the
+  draft's broader localisation of all critical-information-infrastructure
+  data was dropped from the final policy
+  ([ENS](https://www.ensafrica.com/news/detail/8715/south-africas-new-national-cloud-and-data-pol),
+  [Bowmans](https://bowmanslaw.com/insights/south-africa-the-national-policy-on-data-and-cloud-some-highlights/)).
+  Water-use licence evidence, or a DWS / CMA client, could bring data into
+  that scope; ask when a government body becomes a user.
+- Keeping everything in af-south-1 removes both questions, costs ~$8–10 a
+  month more than us-east-1 and cuts ~150 ms off every API call.
+
+**Other countries later: one deployment per jurisdiction, not one global
+database.** The Terraform already takes `aws_region`, and every project's
+data is isolated by RLS, so a second country is a second stack in its own
+region (its own database, domain or subdomain, SES identity and budget),
+applied from the same code. That keeps each country's data under its own
+law, with no cross-border replication to justify. Don't build multi-region
+support before a second country is signed: each new jurisdiction needs its
+own legal review (residency, privacy notice, sub-processors) anyway, and
+the per-stack cost is the minimal tier's ~$50–65 a month.
+
 ## Before choosing
 
-- Region is a client question (plan question 15: may the data leave South
-  Africa?). It moves both tiers' price by roughly 25–35%.
+- Plan question 15 (may the data leave South Africa?) is still open; the
+  recommendation above assumes af-south-1 regardless, which moves both
+  tiers' price up by roughly 25–35% over us-east-1.
 - Loop in the CISO or Security Analyst on the tier choice if this deployment
   falls under the company's SOC 2 scope: availability commitments and backup
   retention are the Availability criteria's territory.
