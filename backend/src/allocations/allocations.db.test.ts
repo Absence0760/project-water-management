@@ -220,6 +220,42 @@ describe('the run comparison', () => {
 		expect(a.surface.years[0].modelledM3).toBeCloseTo(again.nodes[0]!.surface.years[0]!.modelledM3, 6);
 	});
 
+	it('counts groundwater pumped into the dam once: as groundwater, netted out of the dam draw on the surface side (issue #46)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: dam-target borehole' })).body.project.id;
+		const out = node('Weir', null);
+		const f = node('Pumped farm', out.id, { damCapacityM3: 20_000, damInitialPct: 0.2, supplyRule: 'riverFirst', pumpCapacityM3Day: 60 });
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const bh = { id: crypto.randomUUID(), nodeId: f.id, name: 'BH-dam', capacityM3Day: 200, annualCapM3: null, mode: 'primary', emergencyBelowPct: 0.3, target: 'dam', depletionFactor: 0 };
+		const m = { nodes: [out, f], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 60_000 }], transfers: [], boreholes: [bh] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(0) } })).status).toBe(200);
+		const rain = Array.from({ length: 365 }, (_, i) => (i % 9 === 0 ? 25 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'dam-target' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const x = res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === f.id);
+
+		const rows = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction')`, [
+			run.body.run.id,
+			f.id
+		]);
+		const s = Object.fromEntries(rows.map((r) => [r.key as string, r.values as number[]]));
+		expect(Object.keys(s).sort()).toEqual(['groundwater_to_dam', 'groundwater_used', 'river_abstraction', 'supplied']);
+		const sum = (a: number[]) => a.reduce((t, v) => t + v, 0);
+		const toDam = sum(s.groundwater_to_dam!);
+		const damDraw = sum(s.supplied!.map((v, i) => Math.max(v - s.groundwater_used![i]! - s.river_abstraction![i]!, 0)));
+		// The fixture exercises the rule: water is pumped into the dam, drawn out of it, and the river pump runs.
+		expect(toDam).toBeGreaterThan(0);
+		expect(damDraw).toBeGreaterThan(0);
+		expect(sum(s.river_abstraction!)).toBeGreaterThan(0);
+		// One whole water year, 2021/22.
+		expect(x.groundwater.years).toHaveLength(1);
+		expect(x.groundwater.years[0].modelledM3).toBeCloseTo(sum(s.groundwater_used!) + toDam, 3);
+		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) - sum(s.groundwater_used!) - Math.min(toDam, damDraw), 3);
+	});
+
 	it('takes a tolerance, and refuses one out of range', async () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.25`)).body.comparison.tolerance).toBe(0.25);
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=2`)).status).toBe(400);
