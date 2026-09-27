@@ -1,11 +1,14 @@
 <script lang="ts">
-	// Headline numbers, calibration fit and the per-farm table of one run.
+	// Headline numbers and calibration fit of one run. The per-unit table moved to
+	// Units & supply (supply/UnitResultsTable.svelte, issue #17); the printable
+	// report passes it back in through `units`, in its old place.
+	import type { Snippet } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
-	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from './results';
+	import { m3DayToM3s, m3DayToMm3a, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
@@ -15,18 +18,13 @@
 	let {
 		summary,
 		days,
-		nodeOrder = new Map(),
-		startDate,
-		endDate
+		units
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
 		days: number;
-		/** The run's first and last day: the period the farm figures cover (issue #44). */
-		startDate?: string;
-		endDate?: string;
-		/** nodeId → network position, for the default farm order. */
-		nodeOrder?: ReadonlyMap<string, number>;
+		/** Drawn after the catchment cards: the printable report's unit table. */
+		units?: Snippet;
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
@@ -47,31 +45,6 @@
 	const c = $derived(summary.catchment);
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
 	const lede = $derived(runSentence(summary));
-	/** Farm figures here are whole-record means; the curtailment table has its own window. */
-	const wholeRecord = $derived(startDate && endDate ? `the whole record, ${startDate} to ${endDate} (${fmtNum(days)} days)` : 'the whole record');
-
-	let sortKey = $state<FarmSortKey>('network');
-	let sortDir = $state<'asc' | 'desc'>('asc');
-	const sorted = $derived(sortFarms(farms, sortKey, sortDir, nodeOrder));
-
-	function sortBy(k: FarmSortKey) {
-		if (sortKey === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else {
-			sortKey = k;
-			// Worst first for the columns people scan for problems.
-			sortDir = k === 'fractionSupplied' || k === 'name' ? 'asc' : 'desc';
-		}
-	}
-	const ariaSort = (k: FarmSortKey) => (sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined);
-
-	const COLS: { key: FarmSortKey; label: string; unit: string; title: string }[] = [
-		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the unit takes to meet it).' },
-		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
-		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
-		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; units under ${SUPPLY_TARGET * 100} % are flagged.` },
-		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this unit that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).' }, // gitleaks:allow (a field name, not a secret)
-		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this unit was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
-	];
 	const groups = $derived(warningGroups(summary.warnings));
 	const checkItems = $derived(credibility(summary));
 </script>
@@ -158,80 +131,7 @@
 	{/if}
 </dl>
 
-<h3>Units</h3>
-{#if farms.length === 0}
-	<p class="muted">This run has no unit results.</p>
-{:else}
-	<div class="farm-head">
-		<p class="muted small">
-			{#if shortCount}
-				<span class="flag-key" aria-hidden="true"></span>
-				{shortCount} of {farms.length} unit{farms.length === 1 ? '' : 's'} received less than {fmtPct(SUPPLY_TARGET, 0)} of demand (highlighted).
-			{:else}
-				All units received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
-			{/if}
-			<span data-testid="farms-period">Daily averages over {wholeRecord}; the curtailment targets cover the reporting window.</span> Click a heading to sort.
-		</p>
-		{#if sortKey !== 'network'}
-			<button type="button" class="btn btn-sm" onclick={() => ((sortKey = 'network'), (sortDir = 'asc'))}>Network order</button>
-		{/if}
-	</div>
-	<div class="table-wrap">
-		<table class="data farms">
-			<thead>
-				<tr>
-					<th scope="col" aria-sort={ariaSort('name')}>
-						<button type="button" class="sort" onclick={() => sortBy('name')}>Unit{#if sortKey === 'name'}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
-					</th>
-					{#each COLS as col (col.key)}
-						<th scope="col" class="num" aria-sort={ariaSort(col.key)} title={col.title}>
-							<button type="button" class="sort" onclick={() => sortBy(col.key)}>
-								{#if sortKey === col.key}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}{col.label}<br /><span class="u">{col.unit}</span>
-							</button>
-						</th>
-					{/each}
-				</tr>
-			</thead>
-			<tbody>
-				{#each sorted as f (f.nodeId)}
-					{@const short = f.fractionSupplied < SUPPLY_TARGET}
-					<tr class:flag={short}>
-						<th scope="row">
-							{f.name}
-							{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}
-						</th>
-						<td class="num">{fmtNum(f.avgDemandM3Day)}</td>
-						<td class="num">{fmtNum(f.avgSuppliedM3Day)}</td>
-						<td class="num" class:neg={f.avgDeficitM3Day > 0.5}>{fmtNum(f.avgDeficitM3Day)}</td>
-						<td class="num" class:short>
-							<span class="supply">
-								<span class="bar" aria-hidden="true"><span class="fill" style:width="{supplyBarFraction(f.fractionSupplied) * 100}%"></span></span>
-								{fmtPct(f.fractionSupplied)}
-							</span>
-						</td>
-						<td class="num">{fmtNum(f.avgEwrShortfallM3Day)}</td>
-						<td class="num">{fmtNum(f.daysEwrNotMet)}</td>
-					</tr>
-				{/each}
-			</tbody>
-			<tfoot>
-				<tr>
-					<th scope="row">All units</th>
-					<td class="num">{fmtNum(totals.demand)}</td>
-					<td class="num">{fmtNum(totals.supplied)}</td>
-					<td class="num">{fmtNum(totals.deficit)}</td>
-					<td class="num">{totals.demand > 0 ? fmtPct(totals.supplied / totals.demand) : '–'}</td>
-					<td class="num">{fmtNum(totals.ewr)}</td>
-					<td class="num"></td>
-				</tr>
-			</tfoot>
-		</table>
-	</div>
-	<p class="muted small after">
-		Annual totals: demand {fmtQty(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtQty(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
-		deficit {fmtQty(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtQty((totals.deficit * 1000) / 86_400, 1)} l/s).
-	</p>
-{/if}
+{#if units}{@render units()}{/if}
 
 {#if summary.landCover || summary.users?.length || pumping.length}
 	<Lazy load={loadHumanImpacts}>
@@ -328,98 +228,5 @@
 	}
 	.stat dd.none {
 		color: var(--text-muted);
-	}
-	.farm-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem 1rem;
-		flex-wrap: wrap;
-	}
-	.farm-head p {
-		margin: 0 0 0.5rem;
-	}
-	.farms thead th {
-		padding: 0;
-	}
-	.sort {
-		all: unset;
-		box-sizing: border-box;
-		display: block;
-		width: 100%;
-		padding: 0.35rem 0.55rem;
-		cursor: pointer;
-		text-align: inherit;
-		min-height: 36px;
-	}
-	.sort:hover {
-		background: var(--row-hover);
-	}
-	.sort:focus-visible {
-		outline: 2px solid var(--focus);
-		outline-offset: -2px;
-	}
-	.dir {
-		font-size: 0.6rem;
-		margin-right: 0.25rem;
-		color: var(--accent);
-	}
-	td.short,
-	td.neg {
-		color: var(--warning);
-		font-weight: 600;
-	}
-	/* Supplied % of demand: a small bar beside the number (the number is the content; the bar is aria-hidden). */
-	.supply {
-		display: inline-flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 0.4rem;
-	}
-	.bar {
-		flex: none;
-		width: 3.5rem;
-		height: 0.45rem;
-		border-radius: 999px;
-		background: var(--surface-2);
-		box-shadow: inset 0 0 0 1px var(--border);
-		overflow: hidden;
-	}
-	.fill {
-		display: block;
-		height: 100%;
-		background: var(--success);
-	}
-	td.short .fill {
-		background: var(--warning);
-	}
-	@media (max-width: 640px) {
-		.bar {
-			width: 2.25rem;
-		}
-	}
-	@media (forced-colors: active) {
-		.bar {
-			border: 1px solid CanvasText;
-		}
-		.fill {
-			background: CanvasText;
-		}
-	}
-	.badge {
-		margin-left: 0.35rem;
-		text-transform: none;
-	}
-	.flag-key {
-		display: inline-block;
-		width: 0.8rem;
-		height: 0.8rem;
-		background: var(--row-flag);
-		border: 1px solid var(--warning);
-		vertical-align: -1px;
-		margin-right: 0.25rem;
-	}
-	.after {
-		margin: 0.5rem 0 0;
 	}
 </style>
