@@ -7,7 +7,8 @@
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
-	// Wide, the three groups are one row of controls beside the title. In a
+	// Wide, the three groups are one row of controls beside the title, or under
+	// it when they would squeeze the context line onto a second line. In a
 	// narrow header (a phone), in the same order: the pill on a line of its
 	// own; the tab's pickers, each a full row; then its buttons and the page's
 	// pair in full rows, every control growing to fill its row. Add data and
@@ -75,9 +76,14 @@
 		flex-wrap: wrap;
 		gap: 0.75rem 1.5rem;
 	}
+	/* The title asks for its context's full one-line width (flex-basis auto is its
+	   max-content), never less than 16rem: when the controls fit beside a context
+	   on one line they share the row as before, and when they don't the controls
+	   wrap under the title instead of squeezing the context into a narrow column
+	   of 3–4 short lines (River & reserve for a viewer at 1440, Compare runs at 1024). */
 	.title {
-		flex: 1 1 16rem;
-		min-width: 0;
+		flex: 1 1 auto;
+		min-width: min(100%, 16rem);
 	}
 	.title-line {
 		display: flex;

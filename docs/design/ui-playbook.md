@@ -266,6 +266,13 @@ section it belongs to, with the example that taught it.
   `workspace-phone.spec.ts`). A popover anchored to the right edge (the
   rain pill's list) must open from the left once its trigger starts the
   row, or it runs off the screen.
+- **A title column sized by a fixed basis squeezes its text.** The section
+  header's title took `flex: 1 1 16rem`, so whenever the controls fitted
+  beside it a long context line wrapped to 3–4 short lines (River & reserve
+  for a viewer at 1440, Compare runs at 1024). Size a text column that
+  shares a wrapping row with controls by its content (`flex: 1 1 auto`, its
+  max-content, with the old basis as `min-width`), so the controls wrap
+  under it once its text would wrap, and pin the line count in e2e.
 
 ## 3. Colour, wording, content
 

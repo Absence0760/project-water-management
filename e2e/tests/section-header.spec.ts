@@ -10,6 +10,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticRain } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
+import { openRiver, seedRiverProject } from '../support/river.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
@@ -154,6 +155,97 @@ test.describe('desktop', () => {
 		await expect(bar.getByRole('button', { name: 'Save changes' })).toBeVisible();
 		await bar.getByRole('button', { name: 'Discard' }).click();
 		await expect(header(page).getByText('Unsaved changes', { exact: true })).toHaveCount(0);
+	});
+});
+
+/**
+ * How the header lays out its context line: how many lines the context's text
+ * takes, and whether the controls sit beside the title (on its row) or under it.
+ */
+async function contextLayout(page: Page) {
+	return header(page).evaluate((h) => {
+		const ctx = h.querySelector('[data-testid="section-context"]')!;
+		const mids: number[] = [];
+		const walker = document.createTreeWalker(ctx, NodeFilter.SHOW_TEXT);
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+			if (!n.textContent?.trim()) continue;
+			const range = document.createRange();
+			range.selectNodeContents(n);
+			for (const r of range.getClientRects()) if (r.width > 0) mids.push(r.top + r.height / 2);
+		}
+		mids.sort((a, b) => a - b);
+		let lines = 0;
+		let last = -Infinity;
+		for (const m of mids) {
+			if (m - last <= 8) continue;
+			lines++;
+			last = m;
+		}
+		const title = h.querySelector('.title')!.getBoundingClientRect();
+		const actions = h.querySelector('.actions')!.getBoundingClientRect();
+		return { lines, beside: actions.top < title.bottom - 2 };
+	});
+}
+
+test.describe('a long context line', () => {
+	// The title column used to shrink to 16rem whatever its context, so with the controls
+	// beside it a long context wrapped to 3 or 4 short lines (River & reserve for a viewer
+	// at 1440, Compare runs at 1024). The controls now go under the title once the context
+	// would wrap; a context that fits on one line keeps the controls beside it.
+	const WIDTHS = [
+		{ width: 1440, height: 960 },
+		{ width: 1280, height: 800 },
+		{ width: 1024, height: 768 }
+	];
+
+	test('River & reserve for a viewer: the context takes at most 2 lines, 1 beside the controls', async ({ page, owner, signIn }) => {
+		void owner;
+		const id = await seedRiverProject(page.request, 'Header long river');
+		await createRun(page.request, id, 'Earlier run');
+		await createRun(page.request, id, 'Baseline with the upper dam at its present level');
+		const viewer = await signIn('Header long river viewer');
+		await addMember(page.request, id, viewer.user.email, 'viewer');
+		const v = viewer.page;
+		for (const size of WIDTHS) {
+			await v.setViewportSize(size);
+			await openRiver(v, id);
+			await expect(header(v).getByTestId('river-context')).toContainText('Baseline with the upper dam at its present level');
+			// The run picker and Open in Runs & results make the controls wide.
+			await expect(header(v).getByRole('combobox')).toBeVisible();
+			await expect(header(v).getByRole('link', { name: 'Open in Runs & results' })).toBeVisible();
+			const layout = await contextLayout(v);
+			expect(layout.lines, `${size.width} px`).toBeLessThanOrEqual(2);
+			if (layout.beside) expect(layout.lines, `${size.width} px, beside the controls`).toBe(1);
+			expect(await noSideScroll(v)).toBe(true);
+			await expectNoViolations(v);
+		}
+		// 1440: the controls no longer fit beside this context on one line, so they sit under the title.
+		await v.setViewportSize(WIDTHS[0]!);
+		await openRiver(v, id);
+		expect(await contextLayout(v)).toEqual({ lines: 1, beside: false });
+	});
+
+	test('Compare runs: the context takes at most 2 lines, 1 beside the controls; a short context keeps them beside', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, 'Header long compare');
+		await createRun(page.request, project.id, 'Baseline with the upper dam at its present level');
+		await createRun(page.request, project.id, 'What-if with the upper dam raised by two metres');
+		for (const size of WIDTHS) {
+			await page.setViewportSize(size);
+			await page.goto(`/projects/${project.id}?tab=compare`);
+			await expect(header(page).getByTestId('compare-context')).toContainText('against one what-if');
+			await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
+			const layout = await contextLayout(page);
+			expect(layout.lines, `${size.width} px`).toBeLessThanOrEqual(2);
+			if (layout.beside) expect(layout.lines, `${size.width} px, beside the controls`).toBe(1);
+			expect(await noSideScroll(page)).toBe(true);
+			await expectNoViolations(page);
+
+			// Data's short context ("2 input series · 1 behind") keeps its controls beside it, as before.
+			await nav(page).getByRole('link', { name: /^Data/ }).click();
+			await expect(header(page).getByTestId('section-context')).toHaveText('2 input series · 1 behind');
+			expect(await contextLayout(page), `Data at ${size.width} px`).toEqual({ lines: 1, beside: true });
+		}
 	});
 });
 
