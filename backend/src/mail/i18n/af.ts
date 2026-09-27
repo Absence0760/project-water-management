@@ -42,6 +42,18 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.reset.expires': 'Hierdie skakel verval oor 1 uur en werk net een keer.',
 	// If you didn't ask for this, you can ignore this email — your password stays the same.
 	'mail.reset.ignore': 'As jy nie hiervoor gevra het nie, kan jy hierdie e-pos ignoreer — jou wagwoord bly dieselfde.',
+	// You already have an account — {product}
+	'mail.exists.subject': 'Jy het reeds ’n rekening — {product}',
+	// You already have an account
+	'mail.exists.heading': 'Jy het reeds ’n rekening',
+	// Someone tried to create a {product} account for {email}, but this address already has one.
+	'mail.exists.body': 'Iemand het probeer om ’n {product}-rekening vir {email} te skep, maar hierdie adres het reeds een.',
+	// If it was you, sign in with your password. If you’ve forgotten it, choose a new one:
+	'mail.exists.signIn': 'As dit jy was, teken in met jou wagwoord. As jy dit vergeet het, kies ’n nuwe een:',
+	// Choose a new password
+	'mail.exists.action': 'Kies ’n nuwe wagwoord',
+	// If it wasn't you, you can ignore this email — nothing has changed on your account.
+	'mail.exists.ignore': 'As dit nie jy was nie, kan jy hierdie e-pos ignoreer — niks aan jou rekening het verander nie.',
 	// {inviter} has given you access to {farms} in {catchment}
 	'mail.farmer.subject': '{inviter} het jou toegang gegee tot {farms} in {catchment}',
 	// Your farm on {product}

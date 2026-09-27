@@ -80,6 +80,28 @@ export function verifyEmailMail(to: string, url: string, locale?: string | null)
 	);
 }
 
+/**
+ * To the owner of an address someone signed up with again (auth/routes.ts
+ * /register): the sign-up page answers the same for a new and a taken
+ * address, so the owner learns it here, with a password-reset link in case
+ * they forgot theirs.
+ */
+export function accountExistsMail(to: string, url: string, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	return render(
+		to,
+		tr.t('mail.exists.subject', v),
+		{
+			heading: tr.t('mail.exists.heading'),
+			paragraphs: [tr.t('mail.exists.body', v), tr.t('mail.exists.signIn')],
+			action: { label: tr.t('mail.exists.action'), url },
+			footer: [tr.t('mail.reset.expires'), tr.t('mail.exists.ignore')]
+		},
+		tr
+	);
+}
+
 export function resetPasswordMail(to: string, url: string, locale?: string | null): Mail {
 	const tr = mailT(locale);
 	const v = { email: to, product: PRODUCT };

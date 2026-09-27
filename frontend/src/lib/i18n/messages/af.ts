@@ -133,14 +133,16 @@ export const af: Catalogue = {
 	'c98e5cb5': 'Jou syfers sal op hierdie foon gehou word.',
 	// Nothing is kept on this phone now.
 	'6b7e2e01': 'Niks word nou op hierdie foon gehou nie.',
+	// Your farms
+	'ed984863': 'Jou plase',
 	// My farm
 	'eea9510d': 'My plaas',
 	// Menu
 	'00c6075a': 'Kieslys',
-	// Your farms
-	'ed984863': 'Jou plase',
 	// What do these words mean?
 	'874e0640': 'Wat beteken hierdie woorde?',
+	// Account
+	'59f8a2fc': 'Rekening',
 	// Don’t keep a copy on this phone
 	'adfda47f': 'Moenie ’n kopie op hierdie foon hou nie',
 	// Sign out
@@ -603,6 +605,198 @@ export const af: Catalogue = {
 	'94fee914': 'Nie ’n voorspelling nie. Dit kyk terug oor {span}.',
 	// Not measured. It comes from a model of the catchment, which can be wrong.
 	'0d7ba988': 'Nie gemeet nie. Dit kom van ’n model van die opvanggebied, wat verkeerd kan wees.',
+	// Who it’s for
+	'00ffc54f': 'Vir wie dit is',
+	// Consulting hydrologists
+	'e7a496c2': 'Raadgewende hidroloë',
+	// Build and calibrate a catchment model, or import your b023 workbook. Run decades of daily flows in seconds and compare what-ifs.
+	'79147a4a': 'Bou en kalibreer ’n opvanggebiedmodel, of voer jou b023-werkboek in. Bereken dekades se daaglikse vloei in sekondes en vergelyk wat-as-scenario’s.',
+	// Water user associations
+	'f78d4851': 'Watergebruikersverenigings',
+	// One shared model for the whole catchment: who is short this week, and what a restriction would do before you apply it.
+	'061ece1a': 'Een gedeelde model vir die hele opvanggebied: wie hierdie week te min water het, en wat ’n beperking sou doen voordat jy dit oplê.',
+	// Licence applicants and assessors
+	'0414bada': 'Lisensie-aansoekers en -beoordelaars',
+	// Model a new dam or more hectares against the catchment as it is, with evidence an assessor can open and reproduce.
+	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar teen die opvanggebied soos dit is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
+	// Farmers
+	'858cd593': 'Boere',
+	// Your farm’s supply, your dam and any restriction, on your phone, in English or Afrikaans.
+	'942f0d27': 'Die water wat jou plaas kry, jou dam en enige beperking, op jou foon, in Engels of Afrikaans.',
+	// An illustrated catchment: rain over the mountains, two farm dams, an orchard and a vineyard, and a river winding down to a gauging weir.
+	'eb2f0a73': '’n Tekening van ’n opvanggebied: reën oor die berge, twee plaasdamme, ’n boord en ’n wingerd, en ’n rivier wat afkronkel na ’n meetstuwal.',
+	// Catchment water balance
+	'2d2f00a3': 'Waterbalans van die opvanggebied',
+	// Every drop in the catchment, accounted for.
+	'633902ad': 'Elke druppel in die opvanggebied word verreken.',
+	// Model a catchment day by day, from rainfall to river: what each farm is supplied, what its dam holds, and whether the river keeps its ecological reserve.
+	'557501b3': 'Modelleer ’n opvanggebied dag vir dag, van reën tot rivier: hoeveel water elke plaas kry, wat in sy dam is, en of die rivier sy ekologiese reserwe behou.',
+	// Sign in
+	'744be623': 'Teken in',
+	// Create an account
+	'd7f6c093': 'Skep ’n rekening',
+	// Reserve met on {pct} % of days
+	'bc8fde2e': 'Reserwe behou op {pct} % van die dae',
+	// Example catchment, {years} years
+	'828ebfcc': 'Voorbeeld-opvanggebied, {years} jaar',
+	// How it works
+	'd03ba450': 'Hoe dit werk',
+	// Build the network
+	'9325094e': 'Bou die netwerk',
+	// Draw the farms, dams, transfers and gauges on the river, or import your b023 workbook as it is.
+	'ca672fee': 'Teken die plase, damme, oordragte en meetstasies op die rivier, of voer jou b023-werkboek in soos dit is.',
+	// Add the data
+	'ac61f1bd': 'Voeg die data by',
+	// Upload rainfall, flow and evaporation, or let the CHIRPS and DWS feeds keep them up to date every day.
+	'3db163ba': 'Laai reënval, vloei en verdamping op, of laat die CHIRPS- en DWS-datavoere dit elke dag bywerk.',
+	// Run and compare
+	'26609b94': 'Laat loop en vergelyk',
+	// Run the model, then try a what-if and see what it changes for each farm and for the river, in plain words.
+	'ec2ecc6c': 'Laat die model loop, probeer dan ’n wat-as en sien in gewone woorde wat dit vir elke plaas en vir die rivier verander.',
+	// Water Management: daily water balance for a catchment
+	'3dac521e': 'Water Management: daaglikse waterbalans vir ’n opvanggebied',
+	// An illustrated catchment at dusk, with the words: Every drop in the catchment, accounted for.
+	'2f037a30': '’n Tekening van ’n opvanggebied teen skemer, met die woorde: Elke druppel in die opvanggebied word verreken.',
+	// Water Management, home
+	'02a86054': 'Water Management, tuisblad',
+	// See your catchment day by day.
+	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
+	// Footer
+	'575cffd2': 'Voetskrif',
+	// What you get
+	'89089e78': 'Wat jy kry',
+	// Screens from the app itself.
+	'f48a005d': 'Skerms uit die toepassing self.',
+	// A catchment’s Summary: the ecological reserve, supply to each farm and the dams today.
+	'dc9eb4cd': '’n Opvanggebied se opsommingsblad (Summary): die ekologiese reserwe, die lewering aan elke plaas en die damme vandag.',
+	// A farmer’s view of their own farm on a phone: their dam, their supply and any restriction.
+	'972acdeb': 'Die plaas soos die boer dit op ’n foon sien: die dam, die water wat die plaas kry en enige beperking.',
+	// The farmer sees their own share on their phone, in English or Afrikaans.
+	'a5ce8553': 'Die boer sien die plaas se eie deel op die foon, in Engels of Afrikaans.',
+	// The network: farms, dams and gauges on the river, upstream to downstream.
+	'c5f92701': 'Die netwerk: plase, damme en meetstasies op die rivier, van stroomop tot stroomaf.',
+	// The network
+	'991c376a': 'Die netwerk',
+	// Farms, dams, transfers and gauges on the river, from the headwaters to the outlet.
+	'b710dde8': 'Plase, damme, oordragte en meetstasies op die rivier, van die oorsprong tot by die uitloop.',
+	// The river against its ecological reserve, day by day, with the days below it marked.
+	'a67f5236': 'Die rivier teenoor sy ekologiese reserwe, dag vir dag, met die dae daaronder gemerk.',
+	// River and reserve
+	'18beff9c': 'Rivier en reserwe',
+	// Flow at every gauge against the reserve, and which farms’ use it falls short by.
+	'61c83fbb': 'Vloei by elke meetstasie teenoor die reserwe, en aan watter plase se gebruik die tekort toegeskryf word.',
+	// From rainfall to river
+	'2c4de2ff': 'Van reën tot rivier',
+	// What the model works out for every day of the record, one step at a time. The charts are the {year} water year of an example catchment, by week.
+	'6fde5c37': 'Wat die model vir elke dag van die rekordtydperk bereken, een stap op ’n slag. Die grafieke wys die waterjaar {year} van ’n voorbeeld-opvanggebied, per week.',
+	// Rain on the mountains
+	'791b781b': 'Reën op die berge',
+	// Daily rainfall from the catchment’s own gauges, with CHIRPS satellite estimates to fill the gaps and check them.
+	'a90570df': 'Daaglikse reënval van die opvanggebied se eie reënmeters, met CHIRPS-satellietskattings om die gapings te vul en die metings na te gaan.',
+	// mm a week
+	'8e5c53d0': 'mm per week',
+	// Rainfall
+	'58b1f77a': 'Reënval',
+	// {total} mm over the year; the wettest week {peak} mm.
+	'0bdc1bdc': '{total} mm oor die jaar; die natste week {peak} mm.',
+	// Runoff from the slopes
+	'9fb53226': 'Afloop van die hange',
+	// A rainfall–runoff model (GR4J or Pitman), calibrated against the weir’s record, turns rain into the streams’ flow.
+	'8b60aa1f': '’n Reënval-afloopmodel (GR4J of Pitman), gekalibreer teen die meetstuwal se rekord, verander reën in die strome se vloei.',
+	// Natural runoff
+	'b108b500': 'Natuurlike afloop',
+	// Highest in winter: {peak} m³/s in the wettest week.
+	'cc6879f0': 'Die hoogste in die winter: {peak} m³/s in die natste week.',
+	// Dams fill and draw down
+	'41ee0ca8': 'Damme vul en sak',
+	// Each farm dam catches its share of the flow, loses some to evaporation and seepage, and spills when it is full.
+	'e113d616': 'Elke plaasdam vang sy deel van die vloei op, verloor ’n deel daarvan aan verdamping en syfering, en loop oor wanneer hy vol is.',
+	// % full
+	'1032f885': '% vol',
+	// {dam} dam
+	'5df21495': '{dam}-dam',
+	// Full through winter, down to {low} % by the end of summer.
+	'fcd5d4a5': 'Vol deur die winter, teen die einde van die somer af tot {low} %.',
+	// Farms take their share
+	'69b3583e': 'Plase kry hul deel',
+	// Crops need water by the month. The model supplies what the dam and the river can give, and counts the days a farm runs short.
+	'66ee8a7a': 'Gewasse het elke maand water nodig. Die model lewer wat die dam en die rivier kan gee, en tel die dae waarop ’n plaas te min water het.',
+	// m³ a day
+	'd7857240': 'm³ per dag',
+	// Supplied to {farm}
+	'30e67df4': 'Gelewer aan {farm}',
+	// {share} % of what it needed over the year; short in {weeks} weeks (shaded).
+	'9fabf9f8': '{share} % van wat dit oor die jaar nodig gehad het; te min in {weeks} weke (ingekleur).',
+	// The river below
+	'6aa266af': 'Die rivier stroomaf',
+	// What is left reaches the outlet. Every day, the model checks it against the ecological reserve the river needs.
+	'643c2d08': 'Wat oorbly, bereik die uitloop. Elke dag toets die model dit teen die ekologiese reserwe wat die rivier nodig het.',
+	// Flow at the outlet
+	'916671c6': 'Vloei by die uitloop',
+	// Reserve
+	'57d1f6eb': 'Reserwe',
+	// Below the reserve in {weeks} of 52 weeks (shaded), mostly in summer.
+	'310b8b7c': 'Onder die reserwe in {weeks} van 52 weke (ingekleur), meestal in die somer.',
+	// years of daily water balance
+	'f8c0f358': 'jaar se daaglikse waterbalans',
+	// days in one run
+	'e4291d84': 'dae in een lopie',
+	// runs behind the what-if above
+	'9842bf51': 'lopies agter die wat-as hierbo',
+	// Why trust it
+	'458b8568': 'Hoekom jy dit kan vertrou',
+	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
+	'eb8912c3': 'Die rekenenjin word aan gedokumenteerde hidrologie gemeet, nie aan ’n sigblad nie, en elke plek waar dit van die werkboek afwyk, is neergeskryf.',
+	// Every run can be reproduced, and every change has an audit trail.
+	'b8b917a9': 'Elke lopie kan herhaal word, en elke verandering het ’n ouditspoor.',
+	// Each project is private to its members, enforced by the database itself (row-level security).
+	'49027b5c': 'Elke projek is privaat vir sy lede, afgedwing deur die databasis self (row-level security).',
+	// Daily data from CHIRPS rainfall and the DWS gauges.
+	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
+	// This is the farm as it is today. Move a slider to change it.
+	'8b81fde5': 'Dit is die plaas soos dit vandag is. Skuif ’n skuifbalk om dit te verander.',
+	// It costs the river {days} more days a year below the reserve
+	'b7fe266e': 'Dit kos die rivier {days} dae meer per jaar onder die reserwe',
+	// It gives the river {days} fewer days a year below the reserve
+	'2ad50462': 'Die rivier is {days} dae per jaar minder onder die reserwe',
+	// The river is below the reserve about as often as today
+	'7f951aa0': 'Die rivier is omtrent net so dikwels soos vandag onder die reserwe',
+	// and the farm gets about as much of what it needs.
+	'140e03db': 'en die plaas kry omtrent net soveel van wat dit nodig het.',
+	// and the farm gets {points} points more of what it needs.
+	'30a8c782': 'en die plaas kry {points} punte meer van wat dit nodig het.',
+	// and the farm gets {points} points less of what it needs.
+	'5f29d43a': 'en die plaas kry {points} punte minder van wat dit nodig het.',
+	// Try a what-if
+	'c3eedfbb': 'Probeer ’n wat-as',
+	// {farm}, a farm in the example catchment, grows {ha} ha of apples. It wants to plant more, and could build a bigger dam. What would that do to the farm, and to the river?
+	'b258bd4a': '{farm}, ’n plaas in die voorbeeld-opvanggebied, verbou {ha} ha appels. Die plaas wil meer aanplant, en kan ’n groter dam bou. Wat sou dit aan die plaas doen, en aan die rivier?',
+	// Worked out in advance from {runs} runs of the model.
+	'090688fd': 'Vooraf bereken uit {runs} lopies van die model.',
+	// More apples
+	'36b73a49': 'Meer appels',
+	// +{ha} ha
+	'0e94a772': '+{ha} ha',
+	// {ha} more hectares
+	'68a991f8': '{ha} hektaar meer',
+	// Dam size
+	'6b8a7e32': 'Damgrootte',
+	// {times} times today’s dam
+	'64eb41e6': '{times} keer so groot as vandag se dam',
+	// Irrigation supplied
+	'37645529': 'Besproeiingswater gelewer',
+	// {pct} % of what the farm needs
+	'b57d6692': '{pct} % van wat die plaas nodig het',
+	// River below the reserve
+	'c8adc657': 'Rivier onder die reserwe',
+	// {days} days a year
+	'aa84b70d': '{days} dae per jaar',
+	// Today
+	'e7c0775e': 'Vandag',
+	// This plan
+	'ec26a6ec': 'Hierdie plan',
+	// Change from today: supply {supply} points, river {days} days a year.
+	'a3a08f59': 'Verandering teenoor vandag: lewering {supply} punte, rivier {days} dae per jaar.',
 	// About Water Management
 	'a156f424': 'Oor Water Management',
 	// Catchment water balance, from rainfall to river.
@@ -615,16 +809,12 @@ export const af: Catalogue = {
 	'65909895': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke plaas se gebruik.',
 	// River flow each month, in m³ a day
 	'a0ddf26e': 'Riviervloei elke maand, in m³ per dag',
-	// Flow at the outlet
-	'916671c6': 'Vloei by die uitloop',
 	// Ecological reserve
 	'16bf7d51': 'Ekologiese reserwe',
 	// Mean flow at the outlet and the ecological reserve each month, in m³ a day
 	'4702e852': 'Gemiddelde vloei by die uitloop en die ekologiese reserwe elke maand, in m³ per dag',
 	// Flow
 	'3df462b5': 'Vloei',
-	// Reserve
-	'57d1f6eb': 'Reserwe',
 	// No flows to show.
 	'be1887a5': 'Geen vloei om te wys nie.',
 	// The mean flow was above the reserve in every month.
@@ -665,6 +855,8 @@ export const af: Catalogue = {
 	'18840a52': 'Daar is reeds ’n rekening met daardie e-posadres. Teken in, of stel jou wagwoord terug.',
 	// Wrong email or password.
 	'753da152': 'Verkeerde e-pos of wagwoord.',
+	// Confirm your email address before you sign in: open the link we emailed you.
+	'0f7f36bd': 'Bevestig jou e-posadres voordat jy inteken: maak die skakel oop wat ons vir jou ge-e-pos het.',
 	// Too many sign-in attempts for this address. Try again in {wait}, or reset your password.
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
@@ -733,8 +925,6 @@ export const af: Catalogue = {
 	'f555922c': 'Tik jou huidige wagwoord in.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
-	// Account
-	'59f8a2fc': 'Rekening',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -899,10 +1089,22 @@ export const af: Catalogue = {
 	'e10f2988': 'Stuur terugstelskakel',
 	// Remembered it?
 	'3bf754b9': 'Onthou jy dit?',
-	// Sign in
-	'744be623': 'Teken in',
+	// If {email} still needs confirming, a new link is on its way. Check your inbox and spam folder.
+	'9a0aaea5': 'As {email} nog bevestig moet word, is ’n nuwe skakel op pad. Kyk in jou inkassie en gemorspos.',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
+	// Check your email to finish signing up
+	'6460f76e': 'Kyk in jou e-pos om klaar te registreer',
+	// We sent a confirmation link to **{email}**. Open it to confirm your address, then sign in here.
+	'02962730': 'Ons het ’n bevestigingskakel na **{email}** gestuur. Maak dit oop om jou adres te bevestig, en teken dan hier in.',
+	// We sent you a confirmation link. Open it to confirm your address, then sign in here.
+	'd1cccf96': 'Ons het vir jou ’n bevestigingskakel gestuur. Maak dit oop om jou adres te bevestig, en teken dan hier in.',
+	// You can’t sign in until your address is confirmed. The link lasts 48 hours.
+	'1c157712': 'Jy kan nie inteken voordat jou adres bevestig is nie. Die skakel bly 48 uur geldig.',
+	// Send the link again
+	'1ed87a58': 'Stuur die skakel weer',
+	// **Your email address isn’t confirmed yet.** Open the link we emailed to {email}, then sign in again.
+	'5b10b774': '**Jou e-posadres is nog nie bevestig nie.** Maak die skakel oop wat ons na {email} ge-e-pos het, en teken dan weer in.',
 	// Forgot password?
 	'e2619568': 'Wagwoord vergeet?',
 	// Signing in…
@@ -921,6 +1123,8 @@ export const af: Catalogue = {
 	'bbe4f51e': 'die span {name}',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
+	// The two passwords don’t match. Type the same password in both.
+	'8289fa95': 'Die twee wagwoorde stem nie ooreen nie. Tik dieselfde wagwoord in albei velde in.',
 	// Create account (page title)
 	'c91c4fa3': 'Skep rekening',
 	// You’re already signed in
@@ -957,8 +1161,6 @@ export const af: Catalogue = {
 	'03c04bca': 'Nie jy nie?',
 	// Accept your invitation
 	'4252753f': 'Aanvaar jou uitnodiging',
-	// Create an account
-	'd7f6c093': 'Skep ’n rekening',
 	// Model your own catchments, or join a team’s.
 	'23534e88': 'Modelleer jou eie opvanggebiede, of sluit by ’n span s’n aan.',
 	// Checking your invitation…
@@ -973,10 +1175,12 @@ export const af: Catalogue = {
 	'bb9d18b6': 'Ons kon nie jou uitnodiging nou kontroleer nie. Jy kan steeds ’n rekening skep; jy sluit aan sodra jou e-posadres bevestig is.',
 	// The invitation was sent to this address. To use another, ask {inviter} to invite that one instead.
 	'ece15e61': 'Die uitnodiging is na hierdie adres gestuur. Om ’n ander een te gebruik, vra {inviter} om eerder daardie adres uit te nooi.',
-	// Colleagues add you to teams and projects by this address.
-	'e08e5750': 'Kollegas voeg jou met hierdie adres by spanne en projekte.',
+	// We’ll email you a link to confirm your address. You can sign in once it’s confirmed.
+	'2af00cee': 'Ons stuur vir jou ’n skakel per e-pos om jou adres te bevestig. Jy kan inteken sodra dit bevestig is.',
 	// At least 8 characters. A short passphrase works well.
 	'73c4cd8e': 'Ten minste 8 karakters. ’n Kort wagfrase werk goed.',
+	// Confirm password
+	'5ad9dc20': 'Herhaal wagwoord',
 	// Creating…
 	'1aa1a030': 'Skep tans…',
 	// Create account and join

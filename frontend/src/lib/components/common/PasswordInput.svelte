@@ -10,15 +10,16 @@
 
 	let {
 		value = $bindable(''),
+		el = $bindable(),
 		id,
 		...rest
-	}: { value?: string; id: string } & Omit<HTMLInputAttributes, 'type' | 'value' | 'id'> = $props();
+	}: { value?: string; el?: HTMLInputElement; id: string } & Omit<HTMLInputAttributes, 'type' | 'value' | 'id'> = $props();
 
 	let shown = $state(false);
 </script>
 
 <div class="pw">
-	<input {...rest} {id} type={shown ? 'text' : 'password'} bind:value autocapitalize="off" spellcheck="false" />
+	<input {...rest} {id} type={shown ? 'text' : 'password'} bind:value bind:this={el} autocapitalize="off" spellcheck="false" />
 	<!-- Named from its content, not aria-label, so a lookup by the label "Password" finds only the field. -->
 	<button type="button" class="toggle" aria-controls={id} onclick={() => (shown = !shown)}>
 		<span aria-hidden="true">{shown ? t('Hide', {}, 'password field') : t('Show', {}, 'password field')}</span>

@@ -1,6 +1,8 @@
-import { createProject, PASSWORD, register, uniqueEmail } from '../support/api.ts';
+import { createProject, PASSWORD, register, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
 import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoViolations } from '../support/a11y.ts';
+import { fillNewPassword } from '../support/signup.ts';
 
 async function signInThroughForm(page: import('@playwright/test').Page, email: string, password: string) {
 	await page.getByLabel('Email').fill(email);
@@ -8,18 +10,51 @@ async function signInThroughForm(page: import('@playwright/test').Page, email: s
 	await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-test('register lands on the project list, sign out and back in', async ({ page }) => {
+// Sign-up (issue #57, as threkir does it): the password asked twice, a
+// confirmation email, on to sign-in, which is refused until the address is
+// confirmed, with the link offered again.
+test('sign-up asks for the password twice, emails a link and goes to sign-in; the account signs in once confirmed, then out and back in', async ({ page }) => {
 	const email = uniqueEmail('new-user');
 
 	await page.goto('/register');
 	await page.getByLabel('Display name').fill('New User');
 	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(PASSWORD);
+	// A typo in the second field (a trailing space counts) stops it before any account is made.
+	await fillNewPassword(page, PASSWORD, `${PASSWORD} `);
 	await page.getByRole('button', { name: 'Create account' }).click();
+	await expect(page.getByRole('alert')).toHaveText('The two passwords don’t match. Type the same password in both.');
+	await expect(page.getByLabel('Confirm password')).toBeFocused();
+	await expect(page).toHaveURL('/register');
+	await expect(page.getByText('We’ll email you a link to confirm your address. You can sign in once it’s confirmed.')).toBeVisible();
 
+	await page.getByLabel('Confirm password').fill(PASSWORD);
+	await page.getByRole('button', { name: 'Create account' }).click();
+	// On to sign-in: where the link went, and the address filled in.
+	await expect(page).toHaveURL('/login?confirm=sent');
+	const notice = page.getByRole('status').filter({ hasText: 'Check your email to finish signing up' });
+	await expect(notice).toContainText(`We sent a confirmation link to ${email}. Open it to confirm your address, then sign in here.`);
+	await expect(notice).toContainText('You can’t sign in until your address is confirmed.');
+	await expect(page.getByLabel('Email')).toHaveValue(email);
+	await expectNoViolations(page);
+
+	// Signing in before confirming says so, and offers the link again.
+	await page.getByLabel('Password').fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	const warning = page.getByRole('alert');
+	await expect(warning).toContainText(`Your email address isn’t confirmed yet. Open the link we emailed to ${email}, then sign in again.`);
+	await expect(page).toHaveURL(/\/login/);
+	await warning.getByRole('button', { name: 'Send the link again' }).click();
+	await expect(warning).toContainText(`If ${email} still needs confirming, a new link is on its way.`);
+
+	// The link confirms it; now it signs in.
+	await page.goto(`/verify-email?token=${await plantEmailToken(email, 'verify')}`);
+	await expect(page.getByRole('status')).toContainText('is confirmed');
+	await page.goto('/login');
+	await signInThroughForm(page, email, PASSWORD);
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Email confirmation' })).toHaveCount(0);
 	// The account sits at the foot of the app sidebar.
 	await expect(page.getByRole('button', { name: 'Account menu for New User' })).toContainText('New User');
 
@@ -28,13 +63,14 @@ test('register lands on the project list, sign out and back in', async ({ page }
 	await expect(page).toHaveURL('/login');
 	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
-	// The session is really gone: a protected page bounces back to login.
-	await page.goto('/');
+	// The session is really gone: a protected page bounces back to login
+	// (`/` itself is the public landing page when signed out, landing.spec.ts).
+	await page.goto('/teams');
 	await expect(page).toHaveURL(/\/login\?next=/);
 
 	await signInThroughForm(page, email, PASSWORD);
-	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
-	await expect(page).toHaveURL('/');
+	await expect(page.getByRole('heading', { level: 1, name: 'Teams' })).toBeVisible();
+	await expect(page).toHaveURL('/teams');
 });
 
 test('"Sign out everywhere" from the account menu also signs out another device', async ({ page, owner, browser }) => {
@@ -53,7 +89,7 @@ test('"Sign out everywhere" from the account menu also signs out another device'
 	await expect(page).toHaveURL('/login');
 
 	// The other device's session is really revoked: its next request is rejected.
-	await otherPage.goto('/');
+	await otherPage.goto('/teams');
 	await expect(otherPage).toHaveURL(/\/login\?next=/);
 
 	await otherDevice.close();
@@ -83,7 +119,7 @@ test('a wrong password shows an error and stays on the login page', async ({ pag
 	await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
 });
 
-test('registering an email twice is refused', async ({ page, playwright }) => {
+test('signing up with a taken address looks exactly like a new one (no account-existence oracle)', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
 	const user = await register(api, 'Taken');
 	await api.dispose();
@@ -91,11 +127,16 @@ test('registering an email twice is refused', async ({ page, playwright }) => {
 	await page.goto('/register');
 	await page.getByLabel('Display name').fill('Someone else');
 	await page.getByLabel('Email').fill(user.email);
-	await page.getByLabel('Password').fill(PASSWORD);
+	await fillNewPassword(page, 'another passphrase');
 	await page.getByRole('button', { name: 'Create account' }).click();
 
-	// Worded from the error's code (account_exists) in the page's language, not the server's English (docs/api.md § Errors).
-	await expect(page.getByRole('alert')).toHaveText('An account with that email address already exists. Sign in, or reset your password.');
+	// The same page as a fresh sign-up: its owner gets an email instead.
+	await expect(page).toHaveURL('/login?confirm=sent');
+	await expect(page.getByRole('status').filter({ hasText: 'Check your email to finish signing up' })).toContainText(`We sent a confirmation link to ${user.email}.`);
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	// The owner's own password still works.
+	await signInThroughForm(page, user.email, user.password);
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 });
 
 test('an unauthenticated deep link goes to login and back after signing in', async ({ page, playwright }) => {
@@ -202,6 +243,7 @@ test('a signed-in user can still open a reset link, and a spent link says so', a
 
 test('the confirm-email banner goes once the link is used', async ({ page }) => {
 	const user = await register(page.context().request, 'Unconfirmed', { verified: false });
+	await signInUnconfirmed(page.context(), user);
 	const banner = page.getByRole('region', { name: 'Email confirmation' });
 	await page.goto('/');
 	await expect(banner).toContainText(`We sent a link to ${user.email}`);

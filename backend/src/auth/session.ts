@@ -22,18 +22,24 @@ function secret(): Uint8Array {
  */
 export const RENDER_SESSION_TTL_SECONDS = 10 * 60;
 
-export async function issueSession(c: Context, userId: string, scope?: RenderScope): Promise<void> {
+/** The signed session token for a user (issueSession sets it as the cookie). */
+export async function signSession(userId: string, scope?: RenderScope): Promise<string> {
 	const ttl = scope ? RENDER_SESSION_TTL_SECONDS : TTL_SECONDS;
 	// iat is whole seconds; iat_ms lets the revocation watermark compare
 	// precisely, so a sign-in right after a password reset isn't rejected.
 	const claim = scope ? { p: scope.projectId, r: scope.runId, ...(scope.against ? { a: { p: scope.against.projectId, r: scope.against.runId } } : {}) } : null;
-	const token = await new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : {}) })
+	return new SignJWT({ iat_ms: Date.now(), ...(claim ? { scope: claim } : {}) })
 		.setProtectedHeader({ alg: 'HS256' })
 		.setSubject(userId)
 		.setIssuer(ISSUER)
 		.setIssuedAt()
 		.setExpirationTime(`${ttl}s`)
 		.sign(secret());
+}
+
+export async function issueSession(c: Context, userId: string, scope?: RenderScope): Promise<void> {
+	const ttl = scope ? RENDER_SESSION_TTL_SECONDS : TTL_SECONDS;
+	const token = await signSession(userId, scope);
 	setCookie(c, SESSION_COOKIE, token, {
 		httpOnly: true,
 		sameSite: 'Lax',

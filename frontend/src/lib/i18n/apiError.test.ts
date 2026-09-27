@@ -19,6 +19,7 @@ describe('errorText', () => {
 		not_signed_in: 'You’re not signed in. Sign in and try again.',
 		account_exists: 'An account with that email address already exists. Sign in, or reset your password.',
 		wrong_credentials: 'Wrong email or password.',
+		email_unconfirmed: 'Confirm your email address before you sign in: open the link we emailed you.',
 		signin_locked: 'Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.',
 		signup_throttled: 'Too many accounts were made from your network. Try again in 1 minute.',
 		wrong_current_password: 'Your current password is wrong.',

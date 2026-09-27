@@ -1,30 +1,45 @@
 import pg from 'pg';
 import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
+import { SESSION_COOKIE, signSession } from '../auth/session.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
 const ORIGIN = 'http://localhost:7777';
 
 /**
- * A signed-in test user whose requests carry their session cookie. Verified by
- * default (through the emailed link, as a real user would), because only a
- * verified account can be added to a project or team directly; pass
- * `{ verified: false }` to keep the fresh, unconfirmed state.
+ * A signed-in test user whose requests carry their session cookie. Confirmed
+ * by default, the way a real person gets in: sign up, open the emailed link,
+ * sign in (an unconfirmed account can't sign in, issue #57). `{ verified:
+ * false }` gives a signed-in, unconfirmed account: no longer reachable by
+ * signing in, but the state a session made before confirmation became
+ * required is still in, so its session is minted directly (signSession).
  */
 export async function signUp(name = 'User', { verified = true }: { verified?: boolean } = {}) {
 	const email = `${name.toLowerCase()}-${crypto.randomUUID()}@example.com`;
+	const password = 'correct horse';
 	const res = await app.request('/auth/register', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', origin: ORIGIN },
-		body: JSON.stringify({ email, password: 'correct horse', displayName: name })
+		body: JSON.stringify({ email, password, displayName: name })
 	});
-	if (res.status !== 201) throw new Error(`register failed: ${res.status} ${await res.text()}`);
-	const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
-	const { user } = (await res.json()) as { user: { id: string } };
+	if (res.status !== 202) throw new Error(`register failed: ${res.status} ${await res.text()}`);
+	let cookie: string;
+	let id: string;
 	if (verified) {
 		const v = await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) });
 		if (v.status !== 200) throw new Error(`verify failed: ${v.status}`);
+		const login = await app.request('/auth/login', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', origin: ORIGIN },
+			body: JSON.stringify({ email, password })
+		});
+		if (login.status !== 200) throw new Error(`login failed: ${login.status} ${await login.text()}`);
+		cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+		id = ((await login.json()) as { user: { id: string } }).user.id;
+	} else {
+		id = await userIdOf(email);
+		cookie = `${SESSION_COOKIE}=${await signSession(id)}`;
 	}
 	const call = async (method: string, path: string, body?: unknown) => {
 		const r = await app.request(path, {
@@ -35,7 +50,7 @@ export async function signUp(name = 'User', { verified = true }: { verified?: bo
 		const text = await r.text();
 		return { status: r.status, body: text ? JSON.parse(text) : null };
 	};
-	return { id: user.id, email, cookie, call };
+	return { id, email, cookie, call };
 }
 
 export const monthly = (v: number) => new Array(12).fill(v);
@@ -94,6 +109,13 @@ export async function anon(method: string, path: string, body?: unknown, cookie?
  * would take seconds through the API (a multi-MB series from generate_series).
  * Never used to assert on data.
  */
+/** A test account's id by its address (as the schema owner: app_user is under RLS). */
+async function userIdOf(email: string): Promise<string> {
+	const rows = (await asOwner('SELECT id FROM app_user WHERE email = $1', [email])) as { id: string }[];
+	if (!rows[0]) throw new Error(`no account for ${email}`);
+	return rows[0].id;
+}
+
 export async function asOwner(sql: string, params: unknown[] = []) {
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();

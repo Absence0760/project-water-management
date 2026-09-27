@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, PASSWORD, putModel, register, sampleModel, uniqueEmail } from '../support/api.ts';
-import { plantEmailToken, plantInviteToken } from '../support/db.ts';
+import { addMember, createProject, PASSWORD, putModel, register, sampleModel, signInUnconfirmed, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken, plantInviteToken, userIdByEmail } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
+import { fillNewPassword } from '../support/signup.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
 	void owner;
@@ -187,7 +188,7 @@ test('an invited person signs up through the link and lands in the project', asy
 	await expect(v.getByLabel('Email')).toHaveValue(email);
 	await expect(v.getByLabel('Email')).not.toBeEditable();
 	await v.getByLabel('Display name').fill('Invited Hydrologist');
-	await v.getByLabel('Password').fill(PASSWORD);
+	await fillNewPassword(v, PASSWORD);
 	await v.getByRole('button', { name: 'Create account and join' }).click();
 
 	// Signed up through the link: already a verified editor, no confirm banner.
@@ -238,7 +239,7 @@ test('someone signed in as another account opens an invitation: told whose it is
 	await expect(other.page.getByRole('heading', { level: 1, name: 'Accept your invitation' })).toBeVisible();
 	await expect(other.page.getByLabel('Email')).toHaveValue(email);
 	await other.page.getByLabel('Display name').fill('Forwarded Invitee');
-	await other.page.getByLabel('Password').fill(PASSWORD);
+	await fillNewPassword(other.page, PASSWORD);
 	await other.page.getByRole('button', { name: 'Create account and join' }).click();
 	await expect(other.page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(other.page.getByRole('rowheader', { name: 'Forwarded catchment' })).toBeVisible();
@@ -253,7 +254,9 @@ test('the invitee, signed up without the link, is told to confirm their email to
 	const context = await browser.newContext();
 	const v = await context.newPage();
 	const res = await v.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Early Bird' } });
-	expect(res.status()).toBe(201);
+	expect(res.status()).toBe(202);
+	// Signed in before confirming: a session from before confirmation was required (issue #57).
+	await signInUnconfirmed(context, { id: await userIdByEmail(email), email, displayName: 'Early Bird', password: PASSWORD });
 
 	await v.goto(`/register?invite=${token}`);
 	await expect(v.getByRole('heading', { level: 1, name: 'You’re already signed in' })).toBeVisible();

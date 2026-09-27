@@ -11,7 +11,7 @@ import { OWNER_E2E_URL } from './env.ts';
 
 interface PgClient {
 	connect(): Promise<void>;
-	query(sql: string, params?: unknown[]): Promise<{ rowCount: number | null }>;
+	query<R = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rowCount: number | null; rows: R[] }>;
 	end(): Promise<void>;
 }
 type PgModule = { Client: new (opts: { connectionString: string }) => PgClient };
@@ -66,6 +66,15 @@ export async function plantEmailToken(email: string, purpose: 'reset' | 'verify'
 		if (r.rowCount !== 1) throw new Error(`no user ${email}`);
 	});
 	return token;
+}
+
+/** An account's id by its address (a sign-up answers without one until the address is confirmed, issue #57). */
+export async function userIdByEmail(email: string): Promise<string> {
+	return withDb(async (db) => {
+		const r = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [email]);
+		if (!r.rows[0]) throw new Error(`no user ${email}`);
+		return r.rows[0].id;
+	});
 }
 
 /** Re-key the pending invite(s) for `email` so the test knows the link token. */

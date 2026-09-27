@@ -6,7 +6,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError, type InviteInfo } from '$lib/api';
 	import { emailAuthApi, linkToken } from '$lib/api/emailAuth';
-	import { safeNext } from '$lib/auth/redirect';
+	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard, { focusAuthTitle } from '$lib/components/layout/AuthCard.svelte';
@@ -69,6 +69,10 @@
 	let displayName = $state('');
 	let email = $state('');
 	let password = $state('');
+	// Asked twice (issue #57, as threkir learned): a typo in the one field
+	// would be baked into the account, and its owner locked out of it.
+	let password2 = $state('');
+	let password2El: HTMLInputElement | undefined = $state();
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
@@ -102,9 +106,15 @@
 			error = t('Password must be 8–200 characters.');
 			return;
 		}
+		// Compared exactly: a trailing space is a real difference, never trimmed away.
+		if (password !== password2) {
+			error = t('The two passwords don’t match. Type the same password in both.');
+			password2El?.focus();
+			return;
+		}
 		busy = true;
 		try {
-			const user = await api.auth.register(
+			const result = await api.auth.register(
 				email.trim(),
 				password,
 				displayName.trim(),
@@ -112,9 +122,24 @@
 				// The language this page was in, when chosen: the account and its emails start in it (WP-2.5).
 				readStoredLocale() ?? (i18n.locale !== 'en' ? i18n.locale : null)
 			);
-			registered = true;
-			session.user = user;
-			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+			if ('user' in result) {
+				// Through a matching invite: confirmed and signed in, straight to it.
+				registered = true;
+				session.user = result.user;
+				await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+				return;
+			}
+			// An ordinary sign-up: nobody is signed in until the address is
+			// confirmed. On to sign-in, which says where the link went and keeps
+			// the address (not in the URL: this tab's storage).
+			try {
+				sessionStorage.setItem(CONFIRM_EMAIL_KEY, result.email);
+			} catch {
+				// Storage refused (a private window): the notice still shows, without the address.
+			}
+			const login = new URLSearchParams({ confirm: 'sent' });
+			if (next) login.set('next', next);
+			await goto(`${base}/login?${login}`, { replaceState: true });
 		} catch (err) {
 			error = errorText(err);
 		} finally {
@@ -172,7 +197,7 @@
 {:else}
 <AuthCard
 	title={inviteState === 'ok' ? t('Accept your invitation') : t('Create an account')}
-	subtitle={inviteState === 'ok' ? undefined : t('Model your own catchments, or join a team’s.')}
+	subtitle={inviteState === 'none' ? t('Model your own catchments, or join a team’s.') : undefined}
 >
 	{#if inviteState === 'loading'}
 		<p class="muted" role="status">{t('Checking your invitation…')}</p>
@@ -208,7 +233,7 @@
 				{#if inviteState === 'ok'}
 					{t('The invitation was sent to this address. To use another, ask {inviter} to invite that one instead.', { inviter: invite?.invitedBy ?? '' })}
 				{:else}
-					{t('Colleagues add you to teams and projects by this address.')}
+					{t('We’ll email you a link to confirm your address. You can sign in once it’s confirmed.')}
 				{/if}
 			</span>
 		</div>
@@ -225,6 +250,20 @@
 			/>
 			<span class="hint" id="pw-hint">{t('At least 8 characters. A short passphrase works well.')}</span>
 		</div>
+		<div class="field">
+			<label for="password2">{t('Confirm password')}</label>
+			<PasswordInput
+				id="password2"
+				autocomplete="new-password"
+				required
+				minlength={8}
+				maxlength={200}
+				aria-invalid={password2 !== '' && password2.length >= password.length && password2 !== password ? 'true' : undefined}
+				bind:value={password2}
+				bind:el={password2El}
+			/>
+		</div>
+
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>
 			{busy ? t('Creating…') : inviteState === 'ok' ? t('Create account and join') : t('Create account')}
 		</button>

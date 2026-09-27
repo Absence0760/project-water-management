@@ -29,6 +29,14 @@ export const en = {
 	'mail.reset.expires': 'This link expires in 1 hour and works once.',
 	'mail.reset.ignore': "If you didn't ask for this, you can ignore this email — your password stays the same.",
 
+	// Someone signed up with an address that already has an account (auth/routes.ts /register).
+	'mail.exists.subject': 'You already have an account — {product}',
+	'mail.exists.heading': 'You already have an account',
+	'mail.exists.body': 'Someone tried to create a {product} account for {email}, but this address already has one.',
+	'mail.exists.signIn': 'If it was you, sign in with your password. If you’ve forgotten it, choose a new one:',
+	'mail.exists.action': 'Choose a new password',
+	'mail.exists.ignore': "If it wasn't you, you can ignore this email — nothing has changed on your account.",
+
 	// The farmer invite (WP-2.2).
 	'mail.farmer.subject': '{inviter} has given you access to {farms} in {catchment}',
 	'mail.farmer.heading': 'Your farm on {product}',
@@ -112,6 +120,7 @@ export const sections: Record<string, string> = {
 	'mail.buttonFallback': 'Every email: the line under the button, followed by the link itself.',
 	'mail.verify': 'Email: confirm your address. Sent after signing up, and again from “Resend email”.',
 	'mail.reset': 'Email: reset your password. Sent from “Forgot password?” on the sign-in page.',
+	'mail.exists': 'Email: sent when someone signs up with an address that already has a confirmed account. It says so, and offers a new password in case the owner forgot theirs. The sign-up page itself says the same thing either way (“check your email”), so it can’t be used to find out who has an account.',
 	'mail.farmer':
 		'Email: the farmer invite. The WUA gives a farmer access to their farm(s) in a catchment. {farms} is one or more farm names joined with “and” (or “your farm”).',
 	'mail.invite':

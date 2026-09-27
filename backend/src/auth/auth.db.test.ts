@@ -20,18 +20,79 @@ describe('auth', () => {
 		expect((await (await signUp('Bea')).call('GET', '/auth/me')).body.user.emailVerified).toBe(true);
 	});
 
-	it('sets an httpOnly SameSite=Lax session cookie', async () => {
-		const res = await app.request('/auth/register', json({ email: `c-${crypto.randomUUID()}@x.io`, password: 'longenough', displayName: 'C' }));
+	it('a sign-in sets an httpOnly SameSite=Lax session cookie', async () => {
+		const u = await signUp('C');
+		const res = await app.request('/auth/login', json({ email: u.email, password: 'correct horse' }));
 		const cookie = res.headers.get('set-cookie')!;
 		expect(cookie).toMatch(/wm_session=/);
 		expect(cookie).toMatch(/HttpOnly/i);
 		expect(cookie).toMatch(/SameSite=Lax/i);
 	});
 
-	it('rejects duplicate emails case-insensitively', async () => {
+	// Sign-up (issue #57): the account is made and a confirmation link mailed,
+	// but nobody is signed in until the address is confirmed.
+	it('a sign-up signs nobody in: it mails a confirmation link and answers 202', async () => {
+		const email = `n-${crypto.randomUUID()}@x.io`;
+		const res = await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'N' }));
+		expect(res.status).toBe(202);
+		expect(await res.json()).toEqual({ confirm: true, email });
+		expect(res.headers.get('set-cookie')).toBeNull();
+		expect(lastMailTo(email)?.subject).toMatch(/Confirm your email address/);
+	});
+
+	it('an unconfirmed account can’t sign in, and can once the emailed link confirms it', async () => {
+		const email = `u-${crypto.randomUUID()}@x.io`;
+		await app.request('/auth/register', json({ email, password: 'longenough', displayName: 'U' }));
+		const refused = await anon('POST', '/auth/login', { email, password: 'longenough' });
+		expect(refused.status).toBe(403);
+		expect(refused.body.code).toBe('email_unconfirmed');
+		expect(refused.headers.get('set-cookie')).toBeNull();
+		// Only a correct password learns it: a wrong one is the ordinary 401.
+		expect((await anon('POST', '/auth/login', { email, password: 'wrong guess' })).body.code).toBe('wrong_credentials');
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		const ok = await anon('POST', '/auth/login', { email, password: 'longenough' });
+		expect(ok.status).toBe(200);
+		expect(ok.body.user.emailVerified).toBe(true);
+	});
+
+	it('answers a taken address exactly like a free one, and mails its owner instead', async () => {
 		const u = await signUp('Dup');
-		const res = await app.request('/auth/register', json({ email: u.email.toUpperCase(), password: 'longenough', displayName: 'X' }));
-		expect(res.status).toBe(409);
+		const free = await app.request('/auth/register', json({ email: `f-${crypto.randomUUID()}@x.io`, password: 'longenough', displayName: 'X' }));
+		const taken = await app.request('/auth/register', json({ email: u.email.toUpperCase(), password: 'longenough', displayName: 'X' }));
+		expect(taken.status).toBe(free.status);
+		expect(Object.keys((await taken.json()) as object)).toEqual(Object.keys((await free.json()) as object));
+		expect(taken.headers.get('set-cookie')).toBeNull();
+		// The owner hears about it, with a way back in if they forgot the password.
+		const mail = lastMailTo(u.email);
+		expect(mail?.subject).toMatch(/You already have an account/);
+		expect(mail?.text).toMatch(/\/reset-password\?token=/);
+		// The owner's password is untouched.
+		expect((await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' })).status).toBe(200);
+	});
+
+	it('a taken but never-confirmed address gets a fresh confirmation link', async () => {
+		const u = await signUp('Pending', { verified: false });
+		await app.request('/auth/register', json({ email: u.email, password: 'longenough', displayName: 'X' }));
+		expect(lastMailTo(u.email)?.subject).toMatch(/Confirm your email address/);
+	});
+
+	it('“send the link again” answers the same for any address, and mails only an unconfirmed account', async () => {
+		const pending = `p-${crypto.randomUUID()}@x.io`;
+		await app.request('/auth/register', json({ email: pending, password: 'longenough', displayName: 'P' }));
+		const confirmed = await signUp('Confirmed');
+		const before = { pending: lastMailTo(pending), confirmed: lastMailTo(confirmed.email) };
+		// Within the cooldown of the sign-up's own mail: nothing new yet, the same answer.
+		const answers = await Promise.all(
+			[pending, confirmed.email, `nobody-${crypto.randomUUID()}@x.io`].map((email) => anon('POST', '/auth/resend-confirmation', { email }))
+		);
+		for (const a of answers) expect([a.status, a.body]).toEqual([202, { ok: true }]);
+		expect(lastMailTo(confirmed.email)).toBe(before.confirmed);
+		expect(lastMailTo(pending)).toBe(before.pending);
+		// After the cooldown, the unconfirmed account gets a new link.
+		await asOwner("UPDATE email_token SET created_at = created_at - interval '2 hours' WHERE user_id = (SELECT id FROM app_user WHERE email = $1)", [pending]);
+		expect((await anon('POST', '/auth/resend-confirmation', { email: pending })).status).toBe(202);
+		expect(lastMailTo(pending)).not.toBe(before.pending);
+		expect(lastMailTo(pending)?.subject).toMatch(/Confirm your email address/);
 	});
 
 	it('logs in with the right password and not with a wrong one or unknown email', async () => {
