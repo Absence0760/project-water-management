@@ -206,7 +206,7 @@ test('an invited person signs up through the link and lands in the project', asy
 
 test('a dead invite link falls back to a normal sign-up', async ({ page }) => {
 	await page.goto('/register?invite=' + 'y'.repeat(43));
-	await expect(page.getByRole('alert')).toContainText('This invitation link is invalid, was revoked, or has expired');
+	await expect(page.getByRole('alert')).toContainText('This invitation link has expired or was withdrawn');
 	await expect(page.getByRole('heading', { level: 1, name: 'Create an account' })).toBeVisible();
 	await expect(page.getByLabel('Email')).toBeEditable();
 });

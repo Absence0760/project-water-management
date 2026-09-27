@@ -1560,8 +1560,11 @@ by the WUA; nobody is added to a project without an owner acting.
 - Accounts, memberships and farm links: to provide the service the member
   signed up for, and for farmers the WUA's function of managing its members'
   water use (legitimate interest or a legal duty under its constitution)
-  *(confirm)*. There is **no consent screen and no privacy notice yet**:
-  both are needed before a farmer is invited on production.
+  *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
+  `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
+  the sign-up form, invitations included, says that signing up accepts
+  both. Which version a person accepted isn't recorded yet (open in
+  legal-status.md).
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
@@ -1728,7 +1731,8 @@ readable by anyone. The rules:
   role after a human approves the run.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
-  `/welcome`, issue #57) is static: it calls no API but `/auth/me` (the
+  `/welcome`, issue #57) and the legal pages (`/privacy`, `/terms`,
+  [legal-status.md](./legal-status.md)) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
