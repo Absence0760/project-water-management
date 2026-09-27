@@ -11,6 +11,7 @@
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		river: () => import('$lib/components/river/RiverTab.svelte'),
 		dams: () => import('$lib/components/dams/DamsTab.svelte'),
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
@@ -81,6 +82,7 @@
 		demand: 'crops',
 		calibration: 'settings',
 		results: 'runs',
+		reserve: 'river',
 		changes: 'history'
 	};
 
@@ -675,9 +677,12 @@
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
 								onInputsRestored={reloadInputs}
-								{onProjectChange}
 							/>
 						{/snippet}
+					</Lazy>
+				{:else if tab === 'river'}
+					<Lazy load={LOAD.river}>
+						{#snippet children(RiverTab)}<RiverTab {projectId} project={project!} {editor} {runs} {canEdit} {onProjectChange} />{/snippet}
 					</Lazy>
 				{:else if tab === 'dams'}
 					<Lazy load={LOAD.dams}>

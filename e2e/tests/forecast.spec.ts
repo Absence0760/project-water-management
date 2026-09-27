@@ -50,12 +50,15 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(hydro).toHaveAttribute('data-band-from', FROM);
 	await expect(hydro.getByText(`(hatched, from ${FROM})`)).toBeVisible();
 	await expect(hydro.locator('.band-key strong')).toHaveText('Forecast');
-	await expect(page.locator('#res-ewr figure')).toHaveAttribute('data-band-from', FROM);
 	await expectNoViolations(page, { include: '#res-forecast' });
 	await expectNoViolations(page, { include: '#res-hydrograph' });
+	const runId = new URL(page.url()).searchParams.get('run')!;
+	// EWR vs outflow, on River & reserve now, shades the forecast days too.
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
+	await expect(page.locator('#res-ewr figure')).toHaveAttribute('data-band-from', FROM);
+	await page.goBack();
 
 	// The daily CSV leads with the forecast flag.
-	const runId = new URL(page.url()).searchParams.get('run')!;
 	const csv = await page.request.get(`${API_URL}/projects/${project.id}/runs/${runId}/export/daily.csv`);
 	expect(csv.status()).toBe(200);
 	const lines = (await csv.text()).replace(/^﻿/, '').trim().split('\r\n');

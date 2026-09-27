@@ -11,6 +11,7 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention, runHref } from './attention';
+	import { riverHref } from '$lib/components/river/links';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
@@ -353,7 +354,14 @@
 				{#if shown}
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={project.id} runId={shown!.id} refs={latestRefs} forecastFrom={shown!.summary.forecast?.from ?? null} fill={fit} />
+							<FlowVsReserve
+								projectId={project.id}
+								runId={shown!.id}
+								refs={latestRefs}
+								forecastFrom={shown!.summary.forecast?.from ?? null}
+								fill={fit}
+								more={{ href: riverHref(shown!.id), label: 'More on River & reserve' }}
+							/>
 						{/snippet}
 					</Lazy>
 				{/if}

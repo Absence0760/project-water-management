@@ -7,7 +7,7 @@
 	`outlook` job, docs/api.md § Seasonal outlooks). Per level: season-end
 	storage, the share of demand met and the river's requirement as the
 	median with the 10–90 % range, the years met, and the planning figure in
-	the engine's words. Its own chunk: RunsTab loads it lazily.
+	the engine's words. Its own chunk: River & reserve (river/RiverTab.svelte) loads it lazily.
 
 	It reports what the analogue years did at each level; it never picks one.
 	The pending state follows the outlook's own status and its job's (polled),

@@ -28,7 +28,9 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await assurance.getByLabel('Show').selectOption({ label: 'Upper farm' });
 	await expect(grid.getByRole('caption')).toContainText('Upper farm');
 
-	await nav.getByRole('link', { name: 'Water account' }).click();
+	// The water account moved to River & reserve (issue #17): the Runs page links there for this run.
+	await page.locator('#res-river').getByRole('link', { name: 'River & reserve for this run' }).click();
+	await expect(page).toHaveURL(/[?&]tab=river&run=/);
 	const account = page.getByRole('region', { name: 'Water account' });
 	const table = account.getByTestId('account-table');
 	await expect(table.getByRole('columnheader')).toHaveText(['m³', '2021/22', 'Whole run']);
