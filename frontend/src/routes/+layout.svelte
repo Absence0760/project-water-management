@@ -7,6 +7,7 @@
 	import { safeNext } from '$lib/auth/redirect';
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
+	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
@@ -59,6 +60,35 @@
 	// has no projects, teams or workspace to navigate to.
 	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
 
+	// A user whose every membership is `farmer` has no workspace, so their
+	// account pages (/account/**) sit in the farmer view's frame too
+	// (FarmShell: translated, with the way back to their farms), not in the
+	// workspace's English sidebar. Only the membership list says so: it is
+	// read once per signed-in user when they first open an account page, and
+	// the page waits for it rather than flash the wrong frame. FarmShell is
+	// its own chunk, loaded only for such a user. If either fails, the
+	// workspace frame still works, so that is the fallback.
+	const accountScreen = $derived(isAccountPath(page.url.pathname, base));
+	type FarmShellModule = typeof import('$lib/components/farm/FarmShell.svelte');
+	let farmFrame = $state.raw<{ user: string; shell: FarmShellModule | null } | null>(null);
+	async function checkFarmFrame(user: string) {
+		let shell: FarmShellModule | null = null;
+		try {
+			const projects = await api.projects.list();
+			if (isFarmerOnly(projects.map((p) => p.role))) shell = await import('$lib/components/farm/FarmShell.svelte');
+		} catch {
+			shell = null;
+		}
+		if (session.user?.id === user) farmFrame = { user, shell };
+	}
+	$effect(() => {
+		const user = session.user?.id;
+		if (!user || !accountScreen || farmFrame?.user === user) return;
+		untrack(() => checkFarmFrame(user));
+	});
+	const frameKnown = $derived(!accountScreen || !session.user || farmFrame?.user === session.user.id);
+	const farmShell = $derived(accountScreen && session.user && farmFrame?.user === session.user.id ? farmFrame.shell : null);
+
 	// Language (WP-2.5, docs/ui.md § Language), on the translated surfaces
 	// only (sign-in pages, the farm view, the account and alert pages, the
 	// public /share page): the modeller workspace is English and never loads
@@ -109,12 +139,12 @@
 	$effect(() => {
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
-	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady));
+	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
 </script>
 
 <!-- A signed-in person's pages sit in the app frame (a sidebar on wide screens,
      a slim bar on phones, AppShell); sign-in pages and the farmer view have
-     their own. -->
+     their own, and a farmer-only user's account pages the farmer view's. -->
 {#snippet content()}
 	<!-- Loaded only for an unconfirmed address: it is worded from the catalogue, which the workspace doesn't load otherwise. -->
 	{#if !authScreen && session.user?.emailVerified === false}
@@ -142,7 +172,15 @@
 	{/if}
 {/snippet}
 
-{#if !authScreen && !farmScreen && session.user}
+{#if farmShell}
+	<!-- The farm frame's words wait for the language, like the page's. -->
+	{#if ready}
+		<!-- /account has its own language switch (Language and units); one is enough. -->
+		<farmShell.default accountPage languageSwitch={page.url.pathname.slice(base.length) !== '/account'}>{@render content()}</farmShell.default>
+	{:else}
+		{@render content()}
+	{/if}
+{:else if !authScreen && !farmScreen && session.user && frameKnown}
 	<AppShell>{@render content()}</AppShell>
 {:else}
 	{@render content()}

@@ -5,8 +5,9 @@ What each screen is and does. How to design, build and test a screen (process, l
 ## App shell and account menu
 
 Every signed-in page sits in one frame (`lib/components/layout/AppShell.svelte`,
-issue #17), except the farmer view (`/farm`, its own `FarmShell`) and the
-sign-in pages (`AuthCard`). The root layout wraps the page in it once a
+issue #17), except the farmer view (`/farm`, its own `FarmShell`), a
+farmer-only user's account pages (the farm frame too, [§ Farmer
+view](#farmer-view-farm)) and the sign-in pages (`AuthCard`). The root layout wraps the page in it once a
 session exists. A **Skip to content** link comes first.
 
 - **900 px and wider:** a full-height sidebar (15rem, 240 px) from the top
@@ -3929,8 +3930,19 @@ published.
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My farm", the EN | AF
-  language switch, Menu: your farms, the words, "Don't keep a copy on this
-  phone", sign out); the app shell isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
+  language switch, Menu: your farms, the words, Account, "Don't keep a copy
+  on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
+  A user whose every membership is `farmer` gets the same frame on
+  `/account` and `/account/alerts` (the farm view's "Choose your alert
+  emails" link lands there): the header's **Your farms** back link in
+  place of "My farm", and the page keeps its own `main` and styles (the
+  farm pages' card styles apply only inside the farm pages' own `main`).
+  The root layout decides (`lib/auth/frame.ts` `isFarmerOnly`, from the
+  membership list, read once per signed-in user on the first account page
+  they open, the page waiting for it rather than flash the wrong frame;
+  FarmShell is loaded as its own chunk then). If that list or the chunk
+  fails, the workspace frame is the fallback. A farmer who is also a
+  member of a catchment keeps the workspace frame. One 560 px column, a 16 px base, 44 px targets,
   nothing under 13 px, existing tokens only, light and dark. The header is
   sticky at every width, so while it's on the page it sets `--header-h` to
   its 56 px (the app shell's 0 from 900 px would leave in-page links, such
