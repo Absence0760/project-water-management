@@ -535,7 +535,20 @@ In short:
   **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
   explicit and an unrecognised team role grants nothing, in SQL
   (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
-  later can't silently become an editor. The role functions every policy
+  later can't silently become an editor.
+  **The ladder is swept, not sampled** (`backend/src/projects/role-ladder.db.test.ts`):
+  every `/projects/:id` route is called with a request its validation
+  accepts (so a route that parses before it checks the role can't hide
+  behind a `400`), and a wrapper on `requireRole` records the role each one
+  asks for. A write needs editor unless it is in `LOWER_ROLE_WRITES` (leave
+  the project, copy it, a report to yourself, your own alert preferences,
+  notes, scenario routes whose own rules decide), with the reason and the
+  status a viewer gets; the owner-only routes are exactly `OWNER_ONLY` and
+  the editor-only reads exactly `EDITOR_READS`. Viewer, contributor and
+  farmer get `403` from everything above them and nothing changes; an editor
+  gets `403` from every owner-only route; the editor and the owner pass
+  their own checks (positive controls).
+  The role functions every policy
   calls (`app_current_user_id`, `app_team_role`, `app_project_role`,
   `app_has_role`) are PL/pgSQL since 026_rls_role_plpgsql: a SQL function with
   `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
