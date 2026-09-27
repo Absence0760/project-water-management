@@ -2419,6 +2419,16 @@ which checks every catchment tab).
   flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
   example CSV. The two status lines are named *Paste result* and *High-flow
   paste result*.
+  From engine 1.3.0 (issue #64, [model.md §2.9c–§2.9d](./model.md)), once
+  there is a table, two choices sit under the tables, both pending the
+  hydrologist and both defaulting to what earlier runs did: **EWR charge
+  follows** (`settings.ewrChargeSource`: *The pragmatic EWR*, the default, or
+  *The rule tables*: at a site with a table the month's requirement sets the
+  EWR charge, curtailment and the water account's EWR required vs met) and
+  **Low flows judged on** (`settings.lowFlowMeasure`: *The month's total
+  flow*, the default, or *The month's base flow*, from the Lyne–Hollick
+  filter, so a flood month can't pass its low flows). Each has a help tip;
+  scenarios can change both with `settings.set`.
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two

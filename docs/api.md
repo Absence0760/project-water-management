@@ -1328,8 +1328,15 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   longestNotMetRun }`; with high-flow components, `highFlows` (each the
   component plus `peakAppliedM3s`, `years: [{ waterYear, natural, actual,
   required, met }]` over the complete water years, and `overall { years,
-  required, met, rate }`). Each site also has the daily series
-  `ewr_rule` (m³/day; NaN outside complete months). Rules:
+  required, met, rate }`). From engine 1.3.0 (issue #64), with
+  `settings.lowFlowMeasure: 'baseflow'` and a low-flow requirement, each
+  month adds `baseflow` (the month's base flow, table unit) and the site
+  `lowFlowMeasure: 'baseflow'`. Each site also has the daily series
+  `ewr_rule` (m³/day; NaN outside complete months); with
+  `settings.ewrChargeSource: 'ruleTable'` a site the charge followed its table
+  at has `ewr_charge_shortfall` too (m³/day, ≤ 0), and its
+  `curtailment.ewrSites` entry and water-account `ewr` rows carry
+  `ewrSource: 'ruleTable'`. Rules:
   [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6).
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds

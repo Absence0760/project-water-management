@@ -703,13 +703,16 @@ the reports):
       flow selects, the FDC check, the headline card, the Reserve compliance
       panel, a summary CSV block and run comparison. The method choices are
       plan.md question 17 for the hydrologist.
-      - [ ] **Daily charge from the rule table.** The EWR charge and
-            curtailment still follow the daily pragmatic EWR. If the
-            hydrologist and the assessor want the rule table to drive them
-            (plan.md question 17), the durable fix is a daily EWR series per
-            site from the month's requirement (`ewr_rule`, already stored),
-            fed to attribution in place of the pragmatic EWR, with a new
-            engine version and a regression note. Trigger: their answer.
+      - [x] **Daily charge from the rule table.** Built as an opt-in
+            setting, engine 1.3.0 (issue #64,
+            [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)):
+            `settings.ewrChargeSource: 'ruleTable'` feeds each rule-table
+            site's `ewr_rule` requirement to attribution and curtailment in
+            place of the pragmatic EWR (the pragmatic EWR outside complete
+            months and at sites without a table), stored as
+            `ewr_charge_shortfall`; the default stays `'pragmatic'`. Left
+            for the hydrologist and the assessor: which is the default
+            (plan.md question 17).
       - [x] **Uncertainty on compliance.** Phase 9's bands include the
             monthly Reserve compliance rate per site beside days not met
             (engine 0.26.0).
@@ -718,14 +721,14 @@ the reports):
             components per site, entered by paste or CSV, with a heat map
             per site ([model.md §2.9d](./model.md)). Method choices pending
             the hydrologist (plan.md question 17).
-      - [ ] **Low flows on base flow.** Engine 0.33.0 judges the low-flow
-            requirement on the month's total volume, so a flood month can
-            pass its low flows while its base flow was short. The durable
-            fix is a base-flow measure of the month (a recursive baseflow
-            filter, or the mean of the month's lowest daily flows) compared
-            with the low-flow requirement, behind a new engine version.
-            Trigger: the hydrologist's answer on which measure a Reserve
-            monitoring report uses.
+      - [x] **Low flows on base flow.** Built as an opt-in setting, engine
+            1.3.0 (issue #64, [model.md §2.9d](./model.md)):
+            `settings.lowFlowMeasure: 'baseflow'` judges a low-flow
+            requirement on the month's base flow from a three-pass
+            Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997); the
+            default stays the month's total volume. Left for the
+            hydrologist: which measure a Reserve monitoring report uses, and
+            the filter parameter (plan.md question 17).
       - [ ] **Site source and confidence labels (WP-3.7 UI).** Each rule
             table has a free-text source; the WP asks for a typed source
             (`gazetted` | `desktop` | `other`) with a confidence line
@@ -1191,6 +1194,13 @@ the suggested order (the IDs carry the detail):
       **Owed for engines 1.1.0 and 1.2.0** (2026-09-27): no 20 000-case soak
       is recorded since 1.0.0. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
+      **Engine 1.3.0 (issue #64, 2026-09-27): a 2 000-case soak** (the new
+      rule-table charge and base-flow modes drawn in) passed except **seed
+      1774**, which fails with or without them (it has no rule table):
+      doubling crop areas raised n14's supply fraction 0.9999999999964 →
+      0.9999999999984, a 2e-12 rise, so either a float-noise tolerance
+      missing from `checkDoubledCropAreas` or a real sub-ulp effect; not
+      diagnosed. The 20 000-case soak is still owed.
       **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
       cap (N4) ignored the receiving dam's own rain, evaporation and
       seepage, so a leaky dam was topped up short by a fixed volume and
@@ -1760,9 +1770,12 @@ role and not before it.
         column, `damReleaseM3`, since a release joins the river) once WP-3.5 lands: a release
         that leaves the network is an out term; one that stays is already in
         the outflow. Owner: WP-3.5.
-  - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
-        WP-3.7's Desktop tables: the account uses the pragmatic EWR at each
-        site today. Owner: WP-3.7.
+  - [x] **EWR required vs met from the Reserve rule tables** (§2.9c) and
+        WP-3.7's Desktop tables: done, engine 1.3.0 (issue #64). With
+        `settings.ewrChargeSource: 'ruleTable'` the account's requirement
+        at a site with a table is the table's (rows say `ewrSource:
+        'ruleTable'`), the same choice as the charge; the pragmatic EWR
+        stays the default, pending the hydrologist.
   - [ ] **Where else the metrics show**: the printable report
         (`report/`), the farm view (a farmer's own reliability and stress
         months) and the scenario compare view (Δ reliability per farm).

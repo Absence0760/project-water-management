@@ -2616,9 +2616,11 @@ natural percentile comes from (`naturalSource`):
   determination's own curve, so the requirement is the gazette's for a given
   natural flow, but a model biased against that curve shifts the conditions.
 
-No table: nothing changes. The pragmatic EWR stays the daily EWR everywhere
-(the shortfall charge, curtailment, days not met), with or without tables; the
-rule tables add a report, they don't replace the daily EWR.
+No table: nothing changes. By default the pragmatic EWR stays the daily EWR
+everywhere (the shortfall charge, curtailment, days not met), with or without
+tables; the rule tables add a report. From engine 1.3.0 the charge can follow
+the tables instead (`settings.ewrChargeSource`, below, § The charge from the
+rule table).
 
 **Per site, per complete calendar month** (a part month at either end of the
 run is not assessed; `packages/engine/src/reserve/assurance.ts`):
@@ -2706,7 +2708,15 @@ years of a calendar month.
 - **The summaries add up**: the months of the year sum to the whole, and
   rates are met ÷ months.
 - The fuzz generator gives rule tables to 30 % of its random projects, so the
-  order-invariance and finiteness checks cover them too.
+  order-invariance and finiteness checks cover them too; from engine 1.3.0 it
+  sets `ewrChargeSource: 'ruleTable'` and `lowFlowMeasure: 'baseflow'` on 40 %
+  of those each (their own random stream), and the per-run verification
+  checks a rule-table site's `ewr_charge_shortfall` against `ewr_rule` and the
+  flow, and the attribution against it (`verify/checks.ts`
+  `checkEwrAttribution`). Tested directly in `reserve/ewrMethods.test.ts`: a
+  default run is byte-identical with the setting left out, a farm is never
+  charged more than its net impact, a flood month with short base flow fails
+  under `'baseflow'` and passes under `'total'`.
 
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
@@ -2714,11 +2724,46 @@ secondary measure; the Reserve compliance panel has the per-month-of-year
 table and chart; the summary CSV has a block per site; run comparison compares
 each site's rates (docs/ui.md, docs/run-comparison.md).
 
+**The charge from the rule table** (engine ≥ 1.3.0, issue #64;
+`settings.ewrChargeSource`, `'pragmatic'` by default). With `'ruleTable'`,
+the daily requirement the EWR charge (§2.7b), curtailment (§2.11) and the
+water account's EWR required vs met (§2.11b) follow at a site with a rule
+table is `ewr_rule`: each complete month's R spread evenly over its days.
+The site's shortfall on those days is
+
+```
+D_rule = MIN(A_t − R_day, 0)      (A_t the site's simulated flow that day; float noise 1e-12 × MAX(A_t, R_day) is 0, as for the pragmatic EWR)
+```
+
+and it feeds §2.7b's attribution unchanged, so a farm is still never charged
+more than its net impact that day, and charged + natural still add up to the
+site's shortfall (the verification checks both on every run). Days outside a
+complete calendar month (a part month at either end of the run, which the
+monthly rule can't judge) and sites without a table keep the pragmatic EWR;
+the run warns how many days that was per site. The shortfall the charge
+followed is stored per site as `ewr_charge_shortfall` (m³/day, ≤ 0), and the
+curtailment table's EWR sites and the water account's EWR rows carry
+`ewrSource: 'ruleTable'`, so the farm view and the re-windowed curtailment
+recompute from it. What doesn't change: the `ewr` and `ewr_shortfall` series,
+`ewrDaysNotMet`, the EWR compliance grid's outlet row and the observed-record
+agreement (§2.9b) stay on the pragmatic EWR, and the monthly compliance
+report above is the same either way. No table at all: the run says so and
+charges on the pragmatic EWR.
+
+Spreading the month's volume evenly is the simplest daily form of a monthly
+requirement: a day's shortfall then says the river ran below the month's
+average requirement that day. A month met on volume can still charge days
+below that average, and a month failed on volume can have uncharged days; the
+monthly report and the daily charge answer different questions (is the
+Reserve met this month; who reduced the flow on the days it was short).
+Which the charge should follow is plan.md question 17.
+
 **Pending the hydrologist.** The method is from the literature above, not
 from the client's hydrologist: which table applies at which site (and
 whether total or low-flow), whether the percentile should come from the run
-or the gazette's natural curve, linear or log interpolation, and whether the
-requirement below the driest point should scale or hold.
+or the gazette's natural curve, linear or log interpolation, whether the
+requirement below the driest point should scale or hold, and whether the
+daily charge should follow the rule table (`ewrChargeSource`).
 
 **Sources.** Full references are in
 [calibration-research.md § References](./calibration-research.md#references).
@@ -2768,12 +2813,63 @@ Plausibility notes (run warnings, not blocking): a low-flow row that rises
 with the % point, and low flows above the total at a point (the high-flow
 part there counts as 0).
 
-Both requirements are judged on the month's **total** flow volume A, as
-§2.9c does. A flood month can therefore pass its low flows on volume while
-its base flow was short; separating base flow from the month's flow (e.g. a
-baseflow filter or the month's lowest daily flows) is the durable measure
-and is pending the hydrologist (docs/followups.md, "Low flows on base
-flow").
+By default both requirements are judged on the month's **total** flow
+volume A, as §2.9c does. A flood month can therefore pass its low flows on
+volume while its base flow was short.
+
+**Low flows on base flow** (engine ≥ 1.3.0, issue #64;
+`settings.lowFlowMeasure`, `'total'` by default). With `'baseflow'`, a
+low-flow requirement (the `lowFlow` grid of a total table, or a table whose
+component is `lowFlow`) is judged on the month's **base flow** B instead:
+
+```
+b_t    = base flow of the site's simulated daily flow (Lyne–Hollick, below)
+B      = Σ b_t over the month   (table unit)
+lowMet = B ≥ R_low               (a lowFlow table: met = B ≥ R, deficit = MAX(R − B, 0))
+```
+
+The total requirement is still judged on A, and the natural percentile still
+comes from the month's natural flow, so R, R_low and the percentile are the
+same under either measure; only the flow a low-flow requirement is compared
+with changes. The month carries `baseflow` and the site `lowFlowMeasure:
+'baseflow'` (both absent under `'total'`, and on a table without a low-flow
+requirement, which reports exactly as before).
+
+*The filter* (`packages/engine/src/reserve/baseflow.ts`). The one-parameter
+recursive digital filter of Lyne & Hollick (1979),
+
+```
+f_t = α f_t−1 + (1 + α)/2 · (Q_t − Q_t−1),   0 ≤ f_t ≤ Q_t,   b_t = Q_t − f_t
+```
+
+passed three times, forward, backward, forward, each pass filtering the last
+one's base flow (Nathan & McMahon 1990), over the series reflected by 30 days
+at each end so the ends don't carry the filter's start-up (Ladson et al.
+2013). **α = 0.995**: Smakhtin & Watkins (1997, WRC Report 494/1/97) found
+0.995–0.997 right for daily flows in most South African catchments, and
+Hughes, Hannart & Watkins (2003, *Water SA* 29(1):43) build their daily and
+monthly separation for the DRM on it; the international default of 0.925
+(Nathan & McMahon) calls more of the flow quick flow. A digital filter was
+chosen over the mean of the month's lowest daily flows because it is the
+separation South African Reserve work uses (the DRM's base-flow index comes
+from it), it needs no window length to pick, and a month's base flow then
+adds up across months. 0 ≤ b_t ≤ Q_t every day (tested), so B ≤ A: a month
+met on base flow is met on its volume, and base flow only ever fails more
+low-flow months than the total does.
+
+The backward pass makes a day's base flow depend on the days after it, so a
+run resumed from a model-state snapshot (§2.16) carries the part month's base
+flow in the snapshot but filters from its own first day: its later base flow
+is close to, not bit-identical with, the uninterrupted run's (the daily series
+are, since base flow isn't one).
+
+*Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
+Institution of Engineers Australia, 89–93 (the filter) · Nathan & McMahon
+1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
+494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
+Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
+and monthly flows for the DRM) · Ladson, Brown, Neal & Nathan 2013,
+*Australasian J. Water Resources* 17(1):25 (reflecting the ends).
 
 **High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
 component: a label, the calendar months an event may start in, a peak
@@ -2805,8 +2901,8 @@ and simulated flow, so a dam upstream of one gauge changes that gauge and
 every site below it (the outlet), but not a site on another branch (tested:
 two branches, a gauge on each, a dam on one, `lowHighFlows.test.ts`). Farm
 attribution is unchanged: the daily charge still follows the pragmatic EWR at
-each site (§2.7b); a charge driven by the rule tables is the open
-follow-up "Daily charge from the rule table".
+each site (§2.7b) unless `settings.ewrChargeSource` is `'ruleTable'`
+(engine ≥ 1.3.0, §2.9c § The charge from the rule table).
 
 **Invariants (tested, `reserve/lowHighFlows.test.ts`).**
 - A table with neither addition reports exactly as before (no new keys).
@@ -2831,7 +2927,8 @@ days, per year). The API (the settings schema, `backend/src/projects/settings.ts
 table is a validation error, never "0 required".
 
 **Pending the hydrologist.** Whether the low flows should be judged on base
-flow rather than the month's volume; whether a freshet's "per year" should be
+flow rather than the month's volume (`settings.lowFlowMeasure`, built, off by
+default) and, if so, with which filter parameter; whether a freshet's "per year" should be
 capped by natural events (as here) or required outright in maintenance years
 only; whether events should be counted per month rather than per water year;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
@@ -3976,7 +4073,11 @@ the run, volumes in m³, summed over every node per day in node-id order.
   `damReleaseM3`: a release joins the river below the dam the same day, so it
   is already inside the outflow or taken again downstream).
 - **EWR required vs met** at each EWR site (outlet, then gauges by id):
-  Σ requirement, Σ MIN(flow, requirement), and the days short.
+  Σ requirement, Σ MIN(flow, requirement), and the days short. The
+  requirement is the pragmatic EWR, or from engine 1.3.0 with
+  `settings.ewrChargeSource: 'ruleTable'` the site's rule-table requirement
+  where it has one (the row then says `ewrSource: 'ruleTable'`; §2.9c § The
+  charge from the rule table), pending the hydrologist.
 
 Dam releases (WP-3.5, engine 0.35.0) move water within the network, so they
 are a memo; only the lost share of dam seepage is a new out term. Runs made
