@@ -84,7 +84,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await areas.getByLabel('Citrus on River farm, ha').fill('10');
 	await expect(areas.getByRole('row', { name: /^Total/ })).toContainText('45.00 ha');
 	await closeModal(page);
-	await expect(page.getByTestId('crop-card').filter({ hasText: 'Citrus' })).toContainText('45 ha · peak need in');
+	await expect(page.getByTestId('crop-row').filter({ hasText: 'Citrus' })).toContainText('45 ha · peak need in');
 
 	// --- transfers: Ridge → River in summer ------------------------------------
 	await tab(page, 'Transfers').click();

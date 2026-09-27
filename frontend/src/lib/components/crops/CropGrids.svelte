@@ -22,7 +22,7 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
 	import { catchmentDemand, cropStacks, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
-	import { CROP_PALETTE, cropColours } from './cards';
+	import { cropAreaTotals, cropColouring, OTHER_COLOUR, rankCrops } from './cards';
 	import DemandTable from './DemandTable.svelte';
 
 	let {
@@ -70,11 +70,11 @@
 	const unplantedNote = $derived(noPlantedAreaNote(farms.filter((f) => rowTotal(f.id) === 0).map((f) => f.name || '(unnamed)')));
 
 	// Stacked chart above the demand table: the same numbers, split by crop,
-	// in the crop colours the Crops page uses (cards.ts cropColours).
+	// in the crop colours the Crops page uses (cards.ts cropColouring: ranked by planted area).
 	const stacks = $derived.by(() => {
-		const parts = cropStacks(demand, crops, CROP_PALETTE.length);
-		const colours = cropColours(crops, parts);
-		return parts.map((s) => ({ ...s, color: colours.get(s.id) ?? 'var(--text-muted)' }));
+		const ranked = rankCrops(crops, cropAreaTotals(editor.model.cropAreas, farms.map((f) => f.id)));
+		const { colours, named } = cropColouring(ranked);
+		return cropStacks(demand, crops, named).map((s) => ({ ...s, color: colours.get(s.id) ?? OTHER_COLOUR }));
 	});
 	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));
 	const chartLabel = $derived(

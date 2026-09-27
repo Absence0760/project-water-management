@@ -1,6 +1,6 @@
-// Crops & demand is cards and bars (issue #17, option A · A3): the full grids
+// Crops & demand is a crop list and bars (issue #17, option A · A3): the full grids
 // open from the header's Grids menu in the grid modal (`grid=<id>`), a crop's
-// name and factors in a side sheet from its card's Edit (`crop=<id>`). These
+// name and factors in a side sheet from its row's Edit (`crop=<id>`). These
 // open them the way a person does. Save and close with saveModelChanges /
 // closeModal from ./network.ts.
 import type { Page } from '@playwright/test';
@@ -28,7 +28,7 @@ export async function openCropGrid(page: Page, grid: CropGrid) {
 	return dialog;
 }
 
-/** Opens a crop's sheet from its card (Edit, or View for a viewer) and returns the sheet's dialog. */
+/** Opens a crop's sheet from its row in the crop list (Edit, or View for a viewer) and returns the sheet's dialog. */
 export async function openCropSheet(page: Page, name: string) {
 	const sheet = page.getByRole('dialog', { name: new RegExp(`^(Edit ${name}|${name}: crop factors)$`) });
 	if (/[?&]crop=/.test(page.url())) {

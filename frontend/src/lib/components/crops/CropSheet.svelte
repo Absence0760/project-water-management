@@ -1,6 +1,6 @@
 <script lang="ts">
 	// One crop's name and 12 monthly factors in a side sheet over the Crops
-	// page (issue #17, option A · A3: a crop card's Edit, `crop=<cropId>` in
+	// page (issue #17, option A · A3: a crop row's Edit in the crop list, `crop=<cropId>` in
 	// the URL). It edits the shared ModelEditor, the same values as the Crop
 	// factors grid. The sheet is modal, which hides the save bar, so it
 	// carries the save row (model/ModelSaveRow.svelte), as the farm drawer does.
