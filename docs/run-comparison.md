@@ -277,7 +277,11 @@ bottom:
    2×2 table of observed days, per month and per water year) sits side by
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
-5. **Farms.** One row per farm with run B's value and the change from A for
+5. **Plausibility checks** (engine ≥ 1.3.0 compares them, issue #64;
+   `plausibility/compare.ts` `comparePlausibility`,
+   `compare/PlausibilityCompare.svelte`), under its own heading; see
+   [Plausibility checks](#plausibility-checks) below.
+6. **Farms.** One row per farm with run B's value and the change from A for
    demand, supplied, deficit, % supplied, EWR charge and days charged for the
    EWR (engine ≥ 0.17.0, audit Q17; a run from an older engine holds its reach
    shortfall AB there, so compare runs of the same engine).
@@ -291,7 +295,7 @@ bottom:
    river pump at a farm reads as 0 there"), under the rule in
    [Series and metrics only one run has](#series-and-metrics-only-one-run-has)
    (`delta.ts` `farmFeatureMetrics`). These columns don't sort.
-6. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
+7. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
    shared with the Scenarios tab). Pick a **node** and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
    **B − A** on a second chart underneath. It opens on the catchment's
@@ -354,6 +358,39 @@ met). Grey means the change is neither: demand and flow are "just different".
 The better/worse judgement is also in the text read out by screen readers and
 in the tooltip, so colour is never the only cue. For percent bias, closer to 0
 is better; for the EWR frequency bias and a ratio to WR2012, closer to 1; for Reserve compliance, more months met. A change that rounds to zero is shown as plain "0".
+
+### Plausibility checks
+
+`RunComparison.plausibility` sets each run's own hydrologist plausibility
+checks ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6))
+side by side, as each run computed them: nothing is recomputed, so a run
+keeps the tolerances of the engine that made it. One table, a row per check
+and site, with run A, run B and the change:
+
+- **Per site**: the outlet, then each gauge node with its own observed record
+  (engine ≥ 1.3.0, `plausibility.gauges`), matched by node id, then by name
+  across a copy (a renamed gauge shows "(was …)"; a gauge only one run
+  checked gets a note). Two rows each:
+  - *Natural ≥ observed + abstraction*: the water years that fail and how many
+    were judged ("fails 2001/02, 2002/03: 2 of 3 (gauge)", "passes all 3"),
+    and the change: the years **newly failing** and **now passing**, among the
+    years both runs judged;
+  - *Dry-season Q90, simulated ÷ observed*: the ratio and whether it is within
+    the factor of 2, and the change in the ratio.
+- **Catchment-wide**: *EWR days by rain source* (the share of days not met in
+  fallback-rain and good-rain years, "(warns)" when the run warned) and
+  *Observed flow vs rain* (the double-mass breaks the model doesn't share,
+  each with its change and hint), with the change in fallback-rain years or
+  in the whole-record runoff ratio.
+
+Each result is marked pass (green) or fail (red) in words and colour; "not
+checked" when that run couldn't make the check (no record, too few years, or
+a run before engine 0.25.0, whose side is empty). A site neither run could
+check is left out; the panel is absent when neither run has checks. The
+typical use is before and after a refit or new data: which years stopped
+failing, and whether the low flows moved inside the factor of 2. A gauge's
+own record also shows in *What changed* by its gauge ("Observed flow at gauge
+Middle weir series added …").
 
 ## How runs are matched
 

@@ -71,7 +71,7 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
-| `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
+| `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
@@ -216,6 +216,45 @@ its interval) and sends the boundary with the values.
 - Checked by the same rules in the database (`CHECK`s) and the engine
   (`provenanceError`): 1–40 letters, digits, spaces, dots, dashes or
   underscores for the product, 1–20 without spaces for the version.
+
+### Gauge records (084_gauge_records.sql)
+
+`time_series.site_node_id` says an observed or logger flow record was
+measured at a **gauge node inside the network** (engine ≥ 1.3.0, issue #64,
+[model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6));
+`NULL` = the outlet, which every series was before.
+
+- **Read by** a run (`runs/execute.ts` `loadLiveInput`): the outlet's
+  records are the first of each kind by name among the series with **no
+  site**, as before; each gauge's are the first of each flow kind by name
+  among its own, given to the engine as `<kind>@<node id>`. Only the
+  plausibility checks read a gauge's record. The run stores it like any
+  input series (`run_input_series.kind` = that key, the values in
+  `series_blob`), so `loadRunInput` reproduces it; 084 redefines
+  `run_input_series_series_kind` (from 056) to compare the kind before the
+  `@` with the series'.
+- **Only a flow record** has a site (`time_series_site_flow_only` CHECK).
+- **A plain uuid, not a foreign key**, on purpose: deleting the gauge from
+  the model must neither delete its record (a cascade) nor quietly make it
+  the outlet's (SET NULL would change what the outlet calibrates against).
+  The record keeps its site, the run leaves it out with a warning, and the
+  Data page shows "its gauge is no longer in the model" until an editor
+  moves it.
+- **Same project on write**: `time_series_site_same_project` runs
+  `assert_same_project('site_node_id')` when the column is set. The API
+  (`PATCH …/series/:id { siteNodeId }`) also requires a gauge above the
+  outlet, and logs a move as `series.site_changed` (`{ site: { from, to } }`,
+  gauge names or "the outlet").
+- **Kept** by an upload, a merge, a data feed and the ingest (none writes the
+  column). **Carried** by a copy and the project document (`siteNodeId` on a
+  series), both moved to the new project's gauge id; an import refuses a
+  site that isn't a gauge above the outlet in the file's own model, and the
+  export leaves out a site whose node has gone. **Not kept by a series
+  revision**: a deleted series restored from its revision comes back at the
+  outlet.
+- water_app's existing `time_series` grants and RLS policies cover the
+  column. Farmers never read `time_series` (020), and the catalogue guard's
+  farmer list says so (`FARMERS_NEVER_READ`).
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
@@ -503,7 +542,9 @@ the result change?", and put back any earlier version.
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
-  PATCH, `provenance: { from, to }`), `series.held` (WP-2.16: an API key's
+  PATCH, `provenance: { from, to }`), `series.site_changed` (084: a flow
+  record moved to a gauge or back to the outlet, `site: { from, to }`),
+  `series.held` (WP-2.16: an API key's
   pushed days the data-quality rules flag, with `negative`, `outlier`, up to
   5 `examples` and the `source` label; automatic runs wait until a person
   runs the model, `series/hold.ts`), `run.created/changed/deleted/trimmed`, `feed.configured`,

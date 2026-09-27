@@ -773,15 +773,24 @@ the reports):
       10-point warning, the seasonal hint's 10-point margin and the factor of
       2 on Q90 (every value and its reasoning is in model.md §2.10d).
       Still open, each with its trigger:
-      - [ ] **Checks on a gauge node inside the network.** The observed
-            records are the outlet's, so the checks run there only. The
-            durable fix is attaching an observed record to a gauge node
-            (a series per node) and running check 1 and 4 at each. Trigger:
-            a project with a second gauged site.
-      - [ ] **The checks in the run comparison.** Compare shows neither the
-            failing years nor the Q90 ratio side by side. Trigger: the
-            hydrologist asks to compare the checks between runs (for
-            example before and after a refit).
+      - [x] **Checks on a gauge node inside the network.** Done 2026-09-27
+            (issue #64), engine 1.3.0, migration 084 (may need renumbering
+            at merge): a flow record can be attached to a gauge above the
+            outlet (`time_series.site_node_id`, the Data page's site select),
+            and checks 1 and 4 run at each such gauge against the simulated
+            flow there, per site in `plausibility.gauges`, the Runs panel,
+            the summary CSV and the warnings
+            ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6),
+            [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)).
+            A series revision doesn't keep the site: a deleted gauge record
+            restored from its revision comes back at the outlet, to move
+            again by hand.
+      - [x] **The checks in the run comparison.** Done 2026-09-27 (issue
+            #64): Compare's *Plausibility checks* panel gives, per site (the
+            outlet and each gauge), both runs' failing years with those newly
+            failing and now passing, and the Q90 ratio with pass or fail,
+            then the rain-source split and the double-mass breaks
+            ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 - [x] **Phase 10 of issue #4: remove legacy** (issue #16). Done 2026-09-26,
       engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
       hydrologist-review trigger ([plan.md](./plan.md) Decisions,

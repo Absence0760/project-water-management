@@ -3712,10 +3712,38 @@ the run computes or stores, so `ENGINE_VERSION` stayed where it was (as for
 earlier wording fixes): a run saved before it keeps its old text.
 
 Checks 1, 3 and the Q90 comparison use the calibration record only, by
-design: the other record may be a different river (§2.10a). **Not yet**
-([followups.md](./followups.md)): the checks at a gauge node inside the
-network (the observed records are the outlet's), and the checks in the run
-comparison.
+design: the other record may be a different river (§2.10a).
+
+**At a gauge node inside the network** (engine ≥ 1.3.0, issue #64,
+`gaugeSites` in `run.ts`, `gaugeChecks` in `plausibility/index.ts`). An
+observed or logger record can be attached to a gauge node above the outlet
+(`time_series.site_node_id`, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql));
+the run then has it as `series['<kind>@<node id>']` (`GaugeSeriesKey`), and
+the outlet's records stay the series with no site. Checks **1 and 4** run
+again at each such gauge (node-id order) and are reported per site in
+`RunSummary.plausibility.gauges`: `{ nodeId, name, flowKind, naturalShare,
+naturalised, lowFlow }`. At the gauge:
+
+- **O** is the gauge's record: of the run's calibration kind when it has one,
+  else its other record (`flowKind`);
+- **S** is the simulated flow at the gauge, its outflow U;
+- **N** is the catchment's natural flow × `naturalShare`, the flow shares
+  (§2.5) of the gauge and every node above it, which is what the network
+  routes there before any use;
+- the **dams** and **land cover** terms sum only the nodes above the gauge;
+  A = N − S as at the outlet, so a transfer across the gauge falls in *use*;
+- check 4 uses the catchment's dry season (above), the run's calibration
+  exclusions and the same tolerances, factor and floors.
+
+Each finding warns as the outlet's does, prefixed `At gauge "<name>": …`. A
+record whose node is gone from the model, is not a gauge, or is the outlet is
+left out with a warning naming it. Checks 2 and 3 stay catchment-wide (the rain
+is the catchment's), and calibration, the EWR test against observed flow
+(§2.10a) and every other use of an observed record read the outlet's records
+only. A project without a gauge record runs exactly as before: no `gauges`
+key, no new warning (`gauges.test.ts` pins that the rest of the summary and
+every series are unchanged). The run comparison sets both runs' checks side
+by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
