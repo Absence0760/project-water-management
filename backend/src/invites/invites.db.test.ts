@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { SESSION_COOKIE, signSession } from '../auth/session.js';
 
 const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
 
@@ -13,10 +14,22 @@ async function register(email: string, inviteToken?: string) {
 		displayName: 'Invitee',
 		...(inviteToken ? { inviteToken } : {})
 	});
-	expect(res.status).toBe(201);
-	const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+	// A sign-up through a matching invite is signed in (201). Any other waits
+	// for its confirmation link and signs nobody in (202, issue #57): these
+	// tests go on as that account, with a session minted for it.
+	let cookie: string;
+	let user: { id: string; emailVerified?: boolean };
+	if (res.status === 201) {
+		cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+		user = res.body.user;
+	} else {
+		expect(res.status).toBe(202);
+		const [row] = (await asOwner('SELECT id FROM app_user WHERE email = $1', [email])) as { id: string }[];
+		user = { id: row!.id, emailVerified: false } as { id: string; emailVerified: boolean };
+		cookie = `${SESSION_COOKIE}=${await signSession(user.id)}`;
+	}
 	return {
-		user: res.body.user,
+		user,
 		call: (method: string, path: string, body?: unknown) => anon(method, path, body, cookie)
 	};
 }

@@ -63,12 +63,16 @@ describe('a stranger cannot keep an address locked against its owner', () => {
 		expect((await login(u.email, 'fresh password')).status).toBe(429);
 	});
 
-	it('a new account trusts the browser that made it', async () => {
+	it('a new account trusts the browser that confirmed it (the link proved the inbox)', async () => {
 		const email = `new-${crypto.randomUUID()}@example.com`;
 		const made = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New' });
-		expect(made.status).toBe(201);
+		expect(made.status).toBe(202);
+		const confirmed = await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) });
+		expect(confirmed.status).toBe(200);
 		await strangerLocks(email);
-		expect((await login(email, 'correct horse', deviceOf(made))).status).toBe(200);
+		expect((await login(email, 'correct horse', deviceOf(confirmed))).status).toBe(200);
+		// Positive control: a browser that didn't open the link is locked.
+		expect((await login(email, 'correct horse')).status).toBe(429);
 	});
 
 	it('a trusted device’s own guesses still lock it, doubling, capped at 15 minutes, never touching the shared record', async () => {

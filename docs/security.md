@@ -102,13 +102,25 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   a purpose (a verify token can't reset a password), and expire: reset **1 h**,
   verify **48 h**, invite **7 days**. Issuing a new one replaces the old one.
   Malformed tokens are rejected before any DB work.
-- **No account enumeration:** `POST /auth/forgot-password` answers `202` with
-  the same body for known and unknown addresses. Accepted residual risk:
-  response *timing* differs slightly (a known address does a DB write and an
-  SES call), and `POST /auth/register` answers `409` for a taken address
-  (sign-up is not email-first), so enumeration is not closed, only slow: see
-  the sign-up throttle below. Don't "fix" this by making register lie without
-  also making sign-up email-first.
+- **No account enumeration:** `POST /auth/forgot-password`,
+  `POST /auth/resend-confirmation` and `POST /auth/register` each answer the
+  same `202` body for known and unknown addresses. Sign-up is **email-first**
+  (issue #57): it signs nobody in, and the account can sign in only once the
+  emailed link confirms the address (`403 email_unconfirmed` otherwise, said
+  only after a correct password). A taken address gets an email instead of an
+  answer: a fresh confirmation link if it was never confirmed, else "you
+  already have an account" with a password-reset link, both under the
+  address's cooldown and daily cap, so sign-up can't be used to flood an
+  inbox. The one exception is sign-up through an invite link, which names its
+  address already: `409 account_exists` there tells the holder nothing new.
+  Accepted residual risk: response *timing* differs slightly (a known address
+  does DB writes and an SES call).
+- **Confirmation before sign-in** leaves one legacy state: an unconfirmed
+  account signed in before this rule (its session stays valid until it
+  expires) still sees the confirm-your-email banner and can resend the link
+  (`POST /auth/resend-verification`). Opening a confirmation link trusts that
+  browser for the address's sign-in lockout (`auth/device.ts`), as a password
+  reset does.
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -1715,6 +1727,15 @@ readable by anyone. The rules:
   and that environment has a required reviewer. A workflow can only assume the
   role after a human approves the run.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
+- **The public landing page** (`/`, signed out, and the prerendered
+  `/welcome`, issue #57) is static: it calls no API but `/auth/me` (the
+  layout's session check, which it doesn't wait for), shows only invented
+  example data built into the bundle, loads nothing from a third party (no
+  fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
+  the language choice already kept by the sign-in pages. Its prerendered HTML
+  carries the same hashed meta CSP as every page (`check-csp.mjs` scans every
+  `.html` in the build). The route guard's allowlist test covers it
+  (`lib/auth/redirect.test.ts`).
 - **Lambda Function URL**: the backend rejects any request without the
   CloudFront shared-secret header, so the WAF and CloudFront can't be bypassed
   by calling the Function URL directly. The check is skipped when the secret is unset (local

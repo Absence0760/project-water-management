@@ -3,8 +3,9 @@
 //   - 10 sign-ups per client address an hour, then 429 signup_throttled with
 //     Retry-After; a refused attempt doesn't count, so hammering never extends it;
 //   - the window ends and sign-up works again;
-//   - once throttled, a taken and a free address get the same answer (the
-//     409 that reveals a taken address is reached only within the limit);
+//   - a taken and a free address get the same answer, throttled or not (a
+//     sign-up answers 202 either way and a taken address's owner gets an
+//     email instead, issue #57); the throttle also caps the emails sign-up sends;
 //   - the client address is the edge's X-Viewer-Address only on a request
 //     that passed the CloudFront shared-secret check: without it, a spoofed
 //     header is ignored;
@@ -32,7 +33,7 @@ const statusOf = async (r: { status: number } | Promise<{ status: number }>) => 
 
 /** Sign up `n` fresh addresses from the same client; every one must be accepted. */
 async function fill(n: number, headers?: Record<string, string>) {
-	for (let i = 0; i < n; i++) expect(await statusOf(headers ? registerVia(fresh(), headers) : register(fresh()))).toBe(201);
+	for (let i = 0; i < n; i++) expect(await statusOf(headers ? registerVia(fresh(), headers) : register(fresh()))).toBe(202);
 }
 
 /** An existing account, made with the throttle off so it isn't counted. */
@@ -58,7 +59,7 @@ afterEach(() => {
 
 describe('per client address', () => {
 	it('positive control: sign-up works with the throttle on, and the helpers’ signUp works with it off', async () => {
-		expect(await statusOf(register(fresh()))).toBe(201);
+		expect(await statusOf(register(fresh()))).toBe(202);
 		vi.stubEnv('SIGNUP_THROTTLE', 'off');
 		await asOwner(`UPDATE signup_throttle SET attempts = 1000`);
 		expect((await signUp('Helper')).email).toMatch(/@example\.com$/);
@@ -66,9 +67,9 @@ describe('per client address', () => {
 
 	it('accepts the 10th sign-up in the hour and refuses the 11th with a coded 429 and Retry-After', async () => {
 		expect(SIGNUP_THROTTLE.perClient).toBe(10);
-		// A taken address counts too: the 409 is what enumeration reads.
+		// A taken address counts too (it sends its owner an email), and answers like a free one.
 		const taken = await existing();
-		expect((await register(taken.email)).status).toBe(409);
+		expect((await register(taken.email)).status).toBe(202);
 		await fill(9);
 		const refused = await register(fresh());
 		expect(refused.status).toBe(429);
@@ -100,8 +101,8 @@ describe('per client address', () => {
 
 	it('answers a taken and a free address the same once throttled, and makes no account for the free one', async () => {
 		const taken = await existing();
-		// Positive control: within the limit, the taken address is told apart.
-		expect((await register(taken.email)).status).toBe(409);
+		// Within the limit, the taken address answers like a free one too.
+		expect((await register(taken.email)).status).toBe(202);
 		await fill(9);
 		const free = fresh('free');
 		const a = await register(taken.email);
@@ -124,7 +125,7 @@ describe('the client address', () => {
 		await fill(10, viaEdge('203.0.113.9'));
 		expect(await statusOf(registerVia(fresh(), viaEdge('203.0.113.9')))).toBe(429);
 		// Another viewer is not held up by the first one's limit.
-		expect(await statusOf(registerVia(fresh(), viaEdge('198.51.100.4')))).toBe(201);
+		expect(await statusOf(registerVia(fresh(), viaEdge('198.51.100.4')))).toBe(202);
 		// Rotating within one IPv6 /64 is the same client.
 		await fill(10, viaEdge('2001:db8:1:2::1'));
 		expect(await statusOf(registerVia(fresh(), viaEdge('2001:db8:1:2::ffff')))).toBe(429);
@@ -134,7 +135,7 @@ describe('the client address', () => {
 		// No shared secret configured (local, tests): a changing header is still one client.
 		edge = createApp();
 		for (let i = 0; i < 10; i++) {
-			expect(await statusOf(registerVia(fresh(), { [VIEWER_ADDRESS_HEADER]: `203.0.113.${i}`, 'x-forwarded-for': `198.51.100.${i}` }))).toBe(201);
+			expect(await statusOf(registerVia(fresh(), { [VIEWER_ADDRESS_HEADER]: `203.0.113.${i}`, 'x-forwarded-for': `198.51.100.${i}` }))).toBe(202);
 		}
 		expect(await statusOf(registerVia(fresh(), { [VIEWER_ADDRESS_HEADER]: '203.0.113.200', 'x-forwarded-for': '198.51.100.200' }))).toBe(429);
 		// Behind the edge, a request with the wrong secret never reaches the route.
@@ -148,15 +149,15 @@ describe('the global ceiling', () => {
 	it('refuses every client once the hour’s sign-ups reach the ceiling, and lets the last one in', async () => {
 		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', EDGE_SECRET);
 		edge = createApp();
-		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.1')))).toBe(201);
+		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.1')))).toBe(202);
 		await asOwner(`UPDATE signup_throttle SET attempts = $1 WHERE bucket = 'global'`, [SIGNUP_THROTTLE.global - 1]);
-		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.2')))).toBe(201);
+		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.2')))).toBe(202);
 		const refused = await registerVia(fresh(), viaEdge('192.0.2.3'));
 		expect(refused.status).toBe(429);
 		expect(((await refused.json()) as { code: string }).code).toBe('signup_throttled');
 		expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(3500);
 		// The global window ending lets everyone in again.
 		await asOwner(`UPDATE signup_throttle SET window_start = now() - interval '1 hour 1 second' WHERE bucket = 'global'`);
-		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.3')))).toBe(201);
+		expect(await statusOf(registerVia(fresh(), viaEdge('192.0.2.3')))).toBe(202);
 	});
 });

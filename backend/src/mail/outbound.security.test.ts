@@ -62,6 +62,7 @@ const alertKinds: AlertFacts[] = [
 const builders: Record<string, () => Mail[]> = {
 	verifyEmailMail: () => templates.LOCALES.map((l) => templates.verifyEmailMail(TO, URL_, l)),
 	resetPasswordMail: () => templates.LOCALES.map((l) => templates.resetPasswordMail(TO, URL_, l)),
+	accountExistsMail: () => templates.LOCALES.map((l) => templates.accountExistsMail(TO, URL_, l)),
 	inviteMail: () =>
 		(['sign-up', 'confirm'] as const).flatMap((mode) =>
 			(['project', 'team'] as const).map((kind) => templates.inviteMail(TO, URL_, EVIL, { kind, name: EVIL, role: 'editor' }, mode))
@@ -102,7 +103,7 @@ describe('every email template, against hostile names', () => {
 			const tags = new Set([...m.html.matchAll(/<\/?([a-z0-9]+)/gi)].map((t) => t[1]!.toLowerCase()));
 			for (const t of tags) expect(['html', 'head', 'meta', 'title', 'body', 'main', 'h1', 'p', 'a', 'br', 'span']).toContain(t);
 			// The text alternative keeps it readable, and it's plain text (no HTML part leaks into it).
-			if (name !== 'verifyEmailMail' && name !== 'resetPasswordMail') {
+			if (name !== 'verifyEmailMail' && name !== 'resetPasswordMail' && name !== 'accountExistsMail') {
 				expect(m.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
 				expect(m.text).toContain('<script>alert(1)</script>');
 			}

@@ -17,6 +17,8 @@ const PUBLIC = new Set([
 	'POST /auth/forgot-password',
 	'POST /auth/reset-password',
 	'POST /auth/verify-email',
+	// "Send the link again" on the sign-in page (issue #57): the same 202 for any address.
+	'POST /auth/resend-confirmation',
 	'POST /auth/invite-info',
 	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
 	// render token is the credential, and the session it buys reads one
@@ -314,6 +316,7 @@ describe('route auth inventory', () => {
 		'POST /auth/forgot-password',
 		'POST /auth/reset-password',
 		'POST /auth/verify-email',
+		'POST /auth/resend-confirmation',
 		'POST /auth/invite-info',
 		'POST /auth/render-session',
 		'POST /share/view',

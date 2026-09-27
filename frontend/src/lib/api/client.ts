@@ -216,15 +216,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			login: (email: string, password: string) =>
 				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
-			/** `inviteToken` from a `/register?invite=…` link: a live invite for the same address starts the account verified and joined. */
+			/**
+			 * Sign up. An ordinary sign-up signs nobody in: it mails a
+			 * confirmation link and answers `{ confirm, email }` (the same for a
+			 * taken address, issue #57). `inviteToken` from a `/register?invite=…`
+			 * link: a live invite for the same address starts the account
+			 * confirmed, joined and signed in, `{ user }`.
+			 */
 			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: Locale | null) =>
-				request<{ user: User }>('POST', '/auth/register', {
+				request<{ user: User } | { confirm: true; email: string }>('POST', '/auth/register', {
 					email,
 					password,
 					displayName,
 					...(inviteToken ? { inviteToken } : {}),
 					...(locale ? { locale } : {})
-				}).then((r) => r.user),
+				}),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),

@@ -392,6 +392,29 @@ build, median of 9 loads of an 8-year run, time to the hydrograph's first
 paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 `auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.
 
+## The landing page: the one prerendered route
+
+The app is a static SPA (`ssr = false`, `prerender = false` in
+`routes/+layout.ts`): every route renders in the browser from the fallback
+`index.html`. The public landing page (issue #57) is the exception.
+`routes/welcome/+page.ts` sets `ssr = true` and `prerender = true`, so the
+build writes `welcome.html` with the page's HTML and its meta and Open Graph
+tags in it: crawlers and link previews read it without running the app, and a
+visitor sees it before any script. CloudFront's `spa_rewrite` function serves
+`/welcome` from `welcome.html` (`infra/s3_cloudfront.tf`, guarded in
+`guardrails.tftest.hcl`; the e2e static server mirrors it). The absolute URLs in
+its tags come from `kit.prerender.origin`: the build's `SITE_ORIGIN` (the
+deploy passes `PUBLIC_SITE_URL`), else `http://localhost:7777`.
+
+A signed-out `/` shows the same component client-side: the root layout renders
+`lib/components/landing/Landing.svelte` in place of the projects page, a lazy
+chunk fetched beside `/auth/me`. Serving `welcome.html` at `/` instead was
+rejected: `/` is also the signed-in project list, and a prerendered landing
+there would flash for every signed-in user and fail hydration. The landing
+imports no workspace code, no uPlot and no engine: its figures are a small
+generated module (`data.generated.ts`), made by running the engine at build
+time (`pnpm gen:landing-art`).
+
 ## Shared CSS (frontend)
 
 Styles live in two places. `frontend/src/app.css` is global and loads with

@@ -16,8 +16,8 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account; `429 signup_throttled` past the sign-up throttle |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
@@ -26,7 +26,8 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
-| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
+| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
+| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
@@ -174,8 +175,9 @@ unless it is listed there with why its status says enough.
 | --- | --- | --- |
 | `not_signed_in` | 401 | no valid session |
 | `wrong_credentials` | 401 | sign-in with a wrong email or password |
+| `email_unconfirmed` | 403 | sign-in with the right password to an account whose address was never confirmed |
 | `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
-| `account_exists` | 409 | sign-up with an address that has an account |
+| `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `wrong_current_password` | 403 | `POST /auth/change-password` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |

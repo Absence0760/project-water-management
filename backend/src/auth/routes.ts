@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { actAsUser, withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
-import { markVerified, verificationMail } from './email-routes.js';
+import { issueEmailToken, markVerified, verificationMail } from './email-routes.js';
+import { accountExistsMail, siteLink } from '../mail/templates.js';
+import type { Mail } from '../mail/transport.js';
 import { buildSubjectExport, ExportThrottled } from './export.js';
 import { attachment } from '../export/csv.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -110,13 +112,44 @@ const toUser = (r: UserRow) => ({
 });
 const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, ${PREFERENCES_COL}`;
 
+/**
+ * The email for a sign-up with an address that already has an account: a
+ * fresh confirmation link if the account was never confirmed, else "you
+ * already have an account" with a password-reset link. Null when the
+ * address's cooldown or daily cap holds it back (the sign-up answer is the
+ * same either way).
+ */
+async function takenAddressMail(db: Db, address: string): Promise<Mail | null> {
+	const { rows } = await db.query<{ id: string; email: string; locale: Locale | null }>('SELECT id, email, locale FROM app_auth_account($1)', [address]);
+	const owner = rows[0];
+	if (!owner) return null;
+	await actAsUser(db, owner.id);
+	const { rows: me } = await db.query<{ verified: boolean }>('SELECT email_verified_at IS NOT NULL AS verified FROM app_user WHERE id = $1', [owner.id]);
+	if (!me[0]?.verified) {
+		const sent = await verificationMail(db, owner.id, owner.email);
+		return 'mail' in sent ? sent.mail : null;
+	}
+	const issued = await issueEmailToken(db, owner.id, 'reset');
+	return 'token' in issued ? accountExistsMail(owner.email, siteLink('/reset-password', issued.token), owner.locale) : null;
+}
+
 export const authRoutes = new Hono<AuthEnv>()
+	// Sign-up (issue #57, the flow threkir uses): an ordinary sign-up creates
+	// the account and emails a confirmation link, and signs nobody in: the
+	// person confirms, then signs in (POST /login refuses an unconfirmed
+	// account, email_unconfirmed). The answer is the same 202 whether the
+	// address was free or taken, so sign-up can't be used to find out who has
+	// an account: a taken address gets an email instead (a fresh confirmation
+	// link if it was never confirmed, else "you already have an account" with
+	// a password-reset link), under the address's cooldown and daily cap.
+	// Signing up through an invite for exactly this address proves the inbox:
+	// that account starts confirmed, joins straight away and is signed in (201).
 	.post('/register', async (c) => {
 		const body = RegisterBody.parse(await readJson(c));
 		// Sign-up throttle (079_signup_throttle.sql, auth/signupThrottle.ts):
 		// counted per client address and in all, in its own transaction before
 		// the address is looked at, so a taken and a free address get the same
-		// 429 once throttled, and the 409 below can't enumerate accounts quickly.
+		// 429 once throttled.
 		const wait = await withoutUser((db) => countSignup(db, clientKey(c)));
 		if (wait > 0) {
 			c.header('Retry-After', String(wait));
@@ -124,7 +157,8 @@ export const authRoutes = new Hono<AuthEnv>()
 		}
 		const hash = await hashPassword(body.password);
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
-		const result = await withoutUser(async (db) => {
+		type Outcome = { kind: 'joined'; row: UserRow } | { kind: 'confirm'; mail: Mail | null } | { kind: 'taken'; mail: Mail | null };
+		const result = await withoutUser(async (db): Promise<Outcome> => {
 			// app_user is under RLS (068): the insert goes through app_register,
 			// and from then on this transaction is the new account's.
 			const { rows: created } = await db.query<{ id: string | null }>('SELECT app_register($1, $2, $3, $4) AS id', [
@@ -134,7 +168,7 @@ export const authRoutes = new Hono<AuthEnv>()
 				body.locale ?? null
 			]);
 			const id = created[0]?.id;
-			if (!id) return null;
+			if (!id) return { kind: 'taken', mail: await takenAddressMail(db, body.email) };
 			await actAsUser(db, id);
 			const row = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [id])).rows[0]!;
 			// A live invite for exactly this address proves the inbox.
@@ -146,18 +180,41 @@ export const authRoutes = new Hono<AuthEnv>()
 					await markVerified(db, row.id);
 					// Accepting may have set the locale from the invite (050).
 					const { rows: fresh } = await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id]);
-					return { row: fresh[0]!, mail: null };
+					return { kind: 'joined', row: fresh[0]! };
 				}
 			}
 			const verify = await verificationMail(db, row.id, row.email);
-			return { row, mail: 'mail' in verify ? verify.mail : null };
+			return { kind: 'confirm', mail: 'mail' in verify ? verify.mail : null };
 		});
-		if (!result) throw ApiError.coded(409, 'account_exists', 'an account with that email already exists');
-		if (result.mail) await trySendMail(result.mail);
+		// An invite link names its address, so saying it's taken there tells the holder nothing new.
+		if (result.kind === 'taken' && inviteHash) throw ApiError.coded(409, 'account_exists', 'an account with that email already exists');
+		if (result.kind !== 'joined') {
+			if (result.mail) await trySendMail(result.mail);
+			return c.json({ confirm: true as const, email: body.email }, 202);
+		}
 		await issueSession(c, result.row.id);
 		// A new account has no watermark yet.
 		issueDevice(c, result.row.email, null);
 		return c.json({ user: toUser(result.row) }, 201);
+	})
+	// "Send the link again" on the sign-in page, signed out (issue #57). Always
+	// the same 202, whether or not the address has an account or still needs
+	// confirming, so it can't be used to discover accounts; a link goes out
+	// only to an unconfirmed account, under the cooldown and daily cap (078).
+	.post('/resend-confirmation', async (c) => {
+		const body = z.object({ email }).parse(await readJson(c));
+		const mail = await withoutUser(async (db) => {
+			const { rows } = await db.query<{ id: string; email: string }>('SELECT id, email FROM app_auth_account($1)', [body.email]);
+			const user = rows[0];
+			if (!user) return null;
+			await actAsUser(db, user.id);
+			const { rows: me } = await db.query<{ verified: boolean }>('SELECT email_verified_at IS NOT NULL AS verified FROM app_user WHERE id = $1', [user.id]);
+			if (me[0]?.verified !== false) return null;
+			const sent = await verificationMail(db, user.id, user.email);
+			return 'mail' in sent ? sent.mail : null;
+		});
+		if (mail) await trySendMail(mail);
+		return c.json({ ok: true }, 202);
 	})
 	.post('/login', async (c) => {
 		const body = LoginBody.parse(await readJson(c));
@@ -194,6 +251,11 @@ export const authRoutes = new Hono<AuthEnv>()
 			return (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
 		});
 		if (!user) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
+		// The password is right, but the address was never confirmed (issue
+		// #57): no session until it is. Said only after a correct password, so
+		// it tells nothing to someone who doesn't know it. The sign-in page
+		// offers the link again (POST /resend-confirmation).
+		if (user.email_verified_at === null) throw ApiError.coded(403, 'email_unconfirmed', 'confirm your email address first: open the link we emailed you');
 		await issueSession(c, row.id);
 		issueDevice(c, row.email, row.sessions_revoked_at);
 		return c.json({ user: toUser(user) });

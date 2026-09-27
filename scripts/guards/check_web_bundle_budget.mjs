@@ -68,6 +68,14 @@
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
 //                   one favicon, one font weight at a time.
+//   landingKb       the public landing page's own code (issue #57): every
+//                   chunk holding a module of frontend/src/lib/components/landing/,
+//                   with its CSS, summed. It is the first thing a new visitor
+//                   downloads, so it has a ceiling of its own; the guard fails
+//                   if it finds no landing chunk, or finds the landing in the
+//                   root layout's or the projects page's chunk (it must stay a
+//                   chunk of its own, loaded only for a signed-out visitor).
+//                   Still counted in totalCodeKb.
 //
 // ── Ceiling change log (append; newest last) ──────────────────────────────
 // 2026-09-23  initial. Measured on main @ 02552f4 (production build):
@@ -1044,6 +1052,16 @@
 //             out and no chunk budget moved. Went unnoticed while Actions
 //             was down (billing), and the batch merge of #20, #60 and #61
 //             adds nothing to the total. Headroom back to the usual ~3 KB.
+// 2026-09-27  total 994 → 1020 KB (measured 1017, with the email-first sign-up); new landingKb 25 KB. The
+//             public landing page (issue #57) adds ~24 KB: its own chunk
+//             (lib/components/landing/, 15.7 KB JS + 4.4 KB CSS = 20 KB, under
+//             the issue's 25 KB landing budget, now its own ceiling above), the
+//             Afrikaans words for its 94 messages in the lazy af catalogue
+//             (~3.5 KB, loaded only by someone who picks Afrikaans), the
+//             prerendered /welcome route's node (0.2 KB) and a few lines in the
+//             root layout. No new dependency: the charts are plain SVG and the
+//             figures a small generated module, so the landing loads no uPlot,
+//             no engine and no workspace code. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1054,12 +1072,13 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 994,
+	totalCodeKb: 1020,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
+	landingKb: 25,
 });
 
 /** A Web Worker bundle (Vite emits them under `workers/`; so does autocalWorkerChunk for the calibration worker). */
@@ -1131,11 +1150,43 @@ export function tabChunks(modules, chunks) {
 	return { files, errors };
 }
 
+/** The landing page's modules (issue #57). */
+const LANDING_MODULES = 'src/lib/components/landing/';
+/** Chunks the landing must never share: the root layout and the signed-in projects page. */
+const NOT_WITH_LANDING = ['src/routes/+layout.svelte', 'src/routes/+page.svelte'];
+
+/**
+ * The landing page's chunk files (JS and CSS), from the chunk map.
+ * @param {Record<string, { modules: string[], css?: string[] }>} chunks
+ * @returns {{ files: Set<string>, errors: string[] }}
+ */
+export function landingChunks(chunks) {
+	const errors = [];
+	const files = new Set();
+	for (const [file, chunk] of Object.entries(chunks)) {
+		if (!chunk.modules.some((m) => m.startsWith(LANDING_MODULES))) continue;
+		const shared = NOT_WITH_LANDING.filter((m) => chunk.modules.includes(m));
+		if (shared.length) {
+			errors.push(
+				`The landing page's code is in the chunk of ${shared.join(' and ')} (${file}): something imports it statically, so every signed-in visit carries it. Load it only through the root layout's import() (issue #57).`,
+			);
+		}
+		files.add(file);
+		for (const css of chunk.css ?? []) files.add(css);
+	}
+	if (files.size === 0) {
+		errors.push(`Found no chunk holding frontend/${LANDING_MODULES}: the landing ceiling measured nothing. If the landing moved, point LANDING_MODULES in scripts/guards/check_web_bundle_budget.mjs at it.`);
+	}
+	return { files, errors };
+}
+
 /**
  * @param {{ path: string, gzipBytes: number }[]} files
  * @param {Set<string>} [tabFiles] tabChunks().files: measured against the tab ceiling instead of the page one
+ * @param {Set<string>} [landingFiles] landingChunks().files: also summed against the landing ceiling
  */
-export function measure(files, tabFiles = new Set()) {
+export function measure(files, tabFiles = new Set(), landingFiles = new Set()) {
+	let landingBytes = 0;
 	let codeBytes = 0;
 	let codeCount = 0;
 	let largestChunk = { path: '', gzipBytes: 0 };
@@ -1145,6 +1196,7 @@ export function measure(files, tabFiles = new Set()) {
 	let largestSpreadsheetWorker = { path: '', gzipBytes: 0 };
 	let largestAsset = { path: '', gzipBytes: 0 };
 	for (const f of files) {
+		if (landingFiles.has(f.path)) landingBytes += f.gzipBytes;
 		if (CODE.test(f.path)) {
 			codeBytes += f.gzipBytes;
 			codeCount += 1;
@@ -1170,6 +1222,7 @@ export function measure(files, tabFiles = new Set()) {
 		largestWorker: { path: largestWorker.path, kb: kb(largestWorker.gzipBytes) },
 		largestSpreadsheetWorker: { path: largestSpreadsheetWorker.path, kb: kb(largestSpreadsheetWorker.gzipBytes) },
 		largestAsset: { path: largestAsset.path, kb: kb(largestAsset.gzipBytes) },
+		landingKb: kb(landingBytes),
 	};
 }
 
@@ -1207,6 +1260,11 @@ export function violations(m, budget = BUDGET) {
 	if (m.largestSpreadsheetWorker.kb > budget.largestSpreadsheetWorkerKb) {
 		out.push(
 			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. Neither spreadsheet worker carries a spreadsheet library (the import has its own reader, the export its own writer, frontend/src/lib/spreadsheet/); check a new import (above all SheetJS, ~85 KB) is needed before raising the ceiling.`,
+		);
+	}
+	if (m.landingKb > budget.landingKb) {
+		out.push(
+			`The landing page's code is ${m.landingKb} KB, over the ${budget.landingKb} KB landing budget: it is the first download of every new visitor (issue #57). Check it still imports no workspace code, uPlot or engine, and trim before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
@@ -1266,8 +1324,9 @@ function main() {
 		process.exit(1);
 	}
 	const tabs = tabChunks(tabModules(readFileSync(join('frontend', WORKSPACE_PAGE), 'utf8')), chunkModules);
+	const landing = landingChunks(chunkModules);
 	const files = paths.map((p) => ({ path: relative(buildDir, p), gzipBytes: gzipSync(readFileSync(p)).length }));
-	const m = measure(files, tabs.files);
+	const m = measure(files, tabs.files, landing.files);
 	const rows = [
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${BUDGET.totalCodeKb} KB`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${BUDGET.largestChunkKb} KB`],
@@ -1275,6 +1334,7 @@ function main() {
 		[`Largest worker (${m.largestWorker.path || 'none'})`, `${m.largestWorker.kb} KB`, `${BUDGET.largestWorkerKb} KB`],
 		[`Largest spreadsheet worker (${m.largestSpreadsheetWorker.path || 'none'})`, `${m.largestSpreadsheetWorker.kb} KB`, `${BUDGET.largestSpreadsheetWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${BUDGET.largestAssetKb} KB`],
+		[`Landing page (${landing.files.size} files)`, `${m.landingKb} KB`, `${BUDGET.landingKb} KB`],
 	];
 	for (const [what, size, budget] of rows) console.log(`${what}: ${size} (budget ${budget})`);
 	console.log(`Files measured: ${m.fileCount} (${m.codeCount} JS/CSS)`);
@@ -1287,7 +1347,7 @@ function main() {
 	const stale = tabs.errors.length === 0 && m.tabCount !== tabs.files.size
 		? [`The chunk map names ${tabs.files.size} tab files, but ${m.tabCount} of them are in ${buildDir}: the map is from another build. Run pnpm build:frontend again.`]
 		: [];
-	const bad = [...tabs.errors, ...stale, ...violations(m), ...calibrationWorkerViolations(workers)];
+	const bad = [...tabs.errors, ...landing.errors, ...stale, ...violations(m), ...calibrationWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

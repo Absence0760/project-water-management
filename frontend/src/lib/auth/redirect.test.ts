@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeNext } from './redirect';
-import { isPublicPath, routeAccess } from './session.svelte';
+import { isLandingRoot, isPublicPath, routeAccess } from './session.svelte';
 
 describe('safeNext', () => {
 	it('allows app-relative paths only', () => {
@@ -31,7 +31,7 @@ describe('isPublicPath', () => {
 describe('routeAccess', () => {
 	it('sends signed-out visitors to login except on public pages', () => {
 		expect(routeAccess('/projects/1', '', false)).toBe('login');
-		expect(routeAccess('/', '', false)).toBe('login');
+		expect(routeAccess('/projects', '', false)).toBe('login');
 		for (const p of ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']) {
 			expect(routeAccess(p, '', false)).toBe('show');
 		}
@@ -71,5 +71,19 @@ describe('routeAccess', () => {
 		expect(routeAccess('/share', '', true)).toBe('show');
 		expect(isPublicPath('/app/share', '/app')).toBe(true);
 		expect(routeAccess('/shares', '', false)).toBe('login');
+	});
+
+	it('shows a signed-out visitor the landing page at / and /welcome; a signed-in one keeps / as the projects (issue #57)', () => {
+		expect(routeAccess('/', '', false)).toBe('show');
+		expect(routeAccess('/app/', '/app', false)).toBe('show');
+		expect(isLandingRoot('/', '', false)).toBe(true);
+		expect(isLandingRoot('/app', '/app', false)).toBe(true);
+		expect(isLandingRoot('/', '', true)).toBe(false);
+		expect(isLandingRoot('/projects', '', false)).toBe(false);
+		expect(routeAccess('/', '', true)).toBe('show');
+		expect(routeAccess('/welcome', '', false)).toBe('show');
+		expect(routeAccess('/welcome', '', true)).toBe('show');
+		expect(isPublicPath('/app/welcome', '/app')).toBe(true);
+		expect(routeAccess('/welcomes', '', false)).toBe('login');
 	});
 });

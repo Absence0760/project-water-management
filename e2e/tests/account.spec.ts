@@ -3,7 +3,7 @@
 // password while signed in (this device stays signed in, every other one is
 // signed out), and download a copy of their data (GET /auth/me/export).
 import { readFile } from 'node:fs/promises';
-import { register } from '../support/api.ts';
+import { register, signInUnconfirmed } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -57,7 +57,7 @@ test('“Download my data” saves the account’s data export as a JSON file', 
 
 test('an unconfirmed address says so', async ({ page }) => {
 	const user = await register(page.context().request, 'Unconfirmed', { verified: false });
-	void user;
+	await signInUnconfirmed(page.context(), user);
 	await page.goto('/account');
 	await expect(page.getByRole('region', { name: 'Account', exact: true })).toContainText('Not confirmed');
 });

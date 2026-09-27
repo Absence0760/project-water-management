@@ -16,10 +16,17 @@ vi.mock('../mail/i18n/af.js', async () => {
 
 const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
 
+/**
+ * Sign up and read the account back. A sign-up through a matching invite is
+ * signed in (201, the user); an ordinary one waits for its confirmation link
+ * (202, issue #57), so the account is read as the schema owner.
+ */
 async function register(body: Record<string, unknown>) {
 	const res = await anon('POST', '/auth/register', { password: 'correct horse', displayName: 'Lang', ...body });
-	expect(res.status).toBe(201);
-	return res.body.user as { id: string; locale: string | null; volumeUnit: string };
+	if (body.inviteToken && res.status === 201) return res.body.user as { id: string; locale: string | null; volumeUnit: string };
+	expect(res.status).toBe(202);
+	const [row] = (await asOwner('SELECT id, locale, volume_unit FROM app_user WHERE email = $1', [body.email])) as { id: string; locale: string | null; volume_unit: string }[];
+	return { id: row!.id, locale: row!.locale, volumeUnit: row!.volume_unit };
 }
 
 describe('PATCH /auth/me { locale, volumeUnit }', () => {

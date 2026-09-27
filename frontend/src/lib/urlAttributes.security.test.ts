@@ -86,6 +86,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },
 	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },
+	srcset: { why: 'landing Diorama: `${base}/landing/hero-<day|dusk>-<width>.<avif|webp>`, the widths from art.generated.ts (numbers)', in: ['lib/components/landing/Diorama.svelte'] },
+	set: { why: 'landing Shot: `${base}/landing/screen-<name>-<light|dark>-<width>.<avif|webp>`, name a literal from Screens.svelte', in: ['lib/components/landing/Shot.svelte'] },
+	abs: { why: 'landing link-preview tags: new URL(`${base}` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
 	// Objects built in code from the builders above.
 	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)', in: ['lib/components/farm/FarmShell.svelte'] },
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },

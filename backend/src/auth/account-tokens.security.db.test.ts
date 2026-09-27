@@ -237,8 +237,9 @@ describe('the session cookie', () => {
 	});
 
 	it('is HttpOnly and lives 7 days, cookie and token alike', async () => {
-		const res = await anon('POST', '/auth/register', { email: newEmail('ttl-cookie'), password: 'correct horse', displayName: 'Cookie' });
-		expect(res.status).toBe(201);
+		const u = await signUp('Cookie');
+		const res = await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' });
+		expect(res.status).toBe(200);
 		const cookie = res.headers.get('set-cookie')!;
 		expect(cookie).toMatch(/HttpOnly/i);
 		expect(cookie).toMatch(/Max-Age=604800(;|$)/);
