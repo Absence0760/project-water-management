@@ -36,6 +36,7 @@
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { runYears } from '$lib/components/runs/runList';
 	import { fmtDate } from '$lib/format/number';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
 	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
@@ -75,7 +76,7 @@
 		project: string | null;
 		/** The URL for a choice of runs (any may be null). */
 		hrefFor: (a: RunRef | null, b: RunRef | null, c: RunRef | null) => string;
-		/** Heading level of the view's title: 1 on the standalone page, 2 inside the workspace. */
+		/** 1: the standalone page, with its own title. 2: inside the workspace, where its context line goes to the section header and it draws no title. */
 		level?: 1 | 2;
 		/** Links beside the title (the standalone page's Back to runs). */
 		actions?: Snippet;
@@ -330,15 +331,22 @@
 			: []
 	);
 	const H = $derived(`h${level}`);
+	// Inside the workspace the section header is the only title (ui-playbook § 2): the
+	// view's context line goes there, and the view draws no heading of its own.
+	$effect(() => fillHeader({ context: headerContext }, level === 2));
 </script>
 
-<header class="cmp-head">
-	<div class="cmp-title">
-		<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
-		<p class="muted" data-testid="compare-context">{context}</p>
-	</div>
-	{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
-</header>
+{#snippet headerContext()}<span data-testid="compare-context">{context}</span>{/snippet}
+
+{#if level === 1}
+	<header class="cmp-head">
+		<div class="cmp-title">
+			<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
+			<p class="muted" data-testid="compare-context">{context}</p>
+		</div>
+		{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
+	</header>
+{/if}
 
 {#snippet card(side: Side)}
 	{@const pid = side === 'a' ? projectA : side === 'b' ? projectB : projectC}
