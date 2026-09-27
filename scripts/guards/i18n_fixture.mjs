@@ -9,8 +9,16 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-/** A fresh fixture root with 'en' and one stand-in language ('xx', no catalogues yet), and one untranslated message, email string and glossary entry. Returns the root and a cleanup function. */
-export function makeFixture() {
+/**
+ * A fresh fixture root with 'en' and one stand-in language ('xx'), and one
+ * untranslated message, email string and glossary entry. `extra` (relative
+ * path → content) adds more files on top — e.g. a language's catalogues, to
+ * test the "already translated" side without ever re-importing a path this
+ * process wrote to (each call gets its own, never-before-imported root, so
+ * there's no stale-module-cache risk). Returns the root and a cleanup
+ * function.
+ */
+export function makeFixture(extra = {}) {
 	const root = mkdtempSync(path.join(tmpdir(), 'i18n-fixture-'));
 	const write = (rel, content) => {
 		mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -48,6 +56,7 @@ export const notes = {};
 `
 	);
 	write('frontend/src/lib/help/farmer.ts', `export const FARMER_HELP = [{ id: 'stand-in-word', term: 'Stand-in', short: 'A short one.', long: 'A long one.', category: 'farmer' }];\n`);
+	for (const [rel, content] of Object.entries(extra)) write(rel, content);
 
 	return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
