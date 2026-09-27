@@ -136,10 +136,13 @@ buys a **render session** that can read one report and nothing else.
   is closed with the browser after the render.
 - **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
   session may make **only `GET`** requests, and only to `/auth/me`,
-  `/projects/<p>`, `/projects/<p>/series` and `/projects/<p>/runs/<r>[/…]`:
-  exactly the reads the report route makes. Any other method, project, run
-  or route (the run list, members, exports, jobs, reports, teams, compare,
-  every write) answers `403`. A path with encoded characters or dot segments
+  `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
+  `/series`, `/day` and `/signoffs`: exactly the reads the report route
+  makes. Any other method, project, run or route (the run list, members,
+  jobs, reports, teams, compare, every write, and the run's own reads the
+  report doesn't make: its CSV exports, the workbook's bulk series,
+  reproduction, allocation comparison, model input, ensembles) answers
+  `403`. A path with encoded characters or dot segments
   is refused outright. A `scope` claim that isn't a well-formed pair of UUIDs
   makes the whole token invalid, so a render session can never widen into a
   full one. RLS still applies underneath: the session is the requester's, so
@@ -149,7 +152,14 @@ buys a **render session** that can read one report and nothing else.
   scope on another project, another run and every other kind of route, with a
   positive control (the report's own reads answer `200`), a requester who
   lost access between issue and use, and that farmers and strangers can't
-  issue one; `reports/scope.test.ts` pins the path rules; and
+  issue one; `reports/render-session.security.db.test.ts` sweeps every
+  route in the live inventory (`app.routes`) with a render session: it
+  reaches exactly its allowlist of the report's reads (each `200`, and `403`
+  for another run or project the requester fully owns) and gets the scope's
+  `403` everywhere else; it also checks the session's 10-minute life, its
+  revocation by "sign out everywhere", that a malformed `scope` claim opens
+  nothing, and that eight simultaneous exchanges of one token give exactly
+  one session; `reports/scope.test.ts` pins the path rules; and
   `reports/render.db.test.ts` has a real Chromium check that the session is
   refused the project list mid-render.
 - **What the renderer can reach.** Locally, the dev site and API. In

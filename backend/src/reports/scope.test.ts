@@ -16,8 +16,8 @@ describe('scopeAllows', () => {
 		`/projects/${P}/series`,
 		`/projects/${P}/runs/${R}`,
 		`/projects/${P}/runs/${R}/series`,
-		`/projects/${P}/runs/${R}/series/bulk`,
-		`/projects/${P}/runs/${R}/days/2020-01-01`,
+		`/projects/${P}/runs/${R}/day`,
+		`/projects/${P}/runs/${R}/signoffs`,
 		`/projects/${P.toUpperCase()}/runs/${R.toUpperCase()}`
 	])('allows GET %s (the report page’s reads)', (path) => {
 		expect(scopeAllows(scope, 'GET', path)).toBe(true);
@@ -35,6 +35,18 @@ describe('scopeAllows', () => {
 		`/projects/${P}/export.json`,
 		`/projects/${P}/jobs`,
 		`/projects/${P}/reports/${OTHER}`,
+		// The run's reads the report page doesn't make: the session is not a full read of the run.
+		`/projects/${P}/runs/${R}/series/bulk`,
+		`/projects/${P}/runs/${R}/export/daily.csv`,
+		`/projects/${P}/runs/${R}/export/farms.csv`,
+		`/projects/${P}/runs/${R}/export/summary.csv`,
+		`/projects/${P}/runs/${R}/reproduce`,
+		`/projects/${P}/runs/${R}/allocations`,
+		`/projects/${P}/runs/${R}/model-input`,
+		`/projects/${P}/runs/${R}/uncertainty`,
+		`/projects/${P}/runs/${R}/uncertainty/${OTHER}`,
+		`/projects/${P}/runs/${R}/changes-since`,
+		`/projects/${P}/runs/${R}/days/2020-01-01`,
 		`/projects/${P}/runs/${R}/../${OTHER}`,
 		`/projects/${P}/runs/${R}/%2e%2e/${OTHER}`,
 		`/projects/${P}//runs/${R}`,
