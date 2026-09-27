@@ -123,3 +123,32 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
 	});
 }
+
+/**
+ * Move an application's submission `days` back (and its decision, if it has
+ * one, to the day after), as one submitted that long ago sits in the
+ * database. The scenario trigger stamps both with now() and never lets them
+ * change, so the update runs with triggers off for this one transaction
+ * (`session_replication_role`, this connection only). For the Applications
+ * list's "waiting N days".
+ */
+export async function backdateApplication(scenarioId: string, days: number): Promise<void> {
+	await withDb(async (db) => {
+		await db.query('BEGIN');
+		try {
+			await db.query('SET LOCAL session_replication_role = replica');
+			const r = await db.query(
+				`UPDATE scenario SET
+					submitted_at = submitted_at - make_interval(days => $2),
+					decided_at = CASE WHEN decided_at IS NULL THEN NULL ELSE submitted_at - make_interval(days => $2) + interval '1 day' END
+				 WHERE id = $1 AND submitted_at IS NOT NULL`,
+				[scenarioId, days]
+			);
+			if (r.rowCount !== 1) throw new Error(`no submitted application ${scenarioId}`);
+			await db.query('COMMIT');
+		} catch (e) {
+			await db.query('ROLLBACK');
+			throw e;
+		}
+	});
+}

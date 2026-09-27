@@ -75,7 +75,10 @@ section it belongs to, with the example that taught it.
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
   where it makes sense (~1100×620). The page doesn't scroll; long lists
-  scroll *inside their card*. Help, guides and account pages scroll normally
+  scroll *inside their card*. Add the fitted class to the page's
+  `.page:has(…)` rule in `routes/projects/[id]/+page.svelte`, which swaps
+  its 4rem bottom padding for a 1rem gutter: Applications fitted its card to
+  the window yet the page still scrolled 42 px until it was listed there. Help, guides and account pages scroll normally
   with a readable text column (~75ch).
 - **Cards or list on one side, the picked item's detail on the other.** Dams
   and Units & supply: a scrolling column of items (worst first), the picked
@@ -216,7 +219,9 @@ picker in the header, moved panels, anchor redirects),
 `network/NetworkTab.svelte` (map page, Grids menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
-window fit, the pick in the URL).
+window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
+queue: counts in the header, a status filter in the URL, rows that turn into
+cards in a narrow column).
 
 Interaction details that bit:
 
@@ -228,6 +233,10 @@ Interaction details that bit:
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
   closes the overlay rather than leaving the page.
+- **Svelte drops the space at the edge of an element.** A narrow-layout
+  label `<span class="cell-label"> change</span>` after a number read "1change"
+  (and so did its accessible text) on the Applications phone cards. Write
+  the space as `{' '}` inside the span.
 - **A tab that copies a list from the page must take the page's updates.**
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from
@@ -254,6 +263,12 @@ Interaction details that bit:
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
+- **Times the database stamps can't be set through the API.** "Waiting 30
+  days" needs an application submitted 30 days ago, but the scenario trigger
+  stamps `submitted_at` with `now()` and refuses to change it. Plant it in
+  `e2e/support/db.ts` (`backdateApplication` turns triggers off for its one
+  transaction), as `plantLegacyRun` does for old runs; never loosen the
+  assertion to "waiting".
 - **Run the neighbours**, not only the spec for the screen: `a11y`,
   `golden-path`, `section-header`, `tabs-by-role`, `overview` and whatever
   links into the screen. `--repeat-each 5 --retries 0` on every new
