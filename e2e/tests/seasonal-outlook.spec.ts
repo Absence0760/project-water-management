@@ -93,8 +93,8 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	const saved = await getJson<{ project: { settings: { outlook: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outlook).toEqual({ season: null, planningShare: 0.55 });
 
-	// The Runs tab: no outlook yet, then one with a monthly plan (Oct–Dec at 100 %, Jan–Apr at 80 %), queued until the worker runs it.
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	// River & reserve: no outlook yet, then one with a monthly plan (Oct–Dec at 100 %, Jan–Apr at 80 %), queued until the worker runs it.
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('seasonal-outlook');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
 	await expect(panel.getByTestId('outlook-empty')).toHaveText('No seasonal outlook on this run yet.');
@@ -181,7 +181,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	// A viewer: the same outlook, no run button.
 	const viewer = await signIn('Outlook viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await viewer.page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const theirs = viewer.page.getByTestId('seasonal-outlook');
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
 	await expect(theirs.getByTestId('outlook-planning')).toHaveText((await planning.innerText()).trim());

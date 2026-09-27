@@ -12,8 +12,8 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${baseline}`);
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Uncertainty bands' }).click();
+	// The bands sit on River & reserve with the findings they qualify (issue #17).
+	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await expect(panel.getByText('No uncertainty ensemble has been stored for this run.')).toBeVisible();
 

@@ -32,7 +32,7 @@
 	import { fmtDate, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
-	import { MOVED_PANELS, supplyHref, UNIT_PARAM } from './links';
+	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
 	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, supplySummary, supplyTotals, unitCards, weekWindow } from './supply';
@@ -225,7 +225,7 @@
 		if (!run || fragmentShown) return;
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
-		if (!MOVED_PANELS.includes(hash)) return;
+		if (!supplyAnchor(hash)) return;
 		tick().then(() => {
 			const el = destroyed ? null : document.getElementById(hash);
 			if (!el) return;

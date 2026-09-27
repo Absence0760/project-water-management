@@ -50,10 +50,13 @@ EventBridge rate(5 minutes) ──────────────► worker
 
 ## Region recommendation
 
-**Recommendation: `af-south-1` (Cape Town) for the VPC, RDS, both Lambdas,
-the frontend bucket and SES.** This is advice; `aws_region` stays unset and
-the operator decides, ideally after the client answers plan question 15
-(may the data leave South Africa?).
+**Decided (2026-09-26): `af-south-1` (Cape Town) for the VPC, RDS, the
+Lambdas, the frontend bucket and SES, on the minimal tier, while the users
+are South African.** `aws_region` still has no default in Terraform; set it
+in tfvars. The decision holds whatever the client answers to plan question
+15, and a future country gets its own stack in its own region
+([deployment-tiers.md § Where the data lives](./deployment-tiers.md#where-the-data-lives)).
+The reasoning below is why.
 
 What was checked (September 2026):
 
@@ -808,4 +811,6 @@ the report renderer run outside the VPC for the same reason. Total ≈ $50/month
 us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
 is set from `budget_monthly_usd` (default 60; raise it to ~80 for
-af-south-1).
+af-south-1). The minimal (defaults) and full (Multi-AZ, highly available)
+configurations, their tfvars and monthly cost are compared in
+[deployment-tiers.md](./deployment-tiers.md).

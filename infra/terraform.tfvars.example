@@ -26,7 +26,9 @@ bootstrap_slug = "water-management"
 
 # Budget + alarm notifications. Budget needs IAM billing access enabled on the
 # member account (one-time root toggle) — set 0 until then.
-budget_monthly_usd = 60
+# 80 for af-south-1 (idle ≈ $58–63); 60 would forecast-alert every month.
+# Full tier: ~170 (docs/deployment-tiers.md).
+budget_monthly_usd = 80
 budget_alert_email = "you+aws-alerts@example.com"
 
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS

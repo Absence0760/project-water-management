@@ -9,6 +9,8 @@ import { expect, test } from '../support/fixtures.ts';
 const stat = (page: Page, term: string) =>
 	page.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) }).getByRole('definition');
 const setup = (page: Page) => page.getByRole('region', { name: /^Set(up| up this catchment)/ });
+/** A run's daily dam_storage series (the Dam levels' fallback for a run older than engine 1.2.0). */
+const DAM_SERIES = /\/runs\/[^/]+\/series\?key=dam_storage/;
 
 test('a fresh project: nothing loaded, every step to do', async ({ page, owner }) => {
 	void owner;
@@ -58,9 +60,11 @@ test('the latest run: its headline figures, the change from the run before, and 
 	await expect(card('Irrigation supplied')).toContainText('of demand');
 	await expect(card('Dams today')).toContainText(/\d+%full/);
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
-	// Reserve · Irrigation supplied · Dams today · NSE, in that order; the mean outflow is the line under them.
+	// Reserve · Irrigation supplied · Dams today · NSE, in that order; the mean outflow is a short line under them,
+	// its change and the rest on River & reserve (river-page.spec.ts).
 	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams today', 'Calibration NSE']);
-	await expect(latest.locator('[data-headline="outflow"]')).toContainText(/Mean simulated outflow [\d.]+ m³\/s \(\d+% of natural\), 0\s*no change\s*vs previous run\./);
+	await expect(latest.locator('[data-headline="outflow"]')).toContainText(/^Mean simulated outflow [\d.]+ m³\/s \(\d+% of natural\): its change and the reserve in detail are on River & reserve\.$/);
+	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${second}`);
 	// Same inputs, so every change is zero, and it says which run it is against.
 	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
@@ -239,11 +243,18 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary dams');
 	await createRun(page.request, project.id, 'Baseline');
+	// The run summary carries each dam's figures (engine ≥ 1.2.0, issue #55): the Summary fetches no daily series for them.
+	const damSeries: string[] = [];
+	page.on('request', (r) => {
+		if (DAM_SERIES.test(r.url())) damSeries.push(r.url());
+	});
 	await page.goto(`/projects/${project.id}`);
 
 	const today = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]');
 	await expect(today).toContainText('2 dams on 28 Jan 2022');
 	await expect(today).toContainText(/in 30 days/);
+	// Before the Dams page, whose sparklines and chart do read the series.
+	expect(damSeries).toEqual([]);
 	// The table moved to the Dams page (dams-page.spec.ts checks it, and that this figure is its capacity-weighted total).
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
@@ -262,6 +273,29 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	await today.click({ position: { x: 20, y: 60 } });
 	await expect(page).toHaveURL(/\?tab=dams$/);
 	await expectNoViolations(page);
+});
+
+test('Dams today: a run from before the summary kept dam figures still shows it, from the daily series', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary dams, older run');
+	await createRun(page.request, project.id, 'Baseline');
+	// Strip the dam figures from the run's summary, as a run saved before engine 1.2.0 has none.
+	await page.route(/\/runs\/[0-9a-f-]+$/, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		const res = await route.fetch();
+		const body = (await res.json()) as { run: { summary: { farms: Record<string, unknown>[] } } };
+		for (const f of body.run.summary.farms) for (const k of ['damEndM3', 'damAgoM3', 'damLowM3', 'damLowDate', 'damDaysAtMin']) delete f[k];
+		await route.fulfill({ response: res, json: body });
+	});
+	const damSeries: string[] = [];
+	page.on('request', (r) => {
+		if (DAM_SERIES.test(r.url())) damSeries.push(r.url());
+	});
+	await page.goto(`/projects/${project.id}`);
+	const today = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]');
+	await expect(today).toContainText('2 dams on 28 Jan 2022');
+	await expect(today).toContainText(/in 30 days/);
+	expect(damSeries).toHaveLength(2);
 });
 
 test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {

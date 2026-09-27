@@ -222,6 +222,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/roadmap/`: the four-step growth plan (hydrologist tool → shared catchment → licensing → platform), one build plan per step
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
 - `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`
+- `docs/deployment-tiers.md`: minimal vs full (highly available) deployment, their tfvars and monthly cost
 - `infra/README.md`: Terraform specifics
 
 Prefer reading these over guessing. Update them when behaviour changes.

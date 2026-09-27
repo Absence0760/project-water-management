@@ -1,5 +1,5 @@
 ---
-description: Run the full audit sweep — secrets + xss + deps + infra + cost-controls — in parallel
+description: Run the full audit sweep — security (secrets, xss, auth, rls) + deps + infra + cost — in parallel
 argument-hint: [security|deps|infra|cost] (optional area filter)
 ---
 
@@ -7,26 +7,29 @@ Run the project's audit sweep. By default, runs every audit; with an argument, r
 
 ## Areas
 
-- **security** — `audit/secrets`, `audit/xss`
+- **security** — `secrets`, `xss`, `auth`, `rls` (repo-security-auditor)
 - **deps** — `audit/deps`
-- **infra** — `audit/infra`
-- **cost** — `audit/cost-controls`
+- **infra** — `iam`, `network`, `data`, `observability` (infra-auditor)
+- **cost** — `cost` (infra-auditor)
 
 ## Procedure
 
-1. Decide which audits to run based on `$ARGUMENTS`:
-   - No argument → all five audits
-   - `security` → secrets + xss
-   - `deps` → deps only
-   - `infra` → infra only
-   - `cost` → cost-controls only
-2. **Spawn the right agent per audit area, in parallel.** Send all dispatches in a single message with multiple Agent tool calls.
-   - `secrets` and `xss`: each is a separate `repo-security-auditor` invocation, with the audit area passed as the prompt's first sentence. The agent already has the trust boundaries baked in; the prompt just steers it.
-   - `deps`: a single `general-purpose` agent with the `deps.md` body as prompt — the work is mostly running `pnpm audit` per workspace + reviewing Dependabot config + GitHub Actions pin status.
-   - `infra`: a single `general-purpose` agent with the `infra.md` body as prompt — reads ~10 small `.tf` files plus matches against documented expectations.
-   - `cost-controls`: a single `general-purpose` agent with the `cost-controls.md` body as prompt — cross-cuts code + IaC + docs, doesn't fit one specialised auditor.
-3. **Consolidate findings** into a single report grouped by severity (Critical / High / Medium / Low), then by audit area. For each finding: file:line, what's wrong, the audit that found it.
-4. **Recommend a fix order**, but don't apply fixes without explicit confirmation. Critical/High findings should be flagged with "fix this before next deploy"; Medium/Low can be batched.
+1. Decide which audits to run from `$ARGUMENTS`: none → all of them; or one
+   of `security`, `deps`, `infra`, `cost`.
+2. **Spawn every agent in parallel** (one message, several Agent calls):
+   - each security area: a `repo-security-auditor` whose prompt starts
+     `Audit area: <area>.`;
+   - each infra area and `cost`: an `infra-auditor` whose prompt starts
+     `Audit area: <area>.`;
+   - `deps`: one `general-purpose` agent with the body of `deps.md`.
+   The two auditors know the stack and write `reviews/security-<area>.md` /
+   `reviews/infra-<area>.md`.
+3. **Consolidate** into one report grouped by severity, then area; list a
+   root cause two agents found once. Put the cost worst-case table at the
+   top. Hand-overs between the two auditors are merged into the area that
+   owns them.
+4. **Recommend a fix order** without applying anything: Critical/High are
+   "fix before next deploy"; Medium/Low can be batched.
 
 ## Output shape
 
@@ -59,4 +62,4 @@ Run the project's audit sweep. By default, runs every audit; with an argument, r
 - This is read-only. Each sub-audit is read-only by default.
 - The report is the deliverable; do not edit code based on findings without asking the user first.
 - If an audit finds no issues, list it under the `## Clean` section — easier to spot regression on the next run.
-- For changes to **just** dependencies or **just** the frontend / studio, the relevant subset is usually enough — full sweep is for release prep and periodic drift checks.
+- For a change to just dependencies, just `infra/` or just spend-related code, the matching subset is enough; the full sweep is for release prep and periodic drift checks.

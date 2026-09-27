@@ -11,6 +11,7 @@
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		river: () => import('$lib/components/river/RiverTab.svelte'),
 		supply: () => import('$lib/components/supply/SupplyTab.svelte'),
 		dams: () => import('$lib/components/dams/DamsTab.svelte'),
 		compare: () => import('$lib/components/compare/CompareView.svelte'),
@@ -53,7 +54,6 @@
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
-	import { movedFromRuns } from '$lib/components/supply/links';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
@@ -83,21 +83,14 @@
 		demand: 'crops',
 		calibration: 'settings',
 		results: 'runs',
+		reserve: 'river',
 		units: 'supply',
 		farms: 'supply',
 		changes: 'history'
 	};
 
 	const projectId = $derived(page.params.id ?? '');
-	// An old Runs & results link to a unit panel (`#res-curtailment`, …) opens
-	// Units & supply, where those panels moved (issue #17): shown at once, and
-	// the URL rewritten in place below, so Back skips the old address.
-	const movedTo = $derived(movedFromRuns(page.url));
-	$effect(() => {
-		if (movedTo) goto(movedTo, { replaceState: true, noScroll: true, keepFocus: true });
-	});
 	const tab = $derived.by<TabId>(() => {
-		if (movedTo) return 'supply';
 		const raw = page.url.searchParams.get('tab') ?? '';
 		const t = TAB_ALIASES[raw] ?? raw;
 		return (TAB_IDS as string[]).includes(t) ? (t as TabId) : 'overview';
@@ -687,9 +680,12 @@
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
 								onInputsRestored={reloadInputs}
-								{onProjectChange}
 							/>
 						{/snippet}
+					</Lazy>
+				{:else if tab === 'river'}
+					<Lazy load={LOAD.river}>
+						{#snippet children(RiverTab)}<RiverTab {projectId} project={project!} {editor} {runs} {canEdit} {onProjectChange} />{/snippet}
 					</Lazy>
 				{:else if tab === 'supply'}
 					<Lazy load={LOAD.supply}>

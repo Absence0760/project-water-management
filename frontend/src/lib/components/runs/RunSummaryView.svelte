@@ -18,13 +18,16 @@
 	let {
 		summary,
 		days,
-		units
+		units,
+		reserveHref = '#res-reserve'
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
 		days: number;
 		/** Drawn after the catchment cards: the printable report's unit table. */
 		units?: Snippet;
+		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
+		reserveHref?: string;
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
@@ -93,7 +96,7 @@
 				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}
 					· up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
 			</dd>
-			<dd class="sub"><a href="#res-reserve">by month of the year</a></dd>
+			<dd class="sub"><a href={reserveHref}>by month of the year</a></dd>
 		</div>
 	{/if}
 	<div class="stat" class:flagged={c.ewrFractionDaysNotMet > 0.05}>

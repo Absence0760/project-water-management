@@ -2469,6 +2469,20 @@ the regression suite's deviation list.
 | (none: the node-based model's stress classes, §4) | Reliability per farm, stress class per month, the water account | `RunSummary.supplyAssurance` + the Runs tab's Assurance of supply and Water account panels and three CSV blocks (§2.11a–b, engine ≥ 0.32.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
+**Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
+with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
+(`network/damLevel.ts` `damFigures`), so the Summary's Dams today card
+and the Network's colour by dam level need no daily series:
+`damEndM3` (storage on the run's last day), `damAgoM3` (30 days before it,
+null on a shorter run), `damLowM3` and `damLowDate` (the lowest storage in the
+run's last 365 days and its first day) and `damDaysAtMin` (days in that
+window at or below the minimum operating level, `damMinPct`, with a 10⁻⁶
+percentage-point tolerance for a dam held at its minimum as a float; 0 without
+a minimum). They are read off the `dam_storage` series the run already has, so
+no other output moves. A farm without a dam has none of them, nor has a run
+from before 1.2.0; the frontend reduces that run's series by the same rules
+(`overview/damLevels.ts` `damLevel()`, a unit test holds the two equal).
+
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
 
 The workbook's VBA macro `sProEp_GenerateEWRpivotData` walks the

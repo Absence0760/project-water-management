@@ -2,7 +2,9 @@
 	// Summary → the newest run's KPI row (issue #17 A1): the Reserve, irrigation
 	// supplied, Dams today and the calibration NSE, each with its change from
 	// the run before (Dams: over the run's last 30 days, and the card opens the
-	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow is the line under the cards.
+	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow
+	// is the line under the cards, a short mention: its change and the rest of the
+	// river are on River & reserve.
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once. Which run it is (label, period, engine, age, a link to
 	// it) is the section header's context line (OverviewTab, RunContext).
@@ -11,6 +13,7 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from './attention';
+	import { riverHref } from '$lib/components/river/links';
 	import { damsHeadline, headlines, ranAgo, runDays, type DamsState } from './latestRun';
 
 	let {
@@ -78,7 +81,7 @@
 		<p class="muted small after">
 			{#if outflow}
 				<span data-headline="outflow"
-					>Mean simulated outflow <strong class="v">{outflow.value} {outflow.unit}</strong>{#if outflow.sub.length}{' '}({outflow.sub.join(', ')}){/if}{#if outflow.delta}, <Delta m={outflow.delta} spec={outflow.spec} /> vs previous run{/if}.</span
+					>Mean simulated outflow <strong class="v">{outflow.value} {outflow.unit}</strong>{#if outflow.sub.length}{' '}({outflow.sub.join(', ')}){/if}: its change and the reserve in detail are on <a href={riverHref(meta.id)}>River &amp; reserve</a>.</span
 				>
 			{/if}
 			{#if previousMeta}

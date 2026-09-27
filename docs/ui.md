@@ -114,7 +114,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, Runs & results, Dams, Compare runs, Scenarios, Allocations),
+first): **Outcomes** (Summary, River & reserve, Runs & results, Dams, Compare runs, Scenarios, Allocations),
 **Build the model** (Network, Crops & demand, Transfers, Data, Settings &
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
@@ -386,7 +386,9 @@ put the results first; its first screen follows board A1 of the redesign
   chart). It is its own chunk, since it pulls in uPlot, so the page's first
   paint doesn't wait for it. Its series come through the Runs tab's
   `cachedSeries`, and it fetches only the series the run stored ("This run
-  stored no outflow or EWR series." otherwise).
+  stored no outflow or EWR series." otherwise). Beside its heading, **More on
+  River & reserve** opens [River & reserve](#river--reserve) for that run
+  (`riverHref`, `river/links.ts`), where the same chart is larger.
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
   % of its demand supplied, fullest first and emptiest last, in the Network's
@@ -397,8 +399,10 @@ put the results first; its first screen follows board A1 of the redesign
   chunk (it waits for the run's record anyway).
 - **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
   the Summary keeps only the **Dams today** card (which links there) and the
-  one-line link below the first screen. `OverviewTab` still fetches each
-  dam's series for the card (`loadDamLevels`).
+  one-line link below the first screen. `OverviewTab` reads the card's
+  levels from the run summary (`FarmSummary.dam*`, engine ≥ 1.2.0, issue
+  #55, [model.md §2.8](./model.md#28-outputs); `damLevelsFromSummary`), and
+  fetches each dam's series (`loadDamLevels`) only for an older run.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -424,14 +428,14 @@ put the results first; its first screen follows board A1 of the redesign
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
-  days"; none when the run is shorter), flagged below 30 %; it reads each
-  dam's `dam_storage` series (fetched for it through the Runs cache), so it
-  says "loading dam levels" until they are in, and "no dams in the run"
-  without any. The card links to the [Dams](#dams) page: its term is a link
+  days"; none when the run is shorter), flagged below 30 %; it reads the
+  run summary's dam figures (engine ≥ 1.2.0, issue #55), or for an older run
+  each dam's `dam_storage` series through the Runs cache, when it says
+  "loading dam levels" until they are in; "no dams in the run" without any. The card links to the [Dams](#dams) page: its term is a link
   (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
-  facts' tiles are. *Mean simulated outflow*
-  (m³/s, % of natural, its change) is the line under the cards, with the
-  run the changes are against. Each
+  facts' tiles are. *Mean simulated outflow* (m³/s, % of natural) is a short
+  line under the cards, linking to [River & reserve](#river--reserve), which
+  has it as a tile with its change; then the run the changes are against. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
@@ -614,9 +618,10 @@ for every workspace tab. Its own chunk.
   fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
   one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
   fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
-  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The
-  per-dam fetches' durable fix, dam figures in the run summary, needs an
-  engine change and is open work ([followups.md](./followups.md), #55).
+  first 8 rows show, with **Show all N dams**, and **Open in Runs**. The page
+  keeps fetching every dam's series even though the run summary carries the
+  table's figures (engine ≥ 1.2.0, issue #55), because each card's sparkline
+  and the storage chart draw them.
 - **Empty states**: no dams in the model says how to add one, with **Open the
   Network** and **Node table** (the grid modal over this page, where a node's
   dam capacity is set or a node added; a new dam shows as a card at once).
@@ -996,15 +1001,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
   - **Dam level, end of latest run** (offered with a run and a dam): each
-    dam's storage on the run's last day, from its `dam_storage` series,
-    fetched only while this mode is picked, four at a time
-    (`overview/damLevels.ts` `loadDamLevels`, shared with the Dams page and
-    the Summary's Dams today; "Loading dam levels (N of M)…", Retry on failure). Bands on the
+    dam's storage on the run's last day, from the run summary's dam figures
+    (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
+    from its `dam_storage` series, fetched only while this mode is picked,
+    four at a time (`overview/damLevels.ts` `loadDamLevels`, shared with the
+    Dams page and the Summary's Dams today; "Loading dam levels (N of M)…",
+    Retry on failure). Bands on the
     same three colours: **60 % full or more** (`DAM_FULL_PCT`), **30–60 %**,
     **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
     the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and
-    minimum come from the run's own model. (Issue #55 would make this one
-    request.)
+    minimum come from the run's own model.
   - **Irrigated area** (no run needed; follows unsaved edits at once): each
     farm's planted hectares, in one hue over three steps (thirds of the
     largest farm's area, since more area is neither good nor bad) and
@@ -2109,6 +2115,81 @@ run's report to chosen members every week or month.
 - Viewers see the list, with no buttons.
 - Tested by `e2e/tests/server-report.spec.ts`.
 
+## River & reserve
+
+`?tab=river` (alias `?tab=reserve`), under *Outcomes* after the Summary
+(issue #17, option A: the outcome pages). One run's river against its EWR:
+the Runs & results tab's former **River & Reserve** group, moved here with
+its panels unchanged, laid out as a dashboard (`river/RiverTab.svelte`, its
+own lazy chunk, which carries the panels every run shows: the uncertainty
+bands, the outcome matrix, the seasonal outlook and the water account, used
+by no other tab; the flow chart, the water-year bars and Reserve compliance
+stay lazy. Rules in `river/river.ts`, links in `river/links.ts`). Every
+role that reads runs sees it (`TAB_GROUP.river = 'core'`: owners, editors,
+viewers); an applicant and a farmer get their own views, as for every tab.
+
+- **Which run.** `run=<id>` picks it; without one (or when it names a run
+  that is gone) the newest run by `createdAt`, as the Summary shows
+  (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
+  against. The **Run** menu in the header lists every run, newest first
+  (`runOptionLabel`, the compare picker's labels); picking one is a new
+  history entry (`?tab=river&run=<id>`), so Back returns to the run before and
+  a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+- **Header.** The shared section header (`workspace/SectionHeader`, title
+  from `TAB_LABELS`); the tab fills its context line (`fillHeader`): the run's
+  label (with the *Workbook comparison* and *Evidence* badges), its period,
+  its engine, and the EWR it was tested against (`ewrRuleText`: "EWR:
+  pragmatic, by month", plus "Reserve rules at …" with the sites of the
+  project's rule tables), and its actions: the **Run** menu and **Open in
+  Runs & results**, before the page's Add data. With no run the context says
+  what the page is for.
+- **Tiles** (`riverKpis`), each with its change from the previous run where
+  both runs have the figure (`Delta`, as on the Summary):
+  *Reserve met* (share of days the outflow met the pragmatic EWR at the
+  outflow gauge, "N of M days", and with a rule table "Reserve rules: x% of
+  months"; flagged above 5 % of days not met); *Days below the reserve* (the
+  count, and how many in an average year; the change compares the per-year
+  figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
+  % of natural, moved here from the line under the Summary's cards, same
+  figure as `overview/latestRun.ts`); *Worst month* (the month of the water
+  year with the largest share of days below the EWR over the run, from the
+  EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
+  EWR was met every day; its change is that same month in the previous run).
+- **First screen.** The Summary's **Flow vs reserve** chart
+  (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
+  axis, the **30 days / 1 year / All** switch, the days below the reserve
+  shaded and counted in its caption, a forecast run's band). It keeps the two
+  controls the Runs tab's EWR chart had, which the Summary's copy leaves off
+  (`FlowVsReserve` `units` and `pannable`): the **m³/s ↔ m³/day** switch
+  (the shading is days, so it is the same in both units) and **◀ Earlier /
+  Later ▶**, which step by the window picked (a year, or 30 days) with that
+  window's button still pressed, stop at either end of the run (disabled
+  there), and step aside under *All*; Shift+drag moves the view too. It sits beside **Days
+  below the reserve, each water year** (`#res-reserve-years`, Compare runs'
+  `ReserveYearsChart` with this one run: the engine's
+  `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
+  a table behind *Show as a table*). From 1100 × 620 the tiles and this row
+  are exactly the height left below their top (measured with a
+  ResizeObserver, less the save bar), the chart filling what the tiles
+  leave, as the Summary's first screen does; narrower, the two stack.
+- **Below it**, full width, the moved panels, with their ids:
+  **Reserve compliance by month** (`#res-reserve`, with a rule table),
+  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
+  **Uncertainty bands** (`#res-uncertainty`), the **Outcome matrix**
+  (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
+  outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)) and the
+  **Water account** (`#res-water-account`). Each is described under
+  [§ Runs & results](#runs--results), where it used to be.
+- **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
+  and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
+  for a lazy panel's heading to arrive. An old link to one of these panels on
+  Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
+  replaced by the same link here. The Summary's flow chart and outflow line
+  and the run headline's "by month of the year" link here too.
+- **No run yet:** the header, a "No run yet" panel saying what the page will
+  show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
+  editor can run it.
+
 ## Runs & results
 
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
@@ -2148,7 +2229,7 @@ run's report to chosen members every week or month.
   group is a list labelled by that name. It sticks at the top (under the
   phone bar on a phone) down the long results page, marks the section being read, wraps to about two
   rows on a laptop, and on phones is one sideways strip. Unit detail appears
-  only when the run has farms, Reserve compliance only with a rule table,
+  only when the run has farms,
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
   Plausibility checks only on a run made by engine 0.25.0 or later. The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to
@@ -2168,12 +2249,14 @@ run's report to chosen members every week or month.
      stretches). Then one line of **model checks** (`credibility`): the
      self-checks, the plausibility findings, the WR2012 flag and the calibration
      fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
-  2. **River & Reserve**: Reserve compliance by month (with a rule table),
-     EWR vs outflow, EWR by month, the **Uncertainty bands** (their own
-     panel and menu entry, beside the findings they qualify), the **Outcome
-     matrix** ([§ Outcome matrix](#outcome-matrix)), the **Seasonal
-     outlook** ([§ Seasonal outlook](#seasonal-outlook)) and the water
-     account.
+  2. **River & Reserve**: one row (`#res-river`, menu entry **On River &
+     reserve**) linking to [River & reserve](#river--reserve) for the shown
+     run (`?tab=river&run=<id>`). Its panels (Reserve compliance by month,
+     EWR vs outflow, EWR by month, the **Uncertainty bands**, the **Outcome
+     matrix**, the **Seasonal outlook** and the water account) moved there
+     (issue #17); they are still described below. A link to one of them here
+     (`#res-reserve`, …) is sent there, and the headline's "by month of the
+     year" goes there too.
   3. **Units & users**: curtailment (led by the share-the-pain board, with
      the other water users and the EWR sites tables), unit detail.
   4. **Model quality**: the hydrograph with the flow-duration curve under it
@@ -2502,10 +2585,10 @@ run's report to chosen members every week or month.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
-  and (its own panel in the River & Reserve group, beside the findings it qualifies) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  and (its own panel on [River & reserve](#river--reserve), beside the findings it qualifies) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
   [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
-  `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
-  shown, `#res-uncertainty`, menu entry **Uncertainty bands**; helpers in
+  `uncertainty/UncertaintyPanel.svelte`, in River & reserve's chunk,
+  `#res-uncertainty`; helpers in
   `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
   **decision rule** in a box above every band (thresholds, split date,
   percentiles, the 30-set gate, coverage test, sample), a line with the
@@ -2587,7 +2670,8 @@ run's report to chosen members every week or month.
   the days with a reading by default, `onDaysOf`, so they compare like with
   like, and **Observed days / Whole run** switches; the caption says which
   days each curve ranks),
-  EWR against outflow, **Reserve compliance by month** when the run has a rule
+  EWR against outflow and **Reserve compliance by month** (both on
+  [River & reserve](#river--reserve) since issue #17) when the run has a rule
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
   when there are several, the method in one sentence and the table's source,
@@ -2666,16 +2750,16 @@ run's report to chosen members every week or month.
   picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
   colour is never the only cue, with a legend of the ranges and a count of
   months per class.
-- **Outcome matrix** (`#res-outcomes`, under *River & Reserve* after the
-  uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, its own chunk):
+- **Outcome matrix** (`#res-outcomes`, on River & reserve after the
+  uncertainty bands; `outcomes/OutcomeMatrixPanel.svelte`, in River & reserve's chunk):
   the run's inputs at a few demand levels by class of water year, described
   in [§ Outcome matrix](#outcome-matrix) below.
-- **Seasonal outlook** (`#res-outlook`, after the outcome matrix;
-  `outlook/OutlookPanel.svelte`, its own chunk): the season from the run's
-  state at a few demand levels over the record's past years, described in
-  [§ Seasonal outlook](#seasonal-outlook) below.
-- **Water account** (`#res-water-account`, last under *River & Reserve*;
-  `reliability/WaterAccountPanel.svelte`, in the Runs chunk; [model.md §2.11b](./model.md)):
+- **Seasonal outlook** (`#res-outlook`, on River & reserve after the outcome
+  matrix; `outlook/OutlookPanel.svelte`, in River & reserve's chunk): the season from the
+  run's state at a few demand levels over the record's past years, described
+  in [§ Seasonal outlook](#seasonal-outlook) below.
+- **Water account** (`#res-water-account`, last on River & reserve;
+  `reliability/WaterAccountPanel.svelte`, in River & reserve's chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
@@ -2706,9 +2790,9 @@ run's report to chosen members every week or month.
 
 Issue #53 R4 ([planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m),
 [model.md §2.14](./model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
-A panel under *River & Reserve* on the Runs tab (`#res-outcomes`, menu
-entry **Outcome matrix**; `outcomes/OutcomeMatrixPanel.svelte`, its own
-chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
+A panel on [River & reserve](#river--reserve) (`#res-outcomes`; until
+issue #17 under *River & Reserve* on the Runs tab; `outcomes/OutcomeMatrixPanel.svelte`, in River &
+reserve's chunk, view model `outcomes/matrix.ts`).
 
 - **Starting a sweep** (editors): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
@@ -2776,9 +2860,9 @@ Reserve months, the viewer, the fallback).
 
 Issue #53 R5 ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml),
 [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)).
-A panel under *River & Reserve* on the Runs tab, after the outcome matrix
-(`#res-outlook`, menu entry **Seasonal outlook**;
-`outlook/OutlookPanel.svelte`, its own chunk loaded when a run is shown,
+A panel on [River & reserve](#river--reserve), after the outcome matrix
+(`#res-outlook`; until issue #17 under *River & Reserve* on the Runs tab;
+`outlook/OutlookPanel.svelte`, in River & reserve's chunk,
 view model `outlook/view.ts`). For the WUA; English, like the workspace.
 There is no farmer view yet (ask E3 waits on the client's O5).
 

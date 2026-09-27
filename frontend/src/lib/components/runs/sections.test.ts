@@ -7,8 +7,8 @@ describe('resultGroups', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary']],
-			['River & Reserve', ['res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-outcomes', 'res-outlook', 'res-water-account']],
-			['Units & supply', ['res-units']],
+			['River & Reserve', ['res-river']],
+			['Units & users', ['res-units']],
 			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
 			['Record', ['res-notes', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
@@ -43,11 +43,11 @@ describe('resultGroups', () => {
 		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
-	it('puts the flow-duration curve with the hydrograph and the uncertainty bands with the river findings', () => {
+	it('puts the flow-duration curve with the hydrograph, and the river group is one link to River & reserve', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
 		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
-		expect(groups.find((g) => g.label === 'River & Reserve')!.sections.find((s) => s.id === 'res-uncertainty')?.label).toBe('Uncertainty bands');
+		expect(groups.find((g) => g.label === 'River & Reserve')!.sections).toEqual([{ id: 'res-river', label: 'On River & reserve' }]);
 		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
 	});
 

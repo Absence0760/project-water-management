@@ -11,11 +11,12 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { attention, runHref } from './attention';
+	import { riverHref } from '$lib/components/river/links';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { DAMS_HREF, pickRuns, ranAgo, type DamsState } from './latestRun';
-	import { damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
+	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import MembersPanel from './MembersPanel.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
@@ -160,8 +161,9 @@
 	const shown = $derived(latestRun && latestRun.id === pick?.latest.id ? latestRun : null);
 
 	// --- dams: each dam's level at the end of the latest run (damLevels.ts), for
-	// the Dams today card (the Dams page has the table). Each dam's daily storage
-	// series comes through the Runs cache, a few at a time. Capacity and the
+	// the Dams today card (the Dams page has the table): from the run summary, or
+	// for a run older than engine 1.2.0 from each dam's daily storage series
+	// through the Runs cache, a few at a time. Capacity and the
 	// minimum level come from the run's own model, so a later edit doesn't skew them.
 	let damLevels = $state.raw<DamLevel[]>([]);
 	let damsTotal = $state(0);
@@ -188,6 +190,13 @@
 				detailCache.get(id)?.series ?? []
 			);
 			damsTotal = list.length;
+			// A run from engine ≥ 1.2.0 carries the figures in its summary (issue #55): no series to fetch.
+			const fromSummary = damLevelsFromSummary(list, run.summary.farms, run.endDate);
+			if (fromSummary) {
+				damLevels = fromSummary;
+				damsLoading = false;
+				return;
+			}
 			damsLoading = list.length > 0;
 			if (!list.length) return;
 			const current = () => damsKey === key;
@@ -345,7 +354,14 @@
 				{#if shown}
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={project.id} runId={shown!.id} refs={latestRefs} forecastFrom={shown!.summary.forecast?.from ?? null} fill={fit} />
+							<FlowVsReserve
+								projectId={project.id}
+								runId={shown!.id}
+								refs={latestRefs}
+								forecastFrom={shown!.summary.forecast?.from ?? null}
+								fill={fit}
+								more={{ href: riverHref(shown!.id), label: 'More on River & reserve' }}
+							/>
 						{/snippet}
 					</Lazy>
 				{/if}

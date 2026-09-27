@@ -29,7 +29,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'supply', 'dams', 'compare', 'scenarios', 'allocations']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -123,10 +123,19 @@ describe('navSections', () => {
 
 	it('puts outcomes first, then the model, then review', () => {
 		expect(navSections(ALL_TABS)).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'supply', 'dams', 'compare', 'scenarios', 'allocations'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
 			{ id: 'review', label: 'Review', tabs: ['applications', 'history'] }
 		]);
+	});
+
+	it('puts River & reserve under Outcomes, after the Summary, for owners, editors and viewers only', () => {
+		const rendered: TabId[] = ['overview', 'runs', 'river'];
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			expect(navSections(visibleTabs(role, {}, rendered))).toEqual([{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'runs'] }]);
+		}
+		// An applicant (contributor) and a farmer get their own views; the workspace shows them the Summary only.
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
 	});
 
 	it('orders by section whatever order the tabs arrive in, and drops empty sections', () => {
