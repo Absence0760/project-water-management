@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas. The checklist, dam levels and the project’s details follow below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas. The **Dams today** card opens the **Dams** tab. The checklist and the project’s details follow below them.'
 					}
 				]
 			},
@@ -143,7 +143,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, Runs & results, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds Applications and the History of changes.'
+					},
+					{
+						type: 'p',
+						text: '**Dams** has a card for each farm dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network and the farm’s planted areas, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level.'
 					},
 					{
 						type: 'p',

@@ -14,7 +14,7 @@
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
-	import { pickRuns, ranAgo, type DamsState } from './latestRun';
+	import { DAMS_HREF, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import MembersPanel from './MembersPanel.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
@@ -26,8 +26,6 @@
 
 	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
 	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
-	// The Dam levels table: its own chunk too (the levels are fetched here, for the Dams today card as well).
-	const loadDamTable = () => import('./DamLevels.svelte');
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
 	const loadSupply = () => import('./SupplyByFarm.svelte');
 	// The share links (owners only) sit far below the first screen and load their own data: their own
@@ -162,24 +160,21 @@
 	const shown = $derived(latestRun && latestRun.id === pick?.latest.id ? latestRun : null);
 
 	// --- dams: each dam's level at the end of the latest run (damLevels.ts), for
-	// the Dams today card and the Dam levels table. Each dam's daily storage
+	// the Dams today card (the Dams page has the table). Each dam's daily storage
 	// series comes through the Runs cache, a few at a time. Capacity and the
 	// minimum level come from the run's own model, so a later edit doesn't skew them.
 	let damLevels = $state.raw<DamLevel[]>([]);
 	let damsTotal = $state(0);
-	let damsDone = $state(0);
 	let damsLoading = $state(false);
 	let damsError = $state<string | null>(null);
-	let damsAttempt = $state(0);
 	let damsKey = '';
 	$effect(() => {
 		const run = shown;
-		const key = run ? `${run.id}|${damsAttempt}` : '';
+		const key = run ? run.id : '';
 		untrack(() => {
 			if (key === damsKey) return;
 			damsKey = key;
 			damLevels = [];
-			damsDone = 0;
 			damsError = null;
 			if (!run) {
 				damsTotal = 0;
@@ -198,11 +193,7 @@
 			const current = () => damsKey === key;
 			loadDamLevels(
 				list,
-				(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(project.id, id, 'dam_storage', nodeId)),
-				4,
-				(n) => {
-					if (current()) damsDone = n;
-				}
+				(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(project.id, id, 'dam_storage', nodeId))
 			)
 				.then((l) => {
 					if (current()) damLevels = l;
@@ -269,8 +260,9 @@
 			farms: farms.length,
 			gauges: m.nodes.length - farms.length,
 			areaKm2: m.nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0),
-			damM3: m.nodes.reduce((s, n) => s + (n.damCapacityM3 || 0), 0),
-			dams: m.nodes.filter((n) => n.damCapacityM3 > 0).length,
+			// Only a farm has a dam in the engine; a capacity on a gauge is inert (as the Dams page counts them).
+			damM3: farms.reduce((s, n) => s + (n.damCapacityM3 || 0), 0),
+			dams: farms.filter((n) => n.damCapacityM3 > 0).length,
 			crops: m.crops.length,
 			irrigatedHa: m.cropAreas.reduce((s, a) => s + (a.areaM2 || 0), 0) / 10_000,
 			transfers: m.transfers.filter((t) => t.enabled).length,
@@ -378,20 +370,9 @@
 <!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
 <PublishedBaseline projectId={project.id} {runs} {canEdit} />
 
+<!-- Each dam's level, its storage chart and the Dam levels table live on the Dams page (issue #17). -->
 {#if shown && damsTotal}
-	<Lazy load={loadDamTable}>
-		{#snippet children(DamLevels)}
-			<DamLevels
-				runId={shown!.id}
-				levels={damLevels}
-				total={damsTotal}
-				done={damsDone}
-				loading={damsLoading}
-				error={damsError}
-				retry={() => damsAttempt++}
-			/>
-		{/snippet}
-	</Lazy>
+	<p class="dams-link"><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></p>
 {/if}
 
 {#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
@@ -523,6 +504,14 @@
 		flex: 1 1 auto;
 		min-height: 6rem;
 		overflow: auto;
+	}
+	.dams-link {
+		margin: 0 0 1rem;
+	}
+	.dams-link a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.model-h {
 		margin: 1.25rem 0 0.5rem;

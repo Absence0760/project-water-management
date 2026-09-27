@@ -881,6 +881,14 @@
 //             −1.6 with Runs at 41.2): both wait on the per-chunk ceiling
 //             (docs/followups.md). Rollup generatedCode es2015: +0.05.
 //             Headroom ~4 KB.
+// 2026-09-26  total 955 → 962 KB (measured 958, +7); largest chunk unchanged.
+//             The Dams page (issue #17,
+//             option A · Outcomes): dam cards with sparklines, the picked
+//             dam's storage chart and the Dam levels table, moved from the
+//             Summary (dams/DamsTab, DamLevels, dams.ts). A lazy chunk of
+//             7.4 KB gzipped, including the table, which left the Summary's
+//             own lazy chunk; LineChart and uPlot are shared chunks already.
+//             No new dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -891,7 +899,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 955,
+	totalCodeKb: 962,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

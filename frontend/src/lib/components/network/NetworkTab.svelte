@@ -6,7 +6,7 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { damLevel, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
+	import { damLevel, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
@@ -122,11 +122,8 @@
 			if (!run || damLevels?.runId === run) return;
 			const detail = detailCache.get(run);
 			const refs = detail?.series ?? [];
-			const snap = (detail?.run.model?.nodes as { id: string; name: string; damCapacityM3?: unknown; damMinPct?: unknown }[] | undefined) ?? [];
-			const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
-			const dams = (snap.length ? snap : nodes)
-				.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
-				.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
+			// The run's own capacities and minimum levels (a fraction in the model, a % here), as the Summary's.
+			const dams = damsInRun(detail?.run.model?.nodes, nodes, refs);
 			damError = false;
 			damLoading = { done: 0, of: dams.length };
 			loadDamLevels(dams, (nodeId) => cachedSeries(run, 'dam_storage', nodeId, () => api.runs.series(projectId, run, 'dam_storage', nodeId)), 4, (n) => {

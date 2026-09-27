@@ -109,13 +109,16 @@ export function damsToday(levels: readonly DamLevel[]): DamsToday | null {
 	return { pct, change: allAgo ? pct - (ago / cap) * 100 : null, dams: levels.length, endDate };
 }
 
-type DamNode = { id: string; name?: string; damCapacityM3?: unknown; damMinPct?: unknown };
+type DamNode = { id: string; name?: string; kind?: unknown; damCapacityM3?: unknown; damMinPct?: unknown };
 
 /**
  * The dams a run stored storage for: nodes with a capacity and a dam_storage
  * series. Capacity and the minimum level come from the run's own model
  * (`runNodes`), so a later edit doesn't skew them; `liveNodes` stand in for a
- * run saved before it kept its model.
+ * run saved before it kept its model. The model keeps the minimum level as a
+ * fraction of capacity (`damMinPct` 0.1 = 10 %), and only a farm's dam has
+ * one (the engine's dead storage; the node form offers it on farms only), so
+ * it comes back as a percentage, 0 for any other node.
  */
 export function damsInRun(
 	runNodes: readonly DamNode[] | undefined,
@@ -125,7 +128,12 @@ export function damsInRun(
 	const nodes = runNodes?.length ? runNodes : liveNodes;
 	const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 	return nodes
-		.map((n) => ({ nodeId: n.id, name: n.name || '(unnamed)', capacityM3: num(n.damCapacityM3), minPct: num(n.damMinPct) }))
+		.map((n) => ({
+			nodeId: n.id,
+			name: n.name || '(unnamed)',
+			capacityM3: num(n.damCapacityM3),
+			minPct: n.kind === undefined || n.kind === 'farm' ? num(n.damMinPct) * 100 : 0
+		}))
 		.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
 }
 
