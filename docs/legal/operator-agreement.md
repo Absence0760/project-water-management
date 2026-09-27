@@ -166,7 +166,7 @@ the Client the current description on request.
 | --- | --- | --- |
 | **Amazon Web Services, Inc.** | Hosting: AWS Lambda (application, background jobs, report rendering, data-feed fetching), Amazon RDS for PostgreSQL (database and backups), Amazon S3 (site files, report PDFs), Amazon SES (email), Amazon SQS and EventBridge (job queues and schedules), Amazon CloudWatch (logs, metrics, alarms), AWS Secrets Manager and KMS (secrets), Amazon ECR (application images, no personal information), Amazon VPC | Stored in `af-south-1` (Cape Town) |
 | Amazon Web Services, Inc. | Amazon CloudFront (content delivery), AWS WAF (firewall) and AWS Certificate Manager (TLS certificates) | In transit only: requests pass through CloudFront edge locations worldwide; the firewall's configuration and rate counters sit in `us-east-1` and see each request's IP address and path. Nothing is stored there by the service. |
-| [Migadu (Switzerland), the Operator's mailbox provider] | Receives email the Client or data subjects send to `jared@jaredhoward.com` (support, requests) | [Switzerland] *(confirm before signing)* |
+| Migadu (Switzerland), the Operator's mailbox provider for `@jaredhoward.com` (per the estate's DNS records) | Receives email the Client or data subjects send to `jared@jaredhoward.com` (support, requests) | Switzerland *(the Operator's personal site also names Gmail for its email: confirm whether mail is forwarded there, and list Google too if so)* |
 
 6.2 The data-feed sources the service reads from (CHIRPS rainfall, the
 Department of Water and Sanitation's hydrology data) receive no personal
