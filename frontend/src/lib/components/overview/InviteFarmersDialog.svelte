@@ -25,7 +25,7 @@
 
 	const LANGUAGES: { value: InviteLocale; label: string }[] = [
 		{ value: 'en', label: 'English' },
-		{ value: 'af', label: 'Afrikaans (sent in English for now)' }
+		{ value: 'af', label: 'Afrikaans' }
 	];
 
 	let mode = $state<'single' | 'csv'>('single');
