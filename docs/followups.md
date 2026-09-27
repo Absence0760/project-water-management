@@ -1239,9 +1239,21 @@ the suggested order (the IDs carry the detail):
       rule-table charge and base-flow modes drawn in) passed except **seed
       1774**, which fails with or without them (it has no rule table):
       doubling crop areas raised n14's supply fraction 0.9999999999964 →
-      0.9999999999984, a 2e-12 rise, so either a float-noise tolerance
-      missing from `checkDoubledCropAreas` or a real sub-ulp effect; not
-      diagnosed. The 20 000-case soak is still owed.
+      0.9999999999984, a 2e-12 rise. **Diagnosed and fixed in the check
+      (2026-09-27, no engine change):** float noise. n14's dam seeps all it
+      holds each day and a supplemental dam-target borehole (1e9 m³/day,
+      cap off under `droughtBoreholesAsSupplemental`) refills it to dead
+      storage + demand ≈ 2.19e5 m³, so `avail + gd − dead` returns the
+      demand only to an ulp of 2.19e5 (2.9e-11 m³). Every short day was a
+      top-up day, none short by more than 1.49 ulp; Σ(D − G) ≈ 2.1e-9 m³ in
+      both runs over Σ D = 639 → 1278 m³, so 1 − fraction halved. The
+      noise is absolute, not relative to demand, so `checkDoubledCropAreas`
+      now allows each fraction (and volumetric reliability) 4ε × the farm's
+      largest volume ÷ its mean demand (floor 1e-12), the catchment's
+      likewise; a named seed-1774 test pins it, and the real rises in
+      `boreholes.test.ts` still fail the law. A 2 000-case soak
+      (`FUZZ_MAX_FAILURES=100`, seeds 1–2000) then passed. The
+      20 000-case soak is still owed.
       **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
       cap (N4) ignored the receiving dam's own rain, evaporation and
       seepage, so a leaky dam was topped up short by a fixed volume and

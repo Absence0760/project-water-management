@@ -9,7 +9,7 @@ import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput } from './testing/fuzz';
-import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
+import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 
 describe('engine invariants on random networks', () => {
 	// The random soak itself (checkAll on FUZZ_CASES seeds, GR4J) is
@@ -44,6 +44,36 @@ describe('engine invariants on random networks', () => {
 		// (5.8 % → 7.3 % legacy, 7.5 % → 8.5 % GR4J; n13, 2 000-case soak on 0.17.0).
 		expect(checkDoubledCropAreas(randomInput(921))).toBeNull();
 		expect(checkAll(randomInput(921), 921)).toBeNull();
+	});
+
+	it('seed 1774: a supply fraction short of 1 by float noise in the dam volumes is not a rise (checkDoubledCropAreas)', () => {
+		// n14's dam seeps all it holds every day and a supplemental dam-target borehole
+		// (1e9 m³/day, its cap taken off by droughtBoreholesAsSupplemental) refills it to
+		// dead storage + demand, ≈ 2.19e5 m³; the dam then gives back the demand only to an
+		// ulp of that volume (2.9e-11 m³). The shortfall is absolute, so doubling the demand
+		// halves the fraction it leaves: 0.9999999999964 → 0.9999999999984 (2 000-case soak,
+		// engine 1.3.0). The law allows a few ulps of the farm's volumes over its demand.
+		const input = droughtBoreholesAsSupplemental(randomInput(1774));
+		const base = structuredClone(input);
+		for (const n of base.model.nodes) n.lossReturnFraction = 0;
+		const doubled = structuredClone(base);
+		for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
+		const run = (x: ModelInput) => {
+			const out = runModel(x);
+			const f = out.summary.farms.find((f) => f.nodeId === 'n14')!;
+			const d = out.series.find((s) => s.nodeId === 'n14' && s.key === 'demand')!.values;
+			const g = out.series.find((s) => s.nodeId === 'n14' && s.key === 'supplied')!.values;
+			let worst = 0;
+			for (let t = 0; t < d.length; t++) worst = Math.max(worst, d[t]! - g[t]!);
+			return { fraction: f.fractionSupplied, worst };
+		};
+		const [a, b] = [run(base), run(doubled)];
+		// The noise the law has to allow: a rise, but of the order of 1e-12, from a daily shortfall under 2 ulps of 2.19e5 m³.
+		expect(b.fraction).toBeGreaterThan(a.fraction);
+		expect(b.fraction - a.fraction).toBeLessThan(1e-11);
+		expect(Math.max(a.worst, b.worst)).toBeLessThan(2 * 2 ** -35);
+		expect(checkDoubledCropAreas(input)).toBeNull();
+		expect(checkAll(randomInput(1774), 1774)).toBeNull();
 	});
 
 	it('engine 0.21.1: doubling crop areas never raises the supply fraction below a steep, shallow dam (seeds 4197, 7686, 15979, 17277)', () => {

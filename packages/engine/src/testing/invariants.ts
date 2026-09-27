@@ -154,7 +154,18 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * a fuller, very shallow dam with b > 1 end the day emptier; fixed in the
  * engine, network/simulate.ts damDay, not here.)
  * Demand is not rounded (R1), so it doubles exactly and the only slack is
- * float noise.
+ * float noise. That noise is absolute, in the volumes a farm's daily supply
+ * is worked out from (its dam storage, inflows, top-ups), not relative to
+ * its demand, so it does not double with the demand and the fraction it
+ * leaves shrinks as the demand grows: the check allows each fraction a few
+ * ulps of the farm's largest volume over its mean demand (`noiseOf`), like
+ * order invariance's volume / demand scale. Fuzz seed 1774 (engine 1.3.0):
+ * n14's dam seeps its whole content every day and a supplemental borehole
+ * that pumps into it tops it up to dead storage + demand (≈ 2.19e5 m³), so
+ * `avail + gd − dead` gives back the demand only to an ulp of 2.19e5
+ * (2.9e-11 m³). Every short day was such a top-up, none short by more than
+ * 1.49 ulp; Σ(D − G) ≈ 2.1e-9 m³ in both runs over Σ D = 639 then 1278 m³,
+ * so 1 − fraction went 3.6e-12 → 1.6e-12 and the fraction "rose" 2e-12.
  */
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
@@ -170,11 +181,25 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 		return `doubled crop areas threw ${(e as Error).message}`;
 	}
 	const slack = 1e-12;
+	// Each node's largest volume in either run, the scale of its supply's float noise.
+	const volume = new Map<string, number>();
+	for (const o of [o1, o2])
+		for (const s of o.series) {
+			if (s.nodeId === null) continue;
+			let m = volume.get(s.nodeId) ?? 0;
+			for (const v of s.values) if (Number.isFinite(v)) m = Math.max(m, Math.abs(v));
+			volume.set(s.nodeId, m);
+		}
+	/** A few ulps (ε = 2⁻⁵²) of that volume per day, as a fraction of a mean daily demand; never below `slack`. */
+	const noiseOf = (v: number, demand: number) => Math.max(slack, (4 * Number.EPSILON * v) / demand);
 	const before = new Map(o1.summary.farms.map((f) => [f.nodeId, f]));
+	const noise = new Map<string, number>();
 	for (const f2 of o2.summary.farms) {
 		const f1 = before.get(f2.nodeId)!;
 		if (!(f1.avgDemandM3Day > 0)) continue;
-		if (f2.fractionSupplied > f1.fractionSupplied + slack)
+		const tol = noiseOf(volume.get(f2.nodeId) ?? 0, f1.avgDemandM3Day);
+		noise.set(f2.nodeId, tol);
+		if (f2.fractionSupplied > f1.fractionSupplied + tol)
 			return `doubling crop areas raised ${f2.nodeId}'s supply fraction ${f1.fractionSupplied} → ${f2.fractionSupplied}`;
 	}
 	// Nor any reliability metric (WP-3.4): time-based, volumetric, annual.
@@ -185,7 +210,9 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 		for (const k of ['timeReliability', 'volumetricReliability', 'annualReliability'] as const) {
 			const a = r1[k];
 			const b = r2[k];
-			if (a !== null && b !== null && b > a + slack) return `doubling crop areas raised ${r2.nodeId}'s ${k} ${a} → ${b}`;
+			// Volumetric reliability is Σ supplied / Σ demand, the supply fraction's noise; the others count days or years.
+			const tol = k === 'volumetricReliability' ? (noise.get(r2.nodeId) ?? slack) : slack;
+			if (a !== null && b !== null && b > a + tol) return `doubling crop areas raised ${r2.nodeId}'s ${k} ${a} → ${b}`;
 		}
 	}
 	const tot = (o: ModelOutput) => o.summary.farms.reduce((s, f) => [s[0]! + f.avgDemandM3Day, s[1]! + f.avgSuppliedM3Day], [0, 0]);
@@ -194,7 +221,9 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	if (!(d1! > 0) || !(d2! > 0)) return null;
 	const c1 = s1! / d1!;
 	const c2 = s2! / d2!;
-	return c2 > c1 + slack ? `doubling crop areas raised the catchment supply fraction ${c1} → ${c2}` : null;
+	let v = 0;
+	for (const f of o1.summary.farms) v += volume.get(f.nodeId) ?? 0;
+	return c2 > c1 + noiseOf(v, d1!) ? `doubling crop areas raised the catchment supply fraction ${c1} → ${c2}` : null;
 }
 
 /**
