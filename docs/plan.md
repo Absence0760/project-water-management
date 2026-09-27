@@ -359,7 +359,9 @@ decided:
 
 ### 6a. Account, domain, secrets
 
-Decided: slug **`water-management`**, URL **`https://water-management.jaredhoward.com`**.
+Decided: slug **`water-management`**, URL **`https://water-management.jaredhoward.com`**,
+region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 80`;
+[deployment-tiers.md](./deployment-tiers.md)).
 
 - ⬜ Bootstrap tfvars `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
   with `create_subdomain = true`.
@@ -751,11 +753,18 @@ From the client's four sketched outputs; research and recommendations in
     areas, and possibly owners' names) be stored in AWS? Must it stay in South
     Africa (`af-south-1`)? Is any of it confidential between farms, for example
     one farm's abstraction hidden from its neighbours?
+    *Hosting decided 2026-09-26 regardless of the answer: `af-south-1`, so
+    the data stays in South Africa ([deployment-tiers.md § Where the data
+    lives](./deployment-tiers.md#where-the-data-lives)). The confidentiality
+    part is still open.*
 16. **Domain (for information).** The app will live at
     `water-management.jaredhoward.com`. Tell the client this, and flag it early
     if they need a branded domain.
 17. **Budget and support.** What is the expected monthly hosting budget, and
-    who pays? Who supports the users?
+    who pays? Who supports the users? *Expected: ≈ $58–63/month on the
+    minimal tier in af-south-1, ≈ $135–150 on the full (highly available)
+    tier ([deployment-tiers.md](./deployment-tiers.md)); suggest passing it
+    through in the hosting fee.*
 
 ---
 

@@ -50,10 +50,13 @@ EventBridge rate(5 minutes) ──────────────► worker
 
 ## Region recommendation
 
-**Recommendation: `af-south-1` (Cape Town) for the VPC, RDS, both Lambdas,
-the frontend bucket and SES.** This is advice; `aws_region` stays unset and
-the operator decides, ideally after the client answers plan question 15
-(may the data leave South Africa?).
+**Decided (2026-09-26): `af-south-1` (Cape Town) for the VPC, RDS, the
+Lambdas, the frontend bucket and SES, on the minimal tier, while the users
+are South African.** `aws_region` still has no default in Terraform; set it
+in tfvars. The decision holds whatever the client answers to plan question
+15, and a future country gets its own stack in its own region
+([deployment-tiers.md § Where the data lives](./deployment-tiers.md#where-the-data-lives)).
+The reasoning below is why.
 
 What was checked (September 2026):
 

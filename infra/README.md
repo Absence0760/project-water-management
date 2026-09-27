@@ -192,8 +192,8 @@ reviewer.
 
 ### Region
 
-`aws_region` has no default, on purpose: the operator chooses. The
-recommendation (**af-south-1**, with SES in the same region) and its
+`aws_region` has no default, on purpose: it is set in tfvars. The decision
+(**af-south-1**, with SES in the same region, 2026-09-26) and its
 reasoning, with sources, are in
 [docs/deployment.md § Region](../docs/deployment.md#region-recommendation).
 In short: SES, its DKIM/MAIL FROM feedback endpoints and the SES API VPC
