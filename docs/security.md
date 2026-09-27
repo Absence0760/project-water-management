@@ -169,6 +169,10 @@ buys a **render session** that can read one report and nothing else.
   Recipients must be direct project members with viewer or above, checked
   when asked for and again when the mail is sent; a viewer may email only
   themselves; on-demand PDFs are capped at 10 an hour per user and project.
+  A PDF or schedule emails at most 20 people, and a project has at most 10
+  schedules. The hourly and schedule caps are counted under an advisory lock
+  (per user and project, per project), so a burst of concurrent requests
+  can't pass them together (`jobs/costCaps.security.db.test.ts`).
 - **Accepted residual risks.** A pre-signed link works for its hour for
   whoever holds it (as any download link would); keep it short and don't log
   it. A render request dead-lettered in production still holds its token
@@ -703,6 +707,18 @@ In short:
   user and validates it as untrusted input. `water_app` has no `UPDATE` or
   `DELETE` on `job`. A job's stored error is written by the server, never
   database text, and wake messages carry a job id only.
+  Both halves are swept over the live handler registry
+  (`jobs/trust.security.db.test.ts`): every kind is dead once its user drops
+  below the handler's role (only `report_render` runs for a viewer, on an
+  allowlist with its reason), and a job queued in one project whose payload
+  names another project's feed, report, sweep, outlook or run changes nothing
+  there, even for someone who edits both (the handler scopes every read by
+  the job's project; `app_begin_feed_fetch` and the `yield_result` guard
+  check it again in the database). The per-user caps on queued
+  sweeps, outlooks and yield calculations (2 each) are counted under a
+  per-user advisory lock, so a concurrent burst can't pass them, and the
+  database refuses a sweep member or outlook level past the API's cap
+  (`jobs/costCaps.security.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
   `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's
