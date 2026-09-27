@@ -204,8 +204,12 @@ export function inputRows(settings: Record<string, unknown> | null | undefined, 
 
 // ── Daily sheets ───────────────────────────────────────────────────────────
 
-/** A daily sheet's header row: the date, then each column's header. */
-export const dailyHeader = (t: DailyTable): string[] => ['date', ...t.columns.map((c) => c.header)];
+/**
+ * A daily sheet's header row: the date, then each column's header, defused
+ * like every other text cell (the bulk route's headers are engine labels
+ * today; the daily CSV defuses the same headers, backend export/csv.ts).
+ */
+export const dailyHeader = (t: DailyTable): string[] => ['date', ...t.columns.map((c) => defuse(c.header))];
 /** A daily sheet's column widths in characters: the date, then 14 per column. */
 export const dailyWidths = (t: DailyTable): number[] => [11, ...t.columns.map(() => 14)];
 /** The Excel date serial of a table's first day. */

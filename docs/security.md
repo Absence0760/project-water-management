@@ -1223,9 +1223,14 @@ In short:
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
-  (`backend/src/export/csv.ts`, OWASP "CSV injection"). Numbers are written as
+  (`backend/src/export/csv.ts`, OWASP "CSV injection"), and a cell holding a
+  comma, quote or line break is RFC 4180-quoted. Numbers are written as
   numbers. Export file names are ASCII slugs, so `Content-Disposition` can't be
-  injected.
+  injected. `export/export.security.db.test.ts` sweeps every `GET … .csv`
+  route in the live route table over a project seeded with formula-looking
+  names, run label, notes, notes author, series name and allocation fields: no
+  text cell may start with a trigger, the quoting must parse strictly, and an
+  ordinary name must round-trip unchanged.
 - **The `.xlsx` workbook treats names the same way.** It is built in the
   browser from the same API data (`frontend/src/lib/spreadsheet/export/`):
   the summary sheets are the summary CSV's cells, already defused; names the
@@ -1233,8 +1238,13 @@ In short:
   crops and references) go through `defuse` in `names.ts`, the same rule as
   `textCell`. Every name is a **string cell** and the workbook never writes a
   formula, so Excel shows `=cmd|…` as text; the apostrophe keeps it inert if
-  someone edits the cell or copies it into a CSV. Unit and e2e tests check
-  both (no cell in the file has a formula). Sheet names are cleaned to
+  someone edits the cell or copies it into a CSV. The daily sheets' column
+  headers are defused too. Cell text is XML-escaped with control characters
+  as `_xHHHH_`, and an underscore that would start such an escape in the
+  text itself is written `_x005F_` (`writer.ts` `escapeCellText`): Excel
+  decodes `_xHHHH_`, so a name typed as `_x003D_cmd` would otherwise open as
+  `=cmd`, past the defuse. Unit and e2e tests check both (no cell in the file
+  has a formula; `writer.security.test.ts` reads every cell as Excel does). Sheet names are cleaned to
   Excel's rules (none of `[ ] : * ? / \`, at most 31 characters, unique), and
   the file name is the summary CSV's server-made ASCII slug. The worker loads
   from `'self'` only (`worker-src 'self'`), and it only writes (`writer.ts`); it
