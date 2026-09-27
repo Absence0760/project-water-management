@@ -618,7 +618,7 @@ export const af: Catalogue = {
 	// Licence applicants and assessors
 	'0414bada': 'Lisensie-aansoekers en -beoordelaars',
 	// Model a new dam or more hectares against the catchment as it is, with evidence an assessor can open and reproduce.
-	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar teen die opvanggebied soos dit is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
+	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar in die opvanggebied soos dit nou is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
 	// Farmers
 	'858cd593': 'Boere',
 	// Your farm’s supply, your dam and any restriction, on your phone, in English or Afrikaans.
@@ -670,7 +670,7 @@ export const af: Catalogue = {
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
-	'f48a005d': 'Skerms uit die toepassing self.',
+	'f48a005d': 'Skerms uit die app self.',
 	// A catchment’s Summary: the ecological reserve, supply to each farm and the dams today.
 	'dc9eb4cd': '’n Opvanggebied se opsommingsblad (Summary): die ekologiese reserwe, die lewering aan elke plaas en die damme vandag.',
 	// A farmer’s view of their own farm on a phone: their dam, their supply and any restriction.
@@ -692,7 +692,7 @@ export const af: Catalogue = {
 	// From rainfall to river
 	'2c4de2ff': 'Van reën tot rivier',
 	// What the model works out for every day of the record, one step at a time. The charts are the {year} water year of an example catchment, by week.
-	'6fde5c37': 'Wat die model vir elke dag van die rekordtydperk bereken, een stap op ’n slag. Die grafieke wys die waterjaar {year} van ’n voorbeeld-opvanggebied, per week.',
+	'6fde5c37': 'Wat die model vir elke dag van die waarnemingstydperk bereken, een stap op ’n slag. Die grafieke wys die waterjaar {year} van ’n voorbeeld-opvanggebied, per week.',
 	// Rain on the mountains
 	'791b781b': 'Reën op die berge',
 	// Daily rainfall from the catchment’s own gauges, with CHIRPS satellite estimates to fill the gaps and check them.
@@ -746,7 +746,7 @@ export const af: Catalogue = {
 	// days in one run
 	'e4291d84': 'dae in een lopie',
 	// runs behind the what-if above
-	'9842bf51': 'lopies agter die wat-as hierbo',
+	'9842bf51': 'lopies vir die wat-as hierbo',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
@@ -758,11 +758,11 @@ export const af: Catalogue = {
 	// Daily data from CHIRPS rainfall and the DWS gauges.
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
 	// This is the farm as it is today. Move a slider to change it.
-	'8b81fde5': 'Dit is die plaas soos dit vandag is. Skuif ’n skuifbalk om dit te verander.',
+	'8b81fde5': 'Dit is die plaas soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve
-	'b7fe266e': 'Dit kos die rivier {days} dae meer per jaar onder die reserwe',
+	'b7fe266e': 'Dit kos die rivier {days} meer dae per jaar onder die reserwe',
 	// It gives the river {days} fewer days a year below the reserve
-	'2ad50462': 'Die rivier is {days} dae per jaar minder onder die reserwe',
+	'2ad50462': 'Die rivier is {days} minder dae per jaar onder die reserwe',
 	// The river is below the reserve about as often as today
 	'7f951aa0': 'Die rivier is omtrent net so dikwels soos vandag onder die reserwe',
 	// and the farm gets about as much of what it needs.
@@ -1188,7 +1188,7 @@ export const af: Catalogue = {
 	// At least 8 characters. A short passphrase works well.
 	'73c4cd8e': 'Ten minste 8 karakters. ’n Kort wagfrase werk goed.',
 	// Confirm password
-	'5ad9dc20': 'Herhaal wagwoord',
+	'5ad9dc20': 'Bevestig wagwoord',
 	// Creating…
 	'1aa1a030': 'Skep tans…',
 	// Create account and join
