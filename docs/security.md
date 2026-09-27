@@ -594,7 +594,14 @@ In short:
   `publish/publication.db.test.ts` scans a farmer's farm view and
   publication list for every other farm's id and name, with positive
   controls; `farms.db.test.ts` keeps every other `/projects/:id` route
-  refusing a farmer. The modeller's publication `note` is withheld from
+  refusing a farmer. `farms/farmer-privacy.security.db.test.ts` sweeps the
+  inventories so a new table or route is covered the day it lands: every
+  `project_id` table read as each farmer (and a co-farmer on the same farm)
+  may show only rows naming their own farms, their own `user_id` rows, and
+  the reasoned `FARMER_MAY_READ` extras; every farmer GET answer is scanned
+  for the neighbour's farm, crop, note, allocation holder and name; every
+  farmer write aimed at the neighbour's farm is refused and changes none of
+  its rows (positive controls: each farmer's own farm, and a viewer). The modeller's publication `note` is withheld from
   farmers by the API but not by RLS (a column can't be hidden from one role
   there): the publish dialog tells the modeller farmers don't see it, and it
   must not be relied on as a secret. Publishing records `published_by`, and a
