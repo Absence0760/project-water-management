@@ -3,22 +3,40 @@
 	// "What do these words mean?" for farmers (docs/design/farmer-view.md §5.1):
 	// the glossary's farmer entries ($lib/help/farmer, category 'farmer') in the
 	// farm pages' frame, each with an anchor the pages link to. The same entries
-	// appear in the workspace's /help glossary. In Afrikaans an entry shows its
-	// reviewed translation ($lib/help/content.af) when it has one, else the
-	// English, marked with its own `lang` (WP-2.5).
+	// appear in the workspace's /help glossary. In another language an entry
+	// shows its reviewed translation (that language's $lib/help/content.<code>,
+	// loaded on first use) when it has one, else the English, marked with its
+	// own `lang` (WP-2.5).
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 	import { FARMER_HELP } from '$lib/help/farmer';
-	import { HELP_AF } from '$lib/help/content.af';
-	import { i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
+	import { helpTranslations, type HelpTranslation } from '$lib/help/translations';
+	import { DEFAULT_LOCALE, i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
+
+	/** The chosen language's glossary, once loaded ({} until then, and for English). */
+	let translated = $state.raw<{ lang: string; entries: Record<string, HelpTranslation> }>({ lang: DEFAULT_LOCALE, entries: {} });
+	$effect(() => {
+		const lang = i18n.locale;
+		let live = true;
+		if (lang === DEFAULT_LOCALE) translated = { lang, entries: {} };
+		else
+			void helpTranslations(lang).then((entries) => {
+				if (live) translated = { lang, entries };
+			});
+		return () => {
+			live = false;
+		};
+	});
 
 	const entries = $derived(
 		FARMER_HELP.map((e) => {
-			const af = i18n.locale === 'af' ? HELP_AF[e.id] : undefined;
-			return af ? { id: e.id, term: af.term, short: af.short, long: af.long, lang: 'af' } : { id: e.id, term: e.term, short: e.short, long: e.long, lang: 'en' };
+			const own = translated.lang === i18n.locale ? translated.entries[e.id] : undefined;
+			return own
+				? { id: e.id, term: own.term, short: own.short, long: own.long, lang: translated.lang }
+				: { id: e.id, term: e.term, short: e.short, long: e.long, lang: DEFAULT_LOCALE };
 		})
 	);
 	const paragraphs = (s: string) => s.split(/\n{2,}/);

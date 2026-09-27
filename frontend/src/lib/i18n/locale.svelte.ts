@@ -11,7 +11,7 @@
 //   tn(DAYS, 3)                                    → 'days' (DAYS = plural({ one: 'day', other: 'days' }))
 //   tRich('about **{pct}** of the water', { pct }) → a Rich sentence: **…** and
 //                                                    { b } values come out bold
-//   await setLocale('af')                          → switch (loads af.ts once)
+//   await setLocale('af')                          → switch (loads messages/af.ts once)
 //   i18n.locale                                    → the chosen language
 //   wordsLang()                                    → the language the words are in
 //
@@ -19,7 +19,8 @@
 // until the chosen language's catalogue is complete, so the page never claims
 // to be Afrikaans while it is mostly English (it feeds <html lang>, the plural
 // rules and the date formats). Number formats follow the chosen language at
-// once (a decimal comma for af): see $lib/components/farm/format.ts.
+// once (the language table's decimal mark, a comma for af): see
+// $lib/components/farm/format.ts.
 //
 // Every message must be on the translation sheet: `pnpm gen:i18n:sheet`
 // extracts them from the t() / tRich() / msg() / plural() calls
@@ -34,7 +35,7 @@ import { messageId, PLURAL_CATEGORIES, pluralId, type Msg, type Plural, type Plu
 import { MESSAGE_COUNT, MESSAGE_IDS } from './messages/ids.generated';
 import type { Rich, RichPart } from './rich';
 
-import { i18n, wordsLang, type Locale } from './state.svelte';
+import { i18n, language, wordsLang, type Locale } from './state.svelte';
 export * from './state.svelte';
 export { msg, plural, type Msg, type Plural } from './msg';
 
@@ -44,9 +45,21 @@ export type Catalogue = Record<string, string | Partial<Record<PluralCategory, s
 /** An English message: a string literal written at the call, or a Msg from msg() (never an arbitrary string). */
 export type English<S extends string> = S & (string extends S ? Msg : unknown);
 
-const LOADERS: Record<Exclude<Locale, 'en'>, () => Promise<Catalogue>> = {
-	af: () => import('./messages/af').then((m) => m.af)
-};
+/**
+ * Each language's catalogue loader, found by file: messages/<code>.ts (a two-
+ * or three-letter code, so ids.generated.ts is never one)
+ * exporting `const <code>` (af.ts → af). A language in the table with no
+ * catalogue file yet shows in English. Lazy: a catalogue is its own chunk.
+ */
+const LOADERS: Partial<Record<string, () => Promise<Catalogue>>> = Object.fromEntries(
+	Object.entries(import.meta.glob<Record<string, Catalogue>>(['./messages/[a-z][a-z].ts', './messages/[a-z][a-z][a-z].ts'])).map(([path, load]) => {
+		const code = path.slice('./messages/'.length, -'.ts'.length);
+		return [code, () => load().then((m) => m[code] ?? {})];
+	})
+);
+
+/** The languages that have a site catalogue file. */
+export const catalogueLanguages = (): string[] => Object.keys(LOADERS);
 
 /** The chosen language's catalogue ({} for English). Raw: replaced whole, never mutated. */
 let catalogue = $state.raw<Catalogue>({});
@@ -73,7 +86,8 @@ export async function setLocale(locale: Locale, supplied?: Catalogue): Promise<v
 		i18n.complete = true;
 		return;
 	}
-	const loaded = supplied ?? (await LOADERS[locale]());
+	const load = LOADERS[locale];
+	const loaded = supplied ?? (load ? await load() : {});
 	if (mine !== switching) return;
 	catalogue = loaded;
 	i18n.complete = isComplete(loaded);
@@ -119,7 +133,7 @@ const pluralRules = new Map<string, Intl.PluralRules>();
 function category(n: number, ordinal: boolean): Intl.LDMLPluralRule {
 	const k = `${wordsLang()}:${ordinal}`;
 	let r = pluralRules.get(k);
-	if (!r) pluralRules.set(k, (r = new Intl.PluralRules(wordsLang() === 'af' ? 'af-ZA' : 'en-ZA', { type: ordinal ? 'ordinal' : 'cardinal' })));
+	if (!r) pluralRules.set(k, (r = new Intl.PluralRules(language(wordsLang()).intl, { type: ordinal ? 'ordinal' : 'cardinal' })));
 	return r.select(n);
 }
 
