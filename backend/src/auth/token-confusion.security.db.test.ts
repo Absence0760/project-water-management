@@ -341,7 +341,11 @@ describe('where the backend reads a credential (source sweep)', () => {
 		'ingest/auth.ts': ["c.req.header('authorization')"],
 		'alerts/routes.ts': ["c.req.query('token')"],
 		// Not a user's credential: CloudFront's shared secret on the origin (app.ts).
-		'app.ts': ["c.req.header('x-cloudfront-shared-secret')"]
+		'app.ts': ["c.req.header('x-cloudfront-shared-secret')"],
+		// Not an access credential: the sign-in lockout's trusted-device mark
+		// (070). It only picks which throttle record counts a sign-in attempt;
+		// the password is still checked, and it opens nothing (test below).
+		'auth/device.ts': ['getCookie(c, DEVICE_COOKIE)']
 	};
 	const SRC = join(import.meta.dirname, '..');
 	const files = (dir: string): string[] =>
@@ -361,6 +365,24 @@ describe('where the backend reads a credential (source sweep)', () => {
 		}
 		expect(found['auth/session.ts']).toContain('getCookie(c, SESSION_COOKIE)');
 		expect(found).toEqual(READS);
+	});
+
+	it('the trusted-device cookie opens nothing, in its own slot or the session’s (positive control: the session it came with does)', async () => {
+		const u = await signUp('TCdevice');
+		const r = await post('/auth/login', { email: u.email, password: 'correct horse' });
+		expect(r.status).toBe(200);
+		const pairs = (r.setCookie ?? '').split(/,(?=\s*wm_)/).map((c) => c.trim().split(';')[0]!);
+		const device = pairs.find((p) => p.startsWith('wm_device='));
+		const session = pairs.find((p) => p.startsWith('wm_session='));
+		expect(device, r.setCookie ?? '').toBeTruthy();
+		expect((await anon('GET', '/auth/me', undefined, session)).status).toBe(200);
+		const value = device!.slice('wm_device='.length);
+		for (const cookie of [device!, asCookie(value), `${device}; ${asCookie(value)}`]) {
+			expect((await anon('GET', '/auth/me', undefined, cookie)).status, cookie).toBe(401);
+			expect((await anon('GET', '/projects', undefined, cookie)).status, cookie).toBe(401);
+		}
+		const bearer = await send('/ingest/v1/whoami', { headers: { authorization: `Bearer ${value}` } });
+		expect(bearer.status).toBe(401);
 	});
 });
 

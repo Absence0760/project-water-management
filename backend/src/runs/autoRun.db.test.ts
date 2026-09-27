@@ -297,13 +297,17 @@ describe('the new-data hook: gate, debounce and dedupe', () => {
 		] as const) {
 			await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{autoRun}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify(stored)]);
 			const resolved = resolveAutoRun({ autoRun: stored });
+			// due_at is stamped by Postgres's clock, which can run a few ms off this process's (docker's VM), so bound it by the database's own time.
+			const dbNow = async () => ((await asOwner('SELECT clock_timestamp() AS t'))[0] as { t: Date }).t.getTime();
+			const t0 = await dbNow();
 			const q = await withUser(u.id, (db) => enqueueRerun(db, pid, 'series'));
+			const t1 = await dbNow();
 			expect(!!q, JSON.stringify(stored)).toBe(queued);
 			expect(resolved.enabled, JSON.stringify(stored)).toBe(queued);
 			if (q) {
-				const wait = Date.parse(q.runAfter) - Date.now();
-				expect(wait, JSON.stringify(stored)).toBeGreaterThan((resolved.debounceMinutes - 1) * MIN);
-				expect(wait, JSON.stringify(stored)).toBeLessThanOrEqual(resolved.debounceMinutes * MIN);
+				const due = Date.parse(q.runAfter);
+				expect(due, JSON.stringify(stored)).toBeGreaterThanOrEqual(t0 + resolved.debounceMinutes * MIN);
+				expect(due, JSON.stringify(stored)).toBeLessThanOrEqual(t1 + resolved.debounceMinutes * MIN);
 			}
 			await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 		}

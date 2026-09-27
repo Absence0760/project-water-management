@@ -235,13 +235,15 @@ describe('sessions', () => {
 			'UPDATE app_user SET sessions_revoked_at = NULL WHERE id = $1',
 			"UPDATE app_user SET sessions_revoked_at = now() - interval '1 day' WHERE id = $1"
 		]) {
-			await withoutUser((db) => db.query(sql, [u.id]));
+			// As the account itself: under app_user's own-row policy (068) that is the one water_app context that reaches the row.
+			const touched = await withUser(u.id, (db) => db.query(sql, [u.id]));
+			expect(touched.rowCount, sql).toBe(1);
 			const [after] = await asOwner('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [u.id]);
 			expect(after.sessions_revoked_at, sql).toEqual(before.sessions_revoked_at);
 			expect((await anon('GET', '/auth/me', undefined, stolen)).status, sql).toBe(401);
 		}
 		// Forward still moves it (a later sign out everywhere).
-		await withoutUser((db) => db.query("UPDATE app_user SET sessions_revoked_at = now() + interval '1 minute' WHERE id = $1", [u.id]));
+		await withUser(u.id, (db) => db.query("UPDATE app_user SET sessions_revoked_at = now() + interval '1 minute' WHERE id = $1", [u.id]));
 		const [later] = await asOwner('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [u.id]);
 		expect(later.sessions_revoked_at.getTime()).toBeGreaterThan(before.sessions_revoked_at.getTime());
 	});
