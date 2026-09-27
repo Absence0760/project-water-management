@@ -33,7 +33,8 @@ describe('errorText', () => {
 		unsubscribe_link_gone: 'This link doesn’t work any more.',
 		export_throttled: 'You downloaded your data a moment ago. Try again in 1 minute.',
 		alerts_resume_throttled:
-			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'
+			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.',
+		body_refused: 'Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.'
 	};
 
 	it('has its own words for every code the API sends', () => {

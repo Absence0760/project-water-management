@@ -49,7 +49,7 @@ extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
 
 - **File.** CSV, comma- or semicolon-separated (a `;` file reads a comma as
-  the decimal mark), UTF-8, at most 2 MB and 5 000 rows. Quoted fields,
+  the decimal mark), UTF-8, at most 2 MB, 5 000 rows and 200 columns. Quoted fields,
   doubled quotes and line breaks inside quotes are read. XLSX is not read
   yet: save the sheet as CSV.
 - **Refused files.** A heading that looks like an **ID number, passport,

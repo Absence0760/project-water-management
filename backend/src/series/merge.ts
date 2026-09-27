@@ -4,12 +4,22 @@ import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
-import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
+import { MAX_SERIES_ABS_VALUE, MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
 import { acceptedInput, anomalousPushedDays, type HeldDays, othersSuffice } from './hold.js';
 import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
 
-export { MAX_SERIES_VALUES, SeriesStartDate };
+export { MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate };
+
+/**
+ * Before a write creates a series: 409 when the project already holds
+ * SERIES_PER_PROJECT_MAX. A soft cap (two creates racing at the limit can
+ * both pass), which is all a guard against runaway growth needs.
+ */
+export async function assertRoomForSeries(db: Db, projectId: string): Promise<void> {
+	const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM time_series WHERE project_id = $1', [projectId]);
+	if (rows[0]!.n >= SERIES_PER_PROJECT_MAX) throw new ApiError(409, `a project holds at most ${SERIES_PER_PROJECT_MAX} series; delete one it no longer needs first`);
+}
 
 /**
  * A series' product and version as a body carries them (032_series_provenance.sql):
@@ -69,7 +79,15 @@ export function toCanonicalUnit<T extends { kind: string; unit: string; values: 
 		ctx.addIssue({ code: 'custom', path: ['unit'], message: u.error });
 		return z.NEVER;
 	}
-	return { ...b, unit: u.unit, values: scaleValues(b.values, u.factor) };
+	const values = scaleValues(b.values, u.factor);
+	// Checked after scaling: 1e308 in inches is finite as sent but Infinity in
+	// mm, which Postgres would store and every run would then read.
+	const bad = values.findIndex((v) => v !== null && !(Math.abs(v) < MAX_SERIES_ABS_VALUE));
+	if (bad >= 0) {
+		ctx.addIssue({ code: 'custom', path: ['values', bad], message: `a value must be smaller than ${MAX_SERIES_ABS_VALUE.toExponential()} ${u.unit} (after converting to ${u.unit})` });
+		return z.NEVER;
+	}
+	return { ...b, unit: u.unit, values };
 }
 export type SeriesBody = z.output<typeof SeriesBody>;
 
@@ -344,6 +362,7 @@ export async function mergeSeries(
 	if (owned.length === 0) owner = null;
 	const merged = mergeDaily(existing, incoming, { keepOnNull });
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
+	if (!row) await assertRoomForSeries(db, projectId);
 	const before = row
 		? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values, product: row.product, productVersion: row.productVersion }
 		: null;

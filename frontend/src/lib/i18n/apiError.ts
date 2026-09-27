@@ -33,7 +33,8 @@ const CODES: Record<string, Msg> = {
 	note_delete_denied: msg('Only the person who wrote a note, or the WUA, can delete it.'),
 	unsubscribe_link_gone: msg('This link doesn’t work any more.'),
 	export_throttled: msg('You downloaded your data a moment ago. Try again in {wait}.'),
-	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.')
+	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'),
+	body_refused: msg('Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.')
 };
 
 // i18n-section: error.minutes
